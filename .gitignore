@@ -5,7 +5,6 @@ gopanel
 /tmp
 /dist
 .air.toml
-/public
 
 # OSS Credentials
 .oss_env
