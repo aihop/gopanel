@@ -93,14 +93,13 @@ bash <(curl -fsSL https://gopanel.run)
 - **Dependencies**: `go mod tidy`
 - **Run**: `go run main.go`
 
-### Build & Publish
-
-GoPanel provides highly automated cross-compilation and publishing scripts:
+### Run GoPanel locally on your machine
 
 ```bash
 # 1. Compile for all platforms (outputs to dist/)
-bash build.sh 1.0.0 10000000
+git clone https://github.com/aihop/gopanel.git
 
-# 2. Auto-upload artifacts to Aliyun OSS (requires .oss_env configuration)
-./publish.sh v1.0.0
+cd gopanel
+
+go run main.go
 ```

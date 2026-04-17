@@ -93,14 +93,13 @@ bash <(curl -fsSL https://gopanel.run)
 - **依赖安装**：`go mod tidy`
 - **启动服务**：`go run main.go`
 
-### 打包发布
-
-GoPanel 提供了高度自动化的交叉编译与发布脚本：
+### 运行 GoPanel 本地版本
 
 ```bash
-# 1. 编译全平台安装包 (将生成在 dist/ 目录下)
-bash build.sh 1.0.0 100000
+git clone https://github.com/aihop/gopanel.git
 
-# 2. 自动上传构建产物至阿里云 OSS (需配置 .oss_env)
-./publish.sh v1.0.0
+cd gopanel
+
+go run main.go
+
 ```
