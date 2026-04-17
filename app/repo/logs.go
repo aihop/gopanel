@@ -1,0 +1,105 @@
+package repo
+
+import (
+	"github.com/aihop/gopanel/app/model"
+	"github.com/aihop/gopanel/global"
+	"gorm.io/gorm"
+)
+
+type LogRepo struct{}
+
+type ILogRepo interface {
+	CleanLogin() error
+	CreateLoginLog(user *model.LoginLog) error
+	PageLoginLog(page, size int, opts ...DBOption) (int64, []model.LoginLog, error)
+
+	CleanOperation() error
+	CreateOperationLog(user *model.OperationLog) error
+	PageOperationLog(page, size int, opts ...DBOption) (int64, []model.OperationLog, error)
+
+	WithByIP(ip string) DBOption
+	WithByStatus(status string) DBOption
+	WithBySource(source string) DBOption
+	WithByLikeOperation(operation string) DBOption
+}
+
+func NewILogRepo() ILogRepo {
+	return &LogRepo{}
+}
+
+func (u *LogRepo) CleanLogin() error {
+	return global.DB.Exec("delete from login_logs;").Error
+}
+
+func (u *LogRepo) CreateLoginLog(log *model.LoginLog) error {
+	return global.DB.Create(log).Error
+}
+
+func (u *LogRepo) PageLoginLog(page, size int, opts ...DBOption) (int64, []model.LoginLog, error) {
+	var ops []model.LoginLog
+	db := global.DB.Model(&model.LoginLog{}).Order("created_at desc")
+	for _, opt := range opts {
+		db = opt(db)
+	}
+	count := int64(0)
+	db = db.Count(&count)
+	err := db.Limit(size).Offset(size * (page - 1)).Find(&ops).Error
+	return count, ops, err
+}
+
+func (u *LogRepo) CleanOperation() error {
+	return global.DB.Exec("delete from operation_logs").Error
+}
+
+func (u *LogRepo) CreateOperationLog(log *model.OperationLog) error {
+	return global.DB.Create(log).Error
+}
+
+func (u *LogRepo) PageOperationLog(page, size int, opts ...DBOption) (int64, []model.OperationLog, error) {
+	var ops []model.OperationLog
+	db := global.DB.Model(&model.OperationLog{}).Order("created_at desc")
+	for _, opt := range opts {
+		db = opt(db)
+	}
+	count := int64(0)
+	db = db.Count(&count)
+	err := db.Limit(size).Offset(size * (page - 1)).Find(&ops).Error
+	return count, ops, err
+}
+
+func (c *LogRepo) WithByStatus(status string) DBOption {
+	return func(g *gorm.DB) *gorm.DB {
+		if len(status) == 0 {
+			return g
+		}
+		return g.Where("status = ?", status)
+	}
+}
+
+func (c *LogRepo) WithBySource(source string) DBOption {
+	return func(g *gorm.DB) *gorm.DB {
+		if len(source) == 0 {
+			return g
+		}
+		return g.Where("source = ?", source)
+	}
+}
+
+func (c *LogRepo) WithByIP(ip string) DBOption {
+	return func(g *gorm.DB) *gorm.DB {
+		if len(ip) == 0 {
+			return g
+		}
+		return g.Where("ip LIKE ?", "%"+ip+"%")
+	}
+}
+
+func (c *LogRepo) WithByLikeOperation(operation string) DBOption {
+	return func(g *gorm.DB) *gorm.DB {
+		if len(operation) == 0 {
+			return g
+		}
+		infoStr := "%" + operation + "%"
+		return g.Where("detail_zh LIKE ? OR detail_en LIKE ?", infoStr, infoStr)
+	}
+}

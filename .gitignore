@@ -1,0 +1,18 @@
+tmp
+gopanel
+/.vscode
+/admin
+/tmp
+/dist
+.air.toml
+/public
+
+# OSS Credentials
+.oss_env
+conf.yaml
+PROMPT.md
+
+# Dev config & Secrets
+*.dev
+init.yaml
+init.yaml.dev
