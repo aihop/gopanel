@@ -159,18 +159,18 @@ func deployStaticWebsite(website *model.Website, releaseDir string) error {
 	if err := global.DB.Save(website).Error; err != nil {
 		return err
 	}
-	_, err := NewCaddy().ReplaceStaticServerBlock(buildDeployCaddyDomain(*website), releaseDir, BuildOtherDomains(*website), website.Protocol)
-	if err != nil {
-		return fmt.Errorf("配置 Caddy 失败: %w", err)
-	}
+	// _, err := NewCaddy().ReplaceStaticServerBlock(buildDeployCaddyDomain(*website), releaseDir, BuildOtherDomains(*website), website.Protocol)
+	// if err != nil {
+	// 	return fmt.Errorf("配置 Caddy 失败: %w", err)
+	// }
 	return nil
 }
 
 func deployProxyWebsite(website *model.Website) error {
-	_, err := NewCaddy().ReplaceServerBlock(buildDeployCaddyDomain(*website), website.Proxy, BuildOtherDomains(*website), website.Protocol)
-	if err != nil {
-		return fmt.Errorf("更新代理失败: %w", err)
-	}
+	// _, err := NewCaddy().ReplaceServerBlock(buildDeployCaddyDomain(*website), website.Proxy, BuildOtherDomains(*website), website.Protocol)
+	// if err != nil {
+	// 	return fmt.Errorf("更新代理失败: %w", err)
+	// }
 	return nil
 }
 
@@ -225,18 +225,18 @@ func deployWebAppWebsite(website *model.Website, releaseDir, runtimeDir, imageTa
 		return 0, "", "", err
 	}
 
-	if _, err := NewCaddy().ReplaceServerBlock(buildDeployCaddyDomain(*website), website.Proxy, BuildOtherDomains(*website), website.Protocol); err != nil {
-		return 0, "", "", fmt.Errorf("更新代理失败: %w", err)
-	}
+	// if _, err := NewCaddy().ReplaceServerBlock(buildDeployCaddyDomain(*website), website.Proxy, BuildOtherDomains(*website), website.Protocol); err != nil {
+	// 	return 0, "", "", fmt.Errorf("更新代理失败: %w", err)
+	// }
 
-	if req.PreviousContainerID != "" && req.PreviousContainerID != containerID {
-		err := cleanupPreviousContainer(req.PreviousContainerID)
-		if err != nil {
-			appendPipelineDeployErrorLog(pipelineRecordID, website.Alias, fmt.Sprintf("清理旧容器 %s 失败: %v", req.PreviousContainerID, err))
-		} else {
-			appendPipelineDeployInfoLog(pipelineRecordID, website.Alias, fmt.Sprintf("旧容器 %s 已成功清理", req.PreviousContainerID))
-		}
-	}
+	// if req.PreviousContainerID != "" && req.PreviousContainerID != containerID {
+	// 	err := cleanupPreviousContainer(req.PreviousContainerID)
+	// 	if err != nil {
+	// 		appendPipelineDeployErrorLog(pipelineRecordID, website.Alias, fmt.Sprintf("清理旧容器 %s 失败: %v", req.PreviousContainerID, err))
+	// 	} else {
+	// 		appendPipelineDeployInfoLog(pipelineRecordID, website.Alias, fmt.Sprintf("旧容器 %s 已成功清理", req.PreviousContainerID))
+	// 	}
+	// }
 
 	return hostPort, containerID, actualRuntimeDir, nil
 }

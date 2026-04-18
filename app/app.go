@@ -21,10 +21,8 @@ import (
 	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/init/app"
 	"github.com/aihop/gopanel/init/cache"
-	"github.com/aihop/gopanel/init/caddy"
 	"github.com/aihop/gopanel/init/conf"
 	"github.com/aihop/gopanel/init/cron"
-	"github.com/aihop/gopanel/init/daemon"
 	"github.com/aihop/gopanel/init/db"
 	"github.com/aihop/gopanel/init/docker"
 	"github.com/aihop/gopanel/init/log"
@@ -63,9 +61,7 @@ func (t *App) Init() {
 	repo.Init()
 	app.Init()
 	log.Init()
-	caddy.Init()
 	cache.Init()
-	daemon.Init()
 	docker.Init()
 	cron.Init()
 	gob.Register(psession.SessionUser{})

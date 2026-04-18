@@ -96,9 +96,9 @@ func WebsiteDeploySwitch(c fiber.Ctx) error {
 			appInstall.DockerCompose = targetDeploy.DockerCompose
 			global.DB.Save(&appInstall)
 
-			if _, err = service.NewCaddy().ReplaceServerBlock(service.BuildWebsiteCaddyDomain(website.PrimaryDomain, website.Protocol), website.Proxy, service.BuildOtherDomains(website), website.Protocol); err != nil {
-				return c.JSON(e.Fail(buserr.Err(fmt.Errorf("切换 Caddy 配置失败: %w", err))))
-			}
+			// if _, err = service.NewCaddy().ReplaceServerBlock(service.BuildWebsiteCaddyDomain(website.PrimaryDomain, website.Protocol), website.Proxy, service.BuildOtherDomains(website), website.Protocol); err != nil {
+			// 	return c.JSON(e.Fail(buserr.Err(fmt.Errorf("切换 Caddy 配置失败: %w", err))))
+			// }
 
 			global.DB.Model(&model.WebsiteDeploy{}).Where("website_id = ?", website.ID).Update("is_active", false)
 			targetDeploy.IsActive = true

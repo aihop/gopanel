@@ -27,12 +27,9 @@ import (
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
 	"github.com/aihop/gopanel/global"
-	caddyinit "github.com/aihop/gopanel/init/caddy"
 	"github.com/aihop/gopanel/pkg/aliyun"
 	"github.com/aihop/gopanel/pkg/cloud"
 	"github.com/aihop/gopanel/pkg/gormx"
-	"github.com/caddyserver/caddy/v2"
-	"github.com/caddyserver/certmagic"
 )
 
 type acmeLogger struct {
@@ -517,14 +514,14 @@ func (s *SSLService) Apply(req *request.SSLApply) error {
 	if item.Type == "caddy" {
 		return errors.New("Caddy 自动 HTTPS 无需手动应用证书")
 	}
-	certPath, keyPath, err := s.ensureCertificateFiles(&item)
-	if err != nil {
-		return err
-	}
-	content, err := os.ReadFile(caddyinit.CaddyFilePath())
-	if err != nil {
-		return err
-	}
+	// certPath, keyPath, err := s.ensureCertificateFiles(&item)
+	// if err != nil {
+	// 	return err
+	// }
+	// content, err := os.ReadFile(caddyinit.CaddyFilePath())
+	// if err != nil {
+	// 	return err
+	// }
 	domainValues := make([]string, 0, 1+len(website.Domains))
 	domainValues = append(domainValues, website.PrimaryDomain)
 	for _, domain := range website.Domains {
@@ -534,14 +531,15 @@ func (s *SSLService) Apply(req *request.SSLApply) error {
 	if len(domains) == 0 {
 		return errors.New("网站未配置域名")
 	}
-	next := string(content)
-	for _, domain := range domains {
-		next, err = upsertTLSDirective(next, domain, certPath, keyPath)
-		if err != nil {
-			return err
-		}
-	}
-	return NewCaddy().SaveContent([]byte(next))
+	// next := string(content)
+	// for _, domain := range domains {
+	// 	next, err = upsertTLSDirective(next, domain, certPath, keyPath)
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// }
+	// return NewCaddy().SaveContent([]byte(next))
+	return nil
 }
 
 func (s *SSLService) PushCDN(ctx context.Context, req request.SSLPushCDN) error {
@@ -838,19 +836,20 @@ func upsertTLSDirective(content, domain, certPath, keyPath string) (string, erro
 }
 
 func findManagedCertificateFiles(domain string) (string, string, error) {
-	safeDomain := certmagic.StorageKeys.Safe(domain)
-	certPattern := filepath.Join(caddy.AppDataDir(), "certificates", "*", safeDomain, safeDomain+".crt")
-	matches, err := filepath.Glob(certPattern)
-	if err != nil {
-		return "", "", err
-	}
-	if len(matches) == 0 {
-		return "", "", fmt.Errorf("未找到域名 %s 的 Caddy 自动证书，请确认域名解析和 80/443 访问已生效", domain)
-	}
-	certPath := matches[0]
-	keyPath := filepath.Join(filepath.Dir(certPath), safeDomain+".key")
-	if _, err = os.Stat(keyPath); err != nil {
-		return "", "", err
-	}
-	return certPath, keyPath, nil
+	// safeDomain := certmagic.StorageKeys.Safe(domain)
+	// certPattern := filepath.Join(caddy.AppDataDir(), "certificates", "*", safeDomain, safeDomain+".crt")
+	// matches, err := filepath.Glob(certPattern)
+	// if err != nil {
+	// 	return "", "", err
+	// }
+	// if len(matches) == 0 {
+	// 	return "", "", fmt.Errorf("未找到域名 %s 的 Caddy 自动证书，请确认域名解析和 80/443 访问已生效", domain)
+	// }
+	// certPath := matches[0]
+	// keyPath := filepath.Join(filepath.Dir(certPath), safeDomain+".key")
+	// if _, err = os.Stat(keyPath); err != nil {
+	// 	return "", "", err
+	// }
+	// return certPath, keyPath, nil
+	return "", "", nil
 }

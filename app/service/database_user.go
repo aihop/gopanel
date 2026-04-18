@@ -88,129 +88,130 @@ func (s *DatabaseUserService) Create(req *request.DatabaseUserCreate) error {
 }
 
 func (s *DatabaseUserService) Update(req *request.DatabaseUserUpdate) error {
-	var (
-		user *model.DatabaseUser
-		err  error
-	)
+	// var (
+	// 	user *model.DatabaseUser
+	// 	err  error
+	// )
 
-	if req.ID > 0 {
-		user, err = s.Get(req.ID)
-		if err != nil {
-			return err
-		}
-	} else {
-		if req.ServerID == 0 || req.Username == "" {
-			return errors.New("id or (serverId and username) is required")
-		}
-		user = &model.DatabaseUser{
-			ServerID: req.ServerID,
-			Username: req.Username,
-			Host:     req.Host,
-		}
-		if err = s.repo.FirstOrInit(user, user); err != nil {
-			return err
-		}
-	}
+	// if req.ID > 0 {
+	// 	user, err = s.Get(req.ID)
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// } else {
+	// 	if req.ServerID == 0 || req.Username == "" {
+	// 		return errors.New("id or (serverId and username) is required")
+	// 	}
+	// 	user = &model.DatabaseUser{
+	// 		ServerID: req.ServerID,
+	// 		Username: req.Username,
+	// 		Host:     req.Host,
+	// 	}
+	// 	if err = s.repo.FirstOrInit(user, user); err != nil {
+	// 		return err
+	// 	}
+	// }
 
-	server, err := NewDatabaseServer().Get(user.ServerID)
-	if err != nil {
-		return err
-	}
+	// server, err := NewDatabaseServer().Get(user.ServerID)
+	// if err != nil {
+	// 	return err
+	// }
 
-	targetPrivileges := uniqueStrings(req.Privileges)
+	// // targetPrivileges := uniqueStrings(req.Privileges)
 
-	switch server.Type {
-	case model.DatabaseTypeMysql:
-		mysql, err := db.NewMySQL(server.Username, server.Password, fmt.Sprintf("%s:%d", server.Host, server.Port))
-		if err != nil {
-			return err
-		}
-		defer func(mysql *db.MySQL) {
-			_ = mysql.Close()
-		}(mysql)
+	// switch server.Type {
+	// case model.DatabaseTypeMysql:
+	// 	mysql, err := db.NewMySQL(server.Username, server.Password, fmt.Sprintf("%s:%d", server.Host, server.Port))
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// 	defer func(mysql *db.MySQL) {
+	// 		_ = mysql.Close()
+	// 	}(mysql)
 
-		if user.Host == "" {
-			user.Host = req.Host
-		}
-		if user.Host == "" {
-			user.Host = "localhost"
-		}
+	// 	if user.Host == "" {
+	// 		user.Host = req.Host
+	// 	}
+	// 	if user.Host == "" {
+	// 		user.Host = "localhost"
+	// 	}
 
-		if req.Password != "" {
-			if err = mysql.UserPassword(user.Username, req.Password, user.Host); err != nil {
-				return err
-			}
-		}
+	// 	if req.Password != "" {
+	// 		if err = mysql.UserPassword(user.Username, req.Password, user.Host); err != nil {
+	// 			return err
+	// 		}
+	// 	}
 
-		currentPrivileges, err := mysql.UserPrivileges(user.Username, user.Host)
-		if err != nil {
-			currentPrivileges = []string{}
-		}
-		for _, name := range currentPrivileges {
-			if !slices.Contains(targetPrivileges, name) {
-				if err = mysql.PrivilegesRevoke(user.Username, name, user.Host); err != nil {
-					return err
-				}
-			}
-		}
-		for _, name := range targetPrivileges {
-			if err = mysql.DatabaseCreate(name); err != nil {
-				return err
-			}
-			if !slices.Contains(currentPrivileges, name) {
-				if err = mysql.PrivilegesGrant(user.Username, name, user.Host); err != nil {
-					return err
-				}
-			}
-		}
-	case model.DatabaseTypePostgresql:
-		postgres, err := db.NewPostgres(server.Username, server.Password, server.Host, server.Port)
-		if err != nil {
-			return err
-		}
-		defer func(postgres *db.Postgres) {
-			_ = postgres.Close()
-		}(postgres)
-		if req.Password != "" {
-			if err = postgres.UserPassword(user.Username, req.Password); err != nil {
-				return err
-			}
-		}
+	// 	currentPrivileges, err := mysql.UserPrivileges(user.Username, user.Host)
+	// 	if err != nil {
+	// 		currentPrivileges = []string{}
+	// 	}
+	// 	for _, name := range currentPrivileges {
+	// 		if !slices.Contains(targetPrivileges, name) {
+	// 			if err = mysql.PrivilegesRevoke(user.Username, name, user.Host); err != nil {
+	// 				return err
+	// 			}
+	// 		}
+	// 	}
+	// 	for _, name := range targetPrivileges {
+	// 		if err = mysql.DatabaseCreate(name); err != nil {
+	// 			return err
+	// 		}
+	// 		if !slices.Contains(currentPrivileges, name) {
+	// 			if err = mysql.PrivilegesGrant(user.Username, name, user.Host); err != nil {
+	// 				return err
+	// 			}
+	// 		}
+	// 	}
+	// case model.DatabaseTypePostgresql:
+	// 	postgres, err := db.NewPostgres(server.Username, server.Password, server.Host, server.Port)
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// 	defer func(postgres *db.Postgres) {
+	// 		_ = postgres.Close()
+	// 	}(postgres)
+	// 	if req.Password != "" {
+	// 		if err = postgres.UserPassword(user.Username, req.Password); err != nil {
+	// 			return err
+	// 		}
+	// 	}
 
-		currentPrivileges, err := postgres.UserPrivileges(user.Username)
-		if err != nil {
-			currentPrivileges = []string{}
-		}
-		for _, name := range currentPrivileges {
-			if !slices.Contains(targetPrivileges, name) {
-				if err = postgres.PrivilegesRevoke(user.Username, name); err != nil {
-					return err
-				}
-			}
-		}
-		for _, name := range targetPrivileges {
-			if err = postgres.DatabaseCreate(name); err != nil {
-				return err
-			}
-			if !slices.Contains(currentPrivileges, name) {
-				if err = postgres.PrivilegesGrant(user.Username, name); err != nil {
-					return err
-				}
-			}
-		}
-	default:
-		return errors.New("unsupported database server type")
-	}
+	// 	currentPrivileges, err := postgres.UserPrivileges(user.Username)
+	// 	if err != nil {
+	// 		currentPrivileges = []string{}
+	// 	}
+	// 	for _, name := range currentPrivileges {
+	// 		if !slices.Contains(targetPrivileges, name) {
+	// 			if err = postgres.PrivilegesRevoke(user.Username, name); err != nil {
+	// 				return err
+	// 			}
+	// 		}
+	// 	}
+	// 	for _, name := range targetPrivileges {
+	// 		if err = postgres.DatabaseCreate(name); err != nil {
+	// 			return err
+	// 		}
+	// 		if !slices.Contains(currentPrivileges, name) {
+	// 			if err = postgres.PrivilegesGrant(user.Username, name); err != nil {
+	// 				return err
+	// 			}
+	// 		}
+	// 	}
+	// default:
+	// 	return errors.New("unsupported database server type")
+	// }
 
-	if req.Password != "" {
-		user.Password = req.Password
-	}
-	user.Remark = req.Remark
-	if req.Host != "" {
-		user.Host = req.Host
-	}
+	// if req.Password != "" {
+	// 	user.Password = req.Password
+	// }
+	// user.Remark = req.Remark
+	// if req.Host != "" {
+	// 	user.Host = req.Host
+	// }
 
-	return s.repo.Save(user)
+	// return s.repo.Save(user)
+	return nil
 }
 
 func (s DatabaseUserService) Get(id uint) (res *model.DatabaseUser, err error) {
