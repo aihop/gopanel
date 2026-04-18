@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,19 +20,20 @@ import (
 	pgClient "github.com/aihop/gopanel/utils/postgresql/client"
 )
 
-func (u *BackupService) PostgresqlBackup(req *dto.CommonBackup) error {
-	localDir, err := loadLocalDir()
-	if err != nil {
-		return err
-	}
-
+func (u *BackupService) PostgresqlBackup(req *dto.CommonBackup, logger *BackupLogger) error {
+	localDir := constant.BackupDir
 	timeNow := time.Now().Format(constant.DateTimeSlimLayout)
 	itemDir := fmt.Sprintf("database/%s/%s/%s", req.Type, req.Name, req.DetailName)
 	targetDir := path.Join(localDir, itemDir)
 	fileName := fmt.Sprintf("%s_%s.sql.gz", req.DetailName, timeNow+common.RandStrAndNum(5))
-
-	if err := handlePostgresqlBackup(req.Name, req.DetailName, targetDir, fileName); err != nil {
+	if logger != nil {
+		logger.Appendf("prepare backup: type=%s db=%s target=%s", req.Type, req.DetailName, path.Join(targetDir, fileName))
+	}
+	if err := handlePostgresqlBackup(req.Name, req.DetailName, targetDir, fileName, logger); err != nil {
 		return err
+	}
+	if logger != nil {
+		logger.AppendLine("backup file generated, saving record")
 	}
 
 	record := &model.BackupRecord{
@@ -46,6 +48,9 @@ func (u *BackupService) PostgresqlBackup(req *dto.CommonBackup) error {
 	backupRepo := repo.NewBackupRecord()
 	if err := backupRepo.Create(record); err != nil {
 		global.LOG.Errorf("save backup record failed, err: %v", err)
+		if logger != nil {
+			logger.Appendf("save backup record failed: %v", err)
+		}
 	}
 	return nil
 }
@@ -100,12 +105,20 @@ func (u *BackupService) PostgresqlRecoverByUpload(req *dto.CommonRecover) error 
 	global.LOG.Info("recover from uploads successful!")
 	return nil
 }
-func handlePostgresqlBackup(database, dbName, targetDir, fileName string) error {
+func handlePostgresqlBackup(database, dbName, targetDir, fileName string, logger *BackupLogger) error {
 	cli, err := LoadPostgresqlClientByFrom(database)
 	if err != nil {
 		return err
 	}
 	defer cli.Close()
+
+	estimatedBytes := int64(0)
+	if estimate, ok := estimatePostgresqlDBBytes(cli, dbName); ok && estimate > 0 {
+		estimatedBytes = estimate
+		if logger != nil {
+			logger.Appendf("estimated db size: %s", formatBytes(estimatedBytes))
+		}
+	}
 
 	backupInfo := pgClient.BackupInfo{
 		Name:      dbName,
@@ -114,10 +127,81 @@ func handlePostgresqlBackup(database, dbName, targetDir, fileName string) error 
 
 		Timeout: 300,
 	}
+	if logger != nil {
+		logger.AppendLine("starting pg_dump via docker exec")
+	}
+
+	outputFile := path.Join(targetDir, fileName)
+	stop := make(chan struct{})
+	if logger != nil {
+		startAt := time.Now()
+		go func() {
+			ticker := time.NewTicker(3 * time.Second)
+			defer ticker.Stop()
+			var lastSize int64
+			var lastAt = time.Now()
+			for {
+				select {
+				case <-stop:
+					return
+				case <-ticker.C:
+					size := readFileSize(outputFile)
+					dt := time.Since(lastAt).Seconds()
+					if dt <= 0 {
+						dt = 1
+					}
+					speed := int64(float64(size-lastSize) / dt)
+					elapsed := time.Since(startAt).Round(time.Second)
+					if estimatedBytes > 0 {
+						logger.Appendf("dumping... elapsed=%s output=%s speed=%s/s (db≈%s)", elapsed, formatBytes(size), formatBytes(speed), formatBytes(estimatedBytes))
+					} else {
+						logger.Appendf("dumping... elapsed=%s output=%s speed=%s/s", elapsed, formatBytes(size), formatBytes(speed))
+					}
+					lastSize = size
+					lastAt = time.Now()
+				}
+			}
+		}()
+	}
+
 	if err := cli.Backup(backupInfo); err != nil {
+		close(stop)
+		if logger != nil {
+			logger.Appendf("pg_dump failed: %v", err)
+		}
 		return err
 	}
+	close(stop)
+	if logger != nil {
+		logger.AppendLine("pg_dump finished")
+		logger.Appendf("output file size: %s", formatBytes(readFileSize(outputFile)))
+	}
 	return nil
+}
+
+func estimatePostgresqlDBBytes(cli interface{}, dbName string) (int64, bool) {
+	execer, ok := cli.(interface {
+		ExecSQLForRows(command string, timeout uint) ([]string, error)
+	})
+	if !ok {
+		return 0, false
+	}
+	safeDB := strings.ReplaceAll(dbName, "'", "''")
+	lines, err := execer.ExecSQLForRows(fmt.Sprintf("SELECT pg_database_size('%s');", safeDB), 30)
+	if err != nil {
+		return 0, false
+	}
+	for i := len(lines) - 1; i >= 0; i-- {
+		s := strings.TrimSpace(lines[i])
+		if s == "" {
+			continue
+		}
+		v, err := strconv.ParseInt(s, 10, 64)
+		if err == nil && v > 0 {
+			return v, true
+		}
+	}
+	return 0, false
 }
 
 func handlePostgresqlRecover(req *dto.CommonRecover, isRollback bool) error {

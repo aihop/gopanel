@@ -18,6 +18,7 @@ func BackupRouter(r fiber.Router) {
 		backupGroup.Post("/record/download", api.BackupRecordDownload)
 
 		backupGroup.Post("/handle", api.BackupHandle)
+		backupGroup.Get("/logs", api.BackupLogsStream)
 		backupGroup.Post("/recover", api.BackupRecover)
 		backupGroup.Post("/recover/byUpload", api.BackupRecoverByUpload)
 

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,21 +20,21 @@ import (
 	"github.com/aihop/gopanel/utils/mysql/client"
 )
 
-func (u *BackupService) MysqlBackup(req *dto.CommonBackup) error {
-	localDir, err := loadLocalDir()
-	if err != nil {
-		return errors.New("load local dir failed, err: " + err.Error())
-	}
-
+func (u *BackupService) MysqlBackup(req *dto.CommonBackup, logger *BackupLogger) error {
+	localDir := constant.BackupDir
 	timeNow := time.Now().Format(constant.DateTimeSlimLayout)
 	itemDir := fmt.Sprintf("database/%s/%s/%s", req.Type, req.Name, req.DetailName)
 	targetDir := path.Join(localDir, itemDir)
 	fileName := fmt.Sprintf("%s_%s.sql.gz", req.DetailName, timeNow+common.RandStrAndNum(5))
-
-	if err := handleMysqlBackup(req.DetailId, req.DetailName, targetDir, fileName); err != nil {
+	if logger != nil {
+		logger.Appendf("prepare backup: type=%s db=%s target=%s", req.Type, req.DetailName, path.Join(targetDir, fileName))
+	}
+	if err := handleMysqlBackup(req.DetailId, req.DetailName, targetDir, fileName, logger); err != nil {
 		return errors.New("mysql backup failed, err: " + err.Error())
 	}
-
+	if logger != nil {
+		logger.AppendLine("backup file generated, saving record")
+	}
 	record := &model.BackupRecord{
 		Type:       req.Type,
 		Name:       req.Name,
@@ -46,6 +47,9 @@ func (u *BackupService) MysqlBackup(req *dto.CommonBackup) error {
 	backupRecordRepo := repo.NewBackupRecord()
 	if err := backupRecordRepo.Create(record); err != nil {
 		global.LOG.Errorf("save backup record failed, err: %v", err)
+		if logger != nil {
+			logger.Appendf("save backup record failed: %v", err)
+		}
 	}
 	return nil
 }
@@ -102,7 +106,7 @@ func (u *BackupService) MysqlRecoverByUpload(req *dto.CommonRecover) error {
 	return nil
 }
 
-func handleMysqlBackup(serverId uint, dbName, targetDir, fileName string) error {
+func handleMysqlBackup(serverId uint, dbName, targetDir, fileName string, logger *BackupLogger) error {
 	databaseServerRepo := repo.NewDatabaseServer()
 	dbInfo, err := databaseServerRepo.Get(serverId)
 	if err != nil {
@@ -114,6 +118,14 @@ func handleMysqlBackup(serverId uint, dbName, targetDir, fileName string) error 
 		return errors.New("load mysql client failed, err: " + err.Error())
 	}
 
+	estimatedBytes := int64(0)
+	if estimate, ok := estimateMysqlDBBytes(cli, dbName); ok && estimate > 0 {
+		estimatedBytes = estimate
+		if logger != nil {
+			logger.Appendf("estimated db size: %s", formatBytes(estimatedBytes))
+		}
+	}
+
 	backupInfo := client.BackupInfo{
 		Name:      dbName,
 		Type:      "mysql",
@@ -123,10 +135,110 @@ func handleMysqlBackup(serverId uint, dbName, targetDir, fileName string) error 
 		FileName:  fileName,
 		Timeout:   300,
 	}
+	if logger != nil {
+		logger.AppendLine("starting mysqldump via docker exec")
+	}
+
+	outputFile := path.Join(targetDir, fileName)
+	stop := make(chan struct{})
+	if logger != nil {
+		startAt := time.Now()
+		go func() {
+			ticker := time.NewTicker(3 * time.Second)
+			defer ticker.Stop()
+			var lastSize int64
+			var lastAt = time.Now()
+			for {
+				select {
+				case <-stop:
+					return
+				case <-ticker.C:
+					size := readFileSize(outputFile)
+					dt := time.Since(lastAt).Seconds()
+					if dt <= 0 {
+						dt = 1
+					}
+					speed := int64(float64(size-lastSize) / dt)
+					elapsed := time.Since(startAt).Round(time.Second)
+					if estimatedBytes > 0 {
+						logger.Appendf("dumping... elapsed=%s output=%s speed=%s/s (db≈%s)", elapsed, formatBytes(size), formatBytes(speed), formatBytes(estimatedBytes))
+					} else {
+						logger.Appendf("dumping... elapsed=%s output=%s speed=%s/s", elapsed, formatBytes(size), formatBytes(speed))
+					}
+					lastSize = size
+					lastAt = time.Now()
+				}
+			}
+		}()
+	}
+
 	if err := cli.Backup(backupInfo); err != nil {
+		close(stop)
+		if logger != nil {
+			logger.Appendf("mysqldump failed: %v", err)
+		}
 		return err
 	}
+	close(stop)
+	if logger != nil {
+		logger.AppendLine("mysqldump finished")
+		logger.Appendf("output file size: %s", formatBytes(readFileSize(outputFile)))
+	}
 	return nil
+}
+
+func estimateMysqlDBBytes(cli interface{}, dbName string) (int64, bool) {
+	execer, ok := cli.(interface {
+		ExecSQLForRows(command string, timeout uint) ([]string, error)
+	})
+	if !ok {
+		return 0, false
+	}
+	safeDB := strings.ReplaceAll(dbName, "'", "''")
+	lines, err := execer.ExecSQLForRows(fmt.Sprintf("SELECT SUM(DATA_LENGTH+INDEX_LENGTH) FROM information_schema.TABLES WHERE TABLE_SCHEMA='%s';", safeDB), 30)
+	if err != nil {
+		return 0, false
+	}
+	for i := len(lines) - 1; i >= 0; i-- {
+		s := strings.TrimSpace(lines[i])
+		if s == "" {
+			continue
+		}
+		v, err := strconv.ParseInt(s, 10, 64)
+		if err == nil && v > 0 {
+			return v, true
+		}
+	}
+	return 0, false
+}
+
+func readFileSize(p string) int64 {
+	st, err := os.Stat(p)
+	if err != nil {
+		return 0
+	}
+	return st.Size()
+}
+
+func formatBytes(n int64) string {
+	if n < 0 {
+		n = 0
+	}
+	const (
+		kb = 1024
+		mb = 1024 * kb
+		gb = 1024 * mb
+	)
+	switch {
+	case n >= gb:
+		return fmt.Sprintf("%.2fGB", float64(n)/float64(gb))
+	case n >= mb:
+		return fmt.Sprintf("%.2fMB", float64(n)/float64(mb))
+	case n >= kb:
+		return fmt.Sprintf("%.2fKB", float64(n)/float64(kb))
+	default:
+		return fmt.Sprintf("%dB", n)
+	}
 }
 
 func handleMysqlRecover(req *dto.CommonRecover, isRollback bool) error {

@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/init/db"
@@ -57,7 +58,69 @@ func LoadMysqlClientByFrom(server *model.DatabaseServer) (mysql.MysqlClient, str
 	if err != nil {
 		return nil, "", err
 	}
+
+	if v, ok := inferMysqlVersion(cli); ok {
+		version = v
+	}
 	return cli, version, nil
+}
+
+func inferMysqlVersion(cli mysql.MysqlClient) (string, bool) {
+	execer, ok := cli.(interface {
+		ExecSQLForRows(command string, timeout uint) ([]string, error)
+	})
+	if !ok {
+		return "", false
+	}
+	lines, err := execer.ExecSQLForRows("select version();", 30)
+	if err != nil {
+		return "", false
+	}
+	for i := len(lines) - 1; i >= 0; i-- {
+		s := strings.TrimSpace(lines[i])
+		if s == "" {
+			continue
+		}
+		if strings.EqualFold(s, "version()") || strings.HasPrefix(strings.ToLower(s), "version") {
+			continue
+		}
+		v := trimVersionPrefix(s)
+		if v != "" {
+			return v, true
+		}
+	}
+	return "", false
+}
+
+func trimVersionPrefix(s string) string {
+	s = strings.TrimSpace(s)
+	start := -1
+	for i, r := range s {
+		if (r >= '0' && r <= '9') {
+			start = i
+			break
+		}
+	}
+	if start < 0 {
+		return ""
+	}
+	end := start
+	dot := 0
+	for end < len(s) {
+		r := s[end]
+		if (r >= '0' && r <= '9') || r == '.' {
+			if r == '.' {
+				dot++
+			}
+			end++
+			continue
+		}
+		break
+	}
+	if dot == 0 {
+		return ""
+	}
+	return s[start:end]
 }
 
 func LoadPostgresqlClientByFrom(database string) (postgresql.PostgresqlClient, error) {

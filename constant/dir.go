@@ -17,4 +17,5 @@ var (
 	RecycleBinDir        = "/.gopanel_clash"
 	SSLLogDir            = filepath.Join(global.CONF.System.BaseDir, "log", "ssl")
 	McpDir               = filepath.Join(global.CONF.System.BaseDir, "mcp")
+	BackupDir            = filepath.Join(global.CONF.System.BaseDir, "backup")
 )
