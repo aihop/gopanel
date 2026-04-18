@@ -14,6 +14,7 @@ func DashboardRouter(r fiber.Router) {
 		homeRouter.Get("/base/os", api.LoadDashboardOsInfo)
 		homeRouter.Get("/base/:ioOption/:netOption", api.LoadDashboardBaseInfo)
 		homeRouter.Get("/current", api.LoadDashboardCurrentInfo)
+		homeRouter.Post("/current", api.LoadDashboardCurrentInfo)
 		homeRouter.Post("/system/restart/:operation", api.SystemRestart)
 	}
 }

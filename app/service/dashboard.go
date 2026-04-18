@@ -60,6 +60,8 @@ func (u *DashboardService) LoadOsInfo() (*dto.OsInfo, error) {
 	if err != nil {
 		return nil, err
 	}
+	baseInfo.Hostname = hostInfo.Hostname
+	baseInfo.Version = hostInfo.PlatformVersion
 	baseInfo.OS = hostInfo.OS
 	baseInfo.Platform = hostInfo.Platform
 	baseInfo.PlatformFamily = hostInfo.PlatformFamily

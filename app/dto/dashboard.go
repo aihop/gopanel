@@ -26,6 +26,9 @@ type DashboardBase struct {
 }
 
 type OsInfo struct {
+	Hostname string `json:"hostname"`
+	Version  string `json:"version"`
+
 	OS             string `json:"os"`
 	Platform       string `json:"platform"`
 	PlatformFamily string `json:"platformFamily"`

@@ -59,9 +59,18 @@ func LoadDashboardBaseInfo(c fiber.Ctx) error {
 // @Security Timestamp
 // @Router /dashboard/current [post]
 func LoadDashboardCurrentInfo(c fiber.Ctx) error {
-	req, err := e.QueriesToStruct[dto.DashboardReq](c.Queries())
+	var req *dto.DashboardReq
+	var err error
+	if len(c.Body()) > 0 {
+		req, err = e.BodyToStruct[dto.DashboardReq](c.Body())
+	} else {
+		req, err = e.QueriesToStruct[dto.DashboardReq](c.Queries())
+	}
 	if err != nil {
 		return c.JSON(e.Fail(err))
+	}
+	if req.Scope == "" {
+		req.Scope = "basic"
 	}
 	data := dashboardService.LoadCurrentInfo(*req)
 	return c.JSON(e.Succ(data))

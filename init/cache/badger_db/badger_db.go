@@ -64,14 +64,16 @@ func (c *Cache) SetWithTTL(key string, value interface{}, duration time.Duration
 func (c *Cache) PrefixScanKey(prefixStr string) ([]string, error) {
 	var res []string
 	err := c.db.View(func(txn *badger.Txn) error {
-		it := txn.NewIterator(badger.DefaultIteratorOptions)
-		defer it.Close()
 		prefix := []byte(prefixStr)
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false
+		opts.Prefix = prefix
+		it := txn.NewIterator(opts)
+		defer it.Close()
 		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
 			item := it.Item()
 			k := item.Key()
 			res = append(res, string(k))
-			return nil
 		}
 		return nil
 	})

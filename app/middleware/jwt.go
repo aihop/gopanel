@@ -4,6 +4,7 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -38,6 +39,7 @@ func JWT(role string) func(fiber.Ctx) error {
 
 		xAuth := XGetAuth(c)
 		info, err := JwtCheck(xAuth, role)
+		fmt.Println(xAuth, "xAuth")
 		if err != nil && info == nil {
 			tokenStr := c.Get(constant.AppToken)
 			if tokenStr == "" {
