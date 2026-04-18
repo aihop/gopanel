@@ -1,0 +1,34 @@
+[Unit]
+Description=gopanel panel
+After=network.target syslog.target
+Wants=network.target
+
+[Service]
+User=root
+Group=root
+WorkingDirectory=/opt/gopanel
+ExecStart=/opt/gopanel/gopanel
+ExecReload=/bin/kill -s HUP $MAINPID
+ExecStop=/bin/kill -s TERM $MAINPID
+Restart=always
+RestartSec=5
+Type=simple
+PIDFile=/run/gopanel.pid
+RuntimeDirectory=gopanel
+TimeoutStartSec=30
+TimeoutStopSec=30
+
+# 日志与安全配置
+# StandardOutput=journal
+# StandardError=journal
+StandardOutput=null
+StandardError=null
+NoNewPrivileges=true
+PrivateTmp=true
+
+# 进程管理优化
+Delegate=yes
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target

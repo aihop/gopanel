@@ -1,0 +1,553 @@
+{
+	"/backup/recover/byupload": {
+		"bodyKeys": [
+			"type",
+			"name",
+			"detailName",
+			"file"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "从 [file] 恢复 [type] 数据 [name][detailName]",
+		"formatEN": "recover [type] data [name][detailName] from [file]"
+	},
+	"/container/clean/log": {
+		"bodyKeys": [
+			"name"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "清理容器 [name] 日志",
+		"formatEN": "clean container [name] logs"
+	},
+	"/container/compose": {
+		"bodyKeys": [
+			"name"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "创建 compose [name]",
+		"formatEN": "create compose [name]"
+	},
+	"/container/compose/operate": {
+		"bodyKeys": [
+			"name",
+			"operation"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "compose [operation] [name]",
+		"formatEN": "compose [operation] [name]"
+	},
+	"/container/compose/test": {
+		"bodyKeys": [
+			"name"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "检测 compose [name] 格式",
+		"formatEN": "check compose [name]"
+	},
+	"/container/compose/update": {
+		"bodyKeys": [
+			"name"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "更新 compose [name]",
+		"formatEN": "update compose information [name]"
+	},
+	"/container/create": {
+		"bodyKeys": [
+			"name",
+			"image"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "创建容器 [name][image]",
+		"formatEN": "create container [name][image]"
+	},
+	"/container/daemonjson/update": {
+		"bodyKeys": [
+			"key",
+			"value"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "更新配置 [key]",
+		"formatEN": "Updated configuration [key]"
+	},
+	"/container/daemonjson/update/byfile": {
+		"bodyKeys": [],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "更新配置文件",
+		"formatEN": "Updated configuration file"
+	},
+	"/container/docker/operate": {
+		"bodyKeys": [
+			"operation"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "docker 服务 [operation]",
+		"formatEN": "[operation] docker service"
+	},
+	"/container/image/build": {
+		"bodyKeys": [
+			"name"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "构建镜像 [name]",
+		"formatEN": "build image [name]"
+	},
+	"/container/image/load": {
+		"bodyKeys": [
+			"path"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "从 [path] 加载镜像",
+		"formatEN": "load image from [path]"
+	},
+	"/container/image/pull": {
+		"bodyKeys": [
+			"repoID",
+			"imageName"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [
+			{
+				"input_column": "id",
+				"input_value": "repoID",
+				"isList": false,
+				"db": "image_repos",
+				"output_column": "name",
+				"output_value": "reponame"
+			}
+		],
+		"formatZH": "镜像拉取 [reponame][imageName]",
+		"formatEN": "image pull [reponame][imageName]"
+	},
+	"/container/image/push": {
+		"bodyKeys": [
+			"repoID",
+			"tagName",
+			"name"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [
+			{
+				"input_column": "id",
+				"input_value": "repoID",
+				"isList": false,
+				"db": "image_repos",
+				"output_column": "name",
+				"output_value": "reponame"
+			}
+		],
+		"formatZH": "[tagName] 推送到 [reponame][name]",
+		"formatEN": "push [tagName] to [reponame][name]"
+	},
+	"/container/image/remove": {
+		"bodyKeys": [
+			"names"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "移除镜像 [names]",
+		"formatEN": "remove image [names]"
+	},
+	"/container/image/save": {
+		"bodyKeys": [
+			"tagName",
+			"path",
+			"name"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "保留 [tagName] 为 [path]/[name]",
+		"formatEN": "save [tagName] as [path]/[name]"
+	},
+	"/container/image/tag": {
+		"bodyKeys": [
+			"repoID",
+			"targetName"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [
+			{
+				"input_column": "id",
+				"input_value": "repoID",
+				"isList": false,
+				"db": "image_repos",
+				"output_column": "name",
+				"output_value": "reponame"
+			}
+		],
+		"formatZH": "tag 镜像 [reponame][targetName]",
+		"formatEN": "tag image [reponame][targetName]"
+	},
+	"/container/ipv6option/update": {
+		"bodyKeys": [],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "更新 ipv6 配置",
+		"formatEN": "Updated the ipv6 option"
+	},
+	"/container/logoption/update": {
+		"bodyKeys": [],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "更新日志配置",
+		"formatEN": "Updated the log option"
+	},
+	"/container/network": {
+		"bodyKeys": [
+			"name"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "创建容器网络 name",
+		"formatEN": "create container network [name]"
+	},
+	"/container/network/del": {
+		"bodyKeys": [
+			"names"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "删除容器网络 [names]",
+		"formatEN": "delete container network [names]"
+	},
+	"/container/operate": {
+		"bodyKeys": [
+			"names",
+			"operation"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "容器 [names] 执行 [operation]",
+		"formatEN": "container [operation] [names]"
+	},
+	"/container/prune": {
+		"bodyKeys": [
+			"pruneType"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "清理容器 [pruneType]",
+		"formatEN": "clean container [pruneType]"
+	},
+	"/container/rename": {
+		"bodyKeys": [
+			"name",
+			"newName"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "容器重命名 [name] =\u003e [newName]",
+		"formatEN": "rename container [name] =\u003e [newName]"
+	},
+	"/container/repo": {
+		"bodyKeys": [
+			"name"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "创建镜像仓库 [name]",
+		"formatEN": "create image repo [name]"
+	},
+	"/container/repo/del": {
+		"bodyKeys": [
+			"ids"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [
+			{
+				"input_column": "id",
+				"input_value": "ids",
+				"isList": true,
+				"db": "image_repos",
+				"output_column": "name",
+				"output_value": "names"
+			}
+		],
+		"formatZH": "删除镜像仓库 [names]",
+		"formatEN": "delete image repo [names]"
+	},
+	"/container/repo/update": {
+		"bodyKeys": [
+			"id"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [
+			{
+				"input_column": "id",
+				"input_value": "id",
+				"isList": false,
+				"db": "image_repos",
+				"output_column": "name",
+				"output_value": "name"
+			}
+		],
+		"formatZH": "更新镜像仓库 [name]",
+		"formatEN": "update image repo information [name]"
+	},
+	"/container/upgrade": {
+		"bodyKeys": [
+			"name",
+			"image"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "更新容器镜像 [name][image]",
+		"formatEN": "upgrade container image [name][image]"
+	},
+	"/container/volume": {
+		"bodyKeys": [
+			"name"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "创建容器存储卷 [name]",
+		"formatEN": "create container volume [name]"
+	},
+	"/container/volume/del": {
+		"bodyKeys": [
+			"names"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "删除容器存储卷 [names]",
+		"formatEN": "delete container volume [names]"
+	},
+	"/database/comment": {
+		"bodyKeys": [
+			"name"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "更新数据库 [name] 描述",
+		"formatEN": "Update database [name] description"
+	},
+	"/database/create": {
+		"bodyKeys": [
+			"name"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "创建数据库 [name]",
+		"formatEN": "Create database [name]"
+	},
+	"/database/delete": {
+		"bodyKeys": [
+			"name"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "删除数据库 [name]",
+		"formatEN": "Delete database [name]"
+	},
+	"/database/manager/delete": {
+		"bodyKeys": [
+			"databaseName",
+			"tableName"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "删除数据库 [databaseName] 表 [tableName] 中的记录",
+		"formatEN": "Delete record in database [databaseName] table [tableName]"
+	},
+	"/database/manager/insert": {
+		"bodyKeys": [
+			"databaseName",
+			"tableName"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "在数据库 [databaseName] 表 [tableName] 中插入记录",
+		"formatEN": "Insert record in database [databaseName] table [tableName]"
+	},
+	"/database/manager/update": {
+		"bodyKeys": [
+			"databaseName",
+			"tableName"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "更新数据库 [databaseName] 表 [tableName] 中的记录",
+		"formatEN": "Update record in database [databaseName] table [tableName]"
+	},
+	"/files": {
+		"bodyKeys": [
+			"path"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "创建文件/文件夹 [path]",
+		"formatEN": "Create dir or file [path]"
+	},
+	"/files/batch/del": {
+		"bodyKeys": [
+			"paths"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "批量删除文件/文件夹 [paths]",
+		"formatEN": "Batch delete dir or file [paths]"
+	},
+	"/files/batch/role": {
+		"bodyKeys": [
+			"paths",
+			"mode",
+			"user",
+			"group"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "批量修改文件权限和用户/组 [paths] =\u003e [mode]/[user]/[group]",
+		"formatEN": "Batch change file mode and owner [paths] =\u003e [mode]/[user]/[group]"
+	},
+	"/files/chunkdownload": {
+		"bodyKeys": [
+			"name"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "下载文件 [name]",
+		"formatEN": "Download file [name]"
+	},
+	"/files/compress": {
+		"bodyKeys": [
+			"name"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "压缩文件 [name]",
+		"formatEN": "Compress file [name]"
+	},
+	"/files/content": {
+		"bodyKeys": [
+			"path"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "获取文件内容 [path]",
+		"formatEN": "Load file content [path]"
+	},
+	"/files/decompress": {
+		"bodyKeys": [
+			"path"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "解压 [path]",
+		"formatEN": "Decompress file [path]"
+	},
+	"/files/del": {
+		"bodyKeys": [
+			"path"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "删除文件/文件夹 [path]",
+		"formatEN": "Delete dir or file [path]"
+	},
+	"/files/mode": {
+		"bodyKeys": [
+			"path",
+			"mode"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "修改权限 [paths] =\u003e [mode]",
+		"formatEN": "Change mode [paths] =\u003e [mode]"
+	},
+	"/files/move": {
+		"bodyKeys": [
+			"oldPaths",
+			"newPath"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "移动文件 [oldPaths] =\u003e [newPath]",
+		"formatEN": "Move [oldPaths] =\u003e [newPath]"
+	},
+	"/files/owner": {
+		"bodyKeys": [
+			"path",
+			"user",
+			"group"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "修改用户/组 [paths] =\u003e [user]/[group]",
+		"formatEN": "Change owner [paths] =\u003e [user]/[group]"
+	},
+	"/files/rename": {
+		"bodyKeys": [
+			"oldName",
+			"newName"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "重命名 [oldName] =\u003e [newName]",
+		"formatEN": "Rename [oldName] =\u003e [newName]"
+	},
+	"/files/save": {
+		"bodyKeys": [
+			"path"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "更新文件内容 [path]",
+		"formatEN": "Update file content [path]"
+	},
+	"/files/size": {
+		"bodyKeys": [
+			"path"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "获取文件夹大小 [path]",
+		"formatEN": "Load file size [path]"
+	},
+	"/files/upload": {
+		"bodyKeys": [
+			"path"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "上传文件 [path]",
+		"formatEN": "Upload file [path]"
+	},
+	"/files/wget": {
+		"bodyKeys": [
+			"url",
+			"path",
+			"name"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "下载 url =\u003e [path]/[name]",
+		"formatEN": "Download url =\u003e [path]/[name]"
+	},
+	"/hosts/monitor/clean": {
+		"bodyKeys": [],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "清空监控数据",
+		"formatEN": "clean monitor datas"
+	},
+	"/process/stop": {
+		"bodyKeys": [
+			"PID"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "结束进程 [PID]",
+		"formatEN": "结束进程 [PID]"
+	}
+}

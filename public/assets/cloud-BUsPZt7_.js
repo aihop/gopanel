@@ -1,0 +1,1 @@
+import{k as t}from"./index-DAoVJHEp.js";const u=o=>t.post("/cloud/account/search",o),n=o=>t.post("/cloud/account",o),a=o=>t.post("/cloud/account/update",o),s=o=>t.post("/cloud/account/del",o),e=o=>t.get(`/cloud/cdn/${o}/domains`);export{e as C,s as D,u as S,a as U,n as a};
