@@ -91,6 +91,11 @@ type SettingUpgradeReq struct {
 	Lang string `json:"lang"`
 }
 
+type SettingSystemCheck struct {
+	AppBrand string `json:"appBrand"`
+	Lang     string `json:"lang"`
+}
+
 type SettingAppVersion struct {
 	VersionName string `json:"versionName"`
 	VersionCode int64  `json:"versionCode"`

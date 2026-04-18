@@ -1,0 +1,1 @@
+import{k as a}from"./index-DAoVJHEp.js";function r(t){return a.get("/ai/groups",t)}function u(t){return a.post("/ai/groups",t)}function n(t){return a.get("/ai/tasks",t)}function o(t,s){return a.put(`/ai/tasks/${t}`,{title:s})}function i(t){return a.delete(`/ai/tasks/${t}`)}export{n as a,u as c,i as d,r as g,o as u};

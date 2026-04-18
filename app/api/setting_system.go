@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/aihop/gopanel/app/dto"
-	"github.com/aihop/gopanel/app/dto/request"
 	"github.com/aihop/gopanel/app/e"
 	"github.com/aihop/gopanel/app/service"
 	"github.com/aihop/gopanel/constant"
@@ -342,7 +341,7 @@ func SettingSystemUpgradeLogs(c fiber.Ctx) error {
 
 // 检查更新
 func SettingSystemCheck(c fiber.Ctx) error {
-	R, err := e.BodyToStruct[request.Lang](c.Body())
+	R, err := e.QueriesToStruct[dto.SettingSystemCheck](c.Queries())
 	if err != nil {
 		return c.JSON(e.Result(err))
 	}
@@ -363,7 +362,7 @@ func SettingSystemCheck(c fiber.Ctx) error {
 		OS:          runtimeOS,
 		Arch:        runtimeArch,
 		Lang:        R.Lang,
-		AppBrand:    constant.AppBrand,
+		AppBrand:    R.AppBrand,
 	})
 	if err != nil {
 		return c.JSON(e.Fail(err))

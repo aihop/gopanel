@@ -29,6 +29,10 @@ else
   TARGETS=("darwin/arm64" "darwin/amd64" "linux/amd64" "linux/arm64" "windows/amd64")
 fi
 
+if [ "${APP_BRAND}" = "consolex" ]; then
+  APP_BRAND="ConsoleX"
+fi
+
 if [ "${APP_BRAND}" = "ConsoleX" ]; then
   OUTDIR="${PROJECT_ROOT}/dist/consolex/v${VERSION}"
 else 

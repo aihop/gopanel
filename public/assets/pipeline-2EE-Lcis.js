@@ -1,0 +1,1 @@
+import{k as t}from"./index-DAoVJHEp.js";const p=e=>t.get("/pipeline",e),i=e=>t.post("/pipeline",e),r=e=>t.put("/pipeline",e),s=e=>t.delete("/pipeline",e),l=e=>t.post("/pipeline/run",e),o=e=>t.post("/pipeline/stop",e),c=e=>t.get("/pipeline/records",e),a=e=>t.delete("/pipeline/record",e);export{c as a,s as b,i as c,a as d,p as g,l as r,o as s,r as u};

@@ -168,8 +168,8 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 	}
 
 	if summary != nil && summary.Matched == 0 {
-		s.recordRepo.UpdateStatus(recordID, "success", "构建成功，未关联任何网站")
-		logger.Info("流水线构建成功，但当前没有绑定网站，跳过发布。")
+		s.recordRepo.UpdateStatus(recordID, "success", "构建成功")
+		logger.Info("流水线构建成功")
 		return
 	}
 
