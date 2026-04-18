@@ -389,6 +389,44 @@ func normalizeRowid(value interface{}) (int64, bool) {
 	}
 }
 
+func popRowidCondition(conditions map[string]interface{}) (interface{}, bool) {
+	if conditions == nil {
+		return nil, false
+	}
+	for k, v := range conditions {
+		if strings.EqualFold(strings.TrimSpace(k), "__rowid__") {
+			delete(conditions, k)
+			return v, true
+		}
+	}
+	return nil, false
+}
+
+func popCondition(conditions map[string]interface{}, key string) (interface{}, bool) {
+	if conditions == nil {
+		return nil, false
+	}
+	for k, v := range conditions {
+		if strings.EqualFold(strings.TrimSpace(k), key) {
+			delete(conditions, k)
+			return v, true
+		}
+	}
+	return nil, false
+}
+
+func stripComplexConditions(conditions map[string]interface{}) {
+	if conditions == nil {
+		return
+	}
+	for k, v := range conditions {
+		switch v.(type) {
+		case map[string]interface{}, []interface{}:
+			delete(conditions, k)
+		}
+	}
+}
+
 // 插入记录
 func (s *DBManagerService) InsertRecord(req request.InsertRecordReq) error {
 	db, err := s.getDBConn(req.ServerID, req.DatabaseName)
@@ -442,11 +480,16 @@ func (s *DBManagerService) UpdateRecord(req request.UpdateRecordReq) error {
 	var setCols []string
 	var args []interface{}
 	paramOffset := 1
+	stripComplexConditions(req.Conditions)
 
+	rowidValue, hasRowid := popRowidCondition(req.Conditions)
+	idValue, hasID := popCondition(req.Conditions, "id")
+	if hasID && idValue != nil {
+		req.Conditions = map[string]interface{}{"id": idValue}
+	}
 	if dbType == model.DatabaseSQLite {
-		if v, ok := req.Conditions["__rowid__"]; ok && v != nil {
-			delete(req.Conditions, "__rowid__")
-			if rowid, ok := normalizeRowid(v); ok {
+		if hasRowid && rowidValue != nil {
+			if rowid, ok := normalizeRowid(rowidValue); ok {
 				for k, val := range req.Data {
 					col := sanitizeIdent(k)
 					if col == "" {
@@ -461,7 +504,6 @@ func (s *DBManagerService) UpdateRecord(req request.UpdateRecordReq) error {
 				return err
 			}
 		}
-		delete(req.Conditions, "__rowid__")
 	}
 
 	for k, v := range req.Data {
@@ -498,16 +540,20 @@ func (s *DBManagerService) DeleteRecord(req request.DeleteRecordReq) error {
 	server, _ := s.serverRepo.Get(req.ServerID)
 	dbType := server.Type
 	tableName := sanitizeIdent(req.TableName)
+	stripComplexConditions(req.Conditions)
 
+	rowidValue, hasRowid := popRowidCondition(req.Conditions)
+	idValue, hasID := popCondition(req.Conditions, "id")
+	if hasID && idValue != nil {
+		req.Conditions = map[string]interface{}{"id": idValue}
+	}
 	if dbType == model.DatabaseSQLite {
-		if v, ok := req.Conditions["__rowid__"]; ok && v != nil {
-			delete(req.Conditions, "__rowid__")
-			if rowid, ok := normalizeRowid(v); ok {
+		if hasRowid && rowidValue != nil {
+			if rowid, ok := normalizeRowid(rowidValue); ok {
 				_, err = db.Exec(fmt.Sprintf("DELETE FROM %s WHERE rowid = ?", quoteTable(dbType, tableName)), rowid)
 				return err
 			}
 		}
-		delete(req.Conditions, "__rowid__")
 	}
 
 	whereSql, args := buildWhereClause(req.Conditions, 1, dbType)
