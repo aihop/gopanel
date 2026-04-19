@@ -10,12 +10,10 @@ import (
 
 	"github.com/aihop/gopanel/gp-agent/global"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"go.uber.org/zap"
 )
 
 var (
-	cfgFile string
 	rootCmd = &cobra.Command{
 		Use:          "gp-agent",
 		SilenceUsage: true,
@@ -29,16 +27,9 @@ func Execute() error {
 func init() {
 	cobra.OnInitialize(initConfig, initLogger)
 
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file")
 	rootCmd.PersistentFlags().String("base-dir", "", "base dir (align with gopanel system.base_dir)")
-	rootCmd.PersistentFlags().String("socket-path", "", "uds socket path (linux/macos)")
 	rootCmd.PersistentFlags().Bool("enable-caddy", true, "enable embedded caddy")
 	rootCmd.PersistentFlags().Bool("enable-daemon", true, "enable supervisor daemon")
-
-	_ = viper.BindPFlag("base_dir", rootCmd.PersistentFlags().Lookup("base-dir"))
-	_ = viper.BindPFlag("socket_path", rootCmd.PersistentFlags().Lookup("socket-path"))
-	_ = viper.BindPFlag("enable_caddy", rootCmd.PersistentFlags().Lookup("enable-caddy"))
-	_ = viper.BindPFlag("enable_daemon", rootCmd.PersistentFlags().Lookup("enable-daemon"))
 
 	rootCmd.AddCommand(serveCmd)
 	rootCmd.AddCommand(statusCmd)
@@ -54,29 +45,22 @@ func initLogger() {
 }
 
 func initConfig() {
-	viper.SetEnvPrefix("GP_AGENT")
-	viper.AutomaticEnv()
-
-	baseDir := "/opt/gopanel"
-	if runtime.GOOS != "linux" || os.Geteuid() != 0 {
-		if home, err := os.UserHomeDir(); err == nil && home != "" {
-			baseDir = filepath.Join(home, ".gopanel")
+	baseDir, _ := rootCmd.PersistentFlags().GetString("base-dir")
+	baseDir = filepath.Clean(baseDir)
+	if baseDir == "." || baseDir == string(os.PathSeparator) {
+		baseDir = ""
+	}
+	if baseDir == "" {
+		baseDir = "/opt/gopanel"
+		if runtime.GOOS != "linux" || os.Geteuid() != 0 {
+			if home, err := os.UserHomeDir(); err == nil && home != "" {
+				baseDir = filepath.Join(home, ".gopanel")
+			}
 		}
 	}
-	viper.SetDefault("base_dir", baseDir)
 
-	socketPath := filepath.Join(baseDir, "gp-agent", "run", "gp-agent.sock")
-	viper.SetDefault("socket_path", socketPath)
-
-	if cfgFile != "" {
-		viper.SetConfigFile(cfgFile)
-		_ = viper.ReadInConfig()
-	} else {
-		_ = viper.ReadInConfig()
-	}
-
-	global.CONF.BaseDir = viper.GetString("base_dir")
-	global.CONF.SocketPath = viper.GetString("socket_path")
+	global.CONF.BaseDir = baseDir
+	global.CONF.SocketPath = filepath.Join(baseDir, "gp-agent", "run", "gp-agent.sock")
 
 	if global.CONF.BaseDir == "" {
 		panic(errors.New("base_dir is empty"))

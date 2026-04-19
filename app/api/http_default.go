@@ -140,9 +140,6 @@ func HttpDefaultRestart(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	if cf == "" {
-		return c.JSON(e.Fail(errors.New("CaddyFile is empty")))
-	}
 	if err := service.CaddyApplyCaddyFile(ctx, cf); err != nil {
 		return c.JSON(e.Fail(err))
 	}
