@@ -16,6 +16,7 @@ import (
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
 	"github.com/aihop/gopanel/global"
+	udocker "github.com/aihop/gopanel/utils/docker"
 	"github.com/aihop/gopanel/utils/files"
 	"gorm.io/gorm"
 )
@@ -383,9 +384,21 @@ func (s *PipelineService) stepBuild(ctx context.Context, logger *PipelineLogger,
 		logger.Info("选择宿主机本地环境构建 (版本: v%s)", version)
 
 		scriptPath := filepath.Join(workspace, ".gopanel_build.sh")
-		// 在生成的脚本前面加上 cd 命令，确保脚本内部执行指令（如 docker build .）时是在正确的目录
-		// 同时添加环境变量打印方便排错
-		fullScript := fmt.Sprintf("#!/bin/sh\nset -e\ncd \"%s\"\necho \"Current PWD: $(pwd)\"\n%s", workspace, p.BuildScript)
+		runtimeCLI, rerr := udocker.RuntimeCLI(ctx)
+		if rerr != nil {
+			logger.Error("未找到可用容器运行时命令: %v", rerr)
+			return rerr
+		}
+		compatHeader := fmt.Sprintf(`
+CONTAINER_CLI="%s"
+export CONTAINER_CLI
+if [ "$CONTAINER_CLI" = "podman" ]; then
+	docker() { podman "$@"; }
+fi
+echo "Current Runtime CLI: ${CONTAINER_CLI}"
+`, runtimeCLI)
+		// 注入 runtime 兼容层：历史脚本里写 docker ... 也可在 podman 环境运行
+		fullScript := fmt.Sprintf("#!/bin/sh\nset -e\ncd \"%s\"\necho \"Current PWD: $(pwd)\"\n%s\n%s", workspace, compatHeader, p.BuildScript)
 		_ = os.WriteFile(scriptPath, []byte(fullScript), 0755)
 		defer os.Remove(scriptPath)
 
@@ -398,6 +411,7 @@ func (s *PipelineService) stepBuild(ctx context.Context, logger *PipelineLogger,
 		cmd.Env = append(cmd.Env,
 			fmt.Sprintf("PIPELINE_VERSION=%s", version),
 			fmt.Sprintf("VERSION=%s", version),
+			fmt.Sprintf("CONTAINER_CLI=%s", runtimeCLI),
 		)
 
 		var outBuf, errBuf bytes.Buffer
@@ -414,14 +428,22 @@ func (s *PipelineService) stepBuild(ctx context.Context, logger *PipelineLogger,
 		return nil
 	}
 
-	// 检查 Docker 引擎是否运行
-	if err := exec.CommandContext(ctx, "docker", "info").Run(); err != nil {
+	runtimeCLI, rerr := udocker.RuntimeCLI(ctx)
+	if rerr != nil {
+		return rerr
+	}
+	// 检查容器引擎是否运行
+	infoCmd, ierr := udocker.RuntimeCommand(ctx, "info")
+	if ierr != nil {
+		return ierr
+	}
+	if err := infoCmd.Run(); err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		logger.Error("无法连接到 Docker 引擎！请检查 Docker 是否已安装并正在运行。")
+		logger.Error("无法连接到容器引擎（%s）！请检查运行时是否已安装并正在运行。", runtimeCLI)
 		logger.Error("错误详情: %v", err)
-		return fmt.Errorf("docker daemon is not running")
+		return fmt.Errorf("%s daemon is not running", runtimeCLI)
 	}
 
 	logger.Info("启动构建容器: %s (版本: v%s)", p.BuildImage, version)
@@ -430,7 +452,13 @@ func (s *PipelineService) stepBuild(ctx context.Context, logger *PipelineLogger,
 	cmdArgs := []string{
 		"run", "-i", "--rm",
 		"-v", fmt.Sprintf("%s:/workspace", workspace),
-		"-v", "/var/run/docker.sock:/var/run/docker.sock", // 支持 DooD (Docker out of Docker)
+	}
+	resolved := udocker.ResolveRuntime(ctx)
+	if strings.HasPrefix(resolved.Host, "unix://") {
+		hostSock := strings.TrimPrefix(resolved.Host, "unix://")
+		if hostSock != "" {
+			cmdArgs = append(cmdArgs, "-v", fmt.Sprintf("%s:/var/run/docker.sock", hostSock))
+		}
 	}
 
 	// 动态获取宿主机的 ~/.ssh 目录并挂载，解决 macOS 和不同用户的跨平台路径问题
@@ -445,15 +473,20 @@ func (s *PipelineService) stepBuild(ctx context.Context, logger *PipelineLogger,
 	cmdArgs = append(cmdArgs,
 		"-e", fmt.Sprintf("PIPELINE_VERSION=%s", version), // 兼容旧变量
 		"-e", fmt.Sprintf("VERSION=%s", version), // 给脚本使用的通用版本号
+		"-e", fmt.Sprintf("CONTAINER_CLI=%s", runtimeCLI),
+		"-e", "DOCKER_HOST=unix:///var/run/docker.sock",
 		"-w", "/workspace",
 		p.BuildImage,
 		"sh", // 不指定文件，直接运行 sh 并从 stdin 接收脚本
 	)
 
-	cmd := exec.CommandContext(ctx, "docker", cmdArgs...)
+	cmd, cerr := udocker.RuntimeCommand(ctx, cmdArgs...)
+	if cerr != nil {
+		return cerr
+	}
 
 	// 无痕注入脚本内容
-	scriptContent := fmt.Sprintf("set -e\n%s\n", p.BuildScript)
+	scriptContent := fmt.Sprintf("set -e\nif [ \"$CONTAINER_CLI\" = \"podman\" ]; then docker() { podman \"$@\"; }; fi\n%s\n", p.BuildScript)
 	cmd.Stdin = strings.NewReader(scriptContent)
 
 	// 捕获日志
