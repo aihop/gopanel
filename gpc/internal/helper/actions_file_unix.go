@@ -70,7 +70,7 @@ func (s *Server) actionFileList(ctx context.Context, params map[string]interface
 		return "", errors.New("invalid params: path is empty")
 	}
 	page, _ := getInt(params, "page")
-	pageSize, _ := getInt(params, "pageSize")
+	limit, _ := getInt(params, "limit")
 	sortBy := strings.TrimSpace(getString(params, "sortBy"))
 	sortOrder := strings.TrimSpace(getString(params, "sortOrder"))
 	showHidden := strings.TrimSpace(getString(params, "showHidden"))
@@ -112,17 +112,17 @@ func (s *Server) actionFileList(ctx context.Context, params map[string]interface
 	sortItems(items, sortBy, sortOrder)
 
 	total := len(items)
-	if pageSize <= 0 {
-		pageSize = total
+	if limit <= 0 {
+		limit = total
 	}
 	if page <= 0 {
 		page = 1
 	}
-	start := (page - 1) * pageSize
+	start := (page - 1) * limit
 	if start < 0 {
 		start = 0
 	}
-	end := start + pageSize
+	end := start + limit
 	if end > total {
 		end = total
 	}

@@ -107,7 +107,7 @@ export namespace Website {
         operate: string;
         logType: string;
         page?: number;
-        pageSize?: number;
+        limit?: number;
     }
 
     export interface WebSiteLog {

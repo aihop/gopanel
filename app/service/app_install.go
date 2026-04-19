@@ -62,7 +62,6 @@ func (a *AppInstallService) SearchForWebsite(req request.AppInstalledSearch) (in
 		if err != nil {
 			return 0, nil, err
 		}
-		fmt.Printf("app: %v\n", app)
 		if app.ID == 0 {
 			return 0, nil, fmt.Errorf("app key not exist")
 		}
@@ -70,7 +69,7 @@ func (a *AppInstallService) SearchForWebsite(req request.AppInstalledSearch) (in
 	}
 
 	// installs, err = appInstallRepo.ListBy(opts...)
-	total, installs, err = appInstallRepo.Page(req.Page, req.PageSize, opts...)
+	total, installs, err = appInstallRepo.Page(req.Page, req.Limit, opts...)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -166,7 +165,6 @@ func (s *AppInstallService) CreateOrUpdate(appInstall *model.AppInstall) error {
 		return s.Update(appInstall)
 	}
 	app := s.GetByName(appInstall.Name)
-	// fmt.Printf("app: %v\n", app)
 	var err error
 	if app != nil && app.ID != 0 {
 		appInstall.ID = (*app).ID
@@ -182,7 +180,7 @@ func (s *AppInstallService) CreateOrUpdate(appInstall *model.AppInstall) error {
 
 func (s *AppInstallService) Uninstall(req AppUninstall) error {
 	appInstall, err := s.GetByContainerName(req.ContainerName)
-	if err != nil {
+	if err != nil || appInstall == nil {
 		return err
 	}
 	if appInstall.ID == 0 {
@@ -190,10 +188,14 @@ func (s *AppInstallService) Uninstall(req AppUninstall) error {
 	}
 
 	var path string = ""
-	// 找到这个 compose yml文件的路径
 	var compose model.Compose
 	compose, err = composeRepo.GetRecord(commonRepo.WithByName(appInstall.Name))
 	if err != nil {
+		if appInstall.Status == constant.UpErr || appInstall.Status == constant.SyncFailed || appInstall.Status == constant.Installing {
+			if err = s.Delete(appInstall.ID); err != nil {
+				return err
+			}
+		}
 		return err
 	}
 	path = compose.Path
@@ -208,13 +210,9 @@ func (s *AppInstallService) Uninstall(req AppUninstall) error {
 	if err = NewIContainerService().ComposeOperation(&composeOperation); err != nil {
 		return err
 	}
-
-	// 移除数据库记录
-	err = s.Delete(appInstall.ID)
-	if err != nil {
+	if err = s.Delete(appInstall.ID); err != nil {
 		return err
 	}
-
 	return nil
 }
 

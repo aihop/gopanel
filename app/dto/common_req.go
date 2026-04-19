@@ -6,8 +6,8 @@ type SearchWithPage struct {
 }
 
 type PageInfo struct {
-	Page     int `json:"page" validate:"required,number"`
-	PageSize int `json:"pageSize" validate:"required,number"`
+	Page  int `json:"page" validate:"required,number"`
+	Limit int `json:"limit" validate:"required,number"`
 }
 
 type UpdateDescription struct {

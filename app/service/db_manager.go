@@ -191,7 +191,7 @@ func (s *DBManagerService) ExecSql(req request.ExecSqlReq) (map[string]interface
 
 // 获取表数据（带分页）
 func (s *DBManagerService) GetTableData(req request.GetTableDataReq) (map[string]interface{}, error) {
-	offset := (req.Page - 1) * req.PageSize
+	offset := (req.Page - 1) * req.Limit
 
 	// 防注入简单处理
 	tableName := sanitizeIdent(req.TableName)
@@ -246,7 +246,7 @@ func (s *DBManagerService) GetTableData(req request.GetTableDataReq) (map[string
 	if server.Type == model.DatabaseSQLite && sqliteTableHasRowid(db, tableName) {
 		selectCols = "rowid AS \"__rowid__\", *"
 	}
-	dataSql = fmt.Sprintf("SELECT %s FROM %s%s LIMIT %d OFFSET %d", selectCols, quoteTable(server.Type, tableName), whereClause, req.PageSize, offset)
+	dataSql = fmt.Sprintf("SELECT %s FROM %s%s LIMIT %d OFFSET %d", selectCols, quoteTable(server.Type, tableName), whereClause, req.Limit, offset)
 
 	var total int64
 	if err := db.QueryRow(countSql).Scan(&total); err != nil {

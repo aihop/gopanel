@@ -187,7 +187,7 @@ const opRef = ref<any>(null)
 const data = ref<any[]>([])
 const paginationConfig = reactive({
 	currentPage: 1,
-	pageSize: 10,
+	limit: 10,
 	total: 0
 })
 
@@ -212,8 +212,8 @@ const modalTitle = computed(() =>
 
 const paginationOptions = computed(() => ({
 	page: paginationConfig.currentPage,
-	pageSize: paginationConfig.pageSize,
-	pageCount: Math.max(1, Math.ceil((paginationConfig.total || 0) / paginationConfig.pageSize)),
+	limit: paginationConfig.limit,
+	pageCount: Math.max(1, Math.ceil((paginationConfig.total || 0) / paginationConfig.limit)),
 	showSizePicker: true,
 	pageSizes: [10, 20, 50, 100],
 	showQuickJumper: true,

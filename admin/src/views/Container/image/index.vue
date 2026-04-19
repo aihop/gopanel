@@ -430,7 +430,7 @@ const fetchImageData = async () => {
 	try {
 		const params = {
 			page: pagination.value.page,
-			pageSize: pagination.value.pageSize,
+			limit: pagination.value.limit,
 			info: searchForm.value.info || ""
 		}
 		const response = await containerImageListAPI(params)
@@ -594,15 +594,15 @@ const columns = createColumns()
 
 const pagination = ref({
 	page: 1,
-	pageSize: 10,
+	limit: 10,
 	showSizePicker: true,
 	pageSizes: [10, 20, 50],
 	itemCount: 0,
 	onChange: (page: number) => {
 		pagination.value.page = page
 	},
-	onUpdatePageSize: (pageSize: number) => {
-		pagination.value.pageSize = pageSize
+	onUpdatePageSize: (limit: number) => {
+		pagination.value.limit = limit
 		pagination.value.page = 1
 	}
 })

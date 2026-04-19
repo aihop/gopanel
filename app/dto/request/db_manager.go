@@ -16,7 +16,7 @@ type GetTableDataReq struct {
 	DatabaseName   string            `json:"databaseName" validate:"required"`
 	TableName      string            `json:"tableName" validate:"required"`
 	Page           int               `json:"page" validate:"required,min=1"`
-	PageSize       int               `json:"pageSize" validate:"required,min=1,max=100"`
+	Limit          int               `json:"limit" validate:"required,min=1,max=100"`
 	SearchColumn   string            `json:"searchColumn"`
 	SearchValue    string            `json:"searchValue"`
 	AdvancedSearch []SearchCondition `json:"advancedSearch"`

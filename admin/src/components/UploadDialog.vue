@@ -1,111 +1,163 @@
 <template>
-	<n-drawer v-model:show="upVisible" width="50%" :mask-closable="false">
-		<n-drawer-content>
-			<template #header>
-				<DrawerHeader :header="t('commons.button.import')" :resource="title" :back="handleClose" />
-			</template>
+  <n-drawer
+    v-model:show="upVisible"
+    width="50%"
+    :mask-closable="false"
+  >
+    <n-drawer-content>
+      <template #header>
+        <DrawerHeader
+          :header="t('commons.button.import')"
+          :resource="title"
+          :back="handleClose"
+        />
+      </template>
 
-			<div style="padding: 16px">
-				<n-spin :show="loading">
-					<n-alert
-						v-if="type === 'mysql' || type === 'mariadb'"
-						type="error"
-						:title="t('database.formatHelper', [remark])"
-					/>
-					<n-alert
-						v-if="type === 'website'"
-						type="warning"
-						:title="t('website.websiteBackupWarn')"
-						:closable="false"
-						class="mb-4"
-					/>
+      <div style="padding: 16px">
+        <n-spin :show="loading">
+          <n-alert
+            v-if="type === 'mysql' || type === 'mariadb'"
+            type="error"
+            :title="t('database.formatHelper', [remark])"
+          />
+          <n-alert
+            v-if="type === 'website'"
+            type="warning"
+            :title="t('website.websiteBackupWarn')"
+            :closable="false"
+            class="mb-4"
+          />
 
-					<!-- 拖拽上传区域 -->
-					<div class="upload-dropzone" @dragover.prevent="onDragOver" @drop.prevent="onDrop">
-						<input ref="fileInput" class="file-input" type="file" @change="onFileSelect" />
-						<div class="upload-inner">
-							<div class="upload-icon">{{ t("database.dropHelper") }}</div>
-							<div class="upload-sub">{{ t("database.clickHelper") }}</div>
-							<div v-if="isUpload" class="progress-wrap mt-3">
-								<div class="progress-bar">
-									<div class="progress-fill" :style="{ width: uploadPercent + '%' }"></div>
-								</div>
-								<div class="progress-text">{{ uploadPercent }}%</div>
-							</div>
-							<div
-								class="upload-tips"
-								v-if="type === 'mysql' || type === 'mariadb' || type === 'postgresql'"
-							>
-								<div class="input-help">{{ t("database.supportUpType") }}</div>
-								<div class="input-help">{{ t("database.zipFormat") }}</div>
-							</div>
-							<div class="upload-tips" v-else>
-								<div class="input-help">{{ t("website.supportUpType") }}</div>
-								<div class="input-help">{{ t("website.zipFormat", [type + ".json"]) }}</div>
-							</div>
-						</div>
-					</div>
+          <!-- 拖拽上传区域 -->
+          <div
+            class="upload-dropzone"
+            @dragover.prevent="onDragOver"
+            @drop.prevent="onDrop"
+          >
+            <input
+              ref="fileInput"
+              class="file-input"
+              type="file"
+              @change="onFileSelect"
+            />
+            <div class="upload-inner">
+              <div class="upload-icon">{{ t("database.dropHelper") }}</div>
+              <div class="upload-sub">{{ t("database.clickHelper") }}</div>
+              <div
+                v-if="isUpload"
+                class="progress-wrap mt-3"
+              >
+                <div class="progress-bar">
+                  <div
+                    class="progress-fill"
+                    :style="{ width: uploadPercent + '%' }"
+                  ></div>
+                </div>
+                <div class="progress-text">{{ uploadPercent }}%</div>
+              </div>
+              <div
+                class="upload-tips"
+                v-if="type === 'mysql' || type === 'mariadb' || type === 'postgresql'"
+              >
+                <div class="input-help">{{ t("database.supportUpType") }}</div>
+                <div class="input-help">{{ t("database.zipFormat") }}</div>
+              </div>
+              <div
+                class="upload-tips"
+                v-else
+              >
+                <div class="input-help">{{ t("website.supportUpType") }}</div>
+                <div class="input-help">{{ t("website.zipFormat", [type + ".json"]) }}</div>
+              </div>
+            </div>
+          </div>
 
-					<div style="margin-top: 12px; display: flex; gap: 12px; align-items: center">
-						<n-button :disabled="isUpload || uploaderFiles.length !== 1" @click="onSubmit" type="primary">
-							{{ t("commons.button.upload") }}
-						</n-button>
-					</div>
+          <div style="margin-top: 12px; display: flex; gap: 12px; align-items: center">
+            <n-button
+              :disabled="isUpload || uploaderFiles.length !== 1"
+              @click="onSubmit"
+              type="primary"
+            >
+              {{ t("commons.button.upload") }}
+            </n-button>
+          </div>
 
-					<n-divider />
+          <n-divider />
 
-					<div class="mb-4 flex items-center justify-between">
-						<n-space>
-							<n-button :disabled="selects.length === 0" @click="onBatchDelete(null)">
-								{{ t("commons.button.delete") }}
-							</n-button>
-							<div v-if="selects.length" style="color: var(--fg-secondary-color); font-size: 12px">
-								{{ selects.length }} {{ t("commons.selected") }}
-							</div>
-						</n-space>
-					</div>
+          <div class="mb-4 flex items-center justify-between">
+            <n-space>
+              <n-button
+                :disabled="selects.length === 0"
+                @click="onBatchDelete(null)"
+              >
+                {{ t("commons.button.delete") }}
+              </n-button>
+              <div
+                v-if="selects.length"
+                style="color: var(--fg-secondary-color); font-size: 12px"
+              >
+                {{ selects.length }} {{ t("commons.selected") }}
+              </div>
+            </n-space>
+          </div>
 
-					<n-data-table
-						:columns="columns"
-						:data="data"
-						:row-key="rowKey"
-						:loading="loading"
-						:pagination="paginationOptions"
-						remote
-						v-model:checked-rows="selects"
-						@update:page="onPageChange"
-						@update:pageSize="onPageSizeChange"
-						:scroll-x="720"
-					/>
-				</n-spin>
-			</div>
+          <n-data-table
+            :columns="columns"
+            :data="data"
+            :row-key="rowKey"
+            :loading="loading"
+            :pagination="paginationOptions"
+            remote
+            v-model:checked-rows="selects"
+            @update:page="onPageChange"
+            @update:pageSize="onPageSizeChange"
+            :scroll-x="720"
+          />
+        </n-spin>
+      </div>
 
-			<n-modal
-				v-model:show="open"
-				:title="t('commons.button.recover') + ' - ' + name"
-				:mask-closable="false"
-				preset="card"
-			>
-				<n-form :model="{ secret }">
-					<n-form-item v-if="type === 'app' || type === 'website'" :label="t('setting.compressPassword')">
-						<n-input v-model:value="secret" :placeholder="t('setting.backupRecoverMessage')" />
-					</n-form-item>
-				</n-form>
-				<template #footer>
-					<div style="display: flex; justify-content: flex-end; gap: 12px">
-						<n-button @click="handleBackupClose" :disabled="loading">
-							{{ t("commons.button.cancel") }}
-						</n-button>
-						<n-button type="primary" @click="onHandleRecover" :loading="loading">
-							{{ t("commons.button.confirm") }}
-						</n-button>
-					</div>
-				</template>
-			</n-modal>
+      <n-modal
+        v-model:show="open"
+        :title="t('commons.button.recover') + ' - ' + name"
+        :mask-closable="false"
+        preset="card"
+      >
+        <n-form :model="{ secret }">
+          <n-form-item
+            v-if="type === 'app' || type === 'website'"
+            :label="t('setting.compressPassword')"
+          >
+            <n-input
+              v-model:value="secret"
+              :placeholder="t('setting.backupRecoverMessage')"
+            />
+          </n-form-item>
+        </n-form>
+        <template #footer>
+          <div style="display: flex; justify-content: flex-end; gap: 12px">
+            <n-button
+              @click="handleBackupClose"
+              :disabled="loading"
+            >
+              {{ t("commons.button.cancel") }}
+            </n-button>
+            <n-button
+              type="primary"
+              @click="onHandleRecover"
+              :loading="loading"
+            >
+              {{ t("commons.button.confirm") }}
+            </n-button>
+          </div>
+        </template>
+      </n-modal>
 
-			<OpDialog ref="opRef" @search="search" />
-		</n-drawer-content>
-	</n-drawer>
+      <OpDialog
+        ref="opRef"
+        @search="search"
+      />
+    </n-drawer-content>
+  </n-drawer>
 </template>
 
 <script lang="ts" setup>
@@ -151,7 +203,7 @@ const data = ref<any[]>([])
 const title = ref("")
 const paginationConfig = reactive({
 	currentPage: 1,
-	pageSize: 10,
+	limit: 10,
 	total: 0
 })
 
@@ -168,8 +220,8 @@ const fileInput = ref<HTMLInputElement | null>(null)
 
 const paginationOptions = {
 	page: paginationConfig.currentPage,
-	pageSize: paginationConfig.pageSize,
-	pageCount: Math.max(1, Math.ceil((paginationConfig.total || 0) / paginationConfig.pageSize)),
+	limit: paginationConfig.limit,
+	pageCount: Math.max(1, Math.ceil((paginationConfig.total || 0) / paginationConfig.limit)),
 	showSizePicker: true,
 	pageSizes: [10, 20, 50, 100],
 	showQuickJumper: true,
@@ -252,7 +304,7 @@ const search = async () => {
 	try {
 		const params = {
 			page: paginationConfig.currentPage,
-			pageSize: paginationConfig.pageSize,
+			limit: paginationConfig.limit,
 			path: baseDir.value
 		}
 		const res = await GetUploadList(params)
@@ -433,7 +485,7 @@ const onPageChange = (p: number) => {
 	search()
 }
 const onPageSizeChange = (size: number) => {
-	paginationConfig.pageSize = size
+	paginationConfig.limit = size
 	paginationConfig.currentPage = 1
 	search()
 }
@@ -445,7 +497,7 @@ const handleClose = () => {
 	uploadPercent.value = 0
 	loading.value = false
 	paginationConfig.currentPage = 1
-	paginationConfig.pageSize = 10
+	paginationConfig.limit = 10
 	paginationConfig.total = 0
 	data.value = []
 	selects.value = []

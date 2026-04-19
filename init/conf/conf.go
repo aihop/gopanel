@@ -206,13 +206,13 @@ func GlobalConfInit(v *viper.Viper) {
 	if global.CONF.System.GpcSocketPath == "" {
 		switch runtime.GOOS {
 		case "darwin":
-			global.CONF.System.GpcSocketPath = "/var/run/gopanel/gpc.sock"
+			global.CONF.System.GpcSocketPath = filepath.Join(global.CONF.System.BaseDir, "gpc.sock")
 		case "linux":
-			global.CONF.System.GpcSocketPath = "/run/gopanel/gpc.sock"
+			global.CONF.System.GpcSocketPath = filepath.Join(global.CONF.System.BaseDir, "gpc.sock")
 		case "windows":
 			global.CONF.System.GpcSocketPath = `\\.\pipe\gopanel-gpc`
 		default:
-			global.CONF.System.GpcSocketPath = "/run/gopanel/gpc.sock"
+			global.CONF.System.GpcSocketPath = filepath.Join(global.CONF.System.BaseDir, "gpc.sock")
 		}
 	}
 	if strings.TrimSpace(global.CONF.System.ContainerRuntime) == "" {

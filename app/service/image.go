@@ -94,7 +94,7 @@ func (u *ImageService) Page(req dto.SearchWithPage) (int64, interface{}, error) 
 			Size:      size,
 		})
 	}
-	total, start, end := len(records), (req.Page-1)*req.PageSize, req.Page*req.PageSize
+	total, start, end := len(records), (req.Page-1)*req.Limit, req.Page*req.Limit
 	if start > total {
 		backDatas = make([]dto.ImageInfo, 0)
 	} else {
@@ -109,7 +109,7 @@ func (u *ImageService) Page(req dto.SearchWithPage) (int64, interface{}, error) 
 
 func (u *ImageService) ListAll() ([]dto.ImageInfo, error) {
 	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
-		_, data, err := u.pagePodman(dto.SearchWithPage{PageInfo: dto.PageInfo{Page: 1, PageSize: 1000000}})
+		_, data, err := u.pagePodman(dto.SearchWithPage{PageInfo: dto.PageInfo{Page: 1, Limit: 1000000}})
 		if err != nil {
 			return nil, err
 		}

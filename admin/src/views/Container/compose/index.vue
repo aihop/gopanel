@@ -52,7 +52,7 @@
       <div class="flex items-center justify-end">
         <n-pagination
           v-model:page="paginationReactive.page"
-          v-model:page-size="paginationReactive.pageSize"
+          v-model:page-size="paginationReactive.limit"
           :item-count="paginationReactive.itemCount"
           :page-sizes="paginationReactive.pageSizes"
           show-size-picker
@@ -367,7 +367,7 @@ const data = ref<RowData[]>([])
 const loading = ref(false)
 const paginationReactive = reactive({
 	page: 1,
-	pageSize: 10,
+	limit: 10,
 	itemCount: 0,
 	showSizePicker: true,
 	pageSizes: [10, 20, 50, 100],
@@ -375,8 +375,8 @@ const paginationReactive = reactive({
 		paginationReactive.page = page
 		search()
 	},
-	onUpdatePageSize: (pageSize: number) => {
-		paginationReactive.pageSize = pageSize
+	onUpdatePageSize: (limit: number) => {
+		paginationReactive.limit = limit
 		paginationReactive.page = 1
 		search()
 	}
@@ -386,7 +386,7 @@ const searchName = ref()
 const search = async () => {
 	const params: any = {
 		page: paginationReactive.page,
-		pageSize: paginationReactive.pageSize
+		limit: paginationReactive.limit
 	}
 	if (searchName.value && String(searchName.value).trim() !== "") {
 		params.info = String(searchName.value).trim()
@@ -600,7 +600,7 @@ const handleConfirmCreate = async () => {
 		if (logTimer) clearInterval(logTimer)
 		const fetchLog = async () => {
 			try {
-				const res = await ReadByLine({ type: "compose-create", name: logFile, page: 1, pageSize: 1000 })
+				const res = await ReadByLine({ type: "compose-create", name: logFile, page: 1, limit: 1000 })
 				// 根据接口返回内容判断是否停止轮询
 				if (res.data && res.data.lines) {
 					logContent.value = res.data.lines.join("\n")
@@ -659,8 +659,8 @@ function handlePageChange(page: number) {
 	paginationReactive.page = page
 	search()
 }
-function handlePageSizeChange(pageSize: number) {
-	paginationReactive.pageSize = pageSize
+function handlePageSizeChange(limit: number) {
+	paginationReactive.limit = limit
 	paginationReactive.page = 1
 	search()
 }

@@ -1,11 +1,13 @@
 package api
 
 import (
+	"github.com/aihop/gopanel/app/dto"
 	"github.com/aihop/gopanel/app/dto/request"
 	"github.com/aihop/gopanel/app/e"
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/service"
 	"github.com/aihop/gopanel/buserr"
+	"github.com/aihop/gopanel/pkg/gormx"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -18,19 +20,11 @@ func DatabaseServerList(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Result(buserr.Err(err)))
 	}
-	return c.JSON(e.Succ(data))
-}
-
-func DatabaseServerCount(c fiber.Ctx) error {
-	R, err := e.BodyToWhere(c.Body())
+	total, _ := service.NewDatabaseServer().CountByWhere(&gormx.Wherex{Wheres: R.Wheres})
 	if err != nil {
 		return c.JSON(e.Result(buserr.Err(err)))
 	}
-	data, err := service.NewDatabaseServer().CountByWhere(&R)
-	if err != nil {
-		return c.JSON(e.Result(buserr.Err(err)))
-	}
-	return c.JSON(e.Succ(data))
+	return c.JSON(e.Succ(dto.PageResult{Total: total, Items: data}))
 }
 
 func DatabaseServerCreate(c fiber.Ctx) error {

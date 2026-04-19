@@ -222,7 +222,7 @@ const groupInfo = ref<AIGroup | null>(null)
 // 拉取当前组的信息
 const fetchGroupInfo = async () => {
   try {
-    const res = await getAIGroups({ page: 1, pageSize: 50 })
+    const res = await getAIGroups({ page: 1, limit: 50 })
     if (res.code === 0) {
       groupInfo.value = res.data.items.find(g => g.id === currentGroupId.value) || null
     }
@@ -244,7 +244,7 @@ const terminalKey = ref(0)
 const fetchTasks = async () => {
   if (!currentGroupId.value) return
   try {
-    const res = await getAITasks({ page: 1, pageSize: 50, projectId: currentGroupId.value })
+    const res = await getAITasks({ page: 1, limit: 50, projectId: currentGroupId.value })
     if (res.code === 0) {
       tasks.value = res.data.items || []
     }

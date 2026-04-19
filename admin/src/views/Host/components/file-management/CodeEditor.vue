@@ -143,7 +143,7 @@ const openCodeEditor = (path: string, extension: string) => {
 		path: path,
 		expand: true,
 		page: 1,
-		pageSize: 10
+		limit: 10
 	}
 
 	GetFileContent(req)

@@ -16,7 +16,6 @@ func DatabaseRouter(r fiber.Router) {
 		databaseRouter.Post("/delete", api.DatabaseDelete)
 		databaseRouter.Post("/comment", api.DatabaseComment)
 		databaseRouter.Post("/server/list", api.DatabaseServerList)
-		databaseRouter.Post("/server/count", api.DatabaseServerCount)
 		databaseRouter.Post("/server/create", api.DatabaseServerCreate)
 		databaseRouter.Post("/server/update", api.DatabaseServerUpdate)
 		databaseRouter.Post("/server/delete", api.DatabaseServerDelete)
@@ -24,7 +23,6 @@ func DatabaseRouter(r fiber.Router) {
 		databaseRouter.Post("/server/get", api.DatabaseServerGet)
 
 		databaseRouter.Post("/user/list", api.DatabaseUserList)
-		databaseRouter.Post("/user/count", api.DatabaseUserCount)
 		databaseRouter.Post("/user/create", api.DatabaseUserCreate)
 		databaseRouter.Post("/user/update", api.DatabaseUserUpdate)
 		databaseRouter.Post("/user/delete", api.DatabaseUserDelete)

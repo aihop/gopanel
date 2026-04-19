@@ -104,8 +104,8 @@ func (s *FirewallService) Search(req *dto.RuleSearch) (*FirewallSearchResult, er
 	}
 	items = filterFirewallItems(items, req)
 	total := len(items)
-	page, pageSize := normalizePage(req.Page, req.PageSize)
-	start := (page - 1) * pageSize
+	page, limit := normalizePage(req.Page, req.Limit)
+	start := (page - 1) * limit
 	if start >= total {
 		return &FirewallSearchResult{Items: []FirewallRuleItem{}, Total: total}, nil
 	}
@@ -116,7 +116,7 @@ func (s *FirewallService) Search(req *dto.RuleSearch) (*FirewallSearchResult, er
 			items[i].UsedStatus = checkPortUsed(items[i].Port, items[i].Protocol, apps)
 		}
 	}
-	end := min(start+pageSize, total)
+	end := min(start+limit, total)
 	return &FirewallSearchResult{
 		Items: items[start:end],
 		Total: total,
@@ -504,14 +504,14 @@ func normalizeFamily(value string) string {
 	return value
 }
 
-func normalizePage(page, pageSize int) (int, int) {
+func normalizePage(page, limit int) (int, int) {
 	if page <= 0 {
 		page = 1
 	}
-	if pageSize <= 0 {
-		pageSize = 10
+	if limit <= 0 {
+		limit = 10
 	}
-	return page, pageSize
+	return page, limit
 }
 
 func buildFirewallDescriptionKey(ruleType, port, protocol, address, strategy string) string {

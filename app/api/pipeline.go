@@ -31,10 +31,10 @@ func requirePipelineManagePermission(c fiber.Ctx) error {
 
 func PipelinePage(c fiber.Ctx) error {
 	page, _ := strconv.Atoi(c.Query("page", "1"))
-	pageSize, _ := strconv.Atoi(c.Query("pageSize", "10"))
+	limit, _ := strconv.Atoi(c.Query("limit", "10"))
 
 	pipelineRepo := repo.NewPipeline(global.DB)
-	total, list, err := pipelineRepo.Page(page, pageSize)
+	total, list, err := pipelineRepo.Page(page, limit)
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
@@ -171,10 +171,10 @@ func PipelineStop(c fiber.Ctx) error {
 func PipelineRecordPage(c fiber.Ctx) error {
 	pipelineId, _ := strconv.Atoi(c.Query("pipelineId"))
 	page, _ := strconv.Atoi(c.Query("page", "1"))
-	pageSize, _ := strconv.Atoi(c.Query("pageSize", "10"))
+	limit, _ := strconv.Atoi(c.Query("limit", "10"))
 
 	recordRepo := repo.NewPipelineRecord(global.DB)
-	total, list, err := recordRepo.PageByPipeline(uint(pipelineId), page, pageSize)
+	total, list, err := recordRepo.PageByPipeline(uint(pipelineId), page, limit)
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}

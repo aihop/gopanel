@@ -144,7 +144,7 @@ const submitting = ref(false)
 const dataList = ref([])
 const pagination = reactive({
 	page: 1,
-	pageSize: 10,
+	limit: 10,
 	itemCount: 0,
 	onChange: (page: number) => {
 		pagination.page = page
@@ -256,7 +256,7 @@ async function fetchData() {
 	try {
 		const res = await pageUserAPI({
 			page: pagination.page,
-			pageSize: pagination.pageSize
+			limit: pagination.limit
 		})
 		const responseData = res.data as any
 		dataList.value = responseData.items || []

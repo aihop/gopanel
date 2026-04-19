@@ -5,8 +5,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -36,16 +38,37 @@ func Command(ctx context.Context, args ...string) (*exec.Cmd, error) {
 			break
 		}
 	}
+	var extraEnv []string
+	if bin == "podman" && len(prefix) > 0 && prefix[0] == "compose" {
+		extraEnv = append(extraEnv, "PODMAN_COMPOSE_WARNING_LOGS=false")
+		if _, err := exec.LookPath("podman-compose"); err == nil {
+			extraEnv = append(extraEnv, "PODMAN_COMPOSE_PROVIDER=podman-compose")
+		} else if _, err := exec.LookPath("docker-compose"); err == nil {
+			if runtime.GOOS == "darwin" {
+				if home, e := os.UserHomeDir(); e == nil && home != "" {
+					if _, se := os.Stat(filepath.Join(home, ".docker", "run", "docker.sock")); se != nil {
+						return nil, fmt.Errorf("podman compose is using docker-compose provider but docker daemon socket is missing; install podman-compose or start docker daemon")
+					}
+				}
+			}
+		}
+	}
 	if ctx == nil {
 		c := exec.Command(bin, allArgs...)
 		if workDir != "" {
 			c.Dir = workDir
+		}
+		if len(extraEnv) > 0 {
+			c.Env = append(os.Environ(), extraEnv...)
 		}
 		return c, nil
 	}
 	c := exec.CommandContext(ctx, bin, allArgs...)
 	if workDir != "" {
 		c.Dir = workDir
+	}
+	if len(extraEnv) > 0 {
+		c.Env = append(os.Environ(), extraEnv...)
 	}
 	return c, nil
 }

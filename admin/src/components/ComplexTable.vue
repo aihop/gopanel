@@ -37,11 +37,11 @@
       <slot name="pagination">
         <n-pagination
           v-model:page="paginationConfig.currentPage"
-          v-model:page-size="paginationConfig.pageSize"
+          v-model:page-size="paginationConfig.limit"
           :page-sizes="[5, 10, 20, 50, 100]"
           :show-size-picker="true"
           :show-quick-jumper="!mobile"
-          :page-count="Math.ceil(paginationConfig.total / paginationConfig.pageSize)"
+          :page-count="Math.ceil(paginationConfig.total / paginationConfig.limit)"
           @update:page="currentChange"
           @update:page-size="sizeChange"
         />
@@ -178,7 +178,7 @@ function currentChange(page: number) {
 }
 
 function sizeChange(size: number) {
-	emit("update:paginationConfig", { ...paginationConfig.value, pageSize: size, currentPage: 1 })
+	emit("update:paginationConfig", { ...paginationConfig.value, limit: size, currentPage: 1 })
 }
 
 // 排序
@@ -211,7 +211,7 @@ onMounted(() => {
 	if (props.paginationConfig?.cacheSizeKey) {
 		let itemSize = Number(localStorage.getItem(props.paginationConfig.cacheSizeKey))
 		if (itemSize) {
-			props.paginationConfig.pageSize = itemSize
+			props.paginationConfig.limit = itemSize
 		}
 	}
 })

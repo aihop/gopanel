@@ -11,14 +11,12 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
-// === AI Group APIs ===
-
 func GetAIGroups(c fiber.Ctx) error {
 	page, _ := strconv.Atoi(c.Query("page", "1"))
-	pageSize, _ := strconv.Atoi(c.Query("pageSize", "50"))
+	limit, _ := strconv.Atoi(c.Query("limit", "50"))
 
 	groupRepo := repo.NewAIGroupRepo()
-	groups, total, err := groupRepo.GetGroups(page, pageSize)
+	groups, total, err := groupRepo.GetGroups(page, limit)
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
@@ -61,7 +59,7 @@ func GetAITasks(c fiber.Ctx) error {
 	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
 
 	page, _ := strconv.Atoi(c.Query("page", "1"))
-	pageSize, _ := strconv.Atoi(c.Query("pageSize", "20"))
+	limit, _ := strconv.Atoi(c.Query("limit", "20"))
 	projectID, _ := strconv.Atoi(c.Query("projectId", "0"))
 
 	aiRepo := repo.NewAITaskRepo()
@@ -70,9 +68,9 @@ func GetAITasks(c fiber.Ctx) error {
 	var err error
 
 	if projectID > 0 {
-		tasks, total, err = aiRepo.GetTasksByProjectID(uint(projectID), page, pageSize)
+		tasks, total, err = aiRepo.GetTasksByProjectID(uint(projectID), page, limit)
 	} else {
-		tasks, total, err = aiRepo.GetTasksByUserID(claims.UserId, page, pageSize)
+		tasks, total, err = aiRepo.GetTasksByUserID(claims.UserId, page, limit)
 	}
 
 	if err != nil {

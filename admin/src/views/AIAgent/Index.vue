@@ -110,7 +110,7 @@ const groups = ref<AIGroup[]>([])
 
 const fetchGroups = async () => {
   try {
-    const res = await getAIGroups({ page: 1, pageSize: 50 })
+    const res = await getAIGroups({ page: 1, limit: 50 })
     if (res.code === 0) {
       groups.value = res.data.items || []
     }

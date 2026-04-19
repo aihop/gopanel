@@ -469,7 +469,7 @@ const columns = createColumns()
 
 const pagination = ref({
 	page: 1,
-	pageSize: 10,
+	limit: 10,
 	showSizePicker: true,
 	pageSizes: [10, 20, 30, 50],
 	itemCount: 0,
@@ -477,8 +477,8 @@ const pagination = ref({
 		pagination.value.page = page
 		fetchRepositoryData()
 	},
-	onUpdatePageSize: (pageSize: number) => {
-		pagination.value.pageSize = pageSize
+	onUpdatePageSize: (limit: number) => {
+		pagination.value.limit = limit
 		pagination.value.page = 1
 		fetchRepositoryData()
 	}
@@ -495,7 +495,7 @@ const fetchRepositoryData = async () => {
 	try {
 		const params: any = {
 			page: pagination.value.page,
-			pageSize: pagination.value.pageSize
+			limit: pagination.value.limit
 		}
 		if (searchValue.value && searchValue.value.trim() !== "") {
 			params.info = searchValue.value.trim()

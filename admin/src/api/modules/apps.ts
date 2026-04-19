@@ -5,14 +5,14 @@ import { TimeoutEnum } from "@/enums/http-enum"
 
 export interface AppsInstalledSearchParams {
 	page: number
-	pageSize: number
+	limit: number
 	name?: string
 	key?: string
 }
 
 export interface AppsSearchParams {
 	page: number
-	pageSize: number
+	limit: number
 	name?: string
 	type?: string
 	resource?: string

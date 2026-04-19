@@ -18,7 +18,7 @@ const isSubAdmin = authStore.user?.role === "SUB_ADMIN"
 
 const pagination = ref({
   page: 1,
-  pageSize: 10,
+  limit: 10,
   itemCount: 0,
   onChange: (page: number) => {
     pagination.value.page = page
@@ -164,7 +164,7 @@ const fetchData = async () => {
     const res = await getPipelineRecords({
       pipelineId: props.pipelineId,
       page: pagination.value.page,
-      pageSize: pagination.value.pageSize
+      limit: pagination.value.limit
     })
     data.value = res.data.items
     pagination.value.itemCount = res.data.total

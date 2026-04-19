@@ -235,7 +235,7 @@ const selects = ref<any>([])
 const paginationConfig = reactive({
 	cacheSizeKey: "container-page-size",
 	currentPage: 1,
-	pageSize: 10,
+	limit: 10,
 	total: 0
 })
 
@@ -247,7 +247,7 @@ async function search() {
 		name: "",
 		state: "all",
 		page: paginationConfig.currentPage,
-		pageSize: paginationConfig.pageSize,
+		limit: paginationConfig.limit,
 		filters: filterItem,
 		orderBy: "created_at",
 		order: "null"

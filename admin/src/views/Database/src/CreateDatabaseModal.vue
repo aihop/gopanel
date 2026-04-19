@@ -40,7 +40,7 @@ watch(
 	value => {
 		if (value) {
 			createModel.value.serverId = globalSelectedServerId?.value || null as any
-			databaseServerListAPI({ page: 1, pageSize: 10000 }).then(({ data }: { data: any }) => {
+			databaseServerListAPI({ page: 1, limit: 10000 }).then(({ data }: { data: any }) => {
 				servers.value = []
 				for (const server of data) {
 					servers.value.push({
@@ -55,88 +55,121 @@ watch(
 </script>
 
 <template>
-	<n-modal
-		v-model:show="show"
-		:title="$t('database.createDatabase')"
-		style="width: 60vw"
-		size="huge"
-		preset="card"
-		:bordered="false"
-		@close="show = false"
-		:mask-closable="false"
-	>
-		<n-form :model="createModel">
-			<n-form-item path="serverId" :label="$t('database.server')">
-				<n-select
-					v-model:value="createModel.serverId"
-					@keydown.enter.prevent
-					:placeholder="$t('form.pleaseSelectTo', [$t('database.server')])"
-					:options="servers"
-				/>
-			</n-form-item>
-			<n-form-item path="database" :label="$t('database.databaseName')">
-				<n-input
-					v-model:value="createModel.name"
-					type="text"
-					@keydown.enter.prevent
-					:placeholder="$t('form.pleaseInputTo', [$t('database.databaseName')])"
-				/>
-			</n-form-item>
-			<n-form-item path="createUser" :label="$t('database.createUser')">
-				<n-switch v-model:value="createModel.createUser" />
-			</n-form-item>
-			<n-form-item v-if="!createModel.createUser" path="username" :label="$t('database.authorizedUser')">
-				<n-input
-					v-model:value="createModel.username"
-					type="text"
-					@keydown.enter.prevent
-					:placeholder="$t('form.pleaseInputTo', [$t('database.authorizedUser')])"
-				/>
-			</n-form-item>
-			<n-form-item v-if="createModel.createUser" path="username" :label="$t('database.username')">
-				<n-input
-					v-model:value="createModel.username"
-					type="text"
-					@keydown.enter.prevent
-					:placeholder="$t('form.pleaseInputTo', [$t('database.username')])"
-				/>
-			</n-form-item>
-			<n-form-item v-if="createModel.createUser" path="password" :label="$t('database.password')">
-				<n-input
-					v-model:value="createModel.password"
-					type="password"
-					show-password-on="click"
-					@keydown.enter.prevent
-					:placeholder="$t('form.pleaseInputTo', [$t('database.password')])"
-				>
-					<template #suffix>
-						<n-button type="primary" size="tiny" @click="createModel.password = Math.random().toString(32)">
-							{{ $t("commons.button.generate") }}
-						</n-button>
-					</template>
-				</n-input>
-			</n-form-item>
-			<n-form-item v-if="createModel.createUser" path="host-select" :label="$t('database.host')">
-				<n-select
-					v-model:value="createModel.host"
-					@keydown.enter.prevent
-					:placeholder="$t('form.pleaseSelectTo', [$t('database.serverHost')])"
-					:options="hostType"
-				/>
-			</n-form-item>
-			<n-form-item
-				v-if="createModel.createUser && createModel.host === ''"
-				path="host"
-				:label="$t('database.specificHost')"
-			>
-				<n-input
-					v-model:value="createModel.host"
-					type="text"
-					@keydown.enter.prevent
-					:placeholder="$t('form.pleaseInputTo', [$t('database.specificHostAddress')])"
-				/>
-			</n-form-item>
-		</n-form>
-		<n-button type="info" block @click="handleCreate">{{ $t("commons.button.submit") }}</n-button>
-	</n-modal>
+  <n-modal
+    v-model:show="show"
+    :title="$t('database.createDatabase')"
+    style="width: 60vw"
+    size="huge"
+    preset="card"
+    :bordered="false"
+    @close="show = false"
+    :mask-closable="false"
+  >
+    <n-form :model="createModel">
+      <n-form-item
+        path="serverId"
+        :label="$t('database.server')"
+      >
+        <n-select
+          v-model:value="createModel.serverId"
+          @keydown.enter.prevent
+          :placeholder="$t('form.pleaseSelectTo', [$t('database.server')])"
+          :options="servers"
+        />
+      </n-form-item>
+      <n-form-item
+        path="database"
+        :label="$t('database.databaseName')"
+      >
+        <n-input
+          v-model:value="createModel.name"
+          type="text"
+          @keydown.enter.prevent
+          :placeholder="$t('form.pleaseInputTo', [$t('database.databaseName')])"
+        />
+      </n-form-item>
+      <n-form-item
+        path="createUser"
+        :label="$t('database.createUser')"
+      >
+        <n-switch v-model:value="createModel.createUser" />
+      </n-form-item>
+      <n-form-item
+        v-if="!createModel.createUser"
+        path="username"
+        :label="$t('database.authorizedUser')"
+      >
+        <n-input
+          v-model:value="createModel.username"
+          type="text"
+          @keydown.enter.prevent
+          :placeholder="$t('form.pleaseInputTo', [$t('database.authorizedUser')])"
+        />
+      </n-form-item>
+      <n-form-item
+        v-if="createModel.createUser"
+        path="username"
+        :label="$t('database.username')"
+      >
+        <n-input
+          v-model:value="createModel.username"
+          type="text"
+          @keydown.enter.prevent
+          :placeholder="$t('form.pleaseInputTo', [$t('database.username')])"
+        />
+      </n-form-item>
+      <n-form-item
+        v-if="createModel.createUser"
+        path="password"
+        :label="$t('database.password')"
+      >
+        <n-input
+          v-model:value="createModel.password"
+          type="password"
+          show-password-on="click"
+          @keydown.enter.prevent
+          :placeholder="$t('form.pleaseInputTo', [$t('database.password')])"
+        >
+          <template #suffix>
+            <n-button
+              type="primary"
+              size="tiny"
+              @click="createModel.password = Math.random().toString(32)"
+            >
+              {{ $t("commons.button.generate") }}
+            </n-button>
+          </template>
+        </n-input>
+      </n-form-item>
+      <n-form-item
+        v-if="createModel.createUser"
+        path="host-select"
+        :label="$t('database.host')"
+      >
+        <n-select
+          v-model:value="createModel.host"
+          @keydown.enter.prevent
+          :placeholder="$t('form.pleaseSelectTo', [$t('database.serverHost')])"
+          :options="hostType"
+        />
+      </n-form-item>
+      <n-form-item
+        v-if="createModel.createUser && createModel.host === ''"
+        path="host"
+        :label="$t('database.specificHost')"
+      >
+        <n-input
+          v-model:value="createModel.host"
+          type="text"
+          @keydown.enter.prevent
+          :placeholder="$t('form.pleaseInputTo', [$t('database.specificHostAddress')])"
+        />
+      </n-form-item>
+    </n-form>
+    <n-button
+      type="info"
+      block
+      @click="handleCreate"
+    >{{ $t("commons.button.submit") }}</n-button>
+  </n-modal>
 </template>

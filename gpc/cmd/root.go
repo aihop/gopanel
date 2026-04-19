@@ -69,6 +69,7 @@ func init() {
 	cobra.OnInitialize(initConfig, initLogger)
 
 	rootCmd.PersistentFlags().String("base-dir", "", "base dir (align with gopanel system.base_dir)")
+	rootCmd.PersistentFlags().StringSlice("file-roots", nil, "allowed file roots (comma-separated or repeatable). default: base-dir")
 
 	rootCmd.AddCommand(statusCmd)
 	rootCmd.AddCommand(helperCmd)
@@ -117,6 +118,12 @@ func initConfig() {
 	cfg.ActionTimeoutMs = 30000
 	cfg.LockTimeoutMs = 30000
 	cfg.FileRoots = []string{baseDir}
+	if roots, _ := rootCmd.PersistentFlags().GetStringSlice("file-roots"); len(roots) > 0 {
+		cfg.FileRoots = normalizeRoots(roots)
+		if len(cfg.FileRoots) == 0 {
+			cfg.FileRoots = []string{baseDir}
+		}
+	}
 	cfg.AllowRootFS = false
 	cfg.MaxFileReadBytes = int64(1048576)
 	cfg.MaxFileWriteBytes = int64(1048576)
@@ -132,6 +139,33 @@ func initConfig() {
 
 	cfg.GoPanelConfigPath = filepath.Join(baseDir, "conf.yaml")
 	cfg.GoPanelPidfilePath = filepath.Join(baseDir, "run", "gopanel.pid")
+}
+
+func normalizeRoots(roots []string) []string {
+	out := make([]string, 0, len(roots))
+	seen := make(map[string]struct{}, len(roots))
+	for _, r := range roots {
+		r = strings.TrimSpace(r)
+		if r == "" {
+			continue
+		}
+		for _, part := range strings.Split(r, ",") {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			part = filepath.Clean(part)
+			if !filepath.IsAbs(part) {
+				continue
+			}
+			if _, ok := seen[part]; ok {
+				continue
+			}
+			seen[part] = struct{}{}
+			out = append(out, part)
+		}
+	}
+	return out
 }
 
 func detectBaseDir() string {

@@ -49,7 +49,7 @@ func (u *ContainerService) PageNetwork(req *dto.SearchWithPage) (int64, interfac
 	sort.Slice(list, func(i, j int) bool {
 		return list[i].Created.Before(list[j].Created)
 	})
-	total, start, end := len(list), (req.Page-1)*req.PageSize, req.Page*req.PageSize
+	total, start, end := len(list), (req.Page-1)*req.Limit, req.Page*req.Limit
 	if start > total {
 		records = make([]network.Inspect, 0)
 	} else {
@@ -245,7 +245,7 @@ func (u *ContainerService) pageNetworkPodman(req *dto.SearchWithPage) (int64, in
 	}
 	sort.Slice(list, func(i, j int) bool { return list[i].CreatedAt.Before(list[j].CreatedAt) })
 	total := len(list)
-	start, end := (req.Page-1)*req.PageSize, req.Page*req.PageSize
+	start, end := (req.Page-1)*req.Limit, req.Page*req.Limit
 	if start < 0 {
 		start = 0
 	}

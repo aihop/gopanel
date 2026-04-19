@@ -9,7 +9,9 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -68,7 +70,7 @@ func (a AppService) PageApp(ctx fiber.Ctx, req request.AppSearch) (interface{}, 
 		opts = append(opts, appRepo.WithResource(req.Resource))
 	}
 	var res response.AppRes
-	total, apps, err := appRepo.Page(req.Page, req.PageSize, opts...)
+	total, apps, err := appRepo.Page(req.Page, req.Limit, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -524,10 +526,20 @@ func upApp(appInstall *model.AppInstall, pullImages bool, logger *AppInstallLogg
 			out    string
 			errMsg string
 		)
-		_, err = files.NewFileOp().GetContent(appInstall.GetEnvPath())
+		envContent, err := files.NewFileOp().GetContent(appInstall.GetEnvPath())
 		if err != nil {
 			logger.Error("Failed to read .env file: %v", err)
 			return err
+		}
+		composeContent, err := files.NewFileOp().GetContent(appInstall.GetComposePath())
+		if err != nil {
+			logger.Error("Failed to read docker-compose.yml: %v", err)
+			return err
+		}
+		if validateErr := validateComposeEnvForPortsVolumes(string(composeContent), string(envContent)); validateErr != nil {
+			logger.Error("Compose params invalid: %s", validateErr.Error())
+			appInstall.Message = validateErr.Error()
+			return validateErr
 		}
 
 		if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
@@ -581,7 +593,10 @@ func upApp(appInstall *model.AppInstall, pullImages bool, logger *AppInstallLogg
 	if exist.ID > 0 {
 		containerNames, err := getContainerNames(*appInstall)
 		if err != nil {
-			return nil
+			if runErr != nil {
+				return runErr
+			}
+			return err
 		}
 		if len(containerNames) > 0 {
 			appInstall.ContainerName = strings.Join(containerNames, ",")
@@ -589,6 +604,136 @@ func upApp(appInstall *model.AppInstall, pullImages bool, logger *AppInstallLogg
 		_ = appInstallRepo.Save(context.Background(), appInstall)
 	}
 	return runErr
+}
+
+var composeVarRe = regexp.MustCompile(`\\$\\{([^}]+)\\}`)
+
+func validateComposeEnvForPortsVolumes(composeYml string, envText string) error {
+	envMap := parseDotEnv(envText)
+	required := extractRequiredVarsFromComposePortsVolumes(composeYml)
+	if len(required) == 0 {
+		return nil
+	}
+	var missing []string
+	for _, k := range required {
+		v := strings.TrimSpace(envMap[k])
+		v = strings.Trim(v, `"`)
+		if v == "" {
+			missing = append(missing, k)
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	sort.Strings(missing)
+	return fmt.Errorf("missing required compose variables (ports/volumes): %s", strings.Join(missing, ", "))
+}
+
+func parseDotEnv(envText string) map[string]string {
+	out := make(map[string]string)
+	lines := strings.Split(strings.ReplaceAll(envText, "\r\n", "\n"), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if strings.HasPrefix(line, "export ") {
+			line = strings.TrimSpace(strings.TrimPrefix(line, "export "))
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		k := strings.TrimSpace(parts[0])
+		v := strings.TrimSpace(parts[1])
+		out[k] = v
+	}
+	return out
+}
+
+func extractRequiredVarsFromComposePortsVolumes(composeYml string) []string {
+	lines := strings.Split(strings.ReplaceAll(composeYml, "\r\n", "\n"), "\n")
+	var (
+		inPorts   bool
+		inVolumes bool
+		portsInd  int
+		volInd    int
+	)
+	requiredSet := make(map[string]struct{})
+
+	for _, line := range lines {
+		raw := line
+		line = strings.TrimRight(line, " \t")
+		trim := strings.TrimSpace(line)
+		if trim == "" || strings.HasPrefix(trim, "#") {
+			continue
+		}
+		ind := len(raw) - len(strings.TrimLeft(raw, " \t"))
+
+		if inPorts && ind <= portsInd {
+			inPorts = false
+		}
+		if inVolumes && ind <= volInd {
+			inVolumes = false
+		}
+
+		if strings.HasSuffix(trim, "ports:") {
+			inPorts = true
+			portsInd = ind
+			continue
+		}
+		if strings.HasSuffix(trim, "volumes:") {
+			inVolumes = true
+			volInd = ind
+			continue
+		}
+		if !(inPorts || inVolumes) {
+			continue
+		}
+
+		for _, m := range composeVarRe.FindAllStringSubmatch(line, -1) {
+			if len(m) < 2 {
+				continue
+			}
+			name, required := parseComposeVarExpr(m[1])
+			if !required || name == "" {
+				continue
+			}
+			requiredSet[name] = struct{}{}
+		}
+	}
+
+	var required []string
+	for k := range requiredSet {
+		required = append(required, k)
+	}
+	sort.Strings(required)
+	return required
+}
+
+func parseComposeVarExpr(expr string) (string, bool) {
+	s := strings.TrimSpace(expr)
+	if s == "" {
+		return "", false
+	}
+	seps := []string{":-", ":-", ":+", ":?", "-", "+", "?"}
+	name := s
+	op := ""
+	for _, sep := range seps {
+		if i := strings.Index(s, sep); i > 0 {
+			name = strings.TrimSpace(s[:i])
+			op = sep
+			break
+		}
+	}
+	if name == "" {
+		return "", false
+	}
+	required := op == "" || op == ":?" || op == "?"
+	if strings.Contains(name, " ") || strings.Contains(name, "\t") {
+		return "", false
+	}
+	return name, required
 }
 
 func RequestDownloadCallBack(downloadCallBackUrl string) {

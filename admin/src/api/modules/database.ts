@@ -73,7 +73,7 @@ export const getDBManagerTablesAPI = (data: { serverId: number; databaseName: st
 	return http.post<string[]>(`/database/manager/tables`, data)
 }
 
-export const getDBManagerTableDataAPI = (data: { serverId: number; databaseName: string; tableName: string; page: number; pageSize: number; searchColumn?: string; searchValue?: string; advancedSearch?: any[] }) => {
+export const getDBManagerTableDataAPI = (data: { serverId: number; databaseName: string; tableName: string; page: number; limit: number; searchColumn?: string; searchValue?: string; advancedSearch?: any[] }) => {
 	return http.post<any>(`/database/manager/data`, data)
 }
 

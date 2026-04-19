@@ -5,7 +5,7 @@ export namespace Database {
 		info: string
 		database: string
 		page: number
-		pageSize: number
+		limit: number
 		orderBy?: string
 		order?: string
 	}
@@ -288,7 +288,7 @@ export namespace Database {
 		info: string
 		type: string
 		page: number
-		pageSize: number
+		limit: number
 		orderBy?: string
 		order?: string
 	}

@@ -2,7 +2,7 @@ import http from "@/api";
 import { ResPage } from "@/api/interface/index";
 import { Pipeline } from "../interface/pipeline";
 
-export const getPipelinePage = (params: { page: number; pageSize: number }) => {
+export const getPipelinePage = (params: { page: number; limit: number }) => {
   return http.get<ResPage<Pipeline.ResPipeline>>(`/pipeline`, params);
 };
 
@@ -26,7 +26,7 @@ export const stopPipeline = (params: { id: number }) => {
   return http.post(`/pipeline/stop`, params);
 };
 
-export const getPipelineRecords = (params: { pipelineId: number; page: number; pageSize: number }) => {
+export const getPipelineRecords = (params: { pipelineId: number; page: number; limit: number }) => {
   return http.get<ResPage<Pipeline.ResRecord>>(`/pipeline/records`, params);
 };
 

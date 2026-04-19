@@ -133,10 +133,10 @@
             <n-pagination
               class="w-full mt-10 flex flex-row justify-end"
               v-model:page="paginationConfig.currentPage"
-              v-model:page-size="paginationConfig.pageSize"
+              v-model:page-size="paginationConfig.limit"
               :page-sizes="[5, 10, 20, 50, 100]"
               :show-size-picker="true"
-              :page-count="Math.ceil(paginationConfig.total / paginationConfig.pageSize)"
+              :page-count="Math.ceil(paginationConfig.total / paginationConfig.limit)"
               @update:page="search"
               @update:page-size="(size) => handlePageSizeChange(size)"
             />
@@ -246,7 +246,7 @@ type ColumnSetting = {
 const paginationConfig = reactive({
 	cacheSizeKey: "container-page-size",
 	currentPage: 1,
-	pageSize: 10,
+	limit: 10,
 	total: 0,
 	orderBy: "created_at",
 	order: "null"
@@ -600,7 +600,7 @@ const search = async (column?: any) => {
 		name: searchName.value,
 		state: searchState.value || "all",
 		page: paginationConfig.currentPage,
-		pageSize: paginationConfig.pageSize,
+		limit: paginationConfig.limit,
 		filters: filterItem,
 		orderBy: 'created_at',
 		order: paginationConfig.order,
@@ -626,7 +626,7 @@ const refresh = async () => {
 		name: searchName.value,
 		state: searchState.value || "all",
 		page: paginationConfig.currentPage,
-		pageSize: paginationConfig.pageSize,
+		limit: paginationConfig.limit,
 		filters: filterItem,
 		orderBy: paginationConfig.orderBy,
 		order: paginationConfig.order
@@ -650,7 +650,7 @@ const refresh = async () => {
 }
 
 const handlePageSizeChange = (size: number) => {
-	paginationConfig.pageSize = size
+	paginationConfig.limit = size
 	paginationConfig.currentPage = 1
 	if (paginationConfig.cacheSizeKey) {
 		localStorage.setItem(paginationConfig.cacheSizeKey, String(size))

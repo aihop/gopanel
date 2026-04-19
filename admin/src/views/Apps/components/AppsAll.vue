@@ -410,7 +410,7 @@ import { useAuthStore } from "@/store/auth"
 const props = defineProps<{
 	searchName: string
 	page: number
-	pageSize: number
+	limit: number
 }>()
 const emits = defineEmits(["update:total"])
 
@@ -464,7 +464,7 @@ const fetchData = async () => {
 	try {
 		const params: AppsSearchParams = {
 			page: props.page,
-			pageSize: props.pageSize,
+			limit: props.limit,
 			name: props.searchName.trim() || undefined
 		}
 		const res = await appsListAPI(params)
@@ -482,7 +482,7 @@ const fetchData = async () => {
 	}
 }
 
-watch([() => props.searchName, () => props.page, () => props.pageSize], fetchData, { immediate: true })
+watch([() => props.searchName, () => props.page, () => props.limit], fetchData, { immediate: true })
 
 async function handleInstallApp(item: any) {
 	currentApp.value = item

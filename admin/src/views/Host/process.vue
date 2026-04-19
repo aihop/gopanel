@@ -656,7 +656,7 @@ const drawerNetworkConnectionsColumns = [
 const networkData = ref<any[]>([])
 
 const pagination = ref({
-	pageSize: 10
+	limit: 10
 })
 
 // 新增：网络数据 WebSocket 相关逻辑

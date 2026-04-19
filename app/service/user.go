@@ -165,7 +165,7 @@ func (s *UserService) Page(req request.UserSearch) (int64, interface{}, error) {
 		return 0, nil, err
 	}
 
-	ctx := gormx.NewContext(req.PageSize, "id desc")
+	ctx := gormx.NewContext(req.Limit, "id desc")
 	ctx.Page = req.Page
 	list, err := s.repo.List(ctx)
 	if err != nil {

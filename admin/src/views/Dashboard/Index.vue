@@ -440,7 +440,7 @@ async function loadPopularApps() {
 	try {
 		const res = await appsListAPI({
 			page: 1,
-			pageSize: 10,
+			limit: 10,
 			recommend: true
 		})
 		

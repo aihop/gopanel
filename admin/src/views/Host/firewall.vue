@@ -264,7 +264,7 @@ const getRuleRowKey = (row: { id: string | number }) => row.id
 
 const pagination = ref({
 	page: 1,
-	pageSize: 10,
+	limit: 10,
 	itemCount: 0,
 	showSizePicker: true,
 	pageSizes: [10, 20, 50, 100]
@@ -447,7 +447,7 @@ async function getRulesList() {
 		loading.value = true
 		const res: any = await hostsFirewallSearchAPI({
 			page: pagination.value.page,
-			pageSize: pagination.value.pageSize,
+			limit: pagination.value.limit,
 			info: keyword.value,
 			status: status.value,
 			strategy: strategy.value,
@@ -538,8 +538,8 @@ function handlePageChange(page: number) {
 	getRulesList()
 }
 
-function handlePageSizeChange(pageSize: number) {
-	pagination.value.pageSize = pageSize
+function handlePageSizeChange(limit: number) {
+	pagination.value.limit = limit
 	pagination.value.page = 1
 	getRulesList()
 }

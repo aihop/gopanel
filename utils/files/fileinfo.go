@@ -55,7 +55,7 @@ type FileOption struct {
 	Dir        bool   `json:"dir"`
 	ShowHidden bool   `json:"showHidden"`
 	Page       int    `json:"page"`
-	PageSize   int    `json:"pageSize"`
+	Limit      int    `json:"limit"`
 	SortBy     string `json:"sortBy"`
 	SortOrder  string `json:"sortOrder"`
 	IsDetail   bool   `json:"isDetail"`
@@ -221,7 +221,7 @@ func (f *FileInfo) listChildren(option FileOption) error {
 	)
 
 	if option.Search != "" && option.ContainSub {
-		files, total, err = f.search(option.Search, option.Page*option.PageSize)
+		files, total, err = f.search(option.Search, option.Page*option.Limit)
 		if err != nil {
 			return err
 		}
@@ -240,8 +240,8 @@ func (f *FileInfo) listChildren(option FileOption) error {
 	if option.ContainSub {
 		f.ItemTotal = total
 	}
-	start := (option.Page - 1) * option.PageSize
-	end := option.PageSize + start
+	start := (option.Page - 1) * option.Limit
+	end := option.Limit + start
 	var result []*FileInfo
 	if start < 0 || start > f.ItemTotal || end < 0 || start > end {
 		result = items

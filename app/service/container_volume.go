@@ -50,7 +50,7 @@ func (u *ContainerService) PageVolume(req *dto.SearchWithPage) (int64, interface
 	sort.Slice(list.Volumes, func(i, j int) bool {
 		return list.Volumes[i].CreatedAt > list.Volumes[j].CreatedAt
 	})
-	total, start, end := len(list.Volumes), (req.Page-1)*req.PageSize, req.Page*req.PageSize
+	total, start, end := len(list.Volumes), (req.Page-1)*req.Limit, req.Page*req.Limit
 	if start > total {
 		records = make([]*volume.Volume, 0)
 	} else {
@@ -197,7 +197,7 @@ func (u *ContainerService) pageVolumePodman(req *dto.SearchWithPage) (int64, int
 	}
 	sort.Slice(list, func(i, j int) bool { return list[i].CreatedAt.After(list[j].CreatedAt) })
 	total := len(list)
-	start, end := (req.Page-1)*req.PageSize, req.Page*req.PageSize
+	start, end := (req.Page-1)*req.Limit, req.Page*req.Limit
 	if start < 0 {
 		start = 0
 	}

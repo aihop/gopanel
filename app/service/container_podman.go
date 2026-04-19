@@ -100,12 +100,12 @@ func (u *ContainerService) pagePodman(req *dto.PageContainer) (int64, interface{
 	if page <= 0 {
 		page = 1
 	}
-	pageSize := req.PageSize
-	if pageSize <= 0 {
-		pageSize = 10
+	limit := req.Limit
+	if limit <= 0 {
+		limit = 10
 	}
-	start := (page - 1) * pageSize
-	end := page * pageSize
+	start := (page - 1) * limit
+	end := page * limit
 	if start > total {
 		start = total
 	}
@@ -177,4 +177,3 @@ func splitLabelFilter(filter string) (string, string, bool) {
 	}
 	return s, "", true
 }
-

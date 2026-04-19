@@ -3,7 +3,7 @@ import { AIGroup, AITask, AIMessage } from "../interface/ai_agent";
 
 // === Group APIs ===
 
-export function getAIGroups(params: { page: number; pageSize: number }) {
+export function getAIGroups(params: { page: number; limit: number }) {
   return http.get<{ items: AIGroup[]; total: number }>("/ai/groups", params)
 }
 
@@ -14,7 +14,7 @@ export function createAIGroup(data: { name: string; description: string }) {
 // === Task APIs ===
 
 // 获取任务列表
-export function getAITasks(params: { page: number; pageSize: number; projectId?: number }) {
+export function getAITasks(params: { page: number; limit: number; projectId?: number }) {
   return http.get<{ items: AITask[]; total: number }>("/ai/tasks", params)
 }
 

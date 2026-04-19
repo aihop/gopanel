@@ -22,7 +22,7 @@ const tableData = ref<any[]>([])
 const tableColumns = ref<any[]>([])
 const pagination = ref({
   page: 1,
-  pageSize: 20,
+  limit: 20,
   itemCount: 0
 })
 
@@ -59,7 +59,7 @@ const fetchTableData = async () => {
       databaseName: props.selectedDatabase,
       tableName: props.selectedTable,
       page: pagination.value.page,
-      pageSize: pagination.value.pageSize,
+      limit: pagination.value.limit,
       searchColumn: searchColumn.value || undefined,
       searchValue: searchValue.value || undefined,
       advancedSearch: advancedSearch.value.length > 0 ? advancedSearch.value : undefined
@@ -229,7 +229,7 @@ defineExpose({ fetchTableData, setAdvancedSearch })
       <div class="p-2 border-t border-slate-200 flex justify-end bg-[#f8f9fa] z-10">
         <n-pagination
           v-model:page="pagination.page"
-          v-model:page-size="pagination.pageSize"
+          v-model:page-size="pagination.limit"
           :item-count="pagination.itemCount"
           show-size-picker
           :page-sizes="[10, 20, 50, 100]"

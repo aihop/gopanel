@@ -58,7 +58,7 @@ const tableData = ref<Log.OperationLog[]>([])
 
 const searchParams = reactive<Log.SearchOpLog>({
 	page: 1,
-	pageSize: 10,
+	limit: 10,
 	operation: "",
 	source: "",
 	status: ""
@@ -66,7 +66,7 @@ const searchParams = reactive<Log.SearchOpLog>({
 
 const pagination = reactive({
 	page: 1,
-	pageSize: 10,
+	limit: 10,
 	itemCount: 0,
 	showSizePicker: true,
 	pageSizes: [10, 20, 50, 100]
@@ -135,9 +135,9 @@ const handlePageChange = (page: number) => {
 	loadData()
 }
 
-const handlePageSizeChange = (pageSize: number) => {
-	searchParams.pageSize = pageSize
-	pagination.pageSize = pageSize
+const handlePageSizeChange = (limit: number) => {
+	searchParams.limit = limit
+	pagination.limit = limit
 	searchParams.page = 1
 	pagination.page = 1
 	loadData()

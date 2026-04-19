@@ -62,14 +62,14 @@
       v-if="tabValue === 'all'"
       :search-name="searchName"
       :page="page"
-      :page-size="pageSize"
+      :page-size="limit"
       @update:total="handleTotalUpdate"
     />
     <AppsInstalled
       v-else-if="tabValue === 'installed'"
       :search-name="searchName"
       :page="page"
-      :page-size="pageSize"
+      :page-size="limit"
       @update:total="handleTotalUpdate"
     />
   </div>
@@ -84,7 +84,7 @@
     </div>
     <n-pagination
       :page="page"
-      :default-page-size="pageSize"
+      :default-page-size="limit"
       :item-count="total"
       show-size-picker
       :page-sizes="[10, 20, 50]"
@@ -107,7 +107,7 @@ const message = useMessage()
 const tabValue = ref("all")
 const searchName = ref("")
 const page = ref(1)
-const pageSize = ref(10)
+const limit = ref(10)
 const total = ref(0)
 const syncing = ref(false)
 
@@ -148,7 +148,7 @@ const handleSearch = () => {
 }
 
 const handlePageSizeChange = (size: number) => {
-	pageSize.value = size
+	limit.value = size
 	page.value = 1
 }
 </script>

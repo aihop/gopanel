@@ -47,16 +47,16 @@ const (
 	UnHealthy   = "UnHealthy"
 	Error       = "Error"
 	Stopped     = "Stopped"
-	Installing  = "Installing"
-	DownloadErr = "DownloadErr"
+	Installing  = "Installing"  // 安装中
+	DownloadErr = "DownloadErr" // 下载错误
 	Upgrading   = "Upgrading"
 	UpgradeErr  = "UpgradeErr"
 	Rebuilding  = "Rebuilding"
 	Syncing     = "Syncing"
 	SyncSuccess = "SyncSuccess"
 	Paused      = "Paused"
-	UpErr       = "UpErr"
-	SyncFailed  = "SyncFailed"
+	UpErr       = "UpErr"      // 更新错误
+	SyncFailed  = "SyncFailed" // 同步失败
 
 	ContainerPrefix = "GoPanel-"
 

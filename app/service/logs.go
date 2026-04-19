@@ -39,7 +39,7 @@ func (u *LogService) PageLoginLog(req dto.SearchLgLogWithPage) (int64, interface
 	}
 	total, ops, err := logRepo.PageLoginLog(
 		req.Page,
-		req.PageSize,
+		req.Limit,
 		options...,
 	)
 	var dtoOps []dto.LoginLog
@@ -72,7 +72,7 @@ func (u *LogService) PageOperationLog(req dto.SearchOpLogWithPage) (int64, inter
 
 	total, ops, err := logRepo.PageOperationLog(
 		req.Page,
-		req.PageSize,
+		req.Limit,
 		options...,
 	)
 	var dtoOps []dto.OperationLog

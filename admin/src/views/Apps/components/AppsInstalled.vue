@@ -4,74 +4,74 @@
       v-if="apps.length"
       class="apps-grid"
     >
-    <div
-      v-for="item in apps"
-      :key="item.id"
-      class="app-card"
-    >
-      <div class="app-card__glow"></div>
-      <div class="app-card__body">
-        <div class="app-card__header">
-          <div class="app-card__identity">
-            <div class="app-card__icon">
-              <img
-                v-if="item.app?.icon"
-                :src="item.app.icon"
-                alt="icon"
-                class="h-10 w-10 object-contain"
-              />
-              <span
-                v-else
-                class="text-base font-bold text-emerald-600"
-              >
-                {{ item.name?.slice(0, 1)?.toUpperCase() }}
+      <div
+        v-for="item in apps"
+        :key="item.id"
+        class="app-card"
+      >
+        <div class="app-card__glow"></div>
+        <div class="app-card__body">
+          <div class="app-card__header">
+            <div class="app-card__identity">
+              <div class="app-card__icon">
+                <img
+                  v-if="item.app?.icon"
+                  :src="item.app.icon"
+                  alt="icon"
+                  class="h-10 w-10 object-contain"
+                />
+                <span
+                  v-else
+                  class="text-base font-bold text-emerald-600"
+                >
+                  {{ item.name?.slice(0, 1)?.toUpperCase() }}
+                </span>
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2">
+                  <span
+                    class="app-card__name truncate"
+                    @click="showDrawer(item)"
+                  >
+                    {{ item.name }}
+                  </span>
+                  <n-tag
+                    v-if="item.status"
+                    :type="item.status === '已启动' ? 'success' : 'error'"
+                    size="small"
+                    round
+                  >
+                    {{ item.status }}
+                  </n-tag>
+                </div>
+                <div class="mt-1 text-sm text-slate-500">{{ item.app?.name || "已安装应用" }}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="app-card__meta">
+            <div class="app-chip">
+              <span class="app-chip__label">版本</span>
+              <span class="app-chip__value">{{ item.version || "-" }}</span>
+            </div>
+            <div
+              v-if="item.httpPort || item.httpsPort"
+              class="app-chip"
+            >
+              <span class="app-chip__label">服务端口</span>
+              <span class="app-chip__value">
+                {{ item.httpPort || "-" }}<template v-if="item.httpsPort"> / {{ item.httpsPort }}</template>
               </span>
             </div>
-            <div class="min-w-0 flex-1">
-              <div class="flex items-center gap-2">
-                <span
-                  class="app-card__name truncate"
-                  @click="showDrawer(item)"
-                >
-                  {{ item.name }}
-                </span>
-                <n-tag
-                  v-if="item.status"
-                  :type="item.status === '已启动' ? 'success' : 'error'"
-                  size="small"
-                  round
-                >
-                  {{ item.status }}
-                </n-tag>
-              </div>
-              <div class="mt-1 text-sm text-slate-500">{{ item.app?.name || "已安装应用" }}</div>
-            </div>
           </div>
-        </div>
 
-        <div class="app-card__meta">
-          <div class="app-chip">
-            <span class="app-chip__label">版本</span>
-            <span class="app-chip__value">{{ item.version || "-" }}</span>
+          <div class="app-card__info">
+            <p><span class="app-info__label">容器名</span>{{ item.containerName || "-" }}</p>
+            <p><span class="app-info__label">安装时间</span>{{ item.createdAt || "-" }}</p>
+            <p v-if="item.description"><span class="app-info__label">描述</span>{{ item.description }}</p>
           </div>
-          <div
-            v-if="item.httpPort || item.httpsPort"
-            class="app-chip"
-          >
-            <span class="app-chip__label">服务端口</span>
-            <span class="app-chip__value">
-              {{ item.httpPort || "-" }}<template v-if="item.httpsPort"> / {{ item.httpsPort }}</template>
-            </span>
-          </div>
-        </div>
 
-        <div class="app-card__info">
-          <p><span class="app-info__label">容器名</span>{{ item.containerName || "-" }}</p>
-          <p><span class="app-info__label">安装时间</span>{{ item.createdAt || "-" }}</p>
-          <p v-if="item.description"><span class="app-info__label">描述</span>{{ item.description }}</p>
-        </div>
-
-        <div class="app-card__footer">
+          <div class="app-card__footer">
             <n-button
               size="small"
               round
@@ -173,7 +173,7 @@ const handleLogReading = (reading: boolean) => {
 const props = defineProps<{
 	searchName: string
 	page: number
-	pageSize: number
+	limit: number
 }>()
 const emits = defineEmits(["update:total"])
 
@@ -220,7 +220,7 @@ const fetchData = async () => {
 	try {
 		const params: AppsInstalledSearchParams = {
 			page: props.page,
-			pageSize: props.pageSize,
+			limit: props.limit,
 			name: props.searchName.trim() || undefined
 		}
 		const res = await appsInstalledSearch(params)
@@ -238,7 +238,7 @@ const fetchData = async () => {
 	}
 }
 
-watch([() => props.searchName, () => props.page, () => props.pageSize], fetchData, { immediate: true })
+watch([() => props.searchName, () => props.page, () => props.limit], fetchData, { immediate: true })
 
 function showDrawer(item: any) {
 	drawerItem.value = item

@@ -18,12 +18,12 @@ export interface ResPage<T> {
 
 export interface ReqPage {
 	page: number
-	pageSize: number
+	limit: number
 }
 export interface SearchWithPage {
 	info: string
 	page: number
-	pageSize: number
+	limit: number
 	orderBy?: string
 	order?: string
 	name?: string

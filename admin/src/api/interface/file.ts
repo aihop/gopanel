@@ -181,7 +181,7 @@ export namespace File {
 		type: string
 		name?: string
 		page: number
-		pageSize: number
+		limit: number
 	}
 
 	export interface Favorite extends CommonModel {

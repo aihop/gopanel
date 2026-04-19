@@ -130,7 +130,7 @@ func (f *FileService) SearchUploadWithPage(req *request.SearchUploadWithPage) (i
 		}
 		return nil
 	})
-	total, start, end := len(files), (req.Page-1)*req.PageSize, req.Page*req.PageSize
+	total, start, end := len(files), (req.Page-1)*req.Limit, req.Page*req.Limit
 	if start > total {
 		backData = make([]response.UploadInfo, 0)
 	} else {
@@ -446,7 +446,7 @@ func (f *FileService) getFileListViaGpc(op request.FileOption) (response.FileInf
 	resp, err := gpc.Do(ctx, "FILE_LIST", map[string]interface{}{
 		"path":       op.Path,
 		"page":       op.Page,
-		"pageSize":   op.PageSize,
+		"limit":      op.Limit,
 		"sortBy":     op.SortBy,
 		"sortOrder":  op.SortOrder,
 		"showHidden": op.ShowHidden,
@@ -674,12 +674,12 @@ func (f *FileService) ReadLogByLine(req request.FileReadByLineReq) (*response.Fi
 		logFilePath = path.Join(global.CONF.System.BaseDir, fmt.Sprintf("apps/mariadb/%s/db/data/GoPanel-slow.log", req.Name))
 	}
 
-	lines, isEndOfFile, total, err := files.ReadFileByLine(logFilePath, req.Page, req.PageSize, req.Latest)
+	lines, isEndOfFile, total, err := files.ReadFileByLine(logFilePath, req.Page, req.Limit, req.Latest)
 	if err != nil {
 		return nil, err
 	}
 	if req.Latest && req.Page == 1 && len(lines) < 1000 && total > 1 {
-		preLines, _, _, err := files.ReadFileByLine(logFilePath, total-1, req.PageSize, false)
+		preLines, _, _, err := files.ReadFileByLine(logFilePath, total-1, req.Limit, false)
 		if err != nil {
 			return nil, err
 		}

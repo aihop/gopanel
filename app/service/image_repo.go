@@ -34,7 +34,7 @@ func NewIImageRepoService() IImageRepoService {
 }
 
 func (u *ImageRepoService) Page(req dto.SearchWithPage) (int64, interface{}, error) {
-	total, ops, err := imageRepoRepo.Page(req.Page, req.PageSize, commonRepo.WithLikeName(req.Info), commonRepo.WithOrderBy("created_at desc"))
+	total, ops, err := imageRepoRepo.Page(req.Page, req.Limit, commonRepo.WithLikeName(req.Info), commonRepo.WithOrderBy("created_at desc"))
 	var dtoOps []dto.ImageRepoInfo
 	for _, op := range ops {
 		var item dto.ImageRepoInfo

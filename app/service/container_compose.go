@@ -189,7 +189,7 @@ func (u *ContainerService) PageCompose(req *dto.SearchWithPage) (int64, interfac
 	sort.Slice(records, func(i, j int) bool {
 		return records[i].CreatedAt > records[j].CreatedAt
 	})
-	total, start, end := len(records), (req.Page-1)*req.PageSize, req.Page*req.PageSize
+	total, start, end := len(records), (req.Page-1)*req.Limit, req.Page*req.Limit
 	if start > total {
 		BackDatas = make([]dto.ComposeInfo, 0)
 	} else {

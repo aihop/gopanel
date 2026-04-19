@@ -1,41 +1,56 @@
 <template>
-	<div class="py-4">
-		<!-- Header with Action Buttons -->
-		<n-space class="mb-4">
-			<n-button type="primary" @click="showCreateVolumeDrawer = true">创建存储卷</n-button>
-			<n-button @click="handleCleanVolumes">清理存储卷</n-button>
-			<n-button type="error" @click="handleBulkDelete" :disabled="checkedRowKeys.length === 0">删除</n-button>
-		</n-space>
+  <div class="py-4">
+    <!-- Header with Action Buttons -->
+    <n-space class="mb-4">
+      <n-button
+        type="primary"
+        @click="showCreateVolumeDrawer = true"
+      >创建存储卷</n-button>
+      <n-button @click="handleCleanVolumes">清理存储卷</n-button>
+      <n-button
+        type="error"
+        @click="handleBulkDelete"
+        :disabled="checkedRowKeys.length === 0"
+      >删除</n-button>
+    </n-space>
 
-		<!-- Volume List Section -->
-		<n-card>
-			<div class="mb-4 flex items-center justify-between">
-				<h2 class="text-lg font-semibold">存储卷</h2>
-				<n-space>
-					<n-button>列表设置</n-button>
-					<n-input v-model:value="searchForm.info" placeholder="搜索" clearable @keyup.enter="handleSearch">
-						<template #suffix>
-							<n-icon name="search" />
-						</template>
-					</n-input>
-				</n-space>
-			</div>
+    <!-- Volume List Section -->
+    <n-card>
+      <div class="mb-4 flex items-center justify-between">
+        <h2 class="text-lg font-semibold">存储卷</h2>
+        <n-space>
+          <n-button>列表设置</n-button>
+          <n-input
+            v-model:value="searchForm.info"
+            placeholder="搜索"
+            clearable
+            @keyup.enter="handleSearch"
+          >
+            <template #suffix>
+              <n-icon name="search" />
+            </template>
+          </n-input>
+        </n-space>
+      </div>
 
-			<!-- Volumes Table -->
-			<n-data-table
-				:columns="columns"
-				:data="volumeData"
-				:pagination="pagination"
-				:row-key="rowKey"
-				v-model:checked-row-keys="checkedRowKeys"
-				:bordered="false"
-				:loading="loading"
-			/>
-		</n-card>
+      <!-- Volumes Table -->
+      <n-data-table
+        :columns="columns"
+        :data="volumeData"
+        :pagination="pagination"
+        :row-key="rowKey"
+        v-model:checked-row-keys="checkedRowKeys"
+        :bordered="false"
+        :loading="loading"
+      />
+    </n-card>
 
-		<!-- Create Volume Component -->
-		<create-volume v-model:show="showCreateVolumeDrawer" @success="fetchVolumeList" />
-	</div>
+    <!-- Create Volume Component -->
+    <create-volume
+      v-model:show="showCreateVolumeDrawer"
+      @success="fetchVolumeList"
+    />
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -54,7 +69,7 @@ const volumeData = ref<Container.VolumeInfo[]>([])
 const searchForm = ref<SearchWithPage>({
 	info: "",
 	page: 1,
-	pageSize: 10
+	limit: 10
 })
 
 const checkedRowKeys = ref<DataTableRowKey[]>([])
@@ -256,7 +271,7 @@ const columns: DataTableColumns<Container.VolumeInfo> = [
 // 分页配置
 const pagination = ref({
 	page: 1,
-	pageSize: 10,
+	limit: 10,
 	showSizePicker: true,
 	pageSizes: [10, 20, 50],
 	itemCount: 0,
@@ -264,8 +279,8 @@ const pagination = ref({
 		searchForm.value.page = page
 		fetchVolumeList()
 	},
-	onUpdatePageSize: (pageSize: number) => {
-		searchForm.value.pageSize = pageSize
+	onUpdatePageSize: (limit: number) => {
+		searchForm.value.limit = limit
 		searchForm.value.page = 1
 		fetchVolumeList()
 	}

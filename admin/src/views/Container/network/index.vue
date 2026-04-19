@@ -66,7 +66,7 @@ import { computeSize } from "@/utils/util"
 const searchParams = ref({
 	info: "",
 	page: 1,
-	pageSize: 10
+	limit: 10
 })
 
 // 表格数据
@@ -96,7 +96,7 @@ const handleSearch = (value: string) => {
 // 分页处理
 const pagination = ref({
 	page: 1,
-	pageSize: 10,
+	limit: 10,
 	showSizePicker: true,
 	pageSizes: [10, 20, 50],
 	itemCount: 0,
@@ -104,8 +104,8 @@ const pagination = ref({
 		searchParams.value.page = page
 		fetchNetworkList()
 	},
-	onUpdatePageSize: (pageSize: number) => {
-		searchParams.value.pageSize = pageSize
+	onUpdatePageSize: (limit: number) => {
+		searchParams.value.limit = limit
 		searchParams.value.page = 1
 		fetchNetworkList()
 	}

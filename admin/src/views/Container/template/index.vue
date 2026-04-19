@@ -1,86 +1,119 @@
 <template>
-	<div class="py-4">
-		<!-- Header with Action Buttons and Search -->
-		<div class="mb-4 flex items-center justify-between">
-			<n-space>
-				<n-button type="primary" @click="openCreateTemplateDrawer">创建编排模板</n-button>
-				<n-button type="default" @click="handleBulkDelete" :disabled="checkedRowKeys.length === 0">
-					删除
-				</n-button>
-			</n-space>
-			<n-space>
-				<n-button>列表设置</n-button>
-				<n-input placeholder="搜索" clearable>
-					<template #suffix>
-						<n-icon name="search" />
-					</template>
-				</n-input>
-			</n-space>
-		</div>
+  <div class="py-4">
+    <!-- Header with Action Buttons and Search -->
+    <div class="mb-4 flex items-center justify-between">
+      <n-space>
+        <n-button
+          type="primary"
+          @click="openCreateTemplateDrawer"
+        >创建编排模板</n-button>
+        <n-button
+          type="default"
+          @click="handleBulkDelete"
+          :disabled="checkedRowKeys.length === 0"
+        >
+          删除
+        </n-button>
+      </n-space>
+      <n-space>
+        <n-button>列表设置</n-button>
+        <n-input
+          placeholder="搜索"
+          clearable
+        >
+          <template #suffix>
+            <n-icon name="search" />
+          </template>
+        </n-input>
+      </n-space>
+    </div>
 
-		<!-- Template List Section -->
-		<n-card>
-			<div class="mb-4 flex items-center justify-between">
-				<h2 class="text-lg font-semibold">编排模板</h2>
-			</div>
+    <!-- Template List Section -->
+    <n-card>
+      <div class="mb-4 flex items-center justify-between">
+        <h2 class="text-lg font-semibold">编排模板</h2>
+      </div>
 
-			<!-- Templates Table -->
-			<n-data-table
-				:columns="columns"
-				:data="templateData"
-				:pagination="pagination"
-				:row-key="rowKey"
-				v-model:checked-row-keys="checkedRowKeys"
-				:bordered="false"
-			/>
-		</n-card>
+      <!-- Templates Table -->
+      <n-data-table
+        :columns="columns"
+        :data="templateData"
+        :pagination="pagination"
+        :row-key="rowKey"
+        v-model:checked-row-keys="checkedRowKeys"
+        :bordered="false"
+      />
+    </n-card>
 
-		<!-- Create Template Drawer -->
-		<n-drawer v-model:show="showCreateTemplateDrawer" :width="600" placement="right">
-			<n-drawer-content closable>
-				<template #header>
-					<div class="flex items-center">
-						<div
-							class="flex cursor-pointer items-center gap-1 text-gray-500"
-							@click="showCreateTemplateDrawer = false"
-						>
-							<n-icon name="mdi:arrow-left" size="18" />
-							返回
-						</div>
-						<n-divider vertical />
-						创建编排模板
-					</div>
-				</template>
+    <!-- Create Template Drawer -->
+    <n-drawer
+      v-model:show="showCreateTemplateDrawer"
+      :width="600"
+      placement="right"
+    >
+      <n-drawer-content closable>
+        <template #header>
+          <div class="flex items-center">
+            <div
+              class="flex cursor-pointer items-center gap-1 text-gray-500"
+              @click="showCreateTemplateDrawer = false"
+            >
+              <n-icon
+                name="mdi:arrow-left"
+                size="18"
+              />
+              返回
+            </div>
+            <n-divider vertical />
+            创建编排模板
+          </div>
+        </template>
 
-				<n-form
-					ref="createTemplateFormRef"
-					:model="createTemplateFormValue"
-					:rules="rules"
-					class="flex h-full flex-col p-4"
-				>
-					<n-form-item label="名称" path="name">
-						<n-input v-model:value="createTemplateFormValue.name" placeholder="请输入模板名称" />
-					</n-form-item>
-					<n-form-item label="描述" path="description">
-						<n-input
-							v-model:value="createTemplateFormValue.description"
-							placeholder="请输入模板描述 (可选)"
-						/>
-					</n-form-item>
-					<n-form-item label="模板内容" path="content" class="flex flex-grow flex-col">
-						<FtEditor />
-					</n-form-item>
-				</n-form>
+        <n-form
+          ref="createTemplateFormRef"
+          :model="createTemplateFormValue"
+          :rules="rules"
+          class="flex h-full flex-col p-4"
+        >
+          <n-form-item
+            label="名称"
+            path="name"
+          >
+            <n-input
+              v-model:value="createTemplateFormValue.name"
+              placeholder="请输入模板名称"
+            />
+          </n-form-item>
+          <n-form-item
+            label="描述"
+            path="description"
+          >
+            <n-input
+              v-model:value="createTemplateFormValue.description"
+              placeholder="请输入模板描述 (可选)"
+            />
+          </n-form-item>
+          <n-form-item
+            label="模板内容"
+            path="content"
+            class="flex flex-grow flex-col"
+          >
+            <FtEditor />
+          </n-form-item>
+        </n-form>
 
-				<template #footer>
-					<n-space>
-						<n-button @click="showCreateTemplateDrawer = false">取消</n-button>
-						<n-button type="primary" @click="handleCreateTemplate">确认</n-button>
-					</n-space>
-				</template>
-			</n-drawer-content>
-		</n-drawer>
-	</div>
+        <template #footer>
+          <n-space>
+            <n-button @click="showCreateTemplateDrawer = false">取消</n-button>
+            <n-button
+              type="primary"
+              @click="handleCreateTemplate"
+            >确认</n-button>
+          </n-space>
+        </template>
+      </n-drawer-content>
+    </n-drawer>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -221,15 +254,15 @@ const handleBulkDelete = () => {
 
 const pagination = ref({
 	page: 1,
-	pageSize: 10,
+	limit: 10,
 	showSizePicker: true,
 	pageSizes: [10, 20, 50],
 	itemCount: templateData.value.length, // Initially 0
 	onChange: (page: number) => {
 		pagination.value.page = page
 	},
-	onUpdatePageSize: (pageSize: number) => {
-		pagination.value.pageSize = pageSize
+	onUpdatePageSize: (limit: number) => {
+		pagination.value.limit = limit
 		pagination.value.page = 1
 	}
 })

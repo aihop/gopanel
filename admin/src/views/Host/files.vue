@@ -249,7 +249,7 @@ let copiedPathTimer: ReturnType<typeof setTimeout> | null = null
 const fileCompress = reactive({ files: [""], name: "", dst: "", operate: "compress" })
 const fileDeCompress = reactive({ files: [] as string[], path: "", name: "", dst: "", mimeType: "" })
 const filePreview = reactive({ path: "", name: "", extension: "", fileType: "" })
-const codeReq = reactive({ path: "", expand: false, page: 1, pageSize: 100 })
+const codeReq = reactive({ path: "", expand: false, page: 1, limit: 100 })
 const fileCreate = reactive({ path: "/", isDir: false, mode: 0o755 })
 const fileRename = reactive({ path: "", oldName: "" })
 const fileMove = reactive({ oldPaths: [""], allNames: [""], type: "", path: "", name: "", count: 0, isDir: false })
@@ -277,7 +277,7 @@ const searchParams = ref<File.ReqFile>({
 	expand: true,
 	showHidden: true,
 	page: 1,
-	pageSize: 50,
+	limit: 50,
 	containSub: false,
 	sortBy: "name",
 	sortOrder: "ascending"
@@ -311,7 +311,7 @@ const options = [
 // 分页配置
 const pagination = reactive({
 	page: 1,
-	pageSize: 50,
+	limit: 50,
 	showSizePicker: true,
 	pageSizes: [10, 20, 50, 100],
 	itemCount: 0,
@@ -321,10 +321,10 @@ const pagination = reactive({
 		searchParams.value.page = page
 		loadData()
 	},
-	onUpdatePageSize: (pageSize: number) => {
-		pagination.pageSize = pageSize
+	onUpdatePageSize: (limit: number) => {
+		pagination.limit = limit
 		pagination.page = 1
-		searchParams.value.pageSize = pageSize
+		searchParams.value.limit = limit
 		searchParams.value.page = 1
 		loadData()
 	}
@@ -559,14 +559,14 @@ async function loadData() {
 			fileList.value = response.data.items || []
 			totalItems.value = response.data.itemTotal || 0
 			// 处理边界情况：如果当前页超出范围，重置到第一页
-			const maxPage = Math.ceil(totalItems.value / searchParams.value.pageSize)
+			const maxPage = Math.ceil(totalItems.value / searchParams.value.limit)
 			if (searchParams.value.page > maxPage && maxPage > 0) {
 				searchParams.value.page = 1
 				message.warning("当前页码超出范围，已重置到第一页")
 			}
 			// 更新分页信息
 			pagination.page = searchParams.value.page
-			pagination.pageSize = searchParams.value.pageSize
+			pagination.limit = searchParams.value.limit
 			pagination.itemCount = totalItems.value
 			if (!moveOpen.value) {
 				selects.value = []

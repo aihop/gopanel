@@ -169,7 +169,7 @@ func (u *ContainerService) Page(req *dto.PageContainer) (int64, interface{}, err
 		})
 	}
 
-	total, start, end := len(list), (req.Page-1)*req.PageSize, req.Page*req.PageSize
+	total, start, end := len(list), (req.Page-1)*req.Limit, req.Page*req.Limit
 	if start > total {
 		records = make([]types.Container, 0)
 	} else {

@@ -1,31 +1,47 @@
 <template>
-	<div>
-		<div v-if="defaultButton" class="mb-4 flex items-center gap-2">
-			<n-checkbox v-model:checked="tailLog" @update:checked="changeTail(false)">
-				{{ $t("commons.button.watch") }}
-			</n-checkbox>
-			<n-button :disabled="logs.length === 0" @click="onDownload">
-				<template #icon>
-					<n-icon>
-						<download />
-					</n-icon>
-				</template>
-				{{ $t("file.download") }}
-			</n-button>
-			<slot name="button"></slot>
-		</div>
-		<div ref="logContainer" class="log-container" @scroll="onScroll">
-			<div class="log-spacer" :style="{ height: `${totalHeight}px` }"></div>
-			<div
-				v-for="(log, index) in visibleLogs"
-				:key="startIndex + index"
-				class="log-item"
-				:style="{ top: `${(startIndex + index) * logHeight}px` }"
-			>
-				<span>{{ log }}</span>
-			</div>
-		</div>
-	</div>
+  <div>
+    <div
+      v-if="defaultButton"
+      class="mb-4 flex items-center gap-2"
+    >
+      <n-checkbox
+        v-model:checked="tailLog"
+        @update:checked="changeTail(false)"
+      >
+        {{ $t("commons.button.watch") }}
+      </n-checkbox>
+      <n-button
+        :disabled="logs.length === 0"
+        @click="onDownload"
+      >
+        <template #icon>
+          <n-icon>
+            <download />
+          </n-icon>
+        </template>
+        {{ $t("file.download") }}
+      </n-button>
+      <slot name="button"></slot>
+    </div>
+    <div
+      ref="logContainer"
+      class="log-container"
+      @scroll="onScroll"
+    >
+      <div
+        class="log-spacer"
+        :style="{ height: `${totalHeight}px` }"
+      ></div>
+      <div
+        v-for="(log, index) in visibleLogs"
+        :key="startIndex + index"
+        class="log-item"
+        :style="{ top: `${(startIndex + index) * logHeight}px` }"
+      >
+        <span>{{ log }}</span>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script lang="ts" setup>
@@ -83,7 +99,7 @@ const readReq = reactive({
 	type: "",
 	name: "",
 	page: 1,
-	pageSize: 500,
+	limit: 500,
 	latest: false
 })
 
@@ -182,7 +198,7 @@ async function getContent(pre: boolean) {
 					.replace(/\x1B\[[0-?]*[mKhlGA]/g, "")
 			)
 
-			if (newLogs.length === readReq.pageSize && readReq.page < res.data.total) {
+			if (newLogs.length === readReq.limit && readReq.page < res.data.total) {
 				readReq.page++
 			}
 
@@ -230,12 +246,12 @@ async function getContent(pre: boolean) {
 
 		if (logs.value && logs.value.length > 3000) {
 			if (pre) {
-				logs.value.splice(logs.value.length - readReq.pageSize, readReq.pageSize)
+				logs.value.splice(logs.value.length - readReq.limit, readReq.limit)
 				if (maxPage.value > 1) {
 					maxPage.value--
 				}
 			} else {
-				logs.value.splice(0, readReq.pageSize)
+				logs.value.splice(0, readReq.limit)
 				if (minPage.value > 1) {
 					minPage.value++
 				}

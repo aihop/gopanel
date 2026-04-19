@@ -8,8 +8,8 @@ import (
 type IAITaskRepo interface {
 	CreateTask(task *model.AITask) error
 	GetTaskByID(id uint) (*model.AITask, error)
-	GetTasksByUserID(userID uint, page, pageSize int) ([]*model.AITask, int64, error)
-	GetTasksByProjectID(projectID uint, page, pageSize int) ([]*model.AITask, int64, error)
+	GetTasksByUserID(userID uint, page, limit int) ([]*model.AITask, int64, error)
+	GetTasksByProjectID(projectID uint, page, limit int) ([]*model.AITask, int64, error)
 	UpdateTask(task *model.AITask) error
 	DeleteTask(id uint) error
 
@@ -34,21 +34,21 @@ func (r *aiTaskRepo) GetTaskByID(id uint) (*model.AITask, error) {
 	return &task, err
 }
 
-func (r *aiTaskRepo) GetTasksByUserID(userID uint, page, pageSize int) ([]*model.AITask, int64, error) {
+func (r *aiTaskRepo) GetTasksByUserID(userID uint, page, limit int) ([]*model.AITask, int64, error) {
 	var tasks []*model.AITask
 	var total int64
 	db := global.DB.Model(&model.AITask{}).Where("user_id = ?", userID)
 	db.Count(&total)
-	err := db.Order("created_at desc").Offset((page - 1) * pageSize).Limit(pageSize).Find(&tasks).Error
+	err := db.Order("created_at desc").Offset((page - 1) * limit).Limit(limit).Find(&tasks).Error
 	return tasks, total, err
 }
 
-func (r *aiTaskRepo) GetTasksByProjectID(projectID uint, page, pageSize int) ([]*model.AITask, int64, error) {
+func (r *aiTaskRepo) GetTasksByProjectID(projectID uint, page, limit int) ([]*model.AITask, int64, error) {
 	var tasks []*model.AITask
 	var total int64
 	db := global.DB.Model(&model.AITask{}).Where("project_id = ?", projectID)
 	db.Count(&total)
-	err := db.Order("created_at desc").Offset((page - 1) * pageSize).Limit(pageSize).Find(&tasks).Error
+	err := db.Order("created_at desc").Offset((page - 1) * limit).Limit(limit).Find(&tasks).Error
 	return tasks, total, err
 }
 

@@ -19,7 +19,7 @@ const data = ref<Pipeline.ResPipeline[]>([])
 const loading = ref(false)
 const pagination = ref({
   page: 1,
-  pageSize: 10,
+  limit: 10,
   itemCount: 0,
   onChange: (page: number) => {
     pagination.value.page = page
@@ -110,7 +110,7 @@ const fetchData = async () => {
   try {
     const res = await getPipelinePage({
       page: pagination.value.page,
-      pageSize: pagination.value.pageSize
+      limit: pagination.value.limit
     })
     data.value = res.data.items
     pagination.value.itemCount = res.data.total

@@ -261,7 +261,7 @@ const fetchLocalImages = async () => {
 
 const getPipelineList = async () => {
 	try {
-		const res: any = await getPipelinePage({ page: 1, pageSize: 100 })
+		const res: any = await getPipelinePage({ page: 1, limit: 100 })
 		rawPipelineList.value = res.data.items
 		pipelineOptions.value = res.data.items.map((item: any) => {
 			return {

@@ -36,14 +36,14 @@ func (r *PipelineRepo) Get(id uint) (*model.Pipeline, error) {
 	return &pipeline, err
 }
 
-func (r *PipelineRepo) Page(page, pageSize int) (int64, []model.Pipeline, error) {
+func (r *PipelineRepo) Page(page, limit int) (int64, []model.Pipeline, error) {
 	var total int64
 	var list []model.Pipeline
 	err := r.db.Model(&model.Pipeline{}).Count(&total).Error
 	if err != nil {
 		return 0, nil, err
 	}
-	err = r.db.Order("id desc").Offset((page - 1) * pageSize).Limit(pageSize).Find(&list).Error
+	err = r.db.Order("id desc").Offset((page - 1) * limit).Limit(limit).Find(&list).Error
 	return total, list, err
 }
 
@@ -85,7 +85,7 @@ func (r *PipelineRecordRepo) UpdateArchive(id uint, archiveFile string) error {
 	return r.db.Model(&model.PipelineRecord{}).Where("id = ?", id).Update("archive_file", archiveFile).Error
 }
 
-func (r *PipelineRecordRepo) PageByPipeline(pipelineId uint, page, pageSize int) (int64, []model.PipelineRecord, error) {
+func (r *PipelineRecordRepo) PageByPipeline(pipelineId uint, page, limit int) (int64, []model.PipelineRecord, error) {
 	var total int64
 	var list []model.PipelineRecord
 	query := r.db.Model(&model.PipelineRecord{}).Where("pipeline_id = ?", pipelineId)
@@ -93,6 +93,6 @@ func (r *PipelineRecordRepo) PageByPipeline(pipelineId uint, page, pageSize int)
 	if err != nil {
 		return 0, nil, err
 	}
-	err = query.Order("id desc").Offset((page - 1) * pageSize).Limit(pageSize).Find(&list).Error
+	err = query.Order("id desc").Offset((page - 1) * limit).Limit(limit).Find(&list).Error
 	return total, list, err
 }

@@ -40,7 +40,7 @@ func (u *ComposeTemplateService) List() ([]dto.ComposeTemplateInfo, error) {
 }
 
 func (u *ComposeTemplateService) SearchWithPage(req dto.SearchWithPage) (int64, interface{}, error) {
-	total, composes, err := repo.NewIComposeTemplateRepo().Page(req.Page, req.PageSize, repo.NewCommonRepo().WithLikeName(req.Info))
+	total, composes, err := repo.NewIComposeTemplateRepo().Page(req.Page, req.Limit, repo.NewCommonRepo().WithLikeName(req.Info))
 	var dtoComposeTemplates []dto.ComposeTemplateInfo
 	for _, compose := range composes {
 		var item dto.ComposeTemplateInfo

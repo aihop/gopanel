@@ -4,12 +4,14 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/aihop/gopanel/app/dto"
 	"github.com/aihop/gopanel/app/dto/request"
 	"github.com/aihop/gopanel/app/e"
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/service"
 	"github.com/aihop/gopanel/buserr"
 	"github.com/aihop/gopanel/init/db"
+	"github.com/aihop/gopanel/pkg/gormx"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -22,19 +24,11 @@ func DatabaseUserList(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Result(buserr.Err(err)))
 	}
-	return c.JSON(e.Succ(data))
-}
-
-func DatabaseUserCount(c fiber.Ctx) error {
-	R, err := e.BodyToWhere(c.Body())
+	total, _ := service.NewDatabaseUser().CountByWhere(&gormx.Wherex{Wheres: R.Wheres})
 	if err != nil {
 		return c.JSON(e.Result(buserr.Err(err)))
 	}
-	data, err := service.NewDatabaseUser().CountByWhere(&R)
-	if err != nil {
-		return c.JSON(e.Result(buserr.Err(err)))
-	}
-	return c.JSON(e.Succ(data))
+	return c.JSON(e.Succ(dto.PageResult{Total: total, Items: data}))
 }
 
 func DatabaseUserCreate(c fiber.Ctx) error {
