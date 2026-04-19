@@ -53,7 +53,7 @@ func ContainerRouter(r fiber.Router) {
 		// 镜像
 		containerRouter.Get("/image", api.ListImage)
 		containerRouter.Get("/image/all", api.ListAllImage)
-		containerRouter.Post("/image/search", api.SearchImage)
+		containerRouter.Post("/image/list", api.SearchImage)
 		containerRouter.Post("/image/pull", api.ImagePull)
 		containerRouter.Post("/image/push", api.ImagePush)
 		containerRouter.Post("/image/save", api.ImageSave)

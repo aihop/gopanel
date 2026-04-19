@@ -851,6 +851,7 @@ func copyData(app model.App, appDetail model.AppDetail, appInstall *model.AppIns
 	if err := fileOp.WriteFile(appInstall.GetComposePath(), strings.NewReader(appInstall.DockerCompose), 0755); err != nil {
 		return err
 	}
+	ensureComposeRecord(appInstall.Name, appInstall.GetComposePath())
 	return
 }
 func runScript(appInstall *model.AppInstall, operate string) error {

@@ -15,7 +15,7 @@ import (
 // @Success 200 {object} dto.PageResult
 // @Security ApiKeyAuth
 // @Security Timestamp
-// @Router /container/image/search [post]
+// @Router /container/image/list [post]
 func SearchImage(c fiber.Ctx) error {
 	req, err := e.BodyToStruct[dto.SearchWithPage](c.Body())
 	if err != nil {

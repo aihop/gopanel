@@ -205,6 +205,20 @@ func handleErr(install model.AppInstall, err error, out string) error {
 	return reErr
 }
 
+func ensureComposeRecord(name string, composePath string) {
+	name = strings.TrimSpace(name)
+	composePath = strings.TrimSpace(composePath)
+	if name == "" || composePath == "" {
+		return
+	}
+	exist, err := composeRepo.GetRecord(commonRepo.WithByName(name))
+	if err == nil && exist.ID > 0 {
+		_ = composeRepo.UpdateRecord(name, map[string]interface{}{"path": composePath})
+		return
+	}
+	_ = composeRepo.CreateRecord(&model.Compose{Name: name, Path: composePath})
+}
+
 func getContainerNames(install model.AppInstall) ([]string, error) {
 	envStr, err := coverEnvJsonToStr(install.Env)
 	if err != nil {

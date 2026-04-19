@@ -62,7 +62,7 @@ export const DownloadFile = (params: Container.ContainerLogInfo) => {
 
 // image
 export const containerImageListAPI = (params: SearchWithPage) => {
-	return http.post<ResPage<Container.ImageInfo>>(`/container/image/search`, params)
+	return http.post<ResPage<Container.ImageInfo>>(`/container/image/list`, params)
 }
 
 export const listAllImage = () => {

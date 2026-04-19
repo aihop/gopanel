@@ -187,37 +187,28 @@ func (s *AppInstallService) Uninstall(req AppUninstall) error {
 	if appInstall.ID == 0 {
 		return fmt.Errorf("app install not exist")
 	}
-
-	var path string = ""
-	var compose model.Compose
-	compose, err = composeRepo.GetRecord(commonRepo.WithByName(appInstall.Name))
-	if err != nil {
-		if appInstall.Status == constant.UpErr || appInstall.Status == constant.SyncFailed || appInstall.Status == constant.Installing {
-			if err = s.Delete(appInstall.ID); err != nil {
-				return err
-			}
-			if req.DeleteDir {
-				files.NewFileOp().DeleteDir(appInstall.GetPath())
-			}
-			RemoveAppInstallLogger(appInstall.Name)
+	composePath := appInstall.GetComposePath()
+	if files.NewFileOp().Stat(composePath) {
+		composeOperation := dto.ComposeOperation{
+			Name:      appInstall.Name,
+			Path:      composePath,
+			Operation: "delete",
+			WithFile:  req.DeleteDir,
 		}
-		return err
+		if err = NewIContainerService().ComposeOperation(&composeOperation); err != nil {
+			return err
+		}
+	} else {
+		if req.DeleteDir {
+			files.NewFileOp().DeleteDir(appInstall.GetPath())
+		}
+		_ = composeRepo.DeleteRecord(commonRepo.WithByName(appInstall.Name))
 	}
-	path = compose.Path
 
-	composeOperation := dto.ComposeOperation{
-		Name:      appInstall.Name,
-		Path:      path,
-		Operation: "delete",
-		WithFile:  req.DeleteDir,
-	}
-
-	if err = NewIContainerService().ComposeOperation(&composeOperation); err != nil {
-		return err
-	}
 	if err = s.Delete(appInstall.ID); err != nil {
 		return err
 	}
+	RemoveAppInstallLogger(appInstall.Name)
 	return nil
 }
 
