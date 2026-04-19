@@ -1,0 +1,68 @@
+<template>
+  <n-popselect
+    v-model:value="currentLocale"
+    :options="list"
+    :render-label="renderLabel"
+  >
+    <Icon
+      :size="19"
+      :name="MultiLanguageIcon"
+    />
+  </n-popselect>
+</template>
+
+<script lang="ts" setup>
+import type { SelectOption } from "naive-ui"
+import type { VNodeChild } from "vue"
+import Icon from "@/components/common/Icon.vue"
+import { useLocalesStore } from "@/store/i18n"
+import { NPopselect } from "naive-ui"
+import { computed, h } from "vue"
+
+const MultiLanguageIcon = "ion:language-outline"
+
+const localesStore = useLocalesStore()
+
+const { setLocale, t } = localesStore
+
+const list = computed(() =>
+	localesStore.availableLocales.map(i => ({
+		label: i,
+		value: i
+	}))
+)
+
+const currentLocale = computed({
+	get: () => localesStore.locale,
+	set: v => setLocale(v)
+})
+
+function renderLabel(option: SelectOption): VNodeChild {
+	return [
+		h(Icon, {
+			color: "#000",
+			style: {
+				verticalAlign: "-0.15em",
+				marginRight: "8px"
+			},
+			name: `circle-flags:${option.label}`
+		}),
+		h(
+			"span",
+			{},
+			{
+				default: () => {
+					switch (option.label) {
+						case "zh":
+							return "中文"
+						case "en":
+							return "English"
+						default:
+							return option.label
+					}
+				}
+			}
+		)
+	]
+}
+</script>

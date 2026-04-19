@@ -1,0 +1,76 @@
+<svg viewBox="0 0 1817 485.047" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1817.000000" height="485.047119" fill="none" customFrame="#000000">
+	<defs>
+		<g id="pixso_custom_effect_0">
+			<effect x="0.000000" y="8.000000" visibility="visible" fill="rgb(59,130,246)" fill-opacity="0.300000012" effectType="dropShadow" stdDeviation="36" radius="0" />
+		</g>
+		<filter id="filter_0" width="426.000000" height="485.047119" x="0.000000" y="0.000000" filterUnits="userSpaceOnUse" customEffect="url(#pixso_custom_effect_0)" color-interpolation-filters="sRGB">
+			<feFlood flood-opacity="0" result="BackgroundImageFix" />
+			<feOffset dx="0.000000" dy="8.000000" in="SourceAlpha" />
+			<feGaussianBlur stdDeviation="12" />
+			<feColorMatrix type="matrix" values="0 0 0 0 0.231373 0 0 0 0 0.509804 0 0 0 0 0.964706 0 0 0 0.3 0 " />
+			<feBlend result="effect_dropShadow_1" in2="BackgroundImageFix" mode="normal" />
+			<feBlend result="shape" in="SourceGraphic" in2="effect_dropShadow_1" mode="normal" />
+		</filter>
+		<linearGradient id="paint_linear_0" x1="54" x2="425.605072" y1="46.0402832" y2="359.489624" gradientUnits="userSpaceOnUse">
+			<stop stop-color="rgb(59,130,246)" offset="0" stop-opacity="1" />
+			<stop stop-color="rgb(139,92,246)" offset="1" stop-opacity="1" />
+		</linearGradient>
+		<g id="pixso_custom_effect_1">
+			<effect x="0.000000" y="8.000000" visibility="visible" fill="rgb(59,130,246)" fill-opacity="0.300000012" effectType="dropShadow" stdDeviation="36" radius="0" />
+		</g>
+		<filter id="filter_1" width="250.573853" height="278.536865" x="88.213013" y="103.290283" filterUnits="userSpaceOnUse" customEffect="url(#pixso_custom_effect_1)" color-interpolation-filters="sRGB">
+			<feFlood flood-opacity="0" result="BackgroundImageFix" />
+			<feColorMatrix result="hardAlpha" in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0 " />
+			<feOffset dx="0.000000" dy="8.000000" in="hardAlpha" />
+			<feGaussianBlur stdDeviation="12" />
+			<feComposite k2="-1" k3="1" in2="hardAlpha" operator="out" />
+			<feColorMatrix type="matrix" values="0 0 0 0 0.231373 0 0 0 0 0.509804 0 0 0 0 0.964706 0 0 0 0.3 0 " />
+			<feBlend result="effect_dropShadow_1" in2="BackgroundImageFix" mode="normal" />
+			<feBlend result="shape" in="SourceGraphic" in2="effect_dropShadow_1" mode="normal" />
+		</filter>
+		<linearGradient id="paint_linear_1" x1="125" x2="197.064743" y1="132.040283" y2="219.000793" gradientUnits="userSpaceOnUse">
+			<stop stop-color="rgb(34,211,238)" offset="0" stop-opacity="1" />
+			<stop stop-color="rgb(59,130,246)" offset="1" stop-opacity="1" />
+		</linearGradient>
+		<linearGradient id="paint_linear_2" x1="125" x2="125" y1="183.290283" y2="285.790283" gradientUnits="userSpaceOnUse">
+			<stop stop-color="rgb(59,130,246)" offset="0" stop-opacity="1" />
+			<stop stop-color="rgb(79,70,229)" offset="1" stop-opacity="1" />
+		</linearGradient>
+		<linearGradient id="paint_linear_3" x1="125" x2="197.064743" y1="263.699707" y2="350.660217" gradientUnits="userSpaceOnUse">
+			<stop stop-color="rgb(79,70,229)" offset="0" stop-opacity="1" />
+			<stop stop-color="rgb(124,58,237)" offset="1" stop-opacity="1" />
+		</linearGradient>
+		<linearGradient id="paint_linear_4" x1="213.5" x2="285.564758" y1="337.040222" y2="250.079727" gradientUnits="userSpaceOnUse">
+			<stop stop-color="rgb(124,58,237)" offset="0" stop-opacity="1" />
+			<stop stop-color="rgb(91,33,182)" offset="1" stop-opacity="1" />
+		</linearGradient>
+		<linearGradient id="paint_linear_5" x1="263.945068" x2="263.945068" y1="285.790314" y2="225.704102" gradientUnits="userSpaceOnUse">
+			<stop stop-color="rgb(139,92,246)" offset="0" stop-opacity="1" />
+			<stop stop-color="rgb(59,130,246)" offset="1" stop-opacity="1" />
+		</linearGradient>
+		<linearGradient id="paint_linear_6" x1="263.944946" x2="186.064941" y1="225.704102" y2="225.704102" gradientUnits="userSpaceOnUse">
+			<stop stop-color="rgb(59,130,246)" offset="0" stop-opacity="1" />
+			<stop stop-color="rgb(34,211,238)" offset="1" stop-opacity="1" />
+		</linearGradient>
+	</defs>
+	<g id="组合 12">
+		<path id="" d="M603.781 346.618Q619.797 346.618 640.578 344.431L648.547 281.072L591.594 281.072L595.734 245.837L690.5 245.837L674.484 376.384Q632.219 381.853 600.266 381.853L583.625 381.853Q537.219 381.54 516.203 363.65Q495.266 345.681 495.266 306.931Q495.266 297.322 496.906 282.322L501.672 239.743Q506.125 204.587 518.938 182.868Q531.75 161.072 555.109 150.837Q578.469 140.525 614.641 140.212L623.312 140.212Q661.984 140.212 697.219 141.228L692.688 176.697L666.125 176.072Q632.219 175.447 619.094 175.447L609.484 175.447Q586.125 175.447 572.062 182.009Q558 188.572 550.422 202.009Q542.922 215.447 540.109 237.868L534.328 284.275Q533.078 297.009 533.078 301.54Q533.078 325.525 545.344 335.915Q557.688 346.306 587.766 346.618L603.781 346.618ZM719.631 278.181Q728.849 201.072 804.396 201.072L819.787 201.072Q886.037 201.072 886.037 261.853Q886.037 269.197 885.021 277.868L881.818 304.743Q872.521 381.853 797.052 381.853L781.662 381.853Q715.412 381.853 715.412 321.072Q715.412 313.65 716.427 305.056L719.631 278.181ZM801.193 347.634Q839.631 347.634 844.709 305.681L848.224 276.853Q848.849 270.447 848.849 267.947Q848.849 235.29 815.568 235.29L800.256 235.29Q761.818 235.29 756.74 277.165L753.224 305.993Q752.521 312.4 752.521 314.978Q752.521 347.634 785.802 347.634L801.193 347.634ZM1043.09 140.212Q1076.37 140.525 1094.42 156.072Q1112.54 171.618 1112.54 200.759Q1112.54 208.728 1111.92 213.181L1109.96 229.509Q1105.51 264.743 1083.09 283.493Q1060.75 302.165 1023.25 302.478L958.011 302.478L948.402 380.525L910.667 380.525L940.042 140.212L1043.09 140.212ZM1028.4 267.243Q1048.25 266.931 1058.79 258.493Q1069.34 249.978 1071.92 231.462L1074.5 211.931Q1074.81 209.665 1074.81 205.837Q1074.81 190.134 1066.29 182.947Q1057.85 175.759 1039.89 175.447L973.714 175.447L962.152 267.243L1028.4 267.243ZM1174.66 380.525Q1150.67 380.525 1136.22 366.931Q1121.85 353.337 1121.85 331.618Q1121.85 326.775 1122.16 324.275Q1125.05 304.431 1132.39 292.79Q1139.74 281.072 1153.64 275.759Q1167.63 270.447 1190.28 270.447L1244.11 270.447L1244.42 267.947Q1244.74 266.306 1244.74 263.415Q1244.74 250.993 1236.38 243.337Q1228.1 235.603 1210.52 235.603L1202.16 235.603Q1173.64 235.603 1150.99 237.165L1155.75 204.587L1165.05 203.884Q1170.13 203.572 1183.1 202.947Q1196.06 202.322 1205.67 202.322L1214.35 202.322Q1247.31 202.322 1264.27 218.025Q1281.22 233.65 1281.22 259.9Q1281.22 262.79 1280.6 269.822L1267.47 380.525L1174.66 380.525ZM1158.64 328.103Q1158.64 337.322 1163.88 342.322Q1169.19 347.243 1179.11 347.243L1234.81 347.243L1240.21 302.478L1187.16 302.165Q1174.97 301.853 1167.78 306.853Q1160.6 311.775 1158.96 324.275L1158.64 328.103ZM1361.2 236.54L1343.93 380.525L1307.14 380.525L1328.86 202.322L1409.17 202.322Q1475.42 202.322 1475.42 263.103Q1475.42 270.447 1474.48 279.118L1461.98 380.525L1425.18 380.525L1437.68 278.181Q1438.31 271.775 1438.31 269.197Q1438.31 236.54 1405.03 236.54L1361.2 236.54ZM1598.65 201.072Q1631.62 201.072 1648.42 216.618Q1665.21 232.087 1665.21 262.478Q1665.21 269.509 1664.27 277.868L1660.68 306.618L1541.38 306.618L1541.38 306.931Q1540.68 313.962 1540.68 316.54Q1540.68 332.868 1550.13 340.759Q1559.59 348.572 1582.01 348.572L1597.71 348.572Q1614.35 348.572 1648.26 345.681L1644.74 378.962Q1616.54 381.853 1594.2 381.853L1578.49 381.853Q1539.74 381.853 1521.62 366.15Q1503.57 350.447 1503.57 320.056Q1503.57 312.712 1504.59 305.056L1507.79 278.181Q1512.24 239.743 1533.02 220.447Q1553.81 201.072 1592.24 201.072L1598.65 201.072ZM1627.79 275.603L1627.79 275.29Q1628.42 268.259 1628.42 265.056Q1628.42 249.665 1620.21 241.697Q1612.09 233.65 1594.51 233.65L1588.1 233.65Q1550.29 233.65 1545.21 275.603L1627.79 275.603ZM1682.82 380.525L1712.9 133.806L1749.69 133.806L1719.61 380.525L1682.82 380.525Z" fill="rgb(0,97,242)" fill-rule="nonzero" />
+		<g filter="url(#filter_0)">
+			<path id="矢量 46" d="M54 106.234L54 240.876C54 324.038 123.331 401.656 213 423.04C302.669 401.656 372 324.038 372 240.876L372 106.234L213 46.0403L54 106.234Z" fill-rule="nonzero" stroke="url(#paint_linear_0)" stroke-linejoin="round" stroke-width="36.000000" />
+		</g>
+		<g id="组合 11" filter="url(#filter_1)">
+			<path id="矢量 47" d="M213.5 132.04L125 183.29L163.055 205.381L213.5 176.221L213.5 132.04Z" fill="url(#paint_linear_1)" fill-rule="nonzero" />
+			<path id="矢量 47" d="M125 183.29L163.055 205.381L213.5 176.221L213.5 132.04L125 183.29Z" fill-rule="nonzero" stroke="rgb(255,255,255)" stroke-opacity="0.25" stroke-linejoin="round" stroke-width="1.500000" />
+			<path id="矢量 48" d="M125 183.29L125 285.79L163.055 263.7L163.055 205.381L125 183.29Z" fill="url(#paint_linear_2)" fill-rule="nonzero" />
+			<path id="矢量 48" d="M125 285.79L163.055 263.7L163.055 205.381L125 183.29L125 285.79Z" fill-rule="nonzero" stroke="rgb(255,255,255)" stroke-opacity="0.25" stroke-linejoin="round" stroke-width="1.500000" />
+			<path id="矢量 49" d="M125 285.79L213.5 337.04L213.5 292.859L163.055 263.7L125 285.79Z" fill="url(#paint_linear_3)" fill-rule="nonzero" />
+			<path id="矢量 49" d="M213.5 337.04L213.5 292.859L163.055 263.7L125 285.79L213.5 337.04Z" fill-rule="nonzero" stroke="rgb(255,255,255)" stroke-opacity="0.25" stroke-linejoin="round" stroke-width="1.500000" />
+			<path id="矢量 50" d="M213.5 337.04L302 285.79L263.945 263.7L213.5 292.859L213.5 337.04Z" fill="url(#paint_linear_4)" fill-rule="nonzero" />
+			<path id="矢量 50" d="M302 285.79L263.945 263.7L213.5 292.859L213.5 337.04L302 285.79Z" fill-rule="nonzero" stroke="rgb(255,255,255)" stroke-opacity="0.25" stroke-linejoin="round" stroke-width="1.500000" />
+			<path id="矢量 51" d="M302 285.79L302 225.704L263.945 225.704L263.945 263.7L302 285.79Z" fill="url(#paint_linear_5)" fill-rule="nonzero" />
+			<path id="矢量 51" d="M302 225.704L263.945 225.704L263.945 263.7L302 285.79L302 225.704Z" fill-rule="nonzero" stroke="rgb(255,255,255)" stroke-opacity="0.25" stroke-linejoin="round" stroke-width="1.500000" />
+			<path id="矢量 52" d="M263.945 225.704L186.065 225.704L186.065 263.7L263.945 263.7L263.945 225.704Z" fill="url(#paint_linear_6)" fill-rule="nonzero" />
+			<path id="矢量 52" d="M186.065 225.704L186.065 263.7L263.945 263.7L263.945 225.704L186.065 225.704Z" fill-rule="nonzero" stroke="rgb(255,255,255)" stroke-opacity="0.25" stroke-linejoin="round" stroke-width="1.500000" />
+		</g>
+	</g>
+</svg>

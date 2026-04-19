@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Shield Border Gradient -->
+    <linearGradient id="shieldBorder" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3B82F6" />
+      <stop offset="100%" stop-color="#8B5CF6" />
+    </linearGradient>
+
+    <!-- Gradients matching the user's uploaded logo-text.svg -->
+    <linearGradient id="paint_linear_1" x1="407" x2="483.092" y1="22" y2="75.233" gradientUnits="userSpaceOnUse">
+      <stop stop-color="rgb(59,130,246)" offset="0" stop-opacity="1" />
+      <stop stop-color="rgb(139,92,246)" offset="1" stop-opacity="1" />
+    </linearGradient>
+    <linearGradient id="paint_linear_2" x1="435.333" x2="511.425" y1="103" y2="49.767" gradientUnits="userSpaceOnUse">
+      <stop stop-color="rgb(139,92,246)" offset="0" stop-opacity="1" />
+      <stop stop-color="rgb(6,182,212)" offset="1" stop-opacity="1" />
+    </linearGradient>
+
+    <!-- Soft Glow / Drop Shadow -->
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#3B82F6" flood-opacity="0.3" />
+    </filter>
+  </defs>
+
+  <!-- Background Shield (Completely hollow inside, just the glowing outline) -->
+  <path d="M256 40 L84 116 v170 c0 105 75 203 172 230 c97-27 172-125 172-230 V116 L256 40 z" 
+        fill="none" 
+        stroke="url(#shieldBorder)"
+        stroke-width="36"
+        stroke-linejoin="round"
+        filter="url(#glow)" />
+
+  <!-- Inner Center Group: The exact X from logo-text.svg -->
+  <!-- The original X is from x=407 to 492 (width 85), y=22 to 103 (height 81). -->
+  <!-- We center it in the 512x512 viewbox by translating it and scaling it. -->
+  <!-- Target center: 256, 256. Original center: x=449.5, y=62.5 -->
+  <!-- We scale by 3 to make it prominent inside the shield. -->
+  <!-- Translate X: 256 - (449.5 * 3) = 256 - 1348.5 = -1092.5 -->
+  <!-- Translate Y: 256 - (62.5 * 3) = 256 - 187.5 = 68.5 -->
+  <g transform="translate(-1092.5, 68.5) scale(3)">
+    <!-- Left Bracket '>' -->
+    <path d="M407 22L435.333 22L463.667 62.5L435.333 103L407 103L435.333 62.5L407 22Z" fill="url(#paint_linear_1)" fill-rule="evenodd" />
+    <!-- Right Bracket '<' -->
+    <path d="M492 22L463.667 22L435.333 62.5L463.667 103L492 103L463.667 62.5L492 22Z" opacity="0.85" fill="url(#paint_linear_2)" fill-rule="evenodd" />
+  </g>
+</svg>

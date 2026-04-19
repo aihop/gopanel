@@ -1,0 +1,75 @@
+<svg viewBox="0 0 426 485" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="426.000000" height="485.000488" fill="none" customFrame="#000000">
+	<defs>
+		<g id="pixso_custom_effect_2">
+			<effect x="0.000000" y="8.000000" visibility="visible" fill="rgb(59,130,246)" fill-opacity="0.300000012" effectType="dropShadow" stdDeviation="36" radius="0" />
+		</g>
+		<filter id="filter_2" width="426.000000" height="485.000488" x="0.000000" y="0.000000" filterUnits="userSpaceOnUse" customEffect="url(#pixso_custom_effect_2)" color-interpolation-filters="sRGB">
+			<feFlood flood-opacity="0" result="BackgroundImageFix" />
+			<feOffset dx="0.000000" dy="8.000000" in="SourceAlpha" />
+			<feGaussianBlur stdDeviation="12" />
+			<feColorMatrix type="matrix" values="0 0 0 0 0.231373 0 0 0 0 0.509804 0 0 0 0 0.964706 0 0 0 0.3 0 " />
+			<feBlend result="effect_dropShadow_1" in2="BackgroundImageFix" mode="normal" />
+			<feBlend result="shape" in="SourceGraphic" in2="effect_dropShadow_1" mode="normal" />
+		</filter>
+		<linearGradient id="paint_linear_7" x1="54" x2="425.605072" y1="46.0002441" y2="359.449585" gradientUnits="userSpaceOnUse">
+			<stop stop-color="rgb(59,130,246)" offset="0" stop-opacity="1" />
+			<stop stop-color="rgb(139,92,246)" offset="1" stop-opacity="1" />
+		</linearGradient>
+		<g id="pixso_custom_effect_3">
+			<effect x="0.000000" y="8.000000" visibility="visible" fill="rgb(59,130,246)" fill-opacity="0.300000012" effectType="dropShadow" stdDeviation="36" radius="0" />
+		</g>
+		<filter id="filter_3" width="250.500122" height="278.500000" x="88.250000" y="103.250244" filterUnits="userSpaceOnUse" customEffect="url(#pixso_custom_effect_3)" color-interpolation-filters="sRGB">
+			<feFlood flood-opacity="0" result="BackgroundImageFix" />
+			<feColorMatrix result="hardAlpha" in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0 " />
+			<feOffset dx="0.000000" dy="8.000000" in="hardAlpha" />
+			<feGaussianBlur stdDeviation="12" />
+			<feComposite k2="-1" k3="1" in2="hardAlpha" operator="out" />
+			<feColorMatrix type="matrix" values="0 0 0 0 0.231373 0 0 0 0 0.509804 0 0 0 0 0.964706 0 0 0 0.3 0 " />
+			<feBlend result="effect_dropShadow_1" in2="BackgroundImageFix" mode="normal" />
+			<feBlend result="shape" in="SourceGraphic" in2="effect_dropShadow_1" mode="normal" />
+		</filter>
+		<linearGradient id="paint_linear_8" x1="125" x2="197.064743" y1="132.000244" y2="218.960754" gradientUnits="userSpaceOnUse">
+			<stop stop-color="rgb(34,211,238)" offset="0" stop-opacity="1" />
+			<stop stop-color="rgb(59,130,246)" offset="1" stop-opacity="1" />
+		</linearGradient>
+		<linearGradient id="paint_linear_9" x1="125" x2="125" y1="183.250244" y2="285.750244" gradientUnits="userSpaceOnUse">
+			<stop stop-color="rgb(59,130,246)" offset="0" stop-opacity="1" />
+			<stop stop-color="rgb(79,70,229)" offset="1" stop-opacity="1" />
+		</linearGradient>
+		<linearGradient id="paint_linear_10" x1="125" x2="197.064743" y1="263.659668" y2="350.620178" gradientUnits="userSpaceOnUse">
+			<stop stop-color="rgb(79,70,229)" offset="0" stop-opacity="1" />
+			<stop stop-color="rgb(124,58,237)" offset="1" stop-opacity="1" />
+		</linearGradient>
+		<linearGradient id="paint_linear_11" x1="213.5" x2="285.564758" y1="337.000183" y2="250.039688" gradientUnits="userSpaceOnUse">
+			<stop stop-color="rgb(124,58,237)" offset="0" stop-opacity="1" />
+			<stop stop-color="rgb(91,33,182)" offset="1" stop-opacity="1" />
+		</linearGradient>
+		<linearGradient id="paint_linear_12" x1="263.945068" x2="263.945068" y1="285.750275" y2="225.664062" gradientUnits="userSpaceOnUse">
+			<stop stop-color="rgb(139,92,246)" offset="0" stop-opacity="1" />
+			<stop stop-color="rgb(59,130,246)" offset="1" stop-opacity="1" />
+		</linearGradient>
+		<linearGradient id="paint_linear_13" x1="263.944946" x2="186.064941" y1="225.664062" y2="225.664062" gradientUnits="userSpaceOnUse">
+			<stop stop-color="rgb(59,130,246)" offset="0" stop-opacity="1" />
+			<stop stop-color="rgb(34,211,238)" offset="1" stop-opacity="1" />
+		</linearGradient>
+	</defs>
+	<g id="组合 12">
+		<g filter="url(#filter_2)">
+			<path id="矢量 46" d="M54 106.194L54 240.836C54 323.998 123.331 401.616 213 423C302.669 401.616 372 323.998 372 240.836L372 106.194L213 46.0002L54 106.194Z" fill-rule="nonzero" stroke="url(#paint_linear_7)" stroke-linejoin="round" stroke-width="36.000000" />
+		</g>
+		<g id="组合 11" filter="url(#filter_3)">
+			<path id="矢量 47" d="M213.5 132L125 183.25L163.055 205.341L213.5 176.181L213.5 132Z" fill="url(#paint_linear_8)" fill-rule="nonzero" />
+			<path id="矢量 47" d="M125 183.25L163.055 205.341L213.5 176.181L213.5 132L125 183.25Z" fill-rule="nonzero" stroke="rgb(255,255,255)" stroke-opacity="0.25" stroke-linejoin="round" stroke-width="1.500000" />
+			<path id="矢量 48" d="M125 183.25L125 285.75L163.055 263.66L163.055 205.341L125 183.25Z" fill="url(#paint_linear_9)" fill-rule="nonzero" />
+			<path id="矢量 48" d="M125 285.75L163.055 263.66L163.055 205.341L125 183.25L125 285.75Z" fill-rule="nonzero" stroke="rgb(255,255,255)" stroke-opacity="0.25" stroke-linejoin="round" stroke-width="1.500000" />
+			<path id="矢量 49" d="M125 285.75L213.5 337L213.5 292.819L163.055 263.66L125 285.75Z" fill="url(#paint_linear_10)" fill-rule="nonzero" />
+			<path id="矢量 49" d="M213.5 337L213.5 292.819L163.055 263.66L125 285.75L213.5 337Z" fill-rule="nonzero" stroke="rgb(255,255,255)" stroke-opacity="0.25" stroke-linejoin="round" stroke-width="1.500000" />
+			<path id="矢量 50" d="M213.5 337L302 285.75L263.945 263.66L213.5 292.819L213.5 337Z" fill="url(#paint_linear_11)" fill-rule="nonzero" />
+			<path id="矢量 50" d="M302 285.75L263.945 263.66L213.5 292.819L213.5 337L302 285.75Z" fill-rule="nonzero" stroke="rgb(255,255,255)" stroke-opacity="0.25" stroke-linejoin="round" stroke-width="1.500000" />
+			<path id="矢量 51" d="M302 285.75L302 225.664L263.945 225.664L263.945 263.66L302 285.75Z" fill="url(#paint_linear_12)" fill-rule="nonzero" />
+			<path id="矢量 51" d="M302 225.664L263.945 225.664L263.945 263.66L302 285.75L302 225.664Z" fill-rule="nonzero" stroke="rgb(255,255,255)" stroke-opacity="0.25" stroke-linejoin="round" stroke-width="1.500000" />
+			<path id="矢量 52" d="M263.945 225.664L186.065 225.664L186.065 263.66L263.945 263.66L263.945 225.664Z" fill="url(#paint_linear_13)" fill-rule="nonzero" />
+			<path id="矢量 52" d="M186.065 225.664L186.065 263.66L263.945 263.66L263.945 225.664L186.065 225.664Z" fill-rule="nonzero" stroke="rgb(255,255,255)" stroke-opacity="0.25" stroke-linejoin="round" stroke-width="1.500000" />
+		</g>
+	</g>
+</svg>

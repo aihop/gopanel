@@ -1,0 +1,564 @@
+<template>
+  <n-spin :show="daemonLoading">
+    <div class="bg-base-100 mt-3 rounded-[20px] p-4 px-6 shadow">
+      <div class="flex items-center justify-between">
+        <n-space align="center">
+          <n-tag
+            type="success"
+            class="uppercase"
+          >{{ daemon.containerType }}</n-tag>
+          <n-tag
+            type="warning"
+            v-if="daemon.status"
+          >
+            {{ dockerStatusText[daemon.status as dockerStatusEnum] }}
+          </n-tag>
+          <span class="text-sm text-gray-500">版本: {{ daemon.version }}</span>
+        </n-space>
+        <n-space v-if="daemon.status">
+          <n-button
+            v-if="daemon.status === dockerStatus.Stopped"
+            :loading="statusLoading"
+            type="primary"
+            @click="updateDockerStatus('start')"
+          >
+            {{ $t("container.start") }}
+          </n-button>
+          <n-popconfirm
+            v-else
+            @positive-click="updateDockerStatus('stop')"
+          >
+            <template #trigger>
+              <n-button
+                :loading="statusLoading"
+                type="warning"
+              >停止</n-button>
+            </template>
+            是否停止？
+          </n-popconfirm>
+          <n-popconfirm @positive-click="updateDockerStatus('restart')">
+            <template #trigger>
+              <n-button
+                :loading="reloadLoading"
+                :disabled="daemon.status === dockerStatus.Stopped"
+                type="error"
+              >
+                重启
+              </n-button>
+            </template>
+            是否重启
+          </n-popconfirm>
+        </n-space>
+      </div>
+    </div>
+  </n-spin>
+  <div class="bg-base-100 mt-8 rounded-[28px] p-8 shadow">
+    <n-tabs
+      type="line"
+      animated
+      @update:value="handleTabChange"
+    >
+      <n-tab-pane
+        name="basic"
+        tab="基础配置"
+      >
+        <n-spin :show="daemonLoading">
+          <n-form
+            class="space-y-6 p-4"
+            label-placement="left"
+            :style="{
+							maxWidth: '640px'
+						}"
+            label-width="100px"
+          >
+            <!-- 镜像加速 -->
+            <n-form-item label="镜像加速">
+              <div>
+                <div class="flex items-end">
+                  <n-input
+                    v-if="daemon.registryMirrors"
+                    type="textarea"
+                    disabled
+                    :value="daemon.registryMirrors.join('\n')"
+                    style="min-height: 34px"
+                    placeholder="https://dockerpull.pw\nhttps://dockerhub.icu\nhttps://hub.rat.dev\nhttps://register.librax.org\nhttps://docker-0.unsee.tech"
+                    :autosize="{ minRows: 1, maxRows: 5 }"
+                    @update:value="updateMirrorUrls($event, 'registryMirrors')"
+                  />
+                  <n-button @click="openDrawer('registryMirrors')">
+                    <template #icon>
+                      <Icon name="uil:setting" />
+                    </template>
+                    设置
+                  </n-button>
+                </div>
+                <div
+                  class="mt-1 text-xs text-gray-500"
+                  style="line-height: 28px"
+                >
+                  {{ $t("container.mirrorsHelper") }}
+                </div>
+              </div>
+            </n-form-item>
+
+            <!-- 私有仓库 -->
+            <!-- <n-form-item label="私有仓库">
+							<div class="flex w-full items-end">
+								<n-input
+									v-if="daemon.insecureRegistries"
+									type="textarea"
+									disabled
+									:value="daemon.insecureRegistries.join('\n')"
+									style="min-height: 34px"
+									placeholder="未设置"
+									:autosize="{ minRows: 1, maxRows: 5 }"
+									@update:value="updateMirrorUrls($event, 'insecureRegistries')"
+								/>
+								<n-input v-else value="未设置" disabled></n-input>
+								<n-button @click="openPrivateRegistrySettings">
+									<template #icon>
+										<Icon name="uil:setting" />
+									</template>
+									设置
+								</n-button>
+							</div>
+						</n-form-item> -->
+
+            <!-- IPv6 -->
+            <!-- <n-form-item label="IPv6">
+							<n-switch v-model:value="daemon.ipv6" />
+						</n-form-item> -->
+
+            <!-- 日志切割 -->
+            <n-form-item label="日志切割">
+              <n-spin :show="logPruneLoading">
+                <n-switch
+                  :value="logSwitchValue"
+                  @update:value="onLogSwitchChange"
+                />
+                <template v-if="logSwitchValue">
+                  <n-space class="mt-2">
+                    <n-tag type="info">单文件最大: {{ daemon.logMaxSize }}</n-tag>
+                    <n-tag type="info">最大文件数: {{ daemon.logMaxFile }}</n-tag>
+                  </n-space>
+                </template>
+              </n-spin>
+            </n-form-item>
+
+            <!-- iptables -->
+            <n-form-item label="iptables">
+              <div class="w-full">
+                <n-switch
+                  :value="daemon.iptables"
+                  @update:value="onIptablesChange"
+                />
+                <n-text
+                  depth="3"
+                  class="mt-1 block text-xs"
+                >Docker 对 iptables 规则的自动配置</n-text>
+              </div>
+            </n-form-item>
+
+            <!-- Live restore -->
+            <n-form-item label="Live restore">
+              <div class="w-full">
+                <n-switch
+                  :value="daemon.liveRestore"
+                  @update:value="onLiveRestoreChange"
+                />
+                <n-text
+                  depth="3"
+                  class="mt-1 block text-xs"
+                >
+                  允许在 Docker 守护进程发生意外停机或崩溃时保留正在运行的容器状态
+                </n-text>
+              </div>
+            </n-form-item>
+
+            <!-- cgroup driver -->
+            <n-form-item label="cgroup driver">
+              <n-radio-group
+                v-model:value="daemon.cgroupDriver"
+                name="cgroupdriver"
+                @update:value="onCgroupDriverChange"
+              >
+                <n-radio-button
+                  value="cgroupfs"
+                  label="cgroupfs"
+                />
+                <n-radio-button
+                  value="systemd"
+                  label="systemd"
+                />
+              </n-radio-group>
+            </n-form-item>
+            <!-- Socket 路径 -->
+            <!-- <n-form-item label="Socket 路径">
+                <n-input v-model:value="settings.socketPath" />
+                     <n-button class="ml-2"  @click="openSocketPathSettings">
+                                          <template #icon>
+                      <Icon name="uil:setting" />
+                    </template>
+                      设置</n-button>
+            </n-form-item>
+             <div class="ml-[var(--n-label-width)] -mt-4">
+                 <n-text depth="3" class="text-xs">Docker 守护进程 (Docker Daemon) 与客户端之间的通信通道</n-text>
+            </div> -->
+          </n-form>
+        </n-spin>
+      </n-tab-pane>
+      <n-tab-pane
+        name="advanced"
+        tab="全部配置"
+      >
+        <div class="p-4">
+          <FtEditor
+            v-model="dockerConf"
+            language="json"
+            height="calc(100vh - 450px)"
+            class="mt-[10px]"
+          />
+          <n-button
+            :disabled="daemonLoading"
+            type="primary"
+            style="margin-top: 5px"
+            @click="onSaveFile"
+          >
+            {{ $t("commons.button.save") }}
+          </n-button>
+          <n-modal
+            v-model:show="showRestartConfirm"
+            preset="dialog"
+            title="保存配置"
+            :loading="saveLoading"
+            positive-text="确认"
+            negative-text="取消"
+            @positive-click="handleConfirmRestart"
+            @negative-click="showRestartConfirm = false"
+          >
+            <div>保存后将会重启 Docker 服务，是否确认？</div>
+          </n-modal>
+        </div>
+      </n-tab-pane>
+    </n-tabs>
+  </div>
+  <DockerDrawer
+    ref="DockerDrawerModel"
+    @save="getDaemon"
+  />
+  <LogDrawer
+    ref="logDrawerRef"
+    @search="getDaemon"
+  />
+  <RebootAlert
+    ref="rebootIptablesRef"
+    @confirm="handleIptablesConfirm"
+  />
+  <RebootAlert
+    ref="rebootLiveRestoreRef"
+    @confirm="handleLiveRestoreConfirm"
+  />
+  <RebootAlert
+    ref="rebootCgroupRef"
+    @confirm="handleCgroupConfirm"
+  />
+
+  <n-modal
+    v-model:show="showConfirmationModal"
+    preset="dialog"
+    title="配置修改"
+    positive-text="确认"
+    negative-text="取消"
+    @positive-click="handleConfirmSaveChanges"
+    @negative-click="showConfirmationModal = false"
+  >
+    <div>修改配置后需要重启生效。</div>
+    <div>
+      如果确认操作，请输入
+      <span style="color: red">立即重启</span>
+    </div>
+    <n-input
+      v-model:value="confirmationInput"
+      class="mt-2"
+      placeholder='请输入 "立即重启"'
+    />
+  </n-modal>
+</template>
+
+<script setup lang="ts">
+import { ref } from "vue"
+import type { dockerStatusEnum } from "@/enums/dockerStatus.enum"
+import { loadDaemonFile, updateDaemonUpdate, updateDaemonByfile,containerInstanceOperateAPI,containerDaemonConfigAPI } from "@/api/modules/container"
+import FtEditor from "@/components/FtEditor/index.vue"
+import RebootAlert from "@/components/RebootAlert.vue"
+import { dockerStatus, dockerStatusText } from "@/enums/dockerStatus.enum"
+import { isSucc } from "@/utils/is"
+import { useMessage } from "naive-ui"
+import { computed, onMounted } from "vue"
+import DockerDrawer from "./components/dockerDrawer.vue"
+import LogDrawer from "./log/index.vue"
+
+const message = useMessage() // Initialize message service
+const statusLoading = ref(false)
+const reloadLoading = ref(false)
+function updateDockerStatus(operation: string) {
+	if (operation === "restart") {
+		reloadLoading.value = true
+	} else {
+		statusLoading.value = true
+	}
+	containerInstanceOperateAPI({ operation })
+		.then(res => {
+			if (isSucc(res.code)) {
+				getDaemon()
+			}
+		})
+		.finally(() => {
+			if (operation === "restart") {
+				reloadLoading.value = false
+			} else {
+				statusLoading.value = false
+			}
+		})
+}
+const daemon = ref<any>({})
+const daemonLoading = ref(false)
+function getDaemon() {
+	daemonLoading.value = true
+	containerDaemonConfigAPI()
+		.then((res: any) => {
+			if (isSucc(res.code)) {
+				daemon.value = res.data || {}
+			}
+		})
+		.finally(() => {
+			daemonLoading.value = false
+		})
+}
+
+function updateMirrorUrls(value: string, key: string) {
+	daemon.value[key] = value
+		.split("\n")
+		.map(url => url.trim())
+		.filter(url => url)
+}
+
+const editingMirrorUrls = ref("")
+const showMirrorSettingsDrawer = ref(false)
+
+const DockerDrawerModel = ref()
+function openDrawer(key: string) {
+	DockerDrawerModel.value.open(daemon.value[key], key)
+}
+function openPrivateRegistrySettings() {}
+
+const confirmationInput = ref("")
+const showConfirmationModal = ref(false)
+async function handleConfirmSaveChanges() {
+	if (confirmationInput.value === "立即重启") {
+		daemon.value.registryMirrors = editingMirrorUrls.value
+			.split("\n")
+			.map(url => url.trim())
+			.filter(url => url)
+		showMirrorSettingsDrawer.value = false
+		showConfirmationModal.value = false
+		message.success("镜像加速配置已更新，正在重启Docker以使配置生效...")
+		updateDockerStatus("restart")
+	} else {
+		message.error('输入错误，请输入 "立即重启"')
+	}
+}
+function quickJump() {
+	console.log("Quick jump clicked")
+}
+
+const dockerConf = ref("")
+
+// 拉取daemon.json文件内容
+async function fetchDaemonJsonFile() {
+	const res = await loadDaemonFile()
+	if (res && res.code === 0 && typeof res.data === "string") {
+		dockerConf.value = res.data
+	}
+}
+
+// 页面加载时拉取一次
+onMounted(() => {
+	fetchDaemonJsonFile()
+	getDaemon()
+})
+
+// naive-ui n-tabs的change事件
+function handleTabChange(tabName: string) {
+	if (tabName === "advanced") {
+		fetchDaemonJsonFile()
+	}
+}
+
+const confirmDialogRefFile = ref()
+
+const showRestartConfirm = ref(false)
+const saveLoading = ref(false)
+
+function onSaveFile() {
+	showRestartConfirm.value = true
+}
+
+async function handleConfirmRestart() {
+	saveLoading.value = true
+	try {
+		const res = await updateDaemonByfile({ file: dockerConf.value })
+		if (res && res.code === 0) {
+			message.success("保存成功，Docker正在重启...")
+			showRestartConfirm.value = false
+			fetchDaemonJsonFile()
+		} else {
+			message.error(res.msg || "保存失败")
+		}
+	} catch (e) {
+		message.error("保存异常")
+	} finally {
+		saveLoading.value = false
+	}
+}
+
+const showCgroupConfirm = ref(false)
+const cgroupInput = ref("")
+const rebootCgroupRef = ref()
+
+function onCgroupDriverChange(val: string) {
+	cgroupInput.value = val
+	rebootCgroupRef.value.open({
+		title: "cgroup driver 变更",
+		input: "立即重启",
+		msg: "切换 cgroup driver 后将会重启 Docker 服务。"
+	})
+}
+
+async function handleCgroupConfirm() {
+	rebootCgroupRef.value.close()
+	daemonLoading.value = true
+	try {
+		const res = await updateDaemonUpdate("Driver", cgroupInput.value)
+		if (res && res.code === 0) {
+			message.success("cgroup driver配置已保存，Docker正在重启...")
+			getDaemon()
+		} else {
+			message.error(res.msg || "保存失败")
+		}
+	} catch (e) {
+		message.error("保存异常")
+	} finally {
+		rebootCgroupRef.value.close()
+	}
+}
+
+const logDrawerRef = ref()
+const logPruneLoading = ref(false)
+
+async function onLogSwitchChange(val: boolean) {
+	if (val) {
+		// 打开时弹出抽屉
+		logDrawerRef.value.acceptParams({
+			logMaxSize: daemon.value.logMaxSize,
+			logMaxFile: daemon.value.logMaxFile
+		})
+	} else {
+		// 关闭时调用接口
+		logPruneLoading.value = true
+		try {
+			const res = await updateDaemonUpdate("LogOption", "disable")
+			if (res && res.code === 0) {
+				message.success("日志切割已关闭")
+				getDaemon()
+			} else {
+				message.error(res.msg || "操作失败")
+			}
+		} catch {
+			message.error("操作异常")
+		} finally {
+			logPruneLoading.value = false
+		}
+	}
+}
+
+const logSwitchValue = computed(() => {
+	return !!(
+		daemon.value.logMaxSize &&
+		daemon.value.logMaxFile &&
+		daemon.value.logMaxSize !== "" &&
+		daemon.value.logMaxFile !== ""
+	)
+})
+
+const rebootIptablesRef = ref()
+const rebootLiveRestoreRef = ref()
+let iptablesTarget = false
+let liveRestoreTarget = false
+
+function onIptablesChange(val: boolean) {
+	iptablesTarget = val
+	rebootIptablesRef.value.open({
+		title: "iptables 变更",
+		input: "立即重启",
+		msg: "变更 iptables 配置后需要重启 Docker 服务。"
+	})
+}
+async function handleIptablesConfirm() {
+	const value = iptablesTarget ? "enable" : "disable"
+	rebootIptablesRef.value.close()
+	daemonLoading.value = true
+	try {
+		const res = await updateDaemonUpdate("IPtables", value)
+		if (res && res.code === 0) {
+			message.success("iptables 配置已保存，Docker正在重启...")
+			getDaemon()
+		} else {
+			message.error(res.msg || "保存失败")
+		}
+	} catch {
+		message.error("保存异常")
+	}
+}
+
+function onLiveRestoreChange(val: boolean) {
+	liveRestoreTarget = val
+	rebootLiveRestoreRef.value.open({
+		title: "Live restore 变更",
+		input: "立即重启",
+		msg: "变更 Live restore 配置后需要重启 Docker 服务。"
+	})
+}
+async function handleLiveRestoreConfirm() {
+	const value = liveRestoreTarget ? "enable" : "disable"
+	rebootLiveRestoreRef.value.close()
+	daemonLoading.value = true
+	try {
+		const res = await updateDaemonUpdate("LiveRestore", value)
+		if (res && res.code === 0) {
+			message.success("Live restore 配置已保存，Docker正在重启...")
+			getDaemon()
+		} else {
+			message.error(res.msg || "保存失败")
+		}
+	} catch {
+		message.error("保存异常")
+	}
+}
+
+defineExpose({
+	onCgroupDriverChange,
+	showCgroupConfirm,
+	// cgroupLoading,
+	handleCgroupConfirm,
+	handleConfirmRestart
+})
+</script>
+
+<style scoped>
+/* Tailwind utility classes are used directly in the template. */
+/* You can add additional styles here if needed. */
+.n-form-item .n-form-item-label {
+	width: 100px; /* Adjust as needed for consistent label width */
+}
+</style>

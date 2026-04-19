@@ -218,7 +218,7 @@ func (u *ImageService) ImageBuild(req dto.ImageBuild) (string, error) {
 		}
 		go func() {
 			defer file.Close()
-			_, _ = docker.PodmanEnsureReady(context.Background())
+			_ = docker.PodmanEnsureReady(context.Background())
 			out, err := docker.PodmanRunBuild(context.Background(), req.Dockerfile, fileName, req.Name)
 			if err != nil {
 				_, _ = file.WriteString(out + "\n" + err.Error())
@@ -329,7 +329,7 @@ func (u *ImageService) ImagePull(req dto.ImagePull) (string, error) {
 		}
 		go func() {
 			defer file.Close()
-			_, _ = docker.PodmanEnsureReady(context.Background())
+			_ = docker.PodmanEnsureReady(context.Background())
 			out, err := docker.PodmanPull(context.Background(), req.ImageName, "")
 			if err != nil {
 				_, _ = file.WriteString(out + "\n" + err.Error())
@@ -439,7 +439,7 @@ func (u *ImageService) ImageLoad(req dto.ImageLoad) error {
 
 func (u *ImageService) ImageSave(req dto.ImageSave) error {
 	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
-		_, _ = docker.PodmanEnsureReady(context.Background())
+		_ = docker.PodmanEnsureReady(context.Background())
 		outPath := path.Join(req.Path, req.Name)
 		_, err := docker.PodmanSave(context.Background(), req.TagName, outPath)
 		return err
@@ -468,7 +468,7 @@ func (u *ImageService) ImageSave(req dto.ImageSave) error {
 
 func (u *ImageService) ImageTag(req dto.ImageTag) error {
 	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
-		_, _ = docker.PodmanEnsureReady(context.Background())
+		_ = docker.PodmanEnsureReady(context.Background())
 		_, err := docker.PodmanTag(context.Background(), req.SourceID, req.TargetName)
 		return err
 	}
@@ -500,7 +500,7 @@ func (u *ImageService) ImagePush(req dto.ImagePush) (string, error) {
 		}
 		go func() {
 			defer file.Close()
-			_, _ = docker.PodmanEnsureReady(context.Background())
+			_ = docker.PodmanEnsureReady(context.Background())
 			out, err := docker.PodmanPush(context.Background(), req.TagName, "")
 			if err != nil {
 				_, _ = file.WriteString(out + "\n" + err.Error())
@@ -570,7 +570,7 @@ func (u *ImageService) ImagePush(req dto.ImagePush) (string, error) {
 
 func (u *ImageService) ImageRemove(req dto.BatchDelete) error {
 	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
-		_, _ = docker.PodmanEnsureReady(context.Background())
+		_ = docker.PodmanEnsureReady(context.Background())
 		for _, id := range req.Ids {
 			if strings.TrimSpace(id) == "" {
 				continue
