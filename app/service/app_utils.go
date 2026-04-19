@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"path"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -317,6 +318,37 @@ func getAppInstallByKey(key string) (model.AppInstall, error) {
 }
 
 func checkContainerNameIsExist(containerName, appDir string) (bool, error) {
+	if composeV2.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
+		if err := composeV2.PodmanEnsureReady(context.Background()); err != nil {
+			return false, err
+		}
+		containers, err := composeV2.PodmanListContainers(context.Background(), true)
+		if err != nil {
+			return false, err
+		}
+		for _, c := range containers {
+			if strings.TrimPrefix(c.Name, "/") != containerName {
+				continue
+			}
+			if c.Labels != nil {
+				if workDir, ok := c.Labels[composeWorkdirLabel]; ok {
+					if workDir != appDir {
+						return true, nil
+					}
+					return false, nil
+				}
+				if workDir, ok := c.Labels[podmanComposeWorkdirLabel]; ok {
+					if workDir != appDir {
+						return true, nil
+					}
+					return false, nil
+				}
+			}
+			return true, nil
+		}
+		return false, nil
+	}
+
 	client, err := composeV2.NewDockerClient()
 	if err != nil {
 		return false, err
@@ -328,22 +360,25 @@ func checkContainerNameIsExist(containerName, appDir string) (bool, error) {
 		return false, err
 	}
 	for _, container := range list {
-		if containerName == container.Names[0][1:] {
-			if workDir, ok := container.Labels[composeWorkdirLabel]; ok {
-				if workDir != appDir {
-					return true, nil
-				}
-			} else {
-				if workDir, ok := container.Labels[podmanComposeWorkdirLabel]; ok {
-					if workDir != appDir {
-						return true, nil
-					}
-				} else {
-				return true, nil
-				}
-			}
+		if len(container.Names) == 0 {
+			continue
 		}
-
+		if strings.TrimPrefix(container.Names[0], "/") != containerName {
+			continue
+		}
+		if workDir, ok := container.Labels[composeWorkdirLabel]; ok {
+			if workDir != appDir {
+				return true, nil
+			}
+			return false, nil
+		}
+		if workDir, ok := container.Labels[podmanComposeWorkdirLabel]; ok {
+			if workDir != appDir {
+				return true, nil
+			}
+			return false, nil
+		}
+		return true, nil
 	}
 	return false, nil
 }

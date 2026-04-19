@@ -20,7 +20,7 @@ export interface AppsSearchParams {
 }
 
 export const appsListAPI = (data: AppsSearchParams) => {
-	return http.post("/apps/search", data)
+	return http.post("/apps/list", data)
 }
 
 export const appsInstalledList = () => {

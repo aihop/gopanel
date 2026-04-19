@@ -457,6 +457,9 @@ func (u *ContainerService) ContainerCreate(req *dto.ContainerOperate) error {
 }
 
 func (u *ContainerService) ContainerInfo(req *dto.OperationWithName) (*dto.ContainerOperate, error) {
+	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
+		return containerInfoPodman(req)
+	}
 	client, err := docker.NewDockerClient()
 	if err != nil {
 		return nil, err
@@ -481,15 +484,17 @@ func (u *ContainerService) ContainerInfo(req *dto.OperationWithName) (*dto.Conta
 
 	exposePorts, _ := loadPortByInspect(oldContainer.ID, client)
 	data.ExposedPorts = loadContainerPortForInfo(exposePorts)
-	networkSettings := oldContainer.NetworkSettings
-	bridgeNetworkSettings := networkSettings.Networks[data.Network]
-	if bridgeNetworkSettings.IPAMConfig != nil {
-		ipv4Address := bridgeNetworkSettings.IPAMConfig.IPv4Address
-		data.Ipv4 = ipv4Address
-		ipv6Address := bridgeNetworkSettings.IPAMConfig.IPv6Address
-		data.Ipv6 = ipv6Address
-	} else {
-		data.Ipv4 = bridgeNetworkSettings.IPAddress
+	if oldContainer.NetworkSettings != nil && data.Network != "" {
+		if bridgeNetworkSettings, ok := oldContainer.NetworkSettings.Networks[data.Network]; ok && bridgeNetworkSettings != nil {
+			if bridgeNetworkSettings.IPAMConfig != nil {
+				ipv4Address := bridgeNetworkSettings.IPAMConfig.IPv4Address
+				data.Ipv4 = ipv4Address
+				ipv6Address := bridgeNetworkSettings.IPAMConfig.IPv6Address
+				data.Ipv6 = ipv6Address
+			} else {
+				data.Ipv4 = bridgeNetworkSettings.IPAddress
+			}
+		}
 	}
 
 	data.Cmd = oldContainer.Config.Cmd
@@ -515,6 +520,217 @@ func (u *ContainerService) ContainerInfo(req *dto.OperationWithName) (*dto.Conta
 	data.Volumes = loadVolumeBinds(oldContainer.Mounts)
 
 	return &data, nil
+}
+
+func containerInfoPodman(req *dto.OperationWithName) (*dto.ContainerOperate, error) {
+	if err := docker.PodmanEnsureReady(context.Background()); err != nil {
+		return nil, err
+	}
+	out, err := exec.Command("podman", "container", "inspect", req.Name, "--format", "json").CombinedOutput()
+	if err != nil {
+		msg := strings.TrimSpace(string(out))
+		if msg == "" {
+			return nil, err
+		}
+		return nil, errors.New(msg)
+	}
+	var items []map[string]interface{}
+	if err := json.Unmarshal(out, &items); err != nil {
+		return nil, err
+	}
+	if len(items) == 0 {
+		return nil, errors.New("container not found")
+	}
+	m := items[0]
+
+	var data dto.ContainerOperate
+	data.ContainerID = strings.TrimSpace(fmt.Sprint(m["Id"]))
+	if data.ContainerID == "" {
+		data.ContainerID = strings.TrimSpace(fmt.Sprint(m["ID"]))
+	}
+	data.Name = strings.TrimPrefix(strings.TrimSpace(fmt.Sprint(m["Name"])), "/")
+	if data.Name == "" {
+		data.Name = strings.TrimSpace(req.Name)
+	}
+
+	if cfg, ok := m["Config"].(map[string]interface{}); ok {
+		data.Image = strings.TrimSpace(fmt.Sprint(cfg["Image"]))
+		data.Cmd = toStringSlice(cfg["Cmd"])
+		data.Entrypoint = toStringSlice(cfg["Entrypoint"])
+		data.Env = toStringSlice(cfg["Env"])
+		data.OpenStdin = toBool(cfg["OpenStdin"])
+		data.Tty = toBool(cfg["Tty"])
+		if labels, ok := cfg["Labels"].(map[string]interface{}); ok {
+			for k, v := range labels {
+				data.Labels = append(data.Labels, fmt.Sprintf("%s=%v", k, v))
+			}
+		}
+	}
+
+	if hostCfg, ok := m["HostConfig"].(map[string]interface{}); ok {
+		data.AutoRemove = toBool(hostCfg["AutoRemove"])
+		data.Privileged = toBool(hostCfg["Privileged"])
+		data.PublishAllPorts = toBool(hostCfg["PublishAllPorts"])
+		if rp, ok := hostCfg["RestartPolicy"].(map[string]interface{}); ok {
+			data.RestartPolicy = strings.TrimSpace(fmt.Sprint(rp["Name"]))
+		} else {
+			data.RestartPolicy = strings.TrimSpace(fmt.Sprint(hostCfg["RestartPolicy"]))
+		}
+		if n := toInt64(hostCfg["NanoCpus"]); n != 0 {
+			data.NanoCPUs = float64(n) / 1000000000
+		}
+		if n := toInt64(hostCfg["NanoCPUs"]); n != 0 {
+			data.NanoCPUs = float64(n) / 1000000000
+		}
+		data.CPUShares = toInt64(hostCfg["CpuShares"])
+		if data.CPUShares == 0 {
+			data.CPUShares = toInt64(hostCfg["CPUShares"])
+		}
+		if mem := toInt64(hostCfg["Memory"]); mem != 0 {
+			data.Memory = float64(mem) / 1024 / 1024
+		}
+	}
+
+	if net, ok := m["NetworkSettings"].(map[string]interface{}); ok {
+		if networks, ok := net["Networks"].(map[string]interface{}); ok {
+			for name, v := range networks {
+				data.Network = name
+				if nm, ok := v.(map[string]interface{}); ok {
+					data.Ipv4 = strings.TrimSpace(fmt.Sprint(nm["IPAddress"]))
+					data.Ipv6 = strings.TrimSpace(fmt.Sprint(nm["GlobalIPv6Address"]))
+				}
+				break
+			}
+		}
+	}
+
+	data.ExposedPorts = podmanPortsForInfo(req.Name)
+	data.Volumes = podmanMountsForInfo(m)
+	return &data, nil
+}
+
+func podmanPortsForInfo(container string) []dto.PortHelper {
+	out, err := exec.Command("podman", "port", container).CombinedOutput()
+	if err != nil {
+		return nil
+	}
+	lines := splitNonEmptyLines(string(out))
+	var res []dto.PortHelper
+	for _, line := range lines {
+		parts := strings.Split(line, "->")
+		if len(parts) != 2 {
+			continue
+		}
+		left := strings.TrimSpace(parts[0])
+		right := strings.TrimSpace(parts[1])
+
+		cp := ""
+		proto := "tcp"
+		if strings.Contains(left, "/") {
+			lp := strings.SplitN(left, "/", 2)
+			cp = strings.TrimSpace(lp[0])
+			proto = strings.TrimSpace(lp[1])
+		} else {
+			cp = left
+		}
+
+		hostIP := ""
+		hostPort := ""
+		if strings.Contains(right, ":") {
+			rp := strings.SplitN(right, ":", 2)
+			hostIP = strings.TrimSpace(rp[0])
+			hostPort = strings.TrimSpace(rp[1])
+		} else {
+			hostPort = right
+		}
+
+		res = append(res, dto.PortHelper{
+			HostIP:        hostIP,
+			HostPort:      hostPort,
+			ContainerPort: cp,
+			Protocol:      proto,
+		})
+	}
+	return res
+}
+
+func podmanMountsForInfo(inspect map[string]interface{}) []dto.VolumeHelper {
+	mountsAny, ok := inspect["Mounts"]
+	if !ok || mountsAny == nil {
+		return nil
+	}
+	var res []dto.VolumeHelper
+	switch mounts := mountsAny.(type) {
+	case []interface{}:
+		for _, it := range mounts {
+			m, ok := it.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			res = append(res, dto.VolumeHelper{
+				Type:         strings.TrimSpace(fmt.Sprint(m["Type"])),
+				SourceDir:    strings.TrimSpace(fmt.Sprint(m["Source"])),
+				ContainerDir: strings.TrimSpace(fmt.Sprint(m["Destination"])),
+				Mode:         strings.TrimSpace(fmt.Sprint(m["Mode"])),
+			})
+		}
+	}
+	return res
+}
+
+func toStringSlice(v interface{}) []string {
+	switch x := v.(type) {
+	case []string:
+		return x
+	case []interface{}:
+		var out []string
+		for _, it := range x {
+			s := strings.TrimSpace(fmt.Sprint(it))
+			if s != "" {
+				out = append(out, s)
+			}
+		}
+		return out
+	case string:
+		s := strings.TrimSpace(x)
+		if s == "" {
+			return nil
+		}
+		return []string{s}
+	default:
+		return nil
+	}
+}
+
+func toBool(v interface{}) bool {
+	switch x := v.(type) {
+	case bool:
+		return x
+	case string:
+		b, _ := strconv.ParseBool(strings.TrimSpace(x))
+		return b
+	default:
+		return false
+	}
+}
+
+func toInt64(v interface{}) int64 {
+	switch x := v.(type) {
+	case int64:
+		return x
+	case int:
+		return int64(x)
+	case float64:
+		return int64(x)
+	case json.Number:
+		n, _ := x.Int64()
+		return n
+	case string:
+		n, _ := strconv.ParseInt(strings.TrimSpace(x), 10, 64)
+		return n
+	default:
+		return 0
+	}
 }
 
 func (u *ContainerService) ContainerUpdate(req *dto.ContainerOperate) error {
@@ -651,6 +867,9 @@ func (u *ContainerService) ContainerCommit(req *dto.ContainerCommit) error {
 }
 
 func (u *ContainerService) ContainerOperation(req *dto.ContainerOperation) error {
+	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
+		return u.containerOperationPodman(req)
+	}
 	var err error
 	ctx := context.Background()
 	client, err := docker.NewDockerClient()
@@ -678,6 +897,43 @@ func (u *ContainerService) ContainerOperation(req *dto.ContainerOperation) error
 		}
 	}
 	return err
+}
+
+func (u *ContainerService) containerOperationPodman(req *dto.ContainerOperation) error {
+	if err := docker.PodmanEnsureReady(context.Background()); err != nil {
+		return err
+	}
+	for _, item := range req.Names {
+		global.LOG.Infof("start container %s operation %s", item, req.Operation)
+		var c *exec.Cmd
+		switch req.Operation {
+		case constant.ContainerOpStart:
+			c = exec.Command("podman", "start", item)
+		case constant.ContainerOpStop:
+			c = exec.Command("podman", "stop", item)
+		case constant.ContainerOpRestart:
+			c = exec.Command("podman", "restart", item)
+		case constant.ContainerOpKill:
+			c = exec.Command("podman", "kill", "-s", "SIGKILL", item)
+		case constant.ContainerOpPause:
+			c = exec.Command("podman", "pause", item)
+		case constant.ContainerOpUnpause:
+			c = exec.Command("podman", "unpause", item)
+		case constant.ContainerOpRemove:
+			c = exec.Command("podman", "rm", "-f", "-v", item)
+		default:
+			return errors.New("operation is empty")
+		}
+		out, err := c.CombinedOutput()
+		if err != nil {
+			msg := strings.TrimSpace(string(out))
+			if msg == "" {
+				return err
+			}
+			return errors.New(msg)
+		}
+	}
+	return nil
 }
 
 func (u *ContainerService) ContainerLogClean(req *dto.OperationWithName) error {

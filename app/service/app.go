@@ -9,9 +9,9 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"gopkg.in/yaml.v3"
@@ -29,7 +29,6 @@ import (
 	"github.com/aihop/gopanel/utils/common"
 	"github.com/aihop/gopanel/utils/compose"
 	"github.com/aihop/gopanel/utils/docker"
-	composeV2 "github.com/aihop/gopanel/utils/docker"
 	"github.com/aihop/gopanel/utils/env"
 	"github.com/aihop/gopanel/utils/files"
 	httpUtil "github.com/aihop/gopanel/utils/http"
@@ -489,11 +488,12 @@ func (a AppService) Install(ctx context.Context, req request.AppInstallCreate) (
 	logger.Info("Starting installation for %s (App: %s, Version: %s)", appInstall.Name, app.Key, appInstall.Version)
 
 	go func() {
+		installErr := error(nil)
 		defer func() {
-			if err != nil {
+			if installErr != nil {
 				appInstall.Status = constant.UpErr
-				appInstall.Message = err.Error()
-				logger.Error("Installation failed: %s", err.Error())
+				appInstall.Message = installErr.Error()
+				logger.Error("Installation failed: %s", installErr.Error())
 				_ = appInstallRepo.Save(context.Background(), appInstall)
 			} else {
 				logger.Info("Installation completed successfully")
@@ -501,62 +501,56 @@ func (a AppService) Install(ctx context.Context, req request.AppInstallCreate) (
 			logger.Info("EOF")
 		}()
 		logger.Info("Copying app data...")
-		if err = copyData(app, appDetail, appInstall, req); err != nil {
-			logger.Error("Copy data failed: %s", err.Error())
+		if installErr = copyData(app, appDetail, appInstall, req); installErr != nil {
+			logger.Error("Copy data failed: %s", installErr.Error())
 			return
 		}
 		logger.Info("Running init scripts...")
-		if err = runScript(appInstall, "init"); err != nil {
-			logger.Error("Init script failed: %s", err.Error())
+		if installErr = runScript(appInstall, "init"); installErr != nil {
+			logger.Error("Init script failed: %s", installErr.Error())
 			return
 		}
 		logger.Info("Starting container(s)...")
-		upApp(appInstall, req.PullImage, logger)
+		installErr = upApp(appInstall, req.PullImage, logger)
 	}()
 	go updateToolApp(appInstall)
 	return
 }
-func upApp(appInstall *model.AppInstall, pullImages bool, logger *AppInstallLogger) {
+func upApp(appInstall *model.AppInstall, pullImages bool, logger *AppInstallLogger) error {
 	upProject := func(appInstall *model.AppInstall) (err error) {
 		var (
 			out    string
 			errMsg string
 		)
-		if pullImages && appInstall.App.Type != "php" {
-			projectName := strings.ToLower(appInstall.Name)
-			envByte, err := files.NewFileOp().GetContent(appInstall.GetEnvPath())
+		_, err = files.NewFileOp().GetContent(appInstall.GetEnvPath())
+		if err != nil {
+			logger.Error("Failed to read .env file: %v", err)
+			return err
+		}
+
+		if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
+			_ = docker.PodmanEnsureReady(context.Background())
+		}
+
+		if pullImages {
+			logger.Info("Executing compose pull...")
+			out, err = compose.Pull(appInstall.GetComposePath())
 			if err != nil {
-				logger.Error("Failed to read .env file: %v", err)
-				return err
-			}
-			images, err := composeV2.GetDockerComposeImages(projectName, envByte, []byte(appInstall.DockerCompose))
-			if err != nil {
-				logger.Error("Failed to get images from docker-compose: %v", err)
-				return err
-			}
-			for _, image := range images {
-				logger.Info("Pulling image: %s", image)
-				if out, err = cmd.ExecWithTimeOut("docker pull "+image, 60*time.Minute); err != nil {
-					if out != "" {
-						if strings.Contains(out, "no such host") {
-							errMsg = i18n.GetMsgByKey("ErrNoSuchHost") + ":"
-						}
-						if strings.Contains(out, "timeout") {
-							errMsg = i18n.GetMsgByKey("ErrImagePullTimeOut") + ":"
-						}
-					} else {
-						if err.Error() == buserr.New(constant.ErrCmdTimeout).Error() {
-							errMsg = i18n.GetMsgByKey("ErrImagePullTimeOut")
-						} else {
-							errMsg = i18n.GetMsgWithMap("ErrImagePull", map[string]interface{}{"err": err.Error()})
-						}
-					}
-					appInstall.Message = errMsg + out
-					logger.Error("Image pull failed: %s", appInstall.Message)
-					return err
+				msg := strings.ToLower(out + " " + err.Error())
+				if strings.Contains(msg, "no such host") {
+					errMsg = i18n.GetMsgByKey("ErrNoSuchHost") + ":"
 				}
-				logger.Info("Image %s pulled successfully.", image)
+				if strings.Contains(msg, "timeout") {
+					errMsg = i18n.GetMsgByKey("ErrImagePullTimeOut") + ":"
+				}
+				if errMsg == "" {
+					errMsg = i18n.GetMsgWithMap("ErrImagePull", map[string]interface{}{"err": err.Error()})
+				}
+				appInstall.Message = errMsg + out
+				logger.Error("Image pull failed: %s", appInstall.Message)
+				return err
 			}
+			logger.Info("Compose pull completed. Output: %s", out)
 		}
 
 		logger.Info("Executing docker-compose up -d...")
@@ -571,22 +565,24 @@ func upApp(appInstall *model.AppInstall, pullImages bool, logger *AppInstallLogg
 		logger.Info("Container(s) started successfully. Output: %s", out)
 		return
 	}
-	if err := upProject(appInstall); err != nil {
-		appInstall.Status = constant.UpErr
-	} else {
+	runErr := upProject(appInstall)
+	if runErr == nil {
 		appInstall.Status = constant.Running
+	} else {
+		appInstall.Status = constant.UpErr
 	}
 	exist, _ := appInstallRepo.GetFirst(commonRepo.WithByID(appInstall.ID))
 	if exist.ID > 0 {
 		containerNames, err := getContainerNames(*appInstall)
 		if err != nil {
-			return
+			return nil
 		}
 		if len(containerNames) > 0 {
 			appInstall.ContainerName = strings.Join(containerNames, ",")
 		}
 		_ = appInstallRepo.Save(context.Background(), appInstall)
 	}
+	return runErr
 }
 func RequestDownloadCallBack(downloadCallBackUrl string) {
 	if downloadCallBackUrl == "" {
