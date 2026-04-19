@@ -129,10 +129,32 @@ func (r *Remote) Backup(info BackupInfo) error {
 		}
 	}
 	fileNameItem := info.TargetDir + "/" + strings.TrimSuffix(info.FileName, ".gz")
-	backupCommand := exec.Command("bash", "-c",
-		fmt.Sprintf("docker run --rm --net=host -i %s /bin/bash -c 'PGPASSWORD=\"%s\" pg_dump  -h %s -p %d --no-owner -Fc -U %s %s' > %s",
-			imageTag, r.Password, r.Address, r.Port, r.User, info.Name, fileNameItem))
-	_ = backupCommand.Run()
+	outfile, err := os.OpenFile(fileNameItem, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, os.ModePerm)
+	if err != nil {
+		return fmt.Errorf("open file %s failed, err: %v", fileNameItem, err)
+	}
+	defer outfile.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(info.Timeout)*time.Second)
+	defer cancel()
+	runCmd, err := docker.RuntimeCommand(ctx,
+		"run", "--rm", "--net=host", "-i",
+		imageTag,
+		"/bin/bash", "-c",
+		fmt.Sprintf("PGPASSWORD=%q pg_dump -h %s -p %d --no-owner -Fc -U %s %s", r.Password, r.Address, r.Port, r.User, info.Name),
+	)
+	if err != nil {
+		return err
+	}
+	runCmd.Stdout = outfile
+	out, runErr := runCmd.CombinedOutput()
+	if runErr != nil {
+		msg := strings.TrimSpace(string(out))
+		if msg == "" {
+			return runErr
+		}
+		return errors.New(msg)
+	}
 	b := make([]byte, 5)
 	n := []byte{80, 71, 68, 77, 80}
 	handle, err := os.OpenFile(fileNameItem, os.O_RDONLY, os.ModePerm)
@@ -172,9 +194,24 @@ func (r *Remote) Recover(info RecoverInfo) error {
 			_, _ = gzipCmd.CombinedOutput()
 		}()
 	}
-	recoverCommand := exec.Command("bash", "-c",
-		fmt.Sprintf("docker run --rm --net=host -i %s /bin/bash -c 'PGPASSWORD=\"%s\" pg_restore -h %s -p %d --verbose --clean --no-privileges --no-owner -Fc -c  --if-exists --no-owner -U %s -d %s --role=%s' < %s",
-			imageTag, r.Password, r.Address, r.Port, r.User, info.Name, info.Username, fileName))
+	fi, err := os.Open(fileName)
+	if err != nil {
+		return err
+	}
+	defer fi.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(info.Timeout)*time.Second)
+	defer cancel()
+	recoverCommand, err := docker.RuntimeCommand(ctx,
+		"run", "--rm", "--net=host", "-i",
+		imageTag,
+		"/bin/bash", "-c",
+		fmt.Sprintf("PGPASSWORD=%q pg_restore -h %s -p %d --verbose --clean --no-privileges --no-owner -Fc -c --if-exists --no-owner -U %s -d %s --role=%s", r.Password, r.Address, r.Port, r.User, info.Name, info.Username),
+	)
+	if err != nil {
+		return err
+	}
+	recoverCommand.Stdin = fi
 	pipe, _ := recoverCommand.StdoutPipe()
 	stderrPipe, _ := recoverCommand.StderrPipe()
 	defer pipe.Close()

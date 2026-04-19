@@ -13,6 +13,7 @@ import (
 
 	"github.com/aihop/gopanel/buserr"
 	"github.com/aihop/gopanel/constant"
+	udocker "github.com/aihop/gopanel/utils/docker"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -62,13 +63,22 @@ func ExecWithTimeOut(cmdStr string, timeout time.Duration) (string, error) {
 }
 
 func ExecContainerScript(containerName, cmdStr string, timeout time.Duration) error {
-	cmdStr = fmt.Sprintf("docker exec -i %s bash -c '%s'", containerName, cmdStr)
-	out, err := ExecWithTimeOut(cmdStr, timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	c, err := udocker.RuntimeCommand(ctx, "exec", "-i", containerName, "bash", "-c", cmdStr)
 	if err != nil {
-		if out != "" {
-			return fmt.Errorf("%s; err: %v", out, err)
-		}
 		return err
+	}
+	out, runErr := c.CombinedOutput()
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return errors.New(constant.ErrCmdTimeout)
+	}
+	if runErr != nil {
+		msg := strings.TrimSpace(string(out))
+		if msg != "" {
+			return fmt.Errorf("%s; err: %v", msg, runErr)
+		}
+		return runErr
 	}
 	return nil
 }
