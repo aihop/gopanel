@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -86,6 +87,9 @@ func NewIContainerService() IContainerService {
 }
 
 func (u *ContainerService) Page(req *dto.PageContainer) (int64, interface{}, error) {
+	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
+		return u.pagePodman(req)
+	}
 	var (
 		records []types.Container
 		list    []types.Container

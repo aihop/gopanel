@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"runtime"
 	"strings"
 	"time"
 
@@ -46,6 +47,9 @@ func NewIImageService() IImageService {
 	return &ImageService{}
 }
 func (u *ImageService) Page(req dto.SearchWithPage) (int64, interface{}, error) {
+	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
+		return u.pagePodman(req)
+	}
 	var (
 		list      []image.Summary
 		records   []dto.ImageInfo
@@ -104,6 +108,16 @@ func (u *ImageService) Page(req dto.SearchWithPage) (int64, interface{}, error) 
 }
 
 func (u *ImageService) ListAll() ([]dto.ImageInfo, error) {
+	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
+		_, data, err := u.pagePodman(dto.SearchWithPage{PageInfo: dto.PageInfo{Page: 1, PageSize: 1000000}})
+		if err != nil {
+			return nil, err
+		}
+		if items, ok := data.([]dto.ImageInfo); ok {
+			return items, nil
+		}
+		return nil, errors.New("invalid response")
+	}
 	var records []dto.ImageInfo
 	client, err := docker.NewDockerClient()
 	if err != nil {
@@ -129,6 +143,19 @@ func (u *ImageService) ListAll() ([]dto.ImageInfo, error) {
 }
 
 func (u *ImageService) List() ([]dto.Options, error) {
+	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
+		images, err := docker.PodmanListImages(context.Background())
+		if err != nil {
+			return nil, err
+		}
+		var backDatas []dto.Options
+		for _, img := range images {
+			for _, tag := range img.Tags {
+				backDatas = append(backDatas, dto.Options{Option: tag})
+			}
+		}
+		return backDatas, nil
+	}
 	var (
 		list      []image.Summary
 		backDatas []dto.Options
@@ -153,6 +180,56 @@ func (u *ImageService) List() ([]dto.Options, error) {
 }
 
 func (u *ImageService) ImageBuild(req dto.ImageBuild) (string, error) {
+	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
+		fileName := "Dockerfile"
+		if req.From == "edit" {
+			dir := fmt.Sprintf("%s/docker/build/%s", global.CONF.System.BaseDir, strings.ReplaceAll(req.Name, ":", "_"))
+			if _, err := os.Stat(dir); err != nil && os.IsNotExist(err) {
+				if err = os.MkdirAll(dir, os.ModePerm); err != nil {
+					return "", err
+				}
+			}
+
+			pathItem := fmt.Sprintf("%s/Dockerfile", dir)
+			file, err := os.OpenFile(pathItem, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
+			if err != nil {
+				return "", err
+			}
+			defer file.Close()
+			write := bufio.NewWriter(file)
+			_, _ = write.WriteString(string(req.Dockerfile))
+			_ = write.Flush()
+			req.Dockerfile = dir
+		} else {
+			fileName = path.Base(req.Dockerfile)
+			req.Dockerfile = path.Dir(req.Dockerfile)
+		}
+
+		dockerLogDir := path.Join(global.CONF.System.TmpDir, "docker_logs")
+		if _, err := os.Stat(dockerLogDir); err != nil && os.IsNotExist(err) {
+			if err = os.MkdirAll(dockerLogDir, os.ModePerm); err != nil {
+				return "", err
+			}
+		}
+		logItem := fmt.Sprintf("%s/image_build_%s_%s.log", dockerLogDir, strings.ReplaceAll(req.Name, ":", "_"), time.Now().Format(constant.DateTimeSlimLayout))
+		file, err := os.OpenFile(logItem, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
+		if err != nil {
+			return "", err
+		}
+		go func() {
+			defer file.Close()
+			_, _ = docker.PodmanEnsureReady(context.Background())
+			out, err := docker.PodmanRunBuild(context.Background(), req.Dockerfile, fileName, req.Name)
+			if err != nil {
+				_, _ = file.WriteString(out + "\n" + err.Error())
+				_, _ = file.WriteString("\nimage build failed!")
+				return
+			}
+			_, _ = file.WriteString(out)
+			_, _ = file.WriteString("\nimage build successful!")
+		}()
+		return path.Base(logItem), nil
+	}
 	client, err := docker.NewDockerClient()
 	if err != nil {
 		return "", err
@@ -237,6 +314,33 @@ func (u *ImageService) ImageBuild(req dto.ImageBuild) (string, error) {
 }
 
 func (u *ImageService) ImagePull(req dto.ImagePull) (string, error) {
+	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
+		dockerLogDir := path.Join(global.CONF.System.TmpDir, "docker_logs")
+		if _, err := os.Stat(dockerLogDir); err != nil && os.IsNotExist(err) {
+			if err = os.MkdirAll(dockerLogDir, os.ModePerm); err != nil {
+				return "", err
+			}
+		}
+		imageItemName := strings.ReplaceAll(path.Base(req.ImageName), ":", "_")
+		logItem := fmt.Sprintf("%s/image_pull_%s_%s.log", dockerLogDir, imageItemName, time.Now().Format(constant.DateTimeSlimLayout))
+		file, err := os.OpenFile(logItem, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
+		if err != nil {
+			return "", err
+		}
+		go func() {
+			defer file.Close()
+			_, _ = docker.PodmanEnsureReady(context.Background())
+			out, err := docker.PodmanPull(context.Background(), req.ImageName, "")
+			if err != nil {
+				_, _ = file.WriteString(out + "\n" + err.Error())
+				_, _ = file.WriteString("\nimage pull failed!")
+				return
+			}
+			_, _ = file.WriteString(out)
+			_, _ = file.WriteString("\nimage pull successful!")
+		}()
+		return path.Base(logItem), nil
+	}
 	client, err := docker.NewDockerClient()
 	if err != nil {
 		return "", err
@@ -334,6 +438,12 @@ func (u *ImageService) ImageLoad(req dto.ImageLoad) error {
 }
 
 func (u *ImageService) ImageSave(req dto.ImageSave) error {
+	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
+		_, _ = docker.PodmanEnsureReady(context.Background())
+		outPath := path.Join(req.Path, req.Name)
+		_, err := docker.PodmanSave(context.Background(), req.TagName, outPath)
+		return err
+	}
 	client, err := docker.NewDockerClient()
 	if err != nil {
 		return err
@@ -357,6 +467,11 @@ func (u *ImageService) ImageSave(req dto.ImageSave) error {
 }
 
 func (u *ImageService) ImageTag(req dto.ImageTag) error {
+	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
+		_, _ = docker.PodmanEnsureReady(context.Background())
+		_, err := docker.PodmanTag(context.Background(), req.SourceID, req.TargetName)
+		return err
+	}
 	client, err := docker.NewDockerClient()
 	if err != nil {
 		return err
@@ -370,6 +485,33 @@ func (u *ImageService) ImageTag(req dto.ImageTag) error {
 }
 
 func (u *ImageService) ImagePush(req dto.ImagePush) (string, error) {
+	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
+		dockerLogDir := path.Join(global.CONF.System.TmpDir, "docker_logs")
+		if _, err := os.Stat(dockerLogDir); err != nil && os.IsNotExist(err) {
+			if err = os.MkdirAll(dockerLogDir, os.ModePerm); err != nil {
+				return "", err
+			}
+		}
+		imageItemName := strings.ReplaceAll(path.Base(req.TagName), ":", "_")
+		logItem := fmt.Sprintf("%s/image_push_%s_%s.log", dockerLogDir, imageItemName, time.Now().Format(constant.DateTimeSlimLayout))
+		file, err := os.OpenFile(logItem, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
+		if err != nil {
+			return "", err
+		}
+		go func() {
+			defer file.Close()
+			_, _ = docker.PodmanEnsureReady(context.Background())
+			out, err := docker.PodmanPush(context.Background(), req.TagName, "")
+			if err != nil {
+				_, _ = file.WriteString(out + "\n" + err.Error())
+				_, _ = file.WriteString("\nimage push failed!")
+				return
+			}
+			_, _ = file.WriteString(out)
+			_, _ = file.WriteString("\nimage push successful!")
+		}()
+		return path.Base(logItem), nil
+	}
 	client, err := docker.NewDockerClient()
 	if err != nil {
 		return "", err
@@ -427,6 +569,18 @@ func (u *ImageService) ImagePush(req dto.ImagePush) (string, error) {
 }
 
 func (u *ImageService) ImageRemove(req dto.BatchDelete) error {
+	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
+		_, _ = docker.PodmanEnsureReady(context.Background())
+		for _, id := range req.Ids {
+			if strings.TrimSpace(id) == "" {
+				continue
+			}
+			if _, err := docker.PodmanRemoveImage(context.Background(), id); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
 	client, err := docker.NewDockerClient()
 	if err != nil {
 		return err
