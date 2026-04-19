@@ -1,51 +1,91 @@
 <template>
-	<n-drawer v-model:show="terminalVisible" width="50%" @update:show="val => !val && handleClose()">
-		<n-drawer-content :title="$t('container.containerTerminal')" closable>
-			<template #header>
-				<DrawerHeader :header="$t('container.containerTerminal')" :resource="title" :back="handleClose" />
-			</template>
-			<n-form ref="formRef" :model="form" label-placement="top" :rules="rules">
-				<n-form-item :label="$t('commons.table.user')" path="user">
-					<n-input v-model:value="form.user" placeholder="root" clearable />
-				</n-form-item>
-				<n-form-item :label="$t('container.command')" path="command">
-					<n-input-group>
-						<n-checkbox
-							v-model:checked="form.isCustom"
-							style="margin-right: 12px"
-							@update:checked="onChangeCommand"
-						>
-							{{ $t("container.custom") }}
-						</n-checkbox>
-						<n-input v-if="form.isCustom" v-model:value="form.command" clearable style="width: 100%" />
-						<n-select
-							v-else
-							v-model:value="form.command"
-							style="width: 100%"
-							filterable
-							clearable
-							:options="[
+  <n-drawer
+    v-model:show="terminalVisible"
+    width="50%"
+    @update:show="val => !val && handleClose()"
+  >
+    <n-drawer-content
+      :title="$t('container.containerTerminal')"
+      closable
+    >
+      <template #header>
+        <DrawerHeader
+          :header="$t('container.containerTerminal')"
+          :resource="title"
+          :back="handleClose"
+        />
+      </template>
+      <n-form
+        ref="formRef"
+        :model="form"
+        label-placement="top"
+        :rules="rules"
+      >
+        <n-form-item
+          :label="$t('commons.table.user')"
+          path="user"
+        >
+          <n-input
+            v-model:value="form.user"
+            placeholder="root"
+            clearable
+          />
+        </n-form-item>
+        <n-form-item
+          :label="$t('container.command')"
+          path="command"
+        >
+          <n-input-group class="flex items-center">
+            <n-checkbox
+              v-model:checked="form.isCustom"
+              class="w-[100px] text-gray-500"
+              @update:checked="onChangeCommand"
+            >
+              {{ $t("container.custom") }}
+            </n-checkbox>
+            <n-input
+              v-if="form.isCustom"
+              v-model:value="form.command"
+              clearable
+              style="width: 100%"
+            />
+            <n-select
+              v-else
+              v-model:value="form.command"
+              style="width: 100%"
+              filterable
+              clearable
+              :options="[
 								{ label: '/bin/ash', value: '/bin/ash' },
 								{ label: '/bin/bash', value: '/bin/bash' },
 								{ label: '/bin/sh', value: '/bin/sh' }
 							]"
-						/>
-					</n-input-group>
-				</n-form-item>
-			</n-form>
-			<n-button v-if="!terminalOpen" type="primary" style="margin-top: 10px" @click="initTerm">
-				{{ $t("commons.button.conn") }}
-			</n-button>
-			<n-button v-else style="margin-top: 10px" @click="onClose()">
-				{{ $t("commons.button.disconnect") }}
-			</n-button>
-			<Terminal
-				v-if="terminalOpen"
-				ref="terminalRef"
-				style="height: calc(100vh - 312px); margin-top: 18px"
-			></Terminal>
-		</n-drawer-content>
-	</n-drawer>
+            />
+          </n-input-group>
+        </n-form-item>
+      </n-form>
+      <n-button
+        v-if="!terminalOpen"
+        type="primary"
+        style="margin-top: 10px"
+        @click="initTerm"
+      >
+        {{ $t("commons.button.conn") }}
+      </n-button>
+      <n-button
+        v-else
+        style="margin-top: 10px"
+        @click="onClose()"
+      >
+        {{ $t("commons.button.disconnect") }}
+      </n-button>
+      <Terminal
+        v-if="terminalOpen"
+        ref="terminalRef"
+        style="height: calc(100vh - 312px); margin-top: 18px"
+      ></Terminal>
+    </n-drawer-content>
+  </n-drawer>
 </template>
 
 <script lang="ts" setup>

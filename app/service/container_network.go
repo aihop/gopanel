@@ -209,36 +209,47 @@ func (u *ContainerService) pageNetworkPodman(req *dto.SearchWithPage) (int64, in
 	}
 	var list []dto.Network
 	for _, item := range raw {
-		name := strings.TrimSpace(fmt.Sprint(item["Name"]))
+		name := strings.TrimSpace(fmt.Sprint(item["name"]))
+		if name == "" || name == "<nil>" {
+			name = strings.TrimSpace(fmt.Sprint(item["Name"]))
+		}
 		if req.Info != "" && !strings.Contains(name, req.Info) {
 			continue
 		}
 		n := dto.Network{
-			ID:     strings.TrimSpace(fmt.Sprint(item["ID"])),
+			ID:     strings.TrimSpace(fmt.Sprint(item["id"])),
 			Name:   name,
-			Driver: strings.TrimSpace(fmt.Sprint(item["Driver"])),
+			Driver: strings.TrimSpace(fmt.Sprint(item["driver"])),
 		}
-		if labels, ok := item["Labels"].(map[string]interface{}); ok {
+		if n.ID == "" || n.ID == "<nil>" {
+			n.ID = strings.TrimSpace(fmt.Sprint(item["ID"]))
+		}
+		if n.Driver == "" || n.Driver == "<nil>" {
+			n.Driver = strings.TrimSpace(fmt.Sprint(item["Driver"]))
+		}
+		if labels, ok := item["labels"].(map[string]interface{}); ok {
 			for k, v := range labels {
 				n.Labels = append(n.Labels, fmt.Sprintf("%s=%v", k, v))
 			}
 		}
-		inspectCmd := exec.Command("podman", "network", "inspect", name, "--format", "json")
-		inspectOut, inspectErr := inspectCmd.CombinedOutput()
-		if inspectErr == nil {
-			var ins []map[string]interface{}
-			if e := json.Unmarshal(inspectOut, &ins); e == nil && len(ins) > 0 {
-				if subnets, ok := ins[0]["subnets"].([]interface{}); ok && len(subnets) > 0 {
-					if s0, ok := subnets[0].(map[string]interface{}); ok {
-						n.Subnet = strings.TrimSpace(fmt.Sprint(s0["subnet"]))
-						n.Gateway = strings.TrimSpace(fmt.Sprint(s0["gateway"]))
-					}
-				}
-				if created := strings.TrimSpace(fmt.Sprint(ins[0]["created"])); created != "" {
-					if t, e := time.Parse(time.RFC3339Nano, created); e == nil {
-						n.CreatedAt = t
-					}
-				}
+		if labels, ok := item["Labels"].(map[string]interface{}); ok && len(n.Labels) == 0 {
+			for k, v := range labels {
+				n.Labels = append(n.Labels, fmt.Sprintf("%s=%v", k, v))
+			}
+		}
+
+		if ipamOpts, ok := item["ipam_options"].(map[string]interface{}); ok {
+			n.IPAMDriver = strings.TrimSpace(fmt.Sprint(ipamOpts["driver"]))
+		}
+		if subnets, ok := item["subnets"].([]interface{}); ok && len(subnets) > 0 {
+			if s0, ok := subnets[0].(map[string]interface{}); ok {
+				n.Subnet = strings.TrimSpace(fmt.Sprint(s0["subnet"]))
+				n.Gateway = strings.TrimSpace(fmt.Sprint(s0["gateway"]))
+			}
+		}
+		if created := strings.TrimSpace(fmt.Sprint(item["created"])); created != "" && created != "<nil>" {
+			if t, e := time.Parse(time.RFC3339Nano, created); e == nil {
+				n.CreatedAt = t
 			}
 		}
 		list = append(list, n)
@@ -273,7 +284,14 @@ func (u *ContainerService) listNetworkPodman() ([]dto.Options, error) {
 	}
 	var datas []dto.Options
 	for _, item := range raw {
-		datas = append(datas, dto.Options{Option: strings.TrimSpace(fmt.Sprint(item["Name"]))})
+		name := strings.TrimSpace(fmt.Sprint(item["name"]))
+		if name == "" || name == "<nil>" {
+			name = strings.TrimSpace(fmt.Sprint(item["Name"]))
+		}
+		if name == "" || name == "<nil>" {
+			continue
+		}
+		datas = append(datas, dto.Options{Option: name})
 	}
 	sort.Slice(datas, func(i, j int) bool { return datas[i].Option < datas[j].Option })
 	return datas, nil

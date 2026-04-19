@@ -940,6 +940,9 @@ func (u *ContainerService) ContainerLogClean(req *dto.OperationWithName) error {
 	if cmd.CheckIllegal(req.Name) {
 		return buserr.New(constant.ErrCmdIllegal)
 	}
+	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
+		return errors.New("podman on darwin does not support cleaning container log files (logs are stored inside podman machine); please restart/recreate the container to clear logs")
+	}
 	client, err := docker.NewDockerClient()
 	if err != nil {
 		return err

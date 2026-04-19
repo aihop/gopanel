@@ -28,7 +28,7 @@ export const commitContainer = (params: Container.ContainerCommit) => {
 export const loadContainerInfo = (name: string) => {
 	return http.post<Container.ContainerHelper>(`/container/info`, { name: name })
 }
-export const cleanContainerLog = (containerName: string) => {
+export const containerCleanLogAPI = (containerName: string) => {
 	return http.post(`/container/clean/log`, { name: containerName })
 }
 export const loadContainerLog = (type: string, name: string) => {

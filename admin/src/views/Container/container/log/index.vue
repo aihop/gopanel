@@ -1,97 +1,124 @@
 <template>
-	<n-drawer
-		v-model:show="logVisible"
-		:width="globalStore.isFullScreen ? '100%' : '50%'"
-		:trap-focus="false"
-		:block-scroll="false"
-		@update:show="handleClose"
-	>
-		<n-drawer-content :title="$t('commons.button.log')" :native-scrollbar="false" closable>
-			<template #header>
-				<div class="flex justify-between">
-					<div class="flex items-center">
-						<div class="flex cursor-pointer items-center gap-2 text-gray-500" @click="handleClose">
-							<n-icon>
-								<Icon name="mdi:arrow-left" />
-							</n-icon>
-							返回
-						</div>
-						<n-divider vertical />
-						{{ $t("commons.button.log") }}
-					</div>
+  <n-drawer
+    v-model:show="logVisible"
+    :width="globalStore.isFullScreen ? '100%' : '50%'"
+    :trap-focus="false"
+    :block-scroll="false"
+    @update:show="handleClose"
+  >
+    <n-drawer-content
+      :title="$t('commons.button.log')"
+      :native-scrollbar="false"
+      closable
+    >
+      <template #header>
+        <div class="flex justify-between">
+          <div class="flex items-center">
+            <div
+              class="flex cursor-pointer items-center gap-2 text-gray-500"
+              @click="handleClose"
+            >
+              <n-icon>
+                <Icon name="mdi:arrow-left" />
+              </n-icon>
+              返回
+            </div>
+            <n-divider vertical />
+            {{ $t("commons.button.log") }}
+          </div>
 
-					<n-tooltip v-if="!mobile" trigger="hover">
-						<template #trigger>
-							<n-button class="fullScreen" quaternary circle @click="toggleFullscreen">
-								<template #icon>
-									<n-icon>
-										<Icon
-											:name="globalStore.isFullScreen ? 'mdi:fullscreen-exit' : 'mdi:fullscreen'"
-										/>
-									</n-icon>
-								</template>
-							</n-button>
-						</template>
-						{{ $t(`commons.button.${globalStore.isFullScreen ? "quitFullscreen" : "fullscreen"}`) }}
-					</n-tooltip>
-				</div>
-			</template>
+          <n-tooltip
+            v-if="!mobile"
+            trigger="hover"
+          >
+            <template #trigger>
+              <n-button
+                class="fullScreen"
+                quaternary
+                circle
+                @click="toggleFullscreen"
+              >
+                <template #icon>
+                  <n-icon>
+                    <Icon :name="globalStore.isFullScreen ? 'mdi:fullscreen-exit' : 'mdi:fullscreen'" />
+                  </n-icon>
+                </template>
+              </n-button>
+            </template>
+            {{ $t(`commons.button.${globalStore.isFullScreen ? "quitFullscreen" : "fullscreen"}`) }}
+          </n-tooltip>
+        </div>
+      </template>
 
-			<div class="flex w-full flex-col gap-3 md:flex-row">
-				<n-select v-model:value="logSearch.mode" :options="timeOptions" @update:value="searchLogs"></n-select>
+      <div class="flex w-full flex-col gap-3 md:flex-row">
+        <n-select
+          v-model:value="logSearch.mode"
+          :options="timeOptions"
+          @update:value="searchLogs"
+        ></n-select>
 
-				<n-select
-					v-model:value="logSearch.tail"
-					:options="[
+        <n-select
+          v-model:value="logSearch.tail"
+          :options="[
 						{ label: $t('commons.table.all'), value: 0 },
 						{ label: '100', value: 100 },
 						{ label: '200', value: 200 },
 						{ label: '500', value: 500 },
 						{ label: '1000', value: 1000 }
 					]"
-					@update:value="searchLogs"
-				>
-					<template #header>{{ $t("container.lines") }}</template>
-				</n-select>
-				<n-space class="flex items-center">
-					<n-checkbox v-model:checked="logSearch.isWatch" class="min-w-[100px]" @update:checked="searchLogs">
-						{{ $t("commons.button.watch") }}
-					</n-checkbox>
-				</n-space>
-				<n-button @click="onDownload">
-					<template #icon>
-						<n-icon>
-							<Icon name="mdi:download" />
-						</n-icon>
-					</template>
-					{{ $t("file.download") }}
-				</n-button>
+          @update:value="searchLogs"
+        >
+          <template #header>{{ $t("container.lines") }}</template>
+        </n-select>
+        <n-space class="flex items-center">
+          <n-checkbox
+            v-model:checked="logSearch.isWatch"
+            class="min-w-[100px]"
+            @update:checked="searchLogs"
+          >
+            {{ $t("commons.button.watch") }}
+          </n-checkbox>
+        </n-space>
+        <n-button @click="onDownload">
+          <template #icon>
+            <n-icon>
+              <Icon name="mdi:download" />
+            </n-icon>
+          </template>
+          {{ $t("file.download") }}
+        </n-button>
 
-				<n-button @click="onClean">
-					<template #icon>
-						<n-icon>
-							<Icon name="mdi:delete" />
-						</n-icon>
-					</template>
-					{{ $t("commons.button.clean") }}
-				</n-button>
-			</div>
+        <n-button @click="onClean">
+          <template #icon>
+            <n-icon>
+              <Icon name="mdi:delete" />
+            </n-icon>
+          </template>
+          {{ $t("commons.button.clean") }}
+        </n-button>
+      </div>
 
-			<div class="mt-4 h-[70vh] overflow-auto">
-				<FtEditor ref="editorRef" v-model="logInfo" language="shell" height="100%" :readonly="true" />
-			</div>
+      <div class="mt-4 h-[70vh] overflow-auto">
+        <FtEditor
+          ref="editorRef"
+          v-model="logInfo"
+          language="shell"
+          height="100%"
+          :readonly="true"
+        />
+      </div>
 
-			<template #footer>
-				<n-space justify="end">
-					<n-button @click="handleClose">{{ $t("commons.button.cancel") }}</n-button>
-				</n-space>
-			</template>
-		</n-drawer-content>
-	</n-drawer>
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="handleClose">{{ $t("commons.button.cancel") }}</n-button>
+        </n-space>
+      </template>
+    </n-drawer-content>
+  </n-drawer>
 </template>
 
 <script lang="ts" setup>
-import { cleanContainerLog, DownloadFile } from "@/api/modules/container"
+import { containerCleanLogAPI, DownloadFile } from "@/api/modules/container"
 import FtEditor from "@/components/FtEditor/index.vue"
 import { useAuthStore } from "@/store/auth"
 import GlobalStore from "@/store/modules/global"
@@ -217,11 +244,10 @@ async function onClean() {
 		negativeText: t("commons.button.cancel"),
 		onPositiveClick: async () => {
 			try {
-				await cleanContainerLog(logSearch.container)
+				await containerCleanLogAPI(logSearch.container)
 				searchLogs()
 				message.success(t("commons.msg.operationSuccess"))
 			} catch (error) {
-				message.error(t("commons.msg.operationFailed"))
 			}
 		}
 	})

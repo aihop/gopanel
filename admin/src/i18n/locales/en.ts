@@ -1,6 +1,3 @@
-import { ContainerCommit } from './../../api/interface/container';
-import { add } from "lodash"
-
 export default {
 	password: {
 		at_least_8_chars: "At least 8 characters",

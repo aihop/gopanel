@@ -62,14 +62,14 @@
       v-if="tabValue === 'all'"
       :search-name="searchName"
       :page="page"
-      :page-size="limit"
+      :limit="limit"
       @update:total="handleTotalUpdate"
     />
     <AppsInstalled
       v-else-if="tabValue === 'installed'"
       :search-name="searchName"
       :page="page"
-      :page-size="limit"
+      :limit="limit"
       @update:total="handleTotalUpdate"
     />
   </div>

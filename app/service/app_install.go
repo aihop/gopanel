@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
 	"strings"
 
 	"github.com/aihop/gopanel/app/dto"
@@ -237,7 +238,25 @@ func (a *AppInstallService) Operate(req request.AppInstalledOperate) error {
 		if err != nil {
 			return handleErr(install, err, out)
 		}
-		return syncAppInstallStatus(&install, false)
+		if err := syncAppInstallStatus(&install, false); err != nil {
+			return err
+		}
+		if install.Status == constant.Error && strings.HasPrefix(install.Message, "ErrContainerNotFound") {
+			out2, err2 := compose.Up(dockerComposePath)
+			if err2 != nil {
+				if out2 == "" {
+					out2 = out
+				}
+				return handleErr(install, err2, out2)
+			}
+			if err := syncAppInstallStatus(&install, false); err != nil {
+				return err
+			}
+			if install.Status == constant.Error && strings.HasPrefix(install.Message, "ErrContainerNotFound") {
+				return errors.New(install.Message)
+			}
+		}
+		return nil
 	case constant.Stop:
 		out, err := compose.Stop(dockerComposePath)
 		if err != nil {
@@ -249,7 +268,25 @@ func (a *AppInstallService) Operate(req request.AppInstalledOperate) error {
 		if err != nil {
 			return handleErr(install, err, out)
 		}
-		return syncAppInstallStatus(&install, false)
+		if err := syncAppInstallStatus(&install, false); err != nil {
+			return err
+		}
+		if install.Status == constant.Error && strings.HasPrefix(install.Message, "ErrContainerNotFound") {
+			out2, err2 := compose.Up(dockerComposePath)
+			if err2 != nil {
+				if out2 == "" {
+					out2 = out
+				}
+				return handleErr(install, err2, out2)
+			}
+			if err := syncAppInstallStatus(&install, false); err != nil {
+				return err
+			}
+			if install.Status == constant.Error && strings.HasPrefix(install.Message, "ErrContainerNotFound") {
+				return errors.New(install.Message)
+			}
+		}
+		return nil
 	case constant.Delete:
 		if err := a.Uninstall(AppUninstall{
 			ContainerName: install.ContainerName,
@@ -267,6 +304,25 @@ func (a *AppInstallService) Operate(req request.AppInstalledOperate) error {
 
 func syncAppInstallStatus(appInstall *model.AppInstall, force bool) error {
 	if appInstall.Status == constant.Installing || appInstall.Status == constant.Rebuilding || appInstall.Status == constant.Upgrading {
+		return nil
+	}
+	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
+		containers, err := docker.PodmanListContainers(context.Background(), true)
+		if err != nil {
+			return err
+		}
+		containersMap := make(map[string]types.Container)
+		for _, c := range containers {
+			name := strings.TrimPrefix(strings.TrimSpace(c.Name), "/")
+			if name == "" {
+				continue
+			}
+			containersMap["/"+name] = types.Container{
+				Names: []string{"/" + name},
+				State: c.State,
+			}
+		}
+		synAppInstall(containersMap, appInstall, force)
 		return nil
 	}
 	cli, err := docker.NewClient()

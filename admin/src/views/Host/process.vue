@@ -256,7 +256,7 @@
 </template>
 
 <script setup lang="ts">
-import type { DataTableColumns } from "naive-ui"
+import type { DataTableColumns, PaginationProps } from "naive-ui"
 import { ProcessList, StopProcess } from "@/api/modules/process"
 import { useAuthStore } from "@/store/auth"
 import { MsgSuccess } from "@/utils/message"
@@ -655,8 +655,9 @@ const drawerNetworkConnectionsColumns = [
 
 const networkData = ref<any[]>([])
 
-const pagination = ref({
-	limit: 10
+const pagination = ref<PaginationProps>({
+	page: 1,
+	pageSize: 10
 })
 
 // 新增：网络数据 WebSocket 相关逻辑
