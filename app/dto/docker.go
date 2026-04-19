@@ -6,6 +6,9 @@ type DaemonJsonUpdateByFile struct {
 
 type DaemonJsonConf struct {
 	ContainerType string   `json:"containerType"`
+	RuntimeKind   string   `json:"runtimeKind"`
+	RuntimeHost   string   `json:"runtimeHost"`
+	Capabilities  RuntimeCapabilities `json:"capabilities"`
 	IsSwarm       bool     `json:"isSwarm"`
 	Status        string   `json:"status"`
 	Version       string   `json:"version"`
@@ -22,6 +25,13 @@ type DaemonJsonConf struct {
 
 	LogMaxSize string `json:"logMaxSize"`
 	LogMaxFile string `json:"logMaxFile"`
+}
+
+type RuntimeCapabilities struct {
+	DaemonJson bool `json:"daemonJson"`
+	DockerAPI  bool `json:"dockerApi"`
+	PodmanCLI  bool `json:"podmanCli"`
+	Compose    bool `json:"compose"`
 }
 
 type LogOption struct {

@@ -22,8 +22,8 @@ func AppsRouter(r fiber.Router) {
 		AppsRouter.Get("/local/:key", api.AppLocalGet)
 
 		// 已安装的
-		AppsRouter.Get("/installed/list", api.ListAppInstalled)
-		AppsRouter.Post("/installed/search", api.SearchAppInstalled)
+		AppsRouter.Get("/installed/all", api.ListAppInstalled)
+		AppsRouter.Post("/installed/list", api.SearchAppInstalled)
 		AppsRouter.Post("/installed/op", api.OperateAppInstalled)
 		AppsRouter.Post("/installed/sync", api.SyncAppInstalled)
 		AppsRouter.Post("/installed/load-port", api.LoadAppInstalledPort)

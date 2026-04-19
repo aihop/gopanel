@@ -81,9 +81,18 @@ func (u *DockerService) LoadDockerConf() *dto.DaemonJsonConf {
 	var data dto.DaemonJsonConf
 	data.IPTables = true
 	data.ContainerType = "docker"
+	data.RuntimeKind = "docker"
 	data.Status = constant.Stopped
 	data.Version = "-"
 	resolved := docker.ResolveRuntime(ctx)
+	data.RuntimeKind = string(resolved.Kind)
+	data.RuntimeHost = resolved.Host
+	data.Capabilities = dto.RuntimeCapabilities{
+		DaemonJson: resolved.Kind == docker.RuntimeDocker && runtime.GOOS == "linux",
+		DockerAPI:  !(resolved.Kind == docker.RuntimePodman && runtime.GOOS == "darwin"),
+		PodmanCLI:  resolved.Kind == docker.RuntimePodman && runtime.GOOS == "darwin",
+		Compose:    composeAvailable(),
+	}
 	if resolved.Kind == docker.RuntimePodman {
 		data.ContainerType = "podman"
 		if runtime.GOOS == "darwin" {
@@ -159,6 +168,19 @@ func (u *DockerService) LoadDockerConf() *dto.DaemonJsonConf {
 	data.IPTables = conf.IPTables
 	data.LiveRestore = conf.LiveRestore
 	return &data
+}
+
+func composeAvailable() bool {
+	if _, err := exec.LookPath("podman"); err == nil {
+		return true
+	}
+	if _, err := exec.LookPath("docker"); err == nil {
+		return true
+	}
+	if _, err := exec.LookPath("podman-compose"); err == nil {
+		return true
+	}
+	return false
 }
 
 func (u *DockerService) UpdateConf(req dto.SettingUpdate) error {

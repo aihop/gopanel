@@ -28,7 +28,7 @@ export const appsInstalledList = () => {
 }
 
 export const appsInstalledSearch = (data: AppsInstalledSearchParams) => {
-	return http.post("/apps/installed/search", data)
+	return http.post("/apps/installed/list", data)
 }
 
 export const appsUninstall = (data: { containerName: string; deleteDir?: boolean }) => {
@@ -76,11 +76,11 @@ export const ChangePort = (params: App.ChangePort) => {
 }
 
 export const SearchAppInstalled = (search: App.AppInstallSearch) => {
-	return http.post<ResPage<App.AppInstallDto>>("/apps/installed/search", search)
+	return http.post<ResPage<App.AppInstallDto>>("/apps/installed/list", search)
 }
 
 export const ListAppInstalled = () => {
-	return http.get<Array<App.AppInstalledInfo>>("/apps/installed/list")
+	return http.get<Array<App.AppInstalledInfo>>("/apps/installed/all")
 }
 
 export const GetAppPort = (type: string, name: string) => {
@@ -100,7 +100,7 @@ export const AppInstalledDeleteCheck = (appInstallId: number) => {
 }
 
 export const GetAppInstalled = (search: App.AppInstalledSearch) => {
-	return http.post<ResPage<App.AppInstalled>>("/apps/installed/search", search)
+	return http.post<ResPage<App.AppInstalled>>("/apps/installed/list", search)
 }
 
 export const InstalledOp = (op: App.AppInstalledOp) => {

@@ -110,21 +110,14 @@ export function useTable(params: any) {
 			})
 			.then((res: any) => {
 				if (isSucc(res.code)) {
-					list.value = res.data || []
+					list.value = res.data.items || []
+					total.value = res.data.total || 0
 				}
 			})
 			.catch(() => {
 				loading.value = false
 			})
 		loading.value = false
-	}
-	const getCount = async () => {
-		const query = getParams()
-		await params.countAPI(query).then((res: any) => {
-			if (isSucc(res.code)) {
-				total.value = res.data || 0
-			}
-		})
 	}
 	const onPageChange = () => {
 		getList()
@@ -137,9 +130,7 @@ export function useTable(params: any) {
 		await getList()
 		if (curPage.value === 1 && list.value.length < pageSize.value) {
 			total.value = list.value.length
-		} else if (!total.value) {
-			getCount()
-		}
+		} 
 	}
 	const onSearch = () => {
 		total.value = 0

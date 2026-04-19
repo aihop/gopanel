@@ -9,9 +9,7 @@ import (
 
 func UserRouter(r fiber.Router) {
 	userRouter := r.Group("user")
-	// 注意这里：我们将 userRouter 的中间件权限放宽为 SUB_ADMIN，
-	// 因为 /info、/editPassword 等接口子账号也需要访问，
-	// 而那些只有超级管理员才能用的管理接口，我们在下方套一层 Group 并设置 ADMIN 权限。
+
 	userRouter.Use(middleware.JWT(constant.UserRoleSubAdmin))
 	{
 		userRouter.Post("/info", api.UserInfo)

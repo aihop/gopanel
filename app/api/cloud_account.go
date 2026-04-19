@@ -8,7 +8,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
-func CloudAccountSearch(c fiber.Ctx) error {
+func CloudAccountList(c fiber.Ctx) error {
 	ctx, err := e.BodyToContext(c.Body())
 	if err != nil {
 		return c.JSON(e.Fail(buserr.Err(err)))

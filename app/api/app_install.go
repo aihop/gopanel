@@ -30,7 +30,7 @@ import (
 // @Success 200 {object} dto.PageResult
 // @Security ApiKeyAuth
 // @Security Timestamp
-// @Router /apps/installed/search [post]
+// @Router /apps/installed/list [post]
 func SearchAppInstalled(c fiber.Ctx) error {
 	req, err := e.BodyToStruct[request.AppInstalledSearch](c.Body())
 	if err != nil {

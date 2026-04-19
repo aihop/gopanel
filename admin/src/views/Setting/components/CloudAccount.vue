@@ -146,7 +146,7 @@
 import { h, onMounted, reactive, ref, computed, nextTick } from "vue"
 import { NButton, NTag, useDialog, useMessage, FormInst } from "naive-ui"
 import type { DataTableColumns } from "naive-ui"
-import { CreateCloudAccount, DeleteCloudAccount, SearchCloudAccount, UpdateCloudAccount } from "@/api/modules/cloud"
+import { CreateCloudAccount, DeleteCloudAccount, cloudAccountListAPI, UpdateCloudAccount } from "@/api/modules/cloud"
 import type { Website } from "@/api/interface/website"
 
 const message = useMessage()
@@ -225,7 +225,7 @@ const columns: DataTableColumns<Website.CloudAccount> = [
 async function fetchData() {
 	loading.value = true
 	try {
-		const res = await SearchCloudAccount({ page: 1, limit: 100 } as any)
+		const res = await cloudAccountListAPI({ page: 1, limit: 100 } as any)
 		tableData.value = Array.isArray(res.data?.items) ? res.data.items : []
 	} finally {
 		loading.value = false

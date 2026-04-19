@@ -2,10 +2,9 @@ import http from "@/api"
 import type { ReqPage, ResPage } from "../interface"
 import type { Website } from "../interface/website"
 
-import { TimeoutEnum } from "@/enums/http-enum"
-
-export const SearchCloudAccount = (req: ReqPage) => {
-	return http.post<ResPage<Website.CloudAccount>>(`/cloud/account/search`, req)
+ 
+export const cloudAccountListAPI = (req: ReqPage) => {
+	return http.post<ResPage<Website.CloudAccount>>(`/cloud/account/list`, req)
 }
 
 export const CreateCloudAccount = (req: Website.CloudAccountCreate) => {

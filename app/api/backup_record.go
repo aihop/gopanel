@@ -5,6 +5,7 @@ import (
 	"github.com/aihop/gopanel/app/dto/request"
 	"github.com/aihop/gopanel/app/e"
 	"github.com/aihop/gopanel/app/service"
+	"github.com/aihop/gopanel/pkg/gormx"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -17,8 +18,9 @@ func BackupRecordList(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Result(err))
 	}
-	total, _ := service.NewBackupRecord().CountByWhere(&R)
-
+	total, _ := service.NewBackupRecord().CountByWhere(&gormx.Wherex{
+		Wheres: R.Wheres,
+	})
 	return c.JSON(e.Succ(dto.PageResult{
 		Items: data,
 		Total: total,

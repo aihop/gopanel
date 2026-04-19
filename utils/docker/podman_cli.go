@@ -52,10 +52,18 @@ func PodmanEnsureReady(ctx context.Context) error {
 	var items []map[string]interface{}
 	_ = json.Unmarshal([]byte(out), &items)
 	if len(items) == 0 {
-		_, _ = runPodman(ensureCtx, "machine", "init")
+		if _, err := runPodman(ensureCtx, "machine", "init"); err != nil {
+			lower := strings.ToLower(err.Error())
+			if !strings.Contains(lower, "already exists") && !strings.Contains(lower, "already been created") {
+				return err
+			}
+		}
 	}
 	_, err = runPodman(ensureCtx, "machine", "start")
 	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "already running") {
+			return nil
+		}
 		return err
 	}
 	return nil

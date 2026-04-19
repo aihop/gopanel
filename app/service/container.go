@@ -39,6 +39,7 @@ import (
 
 	"github.com/aihop/gopanel/utils/cmd"
 	"github.com/aihop/gopanel/utils/common"
+	"github.com/aihop/gopanel/utils/compose"
 	"github.com/aihop/gopanel/utils/docker"
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/mem"
@@ -270,6 +271,9 @@ func (u *ContainerService) List() ([]string, error) {
 }
 
 func (u *ContainerService) ContainerListStats() ([]dto.ContainerListStats, error) {
+	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
+		return u.containerListStatsPodman()
+	}
 	client, err := docker.NewDockerClient()
 	if err != nil {
 		return nil, err
@@ -293,6 +297,9 @@ func (u *ContainerService) ContainerListStats() ([]dto.ContainerListStats, error
 }
 
 func (u *ContainerService) Inspect(req *dto.InspectReq) (string, error) {
+	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
+		return inspectPodman(req)
+	}
 	client, err := docker.NewDockerClient()
 	if err != nil {
 		return "", err
@@ -712,27 +719,43 @@ func (u *ContainerService) ContainerLogs(wsConn *websocket.Conn, containerType, 
 	if cmd.CheckIllegal(container, since, tail) {
 		return buserr.New(constant.ErrCmdIllegal)
 	}
-	commandName := "docker"
-	commandArg := []string{"logs", container}
+	var cmdExec *exec.Cmd
 	if containerType == "compose" {
-		commandName = "docker-compose"
-		commandArg = []string{"-f", container, "logs"}
-	}
-	if tail != "0" {
-		commandArg = append(commandArg, "--tail")
-		commandArg = append(commandArg, tail)
-	}
-	if since != "all" {
-		commandArg = append(commandArg, "--since")
-		commandArg = append(commandArg, since)
-	}
-	if follow {
-		commandArg = append(commandArg, "-f")
+		commandArg := []string{"-f", container, "logs"}
+		if tail != "0" {
+			commandArg = append(commandArg, "--tail", tail)
+		}
+		if since != "all" {
+			commandArg = append(commandArg, "--since", since)
+		}
+		if follow {
+			commandArg = append(commandArg, "-f")
+		}
+		c, err := compose.Command(context.Background(), commandArg...)
+		if err != nil {
+			return err
+		}
+		cmdExec = c
+	} else {
+		commandName := "docker"
+		if docker.IsPodmanRuntime(context.Background()) {
+			commandName = "podman"
+		}
+		commandArg := []string{"logs", container}
+		if tail != "0" {
+			commandArg = append(commandArg, "--tail", tail)
+		}
+		if since != "all" {
+			commandArg = append(commandArg, "--since", since)
+		}
+		if follow {
+			commandArg = append(commandArg, "-f")
+		}
+		cmdExec = exec.Command(commandName, commandArg...)
 	}
 	if !follow {
-		cmd := exec.Command(commandName, commandArg...)
-		cmd.Stderr = cmd.Stdout
-		stdout, _ := cmd.CombinedOutput()
+		cmdExec.Stderr = cmdExec.Stdout
+		stdout, _ := cmdExec.CombinedOutput()
 		if !utf8.Valid(stdout) {
 			return errors.New("invalid utf8")
 		}
@@ -742,22 +765,21 @@ func (u *ContainerService) ContainerLogs(wsConn *websocket.Conn, containerType, 
 		return nil
 	}
 
-	cmd := exec.Command(commandName, commandArg...)
-	stdout, err := cmd.StdoutPipe()
+	stdout, err := cmdExec.StdoutPipe()
 	if err != nil {
-		_ = cmd.Process.Signal(syscall.SIGTERM)
+		_ = cmdExec.Process.Signal(syscall.SIGTERM)
 		return err
 	}
-	cmd.Stderr = cmd.Stdout
-	if err := cmd.Start(); err != nil {
-		_ = cmd.Process.Signal(syscall.SIGTERM)
+	cmdExec.Stderr = cmdExec.Stdout
+	if err := cmdExec.Start(); err != nil {
+		_ = cmdExec.Process.Signal(syscall.SIGTERM)
 		return err
 	}
 	exitCh := make(chan struct{})
 	go func() {
 		_, wsData, _ := wsConn.ReadMessage()
 		if string(wsData) == "close conn" {
-			_ = cmd.Process.Signal(syscall.SIGTERM)
+			_ = cmdExec.Process.Signal(syscall.SIGTERM)
 			exitCh <- struct{}{}
 		}
 	}()
@@ -787,7 +809,7 @@ func (u *ContainerService) ContainerLogs(wsConn *websocket.Conn, containerType, 
 			}
 		}
 	}()
-	_ = cmd.Wait()
+	_ = cmdExec.Wait()
 	return nil
 }
 
@@ -795,30 +817,43 @@ func (u *ContainerService) DownloadContainerLogs(containerType, container, since
 	if cmd.CheckIllegal(container, since, tail) {
 		return "", buserr.New(constant.ErrCmdIllegal)
 	}
-	commandName := "docker"
-	commandArg := []string{"logs", container}
+	var cmdExec *exec.Cmd
 	if containerType == "compose" {
-		commandName = "docker-compose"
-		commandArg = []string{"-f", container, "logs"}
-	}
-	if tail != "0" {
-		commandArg = append(commandArg, "--tail")
-		commandArg = append(commandArg, tail)
-	}
-	if since != "all" {
-		commandArg = append(commandArg, "--since")
-		commandArg = append(commandArg, since)
+		commandArg := []string{"-f", container, "logs"}
+		if tail != "0" {
+			commandArg = append(commandArg, "--tail", tail)
+		}
+		if since != "all" {
+			commandArg = append(commandArg, "--since", since)
+		}
+		c, err := compose.Command(context.Background(), commandArg...)
+		if err != nil {
+			return "", err
+		}
+		cmdExec = c
+	} else {
+		commandName := "docker"
+		if docker.IsPodmanRuntime(context.Background()) {
+			commandName = "podman"
+		}
+		commandArg := []string{"logs", container}
+		if tail != "0" {
+			commandArg = append(commandArg, "--tail", tail)
+		}
+		if since != "all" {
+			commandArg = append(commandArg, "--since", since)
+		}
+		cmdExec = exec.Command(commandName, commandArg...)
 	}
 
-	cmd := exec.Command(commandName, commandArg...)
-	stdout, err := cmd.StdoutPipe()
+	stdout, err := cmdExec.StdoutPipe()
 	if err != nil {
-		_ = cmd.Process.Signal(syscall.SIGTERM)
+		_ = cmdExec.Process.Signal(syscall.SIGTERM)
 		return "", err
 	}
-	cmd.Stderr = cmd.Stdout
-	if err := cmd.Start(); err != nil {
-		_ = cmd.Process.Signal(syscall.SIGTERM)
+	cmdExec.Stderr = cmdExec.Stdout
+	if err := cmdExec.Start(); err != nil {
+		_ = cmdExec.Process.Signal(syscall.SIGTERM)
 		return "", err
 	}
 
@@ -855,6 +890,9 @@ func (u *ContainerService) DownloadContainerLogs(containerType, container, since
 }
 
 func (u *ContainerService) ContainerStats(id string) (*dto.ContainerStats, error) {
+	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
+		return containerStatsPodman(id)
+	}
 	client, err := docker.NewDockerClient()
 	if err != nil {
 		return nil, err
@@ -886,6 +924,196 @@ func (u *ContainerService) ContainerStats(id string) (*dto.ContainerStats, error
 	data.NetworkRX, data.NetworkTX = calculateNetwork(stats.Networks)
 	data.ShotTime = stats.Read
 	return &data, nil
+}
+
+func inspectPodman(req *dto.InspectReq) (string, error) {
+	if err := docker.PodmanEnsureReady(context.Background()); err != nil {
+		return "", err
+	}
+	var args []string
+	switch req.Type {
+	case "container":
+		args = []string{"container", "inspect", req.ID, "--format", "json"}
+	case "image":
+		args = []string{"image", "inspect", req.ID, "--format", "json"}
+	case "network":
+		args = []string{"network", "inspect", req.ID, "--format", "json"}
+	case "volume":
+		args = []string{"volume", "inspect", req.ID, "--format", "json"}
+	default:
+		return "", errors.New("invalid inspect type")
+	}
+	c := exec.Command("podman", args...)
+	out, err := c.CombinedOutput()
+	if err != nil {
+		msg := strings.TrimSpace(string(out))
+		if msg == "" {
+			return "", err
+		}
+		return "", errors.New(msg)
+	}
+	return string(out), nil
+}
+
+func containerStatsPodman(id string) (*dto.ContainerStats, error) {
+	if err := docker.PodmanEnsureReady(context.Background()); err != nil {
+		return nil, err
+	}
+	c := exec.Command("podman", "stats", "--no-stream", "--format", "{{.ID}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.NetIO}}\t{{.BlockIO}}", id)
+	out, err := c.CombinedOutput()
+	if err != nil {
+		msg := strings.TrimSpace(string(out))
+		if msg == "" {
+			return nil, err
+		}
+		return nil, errors.New(msg)
+	}
+	lines := splitNonEmptyLines(string(out))
+	if len(lines) == 0 {
+		return nil, errors.New("no stats")
+	}
+	parts := strings.Split(lines[0], "\t")
+	if len(parts) < 6 {
+		return nil, errors.New("invalid stats output")
+	}
+	memUsage, _ := parseMemUsagePairToMB(parts[2])
+	netRx, netTx, _ := parsePairToMB(parts[4])
+	ioRead, ioWrite, _ := parsePairToMB(parts[5])
+	return &dto.ContainerStats{
+		CPUPercent: parsePercent(parts[1]),
+		Memory:     memUsage,
+		Cache:      0,
+		IORead:     ioRead,
+		IOWrite:    ioWrite,
+		NetworkRX:  netRx,
+		NetworkTX:  netTx,
+		ShotTime:   time.Now(),
+	}, nil
+}
+
+func (u *ContainerService) containerListStatsPodman() ([]dto.ContainerListStats, error) {
+	if err := docker.PodmanEnsureReady(context.Background()); err != nil {
+		return nil, err
+	}
+	c := exec.Command("podman", "stats", "--no-stream", "--format", "{{.ID}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}")
+	out, err := c.CombinedOutput()
+	if err != nil {
+		msg := strings.TrimSpace(string(out))
+		if msg == "" {
+			return nil, err
+		}
+		return nil, errors.New(msg)
+	}
+	lines := splitNonEmptyLines(string(out))
+	datas := make([]dto.ContainerListStats, 0, len(lines))
+	for _, line := range lines {
+		parts := strings.Split(line, "\t")
+		if len(parts) < 4 {
+			continue
+		}
+		memUsage, memLimit := parseMemUsagePairToBytes(parts[2])
+		datas = append(datas, dto.ContainerListStats{
+			ContainerID:   strings.TrimSpace(parts[0]),
+			CPUPercent:    parsePercent(parts[1]),
+			MemoryUsage:   memUsage,
+			MemoryLimit:   memLimit,
+			MemoryPercent: parsePercent(parts[3]),
+		})
+	}
+	return datas, nil
+}
+
+func splitNonEmptyLines(s string) []string {
+	raw := strings.Split(strings.ReplaceAll(s, "\r\n", "\n"), "\n")
+	out := make([]string, 0, len(raw))
+	for _, line := range raw {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		out = append(out, line)
+	}
+	return out
+}
+
+func parsePercent(s string) float64 {
+	s = strings.TrimSpace(strings.TrimSuffix(s, "%"))
+	f, _ := strconv.ParseFloat(s, 64)
+	return f
+}
+
+func parsePairToMB(s string) (float64, float64, bool) {
+	parts := strings.Split(s, "/")
+	if len(parts) != 2 {
+		return 0, 0, false
+	}
+	a, ok1 := parseSizeToMB(parts[0])
+	b, ok2 := parseSizeToMB(parts[1])
+	return a, b, ok1 && ok2
+}
+
+func parseMemUsagePairToMB(s string) (float64, bool) {
+	parts := strings.Split(s, "/")
+	if len(parts) == 0 {
+		return 0, false
+	}
+	a, ok := parseSizeToMB(parts[0])
+	return a, ok
+}
+
+func parseMemUsagePairToBytes(s string) (uint64, uint64) {
+	parts := strings.Split(s, "/")
+	if len(parts) != 2 {
+		return 0, 0
+	}
+	used, _ := parseSizeToBytes(parts[0])
+	limit, _ := parseSizeToBytes(parts[1])
+	return uint64(used), uint64(limit)
+}
+
+func parseSizeToMB(s string) (float64, bool) {
+	b, ok := parseSizeToBytes(s)
+	if !ok {
+		return 0, false
+	}
+	return b / 1024.0 / 1024.0, true
+}
+
+func parseSizeToBytes(s string) (float64, bool) {
+	s = strings.TrimSpace(strings.ToUpper(s))
+	s = strings.ReplaceAll(s, "I", "")
+	s = strings.ReplaceAll(s, "B", "")
+	s = strings.TrimSpace(s)
+	unit := ""
+	switch {
+	case strings.HasSuffix(s, "K"):
+		unit = "K"
+		s = strings.TrimSuffix(s, "K")
+	case strings.HasSuffix(s, "M"):
+		unit = "M"
+		s = strings.TrimSuffix(s, "M")
+	case strings.HasSuffix(s, "G"):
+		unit = "G"
+		s = strings.TrimSuffix(s, "G")
+	case strings.HasSuffix(s, "T"):
+		unit = "T"
+		s = strings.TrimSuffix(s, "T")
+	}
+	v, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
+	if err != nil {
+		return 0, false
+	}
+	switch unit {
+	case "K":
+		v *= 1024
+	case "M":
+		v *= 1024 * 1024
+	case "G":
+		v *= 1024 * 1024 * 1024
+	case "T":
+		v *= 1024 * 1024 * 1024 * 1024
+	}
+	return v, true
 }
 
 func (u *ContainerService) LoadContainerLogs(req *dto.OperationWithNameAndType) string {

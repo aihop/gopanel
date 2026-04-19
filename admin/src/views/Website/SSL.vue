@@ -521,7 +521,7 @@ import {
 	SSLSearchAPI
 } from "@/api/modules/ssl"
 import { websiteListAPI } from "@/api/modules/website"
-import { CloudCdnDomainsAPI, SearchCloudAccount } from "@/api/modules/cloud"
+import { CloudCdnDomainsAPI, cloudAccountListAPI } from "@/api/modules/cloud"
 import { NButton, NDropdown, NTag, useDialog, useMessage, NAutoComplete } from "naive-ui"
 import { computed, h, onMounted, reactive, ref } from "vue"
 import { useAuthStore } from "@/store/auth"
@@ -1031,7 +1031,7 @@ async function fetchWebsites() {
 }
 
 async function fetchCloudAccounts() {
-	const res = await SearchCloudAccount({ page: 1, limit: 100 } as any)
+	const res = await cloudAccountListAPI({ page: 1, limit: 100 } as any)
 	cloudAccounts.value = Array.isArray(res.data?.items) ? res.data.items : []
 }
 

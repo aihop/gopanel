@@ -11,7 +11,7 @@ func CloudRouter(r fiber.Router) {
 	cloudGroup := r.Group("/cloud")
 	cloudGroup.Use(middleware.JWT(constant.UserRoleAdmin))
 	{
-		cloudGroup.Post("/account/search", api.CloudAccountSearch)
+		cloudGroup.Post("/account/list", api.CloudAccountList)
 		cloudGroup.Post("/account", api.CloudAccountCreate)
 		cloudGroup.Post("/account/update", api.CloudAccountUpdate)
 		cloudGroup.Post("/account/del", api.CloudAccountDelete)

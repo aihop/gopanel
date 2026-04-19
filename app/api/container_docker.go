@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"os"
 
 	"github.com/aihop/gopanel/app/dto"
@@ -8,6 +9,7 @@ import (
 	"github.com/aihop/gopanel/buserr"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/init/docker"
+	udocker "github.com/aihop/gopanel/utils/docker"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -20,6 +22,9 @@ import (
 // @Router /container/docker/status [get]
 func LoadDockerStatus(c fiber.Ctx) error {
 	status := dockerService.LoadDockerStatus()
+	resolved := udocker.ResolveRuntime(context.Background())
+	c.Set("X-Container-Runtime", string(resolved.Kind))
+	c.Set("X-Container-Runtime-Host", resolved.Host)
 	return c.JSON(e.Succ(status))
 }
 
