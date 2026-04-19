@@ -75,7 +75,6 @@ func (a AppService) PageApp(ctx fiber.Ctx, req request.AppSearch) (interface{}, 
 		return nil, err
 	}
 	var appDTOs []*response.AppItem
-	// lang := strings.ToLower(common.GetLang(ctx))
 	for _, ap := range apps {
 		appDTO := &response.AppItem{
 			ID:          ap.ID,
@@ -139,6 +138,9 @@ func (a AppService) GetApp(ctx fiber.Ctx, key string) (*response.AppDTO, error) 
 	// if err != nil {
 	// 	return nil, err
 	// }
+	// Check if the app is installed
+	installs, _ := appInstallRepo.ListBy(appInstallRepo.WithAppId(app.ID))
+	appDTO.Installed = len(installs) > 0
 	appDTO.GpuSupport = app.GpuSupport
 	// appDTO.Tags = tags
 	return &appDTO, nil

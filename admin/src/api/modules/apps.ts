@@ -23,11 +23,9 @@ export const appsListAPI = (data: AppsSearchParams) => {
 	return http.post("/apps/list", data)
 }
 
-export const appsInstalledList = () => {
-	return http.get("/apps/installed/list")
-}
+ 
 
-export const appsInstalledSearch = (data: AppsInstalledSearchParams) => {
+export const appsInstalledListAPI = (data: AppsInstalledSearchParams) => {
 	return http.post("/apps/installed/list", data)
 }
 

@@ -22,7 +22,6 @@ func AppsList(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-
 	list, err := appService.PageApp(c, *req)
 	if err != nil {
 		return c.JSON(e.Fail(err))
@@ -38,14 +37,14 @@ func AppsList(c fiber.Ctx) error {
 // @Security ApiKeyAuth
 // @Security Timestamp
 // @Router /apps/{key} [get]
-func AppGet(c fiber.Ctx) error {
+func AppsGet(c fiber.Ctx) error {
 	key := c.Params("key")
 	if key == "" {
-		return c.JSON(e.Fail(errors.New("key is required")))
+		return c.JSON(e.Result(errors.New("key is required")))
 	}
 	res, err := appService.GetApp(c, key)
 	if err != nil {
-		return c.JSON(e.Fail(err))
+		return c.JSON(e.Result(err))
 	}
 	return c.JSON(e.Succ(res))
 }

@@ -1,174 +1,188 @@
 <template>
-  <n-spin :show="loading">
-    <div
-      v-if="apps.length"
-      class="apps-grid"
-    >
-      <div
+  <div>
+    <div class="apps-card-list">
+      <n-card
         v-for="item in apps"
         :key="item.id"
         class="app-card"
       >
-        <div class="app-card__glow"></div>
-        <div class="app-card__body">
-          <div class="app-card__header">
-            <div class="app-card__identity">
-              <div class="app-card__icon">
-                <img
-                  v-if="item.app?.icon"
-                  :src="item.app.icon"
-                  alt="icon"
-                  class="h-10 w-10 object-contain"
-                />
-                <span
-                  v-else
-                  class="text-base font-bold text-emerald-600"
-                >
-                  {{ item.name?.slice(0, 1)?.toUpperCase() }}
-                </span>
-              </div>
-              <div class="min-w-0 flex-1">
-                <div class="flex items-center gap-2">
-                  <span
-                    class="app-card__name truncate"
-                    @click="showDrawer(item)"
-                  >
-                    {{ item.name }}
-                  </span>
-                  <n-tag
-                    v-if="item.status"
-                    :type="item.status === '已启动' ? 'success' : 'error'"
-                    size="small"
-                    round
-                  >
-                    {{ item.status }}
-                  </n-tag>
-                </div>
-                <div class="mt-1 text-sm text-slate-500">{{ item.app?.name || "已安装应用" }}</div>
-              </div>
-            </div>
-          </div>
+        <template #header>
+          <img
+            v-if="item.app?.icon"
+            :src="item.app.icon"
+            alt="icon"
+            class="mr-2 h-8 w-8 align-middle"
+          />
+          <span
+            class="item-name cursor-pointer text-primary hover:underline"
+            @click="showDrawer(item)"
+            style="margin-right: 8px"
+          >
+            {{ item.name }}
+          </span>
+          <n-tag
+            v-if="item.status"
+            :type="statusType(item.status)"
+          >
+            {{ statusLabel(item.status) }}
+          </n-tag>
+        </template>
 
-          <div class="app-card__meta">
-            <div class="app-chip">
-              <span class="app-chip__label">版本</span>
-              <span class="app-chip__value">{{ item.version || "-" }}</span>
-            </div>
-            <div
-              v-if="item.httpPort || item.httpsPort"
-              class="app-chip"
-            >
-              <span class="app-chip__label">服务端口</span>
-              <span class="app-chip__value">
-                {{ item.httpPort || "-" }}<template v-if="item.httpsPort"> / {{ item.httpsPort }}</template>
-              </span>
-            </div>
-          </div>
+        <template #header-extra>
+          <n-button-group>
+            <!-- <n-button secondary size="small" disabled>导入备份</n-button>
+					<n-button secondary size="small" disabled>备份</n-button> -->
+          </n-button-group>
+        </template>
 
-          <div class="app-card__info">
-            <p><span class="app-info__label">容器名</span>{{ item.containerName || "-" }}</p>
-            <p><span class="app-info__label">安装时间</span>{{ item.createdAt || "-" }}</p>
-            <p v-if="item.description"><span class="app-info__label">描述</span>{{ item.description }}</p>
-          </div>
-
-          <div class="app-card__footer">
-            <n-button
-              size="small"
-              round
-              @click="handleOperate(item, 'start')"
-            >启动</n-button>
-            <n-button
-              size="small"
-              @click="handleOperate(item, 'stop')"
-            >停止</n-button>
-            <n-button
-              size="small"
-              @click="handleOperate(item, 'restart')"
-            >重启</n-button>
-            <n-button
-              size="small"
-              round
-              @click="openDeleteModal(item)"
-            >卸载</n-button>
-          </div>
+        <div class="flex flex-wrap gap-4">
+          <n-tag size="small">版本：{{ item.version }}</n-tag>
+          <n-tag
+            v-if="item.httpPort"
+            size="small"
+          >服务端口：{{ item.httpPort }}</n-tag>
+          <n-tag
+            v-if="item.httpsPort"
+            size="small"
+          >服务端口(https)：{{ item.httpsPort }}</n-tag>
         </div>
-      </div>
-    </div>
-    <div
-      v-else
-      class="app-empty"
-    >
-      暂无已安装应用
-    </div>
-  </n-spin>
 
-  <n-drawer
-    v-model:show="drawerVisible"
-    placement="right"
-    width="400"
-  >
-    <n-drawer-content
-      title="应用详情"
-      v-if="drawerItem"
-    >
-      <pre class="whitespace-pre-wrap">{{ JSON.stringify(drawerItem.app, null, 2) }}</pre>
-    </n-drawer-content>
-  </n-drawer>
+        <div style="margin-top: 15px">
+          <p>容器名：{{ item.containerName }}</p>
+          <p>安装日期：{{ item.createdAt }}</p>
+          <p v-if="item.description">描述：{{ item.description }}</p>
+        </div>
 
-  <n-modal
-    v-model:show="showDeleteModal"
-    preset="dialog"
-    :title="'删除 - ' + deleteRow?.containerName"
-  >
-    <template #default>
-      <n-checkbox v-model:checked="deleteWithFile">删除文件</n-checkbox>
-      <div style="color: #888; margin: 8px 0 16px 0">
-        删除容器的所有文件，包括配置文件和持久化文件，请谨慎操作！
-      </div>
-      <div style="color: #d03050; margin-bottom: 8px">
-        删除操作无法回滚，请输入
-        <b>"{{ deleteRow?.containerName }}"</b>
-        删除此应用
-      </div>
-      <n-input
-        v-model:value="deleteConfirmInput"
-        placeholder="请输入名称"
-      />
-      <div
-        v-if="deleteError"
-        style="color: #d03050; margin-top: 8px"
-      >{{ deleteError }}</div>
-    </template>
-    <template #action>
-      <n-button @click="showDeleteModal = false">取消</n-button>
-      <n-button
-        type="error"
-        @click="handleDeleteCompose"
-        :disabled="deleteConfirmInput !== deleteRow?.containerName"
+        <template #footer>
+          <div class="item-footer">
+            <n-button-group>
+              <n-button
+                size="small"
+                round
+                @click="handleOperate(item, 'start')"
+                :disabled="disableStart(item)"
+              >启动</n-button>
+              <n-button
+                size="small"
+                @click="handleOperate(item, 'stop')"
+                :disabled="disableStop(item)"
+              >停止</n-button>
+              <n-button
+                size="small"
+                @click="handleOperate(item, 'restart')"
+                :disabled="disableRestart(item)"
+              >重启</n-button>
+              <n-button
+                size="small"
+                @click="handleRebuild(item)"
+                :disabled="disableRebuild(item)"
+              >重建</n-button>
+              <n-button
+                size="small"
+                @click="openLog(item)"
+              >日志</n-button>
+              <n-button
+                size="small"
+                round
+                @click="openDeleteModal(item)"
+                :disabled="disableUninstall(item)"
+              >卸载</n-button>
+              <!-- <n-button size="small" round>参数</n-button> -->
+            </n-button-group>
+          </div>
+        </template>
+      </n-card>
+    </div>
+
+    <n-drawer
+      :show="drawerVisible"
+      @update:show="drawerVisible = $event"
+      placement="right"
+      width="400"
+    >
+      <n-drawer-content
+        title="应用详情"
+        v-if="drawerItem"
       >
-        确认
-      </n-button>
-    </template>
-  </n-modal>
+        <pre class="whitespace-pre-wrap">{{ JSON.stringify(drawerItem.app, null, 2) }}</pre>
+      </n-drawer-content>
+    </n-drawer>
+
+    <n-modal
+      :show="showDeleteModal"
+      @update:show="showDeleteModal = $event"
+      preset="dialog"
+      :title="'删除 - ' + deleteRow?.containerName"
+    >
+      <template #default>
+        <n-checkbox
+          :checked="deleteWithFile"
+          @update:checked="deleteWithFile = $event"
+        >删除文件</n-checkbox>
+        <div style="color: #888; margin: 8px 0 16px 0">
+          删除容器的所有文件，包括配置文件和持久化文件，请谨慎操作！
+        </div>
+        <div style="color: #d03050; margin-bottom: 8px">
+          删除操作无法回滚，请输入
+          <b>"{{ deleteRow?.containerName }}"</b>
+          删除此应用
+        </div>
+        <n-input
+          :value="deleteConfirmInput"
+          @update:value="deleteConfirmInput = $event"
+          placeholder="请输入名称"
+        />
+        <div
+          v-if="deleteError"
+          style="color: #d03050; margin-top: 8px"
+        >{{ deleteError }}</div>
+      </template>
+      <template #action>
+        <n-button @click="showDeleteModal = false">取消</n-button>
+        <n-button
+          type="error"
+          @click="handleDeleteCompose"
+          :disabled="deleteConfirmInput !== deleteRow?.containerName"
+        >
+          确认
+        </n-button>
+      </template>
+    </n-modal>
+
+    <n-modal
+      :show="logModalVisible"
+      @update:show="logModalVisible = $event"
+      preset="card"
+      :title="logTitle"
+      style="width: 80vw; max-width: 900px"
+      @after-leave="handleLogModalClose"
+    >
+      <div
+        ref="terminalRef"
+        style="max-height: 60vh; overflow: auto; white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;"
+      >
+        <div
+          v-for="(line, idx) in logsData"
+          :key="idx"
+        >{{ line }}</div>
+      </div>
+    </n-modal>
+  </div>
 </template>
-
 <script setup lang="ts">
-import { ref, watch, onMounted, h } from "vue"
-import { appsInstalledSearch, appsUninstall } from "@/api/modules/apps"
-import type { AppsInstalledSearchParams } from "@/api/modules/apps"
+import { ref, watch, reactive, nextTick, computed } from "vue"
 import { useMessage, useDialog } from "naive-ui"
-import { containerOperator } from "@/api/modules/container"
- 
-const isReading = ref(false)
- 
+import { appsInstalledListAPI, appsUninstall, InstalledOp } from "../../../api/modules/apps"
+import type { AppsInstalledSearchParams } from "../../../api/modules/apps"
+import { useAuthStore } from "../../../store/auth"
 
-const handleLogReading = (reading: boolean) => {
-	isReading.value = reading
-	// 更新完成之后禁用更新按钮
-	if (reading == false) {
-		updateDrawerInfo.value.canUpdate = false
-	}
-}
+const logConfig = reactive({
+	id: 0,
+	type: "install",
+	name: "",
+	tail: true
+})
+ 
 
 const props = defineProps<{
 	searchName: string
@@ -183,47 +197,32 @@ const apps = ref<any[]>([])
 const loading = ref(false)
 const drawerVisible = ref(false)
 const drawerItem = ref<any>(null)
-
-interface UpdateDrawerInfo {
-	currentVersionInfo: null | {
-		appName: string
-		appVersion: string
-		appWebsite: string
-		appVersionCode?: number
-	}
-	latestVersionInfo: null | {
-		appVersion: string
-		appVersionCode?: number
-	}
-	logName: string
-	canUpdate: boolean
-	item: any
-}
-
-const updateDrawerInfo = ref<UpdateDrawerInfo>({
-	currentVersionInfo: null,
-	latestVersionInfo: null,
-	logName: "",
-	canUpdate: false,
-	item: null
-})
-const updateLoading = ref(false)
-
+const authStore = useAuthStore()
+ 
 const showDeleteModal = ref(false)
 const deleteRow = ref<any>(null)
 const deleteWithFile = ref(false)
 const deleteConfirmInput = ref("")
 const deleteError = ref("")
 
+const logModalVisible = ref(false)
+const logsData = ref<string[]>([])
+const terminalRef = ref<HTMLElement | null>(null)
+let logEventSource: EventSource | null = null
+const logTitle = computed(() => (logConfig.name ? `安装日志 - ${logConfig.name}` : "安装日志"))
+
+const busyStatuses = new Set(["Installing", "Upgrading", "Rebuilding", "Syncing"])
+const errorStatuses = new Set(["UpErr", "DownloadErr", "SyncFailed"])
+
 const fetchData = async () => {
 	loading.value = true
 	try {
 		const params: AppsInstalledSearchParams = {
-			page: props.page,
-			limit: props.limit,
+			page: props.page || 1,
+			limit: props.limit || 20,
 			name: props.searchName.trim() || undefined
 		}
-		const res = await appsInstalledSearch(params)
+		const res = await appsInstalledListAPI(params)
 		const data = res.data as any
 		if (res.code === 0 && data && Array.isArray(data.items)) {
 			apps.value = data.items
@@ -232,7 +231,6 @@ const fetchData = async () => {
 			message.error(res.msg || "获取应用列表失败")
 		}
 	} catch (e) {
-		message.error("获取应用列表失败")
 	} finally {
 		loading.value = false
 	}
@@ -245,16 +243,76 @@ function showDrawer(item: any) {
 	drawerVisible.value = true
 }
 
+function statusLabel(status: string) {
+	switch (status) {
+		case "Running":
+			return "已启动"
+		case "Stopped":
+			return "已停止"
+		case "Installing":
+			return "安装中"
+		case "Upgrading":
+			return "升级中"
+		case "Rebuilding":
+			return "重建中"
+		case "Syncing":
+			return "同步中"
+		case "SyncFailed":
+			return "同步失败"
+		case "DownloadErr":
+			return "下载失败"
+		case "UpErr":
+			return "启动失败"
+		default:
+			return status || "-"
+	}
+}
+
+function statusType(status: string) {
+	if (status === "Running") return "success"
+	if (busyStatuses.has(status)) return "warning"
+	if (errorStatuses.has(status)) return "error"
+	return "default"
+}
+
+function isBusy(item: any) {
+	return busyStatuses.has(item?.status)
+}
+
+function disableStart(item: any) {
+	return isBusy(item) || item?.status === "Running"
+}
+
+function disableStop(item: any) {
+	return isBusy(item) || item?.status === "Stopped"
+}
+
+function disableRestart(item: any) {
+	return isBusy(item)
+}
+
+function disableRebuild(item: any) {
+	return isBusy(item)
+}
+
+function disableUninstall(_item: any) {
+	return false
+}
+
 async function handleOperate(item: any, operation: string) {
+	if (isBusy(item)) {
+		message.warning("当前任务进行中，暂不可操作")
+		return
+	}
 	dialog.warning({
 		title: "操作确认",
-		content: `确定要${operation === "start" ? "启动" : operation === "stop" ? "停止" : operation === "restart" ? "重启" : operation}容器${item.containerName}吗？`,
+		content: `确定要${operation === "start" ? "启动" : operation === "stop" ? "停止" : operation === "restart" ? "重启" : operation}应用 ${item.name} 吗？`,
 		positiveText: "确定",
 		negativeText: "取消",
 		onPositiveClick: async () => {
 			const loadingMsg = message.loading(`${operation}中...`, { duration: 0 })
 			try {
-				const res = await containerOperator({ names: [item.containerName], operation })
+				const res = await InstalledOp({ installId: item.id, operate: operation } as any)
 				if (res.code === 0) {
 					message.success(`${operation} 操作成功`)
 					fetchData()
@@ -269,7 +327,91 @@ async function handleOperate(item: any, operation: string) {
 		}
 	})
 }
+
+async function handleRebuild(item: any) {
+	if (isBusy(item)) {
+		message.warning("当前任务进行中，暂不可重建")
+		return
+	}
+	dialog.warning({
+		title: "重建确认",
+		content: `确定要重建应用 ${item.name} 吗？`,
+		positiveText: "确定",
+		negativeText: "取消",
+		onPositiveClick: async () => {
+			const loadingMsg = message.loading("重建中...", { duration: 0 })
+			try {
+				const res = await InstalledOp({ installId: item.id, operate: "rebuild" } as any)
+				if (res.code === 0) {
+					message.success("已开始重建")
+					fetchData()
+				} else {
+					message.error(res.msg || "重建失败")
+				}
+			} catch (e) {
+				message.error("重建异常")
+			} finally {
+				loadingMsg.destroy()
+			}
+		}
+	})
+}
+
+function scrollToBottom() {
+	nextTick(() => {
+		if (terminalRef.value) {
+			terminalRef.value.scrollTop = terminalRef.value.scrollHeight
+		}
+	})
+}
+
+function openLog(item: any) {
+	logConfig.name = item?.name || ""
+	logModalVisible.value = true
+	logsData.value = []
+	const token = (authStore as any).getAuth?.() || authStore.auth || ""
+	const apiUrl = "/api"
+	if (logEventSource) {
+		logEventSource.close()
+		logEventSource = null
+	}
+	if (!logConfig.name || !token) {
+		logsData.value.push("[系统提示] 缺少日志名称或登录状态无效")
+		return
+	}
+	logEventSource = new EventSource(`${apiUrl}/apps/install/${encodeURIComponent(logConfig.name)}/logs?token=${encodeURIComponent(token)}&tail=true`)
+	logEventSource.onmessage = (event) => {
+		if (event.data === "ping") return
+		if (event.data === "EOF" || event.data === '["EOF"]') {
+			logEventSource?.close()
+			logEventSource = null
+			logsData.value.push("\n====== 日志结束 ======")
+			scrollToBottom()
+			return
+		}
+		logsData.value.push(event.data)
+		if (logsData.value.length > 2000) {
+			logsData.value = logsData.value.slice(-2000)
+		}
+		scrollToBottom()
+	}
+	logEventSource.onerror = () => {
+		logsData.value.push("\n[系统提示] 与日志服务器的连接已断开或发生错误。")
+		logEventSource?.close()
+		logEventSource = null
+		scrollToBottom()
+	}
+}
+
+function handleLogModalClose() {
+	if (logEventSource) {
+		logEventSource.close()
+		logEventSource = null
+	}
+}
+
  
+
 function openDeleteModal(row: any) {
 	deleteRow.value = row
 	deleteWithFile.value = false
@@ -307,160 +449,24 @@ async function handleDeleteCompose() {
 </script>
 
 <style scoped>
-.app-card {
-	position: relative;
-	overflow: hidden;
-	border-radius: 24px;
-	border: 1px solid rgba(226, 232, 240, 0.88);
-	background:
-		radial-gradient(circle at top right, rgba(16, 185, 129, 0.1), transparent 28%),
-		linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.92));
-	box-shadow: 0 14px 36px rgba(15, 23, 42, 0.06);
-	transition: transform 0.26s ease, box-shadow 0.26s ease, border-color 0.26s ease;
-}
-
-.app-card:hover {
-	transform: translateY(-4px);
-	border-color: rgba(16, 185, 129, 0.2);
-	box-shadow: 0 22px 44px rgba(15, 23, 42, 0.1);
-}
-
-.apps-grid {
+.apps-card-list {
 	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-	gap: 18px;
+	grid-template-columns: repeat(auto-fill, minmax(500px, 1fr));
+	gap: 16px;
 }
-
-.app-card__glow {
-	position: absolute;
-	top: -40px;
-	right: -32px;
-	width: 120px;
-	height: 120px;
-	border-radius: 9999px;
-	background: rgba(16, 185, 129, 0.12);
-	filter: blur(20px);
-	pointer-events: none;
+.app-card {
+	min-width: 450px;
+	margin-bottom: 16px;
 }
-
-.app-card__body {
-	position: relative;
-	z-index: 1;
-	display: flex;
-	flex-direction: column;
-	gap: 18px;
-	padding: 22px;
-	height: 100%;
+.item-name {
+	cursor: pointer;
+	color: #18a058;
 }
-
-.app-card__header {
+.item-footer {
+	border-top: 1px solid rgb(240 240 240);
+	padding-top: 15px;
 	display: flex;
 	justify-content: space-between;
-	gap: 14px;
-}
-
-.app-card__identity {
-	display: flex;
-	align-items: flex-start;
-	gap: 12px;
-	min-width: 0;
-	flex: 1;
-}
-
-.app-card__icon {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	width: 54px;
-	height: 54px;
-	flex-shrink: 0;
-	border-radius: 18px;
-	border: 1px solid rgba(209, 250, 229, 0.95);
-	background: linear-gradient(135deg, rgba(236, 253, 245, 0.98), rgba(255, 255, 255, 0.72));
-	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
-}
-
-.app-card__name {
-	cursor: pointer;
-	color: #0f766e;
-	font-weight: 700;
-}
-
-.app-card__name:hover {
-	text-decoration: underline;
-}
-
-.app-card__meta {
-	display: grid;
-	grid-template-columns: repeat(2, minmax(0, 1fr));
-	gap: 10px;
-}
-
-.app-chip {
-	padding: 10px 12px;
-	border-radius: 16px;
-	background: rgba(248, 250, 252, 0.95);
-	border: 1px solid rgba(226, 232, 240, 0.9);
-}
-
-.app-chip__label {
-	display: block;
-	font-size: 0.72rem;
-	color: rgb(148 163 184);
-	margin-bottom: 4px;
-}
-
-.app-chip__value {
-	display: block;
-	font-size: 0.88rem;
-	font-weight: 600;
-	color: rgb(30 41 59);
-	word-break: break-word;
-}
-
-.app-card__info {
-	display: flex;
-	flex-direction: column;
-	gap: 8px;
-	font-size: 0.92rem;
-	color: rgb(71 85 105);
-	line-height: 1.65;
-	min-height: 96px;
-}
-
-.app-card__info p {
-	margin: 0;
-}
-
-.app-info__label {
-	display: inline-block;
-	min-width: 64px;
-	margin-right: 8px;
-	color: rgb(148 163 184);
-}
-
-.app-card__footer {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 10px;
-	padding-top: 16px;
-	border-top: 1px solid rgba(226, 232, 240, 0.9);
-}
-
-.app-empty {
-	padding: 64px 20px;
-	text-align: center;
-	font-size: 0.95rem;
-	color: rgb(148 163 184);
-}
-
-@media (max-width: 640px) {
-	.apps-grid {
-		grid-template-columns: 1fr;
-	}
-
-	.app-card__meta {
-		grid-template-columns: 1fr;
-	}
+	flex-direction: row;
 }
 </style>

@@ -463,8 +463,8 @@ const fetchData = async () => {
 	loading.value = true
 	try {
 		const params: AppsSearchParams = {
-			page: props.page,
-			limit: props.limit,
+			page: props.page || 1,
+			limit: props.limit || 20,
 			name: props.searchName.trim() || undefined
 		}
 		const res = await appsListAPI(params)

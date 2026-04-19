@@ -45,7 +45,7 @@ func AppsRouter(r fiber.Router) {
 		AppsRouter.Get("/base-dir", api.AppGetBaseDir)
 
 		AppsRouter.Get("/detail/:id", api.AppDetailGet)
-		AppsRouter.Get("/:key", api.AppGet)
+		AppsRouter.Get("/:key", api.AppsGet)
 		AppsRouter.Get("/install/:name/logs", api.AppInstallLogsStream)
 	}
 }
