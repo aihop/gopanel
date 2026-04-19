@@ -473,10 +473,8 @@ const fetchData = async () => {
 			apps.value = data.items
 			emits("update:total", data.total)
 		} else {
-			message.error(res.msg || "获取应用列表失败")
 		}
 	} catch (e) {
-		message.error("获取应用列表失败")
 	} finally {
 		loading.value = false
 	}

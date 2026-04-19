@@ -19,7 +19,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, shallowRef, computed, onMounted } from "vue"
+import { ref, computed } from "vue"
 import RouterButton from "@/components/RouterButton.vue"
 import LoginLog from "./components/LoginLog.vue"
 import OperationLog from "./components/OperationLog.vue"

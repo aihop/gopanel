@@ -46,6 +46,26 @@ type IImageService interface {
 func NewIImageService() IImageService {
 	return &ImageService{}
 }
+
+func normalizeImageRefForPull(input string) (string, error) {
+	s := strings.TrimSpace(input)
+	if s == "" {
+		return "", errors.New("image name is empty")
+	}
+	fields := strings.Fields(s)
+	if len(fields) >= 3 {
+		first := strings.ToLower(fields[0])
+		second := strings.ToLower(fields[1])
+		if (first == "docker" || first == "podman") && second == "pull" {
+			s = fields[len(fields)-1]
+		}
+	}
+	s = strings.TrimSpace(s)
+	if strings.ContainsAny(s, " \t\r\n") {
+		return "", errors.New("invalid image name")
+	}
+	return s, nil
+}
 func (u *ImageService) Page(req dto.SearchWithPage) (int64, interface{}, error) {
 	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
 		return u.pagePodman(req)
@@ -315,13 +335,17 @@ func (u *ImageService) ImageBuild(req dto.ImageBuild) (string, error) {
 
 func (u *ImageService) ImagePull(req dto.ImagePull) (string, error) {
 	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
+		imageRef, err := normalizeImageRefForPull(req.ImageName)
+		if err != nil {
+			return "", err
+		}
 		dockerLogDir := path.Join(global.CONF.System.TmpDir, "docker_logs")
 		if _, err := os.Stat(dockerLogDir); err != nil && os.IsNotExist(err) {
 			if err = os.MkdirAll(dockerLogDir, os.ModePerm); err != nil {
 				return "", err
 			}
 		}
-		imageItemName := strings.ReplaceAll(path.Base(req.ImageName), ":", "_")
+		imageItemName := strings.ReplaceAll(path.Base(imageRef), ":", "_")
 		logItem := fmt.Sprintf("%s/image_pull_%s_%s.log", dockerLogDir, imageItemName, time.Now().Format(constant.DateTimeSlimLayout))
 		file, err := os.OpenFile(logItem, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
 		if err != nil {
@@ -330,16 +354,39 @@ func (u *ImageService) ImagePull(req dto.ImagePull) (string, error) {
 		go func() {
 			defer file.Close()
 			_ = docker.PodmanEnsureReady(context.Background())
-			out, err := docker.PodmanPull(context.Background(), req.ImageName, "")
+			target := imageRef
+			creds := ""
+			if req.RepoID != 0 {
+				repoItem, e := repo.NewIImageRepoRepo().Get(repo.NewCommonRepo().WithByID(req.RepoID))
+				if e != nil {
+					_, _ = file.WriteString(e.Error() + "\n")
+					_, _ = file.WriteString("image pull failed!\n")
+					return
+				}
+				target = repoItem.DownloadUrl + "/" + imageRef
+				if repoItem.Auth {
+					creds = strings.TrimSpace(repoItem.Username) + ":" + repoItem.Password
+				}
+			}
+			out, err := docker.PodmanPull(context.Background(), target, creds)
 			if err != nil {
-				_, _ = file.WriteString(out + "\n" + err.Error())
-				_, _ = file.WriteString("\nimage pull failed!")
+				if strings.TrimSpace(out) != "" {
+					_, _ = file.WriteString(out + "\n")
+				}
+				_, _ = file.WriteString(err.Error() + "\n")
+				_, _ = file.WriteString("image pull failed!\n")
 				return
 			}
-			_, _ = file.WriteString(out)
-			_, _ = file.WriteString("\nimage pull successful!")
+			if strings.TrimSpace(out) != "" {
+				_, _ = file.WriteString(out + "\n")
+			}
+			_, _ = file.WriteString("image pull successful!\n")
 		}()
 		return path.Base(logItem), nil
+	}
+	imageRef, err := normalizeImageRefForPull(req.ImageName)
+	if err != nil {
+		return "", err
 	}
 	client, err := docker.NewDockerClient()
 	if err != nil {
@@ -352,7 +399,7 @@ func (u *ImageService) ImagePull(req dto.ImagePull) (string, error) {
 			return "", err
 		}
 	}
-	imageItemName := strings.ReplaceAll(path.Base(req.ImageName), ":", "_")
+	imageItemName := strings.ReplaceAll(path.Base(imageRef), ":", "_")
 	logItem := fmt.Sprintf("%s/image_pull_%s_%s.log", dockerLogDir, imageItemName, time.Now().Format(constant.DateTimeSlimLayout))
 	file, err := os.OpenFile(logItem, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
 	if err != nil {
@@ -360,19 +407,19 @@ func (u *ImageService) ImagePull(req dto.ImagePull) (string, error) {
 	}
 	options := image.PullOptions{}
 	if req.RepoID == 0 {
-		hasAuth, authStr := loadAuthInfo(req.ImageName)
+		hasAuth, authStr := loadAuthInfo(imageRef)
 		if hasAuth {
 			options.RegistryAuth = authStr
 		}
 		go func() {
 			defer file.Close()
-			out, err := client.ImagePull(context.TODO(), req.ImageName, options)
+			out, err := client.ImagePull(context.TODO(), imageRef, options)
 			if err != nil {
-				global.LOG.Errorf("image %s pull failed, err: %v", req.ImageName, err)
+				global.LOG.Errorf("image %s pull failed, err: %v", imageRef, err)
 				return
 			}
 			defer out.Close()
-			global.LOG.Infof("pull image %s successful!", req.ImageName)
+			global.LOG.Infof("pull image %s successful!", imageRef)
 			_, _ = io.Copy(file, out)
 		}()
 		return path.Base(logItem), nil
@@ -393,19 +440,19 @@ func (u *ImageService) ImagePull(req dto.ImagePull) (string, error) {
 		authStr := base64.StdEncoding.EncodeToString(encodedJSON)
 		options.RegistryAuth = authStr
 	}
-	image := repo.DownloadUrl + "/" + req.ImageName
+	image := repo.DownloadUrl + "/" + imageRef
 	go func() {
 		defer file.Close()
 		out, err := client.ImagePull(context.TODO(), image, options)
 		if err != nil {
-			_, _ = file.WriteString("image pull failed!")
-			_, _ = file.WriteString(fmt.Sprintf("image %s pull failed, err: %v", image, err))
+			_, _ = file.WriteString("image pull failed!\n")
+			_, _ = file.WriteString(fmt.Sprintf("image %s pull failed, err: %v\n", image, err))
 			return
 		}
 		defer out.Close()
-		global.LOG.Infof("pull image %s successful!", req.ImageName)
+		global.LOG.Infof("pull image %s successful!", imageRef)
 		_, _ = io.Copy(file, out)
-		_, _ = file.WriteString("image pull successful!")
+		_, _ = file.WriteString("\nimage pull successful!\n")
 	}()
 	return path.Base(logItem), nil
 }

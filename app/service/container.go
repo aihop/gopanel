@@ -328,6 +328,9 @@ func (u *ContainerService) Inspect(req *dto.InspectReq) (string, error) {
 
 func (u *ContainerService) Prune(req *dto.ContainerPrune) (dto.ContainerPruneReport, error) {
 	report := dto.ContainerPruneReport{}
+	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
+		return u.prunePodman(req)
+	}
 	client, err := docker.NewDockerClient()
 	if err != nil {
 		return report, err
