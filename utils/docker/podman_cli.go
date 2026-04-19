@@ -183,6 +183,26 @@ func PodmanRunBuild(ctx context.Context, contextDir string, dockerfileName strin
 	return runPodman(ctx, "build", "-t", tag, "-f", dockerfileName, contextDir)
 }
 
+func PodmanVersion(ctx context.Context) (string, error) {
+	out, err := runPodman(ctx, "version", "--format", "json")
+	if err != nil {
+		return "", err
+	}
+	var m map[string]interface{}
+	if err := json.Unmarshal([]byte(out), &m); err != nil {
+		return "", err
+	}
+	if client, ok := m["Client"].(map[string]interface{}); ok {
+		if v, ok := client["Version"]; ok {
+			return strings.TrimSpace(fmt.Sprint(v)), nil
+		}
+	}
+	if v, ok := m["Version"]; ok {
+		return strings.TrimSpace(fmt.Sprint(v)), nil
+	}
+	return "", nil
+}
+
 func runPodman(ctx context.Context, args ...string) (string, error) {
 	base := ctx
 	if base == nil {

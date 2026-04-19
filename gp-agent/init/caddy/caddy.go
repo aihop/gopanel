@@ -64,12 +64,8 @@ func CaddyFilePath() string {
 	if Server.CaddyFilePath != "" {
 		return Server.CaddyFilePath
 	}
-	if global.CONF.ConfDir != "" {
-		Server.CaddyFilePath = filepath.Join(global.CONF.ConfDir, "Caddyfile")
-		return Server.CaddyFilePath
-	}
 	if global.CONF.BaseDir != "" {
-		Server.CaddyFilePath = filepath.Join(global.CONF.BaseDir, "gp-agent", "conf", "Caddyfile")
+		Server.CaddyFilePath = filepath.Join(global.CONF.BaseDir, "Caddyfile")
 		return Server.CaddyFilePath
 	}
 	Server.CaddyFilePath = "Caddyfile"
@@ -81,7 +77,6 @@ func StartCaddyServer(content []byte) error {
 	if err != nil && len(content) > 0 {
 		return err
 	}
-
 	if err := caddy.Load(jsonConfig, true); err != nil {
 		Server.Status = false
 		errInfo := err.Error()

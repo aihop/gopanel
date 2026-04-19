@@ -1,23 +1,21 @@
 import http from "@/api"
 import type { Website } from "../interface/website"
-
+import type { ResPage } from "../interface"
  
-export const ListWebsitesAPI = () => {
-	return http.post<Website.WebsiteDTO[]>(`/website/list`)
+export const websiteListAPI = () => {
+	return http.post<ResPage<any>>(`/website/list`)
 }
 
-export const CreateWebsiteAPI = (req: Website.WebSiteCreateReq) => {
+export const websiteCreateAPI = (req: Website.WebSiteCreateReq) => {
 	return http.post<any>(`/website/create`, req)
 }
-
  
- 
-export const UpdateWebsiteAPI = (req: Website.WebSiteUpdateReq) => {
-	return http.post<any>(`/website/update`, req)
+export const websiteUpdateAPI = (req: Website.WebSiteUpdateReq) => {
+	return http.put<any>(`/website/${req.id}`, req)
 }
 
-export const DeleteWebsiteAPI = (req: Website.WebSiteDel) => {
-	return http.post<any>(`/website/delete`, req)
+export const websiteDeleteAPI = (params: Website.WebSiteDel) => {
+	return http.delete<any>(`/website/${params.id}`,params)
 }
 
 

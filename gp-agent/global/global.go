@@ -7,14 +7,12 @@ import (
 )
 
 type Config struct {
-	BaseDir      string
-	RunDir       string
-	LogDir       string
-	ConfDir      string
-	SocketPath   string
-	EnableCaddy  bool
-	EnableDaemon bool
-	StartedAt    time.Time
+	BaseDir    string
+	RunDir     string
+	LogDir     string
+	BackupDir  string
+	SocketPath string
+	StartedAt  time.Time
 }
 
 var (

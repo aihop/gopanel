@@ -10,6 +10,7 @@ import (
 
 	"github.com/aihop/gopanel/gp-agent/global"
 	"github.com/aihop/gopanel/gp-agent/init/caddy"
+	"github.com/caddyserver/caddy/v2/caddyconfig"
 )
 
 type CaddyStatus struct {
@@ -64,7 +65,7 @@ func CaddyApply(ctx context.Context, params map[string]interface{}) (string, err
 	}
 
 	prev, _ := os.ReadFile(path)
-	backupDir := filepath.Join(global.CONF.ConfDir, "backup")
+	backupDir := global.CONF.BackupDir
 	_ = os.MkdirAll(backupDir, 0755)
 	backupPath := filepath.Join(backupDir, "Caddyfile."+time.Now().Format("20060102-150405.000000000"))
 	_ = os.WriteFile(backupPath, prev, 0644)
@@ -72,7 +73,6 @@ func CaddyApply(ctx context.Context, params map[string]interface{}) (string, err
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 		return "", err
 	}
-
 	if err := caddy.StartCaddyServer([]byte(content)); err != nil {
 		_ = os.WriteFile(path, prev, 0644)
 		_ = caddy.StartCaddyServer(prev)
@@ -90,4 +90,19 @@ func CaddyStop(ctx context.Context) (string, error) {
 		return "", err
 	}
 	return "ok", nil
+}
+
+func CaddyFileToJson(content []byte) ([]byte, error) {
+	adapter := caddyconfig.GetAdapter("caddyfile")
+	if adapter == nil {
+		return nil, errors.New("未找到配置文件")
+	}
+	jsonConfig, warnings, err := adapter.Adapt([]byte(content), nil)
+	if err != nil {
+		return nil, err
+	}
+	for _, warning := range warnings {
+		global.LOG.Warn(warning.String())
+	}
+	return jsonConfig, nil
 }

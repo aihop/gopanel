@@ -207,7 +207,7 @@
 import type { FormInst } from "naive-ui"
 import type { Website } from "@/api/interface/website"
 import { ref, watch, onMounted } from "vue"
-import { CreateWebsiteAPI, UpdateWebsiteAPI } from "@/api/modules/website"
+import { websiteCreateAPI, websiteUpdateAPI } from "@/api/modules/website"
 import { ListAppInstalled } from "@/api/modules/apps"
 import { getPipelinePage } from "@/api/modules/pipeline"
 import { listAllImage } from "@/api/modules/container"
@@ -389,7 +389,7 @@ const onConfirm = async () => {
 			IPV6: form.value.IPV6,
 			remark: form.value.remark
 		}
-		let res = await (actionType.value === "add" ? CreateWebsiteAPI(createPayload) : UpdateWebsiteAPI(updatePayload))
+		let res = await (actionType.value === "add" ? websiteCreateAPI(createPayload) : websiteUpdateAPI(updatePayload))
 		emit("confirm", res, loading)
 	} catch (error) {
 		console.error(error)

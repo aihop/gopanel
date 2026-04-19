@@ -43,9 +43,14 @@ type ResolvedRuntime struct {
 }
 
 func ResolveRuntime(ctx context.Context) ResolvedRuntime {
+	mode := strings.ToLower(strings.TrimSpace(global.CONF.System.ContainerRuntime))
+	if mode == "" {
+		mode = "auto"
+	}
+
 	var settingItem model.Setting
 	_ = global.DB.Where("key = ?", "DockerSockPath").First(&settingItem).Error
-	if len(settingItem.Value) > 0 {
+	if len(settingItem.Value) > 0 && mode == "auto" {
 		host := normalizeHost(ctx, settingItem.Value)
 		if host != settingItem.Value {
 			_ = global.DB.Model(&model.Setting{}).Where("key = ?", "DockerSockPath").Update("value", host).Error
@@ -57,6 +62,70 @@ func ResolveRuntime(ctx context.Context) ResolvedRuntime {
 		return ResolvedRuntime{
 			Kind: k,
 			Host: host,
+		}
+	}
+
+	if mode == "docker" {
+		host := strings.TrimSpace(settingItem.Value)
+		if host != "" {
+			host = normalizeHost(ctx, host)
+			if kindFromHost(host) != RuntimeDocker {
+				host = ""
+			}
+		}
+		switch runtime.GOOS {
+		case "windows":
+			if host == "" {
+				host = "npipe:////./pipe/docker_engine"
+			}
+			return ResolvedRuntime{Kind: RuntimeDocker, Host: host}
+		default:
+			if host == "" {
+				host = autoDetectDockerUnixHost(ctx)
+			}
+			if host == "" {
+				host = "unix:///var/run/docker.sock"
+			}
+			return ResolvedRuntime{Kind: RuntimeDocker, Host: host}
+		}
+	}
+
+	if mode == "podman" {
+		switch runtime.GOOS {
+		case "linux":
+			uid := os.Getuid()
+			host := strings.TrimSpace(settingItem.Value)
+			if host != "" {
+				host = normalizeHost(ctx, host)
+				if kindFromHost(host) != RuntimePodman {
+					host = ""
+				}
+			}
+			if host == "" {
+				if uid == 0 {
+					host = "unix:///run/podman/podman.sock"
+				} else {
+					host = "unix:///run/user/" + strconv.Itoa(uid) + "/podman/podman.sock"
+				}
+			}
+			return ResolvedRuntime{Kind: RuntimePodman, Host: host}
+		case "darwin":
+			host := strings.TrimSpace(settingItem.Value)
+			if host != "" {
+				host = normalizeHost(ctx, host)
+				if kindFromHost(host) != RuntimePodman {
+					host = ""
+				}
+			}
+			if host == "" {
+				host = darwinPodmanMachineHost(ctx)
+			}
+			if host == "" {
+				host = "podman://local"
+			}
+			return ResolvedRuntime{Kind: RuntimePodman, Host: host}
+		default:
+			return ResolvedRuntime{Kind: RuntimePodman, Host: "podman://local"}
 		}
 	}
 
@@ -75,6 +144,21 @@ func ResolveRuntime(ctx context.Context) ResolvedRuntime {
 		}
 		return ResolvedRuntime{Kind: k, Host: host}
 	}
+}
+
+func autoDetectDockerUnixHost(ctx context.Context) string {
+	baseCtx := ctx
+	if baseCtx == nil {
+		baseCtx = context.Background()
+	}
+	pingCtx, cancel := context.WithTimeout(baseCtx, 800*time.Millisecond)
+	defer cancel()
+
+	dockerHost := "unix:///var/run/docker.sock"
+	if canPingHost(pingCtx, dockerHost) {
+		return dockerHost
+	}
+	return ""
 }
 
 func normalizeHost(ctx context.Context, host string) string {
@@ -261,6 +345,9 @@ func darwinPodmanMachineHost(ctx context.Context) string {
 
 func NewClient() (Client, error) {
 	resolved := ResolveRuntime(context.Background())
+	if resolved.Kind == RuntimePodman && runtime.GOOS == "darwin" {
+		return Client{}, errors.New("podman on darwin does not support docker api client")
+	}
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithHost(resolved.Host), client.WithAPIVersionNegotiation())
 	if err != nil {
 		return Client{}, err
@@ -277,6 +364,9 @@ func (c Client) Close() {
 
 func NewDockerClient() (*client.Client, error) {
 	resolved := ResolveRuntime(context.Background())
+	if resolved.Kind == RuntimePodman && runtime.GOOS == "darwin" {
+		return nil, errors.New("podman on darwin does not support docker api client")
+	}
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithHost(resolved.Host), client.WithAPIVersionNegotiation())
 	if err != nil {
 		return nil, err

@@ -27,7 +27,7 @@ type WebsiteService struct {
 	repo *repo.WebsiteRepo
 }
 
-func (s WebsiteService) Create(req *request.WebsiteCreate, mode model.DatabaseMode) (err error) {
+func (s WebsiteService) Create(ctx context.Context, req *request.WebsiteCreate, mode model.DatabaseMode) (err error) {
 	alias := req.Alias
 	if alias == "default" {
 		return buserr.New("ErrDefaultAlias")
@@ -70,6 +70,7 @@ func (s WebsiteService) Create(req *request.WebsiteCreate, mode model.DatabaseMo
 	if req.Protocol == "" {
 		req.Protocol = constant.ProtocolHTTPS
 	}
+
 	defaultDate, _ := time.Parse(constant.DateLayout, constant.DefaultDate)
 	website := &model.Website{
 		PrimaryDomain: req.PrimaryDomain,
@@ -102,7 +103,7 @@ func (s WebsiteService) Create(req *request.WebsiteCreate, mode model.DatabaseMo
 		}
 	}()
 
-	// caddyDomain := BuildWebsiteCaddyDomain(req.PrimaryDomain, req.Protocol)
+	caddyDomain := BuildWebsiteCaddyDomain(req.PrimaryDomain, req.Protocol)
 	staticRoot := resolveWebsiteStaticRoot(alias)
 
 	if req.CodeSource == "app_store" {
@@ -158,24 +159,24 @@ func (s WebsiteService) Create(req *request.WebsiteCreate, mode model.DatabaseMo
 		if caddyProxy == "" {
 			caddyProxy = req.Proxy
 		}
-		// if strings.HasPrefix(alias, "/") {
-		// 	_, err = NewCaddy().AddServerPathBlock(caddyDomain, alias, caddyProxy, req.OtherDomains, req.Protocol)
-		// } else {
-		// 	_, err = NewCaddy().AddServerBlock(caddyDomain, caddyProxy, req.OtherDomains, req.Protocol)
-		// }
-		// if err != nil {
-		// 	return err
-		// }
+		if strings.HasPrefix(alias, "/") {
+			_, err = CaddyAddServerPathBlock(ctx, caddyDomain, alias, caddyProxy, req.OtherDomains, req.Protocol)
+		} else {
+			_, err = CaddyAddServerBlock(ctx, caddyDomain, caddyProxy, req.OtherDomains, req.Protocol)
+		}
+		if err != nil {
+			return err
+		}
 	}
 	if req.Type == constant.Static {
 		website.SiteDir = staticRoot
 		if err = ensureStaticWebsiteIndex(staticRoot); err != nil {
 			return err
 		}
-		// _, err = NewCaddy().AddStaticServerBlock(caddyDomain, staticRoot, req.OtherDomains, req.Protocol)
-		// if err != nil {
-		// 	return err
-		// }
+		_, err = CaddyAddStaticServerBlock(ctx, caddyDomain, staticRoot, req.OtherDomains, req.Protocol)
+		if err != nil {
+			return err
+		}
 	}
 	tx := global.DB.Begin()
 	defer tx.Rollback()

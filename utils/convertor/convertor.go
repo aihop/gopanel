@@ -76,6 +76,14 @@ func ToInt(value any) (int64, error) {
 	}
 }
 
+func ToUint(value any) uint {
+	int64, err := ToInt(value)
+	if err != nil {
+		return 0
+	}
+	return uint(int64)
+}
+
 func ToString(value any) string {
 	if value == nil {
 		return ""

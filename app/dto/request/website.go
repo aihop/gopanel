@@ -30,7 +30,7 @@ type NewAppInstall struct {
 }
 
 type WebsiteUpdate struct {
-	ID            uint   `json:"id" validate:"required"`
+	ID            uint   `json:"id"`
 	PrimaryDomain string `json:"primaryDomain"`
 	Protocol      string `json:"protocol"`
 	Remark        string `json:"remark"`

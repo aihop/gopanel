@@ -11,18 +11,15 @@ func WebsiteRouter(r fiber.Router) {
 	websiteGroup := r.Group("/website")
 	websiteGroup.Use(middleware.JWT(constant.UserRoleAdmin))
 	{
-		websiteGroup.Post("/create", api.WebsiteCreate)
-		websiteGroup.Post("/update", api.WebsiteUpdate)
-		websiteGroup.Post("/delete", api.WebsiteDelete)
 		websiteGroup.Post("/list", api.WebsiteList)
-		websiteGroup.Post("/count", api.WebsiteCount)
+		websiteGroup.Post("/create", api.WebsiteCreate)
+		websiteGroup.Put("/:id", api.WebsiteUpdate)
+		websiteGroup.Delete("/:id", api.WebsiteDelete)
 
-		// Deployments
 		websiteGroup.Post("/deploy/list", api.WebsiteDeployList)
 		websiteGroup.Post("/deploy/switch", api.WebsiteDeploySwitch)
 		websiteGroup.Post("/deploy/delete", api.WebsiteDeployDelete)
 		websiteGroup.Post("/deploy/trigger", api.WebsiteDeployTrigger)
 		websiteGroup.Post("/deploy/snapshot", api.WebsiteDeploySnapshot)
-
 	}
 }

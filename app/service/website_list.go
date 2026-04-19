@@ -15,7 +15,6 @@ import (
 
 func (s *WebsiteService) List(ctx *gormx.Contextx) (websiteDTOs []*response.WebsiteRes, err error) {
 	_ = s.SyncFromCaddyfile()
-
 	res, err := s.repo.List(ctx)
 	if err != nil {
 		return nil, err
@@ -23,7 +22,6 @@ func (s *WebsiteService) List(ctx *gormx.Contextx) (websiteDTOs []*response.Webs
 	if len(res) == 0 {
 		return []*response.WebsiteRes{}, nil
 	}
-
 	for _, web := range res {
 		var (
 			appName      string

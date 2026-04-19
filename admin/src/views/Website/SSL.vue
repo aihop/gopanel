@@ -520,7 +520,7 @@ import {
 	DeleteSSLPushRule,
 	SSLSearchAPI
 } from "@/api/modules/ssl"
-import { ListWebsitesAPI } from "@/api/modules/website"
+import { websiteListAPI } from "@/api/modules/website"
 import { CloudCdnDomainsAPI, SearchCloudAccount } from "@/api/modules/cloud"
 import { NButton, NDropdown, NTag, useDialog, useMessage, NAutoComplete } from "naive-ui"
 import { computed, h, onMounted, reactive, ref } from "vue"
@@ -1026,8 +1026,8 @@ function downloadContent(content: string, fileName: string) {
 }
 
 async function fetchWebsites() {
-	const res = await ListWebsitesAPI()
-	websites.value = Array.isArray(res.data) ? res.data : []
+	const res = await websiteListAPI()
+	websites.value = Array.isArray(res.data?.items) ? res.data.items : []
 }
 
 async function fetchCloudAccounts() {

@@ -1,5 +1,11 @@
 package dto
 
+type CaddyReq struct {
+	PrimaryDomain string `json:"primaryDomain"`
+	OtherDomains  string `json:"otherDomains"`
+	Content       string `json:"content"`
+}
+
 // 最外层
 type CaddyConfig struct {
 	Apps Apps `json:"apps"`

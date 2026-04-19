@@ -571,11 +571,11 @@ func (u *ImageService) ImagePush(req dto.ImagePush) (string, error) {
 func (u *ImageService) ImageRemove(req dto.BatchDelete) error {
 	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
 		_ = docker.PodmanEnsureReady(context.Background())
-		for _, id := range req.Ids {
-			if strings.TrimSpace(id) == "" {
+		for _, name := range req.Names {
+			if strings.TrimSpace(name) == "" {
 				continue
 			}
-			if _, err := docker.PodmanRemoveImage(context.Background(), id); err != nil {
+			if _, err := docker.PodmanRemoveImage(context.Background(), name); err != nil {
 				return err
 			}
 		}

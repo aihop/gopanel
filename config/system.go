@@ -13,6 +13,7 @@ type System struct {
 	Backup               string `mapstructure:"backup"`
 	EncryptKey           string `mapstructure:"encrypt_key"`
 	BaseDir              string `mapstructure:"base_dir"`
+	ContainerRuntime     string `mapstructure:"container_runtime"`
 	GpAgentSocketPath    string `mapstructure:"gp_agent_socket_path"`
 	GpcSocketPath        string `mapstructure:"gpc_socket_path"`
 	Mode                 string `mapstructure:"mode"`

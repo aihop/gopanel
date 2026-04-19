@@ -77,8 +77,6 @@ func initConfig() {
 
 	global.CONF.BaseDir = viper.GetString("base_dir")
 	global.CONF.SocketPath = viper.GetString("socket_path")
-	global.CONF.EnableCaddy = viper.GetBool("enable_caddy")
-	global.CONF.EnableDaemon = viper.GetBool("enable_daemon")
 
 	if global.CONF.BaseDir == "" {
 		panic(errors.New("base_dir is empty"))
@@ -89,6 +87,6 @@ func initConfig() {
 
 	global.CONF.RunDir = filepath.Join(global.CONF.BaseDir, "gp-agent", "run")
 	global.CONF.LogDir = filepath.Join(global.CONF.BaseDir, "gp-agent", "log")
-	global.CONF.ConfDir = filepath.Join(global.CONF.BaseDir, "gp-agent", "conf")
+	global.CONF.BackupDir = filepath.Join(global.CONF.BaseDir, "gp-agent", "backup")
 	global.CONF.StartedAt = time.Now()
 }

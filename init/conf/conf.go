@@ -6,6 +6,7 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/aihop/gopanel/cmd"
 	"github.com/aihop/gopanel/config"
@@ -101,6 +102,7 @@ func Init() {
 		base_dir = InitInstall.BaseDir
 	}
 	p.SetDefault("system.base_dir", base_dir)
+	p.SetDefault("system.container_runtime", "auto")
 	gpAgentSock := filepath.Join(base_dir, "gp-agent", "run", "gp-agent.sock")
 	p.SetDefault("system.gp_agent_socket_path", gpAgentSock)
 	gpcSock := "/run/gopanel/gpc.sock"
@@ -154,6 +156,7 @@ func Init() {
 func GlobalConfInit(v *viper.Viper) {
 	systemConfig := config.System{
 		BaseDir:            v.GetString("system.base_dir"),
+		ContainerRuntime:   v.GetString("system.container_runtime"),
 		GpAgentSocketPath:  v.GetString("system.gp_agent_socket_path"),
 		GpcSocketPath:      v.GetString("system.gpc_socket_path"),
 		Port:               v.GetString("system.port"),
@@ -209,6 +212,9 @@ func GlobalConfInit(v *viper.Viper) {
 		default:
 			global.CONF.System.GpcSocketPath = "/run/gopanel/gpc.sock"
 		}
+	}
+	if strings.TrimSpace(global.CONF.System.ContainerRuntime) == "" {
+		global.CONF.System.ContainerRuntime = "auto"
 	}
 	global.CONF.System.Cache = path.Join(global.CONF.System.BaseDir, "cache")
 	global.CONF.System.Backup = path.Join(global.CONF.System.BaseDir, "backup")

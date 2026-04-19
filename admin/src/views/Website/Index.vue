@@ -19,7 +19,7 @@
             {{ httpServerStatus ? "HTTP服务 运行中" : "HTTP服务 未启动" }}
           </div>
           <div class="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-500">
-            当前共管理 {{ siteSummary.total }} 个网站
+            当前共管理 {{ total }} 个网站
           </div>
         </div>
       </div>
@@ -146,7 +146,7 @@
 import type { Website } from "@/api/interface/website"
 import type { DataTableColumns } from "naive-ui"
 import { httpDefaultReloadAPI, httpDefaultStatusAPI, httpDefaultStopAPI } from "@/api/modules/http"
-import { DeleteWebsiteAPI, ListWebsitesAPI } from "@/api/modules/website"
+import { websiteDeleteAPI, websiteListAPI } from "@/api/modules/website"
 import { NButton, NSpace, NTag, useDialog, useMessage } from "naive-ui"
 import { computed, h, onMounted, ref, watch } from "vue"
 import { useRouter } from "vue-router"
@@ -156,7 +156,7 @@ import DeployHistory from "./components/DeployHistory.vue"
 import { formatTime } from "@/utils/date"
 import { t } from "@/i18n"
 
-const router = useRouter()
+ 
 const message = useMessage()
 const dialog = useDialog()
 const createRef = ref<InstanceType<typeof Create> | null>(null)
@@ -166,6 +166,7 @@ const httpServerStatus = ref(false)
 
 const loading = ref(false)
 const tableData = ref<Website.WebsiteDTO[]>([])
+const total = ref(0)
 
 const activeTab = ref("list")
 
@@ -406,8 +407,9 @@ const columns: DataTableColumns<any> = [
 async function fetchData() {
 	loading.value = true
 	try {
-		const res = await ListWebsitesAPI()
-		tableData.value = res.data || []
+		const res = await websiteListAPI()
+		tableData.value = res.data.items || []
+		total.value = res.data.total || 0
 	} catch (error: any) {
 	} finally {
 		loading.value = false
@@ -422,12 +424,11 @@ async function handleDelete(row: any) {
 		negativeText: "取消",
 		onPositiveClick: async () => {
 			try {
-				await DeleteWebsiteAPI({ id: row.id, deleteApp: false, deleteBackup: false, forceDelete: false })
+				await websiteDeleteAPI({ id: row.id, deleteApp: false, deleteBackup: false, forceDelete: false })
 				message.success("删除成功")
 				fetchData()
 			} catch (error) {
 				console.error(error)
-				message.error("删除失败, 请尝试从配置文件删除")
 			}
 		}
 	})

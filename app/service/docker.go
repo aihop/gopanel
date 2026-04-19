@@ -59,6 +59,12 @@ type logOption struct {
 }
 
 func (u *DockerService) LoadDockerStatus() string {
+	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
+		if err := docker.PodmanEnsureReady(context.Background()); err != nil {
+			return constant.Stopped
+		}
+		return constant.StatusRunning
+	}
 	client, err := docker.NewDockerClient()
 	if err != nil {
 		return constant.Stopped
@@ -78,6 +84,19 @@ func (u *DockerService) LoadDockerConf() *dto.DaemonJsonConf {
 	data.ContainerType = "docker"
 	data.Status = constant.Stopped
 	data.Version = "-"
+	resolved := docker.ResolveRuntime(ctx)
+	if resolved.Kind == docker.RuntimePodman {
+		data.ContainerType = "podman"
+		if runtime.GOOS == "darwin" {
+			if err := docker.PodmanEnsureReady(ctx); err == nil {
+				data.Status = constant.StatusRunning
+			}
+			if v, err := docker.PodmanVersion(ctx); err == nil && strings.TrimSpace(v) != "" {
+				data.Version = v
+			}
+		}
+		return &data
+	}
 	client, err := docker.NewDockerClient()
 	if err != nil {
 		data.Status = constant.Stopped
@@ -98,11 +117,6 @@ func (u *DockerService) LoadDockerConf() *dto.DaemonJsonConf {
 		}
 	}
 
-	resolved := docker.ResolveRuntime(ctx)
-	if resolved.Kind == docker.RuntimePodman {
-		data.ContainerType = "podman"
-		return &data
-	}
 	if runtime.GOOS != "linux" {
 		return &data
 	}

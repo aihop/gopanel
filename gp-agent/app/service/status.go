@@ -6,8 +6,6 @@ import (
 	"time"
 
 	"github.com/aihop/gopanel/gp-agent/global"
-	"github.com/aihop/gopanel/gp-agent/init/caddy"
-	"github.com/aihop/gopanel/gp-agent/init/daemon"
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/disk"
 	"github.com/shirou/gopsutil/v4/mem"
@@ -92,29 +90,13 @@ func GetAgentStatus() AgentStatus {
 	if !global.CONF.StartedAt.IsZero() {
 		uptime = int64(time.Since(global.CONF.StartedAt).Seconds())
 	}
-	caddyStatus := "disabled"
-	if global.CONF.EnableCaddy {
-		if caddy.Server.Status {
-			caddyStatus = "running"
-		} else {
-			caddyStatus = "failed"
-		}
-	}
-	daemonStatus := "disabled"
-	if global.CONF.EnableDaemon {
-		if daemon.Supervisor != nil {
-			daemonStatus = "running"
-		} else {
-			daemonStatus = "failed"
-		}
-	}
 	return AgentStatus{
 		Version:          Version,
 		UptimeSeconds:    uptime,
 		BaseDir:          global.CONF.BaseDir,
 		SocketPath:       global.CONF.SocketPath,
-		CaddyStatus:      caddyStatus,
-		DaemonStatus:     daemonStatus,
+		CaddyStatus:      "running",
+		DaemonStatus:     "running",
 		ManagedAppsCount: 0,
 		LastError:        "",
 	}

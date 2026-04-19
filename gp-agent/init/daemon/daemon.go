@@ -35,10 +35,7 @@ func Init() error {
 }
 
 func GetConfigFilePath() string {
-	confDir := global.CONF.ConfDir
-	if confDir == "" && global.CONF.BaseDir != "" {
-		confDir = filepath.Join(global.CONF.BaseDir, "gp-agent", "conf")
-	}
+	confDir := global.CONF.BaseDir
 	if confDir == "" {
 		confDir = "."
 	}
