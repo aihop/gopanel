@@ -73,6 +73,10 @@ func Command(ctx context.Context, args ...string) (*exec.Cmd, error) {
 	return c, nil
 }
 
+func ResolveCommand() (string, []string, error) {
+	return resolveComposeCommand()
+}
+
 func Exec(ctx context.Context, args ...string) (string, error) {
 	c, err := Command(ctx, args...)
 	if err != nil {

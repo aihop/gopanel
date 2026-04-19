@@ -1,11 +1,13 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -15,6 +17,7 @@ import (
 	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/utils/cmd"
 	"github.com/aihop/gopanel/utils/common"
+	udocker "github.com/aihop/gopanel/utils/docker"
 	"github.com/jinzhu/copier"
 )
 
@@ -85,7 +88,8 @@ func (u *ImageRepoService) Create(req dto.ImageRepoCreate) error {
 		return constant.ErrRecordExist
 	}
 
-	if req.Protocol == "http" {
+	resolved := udocker.ResolveRuntime(context.Background())
+	if req.Protocol == "http" && resolved.Kind == udocker.RuntimeDocker && runtime.GOOS == "linux" {
 		if err := u.handleRegistries(req.DownloadUrl, "", "create"); err != nil {
 			return fmt.Errorf("create registry %s failed, err: %v", req.DownloadUrl, err)
 		}
@@ -154,24 +158,25 @@ func (u *ImageRepoService) Update(req dto.ImageRepoUpdate) error {
 	if err != nil {
 		return err
 	}
-	if repo.Protocol == "http" && req.Protocol == "https" {
+	resolved := udocker.ResolveRuntime(context.Background())
+	if repo.Protocol == "http" && req.Protocol == "https" && resolved.Kind == udocker.RuntimeDocker && runtime.GOOS == "linux" {
 		if err := u.handleRegistries("", repo.DownloadUrl, "delete"); err != nil {
 			return fmt.Errorf("delete registry %s failed, err: %v", repo.DownloadUrl, err)
 		}
 	}
-	if repo.Protocol == "http" && req.Protocol == "http" {
+	if repo.Protocol == "http" && req.Protocol == "http" && resolved.Kind == udocker.RuntimeDocker && runtime.GOOS == "linux" {
 		if err := u.handleRegistries(req.DownloadUrl, repo.DownloadUrl, "update"); err != nil {
 			return fmt.Errorf("update registry %s => %s failed, err: %v", repo.DownloadUrl, req.DownloadUrl, err)
 		}
 	}
-	if repo.Protocol == "https" && req.Protocol == "http" {
+	if repo.Protocol == "https" && req.Protocol == "http" && resolved.Kind == udocker.RuntimeDocker && runtime.GOOS == "linux" {
 		if err := u.handleRegistries(req.DownloadUrl, "", "create"); err != nil {
 			return fmt.Errorf("create registry %s failed, err: %v", req.DownloadUrl, err)
 		}
 	}
 	if repo.Auth != req.Auth || repo.DownloadUrl != req.DownloadUrl {
 		if repo.Auth {
-			_, _ = cmd.ExecWithCheck("docker", "logout", repo.DownloadUrl)
+			_ = u.Logout(repo.DownloadUrl)
 		}
 		if req.Auth {
 			if err := u.CheckConn(req.DownloadUrl, req.Username, req.Password); err != nil {
@@ -180,11 +185,13 @@ func (u *ImageRepoService) Update(req dto.ImageRepoUpdate) error {
 		}
 	}
 
-	if err := validateDockerConfig(); err != nil {
-		return err
-	}
-	if err := restartDocker(); err != nil {
-		return err
+	if resolved.Kind == udocker.RuntimeDocker && runtime.GOOS == "linux" {
+		if err := validateDockerConfig(); err != nil {
+			return err
+		}
+		if err := restartDocker(); err != nil {
+			return err
+		}
 	}
 
 	upMap := make(map[string]interface{})
@@ -199,14 +206,58 @@ func (u *ImageRepoService) Update(req dto.ImageRepoUpdate) error {
 }
 
 func (u *ImageRepoService) CheckConn(host, user, password string) error {
-	stdout, err := cmd.ExecWithCheck("docker", "login", "-u", user, "-p", password, host)
-	if err != nil {
-		return fmt.Errorf("stdout: %s, stderr: %v", stdout, err)
+	host = strings.TrimSpace(host)
+	user = strings.TrimSpace(user)
+	if host == "" {
+		return errors.New("host is empty")
 	}
-	if strings.Contains(string(stdout), "Login Succeeded") {
+	if user == "" {
+		return errors.New("username is empty")
+	}
+
+	c, err := udocker.RuntimeCommand(context.Background(), "login", "-u", user, "--password-stdin", host)
+	if err != nil {
+		return err
+	}
+	c.Stdin = strings.NewReader(password + "\n")
+	var stdout, stderr bytes.Buffer
+	c.Stdout = &stdout
+	c.Stderr = &stderr
+	runErr := c.Run()
+	out := strings.TrimSpace(stdout.String() + "\n" + stderr.String())
+	if runErr != nil {
+		if out == "" {
+			return runErr
+		}
+		return errors.New(out)
+	}
+	if strings.Contains(strings.ToLower(out), "login succeeded") {
 		return nil
 	}
-	return errors.New(string(stdout))
+	if strings.TrimSpace(out) == "" {
+		return nil
+	}
+	return errors.New(out)
+}
+
+func (u *ImageRepoService) Logout(host string) error {
+	host = strings.TrimSpace(host)
+	if host == "" {
+		return nil
+	}
+	c, err := udocker.RuntimeCommand(context.Background(), "logout", host)
+	if err != nil {
+		return err
+	}
+	out, runErr := c.CombinedOutput()
+	if runErr != nil {
+		msg := strings.TrimSpace(string(out))
+		if msg == "" {
+			return runErr
+		}
+		return errors.New(msg)
+	}
+	return nil
 }
 
 func (u *ImageRepoService) handleRegistries(newHost, delHost, handle string) error {

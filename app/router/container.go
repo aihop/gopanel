@@ -75,6 +75,7 @@ func ContainerRouter(r fiber.Router) {
 		containerRouter.Post("/volume", api.CreateVolume)
 		// 配置
 		containerRouter.Get("/instance/status", api.LoadDockerStatus)
+		containerRouter.Get("/precheck", api.ContainerPrecheck)
 		containerRouter.Post("/instance/operate", api.OperateDocker)
 		// Docker 配置
 		containerRouter.Get("/daemon/config", api.LoadDaemonJson)
