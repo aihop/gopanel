@@ -161,8 +161,7 @@ import { formatTime } from "../utils/date"
 import { renderIcon } from "../utils"
 import { NIcon } from "naive-ui"
 import {
-	backupRecordSearchAPI,
-	backupRecordCountAPI,
+	backupRecordListAPI,
 	backupHandleAPI,
 	backupRecordSizeAPI,
 	backupRecordDeletesAPI,
@@ -340,8 +339,7 @@ const onSubmit = async () => {
 }
 
 const params = reactive({
-	listAPI: backupRecordSearchAPI,
-	countAPI: backupRecordCountAPI,
+	listAPI: backupRecordListAPI,
 	params: {
 		wheres: [
 			{

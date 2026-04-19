@@ -20,7 +20,7 @@ export async function DaemonReload(req?: any) {
 }
 
 /** 进程列表 */
-export async function DaemonProcessList() {
+export async function daemonProcessListAPI() {
 	return http.get(`/daemon/process/list`)
 }
 

@@ -55,10 +55,6 @@ func CaddyApply(ctx context.Context, params map[string]interface{}) (string, err
 			content = s
 		}
 	}
-	if content == "" {
-		return "", errors.New("invalid params: caddyfile is empty")
-	}
-
 	path := caddy.CaddyFilePath()
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return "", err
@@ -69,6 +65,14 @@ func CaddyApply(ctx context.Context, params map[string]interface{}) (string, err
 	_ = os.MkdirAll(backupDir, 0755)
 	backupPath := filepath.Join(backupDir, "Caddyfile."+time.Now().Format("20060102-150405.000000000"))
 	_ = os.WriteFile(backupPath, prev, 0644)
+
+	if content == "" {
+		_ = os.WriteFile(path, []byte(""), 0644)
+		if err := caddy.StartCaddyServer([]byte("")); err != nil {
+			return "", err
+		}
+		return "ok", nil
+	}
 
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 		return "", err

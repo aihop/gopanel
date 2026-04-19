@@ -35,12 +35,6 @@ var (
 func initFile() {
 	workDir, _ := os.Getwd()
 
-	// config 目录如果不存在，就创建这个目录
-	configDir := path.Join(workDir, "config")
-	if _, err := os.Stat(configDir); os.IsNotExist(err) {
-		_ = os.Mkdir(configDir, 0755)
-	}
-
 	// 读取项目根目录下的init.yaml文件
 	initFilePath := path.Join(workDir, "init.yaml")
 	// 如果文件存在，则解析文件映射到结构体
@@ -66,8 +60,8 @@ func Init() {
 	p := viper.New()
 	p.BindPFlags(pflag.CommandLine)
 	// system
-	base_dir := "/opt/gopanel" // ...existing code...
-	if runtime.GOOS == "linux" && os.Geteuid() != 0 {
+	base_dir := "/opt/gopanel"
+	if runtime.GOOS != "linux" || os.Geteuid() != 0 {
 		if homeDir, err := os.UserHomeDir(); err == nil && homeDir != "" {
 			base_dir = filepath.Join(homeDir, ".gopanel")
 		}
@@ -189,6 +183,14 @@ func GlobalConfInit(v *viper.Viper) {
 		homeDir, err := os.UserHomeDir()
 		if err == nil {
 			global.CONF.System.BaseDir = filepath.Join(homeDir, ".gopanel")
+		}
+	}
+	if (runtime.GOOS == "darwin" || runtime.GOOS == "windows") && strings.TrimSpace(global.CONF.System.BaseDir) != "" {
+		if strings.Contains(global.CONF.System.GpAgentSocketPath, "/opt/gopanel/") {
+			global.CONF.System.GpAgentSocketPath = path.Join(global.CONF.System.BaseDir, "gp-agent", "run", "gp-agent.sock")
+		}
+		if strings.Contains(global.CONF.System.GpcSocketPath, "/opt/gopanel/") {
+			global.CONF.System.GpcSocketPath = filepath.Join(global.CONF.System.BaseDir, "gpc.sock")
 		}
 	}
 	if global.CONF.System.GpAgentSocketPath == "" {

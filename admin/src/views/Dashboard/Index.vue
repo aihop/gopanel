@@ -194,7 +194,7 @@
 
 <script setup lang="ts">
 import type { App } from "@/api/interface/apps"
-import { appsSearchAPI } from "@/api/modules/apps"
+import { appsListAPI } from "@/api/modules/apps"
 import { loadBaseInfo, loadCurrentInfo } from "@/api/modules/dashboard"
 import { getIOOptions, getNetworkOptions } from "@/api/modules/host"
 import { computeSize, computeSizeFromKBs, dateFormatForSecond } from "@/utils/util"
@@ -438,7 +438,7 @@ async function onLoadIOOptions() {
 async function loadPopularApps() {
 	popularAppsLoading.value = true
 	try {
-		const res = await appsSearchAPI({
+		const res = await appsListAPI({
 			page: 1,
 			pageSize: 10,
 			recommend: true

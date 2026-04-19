@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -428,12 +427,14 @@ func (u *DockerService) OperateDocker(req dto.DockerOperation) error {
 		return u.operatePodman(req.Operation)
 	}
 
-	if !hasDockerSockPathSetting() && isPodmanInstalled() {
+	if (strings.TrimSpace(global.CONF.System.ContainerRuntime) == "" || strings.EqualFold(global.CONF.System.ContainerRuntime, "auto")) && !hasDockerSockPathSetting() && isPodmanInstalled() {
 		if err := u.operatePodman(req.Operation); err != nil {
 			return err
 		}
-		if host := podmanDefaultHost(); host != "" {
-			_ = repo.NewISettingRepo().UpdateOrCreate("DockerSockPath", host)
+		if runtime.GOOS == "linux" {
+			if host := podmanDefaultHost(); host != "" {
+				_ = repo.NewISettingRepo().UpdateOrCreate("DockerSockPath", host)
+			}
 		}
 		return nil
 	}
@@ -593,27 +594,6 @@ func podmanDefaultHost() string {
 			return "unix:///run/podman/podman.sock"
 		}
 		return "unix:///run/user/" + fmt.Sprintf("%d", os.Getuid()) + "/podman/podman.sock"
-	}
-	if runtime.GOOS == "darwin" {
-		out, err := cmd.Exec("podman machine inspect")
-		if err == nil && strings.TrimSpace(out) != "" {
-			type inspectItem struct {
-				ConnectionInfo struct {
-					PodmanSocket struct {
-						Path string `json:"Path"`
-					} `json:"PodmanSocket"`
-				} `json:"ConnectionInfo"`
-			}
-			var items []inspectItem
-			if e := json.Unmarshal([]byte(out), &items); e == nil {
-				for _, it := range items {
-					p := strings.TrimSpace(it.ConnectionInfo.PodmanSocket.Path)
-					if p != "" && filepath.IsAbs(p) {
-						return "unix://" + p
-					}
-				}
-			}
-		}
 	}
 	return ""
 }

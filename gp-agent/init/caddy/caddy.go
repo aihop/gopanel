@@ -73,8 +73,16 @@ func CaddyFilePath() string {
 }
 
 func StartCaddyServer(content []byte) error {
+	if len(strings.TrimSpace(string(content))) == 0 {
+		if err := caddy.Load([]byte(`{}`), true); err != nil {
+			Server.Status = false
+			return err
+		}
+		Server.Status = true
+		return nil
+	}
 	jsonConfig, err := CaddyFileToJSON(content)
-	if err != nil && len(content) > 0 {
+	if err != nil {
 		return err
 	}
 	if err := caddy.Load(jsonConfig, true); err != nil {

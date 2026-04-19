@@ -11,8 +11,7 @@ func BackupRouter(r fiber.Router) {
 	backupGroup := r.Group("/backup")
 	backupGroup.Use(middleware.JWT(constant.UserRoleAdmin))
 	{
-		backupGroup.Post("/record/search", api.BackupRecordSearch)
-		backupGroup.Post("/record/count", api.BackupRecordCount)
+		backupGroup.Post("/record/list", api.BackupRecordList)
 		backupGroup.Post("/record/size", api.BackupRecordSize)
 		backupGroup.Post("/record/deletes", api.BackupRecordDeletes)
 		backupGroup.Post("/record/download", api.BackupRecordDownload)

@@ -10,7 +10,7 @@ export const getSettingInfo = () => {
 }
 
 export const settingSystemBaseDirAPI = () => {
-	return http.post<string>(`/setting/system/baseDir`)
+	return http.post<string>(`/setting/system/base-dir`)
 }
 
 export const updateSetting = (param: Setting.SettingUpdate) => {
@@ -53,7 +53,7 @@ export const settingSystemClear = (param: { key: "log" | "tmp" | "cache" }) => {
 }
 
 export const settingSystemApiTokenUpdate = (params: { apiInterfaceStatus: string, apiKey: string }) => {
-	return http.post(`/setting/system/apiToken`, params)
+	return http.post(`/setting/system/api-token`, params)
 }
 
 export const settingSystemRestart = (operation: "panel" | "server" = "panel") => {

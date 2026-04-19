@@ -19,7 +19,7 @@ export interface AppsSearchParams {
 	recommend?: boolean
 }
 
-export const appsSearchAPI = (data: AppsSearchParams) => {
+export const appsListAPI = (data: AppsSearchParams) => {
 	return http.post("/apps/search", data)
 }
 
@@ -36,7 +36,7 @@ export const appsUninstall = (data: { containerName: string; deleteDir?: boolean
 }
 
 export const appsGetBaseDir = () => {
-	return http.get<any>("/apps/baseDir")
+	return http.get<any>("/apps/base-dir")
 }
 
  
@@ -84,11 +84,11 @@ export const ListAppInstalled = () => {
 }
 
 export const GetAppPort = (type: string, name: string) => {
-	return http.post<number>("/apps/installed/loadport", { type: type, name: name })
+	return http.post<number>("/apps/installed/load-port", { type: type, name: name })
 }
 
 export const GetAppConnInfo = (type: string, name: string) => {
-	return http.post<App.DatabaseConnInfo>("/apps/installed/conninfo", { type: type, name: name })
+	return http.post<App.DatabaseConnInfo>("/apps/installed/conn-info", { type: type, name: name })
 }
 
 export const CheckAppInstalled = (key: string, name: string) => {

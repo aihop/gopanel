@@ -16,8 +16,8 @@ import (
 // @Success 200 {object} response.AppRes
 // @Security ApiKeyAuth
 // @Security Timestamp
-// @Router /apps/search [GET]
-func AppsSearch(c fiber.Ctx) error {
+// @Router /apps/list [GET]
+func AppsList(c fiber.Ctx) error {
 	req, err := e.BodyToStruct[request.AppSearch](c.Body())
 	if err != nil {
 		return c.JSON(e.Fail(err))

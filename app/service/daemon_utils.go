@@ -157,13 +157,14 @@ type DaemonConfigManager struct {
 
 func NewDaemonConfigManager() *DaemonConfigManager {
 	return &DaemonConfigManager{
-		FilePath: global.CONF.System.ConfigSupervisorFile,
+		FilePath: filepath.Join(global.CONF.System.BaseDir, "supervisord.ini"),
 	}
 }
 
 // 从配置文件中读取并解析
 func (m *DaemonConfigManager) GetConfig() ([]*ProcCfg, error) {
 	file, err := os.Open(m.FilePath)
+	fmt.Println(m.FilePath, "m.FilePath")
 	if err != nil {
 		return nil, fmt.Errorf("failed to open config file: %v", err)
 	}

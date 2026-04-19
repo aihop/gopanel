@@ -37,7 +37,7 @@
 
 <script setup lang="ts">
 import { ref, watch, onMounted } from "vue"
-import { appsSearchAPI } from "@/api/modules/apps"
+import { appsListAPI } from "@/api/modules/apps"
 import type { AppsSearchParams } from "@/api/modules/apps"
 import { useMessage } from "naive-ui"
 import { useRouter } from "vue-router"
@@ -62,7 +62,7 @@ const fetchData = async () => {
 			pageSize: props.pageSize,
 			name: props.searchName.trim() || undefined
 		}
-		const res = await appsSearchAPI(params)
+		const res = await appsListAPI(params)
 		const data = res.data as any
 		if (res.code === 0 && data && Array.isArray(data.items)) {
 			apps.value = data.items

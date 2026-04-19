@@ -171,7 +171,7 @@ import {
 	DaemonStart,
 	DaemonStop,
 	DaemonReload,
-	DaemonProcessList,
+	daemonProcessListAPI,
 	DaemonProcessStart,
 	DaemonProcessStop,
 	DaemonProcessReload,
@@ -184,7 +184,7 @@ const stopConfirmInput = ref("")
 const deleteConfirmInput = ref("")
 
 const params = reactive({
-	listAPI: DaemonProcessList,
+	listAPI: daemonProcessListAPI,
 	params: {
 		wheres: []
 	}

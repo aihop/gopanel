@@ -5,14 +5,8 @@ import type { Backup } from "../interface/backup"
 export const backupRecordListAPI = (params: any) => {
 	return http.post(`/backup/record/list`, params)
 }
+ 
 
-export const backupRecordSearchAPI = (params: any) => {
-	return http.post(`/backup/record/search`, params)
-}
-
-export const backupRecordCountAPI = (params: any) => {
-	return http.post(`/backup/record/count`, params)
-}
 export const backupRecordDeletesAPI = (params: { ids: number[] }) => {
 	return http.post(`/backup/record/deletes`, params)
 }

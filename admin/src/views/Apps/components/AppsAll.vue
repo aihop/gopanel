@@ -401,7 +401,7 @@ import { ref, watch, reactive, nextTick } from "vue"
 import { MdPreview } from 'md-editor-v3'
 import 'md-editor-v3/lib/preview.css'
 // @ts-ignore
-import { appsSearchAPI, GetApp, InstallApp, GetAppDetail } from "@/api/modules/apps"
+import { appsListAPI, GetApp, InstallApp, GetAppDetail } from "@/api/modules/apps"
 import type { AppsSearchParams } from "@/api/modules/apps"
 import { useMessage } from "naive-ui"
 import { useRouter } from "vue-router"
@@ -467,7 +467,7 @@ const fetchData = async () => {
 			pageSize: props.pageSize,
 			name: props.searchName.trim() || undefined
 		}
-		const res = await appsSearchAPI(params)
+		const res = await appsListAPI(params)
 		const data = res.data as any
 		if (res.code === 0 && data && Array.isArray(data.items)) {
 			apps.value = data.items

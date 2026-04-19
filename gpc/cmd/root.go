@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"go.uber.org/zap"
 )
 
@@ -30,9 +29,8 @@ type Config struct {
 }
 
 var (
-	cfgFile string
-	cfg     Config
-	log     *zap.Logger
+	cfg Config
+	log *zap.Logger
 )
 
 var rootCmd = &cobra.Command{
@@ -70,26 +68,7 @@ func exitCodeFromErr(err error) int {
 func init() {
 	cobra.OnInitialize(initConfig, initLogger)
 
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file")
-	rootCmd.PersistentFlags().String("socket-path", "", "unix domain socket path (linux/macos)")
-	rootCmd.PersistentFlags().String("windows-pipe", "", "windows named pipe")
 	rootCmd.PersistentFlags().String("base-dir", "", "base dir (align with gopanel system.base_dir)")
-	rootCmd.PersistentFlags().String("gopanel-service-name", "", "gopanel service name/label")
-	rootCmd.PersistentFlags().String("gopanel-binary-path", "", "gopanel binary path (fallback mode)")
-	rootCmd.PersistentFlags().String("gopanel-config-path", "", "gopanel config path (for info)")
-	rootCmd.PersistentFlags().String("gopanel-pidfile-path", "", "gopanel pidfile path (fallback mode)")
-	rootCmd.PersistentFlags().Int("action-timeout-ms", 0, "action timeout in ms")
-	rootCmd.PersistentFlags().Int("lock-timeout-ms", 0, "lock timeout in ms")
-
-	_ = viper.BindPFlag("gpc.socket_path", rootCmd.PersistentFlags().Lookup("socket-path"))
-	_ = viper.BindPFlag("gpc.windows_pipe", rootCmd.PersistentFlags().Lookup("windows-pipe"))
-	_ = viper.BindPFlag("gpc.base_dir", rootCmd.PersistentFlags().Lookup("base-dir"))
-	_ = viper.BindPFlag("gpc.gopanel_service_name", rootCmd.PersistentFlags().Lookup("gopanel-service-name"))
-	_ = viper.BindPFlag("gpc.gopanel_binary_path", rootCmd.PersistentFlags().Lookup("gopanel-binary-path"))
-	_ = viper.BindPFlag("gpc.gopanel_config_path", rootCmd.PersistentFlags().Lookup("gopanel-config-path"))
-	_ = viper.BindPFlag("gpc.gopanel_pidfile_path", rootCmd.PersistentFlags().Lookup("gopanel-pidfile-path"))
-	_ = viper.BindPFlag("gpc.action_timeout_ms", rootCmd.PersistentFlags().Lookup("action-timeout-ms"))
-	_ = viper.BindPFlag("gpc.lock_timeout_ms", rootCmd.PersistentFlags().Lookup("lock-timeout-ms"))
 
 	rootCmd.AddCommand(statusCmd)
 	rootCmd.AddCommand(helperCmd)
@@ -107,50 +86,107 @@ func initLogger() {
 }
 
 func initConfig() {
-	viper.SetEnvPrefix("GPC")
-	viper.AutomaticEnv()
+	baseDir, _ := rootCmd.PersistentFlags().GetString("base-dir")
+	baseDir = filepath.Clean(strings.TrimSpace(baseDir))
+	if baseDir == "." || baseDir == string(os.PathSeparator) {
+		baseDir = ""
+	}
+	if baseDir == "" {
+		baseDir = strings.TrimSpace(os.Getenv("GOPANEL_BASE_DIR"))
+		if baseDir == "" {
+			baseDir = strings.TrimSpace(os.Getenv("GPC_BASE_DIR"))
+		}
+		if baseDir != "" {
+			baseDir = filepath.Clean(baseDir)
+		}
+	}
+	if baseDir == "" {
+		baseDir = detectBaseDir()
+	}
+	if baseDir == "" {
+		baseDir = "/opt/gopanel"
+		if runtime.GOOS != "linux" || os.Geteuid() != 0 {
+			if homeDir, err := os.UserHomeDir(); err == nil && homeDir != "" {
+				baseDir = filepath.Join(homeDir, ".gopanel")
+			}
+		}
+	}
+	cfg.BaseDir = baseDir
+	cfg.SocketPath = filepath.Join(baseDir, "gpc.sock")
+	cfg.WindowsPipe = `\\.\pipe\gopanel-gpc`
+	cfg.ActionTimeoutMs = 30000
+	cfg.LockTimeoutMs = 30000
+	cfg.FileRoots = []string{baseDir}
+	cfg.AllowRootFS = false
+	cfg.MaxFileReadBytes = int64(1048576)
+	cfg.MaxFileWriteBytes = int64(1048576)
 
-	defaultBaseDir := ""
-	homeDir, _ := os.UserHomeDir()
 	switch runtime.GOOS {
+	case "darwin":
+		cfg.GoPanelServiceName = "dev.gopanel.server"
 	case "windows":
-		if homeDir != "" {
-			defaultBaseDir = filepath.Join(homeDir, ".gopanel")
-		}
+		cfg.GoPanelServiceName = "GoPanel"
 	default:
-		if homeDir != "" {
-			defaultBaseDir = filepath.Join(homeDir, ".gopanel")
+		cfg.GoPanelServiceName = "gopanel.service"
+	}
+
+	cfg.GoPanelConfigPath = filepath.Join(baseDir, "conf.yaml")
+	cfg.GoPanelPidfilePath = filepath.Join(baseDir, "run", "gopanel.pid")
+}
+
+func detectBaseDir() string {
+	var candidates []string
+	if runtime.GOOS == "linux" {
+		candidates = append(candidates, "/opt/gopanel")
+	} else {
+		if homeDir, err := os.UserHomeDir(); err == nil && homeDir != "" {
+			candidates = append(candidates, filepath.Join(homeDir, ".gopanel"))
 		}
 	}
-
-	viper.SetDefault("gpc.socket_path", "/run/gopanel/gpc.sock")
-	if runtime.GOOS == "darwin" {
-		viper.SetDefault("gpc.socket_path", "/var/run/gopanel/gpc.sock")
+	if exe, err := os.Executable(); err == nil && exe != "" {
+		d := filepath.Dir(exe)
+		for i := 0; i < 4; i++ {
+			candidates = append(candidates, d)
+			nd := filepath.Dir(d)
+			if nd == d {
+				break
+			}
+			d = nd
+		}
 	}
-	viper.SetDefault("gpc.windows_pipe", `\\.\pipe\gopanel-gpc`)
-	viper.SetDefault("gpc.base_dir", defaultBaseDir)
-	viper.SetDefault("gpc.gopanel_service_name", "gopanel.service")
-	viper.SetDefault("gpc.action_timeout_ms", 30000)
-	viper.SetDefault("gpc.lock_timeout_ms", 30000)
-	viper.SetDefault("gpc.file_roots", []string{defaultBaseDir})
-	viper.SetDefault("gpc.allow_rootfs", false)
-	viper.SetDefault("gpc.max_file_read_bytes", int64(1048576))
-	viper.SetDefault("gpc.max_file_write_bytes", int64(1048576))
-
-	if cfgFile != "" {
-		viper.SetConfigFile(cfgFile)
-	} else if homeDir != "" {
-		viper.AddConfigPath(filepath.Join(homeDir, ".gpc"))
-		viper.SetConfigName("config")
-		viper.SetConfigType("yaml")
+	for _, c := range candidates {
+		c = filepath.Clean(strings.TrimSpace(c))
+		if c == "" {
+			continue
+		}
+		if isLikelyBaseDir(c) {
+			return c
+		}
 	}
+	return ""
+}
 
-	_ = viper.ReadInConfig()
-	_ = viper.Unmarshal(&cfg)
-
-	if cfg.GoPanelPidfilePath == "" && cfg.BaseDir != "" {
-		cfg.GoPanelPidfilePath = filepath.Join(cfg.BaseDir, "run", "gopanel.pid")
+func isLikelyBaseDir(dir string) bool {
+	if dir == "" {
+		return false
 	}
+	st, err := os.Stat(dir)
+	if err != nil || !st.IsDir() {
+		return false
+	}
+	if _, err := os.Stat(filepath.Join(dir, "db")); err == nil {
+		return true
+	}
+	if _, err := os.Stat(filepath.Join(dir, "gp-agent")); err == nil {
+		return true
+	}
+	if _, err := os.Stat(filepath.Join(dir, "conf.yaml")); err == nil {
+		return true
+	}
+	if _, err := os.Stat(filepath.Join(dir, "conf.yml")); err == nil {
+		return true
+	}
+	return false
 }
 
 func actionTimeout() time.Duration {

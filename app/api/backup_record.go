@@ -8,7 +8,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
-func BackupRecordSearch(c fiber.Ctx) error {
+func BackupRecordList(c fiber.Ctx) error {
 	R, err := e.BodyToContext(c.Body())
 	if err != nil {
 		return c.JSON(e.Result(err))
@@ -17,19 +17,12 @@ func BackupRecordSearch(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Result(err))
 	}
-	return c.JSON(e.Succ(data))
-}
+	total, _ := service.NewBackupRecord().CountByWhere(&R)
 
-func BackupRecordCount(c fiber.Ctx) error {
-	R, err := e.BodyToWhere(c.Body())
-	if err != nil {
-		return c.JSON(e.Result(err))
-	}
-	data, err := service.NewBackupRecord().CountByWhere(&R)
-	if err != nil {
-		return c.JSON(e.Result(err))
-	}
-	return c.JSON(e.Succ(data))
+	return c.JSON(e.Succ(dto.PageResult{
+		Items: data,
+		Total: total,
+	}))
 }
 
 func BackupRecordSize(c fiber.Ctx) error {

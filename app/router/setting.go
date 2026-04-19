@@ -27,8 +27,8 @@ func SettingRouter(r fiber.Router) {
 		settingGroup.Post("/system/entrance", api.SettingSystemEntrance)
 
 		settingGroup.Post("/system/clear", api.SettingSystemClearDir)
-		settingGroup.Post("/system/baseDir", api.SettingSystemBaseDir)
-		settingGroup.Post("/system/apiToken", api.SettingSystemApiTokenUpdate)
+		settingGroup.Post("/system/base-dir", api.SettingSystemBaseDir)
+		settingGroup.Post("/system/api-token", api.SettingSystemApiTokenUpdate)
 
 	}
 }

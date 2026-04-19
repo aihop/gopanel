@@ -13,6 +13,23 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
+type ProcessInfo struct {
+	Name          string `xml:"name" json:"name"`
+	Group         string `xml:"group" json:"group"`
+	Description   string `xml:"description" json:"description"`
+	Start         int    `xml:"start" json:"start"`
+	Stop          int    `xml:"stop" json:"stop"`
+	Now           int    `xml:"now" json:"now"`
+	State         int    `xml:"state" json:"state"`
+	Statename     string `xml:"statename" json:"statename"`
+	Spawnerr      string `xml:"spawnerr" json:"spawnerr"`
+	Exitstatus    int    `xml:"exitstatus" json:"exitstatus"`
+	Logfile       string `xml:"logfile" json:"logfile"`
+	StdoutLogfile string `xml:"stdout_logfile" json:"stdout_logfile"`
+	StderrLogfile string `xml:"stderr_logfile" json:"stderr_logfile"`
+	Pid           int    `xml:"pid" json:"pid"`
+}
+
 func DaemonStatus(c fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -76,11 +93,38 @@ func DaemonListProcess(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	var out any
-	if err := json.Unmarshal([]byte(resp.Output), &out); err != nil {
+	var replys []ProcessInfo
+	if err := json.Unmarshal([]byte(resp.Output), &replys); err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	return c.JSON(e.Succ(out))
+
+	// 获取配置
+	daemonService := service.NewDaemonConfigManager()
+	configs, err := daemonService.GetConfig()
+
+	// 创建配置名称的快速查找映射
+	configMap := make(map[string]*service.ProcCfg)
+	for _, cfg := range configs {
+		configMap[cfg.Name] = cfg
+	}
+
+	// 创建新的结果结构
+	type ProcessInfoWithConfig struct {
+		ProcessInfo
+		Config *service.ProcCfg `json:"config,omitempty"`
+	}
+
+	result := make([]ProcessInfoWithConfig, len(replys))
+
+	// 为每个进程信息添加配置
+	for i, process := range replys {
+		result[i] = ProcessInfoWithConfig{
+			ProcessInfo: process,
+			Config:      configMap[process.Name],
+		}
+	}
+
+	return c.JSON(e.Succ(result))
 }
 
 func DaemonStartProcess(c fiber.Ctx) error {
