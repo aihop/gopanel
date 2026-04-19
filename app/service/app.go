@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"gopkg.in/yaml.v3"
@@ -516,6 +517,7 @@ func (a AppService) Install(ctx context.Context, req request.AppInstallCreate) (
 	go updateToolApp(appInstall)
 	return
 }
+
 func upApp(appInstall *model.AppInstall, pullImages bool, logger *AppInstallLogger) error {
 	upProject := func(appInstall *model.AppInstall) (err error) {
 		var (
@@ -534,7 +536,11 @@ func upApp(appInstall *model.AppInstall, pullImages bool, logger *AppInstallLogg
 
 		if pullImages {
 			logger.Info("Executing compose pull...")
-			out, err = compose.Pull(appInstall.GetComposePath())
+			pullCtx, cancel := context.WithTimeout(context.Background(), 60*time.Minute)
+			defer cancel()
+			out, err = compose.ExecStream(pullCtx, func(line string) {
+				logger.Info("%s", line)
+			}, "-f", appInstall.GetComposePath(), "pull")
 			if err != nil {
 				msg := strings.ToLower(out + " " + err.Error())
 				if strings.Contains(msg, "no such host") {
@@ -550,7 +556,7 @@ func upApp(appInstall *model.AppInstall, pullImages bool, logger *AppInstallLogg
 				logger.Error("Image pull failed: %s", appInstall.Message)
 				return err
 			}
-			logger.Info("Compose pull completed. Output: %s", out)
+			logger.Info("Compose pull completed.")
 		}
 
 		logger.Info("Executing docker-compose up -d...")
@@ -584,6 +590,7 @@ func upApp(appInstall *model.AppInstall, pullImages bool, logger *AppInstallLogg
 	}
 	return runErr
 }
+
 func RequestDownloadCallBack(downloadCallBackUrl string) {
 	if downloadCallBackUrl == "" {
 		return
