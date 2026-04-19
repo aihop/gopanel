@@ -186,6 +186,10 @@ export const loadDaemonFile = () => {
 export const loadInstanceStatus = () => {
 	return http.get<string>(`/container/instance/status`)
 }
+
+export const containerPrecheck = () => {
+	return http.get<any>(`/container/precheck`)
+}
 export const updateDaemonUpdate = (key: string, value: string) => {
 	return http.post(`/container/daemon/update`, { key: key, value: value }, TimeoutEnum.T_60S)
 }
