@@ -195,6 +195,10 @@ func (s *AppInstallService) Uninstall(req AppUninstall) error {
 			if err = s.Delete(appInstall.ID); err != nil {
 				return err
 			}
+			if req.DeleteDir {
+				files.NewFileOp().DeleteDir(appInstall.GetPath())
+			}
+			RemoveAppInstallLogger(appInstall.Name)
 		}
 		return err
 	}

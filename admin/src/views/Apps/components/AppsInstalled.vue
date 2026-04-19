@@ -1,98 +1,133 @@
 <template>
-  <div>
-    <div class="apps-card-list">
-      <n-card
-        v-for="item in apps"
-        :key="item.id"
-        class="app-card"
+  <div class="w-full">
+    <n-spin :show="loading">
+      <div
+        v-if="apps.length"
+        class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3"
       >
-        <template #header>
-          <img
-            v-if="item.app?.icon"
-            :src="item.app.icon"
-            alt="icon"
-            class="mr-2 h-8 w-8 align-middle"
-          />
-          <span
-            class="item-name cursor-pointer text-primary hover:underline"
-            @click="showDrawer(item)"
-            style="margin-right: 8px"
-          >
-            {{ item.name }}
-          </span>
-          <n-tag
-            v-if="item.status"
-            :type="statusType(item.status)"
-          >
-            {{ statusLabel(item.status) }}
-          </n-tag>
-        </template>
+        <div
+          v-for="item in apps"
+          :key="item.id"
+          class="relative overflow-hidden rounded-2xl border border-slate-200/80 bg-gradient-to-b from-white to-slate-50/80 p-5 shadow-sm transition hover:-translate-y-1 hover:border-blue-200/60 hover:shadow-md"
+        >
+          <div class="pointer-events-none absolute -top-10 -right-8 h-28 w-28 rounded-full bg-blue-500/10 blur-2xl"></div>
 
-        <template #header-extra>
-          <n-button-group>
-            <!-- <n-button secondary size="small" disabled>导入备份</n-button>
-					<n-button secondary size="small" disabled>备份</n-button> -->
-          </n-button-group>
-        </template>
+          <div class="flex items-start justify-between gap-3">
+            <div class="flex min-w-0 flex-1 items-start gap-3">
+              <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-blue-100 bg-blue-50/70">
+                <img
+                  v-if="item.app?.icon"
+                  :src="item.app.icon"
+                  alt="icon"
+                  class="h-8 w-8 object-contain"
+                />
+                <span
+                  v-else
+                  class="text-base font-bold text-blue-600"
+                >{{ item.name?.slice(0, 1)?.toUpperCase() }}</span>
+              </div>
 
-        <div class="flex flex-wrap gap-4">
-          <n-tag size="small">版本：{{ item.version }}</n-tag>
-          <n-tag
-            v-if="item.httpPort"
-            size="small"
-          >服务端口：{{ item.httpPort }}</n-tag>
-          <n-tag
-            v-if="item.httpsPort"
-            size="small"
-          >服务端口(https)：{{ item.httpsPort }}</n-tag>
-        </div>
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2">
+                  <div
+                    class="truncate text-base font-semibold text-slate-900 hover:underline"
+                    @click="showDrawer(item)"
+                  >{{ item.name }}</div>
+                  <n-tag
+                    v-if="item.status"
+                    :type="statusType(item.status)"
+                    size="small"
+                    round
+                  >{{ statusLabel(item.status) }}</n-tag>
+                  <n-button
+                    v-if="canCancelInstall(item)"
+                    tertiary
+                    type="error"
+                    size="tiny"
+                    @click="cancelInstall(item)"
+                  >取消安装</n-button>
+                </div>
+                <div class="mt-1 truncate text-sm text-slate-500">容器名：{{ item.containerName || "-" }}</div>
+              </div>
+            </div>
 
-        <div style="margin-top: 15px">
-          <p>容器名：{{ item.containerName }}</p>
-          <p>安装日期：{{ item.createdAt }}</p>
-          <p v-if="item.description">描述：{{ item.description }}</p>
-        </div>
-
-        <template #footer>
-          <div class="item-footer">
-            <n-button-group>
-              <n-button
-                size="small"
-                round
-                @click="handleOperate(item, 'start')"
-                :disabled="disableStart(item)"
-              >启动</n-button>
-              <n-button
-                size="small"
-                @click="handleOperate(item, 'stop')"
-                :disabled="disableStop(item)"
-              >停止</n-button>
-              <n-button
-                size="small"
-                @click="handleOperate(item, 'restart')"
-                :disabled="disableRestart(item)"
-              >重启</n-button>
-              <n-button
-                size="small"
-                @click="handleRebuild(item)"
-                :disabled="disableRebuild(item)"
-              >重建</n-button>
-              <n-button
-                size="small"
-                @click="openLog(item)"
-              >日志</n-button>
-              <n-button
-                size="small"
-                round
-                @click="openDeleteModal(item)"
-                :disabled="disableUninstall(item)"
-              >卸载</n-button>
-              <!-- <n-button size="small" round>参数</n-button> -->
-            </n-button-group>
           </div>
-        </template>
-      </n-card>
-    </div>
+
+          <p
+            class="mt-4 line-clamp-3 min-h-[3.5rem] text-sm leading-6 text-slate-600"
+            v-if="item.description"
+          >
+            {{ item.description   }}
+          </p>
+
+          <div class="mt-4 grid grid-cols-2 gap-2">
+            <div class="rounded-xl border border-slate-200/70 bg-white/70 p-3">
+              <div class="text-xs text-slate-400">版本</div>
+              <div class="mt-1 break-words text-sm font-semibold text-slate-800">{{ item.version || "-" }}</div>
+            </div>
+            <div class="rounded-xl border border-slate-200/70 bg-white/70 p-3">
+              <div class="text-xs text-slate-400">安装时间</div>
+              <div class="mt-1 break-words text-sm font-semibold text-slate-800">{{ item.createdAt || "-" }}</div>
+            </div>
+            <div class="rounded-xl border border-slate-200/70 bg-white/70 p-3">
+              <div class="text-xs text-slate-400">HTTP 端口</div>
+              <div class="mt-1 break-words text-sm font-semibold text-slate-800">{{ item.httpPort || "-" }}</div>
+            </div>
+            <div class="rounded-xl border border-slate-200/70 bg-white/70 p-3">
+              <div class="text-xs text-slate-400">HTTPS 端口</div>
+              <div class="mt-1 break-words text-sm font-semibold text-slate-800">{{ item.httpsPort || "-" }}</div>
+            </div>
+          </div>
+
+          <div class="mt-4 flex flex-wrap items-center justify-end gap-2">
+            <n-button
+              secondary
+              size="small"
+              @click="openLog(item)"
+            >日志</n-button>
+            <n-button
+              secondary
+              size="small"
+              :disabled="disableStart(item)"
+              @click="handleOperate(item, 'start')"
+            >启动</n-button>
+            <n-button
+              secondary
+              size="small"
+              :disabled="disableStop(item)"
+              @click="handleOperate(item, 'stop')"
+            >停止</n-button>
+            <n-button
+              secondary
+              size="small"
+              :disabled="disableRestart(item)"
+              @click="handleOperate(item, 'restart')"
+            >重启</n-button>
+            <n-button
+              secondary
+              type="warning"
+              size="small"
+              :disabled="disableRebuild(item)"
+              @click="handleRebuild(item)"
+            >重建</n-button>
+            <n-button
+              secondary
+              type="error"
+              size="small"
+              :disabled="disableUninstall(item)"
+              @click="openDeleteModal(item)"
+            >卸载</n-button>
+          </div>
+        </div>
+      </div>
+
+      <div
+        v-else
+        class="py-16 text-center text-sm text-slate-400"
+      >
+        暂无已安装应用
+      </div>
+    </n-spin>
 
     <n-drawer
       :show="drawerVisible"
@@ -154,13 +189,18 @@
       @update:show="logModalVisible = $event"
       preset="card"
       :title="logTitle"
-      style="width: 80vw; max-width: 900px"
+      style="width: 800px"
       @after-leave="handleLogModalClose"
     >
+      <div class="mb-3 text-xs text-slate-500">实时输出，关闭窗口将断开连接</div>
       <div
         ref="terminalRef"
-        style="max-height: 60vh; overflow: auto; white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;"
+        class="max-h-[60vh] overflow-auto whitespace-pre-wrap rounded-lg bg-slate-950 p-3 font-mono text-xs text-slate-100"
       >
+        <div
+          v-if="logsData.length === 0"
+          class="text-slate-400"
+        >暂无日志输出</div>
         <div
           v-for="(line, idx) in logsData"
           :key="idx"
@@ -296,7 +336,37 @@ function disableRebuild(item: any) {
 }
 
 function disableUninstall(_item: any) {
-	return false
+	return isBusy(_item)
+}
+
+function canCancelInstall(item: any) {
+	return item?.status === "Installing"
+}
+
+async function cancelInstall(item: any) {
+	if (!item?.id) return
+	dialog.warning({
+		title: "取消安装确认",
+		content: `确定要取消安装应用 ${item.name} 吗？这将删除安装记录，并清理安装目录。`,
+		positiveText: "确定",
+		negativeText: "取消",
+		onPositiveClick: async () => {
+			const loadingMsg = message.loading("取消安装中...", { duration: 0 })
+			try {
+				const res = await InstalledOp({ installId: item.id, operate: "delete", forceDelete: true } as any)
+				if (res.code === 0) {
+					message.success("已取消安装")
+					fetchData()
+				} else {
+					message.error(res.msg || "取消安装失败")
+				}
+			} catch (e) {
+				message.error("取消安装异常")
+			} finally {
+				loadingMsg.destroy()
+			}
+		}
+	})
 }
 
 async function handleOperate(item: any, operation: string) {
@@ -369,7 +439,7 @@ function openLog(item: any) {
 	logConfig.name = item?.name || ""
 	logModalVisible.value = true
 	logsData.value = []
-	const token = (authStore as any).getAuth?.() || authStore.auth || ""
+	const token = authStore.auth || ""
 	const apiUrl = "/api"
 	if (logEventSource) {
 		logEventSource.close()
@@ -379,7 +449,7 @@ function openLog(item: any) {
 		logsData.value.push("[系统提示] 缺少日志名称或登录状态无效")
 		return
 	}
-	logEventSource = new EventSource(`${apiUrl}/apps/install/${encodeURIComponent(logConfig.name)}/logs?token=${encodeURIComponent(token)}&tail=true`)
+	logEventSource = new EventSource(`${apiUrl}/apps/install/${encodeURIComponent(logConfig.name)}/logs?token=${encodeURIComponent(token)}`)
 	logEventSource.onmessage = (event) => {
 		if (event.data === "ping") return
 		if (event.data === "EOF" || event.data === '["EOF"]') {
@@ -447,26 +517,3 @@ async function handleDeleteCompose() {
 	}
 }
 </script>
-
-<style scoped>
-.apps-card-list {
-	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(500px, 1fr));
-	gap: 16px;
-}
-.app-card {
-	min-width: 450px;
-	margin-bottom: 16px;
-}
-.item-name {
-	cursor: pointer;
-	color: #18a058;
-}
-.item-footer {
-	border-top: 1px solid rgb(240 240 240);
-	padding-top: 15px;
-	display: flex;
-	justify-content: space-between;
-	flex-direction: row;
-}
-</style>
