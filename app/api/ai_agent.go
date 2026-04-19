@@ -1,12 +1,12 @@
 package api
 
 import (
+	"context"
 	"crypto/md5"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -18,6 +18,7 @@ import (
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/pkg/websocket"
+	"github.com/aihop/gopanel/utils/docker"
 	"github.com/aihop/gopanel/utils/token"
 	"github.com/creack/pty"
 )
@@ -119,10 +120,14 @@ func AIAgentWsSSH(wsConn *websocket.Conn) {
 	containerName := fmt.Sprintf("cx_agent_%x", md5.Sum([]byte(workDir)))
 
 	// 检查该容器是否存在且正在运行
-	inspectCmd := exec.Command("docker", "inspect", "-f", "{{.State.Running}}", containerName)
-	inspectOut, err := inspectCmd.Output()
-
+	isRunning, exists, err := docker.InspectContainerRunning(context.Background(), containerName)
 	if err != nil {
+		global.LOG.Errorf("Failed to inspect workspace container %s: %v", containerName, err)
+		_ = wsConn.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("检查持久化沙箱失败: %s\r\n", err.Error())))
+		return
+	}
+
+	if !exists {
 		// 容器不存在，需要新建一个后台守护容器 (Daemon)
 		// 注意这里使用 -d (后台运行) 且没有 --rm，最后执行 tail -f /dev/null 保证它永远不退出
 		runArgs := []string{
@@ -212,7 +217,12 @@ TRAE_EOF
 
 		runArgs = append(runArgs, dockerImage, "sh", "-c", daemonCmd)
 
-		if output, err := exec.Command("docker", runArgs...).CombinedOutput(); err != nil {
+		runCmd, cerr := docker.RuntimeCommand(context.Background(), runArgs...)
+		if cerr != nil {
+			_ = wsConn.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("创建持久化沙箱失败: %s\r\n", cerr.Error())))
+			return
+		}
+		if output, err := runCmd.CombinedOutput(); err != nil {
 			global.LOG.Errorf("Failed to create workspace container %s: %v", containerName, err)
 			message := fmt.Sprintf("创建持久化沙箱失败: %s\r\n", formatExecOutput(output, err.Error()))
 			_ = wsConn.WriteMessage(websocket.TextMessage, []byte(message))
@@ -220,10 +230,14 @@ TRAE_EOF
 		}
 	} else {
 		// 容器存在，检查是否停机
-		isRunning := strings.TrimSpace(string(inspectOut)) == "true"
 		if !isRunning {
 			// 如果容器停机了（如服务器重启过），唤醒它
-			if output, err := exec.Command("docker", "start", containerName).CombinedOutput(); err != nil {
+			startCmd, cerr := docker.RuntimeCommand(context.Background(), "start", containerName)
+			if cerr != nil {
+				_ = wsConn.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("唤醒持久化沙箱失败: %s\r\n", cerr.Error())))
+				return
+			}
+			if output, err := startCmd.CombinedOutput(); err != nil {
 				global.LOG.Errorf("Failed to start workspace container %s: %v", containerName, err)
 				message := fmt.Sprintf("唤醒持久化沙箱失败: %s\r\n", formatExecOutput(output, err.Error()))
 				_ = wsConn.WriteMessage(websocket.TextMessage, []byte(message))
@@ -252,7 +266,7 @@ TRAE_EOF
 	}
 
 	execArgs := []string{
-		"docker", "exec", "-it",
+		"exec", "-it",
 		"-e", "TERM=xterm-256color",
 		"-e", "COLORTERM=truecolor",
 		"-e", fmt.Sprintf("COLUMNS=%d", cols),
@@ -261,7 +275,12 @@ TRAE_EOF
 		"sh", "-c", welcomeCmd + " /bin/sh",
 	}
 
-	cmd := exec.Command(execArgs[0], execArgs[1:]...)
+	cmd, err := docker.RuntimeCommand(context.Background(), execArgs...)
+	if err != nil {
+		global.LOG.Errorf("Failed to create exec command: %v", err)
+		_ = wsConn.WriteMessage(websocket.TextMessage, []byte("Failed to start AI Agent terminal."))
+		return
+	}
 
 	// 3. 启动 PTY (伪终端)
 	ptmx, err := pty.StartWithSize(cmd, &pty.Winsize{
@@ -458,10 +477,7 @@ TRAE_EOF
 
 							go func(input string, task *model.AITask) {
 								// 使用 docker exec -i (不带 -t，因为这里只是捕获纯文本输出)
-								cmdArgs := []string{
-									"docker", "exec", "-i", containerName,
-									"sh", "-c",
-								}
+								cmdArgs := []string{"exec", "-i", containerName, "sh", "-c"}
 
 								// 构造执行逻辑：先检查工具是否存在，存在则执行，不存在则友好提示
 								// 注意：这里使用的是单次运行模式 (One-shot)
@@ -478,7 +494,19 @@ TRAE_EOF
 
 								cmdArgs = append(cmdArgs, shellCmd)
 
-								execCmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
+								execCmd, err := docker.RuntimeCommand(context.Background(), cmdArgs...)
+								if err != nil {
+									out := []byte(fmt.Sprintf("执行错误: %v", err))
+									if task != nil {
+										_ = aiRepo.CreateMessage(&model.AIMessage{
+											TaskID:  task.ID,
+											Role:    "agent",
+											Content: string(out),
+										})
+									}
+									sendWsMsg(string(out) + "\r\n\033[32m[AI Agent] > \033[0m")
+									return
+								}
 								out, err := execCmd.CombinedOutput()
 
 								// 将输出流式（或一次性）推回给前端终端

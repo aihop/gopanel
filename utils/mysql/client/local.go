@@ -14,6 +14,7 @@ import (
 
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
+	"github.com/aihop/gopanel/utils/docker"
 	"github.com/aihop/gopanel/utils/files"
 )
 
@@ -233,7 +234,10 @@ func (r *Local) Backup(info BackupInfo) error {
 		dumpCmd = "mariadb-dump"
 	}
 	global.LOG.Infof("start to %s | gzip > %s.gzip", dumpCmd, info.TargetDir+"/"+info.FileName)
-	cmd := exec.Command("docker", "exec", r.ContainerName, dumpCmd, "--routines", "-uroot", "-p"+r.Password, "--default-character-set="+info.Format, info.Name)
+	cmd, err := docker.RuntimeCommand(context.Background(), "exec", r.ContainerName, dumpCmd, "--routines", "-uroot", "-p"+r.Password, "--default-character-set="+info.Format, info.Name)
+	if err != nil {
+		return err
+	}
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 
@@ -252,7 +256,10 @@ func (r *Local) Backup(info BackupInfo) error {
 func (r *Local) Recover(info RecoverInfo) error {
 	fi, _ := os.Open(info.SourceFile)
 	defer fi.Close()
-	cmd := exec.Command("docker", "exec", "-i", r.ContainerName, r.Type, "-uroot", "-p"+r.Password, "--default-character-set="+info.Format, info.Name)
+	cmd, err := docker.RuntimeCommand(context.Background(), "exec", "-i", r.ContainerName, r.Type, "-uroot", "-p"+r.Password, "--default-character-set="+info.Format, info.Name)
+	if err != nil {
+		return err
+	}
 	if strings.HasSuffix(info.SourceFile, ".gz") {
 		gzipFile, err := os.Open(info.SourceFile)
 		if err != nil {
@@ -350,7 +357,10 @@ func (r *Local) ExecSQL(command string, timeout uint) error {
 	itemCommand = append(itemCommand, command)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "docker", itemCommand...)
+	cmd, err := docker.RuntimeCommand(ctx, itemCommand...)
+	if err != nil {
+		return err
+	}
 	stdout, err := cmd.CombinedOutput()
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		return errors.New(constant.ErrExecTimeOut)
@@ -367,7 +377,10 @@ func (r *Local) ExecSQLForRows(command string, timeout uint) ([]string, error) {
 	itemCommand = append(itemCommand, command)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "docker", itemCommand...)
+	cmd, err := docker.RuntimeCommand(ctx, itemCommand...)
+	if err != nil {
+		return nil, err
+	}
 	stdout, err := cmd.CombinedOutput()
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		return nil, errors.New(constant.ErrExecTimeOut)

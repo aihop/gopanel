@@ -547,6 +547,11 @@ func upApp(appInstall *model.AppInstall, pullImages bool, logger *AppInstallLogg
 		if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
 			_ = docker.PodmanEnsureReady(context.Background())
 		}
+		if nerr := ensureExternalNetworks(string(composeContent)); nerr != nil {
+			logger.Error("Ensure external networks failed: %s", nerr.Error())
+			appInstall.Message = nerr.Error()
+			return nerr
+		}
 
 		if pullImages {
 			logger.Info("Executing compose pull...")
@@ -609,6 +614,58 @@ func upApp(appInstall *model.AppInstall, pullImages bool, logger *AppInstallLogg
 }
 
 var composeVarRe = regexp.MustCompile(`\\$\\{([^}]+)\\}`)
+
+func ensureExternalNetworks(composeYml string) error {
+	composeMap := make(map[string]interface{})
+	if err := yaml.Unmarshal([]byte(composeYml), &composeMap); err != nil {
+		return err
+	}
+	netsAny, ok := composeMap["networks"]
+	if !ok || netsAny == nil {
+		return nil
+	}
+	nets, ok := netsAny.(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	for k, v := range nets {
+		name := strings.TrimSpace(k)
+		external := false
+		if m, ok := v.(map[string]interface{}); ok {
+			if ex, ok := m["external"]; ok {
+				switch x := ex.(type) {
+				case bool:
+					external = x
+				case map[string]interface{}:
+					external = true
+					if n, ok := x["name"]; ok {
+						if s := strings.TrimSpace(fmt.Sprint(n)); s != "" {
+							name = s
+						}
+					}
+				default:
+					if strings.EqualFold(strings.TrimSpace(fmt.Sprint(ex)), "true") {
+						external = true
+					}
+				}
+			}
+			if external {
+				if exName, ok := m["name"]; ok {
+					if s := strings.TrimSpace(fmt.Sprint(exName)); s != "" {
+						name = s
+					}
+				}
+			}
+		}
+		if !external {
+			continue
+		}
+		if err := docker.EnsureNetwork(name); err != nil {
+			return fmt.Errorf("external network %s not available: %w", name, err)
+		}
+	}
+	return nil
+}
 
 func validateComposeEnvForPortsVolumes(composeYml string, envText string) error {
 	envMap := parseDotEnv(envText)

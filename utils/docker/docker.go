@@ -517,6 +517,39 @@ func CreateDefaultDockerNetwork() error {
 	return nil
 }
 
+func EnsureNetwork(name string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil
+	}
+	resolved := ResolveRuntime(context.Background())
+	if resolved.Kind == RuntimePodman {
+		if err := ensurePodmanNetwork(name); err == nil {
+			return nil
+		} else {
+			cli, cerr := NewClient()
+			if cerr == nil {
+				defer cli.Close()
+				if !cli.NetworkExist(name) {
+					if nerr := cli.CreateNetwork(name); nerr == nil {
+						return nil
+					}
+				}
+			}
+			return err
+		}
+	}
+	cli, err := NewClient()
+	if err != nil {
+		return err
+	}
+	defer cli.Close()
+	if !cli.NetworkExist(name) {
+		return cli.CreateNetwork(name)
+	}
+	return nil
+}
+
 func ensurePodmanNetwork(name string) error {
 	if _, err := exec.LookPath("podman"); err != nil {
 		return err

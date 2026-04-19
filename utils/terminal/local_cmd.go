@@ -1,6 +1,7 @@
 package terminal
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/aihop/gopanel/global"
+	"github.com/aihop/gopanel/utils/docker"
 	"github.com/creack/pty"
 )
 
@@ -25,7 +27,11 @@ type LocalCommand struct {
 }
 
 func NewCommand(initCmd []string) (*LocalCommand, error) {
-	cmd := exec.Command("docker", initCmd...)
+	c, err := docker.RuntimeCommand(context.Background(), initCmd...)
+	if err != nil {
+		return nil, err
+	}
+	cmd := c
 	if term := os.Getenv("TERM"); term != "" {
 		cmd.Env = append(os.Environ(), "TERM="+term)
 	} else {

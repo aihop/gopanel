@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/aihop/gopanel/constant"
+	udocker "github.com/aihop/gopanel/utils/docker"
 	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/utils/files"
 	"github.com/docker/docker/api/types/image"
@@ -301,7 +302,10 @@ func (r *Remote) Backup(info BackupInfo) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(info.Timeout)*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "docker", cmdArgs...)
+	cmd, err := udocker.RuntimeCommand(ctx, cmdArgs...)
+	if err != nil {
+		return err
+	}
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 
@@ -404,7 +408,10 @@ func (r *Remote) Recover(info RecoverInfo) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(info.Timeout)*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "docker", dockerArgs...)
+	cmd, err := udocker.RuntimeCommand(ctx, dockerArgs...)
+	if err != nil {
+		return err
+	}
 
 	// 若为 gzip 文件，解压后作为 stdin；否则直接把文件作为 stdin
 	if strings.HasSuffix(info.SourceFile, ".gz") {
@@ -452,13 +459,16 @@ func ensureDockerImage(image string, policy string, timeout uint) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "docker", "pull", image)
+	cmd, err := udocker.RuntimeCommand(ctx, "pull", image)
+	if err != nil {
+		return err
+	}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			return errors.New(constant.ErrExecTimeOut)
 		}
-		return fmt.Errorf("docker pull %s failed: %s", image, strings.TrimSpace(string(out)))
+		return fmt.Errorf("pull %s failed: %s", image, strings.TrimSpace(string(out)))
 	}
 	return nil
 }
@@ -466,7 +476,10 @@ func ensureDockerImage(image string, policy string, timeout uint) error {
 func dockerImageExists(image string) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "docker", "image", "inspect", image)
+	cmd, err := udocker.RuntimeCommand(ctx, "image", "inspect", image)
+	if err != nil {
+		return false
+	}
 	if err := cmd.Run(); err != nil {
 		return false
 	}

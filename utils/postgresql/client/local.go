@@ -14,6 +14,7 @@ import (
 
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
+	udocker "github.com/aihop/gopanel/utils/docker"
 	"github.com/aihop/gopanel/utils/files"
 )
 
@@ -135,12 +136,10 @@ func (r *Local) Backup(info BackupInfo) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(info.Timeout*uint(time.Second)))
 	defer cancel()
-	cmd := exec.CommandContext(
-		ctx,
-		"docker", "exec", "-i", r.ContainerName,
-		"sh", "-c",
-		fmt.Sprintf("PGPASSWORD=%s pg_dump -F c -U %s -d %s", r.Password, r.Username, info.Name),
-	)
+	cmd, err := udocker.RuntimeCommand(ctx, "exec", "-i", r.ContainerName, "sh", "-c", fmt.Sprintf("PGPASSWORD=%s pg_dump -F c -U %s -d %s", r.Password, r.Username, info.Name))
+	if err != nil {
+		return err
+	}
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 
@@ -162,9 +161,10 @@ func (r *Local) Recover(info RecoverInfo) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(info.Timeout*uint(time.Second)))
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "docker", "exec", "-i", r.ContainerName, "sh", "-c",
-		fmt.Sprintf("PGPASSWORD=%s pg_restore -F c -c --if-exists --no-owner -U %s -d %s", r.Password, r.Username, info.Name),
-	)
+	cmd, err := udocker.RuntimeCommand(ctx, "exec", "-i", r.ContainerName, "sh", "-c", fmt.Sprintf("PGPASSWORD=%s pg_restore -F c -c --if-exists --no-owner -U %s -d %s", r.Password, r.Username, info.Name))
+	if err != nil {
+		return err
+	}
 	if strings.HasSuffix(info.SourceFile, ".gz") {
 		gzipFile, err := os.Open(info.SourceFile)
 		if err != nil {
@@ -211,7 +211,10 @@ func (r *Local) ExecSQL(command string, timeout uint) error {
 	itemCommand = append(itemCommand, command)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "docker", itemCommand...)
+	cmd, err := udocker.RuntimeCommand(ctx, itemCommand...)
+	if err != nil {
+		return err
+	}
 	stdout, err := cmd.CombinedOutput()
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		return errors.New("ErrExecTimeOut")
@@ -227,7 +230,10 @@ func (r *Local) ExecSQLForRows(command string, timeout uint) ([]string, error) {
 	itemCommand = append(itemCommand, command)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "docker", itemCommand...)
+	cmd, err := udocker.RuntimeCommand(ctx, itemCommand...)
+	if err != nil {
+		return nil, err
+	}
 	stdout, err := cmd.CombinedOutput()
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		return nil, errors.New("ErrExecTimeOut")
