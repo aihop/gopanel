@@ -114,6 +114,7 @@ export default defineConfig(({ mode }) => {
 			}
 		},
 		build: {
+			outDir:"../public",
 			rollupOptions: {
 				output: {
 					manualChunks: (id) => {

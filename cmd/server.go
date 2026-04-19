@@ -16,8 +16,8 @@ import (
 
 var (
 	ConfFilePath  string // 配置文件路径
+	helpFlag      bool
 	versionFlag   bool   // 版本标志
-	helpFlag      bool   // 帮助标志
 	showConfig    bool   // 显示安全配置标志
 	resetPassword bool   // 重置密码标志
 )
@@ -25,8 +25,8 @@ var (
 func Init() {
 	log.Println("GoPanel is starting...")
 	pflag.StringVarP(&ConfFilePath, "config", "c", "./conf.yaml", "config file path.")
+	pflag.BoolVarP(&helpFlag, "help", "h", false, "show help")
 	pflag.BoolVarP(&versionFlag, "version", "v", false, "show version info")
-	pflag.BoolVarP(&helpFlag, "help", "h", false, "show help information")
 	pflag.BoolVarP(&showConfig, "show-config", "s", false, "show security configuration")
 	pflag.BoolVarP(&resetPassword, "reset-password", "r", false, "reset super user password")
 	pflag.Parse()

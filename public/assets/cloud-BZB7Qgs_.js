@@ -1,0 +1,1 @@
+import{k as o}from"./index-_lbiSyF2.js";const u=t=>o.post("/cloud/account/list",t),n=t=>o.post("/cloud/account",t),s=t=>o.post("/cloud/account/update",t),a=t=>o.post("/cloud/account/del",t),d=t=>o.get(`/cloud/cdn/${t}/domains`);export{d as C,a as D,s as U,n as a,u as c};

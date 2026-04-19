@@ -39,8 +39,6 @@ func Init() {
 	global.DB = db
 	log.Println("Database connect success")
 
-	fmt.Println(global.CONF.System.DbPath, "global.CONF.System.DbPath")
-
 	initMonitorDB(newLogger)
 }
 

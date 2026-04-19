@@ -156,6 +156,9 @@ func (s *Server) doAction(ctx context.Context, req proto.Request) (string, error
 	case "GOPANEL_INFO":
 		out, err := s.actionGoPanelInfo(ctx, req.Params)
 		return out, err
+	case "GOPANEL_USER_INFO":
+		out, err := s.actionGoPanelUserInfo(ctx, req.Params)
+		return out, err
 	case "FILE_STAT":
 		return s.actionFileStat(ctx, req.Params)
 	case "FILE_LIST":

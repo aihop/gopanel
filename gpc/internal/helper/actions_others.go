@@ -1,4 +1,4 @@
-//go:build !linux && !windows
+//go:build !linux && !windows && !darwin
 
 package helper
 
@@ -41,4 +41,3 @@ func (s *Server) actionGoPanelInfo(ctx context.Context, params map[string]interf
 	_ = params
 	return "", errors.New("unsupported platform")
 }
-

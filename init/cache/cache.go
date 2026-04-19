@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -13,6 +14,7 @@ import (
 )
 
 func Init() {
+	fmt.Println("Init cache start")
 	c := global.CONF.System.Cache
 	_ = os.RemoveAll(c)
 	_ = os.Mkdir(c, 0755)
@@ -49,7 +51,6 @@ func Init() {
 		DetectConflicts:               true,
 		NamespaceOffset:               -1,
 	}
-
 	profile := strings.ToLower(strings.TrimSpace(os.Getenv("GOPANEL_CACHE_PROFILE")))
 	if profile == "" || profile == "auto" {
 		if v, ok := readEnvBool("GOPANEL_CACHE_AUTO"); !ok || v {
@@ -94,6 +95,7 @@ func Init() {
 
 	cache, err := badger.Open(options)
 	if err != nil {
+		fmt.Println("Init cache failed", err)
 		panic(err)
 	}
 	_ = cache.DropAll()

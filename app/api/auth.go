@@ -12,6 +12,7 @@ import (
 	"github.com/aihop/gopanel/buserr"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
+	"github.com/aihop/gopanel/init/geo"
 	"github.com/aihop/gopanel/utils/cryptx"
 	"github.com/aihop/gopanel/utils/token"
 	"github.com/gofiber/fiber/v3"
@@ -28,7 +29,7 @@ func Login(c fiber.Ctx) error {
 	loginLog := model.LoginLog{
 		IP:      c.IP(),
 		Agent:   string(c.Request().Header.UserAgent()),
-		Address: "", // could add geoip later
+		Address: geo.Region(c.IP()),
 	}
 
 	userService := service.NewUser()
