@@ -1,16 +1,10 @@
-/*
- * @Author: Coller
- * @Date: 2022-05-17 12:38:10
- * @LastEditTime: 2024-04-21 17:17:40
- * @Desc: 字符串处理
- */
 package stringx
 
 import (
 	"encoding/hex"
 	"fmt"
 
-	"github.com/duke-git/lancet/v2/convertor"
+	"github.com/aihop/gopanel/utils/convertor"
 
 	"golang.org/x/crypto/scrypt"
 )

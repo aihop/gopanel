@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/aihop/gopanel/global"
+	"github.com/aihop/gopanel/utils/convertor"
 	"github.com/aihop/gopanel/utils/cryptx"
-	"github.com/duke-git/lancet/v2/convertor"
 
 	"github.com/golang-jwt/jwt/v5"
 )

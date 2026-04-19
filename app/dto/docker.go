@@ -5,14 +5,15 @@ type DaemonJsonUpdateByFile struct {
 }
 
 type DaemonJsonConf struct {
-	IsSwarm      bool     `json:"isSwarm"`
-	Status       string   `json:"status"`
-	Version      string   `json:"version"`
-	Mirrors      []string `json:"registryMirrors"`
-	Registries   []string `json:"insecureRegistries"`
-	LiveRestore  bool     `json:"liveRestore"`
-	IPTables     bool     `json:"iptables"`
-	CgroupDriver string   `json:"cgroupDriver"`
+	ContainerType string   `json:"containerType"`
+	IsSwarm       bool     `json:"isSwarm"`
+	Status        string   `json:"status"`
+	Version       string   `json:"version"`
+	Mirrors       []string `json:"registryMirrors"`
+	Registries    []string `json:"insecureRegistries"`
+	LiveRestore   bool     `json:"liveRestore"`
+	IPTables      bool     `json:"iptables"`
+	CgroupDriver  string   `json:"cgroupDriver"`
 
 	Ipv6         bool   `json:"ipv6"`
 	FixedCidrV6  string `json:"fixedCidrV6"`

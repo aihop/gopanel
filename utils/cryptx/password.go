@@ -1,15 +1,9 @@
-/*
- * @Author: Coller
- * @Date: 2021-09-24 12:30:08
- * @LastEditTime: 2024-04-21 14:37:44
- * @Desc: 密码验证
- */
 package cryptx
 
 import (
 	"fmt"
 
-	"github.com/duke-git/lancet/v2/convertor"
+	"github.com/aihop/gopanel/utils/convertor"
 	"golang.org/x/crypto/bcrypt"
 )
 

@@ -2,11 +2,11 @@ package service
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"sort"
@@ -25,18 +25,29 @@ import (
 	"github.com/aihop/gopanel/utils/compose"
 	"github.com/aihop/gopanel/utils/docker"
 	"github.com/docker/docker/api/types/filters"
-	"golang.org/x/net/context"
 )
 
 const composeProjectLabel = "com.docker.compose.project"
 const composeConfigLabel = "com.docker.compose.project.config_files"
 const composeWorkdirLabel = "com.docker.compose.project.working_dir"
+const podmanComposeProjectLabel = "io.podman.compose.project"
+const podmanComposeConfigLabel = "io.podman.compose.project.config_files"
+const podmanComposeWorkdirLabel = "io.podman.compose.project.working_dir"
 const composeCreatedBy = "createdBy"
 
 type DockerCompose struct {
 	Version  string                            `yaml:"version"`
 	Services map[string]map[string]interface{} `yaml:"services"`
 	Networks map[string]interface{}            `yaml:"networks"`
+}
+
+func firstLabel(labels map[string]string, keys ...string) (string, bool) {
+	for _, k := range keys {
+		if v, ok := labels[k]; ok && len(v) > 0 {
+			return v, true
+		}
+	}
+	return "", false
 }
 
 func (u *ContainerService) PageCompose(req *dto.SearchWithPage) (int64, interface{}, error) {
@@ -51,8 +62,10 @@ func (u *ContainerService) PageCompose(req *dto.SearchWithPage) (int64, interfac
 	defer client.Close()
 
 	options := container.ListOptions{All: true}
-	options.Filters = filters.NewArgs()
-	options.Filters.Add("label", composeProjectLabel)
+	if !docker.IsPodmanRuntime(context.Background()) {
+		options.Filters = filters.NewArgs()
+		options.Filters.Add("label", composeProjectLabel)
+	}
 
 	list, err := client.ContainerList(context.Background(), options)
 	if err != nil {
@@ -76,7 +89,8 @@ func (u *ContainerService) PageCompose(req *dto.SearchWithPage) (int64, interfac
 
 	composeMap := make(map[string]dto.ComposeInfo)
 	for _, container := range list {
-		if name, ok := container.Labels[composeProjectLabel]; ok {
+		name, ok := firstLabel(container.Labels, composeProjectLabel, podmanComposeProjectLabel)
+		if ok {
 			containerItem := dto.ComposeContainer{
 				ContainerID: container.ID,
 				Name:        container.Names[0][1:],
@@ -88,8 +102,8 @@ func (u *ContainerService) PageCompose(req *dto.SearchWithPage) (int64, interfac
 				compose.Containers = append(compose.Containers, containerItem)
 				composeMap[name] = compose
 			} else {
-				config := container.Labels[composeConfigLabel]
-				workdir := container.Labels[composeWorkdirLabel]
+				config, _ := firstLabel(container.Labels, composeConfigLabel, podmanComposeConfigLabel)
+				workdir, _ := firstLabel(container.Labels, composeWorkdirLabel, podmanComposeWorkdirLabel)
 				composeItem := dto.ComposeInfo{
 					ContainerNumber: 1,
 					CreatedAt:       time.Unix(container.Created, 0).Format(constant.DateTimeLayout),
@@ -222,8 +236,11 @@ func (u *ContainerService) TestCompose(req *dto.ComposeCreate) (bool, error) {
 	if err := newComposeEnv(req.Path, req.Env); err != nil {
 		return false, err
 	}
-	cmd := exec.Command("docker", "compose", "-f", req.Path, "config")
-	stdout, err := cmd.CombinedOutput()
+	c, err := compose.Command(context.Background(), "-f", req.Path, "config")
+	if err != nil {
+		return false, err
+	}
+	stdout, err := c.CombinedOutput()
 	if err != nil {
 		return false, errors.New(string(stdout))
 	}
@@ -259,11 +276,18 @@ func (u *ContainerService) CreateCompose(req *dto.ComposeCreate) (string, error)
 	}
 	go func() {
 		defer file.Close()
-		cmd := exec.Command("docker", "compose", "-f", req.Path, "up", "-d")
+		c, err := compose.Command(context.Background(), "-f", req.Path, "up", "-d")
+		if err != nil {
+			global.LOG.Errorf("docker-compose.yml path :%v", req.Path)
+			global.LOG.Errorf("docker-compose up %s failed, err: %v", req.Name, err)
+			_, _ = compose.Down(req.Path)
+			_, _ = file.WriteString("docker-compose up failed!")
+			return
+		}
 		multiWriter := io.MultiWriter(os.Stdout, file)
-		cmd.Stdout = multiWriter
-		cmd.Stderr = multiWriter
-		if err := cmd.Run(); err != nil {
+		c.Stdout = multiWriter
+		c.Stderr = multiWriter
+		if err := c.Run(); err != nil {
 			global.LOG.Errorf("docker-compose.yml path :%v", req.Path)
 			global.LOG.Errorf("docker-compose up %s failed, err: %v", req.Name, err)
 			_, _ = compose.Down(req.Path)

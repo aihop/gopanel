@@ -41,6 +41,9 @@ func WebsiteCreate(c fiber.Ctx) error {
 	if err = service.NewWebsite().Create(R, model.DatabaseModeRemote); err != nil {
 		return c.JSON(e.Fail(buserr.Err(err)))
 	}
+	if err := service.ApplyCaddyFromDB(c.Context()); err != nil {
+		return c.JSON(e.Fail(buserr.Err(err)))
+	}
 	return c.JSON(e.Succ())
 }
 
@@ -52,6 +55,9 @@ func WebsiteUpdate(c fiber.Ctx) error {
 	if err = service.NewWebsite().Update(R); err != nil {
 		return c.JSON(e.Fail(buserr.Err(err)))
 	}
+	if err := service.ApplyCaddyFromDB(c.Context()); err != nil {
+		return c.JSON(e.Fail(buserr.Err(err)))
+	}
 	return c.JSON(e.Succ())
 }
 
@@ -61,6 +67,9 @@ func WebsiteDelete(c fiber.Ctx) error {
 		return c.JSON(e.Fail(buserr.Err(err)))
 	}
 	if err = service.NewWebsite().Delete(R.ID); err != nil {
+		return c.JSON(e.Fail(buserr.Err(err)))
+	}
+	if err := service.ApplyCaddyFromDB(c.Context()); err != nil {
 		return c.JSON(e.Fail(buserr.Err(err)))
 	}
 	return c.JSON(e.Succ())

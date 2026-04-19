@@ -13,6 +13,8 @@ type System struct {
 	Backup               string `mapstructure:"backup"`
 	EncryptKey           string `mapstructure:"encrypt_key"`
 	BaseDir              string `mapstructure:"base_dir"`
+	GpAgentSocketPath    string `mapstructure:"gp_agent_socket_path"`
+	GpcSocketPath        string `mapstructure:"gpc_socket_path"`
 	Mode                 string `mapstructure:"mode"`
 	RepoUrl              string `mapstructure:"repo_url"`
 	Version              string `mapstructure:"version"`

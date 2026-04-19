@@ -8,7 +8,9 @@ import (
 	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/init/conf"
 	"github.com/aihop/gopanel/utils/cryptx"
-	"github.com/duke-git/lancet/v2/random"
+
+	// 用柳叶刀的随机数生成器
+	"github.com/aihop/gopanel/utils/random"
 
 	"github.com/aihop/gopanel/pkg/gormx"
 

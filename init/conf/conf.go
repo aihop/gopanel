@@ -66,6 +66,11 @@ func Init() {
 	p.BindPFlags(pflag.CommandLine)
 	// system
 	base_dir := "/opt/gopanel" // ...existing code...
+	if runtime.GOOS == "linux" && os.Geteuid() != 0 {
+		if homeDir, err := os.UserHomeDir(); err == nil && homeDir != "" {
+			base_dir = filepath.Join(homeDir, ".gopanel")
+		}
+	}
 	// 读取/写入配置文件：优先使用命令行 --config 指定的路径（若未指定则使用 ./conf.yaml）
 	pflag.Parse()
 
@@ -96,6 +101,18 @@ func Init() {
 		base_dir = InitInstall.BaseDir
 	}
 	p.SetDefault("system.base_dir", base_dir)
+	gpAgentSock := filepath.Join(base_dir, "gp-agent", "run", "gp-agent.sock")
+	p.SetDefault("system.gp_agent_socket_path", gpAgentSock)
+	gpcSock := "/run/gopanel/gpc.sock"
+	if runtime.GOOS == "darwin" {
+		if homeDir, err := os.UserHomeDir(); err == nil && homeDir != "" {
+			gpcSock = filepath.Join(homeDir, ".gopanel", "gpc.sock")
+		}
+	}
+	if runtime.GOOS == "windows" {
+		gpcSock = `\\.\pipe\gopanel-gpc`
+	}
+	p.SetDefault("system.gpc_socket_path", gpcSock)
 	systemPort := 5470
 	if InitInstall.Port != 0 {
 		systemPort = InitInstall.Port
@@ -137,6 +154,8 @@ func Init() {
 func GlobalConfInit(v *viper.Viper) {
 	systemConfig := config.System{
 		BaseDir:            v.GetString("system.base_dir"),
+		GpAgentSocketPath:  v.GetString("system.gp_agent_socket_path"),
+		GpcSocketPath:      v.GetString("system.gpc_socket_path"),
 		Port:               v.GetString("system.port"),
 		Mode:               v.GetString("system.mode"),
 		Entrance:           v.GetString("system.entrance"),
@@ -167,6 +186,28 @@ func GlobalConfInit(v *viper.Viper) {
 		homeDir, err := os.UserHomeDir()
 		if err == nil {
 			global.CONF.System.BaseDir = filepath.Join(homeDir, ".gopanel")
+		}
+	}
+	if global.CONF.System.GpAgentSocketPath == "" {
+		switch runtime.GOOS {
+		case "darwin":
+			global.CONF.System.GpAgentSocketPath = path.Join(global.CONF.System.BaseDir, "gp-agent", "run", "gp-agent.sock")
+		case "linux":
+			global.CONF.System.GpAgentSocketPath = path.Join(global.CONF.System.BaseDir, "gp-agent", "run", "gp-agent.sock")
+		default:
+			global.CONF.System.GpAgentSocketPath = path.Join(global.CONF.System.BaseDir, "gp-agent", "run", "gp-agent.sock")
+		}
+	}
+	if global.CONF.System.GpcSocketPath == "" {
+		switch runtime.GOOS {
+		case "darwin":
+			global.CONF.System.GpcSocketPath = "/var/run/gopanel/gpc.sock"
+		case "linux":
+			global.CONF.System.GpcSocketPath = "/run/gopanel/gpc.sock"
+		case "windows":
+			global.CONF.System.GpcSocketPath = `\\.\pipe\gopanel-gpc`
+		default:
+			global.CONF.System.GpcSocketPath = "/run/gopanel/gpc.sock"
 		}
 	}
 	global.CONF.System.Cache = path.Join(global.CONF.System.BaseDir, "cache")

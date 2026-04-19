@@ -1,6 +1,7 @@
 package docker
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 
@@ -24,6 +25,10 @@ func Init() {
 			}
 		}
 	}()
+
+	if docker.IsPodmanRuntime(context.Background()) {
+		return
+	}
 	// 优先使用环境变量覆盖
 	if p := os.Getenv("DOCKER_DAEMON_JSON_PATH"); p != "" {
 		DaemonJsonPath = p

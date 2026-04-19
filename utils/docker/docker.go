@@ -2,7 +2,16 @@ package docker
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"runtime" // 添加 runtime 包用于获取操作系统信息
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
@@ -21,20 +30,238 @@ type Client struct {
 	cli *client.Client
 }
 
-func NewClient() (Client, error) {
+type RuntimeKind string
+
+const (
+	RuntimeDocker RuntimeKind = "docker"
+	RuntimePodman RuntimeKind = "podman"
+)
+
+type ResolvedRuntime struct {
+	Kind RuntimeKind
+	Host string
+}
+
+func ResolveRuntime(ctx context.Context) ResolvedRuntime {
 	var settingItem model.Setting
 	_ = global.DB.Where("key = ?", "DockerSockPath").First(&settingItem).Error
-	if len(settingItem.Value) == 0 {
-		// 根据操作系统设置默认路径
-		switch runtime.GOOS {
-		case "windows":
-			settingItem.Value = "npipe:////./pipe/docker_engine" // Windows 默认管道路径
-		default: // Linux/macOS 等其他系统
-			settingItem.Value = "unix:///var/run/docker.sock"
+	if len(settingItem.Value) > 0 {
+		host := normalizeHost(ctx, settingItem.Value)
+		if host != settingItem.Value {
+			_ = global.DB.Model(&model.Setting{}).Where("key = ?", "DockerSockPath").Update("value", host).Error
 		}
-		// settingItem.Value = "unix:///var/run/docker.sock"
+		k := kindFromHost(host)
+		if k == RuntimeDocker {
+			k = detectKind(ctx, host)
+		}
+		return ResolvedRuntime{
+			Kind: k,
+			Host: host,
+		}
 	}
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithHost(settingItem.Value), client.WithAPIVersionNegotiation())
+
+	switch runtime.GOOS {
+	case "windows":
+		host := "npipe:////./pipe/docker_engine"
+		return ResolvedRuntime{Kind: kindFromHost(host), Host: host}
+	default:
+		host := autoDetectUnixHost(ctx)
+		if host == "" {
+			host = "unix:///var/run/docker.sock"
+		}
+		k := kindFromHost(host)
+		if k == RuntimeDocker {
+			k = detectKind(ctx, host)
+		}
+		return ResolvedRuntime{Kind: k, Host: host}
+	}
+}
+
+func normalizeHost(ctx context.Context, host string) string {
+	h := strings.TrimSpace(host)
+	if runtime.GOOS != "darwin" {
+		return h
+	}
+	if strings.Contains(h, "/.local/share/containers/podman/machine/podman.sock") {
+		if !unixSockExists(h) {
+			if ph := darwinPodmanMachineHost(ctx); ph != "" {
+				return ph
+			}
+		}
+	}
+	return h
+}
+
+func kindFromHost(host string) RuntimeKind {
+	h := strings.ToLower(host)
+	if strings.Contains(h, "podman") {
+		return RuntimePodman
+	}
+	return RuntimeDocker
+}
+
+func IsPodmanRuntime(ctx context.Context) bool {
+	return ResolveRuntime(ctx).Kind == RuntimePodman
+}
+
+func autoDetectUnixHost(ctx context.Context) string {
+	baseCtx := ctx
+	if baseCtx == nil {
+		baseCtx = context.Background()
+	}
+	pingCtx, cancel := context.WithTimeout(baseCtx, 800*time.Millisecond)
+	defer cancel()
+
+	uid := os.Getuid()
+	homeDir, _ := os.UserHomeDir()
+	dockerHost := "unix:///var/run/docker.sock"
+	podmanRootHost := "unix:///run/podman/podman.sock"
+	podmanUserHost := "unix:///run/user/" + strconv.Itoa(uid) + "/podman/podman.sock"
+
+	if runtime.GOOS == "linux" {
+		if uid == 0 {
+			candidates := []string{podmanRootHost, dockerHost}
+			for _, host := range candidates {
+				if canPingHost(pingCtx, host) {
+					return host
+				}
+			}
+			return ""
+		}
+		candidates := []string{podmanUserHost, podmanRootHost, dockerHost}
+		for _, host := range candidates {
+			if canPingHost(pingCtx, host) {
+				return host
+			}
+		}
+		return ""
+	}
+
+	if runtime.GOOS == "darwin" {
+		var candidates []string
+		if ph := darwinPodmanMachineHost(pingCtx); ph != "" {
+			candidates = append(candidates, ph)
+		}
+		if homeDir != "" {
+			candidates = append(candidates,
+				"unix://"+filepath.Join(homeDir, ".local/share/containers/podman/machine/podman.sock"),
+				"unix://"+filepath.Join(homeDir, ".local/share/containers/podman/podman.sock"),
+				"unix://"+filepath.Join(homeDir, ".config/containers/podman.sock"),
+			)
+		}
+		candidates = append(candidates, dockerHost)
+		for _, host := range candidates {
+			if canPingHost(pingCtx, host) {
+				return host
+			}
+		}
+		return ""
+	}
+
+	candidates := []string{dockerHost}
+	for _, host := range candidates {
+		if canPingHost(pingCtx, host) {
+			return host
+		}
+	}
+	return ""
+}
+
+func detectKind(ctx context.Context, host string) RuntimeKind {
+	baseCtx := ctx
+	if baseCtx == nil {
+		baseCtx = context.Background()
+	}
+	detectCtx, cancel := context.WithTimeout(baseCtx, 800*time.Millisecond)
+	defer cancel()
+
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithHost(host), client.WithAPIVersionNegotiation())
+	if err != nil {
+		return RuntimeDocker
+	}
+	defer cli.Close()
+
+	ver, err := cli.ServerVersion(detectCtx)
+	if err != nil {
+		return RuntimeDocker
+	}
+	if strings.Contains(strings.ToLower(ver.Platform.Name), "podman") {
+		return RuntimePodman
+	}
+	return RuntimeDocker
+}
+
+func canPingHost(ctx context.Context, host string) bool {
+	if strings.HasPrefix(host, "unix://") {
+		sockPath := strings.TrimPrefix(host, "unix://")
+		if _, err := os.Stat(sockPath); err != nil {
+			return false
+		}
+	}
+
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithHost(host), client.WithAPIVersionNegotiation())
+	if err != nil {
+		return false
+	}
+	defer cli.Close()
+
+	_, err = cli.Ping(ctx)
+	return err == nil
+}
+
+func unixSockExists(host string) bool {
+	if !strings.HasPrefix(host, "unix://") {
+		return false
+	}
+	sockPath := strings.TrimPrefix(host, "unix://")
+	_, err := os.Stat(sockPath)
+	return err == nil
+}
+
+func darwinPodmanMachineHost(ctx context.Context) string {
+	if runtime.GOOS != "darwin" {
+		return ""
+	}
+	if _, err := exec.LookPath("podman"); err != nil {
+		return ""
+	}
+	baseCtx := ctx
+	if baseCtx == nil {
+		baseCtx = context.Background()
+	}
+	ic, cancel := context.WithTimeout(baseCtx, 800*time.Millisecond)
+	defer cancel()
+
+	out, err := exec.CommandContext(ic, "podman", "machine", "inspect").CombinedOutput()
+	if err != nil {
+		return ""
+	}
+	type inspectItem struct {
+		ConnectionInfo struct {
+			PodmanSocket struct {
+				Path string `json:"Path"`
+			} `json:"PodmanSocket"`
+		} `json:"ConnectionInfo"`
+	}
+	var items []inspectItem
+	if err := json.Unmarshal(out, &items); err != nil {
+		return ""
+	}
+	for _, it := range items {
+		p := strings.TrimSpace(it.ConnectionInfo.PodmanSocket.Path)
+		if p == "" {
+			continue
+		}
+		if filepath.IsAbs(p) {
+			return "unix://" + p
+		}
+	}
+	return ""
+}
+
+func NewClient() (Client, error) {
+	resolved := ResolveRuntime(context.Background())
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithHost(resolved.Host), client.WithAPIVersionNegotiation())
 	if err != nil {
 		return Client{}, err
 	}
@@ -49,19 +276,8 @@ func (c Client) Close() {
 }
 
 func NewDockerClient() (*client.Client, error) {
-	var settingItem model.Setting
-	_ = global.DB.Where("key = ?", "DockerSockPath").First(&settingItem).Error
-	if len(settingItem.Value) == 0 {
-		// 根据操作系统设置默认路径
-		switch runtime.GOOS {
-		case "windows":
-			settingItem.Value = "npipe:////./pipe/docker_engine" // Windows 默认管道路径
-		default: // Linux/macOS 等其他系统
-			settingItem.Value = "unix:///var/run/docker.sock"
-		}
-		// settingItem.Value = "unix:///var/run/docker.sock"
-	}
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithHost(settingItem.Value), client.WithAPIVersionNegotiation())
+	resolved := ResolveRuntime(context.Background())
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithHost(resolved.Host), client.WithAPIVersionNegotiation())
 	if err != nil {
 		return nil, err
 	}
@@ -178,6 +394,24 @@ func (c Client) NetworkExist(name string) bool {
 }
 
 func CreateDefaultDockerNetwork() error {
+	resolved := ResolveRuntime(context.Background())
+	if resolved.Kind == RuntimePodman {
+		if err := ensurePodmanNetwork("gopanel-network"); err == nil {
+			return nil
+		} else {
+			cli, cerr := NewClient()
+			if cerr == nil {
+				defer cli.Close()
+				if !cli.NetworkExist("gopanel-network") {
+					if nerr := cli.CreateNetwork("gopanel-network"); nerr == nil {
+						return nil
+					}
+				}
+			}
+			global.LOG.Errorf("create default podman network error %s", err.Error())
+			return err
+		}
+	}
 	cli, err := NewClient()
 	if err != nil {
 		global.LOG.Errorf("init docker client error %s", err.Error())
@@ -189,6 +423,60 @@ func CreateDefaultDockerNetwork() error {
 			global.LOG.Errorf("create default docker network  error %s", err.Error())
 			return err
 		}
+	}
+	return nil
+}
+
+func ensurePodmanNetwork(name string) error {
+	if _, err := exec.LookPath("podman"); err != nil {
+		return err
+	}
+	existsCmd := exec.Command("podman", "network", "exists", name)
+	if err := existsCmd.Run(); err == nil {
+		return nil
+	}
+	if runtime.GOOS == "darwin" {
+		_ = podmanMachineEnsureStarted()
+		existsCmd2 := exec.Command("podman", "network", "exists", name)
+		if err := existsCmd2.Run(); err == nil {
+			return nil
+		}
+	}
+	createCmd := exec.Command("podman", "network", "create", name)
+	out, err := createCmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+func podmanMachineEnsureStarted() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+
+	hasAny := false
+	{
+		c := exec.CommandContext(ctx, "podman", "machine", "list", "--format", "json")
+		out, err := c.CombinedOutput()
+		if err == nil {
+			var items []map[string]interface{}
+			if e := json.Unmarshal(out, &items); e == nil && len(items) > 0 {
+				hasAny = true
+			}
+		}
+	}
+	if !hasAny {
+		c := exec.CommandContext(ctx, "podman", "machine", "init")
+		_, _ = c.CombinedOutput()
+	}
+	c := exec.CommandContext(ctx, "podman", "machine", "start")
+	out, err := c.CombinedOutput()
+	if err != nil {
+		msg := strings.TrimSpace(string(out))
+		if msg != "" {
+			return errors.New(msg)
+		}
+		return err
 	}
 	return nil
 }

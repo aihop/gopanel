@@ -17,29 +17,5 @@ func ProcessRouter(r fiber.Router) {
 		processRouter.Post("/list", api.ListProcess)
 		processRouter.Post("/stop", api.StopProcess)
 		processRouter.Post("/checkPort", api.CheckProcessPort)
-
-		processRouter.Get("/daemon/status", api.StatusSupervisord)
-		processRouter.Post("/daemon/start", api.StartSupervisord)
-		processRouter.Post("/daemon/reload", api.ReloadSupervisord)
-		processRouter.Post("/daemon/stop", api.StopSupervisord)
-
-		processRouter.Get("/daemon/process/list", api.DaemonListProcess)
-		processRouter.Post("/daemon/process/start/:name", api.DaemonStartProcess)
-		processRouter.Post("/daemon/process/stop/:name", api.DaemonStopProcess)
-		processRouter.Post("/daemon/process/reload/:name", api.DaemonReloadProcess)
-		// 平滑重启
-		processRouter.Post("/daemon/process/graceful/:name", api.DaemonGracefulRestart)
-		processRouter.Post("/daemon/process/log", api.DaemonProcessLog)
-		processRouter.Post("/daemon/process/log/clean", api.DaemonProcessLogClean)
-		processRouter.Post("/daemon/process/startBatch", api.DaemonStartBatchProcess)
-		processRouter.Post("/daemon/process/stopBatch", api.DaemonStopBatchProcess)
-		processRouter.Post("/daemon/process/reloadBatch", api.DaemonReloadBatchProcess)
-
-		processRouter.Get("/daemon/config/file/load", api.DaemonConfigFileLoad)
-		processRouter.Post("/daemon/config/file/update", api.DaemonConfigFileSave)
-		processRouter.Get("/daemon/config/list", api.DaemonConfigList)
-		processRouter.Post("/daemon/config/add", api.DaemonConfigAdd)
-		processRouter.Post("/daemon/config/update", api.DaemonConfigUpdate)
-		processRouter.Post("/daemon/config/delete", api.DaemonConfigDelete)
 	}
 }

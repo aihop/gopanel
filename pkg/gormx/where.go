@@ -4,7 +4,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/duke-git/lancet/v2/slice"
+	"github.com/aihop/gopanel/utils/slice"
 
 	"gorm.io/gorm"
 )

@@ -334,7 +334,13 @@ func checkContainerNameIsExist(containerName, appDir string) (bool, error) {
 					return true, nil
 				}
 			} else {
+				if workDir, ok := container.Labels[podmanComposeWorkdirLabel]; ok {
+					if workDir != appDir {
+						return true, nil
+					}
+				} else {
 				return true, nil
+				}
 			}
 		}
 

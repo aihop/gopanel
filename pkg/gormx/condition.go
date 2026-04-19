@@ -4,7 +4,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/duke-git/lancet/v2/strutil"
+	"github.com/aihop/gopanel/utils/strutil"
 )
 
 func Condition(ws []*WhereOne, table string) (where string) {

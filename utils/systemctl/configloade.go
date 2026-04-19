@@ -13,8 +13,8 @@ import (
 
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
-	"go4.org/syncutil/singleflight"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/sync/singleflight"
 )
 
 var (
@@ -38,7 +38,7 @@ func loadPredefinedAliases() map[string][]string {
 		"fail2ban":   {"fail2ban.service", "fail2ban"},
 		"supervisor": {"supervisord.service", "supervisor.service", "supervisord", "supervisor"},
 		"ssh":        {"sshd.service", "ssh.service", "sshd", "ssh"},
-		"gopanel":   {"gopanel.service", "gopanel"},
+		"gopanel":    {"gopanel.service", "gopanel"},
 		"docker":     {"docker.service", "dockerd"},
 	}
 }
@@ -257,7 +257,7 @@ var (
 )
 
 func discoverServices(keyword string) ([]string, error) {
-	result, err := discoveryGroup.Do(keyword, func() (interface{}, error) {
+	result, err, _ := discoveryGroup.Do(keyword, func() (interface{}, error) {
 		if cached, ok := discoveryCache.Load(keyword); ok {
 			item := cached.(cacheItem)
 			if time.Now().Before(item.expires) {

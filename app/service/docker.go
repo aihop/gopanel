@@ -7,12 +7,16 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
 
 	"github.com/aihop/gopanel/app/dto"
+	"github.com/aihop/gopanel/app/model"
+	"github.com/aihop/gopanel/app/repo"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/utils/cmd"
@@ -57,7 +61,6 @@ type logOption struct {
 func (u *DockerService) LoadDockerStatus() string {
 	client, err := docker.NewDockerClient()
 	if err != nil {
-		fmt.Println(err.Error())
 		return constant.Stopped
 	}
 	defer client.Close()
@@ -72,7 +75,8 @@ func (u *DockerService) LoadDockerConf() *dto.DaemonJsonConf {
 	ctx := context.Background()
 	var data dto.DaemonJsonConf
 	data.IPTables = true
-	data.Status = constant.StatusRunning
+	data.ContainerType = "docker"
+	data.Status = constant.Stopped
 	data.Version = "-"
 	client, err := docker.NewDockerClient()
 	if err != nil {
@@ -81,16 +85,26 @@ func (u *DockerService) LoadDockerConf() *dto.DaemonJsonConf {
 		defer client.Close()
 		if _, err := client.Ping(ctx); err != nil {
 			data.Status = constant.Stopped
+		} else {
+			data.Status = constant.StatusRunning
 		}
 		itemVersion, err := client.ServerVersion(ctx)
 		if err == nil {
 			data.Version = itemVersion.Version
 		}
+		info, err := client.Info(ctx)
+		if err == nil {
+			data.IsSwarm = strings.ToLower(string(info.Swarm.LocalNodeState)) == "active"
+		}
 	}
-	data.IsSwarm = false
-	stdout2, _ := cmd.Exec("docker info  | grep Swarm")
-	if string(stdout2) == " Swarm: active\n" {
-		data.IsSwarm = true
+
+	resolved := docker.ResolveRuntime(ctx)
+	if resolved.Kind == docker.RuntimePodman {
+		data.ContainerType = "podman"
+		return &data
+	}
+	if runtime.GOOS != "linux" {
+		return &data
 	}
 	if _, err := os.Stat(constant.DaemonJsonPath); err != nil {
 		return &data
@@ -135,6 +149,12 @@ func (u *DockerService) LoadDockerConf() *dto.DaemonJsonConf {
 }
 
 func (u *DockerService) UpdateConf(req dto.SettingUpdate) error {
+	if docker.IsPodmanRuntime(context.Background()) {
+		return errors.New("podman runtime does not support docker daemon.json management")
+	}
+	if runtime.GOOS != "linux" {
+		return errors.New("unsupported platform")
+	}
 	err := createIfNotExistDaemonJsonFile()
 	if err != nil {
 		return err
@@ -258,6 +278,12 @@ func createIfNotExistDaemonJsonFile() error {
 }
 
 func (u *DockerService) UpdateLogOption(req dto.LogOption) error {
+	if docker.IsPodmanRuntime(context.Background()) {
+		return errors.New("podman runtime does not support docker daemon.json management")
+	}
+	if runtime.GOOS != "linux" {
+		return errors.New("unsupported platform")
+	}
 	err := createIfNotExistDaemonJsonFile()
 	if err != nil {
 		return err
@@ -293,6 +319,12 @@ func (u *DockerService) UpdateLogOption(req dto.LogOption) error {
 }
 
 func (u *DockerService) UpdateIpv6Option(req dto.Ipv6Option) error {
+	if docker.IsPodmanRuntime(context.Background()) {
+		return errors.New("podman runtime does not support docker daemon.json management")
+	}
+	if runtime.GOOS != "linux" {
+		return errors.New("unsupported platform")
+	}
 	err := createIfNotExistDaemonJsonFile()
 	if err != nil {
 		return err
@@ -336,6 +368,12 @@ func (u *DockerService) UpdateIpv6Option(req dto.Ipv6Option) error {
 }
 
 func (u *DockerService) UpdateConfByFile(req dto.DaemonJsonUpdateByFile) error {
+	if docker.IsPodmanRuntime(context.Background()) {
+		return errors.New("podman runtime does not support docker daemon.json management")
+	}
+	if runtime.GOOS != "linux" {
+		return errors.New("unsupported platform")
+	}
 	if len(req.File) == 0 {
 		_ = os.Remove(constant.DaemonJsonPath)
 		if err := restartDocker(); err != nil {
@@ -367,6 +405,25 @@ func (u *DockerService) UpdateConfByFile(req dto.DaemonJsonUpdateByFile) error {
 }
 
 func (u *DockerService) OperateDocker(req dto.DockerOperation) error {
+	req.Operation = strings.TrimSpace(req.Operation)
+	if req.Operation == "" {
+		return errors.New("operation is empty")
+	}
+
+	if docker.IsPodmanRuntime(context.Background()) {
+		return u.operatePodman(req.Operation)
+	}
+
+	if !hasDockerSockPathSetting() && isPodmanInstalled() {
+		if err := u.operatePodman(req.Operation); err != nil {
+			return err
+		}
+		if host := podmanDefaultHost(); host != "" {
+			_ = repo.NewISettingRepo().UpdateOrCreate("DockerSockPath", host)
+		}
+		return nil
+	}
+
 	if runtime.GOOS == "darwin" {
 		return u.operateDockerOnDarwin(req.Operation)
 	}
@@ -407,6 +464,144 @@ func (u *DockerService) OperateDocker(req dto.DockerOperation) error {
 		return errors.New(result.Output)
 	}
 	return nil
+}
+
+func (u *DockerService) operatePodman(operation string) error {
+	switch runtime.GOOS {
+	case "darwin":
+		switch operation {
+		case "start":
+			return podmanMachineEnsureStarted()
+		case "stop":
+			out, err := cmd.Exec("podman machine stop")
+			if err != nil {
+				if strings.TrimSpace(out) != "" {
+					return errors.New(out)
+				}
+				return err
+			}
+			return nil
+		case "restart":
+			_, _ = cmd.Exec("podman machine stop")
+			return podmanMachineEnsureStarted()
+		default:
+			return fmt.Errorf("unsupported podman operation: %s", operation)
+		}
+	default:
+		unit := "podman.socket"
+		args := []string{operation}
+		if operation == "restart" {
+			args = []string{"restart"}
+		}
+		if _, err := exec.LookPath("systemctl"); err == nil {
+			if os.Geteuid() != 0 {
+				_, err := cmd.Exec("systemctl --user " + strings.Join(args, " ") + " " + unit)
+				return err
+			}
+			_, err := cmd.Exec("systemctl " + strings.Join(args, " ") + " " + unit)
+			return err
+		}
+		if operation == "start" || operation == "restart" {
+			return errors.New("podman 已安装但无法自动启动（缺少 systemctl）；请先手动启动 podman 的服务/Socket")
+		}
+		return nil
+	}
+}
+
+func podmanMachineEnsureStarted() error {
+	hasAny, _ := podmanMachineHasAny()
+	if !hasAny {
+		out2, err2 := cmd.Exec("podman machine init")
+		if err2 != nil {
+			lower2 := strings.ToLower(out2)
+			if strings.Contains(lower2, "already exists") || strings.Contains(lower2, "already been created") {
+			} else if strings.TrimSpace(out2) != "" {
+				return errors.New(out2)
+			} else {
+				return err2
+			}
+		}
+	}
+
+	out, err := cmd.Exec("podman machine start")
+	if err == nil {
+		return nil
+	}
+	lower := strings.ToLower(out)
+	if strings.Contains(lower, "already running") {
+		return nil
+	}
+	if strings.TrimSpace(out) != "" {
+		return errors.New(out)
+	}
+	return err
+}
+
+func podmanMachineHasAny() (bool, error) {
+	out, err := cmd.Exec("podman machine list --format json")
+	if err == nil {
+		var items []map[string]any
+		if e := json.Unmarshal([]byte(out), &items); e == nil {
+			return len(items) > 0, nil
+		}
+	}
+
+	out, err = cmd.Exec("podman machine list")
+	if err != nil {
+		if strings.TrimSpace(out) != "" {
+			return false, errors.New(out)
+		}
+		return false, err
+	}
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) < 2 {
+		return false, nil
+	}
+	return true, nil
+}
+
+func hasDockerSockPathSetting() bool {
+	var settingItem model.Setting
+	if err := global.DB.Where("key = ?", "DockerSockPath").First(&settingItem).Error; err != nil {
+		return false
+	}
+	return strings.TrimSpace(settingItem.Value) != ""
+}
+
+func isPodmanInstalled() bool {
+	_, err := exec.LookPath("podman")
+	return err == nil
+}
+
+func podmanDefaultHost() string {
+	if runtime.GOOS == "linux" {
+		if os.Geteuid() == 0 {
+			return "unix:///run/podman/podman.sock"
+		}
+		return "unix:///run/user/" + fmt.Sprintf("%d", os.Getuid()) + "/podman/podman.sock"
+	}
+	if runtime.GOOS == "darwin" {
+		out, err := cmd.Exec("podman machine inspect")
+		if err == nil && strings.TrimSpace(out) != "" {
+			type inspectItem struct {
+				ConnectionInfo struct {
+					PodmanSocket struct {
+						Path string `json:"Path"`
+					} `json:"PodmanSocket"`
+				} `json:"ConnectionInfo"`
+			}
+			var items []inspectItem
+			if e := json.Unmarshal([]byte(out), &items); e == nil {
+				for _, it := range items {
+					p := strings.TrimSpace(it.ConnectionInfo.PodmanSocket.Path)
+					if p != "" && filepath.IsAbs(p) {
+						return "unix://" + p
+					}
+				}
+			}
+		}
+	}
+	return ""
 }
 
 func (u *DockerService) operateDockerOnDarwin(operation string) error {

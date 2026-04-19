@@ -4,7 +4,7 @@ import (
 	"github.com/aihop/gopanel/app/e"
 	"github.com/aihop/gopanel/app/service"
 	"github.com/aihop/gopanel/buserr"
-	"github.com/duke-git/lancet/v2/convertor"
+	"github.com/aihop/gopanel/utils/convertor"
 	"github.com/gofiber/fiber/v3"
 )
 

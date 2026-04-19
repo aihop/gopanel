@@ -95,12 +95,13 @@ func (u *ContainerService) Page(req *dto.PageContainer) (int64, interface{}, err
 		return 0, nil, err
 	}
 	defer client.Close()
+	isPodman := docker.IsPodmanRuntime(context.Background())
 	options := container.ListOptions{
 		All: true,
 	}
 	if len(req.Filters) != 0 {
 		options.Filters = filters.NewArgs()
-		options.Filters.Add("label", req.Filters)
+		options.Filters.Add("label", normalizeContainerLabelFilter(req.Filters, isPodman))
 	}
 	containers, err := client.ContainerList(context.Background(), options)
 	if err != nil {
@@ -177,7 +178,7 @@ func (u *ContainerService) Page(req *dto.PageContainer) (int64, interface{}, err
 	for i := 0; i < len(records); i++ {
 		item := records[i]
 		IsFromCompose := false
-		if _, ok := item.Labels[composeProjectLabel]; ok {
+		if _, ok := firstLabel(item.Labels, composeProjectLabel, podmanComposeProjectLabel); ok {
 			IsFromCompose = true
 		}
 		IsFromApp := false
@@ -186,11 +187,19 @@ func (u *ContainerService) Page(req *dto.PageContainer) (int64, interface{}, err
 		}
 
 		exposePorts := transPortToStr(records[i].Ports)
+		name := ""
+		if len(item.Names) > 0 {
+			name = strings.TrimPrefix(item.Names[0], "/")
+		}
+		imageID := item.ImageID
+		if parts := strings.Split(imageID, ":"); len(parts) > 1 {
+			imageID = parts[len(parts)-1]
+		}
 		info := dto.ContainerInfo{
 			ContainerID:   item.ID,
 			CreateTime:    time.Unix(item.Created, 0).Format(constant.DateTimeLayout),
-			Name:          item.Names[0][1:],
-			ImageId:       strings.Split(item.ImageID, ":")[1],
+			Name:          name,
+			ImageId:       imageID,
 			ImageName:     item.Image,
 			State:         item.State,
 			RunTime:       item.Status,
@@ -221,6 +230,17 @@ func (u *ContainerService) Page(req *dto.PageContainer) (int64, interface{}, err
 	}
 
 	return int64(total), backDatas, nil
+}
+
+func normalizeContainerLabelFilter(filter string, isPodman bool) string {
+	f := strings.TrimSpace(filter)
+	if !isPodman || f == "" {
+		return f
+	}
+	f = strings.ReplaceAll(f, composeProjectLabel, podmanComposeProjectLabel)
+	f = strings.ReplaceAll(f, composeConfigLabel, podmanComposeConfigLabel)
+	f = strings.ReplaceAll(f, composeWorkdirLabel, podmanComposeWorkdirLabel)
+	return f
 }
 
 func (u *ContainerService) List() ([]string, error) {
@@ -873,15 +893,23 @@ func (u *ContainerService) LoadContainerLogs(req *dto.OperationWithNameAndType) 
 		}
 		defer cli.Close()
 		options := container.ListOptions{All: true}
-		options.Filters = filters.NewArgs()
-		options.Filters.Add("label", fmt.Sprintf("%s=%s", composeProjectLabel, req.Name))
+		if !docker.IsPodmanRuntime(context.Background()) {
+			options.Filters = filters.NewArgs()
+			options.Filters.Add("label", fmt.Sprintf("%s=%s", composeProjectLabel, req.Name))
+		}
 		containers, err := cli.ContainerList(context.Background(), options)
 		if err != nil {
 			return ""
 		}
 		for _, container := range containers {
-			config := container.Labels[composeConfigLabel]
-			workdir := container.Labels[composeWorkdirLabel]
+			if docker.IsPodmanRuntime(context.Background()) {
+				name, ok := firstLabel(container.Labels, composeProjectLabel, podmanComposeProjectLabel)
+				if !ok || name != req.Name {
+					continue
+				}
+			}
+			config, _ := firstLabel(container.Labels, composeConfigLabel, podmanComposeConfigLabel)
+			workdir, _ := firstLabel(container.Labels, composeWorkdirLabel, podmanComposeWorkdirLabel)
 			if len(config) != 0 && len(workdir) != 0 && strings.Contains(config, workdir) {
 				filePath = config
 				break

@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"path"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -152,7 +152,6 @@ func (p *ProcCfg) ToConfigString() string {
 }
 
 type DaemonConfigManager struct {
-	// 配置文件路径
 	FilePath string
 }
 
@@ -162,7 +161,7 @@ func NewDaemonConfigManager() *DaemonConfigManager {
 	}
 }
 
-// 从配置文件中读取并解析 Supervisord 进程配置
+// 从配置文件中读取并解析
 func (m *DaemonConfigManager) GetConfig() ([]*ProcCfg, error) {
 	file, err := os.Open(m.FilePath)
 	if err != nil {
@@ -235,7 +234,7 @@ func (m *DaemonConfigManager) AddConfig(cfg *ProcCfg) error {
 
 	// 检查一下日志配置,是否设置，如果没设置，默认添加日志配置
 	if cfg.StdoutLogfile == "" {
-		cfg.StdoutLogfile = path.Join(global.CONF.System.LogPath, fmt.Sprintf("stdout_%s.log", cfg.Name))
+		cfg.StdoutLogfile = filepath.Join(global.CONF.System.LogPath, fmt.Sprintf("stdout_%s.log", cfg.Name))
 		cfg.StdoutLogMaxBytes = "50MB"
 	}
 	if cfg.StderrLogfile == "" {

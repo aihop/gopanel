@@ -3,8 +3,8 @@ package gormx
 import (
 	"strings"
 
-	"github.com/duke-git/lancet/v2/convertor"
-	"github.com/duke-git/lancet/v2/slice"
+	"github.com/aihop/gopanel/utils/convertor"
+	"github.com/aihop/gopanel/utils/slice"
 	"gorm.io/gorm"
 )
 

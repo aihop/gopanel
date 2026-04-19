@@ -70,9 +70,6 @@ func (s WebsiteService) Create(req *request.WebsiteCreate, mode model.DatabaseMo
 	if req.Protocol == "" {
 		req.Protocol = constant.ProtocolHTTPS
 	}
-
-	fmt.Println(req.Protocol, "req.Protocol")
-
 	defaultDate, _ := time.Parse(constant.DateLayout, constant.DefaultDate)
 	website := &model.Website{
 		PrimaryDomain: req.PrimaryDomain,
