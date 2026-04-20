@@ -163,6 +163,7 @@ func (s *LocalAppService) Install(ctx context.Context, req request.AppLocalInsta
 	if err := addDockerComposeCommonParam(composeMap, serviceName, req.AppContainerConfig, params); err != nil {
 		return nil, err
 	}
+	qualifyComposeImagesInMap(composeMap)
 
 	composeBytes, err := yaml.Marshal(composeMap)
 	if err != nil {

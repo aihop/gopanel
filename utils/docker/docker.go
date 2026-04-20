@@ -61,7 +61,25 @@ func ResolveRuntime(ctx context.Context) ResolvedRuntime {
 
 		if kindFromHost(host) == RuntimePodman {
 			if !canPingHost(pingCtx, host) {
-				host = ""
+				uid := os.Getuid()
+				podmanRootHost := "unix:///run/podman/podman.sock"
+				podmanUserHost := "unix:///run/user/" + strconv.Itoa(uid) + "/podman/podman.sock"
+				candidates := []string{podmanUserHost, podmanRootHost}
+				for _, c := range candidates {
+					if canPingHost(pingCtx, c) {
+						host = c
+						break
+					}
+				}
+				if host == normalizeHost(ctx, settingItem.Value) {
+					if uid != 0 && unixSockExists(podmanUserHost) {
+						host = podmanUserHost
+					} else if unixSockExists(podmanRootHost) {
+						host = podmanRootHost
+					} else {
+						host = ""
+					}
+				}
 			}
 		}
 		if host != settingItem.Value {
@@ -255,6 +273,9 @@ func autoDetectUnixHost(ctx context.Context) string {
 					return host
 				}
 			}
+			if unixSockExists(podmanRootHost) {
+				return podmanRootHost
+			}
 			return ""
 		}
 		candidates := []string{podmanUserHost, podmanRootHost, dockerHost}
@@ -262,6 +283,12 @@ func autoDetectUnixHost(ctx context.Context) string {
 			if canPingHost(pingCtx, host) {
 				return host
 			}
+		}
+		if unixSockExists(podmanUserHost) {
+			return podmanUserHost
+		}
+		if unixSockExists(podmanRootHost) {
+			return podmanRootHost
 		}
 		return ""
 	}
@@ -336,6 +363,10 @@ func canPingHost(ctx context.Context, host string) bool {
 
 	_, err = cli.Ping(ctx)
 	return err == nil
+}
+
+func CanPingHost(ctx context.Context, host string) bool {
+	return canPingHost(ctx, host)
 }
 
 func unixSockExists(host string) bool {

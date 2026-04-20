@@ -179,6 +179,54 @@ func ExecStream(ctx context.Context, onLine func(string), args ...string) (strin
 	return out, nil
 }
 
+func ExecStreamWithEnv(ctx context.Context, onLine func(string), extraEnv []string, args ...string) (string, error) {
+	c, err := Command(ctx, args...)
+	if err != nil {
+		return "", err
+	}
+	if len(extraEnv) > 0 {
+		if len(c.Env) > 0 {
+			c.Env = append(c.Env, extraEnv...)
+		} else {
+			c.Env = append(os.Environ(), extraEnv...)
+		}
+	}
+	stdout, err := c.StdoutPipe()
+	if err != nil {
+		return "", err
+	}
+	c.Stderr = c.Stdout
+	if err := c.Start(); err != nil {
+		return "", err
+	}
+
+	var buf bytes.Buffer
+	sc := bufio.NewScanner(stdout)
+	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	for sc.Scan() {
+		line := sc.Text()
+		if onLine != nil {
+			onLine(line)
+		}
+		buf.WriteString(line)
+		buf.WriteByte('\n')
+	}
+	scErr := sc.Err()
+	waitErr := c.Wait()
+	out := buf.String()
+	if scErr != nil {
+		return out, scErr
+	}
+	if waitErr != nil {
+		msg := strings.TrimSpace(out)
+		if msg == "" {
+			return out, waitErr
+		}
+		return out, fmt.Errorf("%w: %s", waitErr, msg)
+	}
+	return out, nil
+}
+
 func Pull(filePath string) (string, error) {
 	return Exec(context.Background(), "-f", filePath, "pull")
 }

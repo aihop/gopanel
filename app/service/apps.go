@@ -457,6 +457,7 @@ func (a AppService) Install(ctx context.Context, req request.AppInstallCreate) (
 	if err = addDockerComposeCommonParam(composeMap, appInstall.ServiceName, req.AppContainerConfig, req.Params); err != nil {
 		return
 	}
+	qualifyComposeImagesInMap(composeMap)
 	var (
 		composeByte []byte
 		paramByte   []byte
@@ -533,10 +534,24 @@ func upApp(appInstall *model.AppInstall, pullImages bool, logger *AppInstallLogg
 			logger.Error("Failed to read .env file: %v", err)
 			return err
 		}
+		if fixedEnv, changedEnv := qualifyEnvImageVars(string(envContent)); changedEnv {
+			envContent = []byte(fixedEnv)
+			_ = files.NewFileOp().WriteFile(appInstall.GetEnvPath(), strings.NewReader(fixedEnv), 0644)
+			logger.Info("Qualified image variables in .env")
+		}
 		composeContent, err := files.NewFileOp().GetContent(appInstall.GetComposePath())
 		if err != nil {
 			logger.Error("Failed to read docker-compose.yml: %v", err)
 			return err
+		}
+		if fixed, changed, ferr := qualifyComposeImagesYAML(string(composeContent)); ferr == nil && changed {
+			composeContent = []byte(fixed)
+			_ = files.NewFileOp().WriteFile(appInstall.GetComposePath(), strings.NewReader(fixed), 0644)
+			logger.Info("Qualified image names in docker-compose.yml")
+		} else if fixed2, changed2 := qualifyComposeImagesText(string(composeContent)); changed2 {
+			composeContent = []byte(fixed2)
+			_ = files.NewFileOp().WriteFile(appInstall.GetComposePath(), strings.NewReader(fixed2), 0644)
+			logger.Info("Qualified image names in docker-compose.yml")
 		}
 		if validateErr := validateComposeEnvForPortsVolumes(string(composeContent), string(envContent)); validateErr != nil {
 			logger.Error("Compose params invalid: %s", validateErr.Error())
@@ -557,11 +572,27 @@ func upApp(appInstall *model.AppInstall, pullImages bool, logger *AppInstallLogg
 			logger.Info("Executing compose pull...")
 			pullCtx, cancel := context.WithTimeout(context.Background(), 60*time.Minute)
 			defer cancel()
-			out, err = compose.ExecStream(pullCtx, func(line string) {
-				logger.Info("%s", line)
-			}, "-f", appInstall.GetComposePath(), "pull")
+			if skip, _ := shouldSkipComposePull(pullCtx, string(composeContent), string(envContent)); skip {
+				logger.Info("All images already exist locally, skip compose pull.")
+				out = ""
+				err = nil
+			} else {
+				out, err = compose.ExecStream(pullCtx, func(line string) {
+					logger.Info("%s", line)
+				}, "-f", appInstall.GetComposePath(), "pull")
+			}
+			msg := strings.ToLower(out)
+			if err == nil {
+				if strings.Contains(msg, "exit code:") && !strings.Contains(msg, "exit code: 0") {
+					err = errors.New("compose pull exit code not zero")
+				} else if strings.Contains(msg, "short-name") && strings.Contains(msg, "did not resolve") {
+					err = errors.New("podman short-name not resolved")
+				} else if strings.Contains(msg, "invalid status code") && strings.Contains(msg, "404") && strings.Contains(msg, "error fetching blob") {
+					err = errors.New("compose pull registry 404")
+				}
+			}
 			if err != nil {
-				msg := strings.ToLower(out + " " + err.Error())
+				msg = strings.ToLower(out + " " + err.Error())
 				if strings.Contains(msg, "no such host") {
 					errMsg = i18n.GetMsgByKey("ErrNoSuchHost") + ":"
 				}
@@ -571,9 +602,39 @@ func upApp(appInstall *model.AppInstall, pullImages bool, logger *AppInstallLogg
 				if errMsg == "" {
 					errMsg = i18n.GetMsgWithMap("ErrImagePull", map[string]interface{}{"err": err.Error()})
 				}
-				appInstall.Message = errMsg + out
-				logger.Error("Image pull failed: %s", appInstall.Message)
-				return err
+				if strings.Contains(msg, "invalid status code") && strings.Contains(msg, "404") && strings.Contains(msg, "error fetching blob") {
+					nomirrorPath := filepath.Join(appInstall.GetPath(), ".registries.nomirror.conf")
+					nomirrorConf := `unqualified-search-registries = ["docker.io"]
+
+[[registry]]
+prefix = "docker.io"
+location = "docker.io"
+`
+					_ = files.NewFileOp().WriteFile(nomirrorPath, strings.NewReader(nomirrorConf), 0644)
+					logger.Info("Compose pull failed with registry 404, retry without mirrors...")
+					out2, err2 := compose.ExecStreamWithEnv(pullCtx, func(line string) {
+						logger.Info("%s", line)
+					}, []string{"CONTAINERS_REGISTRIES_CONF=" + nomirrorPath}, "-f", appInstall.GetComposePath(), "pull")
+					out = out + "\n" + out2
+					if err2 == nil {
+						msg2 := strings.ToLower(out2)
+						if strings.Contains(msg2, "exit code:") && !strings.Contains(msg2, "exit code: 0") {
+							err2 = errors.New("compose pull exit code not zero")
+						} else if strings.Contains(msg2, "short-name") && strings.Contains(msg2, "did not resolve") {
+							err2 = errors.New("podman short-name not resolved")
+						}
+					}
+					if err2 == nil {
+						err = nil
+					} else {
+						err = err2
+					}
+				}
+				if err != nil {
+					appInstall.Message = errMsg + out
+					logger.Error("Image pull failed: %s", appInstall.Message)
+					return err
+				}
 			}
 			logger.Info("Compose pull completed.")
 		}
