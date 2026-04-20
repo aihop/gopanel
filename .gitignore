@@ -14,3 +14,5 @@ PROMPT.md
 *.dev
 init.yaml
 init.yaml.dev
+
+/public
