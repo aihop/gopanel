@@ -348,8 +348,8 @@ func DownloadContainerLogs(c fiber.Ctx) error {
 // @Success 200 {object} dto.PageResult
 // @Security ApiKeyAuth
 // @Security Timestamp
-// @Router /container/network/search [post]
-func SearchNetwork(c fiber.Ctx) error {
+// @Router /container/network/list [post]
+func ContainerNetworkList(c fiber.Ctx) error {
 	R, err := e.BodyToStruct[dto.SearchWithPage](c.Body())
 	if err != nil {
 		return c.JSON(e.Result(buserr.Err(err)))
@@ -508,8 +508,8 @@ func CreateVolume(c fiber.Ctx) error {
 // @Success 200 {object} dto.PageResult
 // @Security ApiKeyAuth
 // @Security Timestamp
-// @Router /container/compose/search [post]
-func SearchCompose(c fiber.Ctx) error {
+// @Router /container/compose/list [post]
+func ContainerComposeList(c fiber.Ctx) error {
 	req, err := e.BodyToStruct[dto.SearchWithPage](c.Body())
 	if err != nil {
 		return c.JSON(e.Result(buserr.Err(err)))

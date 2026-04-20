@@ -57,7 +57,7 @@
 import { h, ref, computed, onMounted } from "vue"
 import { NButton, NSpace, NTag, NText, NInput, NIcon, NDataTable, NCard, useDialog, useMessage } from "naive-ui"
 import type { DataTableColumns, DataTableRowKey } from "naive-ui"
-import { searchNetwork, deleteNetwork, containerPrune } from "@/api/modules/container"
+import { containerNetworkListAPI, deleteNetwork, containerPrune } from "@/api/modules/container"
 import type { Container } from "@/api/interface/container"
 import CreateNetwork from "./create/index.vue"
 import { computeSize } from "@/utils/util"
@@ -78,7 +78,7 @@ const dialog = useDialog()
 // 获取网络列表数据
 const fetchNetworkList = async () => {
 	loading.value = true
-	const res = await searchNetwork(searchParams.value)
+	const res = await containerNetworkListAPI(searchParams.value)
 	if (res.code === 0) {
 		networkData.value = res.data.items
 		pagination.value.itemCount = res.data.total

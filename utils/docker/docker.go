@@ -52,8 +52,23 @@ func ResolveRuntime(ctx context.Context) ResolvedRuntime {
 	_ = global.DB.Where("key = ?", "DockerSockPath").First(&settingItem).Error
 	if len(settingItem.Value) > 0 && mode == "auto" {
 		host := normalizeHost(ctx, settingItem.Value)
+		baseCtx := ctx
+		if baseCtx == nil {
+			baseCtx = context.Background()
+		}
+		pingCtx, cancel := context.WithTimeout(baseCtx, 800*time.Millisecond)
+		defer cancel()
+
+		if kindFromHost(host) == RuntimePodman {
+			if !canPingHost(pingCtx, host) {
+				host = ""
+			}
+		}
 		if host != settingItem.Value {
 			_ = global.DB.Model(&model.Setting{}).Where("key = ?", "DockerSockPath").Update("value", host).Error
+		}
+		if host == "" {
+			goto auto_detect
 		}
 		k := kindFromHost(host)
 		if k == RuntimeDocker {
@@ -65,6 +80,7 @@ func ResolveRuntime(ctx context.Context) ResolvedRuntime {
 		}
 	}
 
+auto_detect:
 	if mode == "docker" {
 		host := strings.TrimSpace(settingItem.Value)
 		if host != "" {
@@ -101,11 +117,40 @@ func ResolveRuntime(ctx context.Context) ResolvedRuntime {
 					host = ""
 				}
 			}
+			baseCtx := ctx
+			if baseCtx == nil {
+				baseCtx = context.Background()
+			}
+			pingCtx, cancel := context.WithTimeout(baseCtx, 800*time.Millisecond)
+			defer cancel()
+
 			if host == "" {
+				podmanRootHost := "unix:///run/podman/podman.sock"
+				podmanUserHost := "unix:///run/user/" + strconv.Itoa(uid) + "/podman/podman.sock"
 				if uid == 0 {
-					host = "unix:///run/podman/podman.sock"
+					if canPingHost(pingCtx, podmanRootHost) {
+						host = podmanRootHost
+					} else {
+						host = podmanRootHost
+					}
 				} else {
-					host = "unix:///run/user/" + strconv.Itoa(uid) + "/podman/podman.sock"
+					candidates := []string{podmanUserHost, podmanRootHost}
+					for _, c := range candidates {
+						if canPingHost(pingCtx, c) {
+							host = c
+							break
+						}
+					}
+					if host == "" {
+						host = podmanUserHost
+					}
+				}
+			} else if uid != 0 {
+				if !canPingHost(pingCtx, host) {
+					podmanRootHost := "unix:///run/podman/podman.sock"
+					if canPingHost(pingCtx, podmanRootHost) {
+						host = podmanRootHost
+					}
 				}
 			}
 			return ResolvedRuntime{Kind: RuntimePodman, Host: host}

@@ -94,8 +94,8 @@ export const imageRemove = (params: Container.BatchDelete) => {
 }
 
 // network
-export const searchNetwork = (params: SearchWithPage) => {
-	return http.post<ResPage<Container.NetworkInfo>>(`/container/network/search`, params)
+export const containerNetworkListAPI = (params: SearchWithPage) => {
+	return http.post<ResPage<Container.NetworkInfo>>(`/container/network/list`, params)
 }
 export const listNetwork = () => {
 	return http.get<Array<Container.Options>>(`/container/network`)
@@ -159,8 +159,8 @@ export const updateComposeTemplate = (params: Container.TemplateUpdate) => {
 }
 
 // compose
-export const searchCompose = (params: SearchWithPage) => {
-	return http.post<ResPage<Container.ComposeInfo>>(`/container/compose/search`, params)
+export const containerComposeListAPI = (params: SearchWithPage) => {
+	return http.post<ResPage<Container.ComposeInfo>>(`/container/compose/list`, params)
 }
 export const upCompose = (params: Container.ComposeCreate) => {
 	return http.post<string>(`/container/compose`, params)

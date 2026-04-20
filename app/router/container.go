@@ -43,7 +43,7 @@ func ContainerRouter(r fiber.Router) {
 		containerRouter.Post("/repo/del", api.DeleteRepo)
 
 		// 编排
-		containerRouter.Post("/compose/search", api.SearchCompose)
+		containerRouter.Post("/compose/list", api.ContainerComposeList)
 		containerRouter.Post("/compose", api.CreateCompose)
 		containerRouter.Post("/compose/test", api.TestCompose)
 		containerRouter.Post("/compose/operate", api.OperatorCompose)
@@ -65,7 +65,7 @@ func ContainerRouter(r fiber.Router) {
 		// 网络
 		containerRouter.Get("/network", api.ListNetwork)
 		containerRouter.Post("/network/del", api.DeleteNetwork)
-		containerRouter.Post("/network/search", api.SearchNetwork)
+		containerRouter.Post("/network/list", api.ContainerNetworkList)
 		containerRouter.Post("/network", api.CreateNetwork)
 
 		// 卷

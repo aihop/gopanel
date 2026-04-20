@@ -10,19 +10,64 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 )
 
 func resolveComposeCommand() (string, []string, error) {
-	if _, err := exec.LookPath("podman"); err == nil {
-		return "podman", []string{"compose"}, nil
-	}
-	if _, err := exec.LookPath("docker"); err == nil {
-		return "docker", []string{"compose"}, nil
-	}
 	if _, err := exec.LookPath("podman-compose"); err == nil {
 		return "podman-compose", nil, nil
 	}
+	if _, err := exec.LookPath("docker"); err == nil {
+		if dockerComposeAvailable() {
+			return "docker", []string{"compose"}, nil
+		}
+	}
+	if _, err := exec.LookPath("podman"); err == nil {
+		if podmanComposeAvailable() {
+			return "podman", []string{"compose"}, nil
+		}
+	}
 	return "", nil, fmt.Errorf("no compose command found (docker/podman/podman-compose)")
+}
+
+func podmanComposeAvailable() bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "podman", "compose", "version")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		msg := strings.ToLower(string(out))
+		if strings.Contains(msg, "no compose provider") ||
+			strings.Contains(msg, "unknown command") ||
+			strings.Contains(msg, "podman-compose") ||
+			strings.Contains(msg, "docker-compose") {
+			return false
+		}
+		if ctx.Err() != nil {
+			return false
+		}
+	}
+	return true
+}
+
+func dockerComposeAvailable() bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "docker", "compose", "version")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		msg := strings.ToLower(string(out))
+		if strings.Contains(msg, "unknown command") ||
+			strings.Contains(msg, "is not a docker command") ||
+			strings.Contains(msg, "not found") ||
+			strings.Contains(msg, "compose plugin") {
+			return false
+		}
+		if ctx.Err() != nil {
+			return false
+		}
+	}
+	return true
 }
 
 func Command(ctx context.Context, args ...string) (*exec.Cmd, error) {

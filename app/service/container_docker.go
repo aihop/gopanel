@@ -20,6 +20,7 @@ import (
 	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/utils/cmd"
 	"github.com/aihop/gopanel/utils/docker"
+	"github.com/aihop/gopanel/utils/gpc"
 	"github.com/aihop/gopanel/utils/systemctl"
 )
 
@@ -544,17 +545,55 @@ func (u *DockerService) operatePodman(operation string) error {
 		}
 		if _, err := exec.LookPath("systemctl"); err == nil {
 			if os.Geteuid() != 0 {
-				_, err := cmd.Exec("systemctl --user " + strings.Join(args, " ") + " " + unit)
+				var userErr error
+				if systemdUserBusAvailable() {
+					out, err := cmd.Exec("systemctl --user " + strings.Join(args, " ") + " " + unit)
+					if err == nil {
+						return nil
+					}
+					if strings.TrimSpace(out) != "" {
+						userErr = fmt.Errorf("%w: %s", err, strings.TrimSpace(out))
+					} else {
+						userErr = err
+					}
+				}
+				_, gerr := gpc.Do(context.Background(), "GOPANEL_SERVICE_ACTION", map[string]interface{}{
+					"op":   operation,
+					"name": unit,
+				})
+				if gerr == nil {
+					return nil
+				}
+				if userErr != nil {
+					return fmt.Errorf("%w; fallback gpc failed: %v", userErr, gerr)
+				}
+				return gerr
+			}
+			out, err := cmd.Exec("systemctl " + strings.Join(args, " ") + " " + unit)
+			if err != nil {
+				if strings.TrimSpace(out) != "" {
+					return fmt.Errorf("%w: %s", err, strings.TrimSpace(out))
+				}
 				return err
 			}
-			_, err := cmd.Exec("systemctl " + strings.Join(args, " ") + " " + unit)
-			return err
+			return nil
 		}
 		if operation == "start" || operation == "restart" {
 			return errors.New("podman 已安装但无法自动启动（缺少 systemctl）；请先手动启动 podman 的服务/Socket")
 		}
 		return nil
 	}
+}
+
+func systemdUserBusAvailable() bool {
+	runtimeDir := strings.TrimSpace(os.Getenv("XDG_RUNTIME_DIR"))
+	if runtimeDir == "" {
+		runtimeDir = fmt.Sprintf("/run/user/%d", os.Geteuid())
+	}
+	if _, err := os.Stat(runtimeDir + "/bus"); err == nil {
+		return true
+	}
+	return false
 }
 
 func podmanMachineEnsureStarted() error {

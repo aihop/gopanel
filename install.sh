@@ -286,10 +286,10 @@ install_gpagent_binary() {
     warn "安装包未包含 gp-agent，将跳过 gp-agent 安装与自启配置"
     return 0
   fi
-  log "安装 gp-agent 到 ${CONFIG_INSTALL_DIR}/agent/gp-agent"
-  run_privileged mkdir -p "${CONFIG_INSTALL_DIR}/agent"
-  run_privileged cp "${BIN_GPAGENT_PATH}" "${CONFIG_INSTALL_DIR}/agent/gp-agent"
-  run_privileged chmod 755 "${CONFIG_INSTALL_DIR}/agent/gp-agent"
+  log "安装 gp-agent 到 ${CONFIG_INSTALL_DIR}/gp-agent"
+  run_privileged mkdir -p "${CONFIG_INSTALL_DIR}"
+  run_privileged cp "${BIN_GPAGENT_PATH}" "${CONFIG_INSTALL_DIR}/gp-agent"
+  run_privileged chmod 755 "${CONFIG_INSTALL_DIR}/gp-agent"
 }
 
 write_init_yaml() {
@@ -419,7 +419,22 @@ choose_gopanel_runtime_user() {
 
 ensure_install_dir_owner() {
   if [ -d "${CONFIG_INSTALL_DIR}" ]; then
-    run_privileged chown -R "${RUNTIME_USER}" "${CONFIG_INSTALL_DIR}"
+    local grp=""
+    grp="$(id -gn "${RUNTIME_USER}" 2>/dev/null || true)"
+    if [ -n "${grp}" ]; then
+      run_privileged chown -R "${RUNTIME_USER}:${grp}" "${CONFIG_INSTALL_DIR}"
+    else
+      run_privileged chown -R "${RUNTIME_USER}" "${CONFIG_INSTALL_DIR}"
+    fi
+
+    if [ "${RUNTIME_USER}" != "root" ]; then
+      if [ -n "${grp}" ]; then
+        run_privileged chown root:"${grp}" "${CONFIG_INSTALL_DIR}"
+      else
+        run_privileged chown root:"${RUNTIME_USER}" "${CONFIG_INSTALL_DIR}" || true
+      fi
+      run_privileged chmod 2775 "${CONFIG_INSTALL_DIR}"
+    fi
   fi
 }
 
@@ -433,7 +448,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/gpc service --base-dir ${CONFIG_INSTALL_DIR} 
+ExecStart=/usr/local/bin/gpc service --base-dir ${CONFIG_INSTALL_DIR}
 Restart=always
 RestartSec=2
 
@@ -453,12 +468,14 @@ install_service_gopanel_linux() {
   cat >"${tmp_service}" <<EOF
 [Unit]
 Description=GoPanel
-After=network.target gpc.service
+After=network.target docker.socket podman.socket gpc.service
+Wants=docker.socket podman.socket
 Requires=gpc.service
 
 [Service]
 Type=simple
 User=${RUNTIME_USER}
+Group=${RUNTIME_USER}
 WorkingDirectory=${CONFIG_INSTALL_DIR}
 ExecStart=${CONFIG_INSTALL_DIR}/gopanel
 Restart=always
@@ -475,7 +492,7 @@ EOF
 }
 
 install_service_gpagent_linux() {
-  if [ ! -x "${CONFIG_INSTALL_DIR}/agent/gp-agent" ]; then
+  if [ ! -x "${CONFIG_INSTALL_DIR}/gp-agent" ]; then
     warn "未检测到 gp-agent 二进制，跳过 gp-agent service 配置"
     return 0
   fi
@@ -484,17 +501,26 @@ install_service_gpagent_linux() {
   cat >"${tmp_service}" <<EOF
 [Unit]
 Description=GoPanel Agent (gp-agent)
-After=network.target
+After=network.target docker.socket podman.socket
+Wants=docker.socket podman.socket
 
 [Service]
 Type=simple
 User=${RUNTIME_USER}
+Group=${RUNTIME_USER}
 WorkingDirectory=${CONFIG_INSTALL_DIR}
-ExecStart=${CONFIG_INSTALL_DIR}/agent/gp-agent --base-dir ${CONFIG_INSTALL_DIR} serve
+ExecStart=${CONFIG_INSTALL_DIR}/gp-agent --base-dir ${CONFIG_INSTALL_DIR} serve
 Restart=always
 RestartSec=2
+
+Environment="HOME=${CONFIG_INSTALL_DIR}"
+Environment="CADDY_DATA_DIR=${CONFIG_INSTALL_DIR}/caddy/data"
+
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+
+LimitNOFILE=65535
+OOMScoreAdjust=-100
 
 [Install]
 WantedBy=multi-user.target
@@ -616,9 +642,76 @@ install_podman() {
     return 0
   fi
 
-  if command -v apt-get >/dev/null 2>&1; then
+  ensure_gnupg_for_apt() {
+    if command -v gpg >/dev/null 2>&1; then
+      return 0
+    fi
     run_privileged apt-get update
-    run_privileged apt-get install -y podman
+    run_privileged apt-get install -y gnupg ca-certificates
+  }
+
+  read_os_release_value() {
+    local key="$1"
+    local file="/etc/os-release"
+    if [ ! -f "${file}" ]; then
+      echo ""
+      return 0
+    fi
+    awk -F= -v k="${key}" '
+      $1==k {
+        v=$2
+        gsub(/^"/,"",v); gsub(/"$/,"",v)
+        print v
+        exit
+      }
+    ' "${file}" 2>/dev/null || true
+  }
+
+  configure_podman_repo_apt_latest() {
+    local id version_id repo_dist repo_url key_url keyring list_file
+    id="$(read_os_release_value ID)"
+    version_id="$(read_os_release_value VERSION_ID)"
+    id="$(echo "${id}" | tr '[:upper:]' '[:lower:]')"
+
+    if [ -z "${version_id}" ]; then
+      warn "无法识别系统版本（/etc/os-release VERSION_ID 为空），将尝试直接 apt 安装 Podman。"
+      return 1
+    fi
+
+    case "${id}" in
+      debian)
+        repo_dist="Debian_${version_id}"
+        ;;
+      ubuntu)
+        repo_dist="xUbuntu_${version_id}"
+        ;;
+      *)
+        warn "当前发行版 ${id} 未配置 Podman 官方新版本源，将尝试直接 apt 安装。"
+        return 1
+        ;;
+    esac
+
+    repo_url="https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/${repo_dist}/"
+    key_url="${repo_url}Release.key"
+    keyring="/etc/apt/keyrings/libcontainers-archive-keyring.gpg"
+    list_file="/etc/apt/sources.list.d/devel:kubic:libcontainers:stable.list"
+
+    run_privileged mkdir -p /etc/apt/keyrings
+    curl -fsSL "${key_url}" | run_privileged gpg --dearmor -o "${keyring}"
+    run_privileged chmod 644 "${keyring}"
+    printf "deb [signed-by=%s] %s /\n" "${keyring}" "${repo_url}" | run_privileged tee "${list_file}" >/dev/null
+    return 0
+  }
+
+  if command -v apt-get >/dev/null 2>&1; then
+    ensure_gnupg_for_apt
+    if configure_podman_repo_apt_latest; then
+      run_privileged apt-get update
+      run_privileged apt-get install -y podman
+    else
+      run_privileged apt-get update
+      run_privileged apt-get install -y podman
+    fi
   elif command -v dnf >/dev/null 2>&1; then
     run_privileged dnf install -y podman
   elif command -v yum >/dev/null 2>&1; then
@@ -630,6 +723,9 @@ install_podman() {
   else
     warn "未识别的 Linux 包管理器，请手动安装 Podman。"
   fi
+
+  ensure_podman_compose || true
+  ensure_podman_socket_access || true
 }
 
 install_docker() {
@@ -657,9 +753,93 @@ install_docker() {
   rm -f "${tmp_script}"
 }
 
+ensure_podman_socket_access() {
+  if [ "$os_name" != "linux" ]; then
+    return 0
+  fi
+  if ! command -v podman >/dev/null 2>&1; then
+    return 0
+  fi
+  if ! command -v systemctl >/dev/null 2>&1; then
+    return 0
+  fi
+  if [ "${RUNTIME_USER}" = "root" ]; then
+    return 0
+  fi
+
+  if ! run_privileged systemctl list-unit-files podman.socket >/dev/null 2>&1; then
+    return 0
+  fi
+
+  local grp
+  grp="$(id -gn "${RUNTIME_USER}" 2>/dev/null || true)"
+  [ -n "${grp}" ] || return 0
+
+  log "配置 Podman socket 访问权限（SocketGroup=${grp}）"
+  run_privileged mkdir -p /etc/systemd/system/podman.socket.d
+  cat <<EOF | run_privileged tee /etc/systemd/system/podman.socket.d/override.conf >/dev/null
+[Socket]
+SocketUser=root
+SocketGroup=${grp}
+SocketMode=0660
+EOF
+
+  run_privileged systemctl daemon-reload
+  run_privileged systemctl stop podman.socket >/dev/null 2>&1 || true
+  run_privileged rm -f /run/podman/podman.sock >/dev/null 2>&1 || true
+  run_privileged systemctl start podman.socket >/dev/null 2>&1 || true
+  return 0
+}
+
+ensure_podman_compose() {
+  if [ "$os_name" != "linux" ]; then
+    return 0
+  fi
+  if ! command -v podman >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if command -v podman-compose >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if podman compose version >/dev/null 2>&1; then
+    return 0
+  fi
+
+  log "检测到 podman compose 不可用，尝试安装 podman-compose"
+
+  if command -v apt-get >/dev/null 2>&1; then
+    run_privileged apt-get update
+    run_privileged apt-get install -y podman-compose
+    return 0
+  fi
+  if command -v dnf >/dev/null 2>&1; then
+    run_privileged dnf install -y podman-compose
+    return 0
+  fi
+  if command -v yum >/dev/null 2>&1; then
+    run_privileged yum install -y podman-compose
+    return 0
+  fi
+  if command -v pacman >/dev/null 2>&1; then
+    run_privileged pacman -Sy --noconfirm podman-compose
+    return 0
+  fi
+  if command -v zypper >/dev/null 2>&1; then
+    run_privileged zypper --non-interactive install podman-compose
+    return 0
+  fi
+
+  warn "未识别的包管理器，无法自动安装 podman-compose，请手动安装"
+  return 0
+}
+
 check_container_runtime() {
   if command -v docker >/dev/null 2>&1 || command -v podman >/dev/null 2>&1; then
-    log "检测到容器运行时已存在，跳过安装。"
+    log "检测到容器运行时已存在。"
+    ensure_podman_compose || true
+    ensure_podman_socket_access || true
     return 0
   fi
 

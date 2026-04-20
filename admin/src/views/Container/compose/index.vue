@@ -331,7 +331,7 @@ import {
 } from "naive-ui"
 import FtEditor from "@/components/FtEditor/index.vue"
 import {
-	searchCompose,
+	containerComposeListAPI,
 	composeOperator,
 	testCompose,
 	upCompose
@@ -394,7 +394,7 @@ const search = async () => {
 		params.info = ""
 	}
 	loading.value = true
-	await searchCompose(params)
+	await containerComposeListAPI(params)
 		.then(res => {
 			loading.value = false
 			if (res.data && res.data.items) {
