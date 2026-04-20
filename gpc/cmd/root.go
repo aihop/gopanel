@@ -72,6 +72,7 @@ func init() {
 	rootCmd.PersistentFlags().StringSlice("file-roots", nil, "allowed file roots (comma-separated or repeatable). default: base-dir")
 
 	rootCmd.AddCommand(statusCmd)
+	rootCmd.AddCommand(serviceCmd)
 	rootCmd.AddCommand(helperCmd)
 	rootCmd.AddCommand(goPanelCmd)
 	rootCmd.AddCommand(serverCmd)

@@ -47,6 +47,10 @@ func (s *Server) Serve(ctx context.Context) error {
 		return err
 	}
 	defer l.Close()
+	go func() {
+		<-ctx.Done()
+		_ = l.Close()
+	}()
 
 	_ = os.Chmod(s.cfg.SocketPath, 0660)
 	s.tryChgrpSocketToBaseDir()
@@ -59,6 +63,9 @@ func (s *Server) Serve(ctx context.Context) error {
 		}
 		c, err := l.Accept()
 		if err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
 			if ne, ok := err.(net.Error); ok && ne.Temporary() {
 				time.Sleep(100 * time.Millisecond)
 				continue
