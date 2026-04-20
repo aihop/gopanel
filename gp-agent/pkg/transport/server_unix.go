@@ -28,6 +28,10 @@ func Serve(ctx context.Context, socketPath string) error {
 		return err
 	}
 	defer l.Close()
+	go func() {
+		<-ctx.Done()
+		_ = l.Close()
+	}()
 
 	_ = os.Chmod(socketPath, 0660)
 
@@ -40,6 +44,9 @@ func Serve(ctx context.Context, socketPath string) error {
 
 		conn, err := l.Accept()
 		if err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
 			if ne, ok := err.(net.Error); ok && ne.Temporary() {
 				time.Sleep(50 * time.Millisecond)
 				continue

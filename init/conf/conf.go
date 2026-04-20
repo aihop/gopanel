@@ -99,7 +99,7 @@ func Init() {
 	p.SetDefault("system.container_runtime", "auto")
 	gpAgentSock := filepath.Join(base_dir, "agent", "run", "gp-agent.sock")
 	p.SetDefault("system.gp_agent_socket_path", gpAgentSock)
-	gpcSock := "/run/gopanel/gpc.sock"
+	gpcSock := filepath.Join(base_dir, "gpc.sock")
 	if runtime.GOOS == "darwin" {
 		if homeDir, err := os.UserHomeDir(); err == nil && homeDir != "" {
 			gpcSock = filepath.Join(homeDir, ".gopanel", "gpc.sock")

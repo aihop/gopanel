@@ -5,12 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"runtime"
+	"strings"
 	"time"
 
 	"github.com/aihop/gopanel/app/dto"
 	"github.com/aihop/gopanel/app/e"
 	"github.com/aihop/gopanel/app/service"
 	"github.com/aihop/gopanel/utils/gpagent"
+	"github.com/aihop/gopanel/utils/gpc"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -31,10 +34,30 @@ type ProcessInfo struct {
 	Pid           int    `xml:"pid" json:"pid"`
 }
 
+func gpagentDoWithAutoRestart(ctx context.Context, action string, params map[string]interface{}) (gpagent.Response, error) {
+	resp, err := gpagent.Do(ctx, action, params)
+	if err == nil {
+		return resp, nil
+	}
+	if runtime.GOOS != "linux" {
+		return resp, err
+	}
+	msg := strings.ToLower(err.Error())
+	if !strings.Contains(msg, "no such file") && !strings.Contains(msg, "connection refused") && !strings.Contains(msg, "connect:") {
+		return resp, err
+	}
+	_, _ = gpc.Do(ctx, "GOPANEL_SERVICE_ACTION", map[string]interface{}{
+		"op":   "restart",
+		"name": "gp-agent.service",
+	})
+	time.Sleep(300 * time.Millisecond)
+	return gpagent.Do(ctx, action, params)
+}
+
 func DaemonStatus(c fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	resp, err := gpagent.Do(ctx, "DAEMON_STATUS", nil)
+	resp, err := gpagentDoWithAutoRestart(ctx, "DAEMON_STATUS", nil)
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
@@ -48,7 +71,7 @@ func DaemonStatus(c fiber.Ctx) error {
 func DaemonStart(c fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	resp, err := gpagent.Do(ctx, "DAEMON_START", nil)
+	resp, err := gpagentDoWithAutoRestart(ctx, "DAEMON_START", nil)
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
@@ -62,7 +85,7 @@ func DaemonStart(c fiber.Ctx) error {
 func DaemonReload(c fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	resp, err := gpagent.Do(ctx, "DAEMON_RELOAD", nil)
+	resp, err := gpagentDoWithAutoRestart(ctx, "DAEMON_RELOAD", nil)
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
@@ -76,7 +99,7 @@ func DaemonReload(c fiber.Ctx) error {
 func DaemonStop(c fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	resp, err := gpagent.Do(ctx, "DAEMON_STOP", nil)
+	resp, err := gpagentDoWithAutoRestart(ctx, "DAEMON_STOP", nil)
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
@@ -90,7 +113,7 @@ func DaemonStop(c fiber.Ctx) error {
 func DaemonListProcess(c fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	resp, err := gpagent.Do(ctx, "DAEMON_APP_LIST", nil)
+	resp, err := gpagentDoWithAutoRestart(ctx, "DAEMON_APP_LIST", nil)
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
@@ -138,7 +161,7 @@ func DaemonStartProcess(c fiber.Ctx) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	resp, err := gpagent.Do(ctx, "DAEMON_APP_START", map[string]interface{}{"name": name})
+	resp, err := gpagentDoWithAutoRestart(ctx, "DAEMON_APP_START", map[string]interface{}{"name": name})
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
@@ -156,7 +179,7 @@ func DaemonStopProcess(c fiber.Ctx) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	resp, err := gpagent.Do(ctx, "DAEMON_APP_STOP", map[string]interface{}{"name": name})
+	resp, err := gpagentDoWithAutoRestart(ctx, "DAEMON_APP_STOP", map[string]interface{}{"name": name})
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
@@ -174,7 +197,7 @@ func DaemonReloadProcess(c fiber.Ctx) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	resp, err := gpagent.Do(ctx, "DAEMON_APP_RESTART", map[string]interface{}{"name": name, "mode": "reload"})
+	resp, err := gpagentDoWithAutoRestart(ctx, "DAEMON_APP_RESTART", map[string]interface{}{"name": name, "mode": "reload"})
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
@@ -192,7 +215,7 @@ func DaemonGracefulRestart(c fiber.Ctx) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	resp, err := gpagent.Do(ctx, "DAEMON_APP_RESTART", map[string]interface{}{"name": name, "mode": "graceful"})
+	resp, err := gpagentDoWithAutoRestart(ctx, "DAEMON_APP_RESTART", map[string]interface{}{"name": name, "mode": "graceful"})
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
@@ -226,7 +249,7 @@ func DaemonProcessLog(c fiber.Ctx) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	resp, err := gpagent.Do(ctx, "DAEMON_APP_LOG", map[string]interface{}{
+	resp, err := gpagentDoWithAutoRestart(ctx, "DAEMON_APP_LOG", map[string]interface{}{
 		"name":   req.Name,
 		"offset": req.Offset,
 		"length": length,
@@ -248,7 +271,7 @@ func DaemonProcessLogClear(c fiber.Ctx) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	resp, err := gpagent.Do(ctx, "DAEMON_APP_LOG_CLEAR", map[string]interface{}{"name": name})
+	resp, err := gpagentDoWithAutoRestart(ctx, "DAEMON_APP_LOG_CLEAR", map[string]interface{}{"name": name})
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}

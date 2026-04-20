@@ -74,6 +74,9 @@ func initConfig() {
 	global.CONF.BaseDir = baseDir
 	global.CONF.SocketPath = filepath.Join(baseDir, "agent", "run", "gp-agent.sock")
 
+	os.Setenv("CADDY_DATA_DIR", filepath.Join(baseDir, "caddy", "data"))
+	os.Setenv("CADDY_CONFIG_DIR", filepath.Join(baseDir, "caddy", "config"))
+
 	if global.CONF.BaseDir == "" {
 		panic(errors.New("base_dir is empty"))
 	}

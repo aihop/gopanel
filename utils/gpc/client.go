@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -36,6 +37,12 @@ func SocketPath() string {
 	}
 	if v := strings.TrimSpace(global.CONF.System.GpcSocketPath); v != "" {
 		return v
+	}
+	if baseDir := strings.TrimSpace(os.Getenv("GOPANEL_BASE_DIR")); baseDir != "" {
+		return filepath.Join(filepath.Clean(baseDir), "gpc.sock")
+	}
+	if baseDir := strings.TrimSpace(os.Getenv("GPC_BASE_DIR")); baseDir != "" {
+		return filepath.Join(filepath.Clean(baseDir), "gpc.sock")
 	}
 	switch runtime.GOOS {
 	case "darwin":

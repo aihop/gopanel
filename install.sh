@@ -24,6 +24,7 @@ SUDO_CMD=""
 WORK_DIR=""
 BIN_GPC_PATH=""
 BIN_GOPANEL_PATH=""
+BIN_GPAGENT_PATH=""
 
 log() { echo "[INFO] $*"; }
 warn() { echo "[WARN] $*" >&2; }
@@ -260,6 +261,7 @@ extract_and_find_binaries() {
 
   BIN_GPC_PATH="$(find "${WORK_DIR}" -type f -name gpc | head -n 1)"
   BIN_GOPANEL_PATH="$(find "${WORK_DIR}" -type f -name gopanel | head -n 1)"
+  BIN_GPAGENT_PATH="$(find "${WORK_DIR}" -type f -name gp-agent | head -n 1)"
 
   [ -n "${BIN_GPC_PATH}" ] || die "安装包中未找到 gpc 二进制文件"
   [ -n "${BIN_GOPANEL_PATH}" ] || die "安装包中未找到 gopanel 二进制文件"
@@ -277,6 +279,17 @@ install_gopanel_binary() {
   run_privileged mkdir -p "${CONFIG_INSTALL_DIR}"
   run_privileged cp "${BIN_GOPANEL_PATH}" "${CONFIG_INSTALL_DIR}/gopanel"
   run_privileged chmod 755 "${CONFIG_INSTALL_DIR}/gopanel"
+}
+
+install_gpagent_binary() {
+  if [ -z "${BIN_GPAGENT_PATH}" ]; then
+    warn "安装包未包含 gp-agent，将跳过 gp-agent 安装与自启配置"
+    return 0
+  fi
+  log "安装 gp-agent 到 ${CONFIG_INSTALL_DIR}/agent/gp-agent"
+  run_privileged mkdir -p "${CONFIG_INSTALL_DIR}/agent"
+  run_privileged cp "${BIN_GPAGENT_PATH}" "${CONFIG_INSTALL_DIR}/agent/gp-agent"
+  run_privileged chmod 755 "${CONFIG_INSTALL_DIR}/agent/gp-agent"
 }
 
 write_init_yaml() {
@@ -420,7 +433,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/gpc --base-dir ${CONFIG_INSTALL_DIR}
+ExecStart=/usr/local/bin/gpc service --base-dir ${CONFIG_INSTALL_DIR} 
 Restart=always
 RestartSec=2
 
@@ -461,6 +474,38 @@ EOF
   run_privileged systemctl restart gopanel.service
 }
 
+install_service_gpagent_linux() {
+  if [ ! -x "${CONFIG_INSTALL_DIR}/agent/gp-agent" ]; then
+    warn "未检测到 gp-agent 二进制，跳过 gp-agent service 配置"
+    return 0
+  fi
+  local tmp_service
+  tmp_service="$(mktemp -t gp-agent.service.XXXXXX)"
+  cat >"${tmp_service}" <<EOF
+[Unit]
+Description=GoPanel Agent (gp-agent)
+After=network.target
+
+[Service]
+Type=simple
+User=${RUNTIME_USER}
+WorkingDirectory=${CONFIG_INSTALL_DIR}
+ExecStart=${CONFIG_INSTALL_DIR}/agent/gp-agent --base-dir ${CONFIG_INSTALL_DIR} serve
+Restart=always
+RestartSec=2
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  run_privileged cp "${tmp_service}" /etc/systemd/system/gp-agent.service
+  rm -f "${tmp_service}"
+  run_privileged systemctl daemon-reload
+  run_privileged systemctl enable gp-agent.service
+  run_privileged systemctl restart gp-agent.service
+}
+
 install_service_gpc_macos() {
   local plist="/Library/LaunchDaemons/io.aihop.gpc.plist"
   local tmp_plist
@@ -477,6 +522,7 @@ install_service_gpc_macos() {
     <string>/usr/local/bin/gpc</string>
     <string>--base-dir</string>
     <string>${CONFIG_INSTALL_DIR}</string>
+    <string>service</string>
   </array>
   <key>UserName</key>
   <string>${RUNTIME_USER}</string>
@@ -547,6 +593,7 @@ install_autostart_services() {
     fi
     install_service_gpc_linux
     install_service_gopanel_linux
+    install_service_gpagent_linux
   else
     install_service_gpc_macos
     install_service_gopanel_macos
@@ -680,6 +727,7 @@ main() {
   extract_and_find_binaries
   install_gpc_binary
   install_gopanel_binary
+  install_gpagent_binary
   write_init_yaml
   ensure_install_dir_owner
   install_autostart_services
