@@ -102,6 +102,18 @@ func (u *DockerService) LoadDockerConf() *dto.DaemonJsonConf {
 			if v, err := docker.PodmanVersion(ctx); err == nil && strings.TrimSpace(v) != "" {
 				data.Version = v
 			}
+		} else {
+			client, err := docker.NewDockerClient()
+			if err == nil {
+				defer client.Close()
+				if _, err := client.Ping(ctx); err == nil {
+					data.Status = constant.StatusRunning
+				}
+				itemVersion, err := client.ServerVersion(ctx)
+				if err == nil {
+					data.Version = itemVersion.Version
+				}
+			}
 		}
 		return &data
 	}

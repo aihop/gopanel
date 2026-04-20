@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/aihop/gopanel/app/dto"
 	"github.com/aihop/gopanel/app/e"
 	"github.com/aihop/gopanel/app/service"
 	"github.com/aihop/gopanel/utils/gpagent"
@@ -124,7 +125,10 @@ func DaemonListProcess(c fiber.Ctx) error {
 		}
 	}
 
-	return c.JSON(e.Succ(result))
+	return c.JSON(e.Succ(dto.PageResult{
+		Items: result,
+		Total: int64(len(replys)),
+	}))
 }
 
 func DaemonStartProcess(c fiber.Ctx) error {

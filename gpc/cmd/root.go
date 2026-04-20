@@ -211,7 +211,7 @@ func isLikelyBaseDir(dir string) bool {
 	if _, err := os.Stat(filepath.Join(dir, "db")); err == nil {
 		return true
 	}
-	if _, err := os.Stat(filepath.Join(dir, "gp-agent")); err == nil {
+	if _, err := os.Stat(filepath.Join(dir, "agent")); err == nil {
 		return true
 	}
 	if _, err := os.Stat(filepath.Join(dir, "conf.yaml")); err == nil {

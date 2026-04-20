@@ -25,6 +25,7 @@ import (
 	"github.com/aihop/gopanel/init/cron"
 	"github.com/aihop/gopanel/init/db"
 	"github.com/aihop/gopanel/init/docker"
+	"github.com/aihop/gopanel/init/geo"
 	"github.com/aihop/gopanel/init/log"
 	"github.com/aihop/gopanel/init/repo"
 	"github.com/aihop/gopanel/init/session"
@@ -61,6 +62,7 @@ func (t *App) Init() {
 	repo.Init()
 	app.Init()
 	log.Init()
+	geo.Init()
 	cache.Init()
 	docker.Init()
 	cron.Init()

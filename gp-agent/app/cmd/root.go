@@ -16,7 +16,7 @@ import (
 
 var (
 	rootCmd = &cobra.Command{
-		Use:          "gp-agent",
+		Use:          "agent",
 		SilenceUsage: true,
 	}
 )
@@ -72,7 +72,7 @@ func initConfig() {
 		}
 	}
 	global.CONF.BaseDir = baseDir
-	global.CONF.SocketPath = filepath.Join(baseDir, "gp-agent", "run", "gp-agent.sock")
+	global.CONF.SocketPath = filepath.Join(baseDir, "agent", "run", "gp-agent.sock")
 
 	if global.CONF.BaseDir == "" {
 		panic(errors.New("base_dir is empty"))
@@ -81,9 +81,9 @@ func initConfig() {
 		panic(errors.New("socket_path is empty"))
 	}
 
-	global.CONF.RunDir = filepath.Join(global.CONF.BaseDir, "gp-agent", "run")
-	global.CONF.LogDir = filepath.Join(global.CONF.BaseDir, "gp-agent", "log")
-	global.CONF.BackupDir = filepath.Join(global.CONF.BaseDir, "gp-agent", "backup")
+	global.CONF.RunDir = filepath.Join(global.CONF.BaseDir, "agent", "run")
+	global.CONF.LogDir = filepath.Join(global.CONF.BaseDir, "agent", "log")
+	global.CONF.BackupDir = filepath.Join(global.CONF.BaseDir, "agent", "backup")
 	global.CONF.StartedAt = time.Now()
 }
 
@@ -130,7 +130,7 @@ func isLikelyBaseDir(dir string) bool {
 	if _, err := os.Stat(filepath.Join(dir, "db")); err == nil {
 		return true
 	}
-	if _, err := os.Stat(filepath.Join(dir, "gp-agent")); err == nil {
+	if _, err := os.Stat(filepath.Join(dir, "agent")); err == nil {
 		return true
 	}
 	if _, err := os.Stat(filepath.Join(dir, "conf.yaml")); err == nil {

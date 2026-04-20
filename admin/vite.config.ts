@@ -11,7 +11,7 @@ import { defineConfig, loadEnv } from "vite"
 import VueDevTools from "vite-plugin-vue-devtools"
 import svgLoader from "vite-svg-loader"
 // import { visualizer } from "rollup-plugin-visualizer"
-import viteCompression from "vite-plugin-compression"
+// import viteCompression from "vite-plugin-compression"
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
@@ -77,21 +77,21 @@ export default defineConfig(({ mode }) => {
 				// 	filename: "dist/stats.html" // 生成的分析报告文件路径
 				// }),
 				// gzip 压缩
-				viteCompression({
-					verbose: true,
-					disable: false,
-					threshold: 10240, // 超过 10kb 的文件才进行压缩
-					algorithm: 'gzip',
-					ext: '.gz',
-				}),
+				// viteCompression({
+				// 	verbose: true,
+				// 	disable: false,
+				// 	threshold: 10240,  
+				// 	algorithm: 'gzip',
+				// 	ext: '.gz',
+				// }),
 				// brotli 压缩（拥有更高的压缩率）
-				viteCompression({
-					verbose: true,
-					disable: false,
-					threshold: 10240,
-					algorithm: 'brotliCompress',
-					ext: '.br',
-				})
+				// viteCompression({
+				// 	verbose: true,
+				// 	disable: false,
+				// 	threshold: 10240,
+				// 	algorithm: 'brotliCompress',
+				// 	ext: '.br',
+				// })
 			],
 		resolve: {
 			alias: [

@@ -42,7 +42,7 @@ func SocketPath() string {
 			baseDir = filepath.Join(homeDir, ".gopanel")
 		}
 	}
-	sock := filepath.Join(baseDir, "gp-agent", "run", "gp-agent.sock")
+	sock := filepath.Join(baseDir, "agent", "run", "gp-agent.sock")
 	return sock
 }
 

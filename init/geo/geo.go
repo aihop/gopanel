@@ -3,10 +3,10 @@ package geo
 import (
 	"fmt"
 	"log"
-	"os"
 	"strings"
 	"sync"
 
+	"github.com/aihop/gopanel/global"
 	"github.com/lionsoul2014/ip2region/binding/golang/xdb"
 )
 
@@ -26,12 +26,12 @@ type GeoInfo struct {
 
 func Init() error {
 	once.Do(func() {
-		data, err := os.ReadFile("resource/region.xdb")
+		data, err := global.EmbedFS.ReadFile("resource/region.xdb")
 		if err != nil {
 			initErr = fmt.Errorf("read xdb file failed: %w", err)
 			return
 		}
-		searcher, err := xdb.NewWithBuffer(data)
+		searcher, err := xdb.NewWithBuffer(xdb.IPv4, data)
 		if err != nil {
 			initErr = fmt.Errorf("init ip2region buffer failed: %w", err)
 			return
@@ -50,7 +50,7 @@ func Region(ip string) string {
 	if ip == "" {
 		return ""
 	}
-	res, _ := IP2.SearchByStr(ip)
+	res, _ := IP2.Search(ip)
 	return format(res)
 }
 

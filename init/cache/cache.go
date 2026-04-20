@@ -63,14 +63,14 @@ func Init() {
 		options.BlockCacheSize = 8 << 20
 		options.ValueLogFileSize = 16 << 20
 		options.MetricsEnabled = false
-		options.NumCompactors = 1
+		options.NumCompactors = 2
 		options.NumGoroutines = 2
 	case "tiny":
 		options.MemTableSize = 4 << 20
 		options.BlockCacheSize = 4 << 20
 		options.ValueLogFileSize = 8 << 20
 		options.MetricsEnabled = false
-		options.NumCompactors = 1
+		options.NumCompactors = 2
 		options.NumGoroutines = 1
 	}
 

@@ -97,7 +97,7 @@ func Init() {
 	}
 	p.SetDefault("system.base_dir", base_dir)
 	p.SetDefault("system.container_runtime", "auto")
-	gpAgentSock := filepath.Join(base_dir, "gp-agent", "run", "gp-agent.sock")
+	gpAgentSock := filepath.Join(base_dir, "agent", "run", "gp-agent.sock")
 	p.SetDefault("system.gp_agent_socket_path", gpAgentSock)
 	gpcSock := "/run/gopanel/gpc.sock"
 	if runtime.GOOS == "darwin" {
@@ -187,7 +187,7 @@ func GlobalConfInit(v *viper.Viper) {
 	}
 	if (runtime.GOOS == "darwin" || runtime.GOOS == "windows") && strings.TrimSpace(global.CONF.System.BaseDir) != "" {
 		if strings.Contains(global.CONF.System.GpAgentSocketPath, "/opt/gopanel/") {
-			global.CONF.System.GpAgentSocketPath = path.Join(global.CONF.System.BaseDir, "gp-agent", "run", "gp-agent.sock")
+			global.CONF.System.GpAgentSocketPath = path.Join(global.CONF.System.BaseDir, "agent", "run", "gp-agent.sock")
 		}
 		if strings.Contains(global.CONF.System.GpcSocketPath, "/opt/gopanel/") {
 			global.CONF.System.GpcSocketPath = filepath.Join(global.CONF.System.BaseDir, "gpc.sock")
@@ -196,11 +196,11 @@ func GlobalConfInit(v *viper.Viper) {
 	if global.CONF.System.GpAgentSocketPath == "" {
 		switch runtime.GOOS {
 		case "darwin":
-			global.CONF.System.GpAgentSocketPath = path.Join(global.CONF.System.BaseDir, "gp-agent", "run", "gp-agent.sock")
+			global.CONF.System.GpAgentSocketPath = path.Join(global.CONF.System.BaseDir, "agent", "run", "gp-agent.sock")
 		case "linux":
-			global.CONF.System.GpAgentSocketPath = path.Join(global.CONF.System.BaseDir, "gp-agent", "run", "gp-agent.sock")
+			global.CONF.System.GpAgentSocketPath = path.Join(global.CONF.System.BaseDir, "agent", "run", "gp-agent.sock")
 		default:
-			global.CONF.System.GpAgentSocketPath = path.Join(global.CONF.System.BaseDir, "gp-agent", "run", "gp-agent.sock")
+			global.CONF.System.GpAgentSocketPath = path.Join(global.CONF.System.BaseDir, "agent", "run", "gp-agent.sock")
 		}
 	}
 	if global.CONF.System.GpcSocketPath == "" {

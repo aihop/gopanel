@@ -50,6 +50,8 @@ require (
 	github.com/ebitengine/purego v0.9.0 // indirect
 	github.com/google/flatbuffers v25.2.10+incompatible // indirect
 	github.com/kr/fs v0.1.0 // indirect
+	github.com/lionsoul2014/ip2region/binding/golang v0.0.0-20260419022313-1d9ffabfebf5 // indirect
+	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/morikuni/aec v1.1.0 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect

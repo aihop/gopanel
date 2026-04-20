@@ -44,7 +44,8 @@ func staticRouter(r fiber.Router) {
 
 	// 托管静态目录
 	r.Get("/assets/*", static.New("", static.Config{
-		FS: assetsFS,
+		Compress: true,
+		FS:       assetsFS,
 	}))
 	r.Get("/images/*", static.New("", static.Config{
 		FS: imagesFS,
