@@ -165,6 +165,12 @@ func (s *Server) actionSystemdEnableLinger(ctx context.Context, params map[strin
 	return "", errors.New("unsupported platform")
 }
 
+func (s *Server) actionComposeInstall(ctx context.Context, params map[string]interface{}) (string, error) {
+	_ = ctx
+	_ = params
+	return "", errors.New("unsupported platform")
+}
+
 var launchctlPidRe = regexp.MustCompile(`\bpid\s*=\s*([0-9]+)\b`)
 
 func launchctlStatus(ctx context.Context, label string) (loaded bool, running bool, pid int, err error) {

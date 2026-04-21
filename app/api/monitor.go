@@ -20,8 +20,8 @@ import (
 // @Success 200 {array} dto.MonitorData
 // @Security ApiKeyAuth
 // @Security Timestamp
-// @Router /hosts/monitor/search [post]
-func LoadMonitor(c fiber.Ctx) error {
+// @Router /hosts/monitor/list [post]
+func HostMonitorList(c fiber.Ctx) error {
 	req, err := e.BodyToStruct[dto.MonitorSearch](c.Body())
 	if err != nil {
 		return c.JSON(e.Result(err))

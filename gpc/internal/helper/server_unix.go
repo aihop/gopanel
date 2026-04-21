@@ -172,6 +172,9 @@ func (s *Server) doAction(ctx context.Context, req proto.Request) (string, error
 	case "SYSTEMD_ENABLE_LINGER":
 		out, err := s.actionSystemdEnableLinger(ctx, req.Params)
 		return out, err
+	case "COMPOSE_INSTALL":
+		out, err := s.actionComposeInstall(ctx, req.Params)
+		return out, err
 	case "FILE_STAT":
 		return s.actionFileStat(ctx, req.Params)
 	case "FILE_LIST":
@@ -207,6 +210,8 @@ func lockKeyForAction(action string) string {
 		return "podman_socket_repair"
 	case "SYSTEMD_ENABLE_LINGER":
 		return "systemd_enable_linger"
+	case "COMPOSE_INSTALL":
+		return "compose_install"
 	case "RESTART_HOST":
 		return "restart_host"
 	case "FILE_WRITE", "FILE_MKDIR", "FILE_CREATE", "FILE_REMOVE", "FILE_CHMOD", "FILE_CHOWN":

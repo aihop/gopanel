@@ -16,7 +16,7 @@ import (
 // @Security ApiKeyAuth
 // @Security Timestamp
 // @Router /container/image/list [post]
-func SearchImage(c fiber.Ctx) error {
+func ImageList(c fiber.Ctx) error {
 	req, err := e.BodyToStruct[dto.SearchWithPage](c.Body())
 	if err != nil {
 		return c.JSON(e.Result(err))

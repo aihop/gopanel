@@ -179,7 +179,7 @@ import {
 	updateImageRepo,
 	deleteImageRepo,
 	checkRepoStatus,
-	searchImageRepo
+	containerRepoListAPI
 } from "@/api/modules/container"
 
 // Define the type for a repository row
@@ -500,7 +500,7 @@ const fetchRepositoryData = async () => {
 		if (searchValue.value && searchValue.value.trim() !== "") {
 			params.info = searchValue.value.trim()
 		}
-		const response = await searchImageRepo(params)
+		const response = await containerRepoListAPI(params)
 		if (response.code === 0 && response.data) {
 			const items = Array.isArray(response.data.items) ? response.data.items : []
 			repositoryData.value = items.map(repo => {

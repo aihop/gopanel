@@ -13,7 +13,7 @@ func HostRouter(r fiber.Router) {
 	{
 
 		hostRouter.Get("/firewall/base", api.LoadFirewallBaseInfo)
-		hostRouter.Post("/firewall/search", api.SearchFirewallRule)
+		hostRouter.Post("/firewall/list", api.SearchFirewallRule)
 		hostRouter.Post("/firewall/operate", api.OperateFirewall)
 		hostRouter.Post("/firewall/port", api.OperatePortRule)
 		hostRouter.Post("/firewall/forward", api.OperateForwardRule)
@@ -23,7 +23,7 @@ func HostRouter(r fiber.Router) {
 		hostRouter.Post("/firewall/update/addr", api.UpdateAddrRule)
 		hostRouter.Post("/firewall/update/description", api.UpdateFirewallDescription)
 
-		hostRouter.Post("/monitor/search", api.LoadMonitor)
+		hostRouter.Post("/monitor/list", api.HostMonitorList)
 		hostRouter.Post("/monitor/clean", api.CleanMonitor)
 		hostRouter.Get("/monitor/netoptions", api.GetNetworkOptions)
 		hostRouter.Get("/monitor/iooptions", api.GetIOOptions)

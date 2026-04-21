@@ -224,7 +224,7 @@ import {
 	hostsFirewallIPAPI,
 	hostsFirewallOperateAPI,
 	hostsFirewallPortAPI,
-	hostsFirewallSearchAPI,
+	hostsFirewallListAPI,
 	hostsFirewallUpdateAddrAPI,
 	hostsFirewallUpdatePortAPI
 } from "@/api/host/firewall"
@@ -445,7 +445,7 @@ async function getBase() {
 async function getRulesList() {
 	try {
 		loading.value = true
-		const res: any = await hostsFirewallSearchAPI({
+		const res: any = await hostsFirewallListAPI({
 			page: pagination.value.page,
 			limit: pagination.value.limit,
 			info: keyword.value,

@@ -45,6 +45,10 @@ export function appsSyncAPI() {
 	return http.post(`/apps/sync`)
 }
 
+export function appsRepairComposeAPI() {
+	return http.post(`/apps/repair/compose`)
+}
+
 export const GetApp = (key: string) => {
 	return http.get<App.AppDTO>("/apps/" + key)
 }

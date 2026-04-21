@@ -53,3 +53,9 @@ func (s *Server) actionSystemdEnableLinger(ctx context.Context, params map[strin
 	_ = params
 	return "", errors.New("unsupported platform")
 }
+
+func (s *Server) actionComposeInstall(ctx context.Context, params map[string]interface{}) (string, error) {
+	_ = ctx
+	_ = params
+	return "", errors.New("unsupported platform")
+}

@@ -128,7 +128,7 @@
 
 <script setup lang="ts">
 import { loadBaseInfo } from "@/api/modules/dashboard"
-import { cleanMonitors, getIOOptions, getNetworkOptions, loadMonitor } from "@/api/modules/host"
+import { cleanMonitors, getIOOptions, getNetworkOptions, hostMonitorListAPI } from "@/api/modules/host"
 import { useDialog, useMessage } from "naive-ui"
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue"
 import MonitorLoad from "./components/MonitorLoad.vue"
@@ -256,7 +256,7 @@ async function getSearch(params: any) {
 	if (nextParams.param === "io") {
 		nextParams.info = selectedIO.value
 	}
-	const res = await loadMonitor(nextParams)
+	const res = await hostMonitorListAPI(nextParams)
 	const list = res.data || []
 	if (nextParams.param === "all") {
 		data.load = list.find((item: any) => item.param === "base")

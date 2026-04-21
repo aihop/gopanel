@@ -21,8 +21,8 @@ func ContainerRouter(r fiber.Router) {
 		containerRouter.Post("/update", api.ContainerUpdate)
 		containerRouter.Post("/upgrade", api.ContainerUpgrade)
 		containerRouter.Post("/info", api.ContainerInfo)
-		containerRouter.Post("/search", api.ContainerSearch)
 		containerRouter.Post("/list", api.ContainerList)
+		containerRouter.Post("/all", api.ContainerAll)
 		containerRouter.Get("/list/stats", api.ContainerListStats)
 		containerRouter.Get("/search/log", websocket.New(api.ContainerLogs))
 		containerRouter.Get("/limit", api.LoadResourceLimit)
@@ -37,7 +37,7 @@ func ContainerRouter(r fiber.Router) {
 		// 镜像源
 		containerRouter.Get("/repo", api.ListRepo)
 		containerRouter.Post("/repo/status", api.CheckRepoStatus)
-		containerRouter.Post("/repo/search", api.SearchRepo)
+		containerRouter.Post("/repo/list", api.ContainerRepoList)
 		containerRouter.Post("/repo/update", api.UpdateRepo)
 		containerRouter.Post("/repo", api.CreateRepo)
 		containerRouter.Post("/repo/del", api.DeleteRepo)
@@ -53,7 +53,7 @@ func ContainerRouter(r fiber.Router) {
 		// 镜像
 		containerRouter.Get("/image", api.ListImage)
 		containerRouter.Get("/image/all", api.ListAllImage)
-		containerRouter.Post("/image/list", api.SearchImage)
+		containerRouter.Post("/image/list", api.ImageList)
 		containerRouter.Post("/image/pull", api.ImagePull)
 		containerRouter.Post("/image/push", api.ImagePush)
 		containerRouter.Post("/image/save", api.ImageSave)
@@ -71,7 +71,7 @@ func ContainerRouter(r fiber.Router) {
 		// 卷
 		containerRouter.Get("/volume", api.ListVolume)
 		containerRouter.Post("/volume/del", api.DeleteVolume)
-		containerRouter.Post("/volume/search", api.SearchVolume)
+		containerRouter.Post("/volume/list", api.ContainerVolumeList)
 		containerRouter.Post("/volume", api.CreateVolume)
 		// 配置
 		containerRouter.Get("/instance/status", api.LoadDockerStatus)

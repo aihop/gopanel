@@ -15,7 +15,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
-func ContainerSearch(c fiber.Ctx) error {
+func ContainerList(c fiber.Ctx) error {
 	R, err := e.BodyToStruct[dto.PageContainer](c.Body())
 	if err != nil {
 		return c.JSON(e.Result(buserr.Err(err)))
@@ -30,7 +30,7 @@ func ContainerSearch(c fiber.Ctx) error {
 	}))
 }
 
-func ContainerList(c fiber.Ctx) error {
+func ContainerAll(c fiber.Ctx) error {
 	list, err := service.NewIContainerService().List()
 	if err != nil {
 		return c.JSON(e.Error(buserr.Err(errors.New(constant.ErrTypeInternalServer))))
@@ -430,8 +430,8 @@ func CreateNetwork(c fiber.Ctx) error {
 // @Success 200 {object} dto.PageResult
 // @Security ApiKeyAuth
 // @Security Timestamp
-// @Router /container/volume/search [post]
-func SearchVolume(c fiber.Ctx) error {
+// @Router /container/volume/list [post]
+func ContainerVolumeList(c fiber.Ctx) error {
 	R, err := e.BodyToStruct[dto.SearchWithPage](c.Body())
 	if err != nil {
 		return c.JSON(e.Result(buserr.Err(err)))

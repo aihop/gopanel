@@ -15,8 +15,8 @@ import (
 // @Success 200 {object} dto.PageResult
 // @Security ApiKeyAuth
 // @Security Timestamp
-// @Router /container/repo/search [post]
-func SearchRepo(c fiber.Ctx) error {
+// @Router /container/repo/list [post]
+func ContainerRepoList(c fiber.Ctx) error {
 	req, err := e.BodyToStruct[dto.SearchWithPage](c.Body())
 	if err != nil {
 		return c.JSON(e.RetError(constant.CodeErrBadRequest, err.Error()))

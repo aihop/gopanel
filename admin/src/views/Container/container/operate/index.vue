@@ -515,7 +515,7 @@ import {
 	updateContainer,
 	loadResourceLimit,
 	listNetwork,
-	searchContainer
+	containerListAPI
 } from "@/api/modules/container"
 import { type Container } from "@/api/interface/container"
 import { MsgError, MsgSuccess } from "@/utils/message"
@@ -860,7 +860,7 @@ const updateContainerID = async () => {
 		orderBy: "created_at",
 		order: "null"
 	}
-	await searchContainer(params).then(res => {
+	await containerListAPI(params).then(res => {
 		if (res.data.items?.length === 1) {
 			dialogData.value.rowData.containerID = res.data.items[0].containerID
 			return

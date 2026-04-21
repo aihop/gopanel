@@ -4,11 +4,11 @@ import type { Container } from "../interface/container"
 import { TimeoutEnum } from "@/enums/http-enum"
 import type { Response } from "@/types/api/response"
 
-export const searchContainer = (params: Container.ContainerSearch) => {
-	return http.post<ResPage<Container.ContainerInfo>>(`/container/search`, params, TimeoutEnum.T_40S)
+export const containerListAPI = (params: Container.ContainerSearch) => {
+	return http.post<ResPage<Container.ContainerInfo>>(`/container/list`, params, TimeoutEnum.T_40S)
 }
-export const listContainer = () => {
-	return http.post<Array<string>>(`/container/list`, {})
+export const containerAllAPI = () => {
+	return http.post<Array<string>>(`/container/all`, {})
 }
 export const loadResourceLimit = () => {
 	return http.get<Container.ResourceLimit>(`/container/limit`)
@@ -108,8 +108,8 @@ export const createNetwork = (params: Container.NetworkCreate) => {
 }
 
 // volume
-export const searchVolume = (params: SearchWithPage) => {
-	return http.post<ResPage<Container.VolumeInfo>>(`/container/volume/search`, params)
+export const containerVolumeListAPI = (params: SearchWithPage) => {
+	return http.post<ResPage<Container.VolumeInfo>>(`/container/volume/list`, params)
 }
 export const listVolume = () => {
 	return http.get<Array<Container.Options>>(`/container/volume`)
@@ -125,8 +125,8 @@ export const createVolume = (params: Container.VolumeCreate) => {
 export const checkRepoStatus = (id: number) => {
 	return http.post(`/container/repo/status`, { id: id }, TimeoutEnum.T_40S)
 }
-export const searchImageRepo = (params: SearchWithPage) => {
-	return http.post<ResPage<Container.RepoInfo>>(`/container/repo/search`, params)
+export const containerRepoListAPI = (params: SearchWithPage) => {
+	return http.post<ResPage<Container.RepoInfo>>(`/container/repo/list`, params)
 }
 export const listImageRepo = () => {
 	return http.get<Container.RepoOptions>(`/container/repo`)

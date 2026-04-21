@@ -366,6 +366,35 @@
     :mask-closable="false"
     :closable="true"
   >
+    <n-alert
+      v-if="repairTipVisible"
+      class="mb-3"
+      type="warning"
+      :title="repairTipTitle"
+      :show-icon="true"
+    >
+      <div class="text-sm leading-6">
+        <div v-if="repairTipMessage">{{ repairTipMessage }}</div>
+        <div class="mt-2 whitespace-pre-wrap rounded-md bg-slate-50 p-3 font-mono text-xs text-slate-700">{{ repairTipCommands }}</div>
+        <div
+          v-if="repairTipOutput"
+          class="mt-2 whitespace-pre-wrap rounded-md bg-slate-50 p-3 font-mono text-xs text-slate-700"
+        >{{ repairTipOutput }}</div>
+        <n-space class="mt-3">
+          <n-button
+            size="small"
+            type="primary"
+            :loading="repairingCompose"
+            @click="handleRepairCompose"
+          >一键修复</n-button>
+          <n-button
+            size="small"
+            secondary
+            @click="copyRepairCommands"
+          >复制命令</n-button>
+        </n-space>
+      </div>
+    </n-alert>
     <div
       ref="terminalRef"
       class="bg-[#1e1e1e] p-4 rounded-md h-[400px] overflow-y-auto text-[#d4d4d4] font-mono text-sm leading-relaxed"
@@ -401,7 +430,7 @@ import { ref, watch, reactive, nextTick } from "vue"
 import { MdPreview } from 'md-editor-v3'
 import 'md-editor-v3/lib/preview.css'
 // @ts-ignore
-import { appsListAPI, GetApp, InstallApp, GetAppDetail } from "@/api/modules/apps"
+import { appsInstalledListAPI, appsListAPI, appsRepairComposeAPI, GetApp, InstallApp, GetAppDetail } from "@/api/modules/apps"
 import type { AppsSearchParams } from "@/api/modules/apps"
 import { useMessage } from "naive-ui"
 import { useRouter } from "vue-router"
@@ -439,6 +468,12 @@ const logsData = ref<string[]>([])
 const isInstallFinished = ref(false)
 const terminalRef = ref<HTMLElement | null>(null)
 let logEventSource: EventSource | null = null
+const repairTipVisible = ref(false)
+const repairTipTitle = ref("")
+const repairTipMessage = ref("")
+const repairTipCommands = ref("")
+const repairTipOutput = ref("")
+const repairingCompose = ref(false)
 const formFields = ref<any[]>([])
 const formRef = ref<any>(null)
 
@@ -611,6 +646,11 @@ async function submitInstall() {
 					logModalVisible.value = true
 					logsData.value = []
 					isInstallFinished.value = false
+					repairTipVisible.value = false
+					repairTipTitle.value = ""
+					repairTipMessage.value = ""
+					repairTipCommands.value = ""
+					repairTipOutput.value = ""
 					
 					if (logEventSource) {
 						logEventSource.close()
@@ -639,19 +679,19 @@ async function submitInstall() {
 							isInstallFinished.value = true
 							logsData.value.push("\n====== 安装流程结束 ======")
 							scrollToBottom()
-							// 安装完成后刷新列表或更新状态
-							if (currentApp.value) {
-								currentApp.value.installing = false
-								currentApp.value.installed = true
-							}
-							if (appIndex !== -1) {
-								apps.value[appIndex].installing = false
-								apps.value[appIndex].installed = true
-							}
+							if (currentApp.value) currentApp.value.installing = false
+							if (appIndex !== -1) apps.value[appIndex].installing = false
+							checkInstallResult(reqData.name)
 							fetchData() // 重新拉取最新状态
 							return
 						}
 						logsData.value.push(event.data)
+						if (event.data.includes("no compose command found")) {
+							repairTipVisible.value = true
+							repairTipTitle.value = "检测到 Compose 环境缺失"
+							repairTipMessage.value = "当前主机未检测到 docker compose / podman compose / podman-compose，导致无法 pull/up。可以先一键修复（需要 root 权限），或复制命令手动执行。"
+							repairTipCommands.value = "sudo apt-get update\nsudo apt-get install -y podman-compose"
+						}
 						scrollToBottom()
 					}
 					
@@ -681,6 +721,59 @@ async function submitInstall() {
 			}
 		}
 	})
+}
+
+const checkInstallResult = async (name: string) => {
+	try {
+		const res = await appsInstalledListAPI({ page: 1, limit: 1, name })
+		const data = res.data as any
+		const item = data?.items?.[0]
+		if (!item) return
+		if (item.status === "UpErr" || item.status === "DownloadErr" || item.status === "SyncFailed" || item.status === "Error") {
+			if (!repairTipVisible.value && typeof item.message === "string" && item.message.includes("no compose command found")) {
+				repairTipVisible.value = true
+				repairTipTitle.value = "检测到 Compose 环境缺失"
+				repairTipMessage.value = item.message
+				repairTipCommands.value = "sudo apt-get update\nsudo apt-get install -y podman-compose"
+			}
+		}
+	} catch (e) {
+	}
+}
+
+const handleRepairCompose = async () => {
+	if (repairingCompose.value) return
+	repairingCompose.value = true
+	repairTipOutput.value = ""
+	try {
+		const res = await appsRepairComposeAPI()
+		const r = res as any
+		if (r.code === 0) {
+			repairTipOutput.value = r.data?.output || "已执行修复，请重新发起安装。"
+			message.success("修复已执行，请重新发起安装")
+		} else {
+			message.error(r.msg || "修复失败")
+		}
+	} catch (e: any) {
+		message.error(e?.message || "修复失败")
+	} finally {
+		repairingCompose.value = false
+	}
+}
+
+const copyRepairCommands = async () => {
+	try {
+		const text = repairTipCommands.value || ""
+		if (!text) return
+		if (navigator?.clipboard?.writeText) {
+			await navigator.clipboard.writeText(text)
+			message.success("已复制命令")
+			return
+		}
+		message.warning("当前环境不支持一键复制，请手动选择复制")
+	} catch (e) {
+		message.warning("复制失败，请手动选择复制")
+	}
 }
 
 function handleLogModalClose() {

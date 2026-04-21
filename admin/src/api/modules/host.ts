@@ -116,8 +116,8 @@ export const batchOperateRule = (params: Host.BatchRule) => {
 }
 
 // monitors
-export const loadMonitor = (param: Host.MonitorSearch) => {
-	return http.post<Array<Host.MonitorData>>(`/host/monitor/search`, param)
+export const hostMonitorListAPI = (param: Host.MonitorSearch) => {
+	return http.post<Array<Host.MonitorData>>(`/host/monitor/list`, param)
 }
 export const getNetworkOptions = () => {
 	return http.get<Array<string>>(`/host/monitor/netoptions`)

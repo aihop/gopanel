@@ -7,8 +7,8 @@ export async function hostsFirewallBaseAPI() {
 	})
 }
 
-export async function hostsFirewallSearchAPI(data: any) {
-	return await request<Response<any>>(`/host/firewall/search`, {
+export async function hostsFirewallListAPI(data: any) {
+	return await request<Response<any>>(`/host/firewall/list`, {
 		method: "POST",
 		data
 	})

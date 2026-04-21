@@ -189,7 +189,7 @@
 
 <script lang="ts" setup>
 import type { Container } from "@/api/interface/container"
-import { composeOperator, containerOperator, inspect, searchContainer } from "@/api/modules/container"
+import { composeOperator, containerOperator, inspect, containerListAPI } from "@/api/modules/container"
 import CodeDialog from "@/components/CodeDialog.vue"
 import LayoutContent from "@/components/LayoutContent.vue"
 import OpDialog from "@/components/OpDialog.vue"
@@ -253,7 +253,7 @@ async function search() {
 		order: "null"
 	}
 	loading.value = true
-	await searchContainer(params)
+	await containerListAPI(params)
 		.then(res => {
 			loading.value = false
 			data.value = res.data.items || []

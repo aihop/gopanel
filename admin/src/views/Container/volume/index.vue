@@ -58,7 +58,7 @@ import { h, ref, onMounted } from "vue"
 import { NButton, NSpace, NText, NInput, NIcon, NDataTable, NCard, useDialog, useMessage } from "naive-ui"
 import type { DataTableColumns, DataTableRowKey, FormInst, FormRules } from "naive-ui"
 import CreateVolume from "./create/index.vue"
-import { searchVolume, deleteVolume, containerPrune } from "@/api/modules/container"
+import { containerVolumeListAPI, deleteVolume, containerPrune } from "@/api/modules/container"
 import type { Container } from "@/api/interface/container"
 import type { SearchWithPage } from "@/api/interface"
 import { computeSize } from "@/utils/util"
@@ -137,7 +137,7 @@ const handleCreateVolume = () => {
 const fetchVolumeList = async () => {
 	try {
 		loading.value = true
-		const res = await searchVolume(searchForm.value)
+		const res = await containerVolumeListAPI(searchForm.value)
 		volumeData.value = res.data.items || []
 		pagination.value.itemCount = res.data.total || 0
 	} catch (error) {

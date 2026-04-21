@@ -373,7 +373,7 @@ func loadContainerListStatPodmanCLI(containerID string) dto.ContainerListStats {
 	}
 	memUsage, _ := parseMemUsagePairToMB(parts[2])
 	return dto.ContainerListStats{
-		ContainerID:    strings.TrimSpace(containerID),
+		ContainerID:   strings.TrimSpace(containerID),
 		CPUPercent:    parsePercent(parts[1]),
 		MemoryPercent: parsePercent(parts[3]),
 		MemoryUsage:   uint64(memUsage * 1024 * 1024),

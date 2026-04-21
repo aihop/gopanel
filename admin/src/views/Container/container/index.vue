@@ -209,7 +209,7 @@ import {
 	inspect,
 	loadContainerInfo,
 	loadInstanceStatus,
-	searchContainer
+	containerListAPI
 } from "@/api/modules/container"
 import { type Container } from "@/api/interface/container"
 import { t } from "@/i18n"
@@ -609,7 +609,7 @@ const search = async (column?: any) => {
 	}
 	loading.value = true
 	loadStats()
-	await searchContainer(params)
+	await containerListAPI(params)
 		.then(res => {
 			loading.value = false
 			data.value = Array.isArray(res.data.items) ? res.data.items : []
@@ -633,7 +633,7 @@ const refresh = async () => {
 		order: paginationConfig.order
 	}
 	loadStats()
-	const res = await searchContainer(params)
+	const res = await containerListAPI(params)
 	let containers = res.data.items || []
 	for (const container of containers) {
 		for (const c of data.value) {
