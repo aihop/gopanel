@@ -4,6 +4,7 @@ export namespace Container {
 	export interface ContainerOperate {
 		names: Array<string>
 		operation: string
+		runtimeHost?: string
 	}
 	export interface ContainerRename {
 		name: string
@@ -78,6 +79,7 @@ export namespace Container {
 		createTime: string
 		state: string
 		runTime: string
+		runtimeHost?: string
 		network: Array<string>
 		ports: Array<string>
 		isFromApp: boolean
@@ -117,6 +119,7 @@ export namespace Container {
 	export interface ContainerInspect {
 		id: string
 		type: string
+		runtimeHost?: string
 	}
 	export interface ContainerPrune {
 		pruneType: string
@@ -345,5 +348,6 @@ export namespace Container {
 		since: string
 		tail: number
 		containerType: string
+		runtimeHost?: string
 	}
 }

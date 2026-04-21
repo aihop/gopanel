@@ -47,6 +47,29 @@ func RuntimeCommand(ctx context.Context, args ...string) (*exec.Cmd, error) {
 	return c, nil
 }
 
+func RuntimeCommandWithHost(ctx context.Context, host string, args ...string) (*exec.Cmd, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	bin, err := RuntimeCLI(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if bin == "podman" && runtime.GOOS == "darwin" {
+		_ = PodmanEnsureReady(ctx)
+	}
+	h := strings.TrimSpace(host)
+	if h != "" && h != "podman-cli" && strings.HasPrefix(h, "unix://") {
+		if bin == "podman" {
+			args = append([]string{"--url", h}, args...)
+		} else {
+			args = append([]string{"-H", h}, args...)
+		}
+	}
+	c := exec.CommandContext(ctx, bin, args...)
+	return c, nil
+}
+
 func InspectContainerRunning(ctx context.Context, containerName string) (bool, bool, error) {
 	containerName = strings.TrimSpace(containerName)
 	if containerName == "" {

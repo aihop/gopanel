@@ -1,10 +1,12 @@
 package api
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -13,6 +15,7 @@ import (
 	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/pkg/websocket"
 	"github.com/aihop/gopanel/utils/cmd"
+	"github.com/aihop/gopanel/utils/docker"
 	"github.com/aihop/gopanel/utils/terminal"
 	"github.com/aihop/gopanel/utils/token"
 )
@@ -40,6 +43,7 @@ func ContainerWsSSH(wsConn *websocket.Conn) {
 		return
 	}
 	source := wsConn.Query("source")
+	runtimeHost := wsConn.Query("runtimeHost")
 	var containerID string
 	var initCmd []string
 	switch source {
@@ -53,12 +57,17 @@ func ContainerWsSSH(wsConn *websocket.Conn) {
 	if wshandleError(wsConn, err) {
 		return
 	}
-	pidMap := loadMapFromDockerTop(containerID)
-	slave, err := terminal.NewCommand(initCmd)
+	finalHost := strings.TrimSpace(runtimeHost)
+	if finalHost == "" && docker.IsPodmanRuntime(context.Background()) {
+		finalHost = resolvePodmanContainerHost(containerID)
+	}
+
+	pidMap := loadMapFromRuntimeTop(containerID, finalHost)
+	slave, err := terminal.NewCommandWithRuntimeHost(initCmd, finalHost)
 	if wshandleError(wsConn, err) {
 		return
 	}
-	defer killBash(containerID, strings.ReplaceAll(strings.Join(initCmd, " "), fmt.Sprintf("exec -it %s ", containerID), ""), pidMap)
+	defer killBash(containerID, strings.ReplaceAll(strings.Join(initCmd, " "), fmt.Sprintf("exec -it %s ", containerID), ""), pidMap, finalHost)
 	defer slave.Close()
 
 	tty, err := terminal.NewLocalWsSession(cols, rows, wsConn, slave, false)
@@ -117,14 +126,20 @@ func wshandleError(ws *websocket.Conn, err error) bool {
 }
 
 func loadMapFromDockerTop(containerID string) map[string]string {
-	pidMap := make(map[string]string)
-	sudo := cmd.SudoHandleCmd()
+	return loadMapFromRuntimeTop(containerID, "")
+}
 
-	stdout, err := cmd.Execf("%s docker top %s -eo pid,command ", sudo, containerID)
+func loadMapFromRuntimeTop(containerID string, runtimeHost string) map[string]string {
+	pidMap := make(map[string]string)
+	c, err := docker.RuntimeCommandWithHost(context.Background(), runtimeHost, "top", containerID, "-eo", "pid,command")
 	if err != nil {
 		return pidMap
 	}
-	lines := strings.Split(stdout, "\n")
+	out, err := c.CombinedOutput()
+	if err != nil {
+		return pidMap
+	}
+	lines := strings.Split(string(out), "\n")
 	for _, line := range lines {
 		parts := strings.Fields(line)
 		if len(parts) < 2 {
@@ -135,9 +150,9 @@ func loadMapFromDockerTop(containerID string) map[string]string {
 	return pidMap
 }
 
-func killBash(containerID, comm string, pidMap map[string]string) {
+func killBash(containerID, comm string, pidMap map[string]string, runtimeHost string) {
 	sudo := cmd.SudoHandleCmd()
-	newPidMap := loadMapFromDockerTop(containerID)
+	newPidMap := loadMapFromRuntimeTop(containerID, runtimeHost)
 	for pid, command := range newPidMap {
 		isOld := false
 		for pid2 := range pidMap {
@@ -150,6 +165,23 @@ func killBash(containerID, comm string, pidMap map[string]string) {
 			_, _ = cmd.Execf("%s kill -9 %s", sudo, pid)
 		}
 	}
+}
+
+func resolvePodmanContainerHost(containerID string) string {
+	id := strings.TrimSpace(containerID)
+	if id == "" {
+		return ""
+	}
+	c := exec.Command("podman", "container", "exists", id)
+	if err := c.Run(); err == nil {
+		return ""
+	}
+	host := "unix:///run/podman/podman.sock"
+	c2 := exec.Command("podman", "--url", host, "container", "exists", id)
+	if err := c2.Run(); err == nil {
+		return host
+	}
+	return ""
 }
 
 // var upGrader = websocket.Upgrader{

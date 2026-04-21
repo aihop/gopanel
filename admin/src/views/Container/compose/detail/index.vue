@@ -373,7 +373,7 @@ function onMonitor(row: any) {
 
 const dialogTerminalRef = ref()
 function onTerminal(row: any) {
-	dialogTerminalRef.value!.acceptParams({ containerID: row.containerID, container: row.name })
+	dialogTerminalRef.value!.acceptParams({ containerID: row.containerID, container: row.name, runtimeHost: row.runtimeHost || "" })
 }
 
 const buttons = [
@@ -398,7 +398,7 @@ const buttons = [
 	{
 		label: t("commons.button.log"),
 		click: (row: Container.ContainerInfo) => {
-			dialogContainerLogRef.value!.acceptParams({ containerID: row.containerID, container: row.name })
+			dialogContainerLogRef.value!.acceptParams({ containerID: row.containerID, container: row.name, runtimeHost: row.runtimeHost || "" })
 		}
 	}
 ]

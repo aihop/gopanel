@@ -16,7 +16,8 @@ type UpdateDescription struct {
 }
 
 type OperationWithName struct {
-	Name string `json:"name" validate:"required"`
+	Name        string `json:"name" validate:"required"`
+	RuntimeHost string `json:"runtimeHost"`
 }
 
 type OperateByID struct {
@@ -49,8 +50,9 @@ type UpdateByNameAndFile struct {
 }
 
 type OperationWithNameAndType struct {
-	Name string `json:"name"`
-	Type string `json:"type" validate:"required"`
+	Name        string `json:"name"`
+	Type        string `json:"type" validate:"required"`
+	RuntimeHost string `json:"runtimeHost"`
 }
 
 type ForceDelete struct {

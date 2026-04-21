@@ -25,8 +25,8 @@ export const upgradeContainer = (name: string, image: string, forcePull: boolean
 export const commitContainer = (params: Container.ContainerCommit) => {
 	return http.post(`/container/commit`, params)
 }
-export const loadContainerInfo = (name: string) => {
-	return http.post<Container.ContainerHelper>(`/container/info`, { name: name })
+export const loadContainerInfo = (name: string, runtimeHost?: string) => {
+	return http.post<Container.ContainerHelper>(`/container/info`, { name: name, runtimeHost: runtimeHost || "" })
 }
 export const containerCleanLogAPI = (containerName: string) => {
 	return http.post(`/container/clean/log`, { name: containerName })

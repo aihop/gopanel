@@ -53,6 +53,33 @@ func NewCommand(initCmd []string) (*LocalCommand, error) {
 	return lcmd, nil
 }
 
+func NewCommandWithRuntimeHost(initCmd []string, runtimeHost string) (*LocalCommand, error) {
+	c, err := docker.RuntimeCommandWithHost(context.Background(), runtimeHost, initCmd...)
+	if err != nil {
+		return nil, err
+	}
+	cmd := c
+	if term := os.Getenv("TERM"); term != "" {
+		cmd.Env = append(os.Environ(), "TERM="+term)
+	} else {
+		cmd.Env = append(os.Environ(), "TERM=xterm")
+	}
+
+	pty, err := pty.Start(cmd)
+	if err != nil {
+		return nil, fmt.Errorf("failed to start command: %w", err)
+	}
+
+	lcmd := &LocalCommand{
+		closeSignal:  DefaultCloseSignal,
+		closeTimeout: DefaultCloseTimeout,
+		cmd:          cmd,
+		pty:          pty,
+	}
+
+	return lcmd, nil
+}
+
 func (lcmd *LocalCommand) Read(p []byte) (n int, err error) {
 	return lcmd.pty.Read(p)
 }

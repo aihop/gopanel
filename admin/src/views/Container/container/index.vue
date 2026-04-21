@@ -285,7 +285,7 @@ const columns = ref([
 						whiteSpace: "normal", // 覆盖按钮默认的 nowrap
 						wordBreak: "break-all" // 确保长字符串（如无空格的名字）能强制换行
 					},
-					onClick: () => onInspect(row.containerID)
+					onClick: () => onInspect(row)
 				},
 				{ default: () => row.name }
 			)
@@ -477,7 +477,8 @@ const columns = ref([
 							onClick: () =>
 								dialogContainerLogRef.value!.acceptParams({
 									containerID: row.containerID,
-									container: row.name
+									container: row.name,
+									runtimeHost: row.runtimeHost || ""
 								})
 						},
 						{ default: () => t("commons.button.log") }
@@ -715,8 +716,8 @@ function loadMemValue(t: number) {
 }
 
 const dialogOperateRef = ref()
-const onEdit = async (container: string) => {
-	const res = await loadContainerInfo(container)
+const onEdit = async (row: Container.ContainerInfo) => {
+	const res = await loadContainerInfo(row.containerID, row.runtimeHost || "")
 	if (res.data) {
 		onOpenDialog("edit", res.data)
 	}
@@ -752,12 +753,15 @@ const onMonitor = (row: any) => {
 
 const dialogTerminalRef = ref()
 const onTerminal = (row: any) => {
-	dialogTerminalRef.value!.acceptParams({ containerID: row.containerID, container: row.name })
+	dialogTerminalRef.value!.acceptParams({
+		containerID: row.containerID,
+		container: row.name,
+		runtimeHost: row.runtimeHost || ""
+	})
 }
 
-const onInspect = async (id: string) => {
-	console.log("inspect click", id)
-	const res = await inspect({ id: id, type: "container" })
+const onInspect = async (row: Container.ContainerInfo) => {
+	const res = await inspect({ id: row.containerID, type: "container", runtimeHost: row.runtimeHost || "" })
 	console.log("inspect result", res)
 	let detailInfo = JSON.stringify(JSON.parse(res.data), null, 2)
 	let param = {
@@ -871,7 +875,7 @@ const buttons = [
 	{
 		label: t("commons.button.edit"),
 		click: (row: Container.ContainerInfo) => {
-			onEdit(row.containerID)
+			onEdit(row)
 		}
 	},
 	{

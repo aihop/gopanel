@@ -15,8 +15,9 @@ type PageContainer struct {
 }
 
 type InspectReq struct {
-	ID   string `json:"id" validate:"required"`
-	Type string `json:"type" validate:"required"`
+	ID          string `json:"id" validate:"required"`
+	Type        string `json:"type" validate:"required"`
+	RuntimeHost string `json:"runtimeHost"`
 }
 
 type ContainerInfo struct {
@@ -27,6 +28,7 @@ type ContainerInfo struct {
 	CreateTime  string `json:"createTime"`
 	State       string `json:"state"`
 	RunTime     string `json:"runTime"`
+	RuntimeHost string `json:"runtimeHost"`
 
 	Network []string `json:"network"`
 	Ports   []string `json:"ports"`
@@ -115,8 +117,9 @@ type PortHelper struct {
 }
 
 type ContainerOperation struct {
-	Names     []string `json:"names" validate:"required"`
-	Operation string   `json:"operation" validate:"required,oneof=up start stop restart kill pause unpause remove"`
+	Names       []string `json:"names" validate:"required"`
+	Operation   string   `json:"operation" validate:"required,oneof=up start stop restart kill pause unpause remove"`
+	RuntimeHost string   `json:"runtimeHost"`
 }
 
 type ContainerRename struct {
@@ -234,4 +237,5 @@ type ContainerLog struct {
 	Since         string `json:"since"`
 	Tail          uint   `json:"tail"`
 	ContainerType string `json:"containerType"`
+	RuntimeHost   string `json:"runtimeHost"`
 }

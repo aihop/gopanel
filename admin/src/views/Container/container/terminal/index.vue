@@ -103,7 +103,8 @@ const form = reactive({
 	isCustom: false,
 	command: "",
 	user: "",
-	containerID: ""
+	containerID: "",
+	runtimeHost: ""
 })
 const formRef = ref<FormInst>()
 const terminalRef = ref<InstanceType<typeof Terminal> | null>(null)
@@ -119,10 +120,12 @@ const rules = {
 interface DialogProps {
 	containerID: string
 	container: string
+	runtimeHost?: string
 }
 async function acceptParams(params: DialogProps): Promise<void> {
 	terminalVisible.value = true
 	form.containerID = params.containerID
+	form.runtimeHost = params.runtimeHost || ""
 	title.value = params.container
 	form.isCustom = false
 	form.user = ""
@@ -141,7 +144,7 @@ async function initTerm() {
 		await nextTick()
 		terminalRef.value!.acceptParams({
 			endpoint: "/container/exec",
-			args: `source=container&containerid=${form.containerID}&user=${form.user}&command=${form.command}`,
+			args: `source=container&containerid=${form.containerID}&user=${form.user}&command=${form.command}&runtimeHost=${encodeURIComponent(form.runtimeHost || "")}`,
 			error: "",
 			initCmd: ""
 		})

@@ -146,6 +146,7 @@ const logSearch = reactive({
 	isWatch: true,
 	container: "",
 	containerID: "",
+	runtimeHost: "",
 	mode: "all",
 	tail: 100
 })
@@ -194,7 +195,7 @@ async function searchLogs() {
 	const authStore = useAuthStore()
 	const auth = authStore.getAuth() || ""
 
-	const url = `${protocol}://${host}/api/container/search/log?container=${logSearch.containerID}&since=${logSearch.mode}&tail=${logSearch.tail}&follow=${logSearch.isWatch}&auth=${auth}`
+	const url = `${protocol}://${host}/api/container/search/log?container=${logSearch.containerID}&since=${logSearch.mode}&tail=${logSearch.tail}&follow=${logSearch.isWatch}&runtimeHost=${encodeURIComponent(logSearch.runtimeHost || "")}&auth=${auth}`
 	terminalSocket.value = new WebSocket(url)
 
 	terminalSocket.value.onmessage = event => {
@@ -217,7 +218,8 @@ async function onDownload() {
 				container: logSearch.containerID,
 				since: logSearch.mode,
 				tail: logSearch.tail,
-				containerType: "container"
+				containerType: "container",
+				runtimeHost: logSearch.runtimeHost || ""
 			}
 			const fileName = `${logSearch.container}-${dateFormatForName(new Date())}.log`
 			try {
@@ -256,11 +258,13 @@ async function onClean() {
 interface DialogProps {
 	container: string
 	containerID: string
+	runtimeHost?: string
 }
 
 function acceptParams(props: DialogProps): void {
 	logVisible.value = true
 	logSearch.containerID = props.containerID
+	logSearch.runtimeHost = props.runtimeHost || ""
 	logSearch.tail = 100
 	logSearch.mode = "all"
 	logSearch.isWatch = true

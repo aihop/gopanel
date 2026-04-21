@@ -312,9 +312,10 @@ func ContainerLogs(c *websocket.Conn) {
 	since := c.Query("since")
 	follow := c.Query("follow") == "true"
 	tail := c.Query("tail")
+	runtimeHost := c.Query("runtimeHost")
 
 	// 获取容器日志
-	if err := containerService.ContainerLogs(c, "container", container, since, tail, follow); err != nil {
+	if err := containerService.ContainerLogs(c, "container", container, since, tail, runtimeHost, follow); err != nil {
 		_ = c.WriteMessage(websocket.TextMessage, []byte(err.Error()))
 	}
 }
@@ -332,7 +333,7 @@ func DownloadContainerLogs(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(buserr.Err(err)))
 	}
-	info, err := service.NewIContainerService().DownloadContainerLogs(R.ContainerType, R.Container, R.Since, strconv.Itoa(int(R.Tail)))
+	info, err := service.NewIContainerService().DownloadContainerLogs(R.ContainerType, R.Container, R.Since, strconv.Itoa(int(R.Tail)), R.RuntimeHost)
 	if err != nil {
 		return c.JSON(e.Fail(buserr.Err(errors.New(constant.ErrTypeInternalServer))))
 	}
@@ -640,7 +641,7 @@ func ComposeLogs(c *websocket.Conn) {
 	follow := c.Query("follow") == "true"
 	tail := c.Query("tail")
 
-	if err := containerService.ContainerLogs(c, "compose", compose, since, tail, follow); err != nil {
+	if err := containerService.ContainerLogs(c, "compose", compose, since, tail, "", follow); err != nil {
 		_ = c.WriteMessage(websocket.TextMessage, []byte(err.Error()))
 		return
 	}
