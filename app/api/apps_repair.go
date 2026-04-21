@@ -28,3 +28,20 @@ func RepairCompose(c fiber.Ctx) error {
 	}))
 }
 
+func RepairPodmanShortName(c fiber.Ctx) error {
+	if runtime.GOOS != "linux" {
+		return c.JSON(e.Error(errors.New("unsupported platform")))
+	}
+	resp, err := gpc.Do(context.Background(), "REPAIR_PODMAN_SHORT_NAME", map[string]interface{}{})
+	if err != nil {
+		msg := strings.ToLower(err.Error())
+		if strings.Contains(msg, "unknown action") {
+			return c.JSON(e.Error(errors.New("gpc helper 版本过旧，缺少 REPAIR_PODMAN_SHORT_NAME 动作；请更新服务器上的 gpc 并重启 gpc.service 后再试")))
+		}
+		return c.JSON(e.Error(err))
+	}
+	return c.JSON(e.Succ(map[string]any{
+		"output": strings.TrimSpace(resp.Output),
+	}))
+}
+

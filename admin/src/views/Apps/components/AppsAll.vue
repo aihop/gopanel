@@ -390,7 +390,14 @@
           <n-button
             size="small"
             secondary
+            @click="submitInstall"
+            v-if="isInstallFinished && repairTipAction"
+          >重新安装</n-button>
+          <n-button
+            size="small"
+            secondary
             @click="copyRepairCommands"
+            v-if="repairTipCommands"
           >复制命令</n-button>
         </n-space>
       </div>
@@ -430,7 +437,9 @@ import { ref, watch, reactive, nextTick } from "vue"
 import { MdPreview } from 'md-editor-v3'
 import 'md-editor-v3/lib/preview.css'
 // @ts-ignore
-import { appsInstalledListAPI, appsListAPI, appsRepairComposeAPI, GetApp, InstallApp, GetAppDetail } from "@/api/modules/apps"
+import { appsInstalledListAPI, appsListAPI, appsRepairComposeAPI, appsRepairPodmanShortNameAPI, GetApp, InstallApp, GetAppDetail } from "@/api/modules/apps"
+// @ts-ignore
+import { repairSystemdLingerAPI } from "@/api/modules/container"
 import type { AppsSearchParams } from "@/api/modules/apps"
 import { useMessage } from "naive-ui"
 import { useRouter } from "vue-router"
@@ -473,6 +482,7 @@ const repairTipTitle = ref("")
 const repairTipMessage = ref("")
 const repairTipCommands = ref("")
 const repairTipOutput = ref("")
+const repairTipAction = ref("")
 const repairingCompose = ref(false)
 const formFields = ref<any[]>([])
 const formRef = ref<any>(null)
@@ -651,6 +661,7 @@ async function submitInstall() {
 					repairTipMessage.value = ""
 					repairTipCommands.value = ""
 					repairTipOutput.value = ""
+					repairTipAction.value = ""
 					
 					if (logEventSource) {
 						logEventSource.close()
@@ -686,13 +697,26 @@ async function submitInstall() {
 							return
 						}
 						logsData.value.push(event.data)
-						if (event.data.includes("no compose command found")) {
-							repairTipVisible.value = true
-							repairTipTitle.value = "检测到 Compose 环境缺失"
-							repairTipMessage.value = "当前主机未检测到 docker compose / podman compose / podman-compose，导致无法 pull/up。可以先一键修复（需要 root 权限），或复制命令手动执行。"
-							repairTipCommands.value = "sudo apt-get update\nsudo apt-get install -y podman-compose"
-						}
-						scrollToBottom()
+				if (event.data.includes("no compose command found")) {
+					repairTipVisible.value = true
+					repairTipTitle.value = "检测到 Compose 环境缺失"
+					repairTipMessage.value = "当前主机未检测到 docker compose / podman compose / podman-compose，导致无法 pull/up。可以先一键修复（需要 root 权限），或复制命令手动执行。"
+					repairTipCommands.value = "sudo apt-get update\nsudo apt-get install -y podman-compose"
+					repairTipAction.value = "compose"
+				} else if (event.data.includes("short-name") && event.data.includes("did not resolve")) {
+					repairTipVisible.value = true
+					repairTipTitle.value = "检测到 Podman 短名解析失败"
+					repairTipMessage.value = "当前容器运行时配置不允许直接拉取简写镜像名。可以先一键修复（自动向 /etc/containers/registries.conf 追加 docker.io 源）。"
+					repairTipCommands.value = ""
+					repairTipAction.value = "short-name"
+				} else if (event.data.includes("cgroup-manager") || event.data.includes("enable-linger")) {
+					repairTipVisible.value = true
+					repairTipTitle.value = "建议开启用户 Linger (保活) 支持"
+					repairTipMessage.value = "检测到当前 Podman 用户会话未开启 Linger，可能导致 cgroup 限制降级或容器异常退出。可以先一键修复开启该支持。"
+					repairTipCommands.value = ""
+					repairTipAction.value = "linger"
+				}
+				scrollToBottom()
 					}
 					
 					logEventSource.onerror = (err) => {
@@ -735,6 +759,19 @@ const checkInstallResult = async (name: string) => {
 				repairTipTitle.value = "检测到 Compose 环境缺失"
 				repairTipMessage.value = item.message
 				repairTipCommands.value = "sudo apt-get update\nsudo apt-get install -y podman-compose"
+				repairTipAction.value = "compose"
+			} else if (!repairTipVisible.value && typeof item.message === "string" && item.message.includes("short-name") && item.message.includes("did not resolve")) {
+				repairTipVisible.value = true
+				repairTipTitle.value = "检测到 Podman 短名解析失败"
+				repairTipMessage.value = item.message
+				repairTipCommands.value = ""
+				repairTipAction.value = "short-name"
+			} else if (!repairTipVisible.value && typeof item.message === "string" && (item.message.includes("cgroup-manager") || item.message.includes("enable-linger"))) {
+				repairTipVisible.value = true
+				repairTipTitle.value = "建议开启用户 Linger (保活) 支持"
+				repairTipMessage.value = item.message
+				repairTipCommands.value = ""
+				repairTipAction.value = "linger"
 			}
 		}
 	} catch (e) {
@@ -746,7 +783,15 @@ const handleRepairCompose = async () => {
 	repairingCompose.value = true
 	repairTipOutput.value = ""
 	try {
-		const res = await appsRepairComposeAPI()
+		let res: any
+		if (repairTipAction.value === "short-name") {
+			res = await appsRepairPodmanShortNameAPI()
+		} else if (repairTipAction.value === "linger") {
+			res = await repairSystemdLingerAPI()
+		} else {
+			res = await appsRepairComposeAPI()
+		}
+		
 		const r = res as any
 		if (r.code === 0) {
 			repairTipOutput.value = r.data?.output || "已执行修复，请重新发起安装。"

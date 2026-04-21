@@ -190,9 +190,48 @@
       preset="card"
       :title="logTitle"
       style="width: 800px"
+      :mask-closable="false"
       @after-leave="handleLogModalClose"
     >
-      <div class="mb-3 text-xs text-slate-500">实时输出，关闭窗口将断开连接</div>
+      <div class="mb-3 flex items-center justify-between text-xs text-slate-500">
+        <span>实时输出，关闭窗口将断开连接</span>
+      </div>
+      <n-alert
+        v-if="repairTipVisible"
+        class="mb-3"
+        type="warning"
+        :title="repairTipTitle"
+        :show-icon="true"
+      >
+        <div class="text-sm leading-6">
+          <div v-if="repairTipMessage">{{ repairTipMessage }}</div>
+          <div class="mt-2 whitespace-pre-wrap rounded-md bg-slate-50 p-3 font-mono text-xs text-slate-700">{{ repairTipCommands }}</div>
+          <div
+            v-if="repairTipOutput"
+            class="mt-2 whitespace-pre-wrap rounded-md bg-slate-50 p-3 font-mono text-xs text-slate-700"
+          >{{ repairTipOutput }}</div>
+          <n-space class="mt-3">
+            <n-button
+              size="small"
+              type="primary"
+              :loading="repairingCompose"
+              @click="handleRepairCompose"
+            >一键修复</n-button>
+            <n-button
+              size="small"
+              secondary
+              @click="handleRebuild({id: logConfig.id, name: logConfig.name, status: 'Error'})"
+              v-if="isInstallFinished && repairTipAction"
+            >重新重建</n-button>
+            <n-button
+              size="small"
+              secondary
+              @click="copyRepairCommands"
+              v-if="repairTipCommands"
+            >复制命令</n-button>
+          </n-space>
+        </div>
+      </n-alert>
       <div
         ref="terminalRef"
         class="max-h-[60vh] overflow-auto whitespace-pre-wrap rounded-lg bg-slate-950 p-3 font-mono text-xs text-slate-100"
@@ -204,15 +243,35 @@
         <div
           v-for="(line, idx) in logsData"
           :key="idx"
-        >{{ line }}</div>
+        >
+          <span
+            v-if="line.includes('ERROR')"
+            class="text-red-400"
+          >{{ line }}</span>
+          <span
+            v-else-if="line.includes('INFO')"
+            class="text-blue-300"
+          >{{ line }}</span>
+          <span v-else>{{ line }}</span>
+        </div>
       </div>
+      <template #action>
+        <n-button
+          :disabled="!isInstallFinished"
+          type="primary"
+          @click="handleLogModalClose"
+        >关闭</n-button>
+      </template>
     </n-modal>
   </div>
 </template>
 <script setup lang="ts">
 import { ref, watch, reactive, nextTick, computed } from "vue"
 import { useMessage, useDialog } from "naive-ui"
-import { appsInstalledListAPI, appsUninstall, InstalledOp } from "../../../api/modules/apps"
+// @ts-ignore
+import { appsInstalledListAPI, appsUninstall, InstalledOp, appsRepairComposeAPI, appsRepairPodmanShortNameAPI } from "../../../api/modules/apps"
+// @ts-ignore
+import { repairSystemdLingerAPI } from "@/api/modules/container"
 import type { AppsInstalledSearchParams } from "../../../api/modules/apps"
 import { useAuthStore } from "../../../store/auth"
 
@@ -248,9 +307,18 @@ const deleteError = ref("")
 
 const logModalVisible = ref(false)
 const logsData = ref<string[]>([])
+const isInstallFinished = ref(false)
 const terminalRef = ref<HTMLElement | null>(null)
 let logEventSource: EventSource | null = null
 const logTitle = computed(() => (logConfig.name ? `安装日志 - ${logConfig.name}` : "安装日志"))
+
+const repairTipVisible = ref(false)
+const repairTipTitle = ref("")
+const repairTipMessage = ref("")
+const repairTipCommands = ref("")
+const repairTipOutput = ref("")
+const repairTipAction = ref("")
+const repairingCompose = ref(false)
 
 const busyStatuses = new Set(["Installing", "Upgrading", "Rebuilding", "Syncing"])
 const errorStatuses = new Set(["UpErr", "DownloadErr", "SyncFailed"])
@@ -416,6 +484,15 @@ async function handleRebuild(item: any) {
 				if (res.code === 0) {
 					message.success("已开始重建")
 					fetchData()
+					// 调用 openLog 并重置完成状态与提示
+					isInstallFinished.value = false
+					repairTipVisible.value = false
+					repairTipTitle.value = ""
+					repairTipMessage.value = ""
+					repairTipCommands.value = ""
+					repairTipOutput.value = ""
+					repairTipAction.value = ""
+					openLog(item)
 				} else {
 					message.error(res.msg || "重建失败")
 				}
@@ -456,21 +533,117 @@ function openLog(item: any) {
 		if (event.data === "EOF" || event.data === '["EOF"]') {
 			logEventSource?.close()
 			logEventSource = null
+			isInstallFinished.value = true
 			logsData.value.push("\n====== 日志结束 ======")
 			scrollToBottom()
+			checkInstallResult(logConfig.name)
+			fetchData()
 			return
 		}
 		logsData.value.push(event.data)
-		if (logsData.value.length > 2000) {
+				if (event.data.includes("no compose command found")) {
+					repairTipVisible.value = true
+					repairTipTitle.value = "检测到 Compose 环境缺失"
+					repairTipMessage.value = "当前主机未检测到 docker compose / podman compose / podman-compose，导致无法 pull/up。可以先一键修复（需要 root 权限），或复制命令手动执行。"
+					repairTipCommands.value = "sudo apt-get update\nsudo apt-get install -y podman-compose"
+					repairTipAction.value = "compose"
+				} else if (event.data.includes("short-name") && event.data.includes("did not resolve")) {
+					repairTipVisible.value = true
+					repairTipTitle.value = "检测到 Podman 短名解析失败"
+					repairTipMessage.value = "当前容器运行时配置不允许直接拉取简写镜像名。可以先一键修复（自动向 /etc/containers/registries.conf 追加 docker.io 源）。"
+					repairTipCommands.value = ""
+					repairTipAction.value = "short-name"
+				} else if (event.data.includes("cgroup-manager") || event.data.includes("enable-linger")) {
+					repairTipVisible.value = true
+					repairTipTitle.value = "建议开启用户 Linger (保活) 支持"
+					repairTipMessage.value = "检测到当前 Podman 用户会话未开启 Linger，可能导致 cgroup 限制降级或容器异常退出。可以先一键修复开启该支持。"
+					repairTipCommands.value = ""
+					repairTipAction.value = "linger"
+				}
+				if (logsData.value.length > 2000) {
 			logsData.value = logsData.value.slice(-2000)
 		}
 		scrollToBottom()
 	}
 	logEventSource.onerror = () => {
 		logsData.value.push("\n[系统提示] 与日志服务器的连接已断开或发生错误。")
+		isInstallFinished.value = true
 		logEventSource?.close()
 		logEventSource = null
 		scrollToBottom()
+	}
+}
+
+const checkInstallResult = async (name: string) => {
+	try {
+		const res = await appsInstalledListAPI({ page: 1, limit: 1, name })
+		const data = res.data as any
+		const item = data?.items?.[0]
+		if (!item) return
+		if (item.status === "UpErr" || item.status === "DownloadErr" || item.status === "SyncFailed" || item.status === "Error") {
+			if (!repairTipVisible.value && typeof item.message === "string" && item.message.includes("no compose command found")) {
+				repairTipVisible.value = true
+				repairTipTitle.value = "检测到 Compose 环境缺失"
+				repairTipMessage.value = item.message
+				repairTipCommands.value = "sudo apt-get update\nsudo apt-get install -y podman-compose"
+				repairTipAction.value = "compose"
+			} else if (!repairTipVisible.value && typeof item.message === "string" && item.message.includes("short-name") && item.message.includes("did not resolve")) {
+				repairTipVisible.value = true
+				repairTipTitle.value = "检测到 Podman 短名解析失败"
+				repairTipMessage.value = item.message
+				repairTipCommands.value = ""
+				repairTipAction.value = "short-name"
+			} else if (!repairTipVisible.value && typeof item.message === "string" && (item.message.includes("cgroup-manager") || item.message.includes("enable-linger"))) {
+				repairTipVisible.value = true
+				repairTipTitle.value = "建议开启用户 Linger (保活) 支持"
+				repairTipMessage.value = item.message
+				repairTipCommands.value = ""
+				repairTipAction.value = "linger"
+			}
+		}
+	} catch (e) {
+	}
+}
+
+const handleRepairCompose = async () => {
+	if (repairingCompose.value) return
+	repairingCompose.value = true
+	repairTipOutput.value = ""
+	try {
+		let res: any
+		if (repairTipAction.value === "short-name") {
+			res = await appsRepairPodmanShortNameAPI()
+		} else if (repairTipAction.value === "linger") {
+			res = await repairSystemdLingerAPI()
+		} else {
+			res = await appsRepairComposeAPI()
+		}
+		const r = res as any
+		if (r.code === 0) {
+			repairTipOutput.value = r.data?.output || "已执行修复，请重新发起操作。"
+			message.success("修复已执行，请重新发起操作")
+		} else {
+			message.error(r.msg || "修复失败")
+		}
+	} catch (e: any) {
+		message.error(e?.message || "修复失败")
+	} finally {
+		repairingCompose.value = false
+	}
+}
+
+const copyRepairCommands = async () => {
+	try {
+		const text = repairTipCommands.value || ""
+		if (!text) return
+		if (navigator?.clipboard?.writeText) {
+			await navigator.clipboard.writeText(text)
+			message.success("已复制命令")
+			return
+		}
+		message.warning("当前环境不支持一键复制，请手动选择复制")
+	} catch (e) {
+		message.warning("复制失败，请手动选择复制")
 	}
 }
 

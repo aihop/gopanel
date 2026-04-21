@@ -333,6 +333,38 @@ func (s *Server) actionPodmanSocketRepair(ctx context.Context, params map[string
 	return strings.Join(outs, "\n"), nil
 }
 
+func (s *Server) actionRepairPodmanShortName(ctx context.Context, params map[string]interface{}) (string, error) {
+	_ = params
+	if err := os.MkdirAll("/etc/containers", 0755); err != nil {
+		return "", err
+	}
+	confPath := "/etc/containers/registries.conf"
+	var content []byte
+	if fi, err := os.Stat(confPath); err == nil && !fi.IsDir() {
+		content, _ = os.ReadFile(confPath)
+	}
+
+	strContent := string(content)
+	if strings.Contains(strContent, "unqualified-search-registries") {
+		// 已经有配置，如果不包含 docker.io 就补上
+		if !strings.Contains(strContent, "docker.io") {
+			return "", errors.New("registries.conf 已经存在 unqualified-search-registries 但不包含 docker.io，请手动检查")
+		}
+		return "已经配置了 docker.io 短名解析，无需修复", nil
+	}
+
+	appendStr := "\n\n# 自动添加的短名解析\nunqualified-search-registries = [\"docker.io\"]\n"
+	f, err := os.OpenFile(confPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	if _, err := f.WriteString(appendStr); err != nil {
+		return "", err
+	}
+	return "已成功添加 docker.io 短名解析到 /etc/containers/registries.conf", nil
+}
+
 func (s *Server) actionSystemdEnableLinger(ctx context.Context, params map[string]interface{}) (string, error) {
 	uid, ok := getInt(params, "uid")
 	if !ok {

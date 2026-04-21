@@ -49,6 +49,10 @@ export function appsRepairComposeAPI() {
 	return http.post(`/apps/repair/compose`)
 }
 
+export function appsRepairPodmanShortNameAPI() {
+	return http.post(`/apps/repair/short-name`)
+}
+
 export const GetApp = (key: string) => {
 	return http.get<App.AppDTO>("/apps/" + key)
 }

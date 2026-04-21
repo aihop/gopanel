@@ -18,6 +18,7 @@ func AppsRouter(r fiber.Router) {
 		// 安装
 		AppsRouter.Post("/install", api.AppInstall)
 		AppsRouter.Post("/repair/compose", api.RepairCompose)
+		AppsRouter.Post("/repair/short-name", api.RepairPodmanShortName)
 		AppsRouter.Post("/local/install", api.AppLocalInstall)
 		AppsRouter.Get("/local/list", api.AppLocalList)
 		AppsRouter.Get("/local/:key", api.AppLocalGet)

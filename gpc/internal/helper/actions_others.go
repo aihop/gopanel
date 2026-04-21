@@ -48,6 +48,12 @@ func (s *Server) actionPodmanSocketRepair(ctx context.Context, params map[string
 	return "", errors.New("unsupported platform")
 }
 
+func (s *Server) actionRepairPodmanShortName(ctx context.Context, params map[string]interface{}) (string, error) {
+	_ = ctx
+	_ = params
+	return "", errors.New("unsupported platform")
+}
+
 func (s *Server) actionSystemdEnableLinger(ctx context.Context, params map[string]interface{}) (string, error) {
 	_ = ctx
 	_ = params

@@ -169,6 +169,9 @@ func (s *Server) doAction(ctx context.Context, req proto.Request) (string, error
 	case "PODMAN_SOCKET_REPAIR":
 		out, err := s.actionPodmanSocketRepair(ctx, req.Params)
 		return out, err
+	case "REPAIR_PODMAN_SHORT_NAME":
+		out, err := s.actionRepairPodmanShortName(ctx, req.Params)
+		return out, err
 	case "SYSTEMD_ENABLE_LINGER":
 		out, err := s.actionSystemdEnableLinger(ctx, req.Params)
 		return out, err
@@ -208,6 +211,8 @@ func lockKeyForAction(action string) string {
 		return "gopanel_service"
 	case "PODMAN_SOCKET_REPAIR":
 		return "podman_socket_repair"
+	case "REPAIR_PODMAN_SHORT_NAME":
+		return "repair_podman_short_name"
 	case "SYSTEMD_ENABLE_LINGER":
 		return "systemd_enable_linger"
 	case "COMPOSE_INSTALL":
