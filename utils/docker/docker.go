@@ -59,8 +59,8 @@ func ResolveRuntime(ctx context.Context) ResolvedRuntime {
 		pingCtx, cancel := context.WithTimeout(baseCtx, 800*time.Millisecond)
 		defer cancel()
 
-		if kindFromHost(host) == RuntimePodman {
-			if !canPingHost(pingCtx, host) {
+		if host != "" && !canPingHost(pingCtx, host) {
+			if kindFromHost(host) == RuntimePodman {
 				uid := os.Getuid()
 				podmanRootHost := "unix:///run/podman/podman.sock"
 				podmanUserHost := "unix:///run/user/" + strconv.Itoa(uid) + "/podman/podman.sock"
@@ -80,6 +80,8 @@ func ResolveRuntime(ctx context.Context) ResolvedRuntime {
 						host = ""
 					}
 				}
+			} else {
+				host = ""
 			}
 		}
 		if host != settingItem.Value {

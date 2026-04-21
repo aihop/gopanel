@@ -509,7 +509,7 @@ Type=simple
 User=${RUNTIME_USER}
 Group=${RUNTIME_USER}
 WorkingDirectory=${CONFIG_INSTALL_DIR}
-ExecStart=${CONFIG_INSTALL_DIR}/gp-agent --base-dir ${CONFIG_INSTALL_DIR} serve
+ExecStart=${CONFIG_INSTALL_DIR}/gp-agent service --base-dir ${CONFIG_INSTALL_DIR}
 Restart=always
 RestartSec=2
 
@@ -787,6 +787,8 @@ EOF
 
   run_privileged systemctl daemon-reload
   run_privileged systemctl stop podman.socket >/dev/null 2>&1 || true
+  run_privileged mkdir -p /run/podman >/dev/null 2>&1 || true
+  run_privileged chmod 0755 /run/podman >/dev/null 2>&1 || true
   run_privileged rm -f /run/podman/podman.sock >/dev/null 2>&1 || true
   run_privileged systemctl start podman.socket >/dev/null 2>&1 || true
   return 0

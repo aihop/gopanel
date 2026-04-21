@@ -9,7 +9,7 @@ import (
 
 func Run() {
 	if len(os.Args) == 1 {
-		os.Args = append(os.Args, "serve")
+		os.Args = append(os.Args, "service")
 	}
 	if err := cmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())

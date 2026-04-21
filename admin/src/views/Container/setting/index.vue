@@ -365,7 +365,7 @@
             Runtime: {{ precheck?.runtimeKind || '-' }} / Host: {{ precheck?.runtimeHost || '-' }}
           </div>
           <n-button
-            v-if="precheck?.os === 'linux' && precheck?.runtimeKind === 'podman'"
+            v-if="canAutoRepair"
             :loading="autoRepairLoading"
             :disabled="!precheck?.gpc?.reachable"
             type="primary"
@@ -398,7 +398,7 @@
 
         <div class="flex flex-wrap gap-2">
           <n-button
-            v-if="precheck?.os === 'linux' && precheck?.runtimeKind === 'podman'"
+            v-if="canAutoRepair"
             :loading="repairSocketLoading"
             :disabled="!precheck?.gpc?.reachable || autoRepairLoading"
             type="warning"
@@ -407,7 +407,7 @@
             修复 Podman Socket 权限
           </n-button>
           <n-button
-            v-if="precheck?.os === 'linux' && precheck?.runtimeKind === 'podman'"
+            v-if="canAutoRepair"
             :loading="repairLingerLoading"
             :disabled="!precheck?.gpc?.reachable || autoRepairLoading"
             @click="repairLinger"
@@ -417,7 +417,7 @@
         </div>
 
         <div
-          v-if="precheck && precheck?.os === 'linux' && precheck?.runtimeKind === 'podman' && !precheck?.gpc?.reachable"
+          v-if="precheck && canAutoRepair && !precheck?.gpc?.reachable"
           class="text-xs text-gray-500"
         >
           GPC 未连接时无法执行一键修复，请先在服务器上启用/启动 gpc helper。
@@ -469,6 +469,13 @@ const dockerOnly = computed(() => {
 	if (!precheck.value?.runtimeKind) return false
 	return precheck.value.runtimeKind !== "docker"
 })
+const canAutoRepair = computed(() => {
+	if (!precheck.value) return false
+	if (precheck.value?.os !== "linux") return false
+	if (precheck.value?.runtimeKind === "podman") return true
+	if (precheck.value?.runtimeKind === "docker" && !precheck.value?.cli?.docker && precheck.value?.cli?.podman) return true
+	return false
+})
 const repairHintType = computed(() => {
 	if (!precheck.value) return "default"
 	if (precheck.value?.runtime?.serviceActive && !precheck.value?.runtime?.apiReady) return "warning"
@@ -490,7 +497,7 @@ async function autoRepair() {
 	if (autoRepairLoading.value) return
 	await loadPrecheck()
 	if (!precheck.value) return
-	if (precheck.value?.os !== "linux" || precheck.value?.runtimeKind !== "podman") return
+	if (!canAutoRepair.value) return
 	if (!precheck.value?.gpc?.reachable) return
 	if (precheck.value?.runtime?.apiReady) return
 
@@ -504,8 +511,7 @@ async function autoRepair() {
 			return
 		}
 		const notes = Array.isArray(precheck.value?.notes) ? precheck.value.notes.join(" ").toLowerCase() : ""
-		const maybeRootless =
-			typeof precheck.value?.runtimeHost === "string" && precheck.value.runtimeHost.includes("/run/user/")
+		const maybeRootless = typeof precheck.value?.runtimeHost === "string" && precheck.value.runtimeHost.includes("/run/user/")
 		const needLinger =
 			maybeRootless ||
 			notes.includes("linger") ||

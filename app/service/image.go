@@ -75,16 +75,26 @@ func (u *ImageService) Page(req dto.SearchWithPage) (int64, interface{}, error) 
 		records   []dto.ImageInfo
 		backDatas []dto.ImageInfo
 	)
-	client, err := docker.NewDockerClient()
-	if err != nil {
-		return 0, nil, err
+	ctx := context.Background()
+	var containers []types.Container
+	if docker.IsPodmanRuntime(ctx) && runtime.GOOS == "linux" {
+		var err error
+		list, containers, err = listImagesMergedByHost(ctx)
+		if err != nil {
+			return 0, nil, err
+		}
+	} else {
+		client, err := docker.NewDockerClient()
+		if err != nil {
+			return 0, nil, err
+		}
+		defer client.Close()
+		list, err = client.ImageList(ctx, image.ListOptions{})
+		if err != nil {
+			return 0, nil, err
+		}
+		containers, _ = client.ContainerList(ctx, container.ListOptions{All: true})
 	}
-	defer client.Close()
-	list, err = client.ImageList(context.Background(), image.ListOptions{})
-	if err != nil {
-		return 0, nil, err
-	}
-	containers, _ := client.ContainerList(context.Background(), container.ListOptions{All: true})
 	if len(req.Info) != 0 {
 		length, count := len(list), 0
 		for count < length {
@@ -139,16 +149,29 @@ func (u *ImageService) ListAll() ([]dto.ImageInfo, error) {
 		return nil, errors.New("invalid response")
 	}
 	var records []dto.ImageInfo
-	client, err := docker.NewDockerClient()
-	if err != nil {
-		return nil, err
+	ctx := context.Background()
+	var (
+		list       []image.Summary
+		containers []types.Container
+	)
+	if docker.IsPodmanRuntime(ctx) && runtime.GOOS == "linux" {
+		var err error
+		list, containers, err = listImagesMergedByHost(ctx)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		client, err := docker.NewDockerClient()
+		if err != nil {
+			return nil, err
+		}
+		defer client.Close()
+		list, err = client.ImageList(ctx, image.ListOptions{})
+		if err != nil {
+			return nil, err
+		}
+		containers, _ = client.ContainerList(ctx, container.ListOptions{All: true})
 	}
-	defer client.Close()
-	list, err := client.ImageList(context.Background(), image.ListOptions{})
-	if err != nil {
-		return nil, err
-	}
-	containers, _ := client.ContainerList(context.Background(), container.ListOptions{All: true})
 	for _, image := range list {
 		size := formatFileSize(image.Size)
 		records = append(records, dto.ImageInfo{

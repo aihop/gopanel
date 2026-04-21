@@ -39,6 +39,10 @@ func RepairPodmanSocket(c fiber.Ctx) error {
 		"group": group,
 	})
 	if err != nil {
+		msg := err.Error()
+		if strings.Contains(strings.ToLower(msg), "unknown action") {
+			return c.JSON(e.Error(errors.New("gpc helper 版本过旧，缺少 PODMAN_SOCKET_REPAIR 动作；请更新服务器上的 gpc 并重启 gpc.service 后再试")))
+		}
 		return c.JSON(e.Error(err))
 	}
 	if err := service.EnsurePodmanAPIReady(); err != nil {
@@ -65,6 +69,10 @@ func RepairSystemdLinger(c fiber.Ctx) error {
 		"uid": uid,
 	})
 	if err != nil {
+		msg := err.Error()
+		if strings.Contains(strings.ToLower(msg), "unknown action") {
+			return c.JSON(e.Error(errors.New("gpc helper 版本过旧，缺少 SYSTEMD_ENABLE_LINGER 动作；请更新服务器上的 gpc 并重启 gpc.service 后再试")))
+		}
 		return c.JSON(e.Error(err))
 	}
 	return c.JSON(e.Succ(map[string]any{
@@ -72,4 +80,3 @@ func RepairSystemdLinger(c fiber.Ctx) error {
 		"output": strings.TrimSpace(resp.Output),
 	}))
 }
-

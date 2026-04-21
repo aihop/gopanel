@@ -95,12 +95,8 @@ func (u *ContainerService) Page(req *dto.PageContainer) (int64, interface{}, err
 		records []types.Container
 		list    []types.Container
 	)
-	client, err := docker.NewDockerClient()
-	if err != nil {
-		return 0, nil, err
-	}
-	defer client.Close()
-	isPodman := docker.IsPodmanRuntime(context.Background())
+	ctx := context.Background()
+	isPodman := docker.IsPodmanRuntime(ctx)
 	options := container.ListOptions{
 		All: true,
 	}
@@ -108,9 +104,19 @@ func (u *ContainerService) Page(req *dto.PageContainer) (int64, interface{}, err
 		options.Filters = filters.NewArgs()
 		options.Filters.Add("label", normalizeContainerLabelFilter(req.Filters, isPodman))
 	}
-	containers, err := client.ContainerList(context.Background(), options)
-	if err != nil {
-		return 0, nil, err
+	var containers []types.Container
+	if isPodman && runtime.GOOS == "linux" {
+		containers, _ = listContainersMergedByHost(ctx, options)
+	} else {
+		client, err := docker.NewDockerClient()
+		if err != nil {
+			return 0, nil, err
+		}
+		defer client.Close()
+		containers, err = client.ContainerList(ctx, options)
+		if err != nil {
+			return 0, nil, err
+		}
 	}
 	if req.ExcludeAppStore {
 		for _, item := range containers {

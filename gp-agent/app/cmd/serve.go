@@ -17,7 +17,8 @@ import (
 )
 
 var serveCmd = &cobra.Command{
-	Use:          "serve",
+	Use:          "service",
+	Aliases:      []string{"serve"},
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		socketPath := global.CONF.SocketPath

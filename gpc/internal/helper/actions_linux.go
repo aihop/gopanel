@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -292,6 +293,9 @@ func (s *Server) actionPodmanSocketRepair(ctx context.Context, params map[string
 		return "", err
 	}
 
+	_ = os.MkdirAll("/run/podman", 0755)
+	_ = os.Chmod("/run/podman", 0755)
+
 	steps := [][]string{
 		{"systemctl", "daemon-reload"},
 		{"systemctl", "stop", "podman.socket"},
@@ -311,6 +315,19 @@ func (s *Server) actionPodmanSocketRepair(ctx context.Context, params map[string
 				continue
 			}
 			return strings.Join(outs, "\n"), fmt.Errorf("%w: %s", err, s)
+		}
+	}
+
+	sock := "/run/podman/podman.sock"
+	if fi, err := os.Stat(sock); err == nil {
+		if st, ok := fi.Sys().(*syscall.Stat_t); ok {
+			mode := fi.Mode().Perm() & 0777
+			if mode != 0660 {
+				_ = os.Chmod(sock, 0660)
+			}
+			if st.Gid == 0 {
+				_ = exec.CommandContext(ctx, "chgrp", group, sock).Run()
+			}
 		}
 	}
 	return strings.Join(outs, "\n"), nil

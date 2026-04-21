@@ -42,26 +42,26 @@ func (a *AppVersionService) GetUpdateInfo(checkUrl string, upgradeVersion *dto.S
 	client := &http.Client{Timeout: 10 * time.Second}
 	req, err := http.NewRequest("GET", checkUrl+"?versionCode="+strconv.FormatInt(upgradeVersion.VersionCode, 10)+"&version="+upgradeVersion.VersionName+"&os="+upgradeVersion.OS+"&arch="+upgradeVersion.Lang+"&appBrand="+upgradeVersion.AppBrand, nil)
 	if err != nil {
-		return nil, fmt.Errorf("创建请求失败: %v", err)
+		return nil, nil
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("网络请求失败: %v", err)
+		return nil, nil
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("GoPanel API 返回异常状态码: %d", resp.StatusCode)
+		return nil, nil
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("读取响应体失败: %v", err)
+		return nil, nil
 	}
 
 	var release *dto.AppUpdateData
 	if err := json.Unmarshal(body, &release); err != nil {
-		return nil, fmt.Errorf("解析 GoPanel 响应失败: %v", err)
+		return nil, nil
 	}
 	return release, nil
 }
