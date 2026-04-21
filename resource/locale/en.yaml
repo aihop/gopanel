@@ -588,3 +588,5 @@ TerminalAIReadyToExecute: "Thinking complete, press Enter to execute (duration: 
 TerminalAIRequestFailed: "AI request failed: {{ .err }}"
 FileAISearchEmptyDir: "No files or directories found under this path (or all entries were filtered)."
 ErrFirewallNone: "Firewall is not enabled"
+ErrImagePullFailed: "Image pull failed: {{ .err }}"
+ErrImagePullTimeOut: "Image pull timeout: {{ .err }}"

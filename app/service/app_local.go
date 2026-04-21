@@ -85,7 +85,8 @@ func (s *LocalAppService) Get(key string) (*dto.LocalAppDetail, error) {
 		}
 		if err := yaml.Unmarshal(dataContent, &meta); err == nil {
 			if len(meta.AdditionalProperties.FormFields) > 0 {
-				for _, v := range meta.AdditionalProperties.FormFields {
+				for i := range meta.AdditionalProperties.FormFields {
+					v := &meta.AdditionalProperties.FormFields[i]
 					switch v.Type {
 					case "user":
 						if str, ok := v.Default.(string); ok {

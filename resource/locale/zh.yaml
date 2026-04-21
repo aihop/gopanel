@@ -588,3 +588,5 @@ TerminalAIReadyToExecute: "思考完成，请回车执行（耗时 {{ .duration 
 TerminalAIRequestFailed: "AI 请求失败：{{ .err }}"
 FileAISearchEmptyDir: "当前目录下没有可列出的文件或文件夹（或均被过滤）。"
 ErrFirewallNone: "防火墙未启用"
+ErrImagePullFailed: "镜像拉取失败：{{ .err }}"
+ErrImagePullTimeOut: "镜像拉取超时：{{ .err }}"
