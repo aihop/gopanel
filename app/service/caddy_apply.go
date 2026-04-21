@@ -69,6 +69,67 @@ func renderCaddyfile(websites []model.Website, domainByWebsite map[uint][]model.
 		b.WriteString(strings.Join(addrs, ", "))
 		b.WriteString(" {\n")
 
+		if w.AntiCrawler {
+			b.WriteString("  @blocked_ua {\n")
+			b.WriteString("    header_regexp User-Agent \"(?i)(curl|python|sqlmap|nmap|wget|headless|dirbuster|nikto|java|perl|ruby)\"\n")
+			b.WriteString("  }\n")
+			b.WriteString("  respond @blocked_ua \"Forbidden by Anti-Crawler\" 403\n\n")
+		}
+
+		if w.AntiLeech {
+			b.WriteString("  @leech {\n")
+			b.WriteString("    path *.jpg *.jpeg *.png *.gif *.webp *.svg *.mp4 *.mp3 *.flv *.css *.js *.woff *.woff2 *.ttf *.eot\n")
+			b.WriteString("    not header Referer \"\"\n")
+			// Replace dots in primary domain for regex matching
+			primaryRegex := strings.ReplaceAll(w.PrimaryDomain, ".", "\\.")
+			b.WriteString("    not header_regexp Referer \"(?i)https?://(www\\.)?" + primaryRegex + "\"\n")
+			b.WriteString("  }\n")
+			b.WriteString("  respond @leech \"Forbidden by Anti-Leech\" 403\n\n")
+		}
+
+		if w.RateLimitMode != "" && w.RateLimitMode != "none" {
+			b.WriteString("  rate_limit {\n")
+			b.WriteString("    zone website_" + strconv.Itoa(int(w.ID)) + "\n")
+			b.WriteString("    key {remote_ip}\n")
+			b.WriteString("    window 1s\n")
+			if w.RateLimitMode == "strict" {
+				b.WriteString("    events 3\n")
+			} else { // normal
+				b.WriteString("    events 10\n")
+			}
+			b.WriteString("  }\n\n")
+		}
+
+		if w.WafEnable {
+			b.WriteString("  @waf_sqli {\n")
+			b.WriteString("    query ~*(?i)(union.*select|waitfor.*delay|select.*from.*information_schema|1=1)\n")
+			b.WriteString("  }\n")
+			b.WriteString("  respond @waf_sqli \"Forbidden by WAF (SQLi)\" 403\n\n")
+			
+			b.WriteString("  @waf_xss {\n")
+			b.WriteString("    query ~*(?i)(<script>|javascript:|onerror=)\n")
+			b.WriteString("  }\n")
+			b.WriteString("  respond @waf_xss \"Forbidden by WAF (XSS)\" 403\n\n")
+
+			b.WriteString("  @waf_path {\n")
+			b.WriteString("    path_regexp (?i)(/\\.\\./|%c0%ae|/etc/passwd)\n")
+			b.WriteString("  }\n")
+			b.WriteString("  respond @waf_path \"Forbidden by WAF (Path Traversal)\" 403\n\n")
+		}
+
+		if w.BlockSensitive {
+			b.WriteString("  @sensitive_hidden {\n")
+			b.WriteString("    path /.* /*/.*\n")
+			b.WriteString("    not path /.well-known/*\n")
+			b.WriteString("  }\n")
+			b.WriteString("  respond @sensitive_hidden \"Access Denied\" 403\n\n")
+
+			b.WriteString("  @sensitive_ext {\n")
+			b.WriteString("    path *.sql *.bak *.log *.conf *.ini\n")
+			b.WriteString("  }\n")
+			b.WriteString("  respond @sensitive_ext \"Access Denied\" 403\n\n")
+		}
+
 		switch w.Type {
 		case constant.Static:
 			root := strings.TrimSpace(w.SiteDir)

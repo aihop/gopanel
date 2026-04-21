@@ -269,7 +269,7 @@
 import { ref, watch, reactive, nextTick, computed } from "vue"
 import { useMessage, useDialog } from "naive-ui"
 // @ts-ignore
-import { appsInstalledListAPI, appsUninstall, InstalledOp, appsRepairComposeAPI, appsRepairPodmanShortNameAPI } from "../../../api/modules/apps"
+import { appsInstalledListAPI, appsUninstall, InstalledOp, appsRepairComposeAPI, appsRepairPodmanShortNameAPI, appsRepairPortConflictAPI } from "../../../api/modules/apps"
 // @ts-ignore
 import { repairSystemdLingerAPI } from "@/api/modules/container"
 import type { AppsInstalledSearchParams } from "../../../api/modules/apps"
@@ -318,6 +318,7 @@ const repairTipMessage = ref("")
 const repairTipCommands = ref("")
 const repairTipOutput = ref("")
 const repairTipAction = ref("")
+const currentInstallId = ref<number>(0)
 const repairingCompose = ref(false)
 
 const busyStatuses = new Set(["Installing", "Upgrading", "Rebuilding", "Syncing"])
@@ -515,6 +516,8 @@ function scrollToBottom() {
 
 function openLog(item: any) {
 	logConfig.name = item?.name || ""
+	logConfig.id = item?.id || 0
+	currentInstallId.value = item?.id || 0
 	logModalVisible.value = true
 	logsData.value = []
 	const token = authStore.auth || ""
@@ -559,6 +562,12 @@ function openLog(item: any) {
 					repairTipMessage.value = "检测到当前 Podman 用户会话未开启 Linger，可能导致 cgroup 限制降级或容器异常退出。可以先一键修复开启该支持。"
 					repairTipCommands.value = ""
 					repairTipAction.value = "linger"
+				} else if (event.data.includes("port is already allocated") || event.data.includes("address already in use") || event.data.includes("bind: address already in use")) {
+					repairTipVisible.value = true
+					repairTipTitle.value = "检测到端口冲突"
+					repairTipMessage.value = "当前应用所需的端口已被其他服务占用。可以点击一键修复，系统将自动寻找可用端口并换绑。"
+					repairTipCommands.value = ""
+					repairTipAction.value = "port-conflict"
 				}
 				if (logsData.value.length > 2000) {
 			logsData.value = logsData.value.slice(-2000)
@@ -599,6 +608,13 @@ const checkInstallResult = async (name: string) => {
 				repairTipMessage.value = item.message
 				repairTipCommands.value = ""
 				repairTipAction.value = "linger"
+			} else if (!repairTipVisible.value && typeof item.message === "string" && (item.message.includes("port is already allocated") || item.message.includes("address already in use") || item.message.includes("bind: address already in use"))) {
+				repairTipVisible.value = true
+				repairTipTitle.value = "检测到端口冲突"
+				repairTipMessage.value = item.message
+				repairTipCommands.value = ""
+				repairTipAction.value = "port-conflict"
+				currentInstallId.value = item.id || 0
 			}
 		}
 	} catch (e) {
@@ -615,6 +631,11 @@ const handleRepairCompose = async () => {
 			res = await appsRepairPodmanShortNameAPI()
 		} else if (repairTipAction.value === "linger") {
 			res = await repairSystemdLingerAPI()
+		} else if (repairTipAction.value === "port-conflict") {
+			if (!currentInstallId.value) {
+				throw new Error("无法获取应用安装ID，请重试")
+			}
+			res = await appsRepairPortConflictAPI(currentInstallId.value)
 		} else {
 			res = await appsRepairComposeAPI()
 		}

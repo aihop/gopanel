@@ -8,6 +8,13 @@ import (
 )
 
 func AppsRouter(r fiber.Router) {
+	SecurityRouter := r.Group("security")
+	SecurityRouter.Use(middleware.JWT(constant.UserRoleAdmin))
+	{
+		SecurityRouter.Get("/scan", api.SecurityScan)
+		SecurityRouter.Post("/fix/ssh", api.SecurityFixSSH)
+	}
+
 	AppsRouter := r.Group("apps")
 	AppsRouter.Use(middleware.JWT(constant.UserRoleAdmin))
 	{
@@ -17,8 +24,10 @@ func AppsRouter(r fiber.Router) {
 
 		// 安装
 		AppsRouter.Post("/install", api.AppInstall)
+		AppsRouter.Get("/precheck", api.PrecheckAppInstall)
 		AppsRouter.Post("/repair/compose", api.RepairCompose)
 		AppsRouter.Post("/repair/short-name", api.RepairPodmanShortName)
+		AppsRouter.Post("/repair/port-conflict", api.RepairPortConflict)
 		AppsRouter.Post("/local/install", api.AppLocalInstall)
 		AppsRouter.Get("/local/list", api.AppLocalList)
 		AppsRouter.Get("/local/:key", api.AppLocalGet)

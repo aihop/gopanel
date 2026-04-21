@@ -386,7 +386,7 @@ func AppGetBaseDir(c fiber.Ctx) error {
 // @Summary Install app
 // @Accept json
 // @Param request body request.AppInstallCreate true "request"
-// @Success 200 {object} model.AppInstall
+// @Success 200 {object} map[string]interface{}
 // @Security ApiKeyAuth
 // @Security Timestamp
 // @Router /apps/install [post]
@@ -399,7 +399,7 @@ func AppInstall(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	return c.JSON(e.Succ(res))
+	return c.JSON(e.Succ(fiber.Map{"installId": res.ID, "name": res.Name}))
 }
 
 // AppInstallLogsStream streams the installation logs for a specific app install name via SSE.

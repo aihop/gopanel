@@ -25,4 +25,10 @@ type WebsiteRes struct {
 	AppInstallID  uint      `json:"appInstallId"`
 	PipelineID    uint      `json:"pipelineId"`
 	RuntimeType   string    `json:"runtimeType"`
+
+	AntiCrawler    bool      `json:"antiCrawler"`
+	AntiLeech      bool      `json:"antiLeech"`
+	RateLimitMode  string    `json:"rateLimitMode"`
+	WafEnable      bool      `json:"wafEnable"`
+	BlockSensitive bool      `json:"blockSensitive"`
 }

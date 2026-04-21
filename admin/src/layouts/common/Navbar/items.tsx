@@ -192,6 +192,19 @@ export default function getItems(_: { mode: "vertical" | "horizontal"; collapsed
 							RouterLink,
 							{
 								to: {
+									name: "Host-Security"
+								}
+							},
+							{ default: () => "安全体检" }
+						),
+					key: "Host-Security"
+				},
+				{
+					label: () =>
+						h(
+							RouterLink,
+							{
+								to: {
 									name: "Toolbox-Daemon"
 								}
 							},

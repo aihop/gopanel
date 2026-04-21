@@ -19,6 +19,12 @@ type WebsiteCreate struct {
 	CodeDir             string `json:"codeDir"`
 	CodeDirFallback     string `json:"-"`
 	PreviousContainerID string `json:"-"`
+
+	AntiCrawler    bool   `json:"antiCrawler"`
+	AntiLeech      bool   `json:"antiLeech"`
+	RateLimitMode  string `json:"rateLimitMode"`
+	WafEnable      bool   `json:"wafEnable"`
+	BlockSensitive bool   `json:"blockSensitive"`
 }
 
 type NewAppInstall struct {
@@ -39,4 +45,10 @@ type WebsiteUpdate struct {
 	Proxy         string `json:"proxy"`
 	PipelineId    uint   `json:"pipelineId"`
 	CodeSource    string `json:"codeSource"`
+
+	AntiCrawler    bool   `json:"antiCrawler"`
+	AntiLeech      bool   `json:"antiLeech"`
+	RateLimitMode  string `json:"rateLimitMode"`
+	WafEnable      bool   `json:"wafEnable"`
+	BlockSensitive bool   `json:"blockSensitive"`
 }

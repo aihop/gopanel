@@ -30,6 +30,12 @@ type Website struct {
 	ContainerID string `gorm:"type:varchar;" json:"containerId"`
 	Message     string `gorm:"type:text;" json:"message"`
 
+	AntiCrawler    bool   `json:"antiCrawler" gorm:"type:boolean;default:false"`
+	AntiLeech      bool   `json:"antiLeech" gorm:"type:boolean;default:false"`
+	RateLimitMode  string `json:"rateLimitMode" gorm:"type:varchar(32);default:'none'"`
+	WafEnable      bool   `json:"wafEnable" gorm:"type:boolean;default:false"`
+	BlockSensitive bool   `json:"blockSensitive" gorm:"type:boolean;default:false"`
+
 	User    string           `gorm:"type:varchar;" json:"user"`
 	Group   string           `gorm:"type:varchar;" json:"group"`
 	Domains []*WebsiteDomain `json:"domains" gorm:"-:migration"`

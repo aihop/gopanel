@@ -87,6 +87,11 @@ func (s WebsiteService) Create(ctx context.Context, req *request.WebsiteCreate, 
 		ErrorLog:      true,
 		IPV6:          req.IPV6,
 		PipelineID:    req.PipelineId,
+		AntiCrawler:    req.AntiCrawler,
+		AntiLeech:      req.AntiLeech,
+		RateLimitMode:  req.RateLimitMode,
+		WafEnable:      req.WafEnable,
+		BlockSensitive: req.BlockSensitive,
 	}
 
 	var appInstall *model.AppInstall

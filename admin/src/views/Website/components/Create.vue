@@ -177,6 +177,49 @@
           />
         </n-form-item>
 
+        <n-divider class="!my-6 text-slate-400">安全防护</n-divider>
+
+        <n-form-item label="防爬虫 (拦截恶意扫描)">
+          <div class="flex flex-col gap-2">
+            <n-switch v-model:value="form.antiCrawler" />
+            <div class="text-xs text-slate-500">开启后将在 Caddy 层拦截常见恶意扫描器、无头浏览器及部分不规范 User-Agent，降低服务器开销。</div>
+          </div>
+        </n-form-item>
+
+        <n-form-item label="防盗链 (保护静态资源)">
+          <div class="flex flex-col gap-2">
+            <n-switch v-model:value="form.antiLeech" />
+            <div class="text-xs text-slate-500">开启后仅允许本站域名引用图片、视频等静态资源，防止流量被外部网站“薅羊毛”。</div>
+          </div>
+        </n-form-item>
+
+        <n-form-item label="并发与频率限制 (防 CC)">
+          <n-select
+            v-model:value="form.rateLimitMode"
+            :options="[
+              { label: '关闭 (默认)', value: 'none' },
+              { label: '常规防护 (推荐)', value: 'normal' },
+              { label: '严格防护 (应急)', value: 'strict' }
+            ]"
+          />
+        </n-form-item>
+
+        <n-form-item label="轻量级 WAF (防注入/XSS)">
+          <div class="flex flex-col gap-2">
+            <n-switch v-model:value="form.wafEnable" />
+            <div class="text-xs text-slate-500">拦截常见的 SQL 注入、跨站脚本及系统路径穿越攻击，为建站程序提供基础防护。</div>
+          </div>
+        </n-form-item>
+
+        <n-form-item label="保护敏感配置文件">
+          <div class="flex flex-col gap-2">
+            <n-switch v-model:value="form.blockSensitive" />
+            <div class="text-xs text-slate-500">禁止外部访问 .env、.git 等隐藏文件及 .sql、.bak 等备份数据，防止源码与数据库泄露。</div>
+          </div>
+        </n-form-item>
+
+        <n-divider class="!my-4" />
+
         <n-form-item
           label="备注"
           path="remark"
@@ -315,7 +358,12 @@ const form = ref({
 	codeSource: "upload",
 	gitRepo: "",
 	codeDir: "",
-	pipelineId: undefined as number | undefined
+	pipelineId: undefined as number | undefined,
+	antiCrawler: false,
+	antiLeech: false,
+	rateLimitMode: "none",
+	wafEnable: false,
+	blockSensitive: false
 })
 
 const rules = {
@@ -376,7 +424,12 @@ const onConfirm = async () => {
 			codeSource: form.value.codeSource,
 			gitRepo: form.value.gitRepo,
 			codeDir: form.value.codeDir,
-			pipelineId: form.value.pipelineId
+			pipelineId: form.value.pipelineId,
+			antiCrawler: form.value.antiCrawler,
+			antiLeech: form.value.antiLeech,
+			rateLimitMode: form.value.rateLimitMode,
+			wafEnable: form.value.wafEnable,
+			blockSensitive: form.value.blockSensitive,
 		}
 		const updatePayload: Website.WebSiteUpdateReq = {
 			id: form.value.id || 0,
@@ -387,7 +440,12 @@ const onConfirm = async () => {
 			pipelineId: form.value.pipelineId,
 			codeSource: form.value.codeSource,
 			IPV6: form.value.IPV6,
-			remark: form.value.remark
+			remark: form.value.remark,
+			antiCrawler: form.value.antiCrawler,
+			antiLeech: form.value.antiLeech,
+			rateLimitMode: form.value.rateLimitMode,
+			wafEnable: form.value.wafEnable,
+			blockSensitive: form.value.blockSensitive
 		}
 		let res = await (actionType.value === "add" ? websiteCreateAPI(createPayload) : websiteUpdateAPI(updatePayload))
 		emit("confirm", res, loading)
@@ -417,7 +475,12 @@ const open = (record?: any, action: string = "add") => {
 			codeSource: "upload",
 			gitRepo: "",
 			codeDir: "",
-			pipelineId: undefined
+			pipelineId: undefined,
+			antiCrawler: false,
+			antiLeech: false,
+			rateLimitMode: "none",
+			wafEnable: false,
+			blockSensitive: false
 		}
 	} else {
 		actionType.value = "update"
@@ -438,7 +501,12 @@ const open = (record?: any, action: string = "add") => {
 		} else {
 			record.otherDomains = ""
 		}
-		form.value = { ...record }
+		form.value = {
+			...record,
+			rateLimitMode: record.rateLimitMode || "none",
+			wafEnable: record.wafEnable || false,
+			blockSensitive: record.blockSensitive || false
+		}
 	}
 }
 watch(

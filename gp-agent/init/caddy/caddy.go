@@ -18,6 +18,7 @@ import (
 	_ "github.com/caddyserver/caddy/v2/modules/caddyhttp/fileserver"
 	_ "github.com/caddyserver/caddy/v2/modules/caddyhttp/reverseproxy"
 	_ "github.com/caddyserver/caddy/v2/modules/logging"
+	_ "github.com/mholt/caddy-ratelimit"
 )
 
 type CaddyServer struct {

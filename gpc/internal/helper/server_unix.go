@@ -178,6 +178,12 @@ func (s *Server) doAction(ctx context.Context, req proto.Request) (string, error
 	case "COMPOSE_INSTALL":
 		out, err := s.actionComposeInstall(ctx, req.Params)
 		return out, err
+	case "SECURITY_SCAN_SSH":
+		return s.actionSecurityScanSSH(ctx, req.Params)
+	case "SECURITY_FIX_SSH":
+		return s.actionSecurityFixSSH(ctx, req.Params)
+	case "SECURITY_SCAN_PORT":
+		return s.actionSecurityScanPort(ctx, req.Params)
 	case "FILE_STAT":
 		return s.actionFileStat(ctx, req.Params)
 	case "FILE_LIST":

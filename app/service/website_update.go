@@ -36,6 +36,13 @@ func (s WebsiteService) Update(ctx context.Context, req *request.WebsiteUpdate) 
 	if req.CodeSource != "" {
 		website.CodeSource = req.CodeSource
 	}
+
+	website.AntiCrawler = req.AntiCrawler
+	website.AntiLeech = req.AntiLeech
+	website.RateLimitMode = req.RateLimitMode
+	website.WafEnable = req.WafEnable
+	website.BlockSensitive = req.BlockSensitive
+
 	var newContent, updatedContent string
 	var domains []model.WebsiteDomain
 	var isUpdateOtherDomains bool

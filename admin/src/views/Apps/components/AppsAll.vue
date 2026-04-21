@@ -390,8 +390,14 @@
           <n-button
             size="small"
             secondary
+            @click="handleRebuild"
+            v-if="isInstallFinished && repairTipAction === 'port-conflict'"
+          >重新重建</n-button>
+          <n-button
+            size="small"
+            secondary
             @click="submitInstall"
-            v-if="isInstallFinished && repairTipAction"
+            v-if="isInstallFinished && repairTipAction && repairTipAction !== 'port-conflict'"
           >重新安装</n-button>
           <n-button
             size="small"
@@ -437,11 +443,11 @@ import { ref, watch, reactive, nextTick } from "vue"
 import { MdPreview } from 'md-editor-v3'
 import 'md-editor-v3/lib/preview.css'
 // @ts-ignore
-import { appsInstalledListAPI, appsListAPI, appsRepairComposeAPI, appsRepairPodmanShortNameAPI, GetApp, InstallApp, GetAppDetail } from "@/api/modules/apps"
+import { appsInstalledListAPI, appsListAPI, appsRepairComposeAPI, appsRepairPodmanShortNameAPI, appsRepairPortConflictAPI, GetApp, InstallApp, PrecheckAppInstall, GetAppDetail, InstalledOp } from "@/api/modules/apps"
 // @ts-ignore
 import { repairSystemdLingerAPI } from "@/api/modules/container"
 import type { AppsSearchParams } from "@/api/modules/apps"
-import { useMessage } from "naive-ui"
+import { useMessage, useDialog } from "naive-ui"
 import { useRouter } from "vue-router"
 import { useAuthStore } from "@/store/auth"
 
@@ -455,6 +461,7 @@ const emits = defineEmits(["update:total"])
 
 const router = useRouter()
 const message = useMessage()
+const dialog = useDialog()
 const apps = ref<any[]>([])
 const loading = ref(false)
 const authStore = useAuthStore()
@@ -483,6 +490,7 @@ const repairTipMessage = ref("")
 const repairTipCommands = ref("")
 const repairTipOutput = ref("")
 const repairTipAction = ref("")
+const currentInstallId = ref<number>(0)
 const repairingCompose = ref(false)
 const formFields = ref<any[]>([])
 const formRef = ref<any>(null)
@@ -647,10 +655,47 @@ async function submitInstall() {
 					editCompose: false
 				}
 
-				const res = await InstallApp(reqData as any)
+				try {
+					const precheckRes = await PrecheckAppInstall()
+					if (precheckRes.code === 0 && precheckRes.data && precheckRes.data.isWarning) {
+						installLoading.value = false
+						dialog.warning({
+							title: "资源预警",
+							content: precheckRes.data.message,
+							positiveText: "强制继续",
+							negativeText: "取消",
+							onPositiveClick: async () => {
+								installLoading.value = true
+								await doSubmitInstall(reqData)
+							},
+							onNegativeClick: () => {
+								// do nothing
+							}
+						})
+						return
+					}
+				} catch (e) {
+					console.error("预检失败", e)
+				}
+
+				await doSubmitInstall(reqData)
+			} catch (e: any) {
+				message.error(e.message || "安装异常")
+			} finally {
+				// installLoading.value = false
+			}
+		}
+	})
+}
+
+async function doSubmitInstall(reqData: any) {
+	try {
+		const res = await InstallApp(reqData as any)
 				if (res.code === 0) {
 					message.success("应用开始安装")
 					showInstallModal.value = false
+					const installId = (res.data as any)?.installId
+					currentInstallId.value = installId || 0
 					
 					// 打开日志模态框，监听 SSE
 					logModalVisible.value = true
@@ -715,6 +760,12 @@ async function submitInstall() {
 					repairTipMessage.value = "检测到当前 Podman 用户会话未开启 Linger，可能导致 cgroup 限制降级或容器异常退出。可以先一键修复开启该支持。"
 					repairTipCommands.value = ""
 					repairTipAction.value = "linger"
+				} else if (event.data.includes("port is already allocated") || event.data.includes("address already in use") || event.data.includes("bind: address already in use")) {
+					repairTipVisible.value = true
+					repairTipTitle.value = "检测到端口冲突"
+					repairTipMessage.value = "当前应用所需的端口已被其他服务占用。可以点击一键修复，系统将自动寻找可用端口并换绑。"
+					repairTipCommands.value = ""
+					repairTipAction.value = "port-conflict"
 				}
 				scrollToBottom()
 					}
@@ -738,13 +789,11 @@ async function submitInstall() {
 				} else {
 					message.error(res.msg || "安装请求失败")
 				}
-			} catch (e: any) {
-				message.error(e.message || "安装异常")
-			} finally {
-				installLoading.value = false
-			}
-		}
-	})
+	} catch (e: any) {
+		message.error(e.message || "安装异常")
+	} finally {
+		installLoading.value = false
+	}
 }
 
 const checkInstallResult = async (name: string) => {
@@ -772,6 +821,13 @@ const checkInstallResult = async (name: string) => {
 				repairTipMessage.value = item.message
 				repairTipCommands.value = ""
 				repairTipAction.value = "linger"
+			} else if (!repairTipVisible.value && typeof item.message === "string" && (item.message.includes("port is already allocated") || item.message.includes("address already in use") || item.message.includes("bind: address already in use"))) {
+				repairTipVisible.value = true
+				repairTipTitle.value = "检测到端口冲突"
+				repairTipMessage.value = item.message
+				repairTipCommands.value = ""
+				repairTipAction.value = "port-conflict"
+				currentInstallId.value = item.id || 0
 			}
 		}
 	} catch (e) {
@@ -788,6 +844,11 @@ const handleRepairCompose = async () => {
 			res = await appsRepairPodmanShortNameAPI()
 		} else if (repairTipAction.value === "linger") {
 			res = await repairSystemdLingerAPI()
+		} else if (repairTipAction.value === "port-conflict") {
+			if (!currentInstallId.value) {
+				throw new Error("无法获取应用安装ID，请重试")
+			}
+			res = await appsRepairPortConflictAPI(currentInstallId.value)
 		} else {
 			res = await appsRepairComposeAPI()
 		}
@@ -803,6 +864,100 @@ const handleRepairCompose = async () => {
 		message.error(e?.message || "修复失败")
 	} finally {
 		repairingCompose.value = false
+	}
+}
+
+const handleRebuild = async () => {
+	if (!currentInstallId.value) return
+	const loadingMsg = message.loading("重建中...", { duration: 0 })
+	try {
+		const res = await InstalledOp({ installId: currentInstallId.value, operate: "rebuild" } as any)
+		if (res.code === 0) {
+			message.success("已开始重建")
+			fetchData()
+			// 重新监听 SSE 流程
+			isInstallFinished.value = false
+			repairTipVisible.value = false
+			repairTipTitle.value = ""
+			repairTipMessage.value = ""
+			repairTipCommands.value = ""
+			repairTipOutput.value = ""
+			repairTipAction.value = ""
+			
+			if (logEventSource) {
+				logEventSource.close()
+			}
+			
+			logsData.value = []
+			const apiUrl = "/api"
+			const token = authStore.getAuth() || authStore.auth || ""
+			// 我们需要知道 currentApp.name 也就是安装的名称
+			// 如果 reqData 还在作用域里就好了，但是由于是组件级别的方法，我们可以保存 currentInstallName
+			// 或者从 appsInstalledListAPI 获取
+			const resInfo = await appsInstalledListAPI({ page: 1, limit: 1, name: "" })
+			let installName = ""
+			if (resInfo.data && (resInfo.data as any).items) {
+				const item = (resInfo.data as any).items.find((i: any) => i.id === currentInstallId.value)
+				if (item) installName = item.name
+			}
+			if (!installName) {
+				installName = currentApp.value?.key || ""
+			}
+			logEventSource = new EventSource(`${apiUrl}/apps/install/${installName}/logs?token=${token}`)
+			logEventSource.onmessage = (event) => {
+				if (event.data === "ping") return
+				if (event.data === "EOF" || event.data === '["EOF"]') {
+					logEventSource?.close()
+					isInstallFinished.value = true
+					logsData.value.push("\n====== 重建流程结束 ======")
+					scrollToBottom()
+					checkInstallResult(installName)
+					fetchData()
+					return
+				}
+				logsData.value.push(event.data)
+				if (event.data.includes("no compose command found")) {
+					repairTipVisible.value = true
+					repairTipTitle.value = "检测到 Compose 环境缺失"
+					repairTipMessage.value = "当前主机未检测到 docker compose / podman compose / podman-compose，导致无法 pull/up。可以先一键修复（需要 root 权限），或复制命令手动执行。"
+					repairTipCommands.value = "sudo apt-get update\nsudo apt-get install -y podman-compose"
+					repairTipAction.value = "compose"
+				} else if (event.data.includes("short-name") && event.data.includes("did not resolve")) {
+					repairTipVisible.value = true
+					repairTipTitle.value = "检测到 Podman 短名解析失败"
+					repairTipMessage.value = "当前容器运行时配置不允许直接拉取简写镜像名。可以先一键修复（自动向 /etc/containers/registries.conf 追加 docker.io 源）。"
+					repairTipCommands.value = ""
+					repairTipAction.value = "short-name"
+				} else if (event.data.includes("cgroup-manager") || event.data.includes("enable-linger")) {
+					repairTipVisible.value = true
+					repairTipTitle.value = "建议开启用户 Linger (保活) 支持"
+					repairTipMessage.value = "检测到当前 Podman 用户会话未开启 Linger，可能导致 cgroup 限制降级或容器异常退出。可以先一键修复开启该支持。"
+					repairTipCommands.value = ""
+					repairTipAction.value = "linger"
+				} else if (event.data.includes("port is already allocated") || event.data.includes("address already in use") || event.data.includes("bind: address already in use")) {
+					repairTipVisible.value = true
+					repairTipTitle.value = "检测到端口冲突"
+					repairTipMessage.value = "当前应用所需的端口已被其他服务占用。可以点击一键修复，系统将自动寻找可用端口并换绑。"
+					repairTipCommands.value = ""
+					repairTipAction.value = "port-conflict"
+				}
+				scrollToBottom()
+			}
+			logEventSource.onerror = (err) => {
+				console.error("SSE Error:", err)
+				if (!isInstallFinished.value) {
+					logsData.value.push("\n[系统提示] 与日志服务器的连接已断开或发生错误。")
+					isInstallFinished.value = true
+				}
+				logEventSource?.close()
+			}
+		} else {
+			message.error(res.msg || "重建失败")
+		}
+	} catch (e: any) {
+		message.error(e?.message || "重建异常")
+	} finally {
+		loadingMsg.destroy()
 	}
 }
 

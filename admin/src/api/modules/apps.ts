@@ -53,6 +53,10 @@ export function appsRepairPodmanShortNameAPI() {
 	return http.post(`/apps/repair/short-name`)
 }
 
+export function appsRepairPortConflictAPI(installId: number) {
+	return http.post(`/apps/repair/port-conflict`, { installId })
+}
+
 export const GetApp = (key: string) => {
 	return http.get<App.AppDTO>("/apps/" + key)
 }
@@ -69,6 +73,10 @@ export const GetAppDetail = (id: number, version: string = "") => {
 export const GetAppDetailByID = (id: number) => {
 	// The endpoint is /apps/detail/:id in Go code, not /apps/details/:id
 	return http.get<App.AppDetail>(`/apps/detail/${id}`)
+}
+
+export const PrecheckAppInstall = () => {
+	return http.get<any>("/apps/precheck")
 }
 
 export const InstallApp = (install: App.AppInstall) => {

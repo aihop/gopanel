@@ -77,6 +77,11 @@ func (s *WebsiteService) List(ctx *gormx.Contextx) (websiteDTOs []*response.Webs
 			DefaultServer: web.DefaultServer,
 			Proxy:         web.Proxy,
 			IPV6:          web.IPV6,
+			AntiCrawler:    web.AntiCrawler,
+			AntiLeech:      web.AntiLeech,
+			RateLimitMode:  web.RateLimitMode,
+			WafEnable:      web.WafEnable,
+			BlockSensitive: web.BlockSensitive,
 		})
 	}
 	return websiteDTOs, nil

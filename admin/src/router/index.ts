@@ -222,6 +222,12 @@ const router = createRouter({
 					meta: { title: "进程管理", auth: true, roles: "all" }
 				},
 				{
+					path: "security",
+					name: "Host-Security",
+					component: () => import("@/views/Host/security.vue"),
+					meta: { title: "安全体检", auth: true, roles: "all" }
+				},
+				{
 					path: "daemon",
 					name: "Toolbox-Daemon",
 					component: () => import("@/views/Host/Toolbox/Daemon.vue"),
