@@ -148,7 +148,6 @@ func (a AppService) GetApp(ctx fiber.Ctx, key string) (*response.AppDTO, error) 
 
 func (a AppService) GetAppDetail(ctx fiber.Ctx, id uint, version string) (*response.AppDetailDTO, error) {
 	res := &response.AppDetailDTO{}
-
 	// Default to getting the latest version if no version is provided
 	var appDetail model.AppDetail
 	var err error
@@ -181,7 +180,6 @@ func (a AppService) GetAppDetail(ctx fiber.Ctx, id uint, version string) (*respo
 				return nil, err
 			}
 		}
-
 		// Read data.yml for params
 		paramsPath := filepath.Join(versionPath, "data.yml")
 		if fileOp.Stat(paramsPath) {
@@ -246,7 +244,6 @@ func (a AppService) SyncAppList() error {
 		global.LOG.Errorf("[AppStore] Failed to get app list: %v", err)
 		return err
 	}
-
 	for _, appDef := range list.Apps {
 		appProperty := appDef.AppProperty
 

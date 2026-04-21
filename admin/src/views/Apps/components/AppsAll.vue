@@ -28,8 +28,9 @@
                 </span>
               </div>
               <div class="min-w-0 flex-1">
-                <div class="flex items-center gap-2">
-                  <div class="truncate text-base font-semibold text-slate-900">{{ item.name }}</div>
+                <div class="truncate text-base font-semibold text-slate-900">{{ item.name }}</div>
+                <div class="mt-1 flex items-center justify-between gap-2">
+                  <div class="truncate text-sm text-slate-500">{{ item.type }}</div>
                   <n-tag
                     v-if="item.installing"
                     type="warning"
@@ -43,7 +44,6 @@
                     round
                   >已安装</n-tag>
                 </div>
-                <div class="mt-1 text-sm text-slate-500">{{ item.type || "应用服务" }}</div>
               </div>
             </div>
             <div class="app-card__actions">
@@ -411,6 +411,7 @@ const props = defineProps<{
 	searchName: string
 	page: number
 	limit: number
+	refreshKey?: number
 }>()
 const emits = defineEmits(["update:total"])
 
@@ -480,7 +481,7 @@ const fetchData = async () => {
 	}
 }
 
-watch([() => props.searchName, () => props.page, () => props.limit], fetchData, { immediate: true })
+watch([() => props.searchName, () => props.page, () => props.limit, () => props.refreshKey], fetchData, { immediate: true })
 
 async function handleInstallApp(item: any) {
 	currentApp.value = item

@@ -228,6 +228,7 @@ const props = defineProps<{
 	searchName: string
 	page: number
 	limit: number
+	refreshKey?: number
 }>()
 const emits = defineEmits(["update:total"])
 
@@ -276,7 +277,7 @@ const fetchData = async () => {
 	}
 }
 
-watch([() => props.searchName, () => props.page, () => props.limit], fetchData, { immediate: true })
+watch([() => props.searchName, () => props.page, () => props.limit, () => props.refreshKey], fetchData, { immediate: true })
 
 function showDrawer(item: any) {
 	drawerItem.value = item

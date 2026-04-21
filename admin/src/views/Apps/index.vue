@@ -63,6 +63,7 @@
       :search-name="searchName"
       :page="page"
       :limit="limit"
+      :refresh-key="refreshKey"
       @update:total="handleTotalUpdate"
     />
     <AppsInstalled
@@ -70,6 +71,7 @@
       :search-name="searchName"
       :page="page"
       :limit="limit"
+      :refresh-key="refreshKey"
       @update:total="handleTotalUpdate"
     />
   </div>
@@ -110,15 +112,15 @@ const page = ref(1)
 const limit = ref(10)
 const total = ref(0)
 const syncing = ref(false)
+const refreshKey = ref(0)
 
 const handleSyncApps = async () => {
 	syncing.value = true
 	try {
 		const res = await appsSyncAPI()
-		if (res.code === 0) {
+		if (res.code == 0) {
 			message.success(t('app.syncSuccess'))
-			page.value = 1
-			handleSearch()  
+			handleSearch()
 		} else {
 		}
 	} catch (error) {
@@ -145,6 +147,7 @@ const handleTotalUpdate = (val: number) => {
 
 const handleSearch = () => {
 	page.value = 1
+	refreshKey.value += 1
 }
 
 const handlePageSizeChange = (size: number) => {

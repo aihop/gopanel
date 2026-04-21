@@ -19,6 +19,7 @@ import (
 	"github.com/aihop/gopanel/utils/docker"
 	"github.com/aihop/gopanel/utils/env"
 	"github.com/aihop/gopanel/utils/files"
+	"github.com/aihop/gopanel/utils/random"
 	"github.com/subosito/gotenv"
 	"gopkg.in/yaml.v3"
 	"gorm.io/gorm"
@@ -83,6 +84,20 @@ func (s *LocalAppService) Get(key string) (*dto.LocalAppDetail, error) {
 			} `yaml:"additionalProperties"`
 		}
 		if err := yaml.Unmarshal(dataContent, &meta); err == nil {
+			if len(meta.AdditionalProperties.FormFields) > 0 {
+				for _, v := range meta.AdditionalProperties.FormFields {
+					switch v.Type {
+					case "user":
+						if str, ok := v.Default.(string); ok {
+							v.Default = "gopanel_" + str
+						}
+					case "password":
+						if _, ok := v.Default.(string); ok {
+							v.Default = random.RandString(32)
+						}
+					}
+				}
+			}
 			formFields = meta.AdditionalProperties.FormFields
 		}
 	}
