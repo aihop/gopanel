@@ -30,6 +30,41 @@ log() { echo "[INFO] $*"; }
 warn() { echo "[WARN] $*" >&2; }
 die() { echo "[ERROR] $*" >&2; exit 1; }
 
+ensure_curl() {
+  if command -v curl >/dev/null 2>&1; then
+    return 0
+  fi
+
+  warn "检测到系统未安装 curl，正在自动安装..."
+
+  if [ "${os_name:-}" = "darwin" ]; then
+    if command -v brew >/dev/null 2>&1; then
+      brew install curl
+    else
+      die "系统未安装 curl，且未检测到 Homebrew。请先安装 curl 后重试。"
+    fi
+  elif command -v apt-get >/dev/null 2>&1; then
+    run_privileged env DEBIAN_FRONTEND=noninteractive apt-get update -y
+    run_privileged env DEBIAN_FRONTEND=noninteractive apt-get install -y curl ca-certificates
+  elif command -v dnf >/dev/null 2>&1; then
+    run_privileged dnf install -y curl ca-certificates
+  elif command -v yum >/dev/null 2>&1; then
+    run_privileged yum install -y curl ca-certificates
+  elif command -v apk >/dev/null 2>&1; then
+    run_privileged apk add --no-cache curl ca-certificates
+  elif command -v pacman >/dev/null 2>&1; then
+    run_privileged pacman -Sy --noconfirm curl ca-certificates
+  elif command -v zypper >/dev/null 2>&1; then
+    run_privileged zypper --non-interactive in -y curl ca-certificates
+  else
+    die "系统未安装 curl，且未识别到可用的包管理器（apt/yum/dnf/apk/pacman/zypper/brew）。请手动安装 curl 后重试。"
+  fi
+
+  if ! command -v curl >/dev/null 2>&1; then
+    die "curl 安装失败，请手动安装后重试。"
+  fi
+}
+
 cleanup() {
   if [ -n "${WORK_DIR}" ] && [ -d "${WORK_DIR}" ]; then
     rm -rf "${WORK_DIR}"
@@ -100,7 +135,7 @@ detect_platform() {
   case "$u" in
     linux*) os_name="linux" ;;
     darwin*) os_name="darwin" ;;
-    msys*|mingw*|cygwin*) die "检测到 Windows 环境，请使用 quick_start.ps1 进行安装。" ;;
+    msys*|mingw*|cygwin*) die "检测到 Windows 环境，请使用 install.ps1 进行安装。" ;;
     *) die "暂不支持的系统: $u" ;;
   esac
 
@@ -144,6 +179,59 @@ run_privileged() {
   else
     "$@"
   fi
+}
+
+detect_local_package() {
+  if [ -n "${LOCAL_PACKAGE:-}" ]; then
+    if [ -f "${LOCAL_PACKAGE}" ]; then
+      PACKAGE_NAME="${LOCAL_PACKAGE}"
+      PACKAGE_URL=""
+      version="local"
+      version_code="0"
+      log "发现本地安装包（LOCAL_PACKAGE）: ${PACKAGE_NAME}，将跳过远程获取与下载。"
+      return 0
+    fi
+    warn "已设置 LOCAL_PACKAGE，但文件不存在: ${LOCAL_PACKAGE}"
+  fi
+
+  local script_dir
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+  local candidates=()
+  local d
+  for d in "$PWD" "$script_dir"; do
+    if [ -d "$d" ]; then
+      shopt -s nullglob
+      candidates+=(
+        "$d"/gopanel*"$os_name"*"$arch_name"*.tar.gz
+        "$d"/gopanel*"$os_name"*"$arch_name"*.tgz
+        "$d"/gopanel*.tar.gz
+        "$d"/gopanel*.tgz
+      )
+      shopt -u nullglob
+    fi
+  done
+
+  local newest=""
+  local f
+  for f in "${candidates[@]}"; do
+    if [ -f "$f" ]; then
+      if [ -z "$newest" ] || [ "$f" -nt "$newest" ]; then
+        newest="$f"
+      fi
+    fi
+  done
+
+  if [ -n "$newest" ]; then
+    PACKAGE_NAME="$newest"
+    PACKAGE_URL=""
+    version="local"
+    version_code="0"
+    log "发现本地安装包: ${PACKAGE_NAME}，将跳过远程获取与下载。"
+    return 0
+  fi
+
+  return 1
 }
 
 fetch_upgrade_info() {
@@ -680,6 +768,12 @@ install_podman() {
 
     case "${id}" in
       debian)
+        local major
+        major="${version_id%%.*}"
+        if [[ "${major}" =~ ^[0-9]+$ ]] && [ "${major}" -ge 13 ]; then
+          warn "检测到 Debian ${version_id}，将跳过 devel:kubic:libcontainers:stable 源（该源可能缺少 Debian_${version_id}），改为直接使用 Debian 官方仓库安装 Podman。"
+          return 1
+        fi
         repo_dist="Debian_${version_id}"
         ;;
       ubuntu)
@@ -697,7 +791,20 @@ install_podman() {
     list_file="/etc/apt/sources.list.d/devel:kubic:libcontainers:stable.list"
 
     run_privileged mkdir -p /etc/apt/keyrings
-    curl -fsSL "${key_url}" | run_privileged gpg --dearmor -o "${keyring}"
+    local tmpkey
+    tmpkey="$(mktemp -t libcontainers_key.XXXXXX)"
+    if ! curl -fsSL "${key_url}" -o "${tmpkey}"; then
+      rm -f "${tmpkey}"
+      warn "下载 Podman 源密钥失败（将回退到官方仓库安装）: ${key_url}"
+      return 1
+    fi
+    if ! curl -fsSL "${repo_url}Release" -o /dev/null; then
+      rm -f "${tmpkey}"
+      warn "Podman 源不存在或不可用（将回退到官方仓库安装）: ${repo_url}"
+      return 1
+    fi
+    run_privileged gpg --dearmor -o "${keyring}" "${tmpkey}"
+    rm -f "${tmpkey}"
     run_privileged chmod 644 "${keyring}"
     printf "deb [signed-by=%s] %s /\n" "${keyring}" "${repo_url}" | run_privileged tee "${list_file}" >/dev/null
     return 0
@@ -895,11 +1002,14 @@ show_result() {
 }
 
 main() {
-  require_cmds
   init_invoking_user
   detect_platform
   init_privilege
-  fetch_upgrade_info
+  ensure_curl
+  require_cmds
+  if ! detect_local_package; then
+    fetch_upgrade_info
+  fi
 
   echo "GoPanel 安装向导 (版本: ${version}, code: ${version_code})"
   echo "==============================================="
