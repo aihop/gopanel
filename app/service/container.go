@@ -255,14 +255,21 @@ func normalizeContainerLabelFilter(filter string, isPodman bool) string {
 }
 
 func (u *ContainerService) List() ([]string, error) {
-	client, err := docker.NewDockerClient()
-	if err != nil {
-		return nil, err
-	}
-	defer client.Close()
-	containers, err := client.ContainerList(context.Background(), container.ListOptions{All: true})
-	if err != nil {
-		return nil, err
+	ctx := context.Background()
+	var containers []types.Container
+	if docker.IsPodmanRuntime(ctx) && runtime.GOOS == "linux" {
+		containers, _ = listContainersMergedByHost(ctx, container.ListOptions{All: true})
+	} else {
+		client, err := docker.NewDockerClient()
+		if err != nil {
+			return nil, err
+		}
+		defer client.Close()
+		list2, err := client.ContainerList(ctx, container.ListOptions{All: true})
+		if err != nil {
+			return nil, err
+		}
+		containers = list2
 	}
 	var datas []string
 	for _, container := range containers {
@@ -280,12 +287,42 @@ func (u *ContainerService) ContainerListStats() ([]dto.ContainerListStats, error
 	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
 		return u.containerListStatsPodman()
 	}
+	ctx := context.Background()
+	if docker.IsPodmanRuntime(ctx) && runtime.GOOS == "linux" {
+		list, source, err := listContainersMergedByHostWithSource(ctx, container.ListOptions{All: true})
+		if err != nil {
+			return nil, err
+		}
+		datas := make([]dto.ContainerListStats, len(list))
+		var wg sync.WaitGroup
+		wg.Add(len(list))
+		for i := 0; i < len(list); i++ {
+			go func(index int, item types.Container) {
+				host := strings.TrimSpace(source[item.ID])
+				if host == "" {
+					wg.Done()
+					return
+				}
+				cli, err := client.NewClientWithOpts(client.FromEnv, client.WithHost(host), client.WithAPIVersionNegotiation())
+				if err != nil {
+					wg.Done()
+					return
+				}
+				datas[index] = loadCpuAndMem(cli, item.ID)
+				_ = cli.Close()
+				wg.Done()
+			}(i, list[i])
+		}
+		wg.Wait()
+		return datas, nil
+	}
+
 	client, err := docker.NewDockerClient()
 	if err != nil {
 		return nil, err
 	}
 	defer client.Close()
-	list, err := client.ContainerList(context.Background(), container.ListOptions{All: true})
+	list, err := client.ContainerList(ctx, container.ListOptions{All: true})
 	if err != nil {
 		return nil, err
 	}

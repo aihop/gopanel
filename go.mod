@@ -8,7 +8,6 @@ require (
 	github.com/dgraph-io/badger/v4 v4.9.1
 	github.com/docker/docker v28.1.1+incompatible
 	github.com/docker/go-connections v0.5.0
-	github.com/elastic/go-sysinfo v1.11.2
 	github.com/fasthttp/websocket v1.5.12
 	github.com/glebarez/go-sqlite v1.21.2
 	github.com/glebarez/sqlite v1.11.0
@@ -19,6 +18,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/jinzhu/copier v0.4.0
 	github.com/klauspost/compress v1.18.4
+	github.com/lionsoul2014/ip2region/binding/golang v0.0.0-20260419022313-1d9ffabfebf5
 	github.com/mattn/go-colorable v0.1.14
 	github.com/mattn/go-isatty v0.0.20
 	github.com/mholt/archiver/v4 v4.0.0-alpha.8
@@ -50,8 +50,6 @@ require (
 	github.com/ebitengine/purego v0.9.0 // indirect
 	github.com/google/flatbuffers v25.2.10+incompatible // indirect
 	github.com/kr/fs v0.1.0 // indirect
-	github.com/lionsoul2014/ip2region/binding/golang v0.0.0-20260419022313-1d9ffabfebf5 // indirect
-	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/morikuni/aec v1.1.0 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect

@@ -203,14 +203,23 @@ func (u *ImageService) List() ([]dto.Options, error) {
 		list      []image.Summary
 		backDatas []dto.Options
 	)
-	client, err := docker.NewDockerClient()
-	if err != nil {
-		return nil, err
-	}
-	defer client.Close()
-	list, err = client.ImageList(context.Background(), image.ListOptions{})
-	if err != nil {
-		return nil, err
+	ctx := context.Background()
+	if docker.IsPodmanRuntime(ctx) && runtime.GOOS == "linux" {
+		var err error
+		list, _, err = listImagesMergedByHost(ctx)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		client, err := docker.NewDockerClient()
+		if err != nil {
+			return nil, err
+		}
+		defer client.Close()
+		list, err = client.ImageList(ctx, image.ListOptions{})
+		if err != nil {
+			return nil, err
+		}
 	}
 	for _, image := range list {
 		for _, tag := range image.RepoTags {
