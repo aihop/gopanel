@@ -18,6 +18,10 @@ import (
 	"github.com/aihop/gopanel/utils/gpc"
 )
 
+func EnsurePodmanAPIReady() error {
+	return ensurePodmanAPIReady()
+}
+
 func (u *DockerService) operatePodman(operation string) error {
 	switch runtime.GOOS {
 	case "darwin":
@@ -107,12 +111,30 @@ func ensurePodmanAPIReady() error {
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
 
+	lastUserErr := ""
+	lastRootErr := ""
+
 	for {
 		okHost := ""
-		if uid != 0 && docker.CanPingHost(baseCtx, userHost) {
+		attemptCtx, cancel := context.WithTimeout(baseCtx, 600*time.Millisecond)
+		userErr := error(nil)
+		rootErr := error(nil)
+		if uid != 0 {
+			userErr = docker.PingHost(attemptCtx, userHost)
+		}
+		rootErr = docker.PingHost(attemptCtx, rootHost)
+		cancel()
+
+		if uid != 0 && userErr == nil {
 			okHost = userHost
-		} else if docker.CanPingHost(baseCtx, rootHost) {
+		} else if rootErr == nil {
 			okHost = rootHost
+		}
+		if userErr != nil {
+			lastUserErr = userErr.Error()
+		}
+		if rootErr != nil {
+			lastRootErr = rootErr.Error()
 		}
 		if okHost != "" {
 			settingRepo := repo.NewISettingRepo()
@@ -129,10 +151,36 @@ func ensurePodmanAPIReady() error {
 		}
 		select {
 		case <-baseCtx.Done():
-			return fmt.Errorf("podman.socket 已执行，但 Docker API socket 仍不可用（已尝试 %s, %s）", userHost, rootHost)
+			svcActive := podmanSocketServiceActive(context.Background())
+			msg := fmt.Sprintf("podman.socket 已执行，但 Docker API socket 仍不可用。\n- systemd podman.socket active: %v\n- try1: %s -> %s\n- try2: %s -> %s", svcActive, userHost, strings.TrimSpace(lastUserErr), rootHost, strings.TrimSpace(lastRootErr))
+			if uid != 0 {
+				msg += "\n建议：优先调用接口 POST /container/repair/podman-socket 修复 SocketGroup；rootless 场景再调用 POST /container/repair/linger"
+			} else {
+				msg += "\n建议：检查 podman.service/podman.socket 日志与 /run/podman/podman.sock 权限"
+			}
+			return errors.New(msg)
 		case <-ticker.C:
 		}
 	}
+}
+
+func podmanSocketServiceActive(ctx context.Context) bool {
+	if runtime.GOOS != "linux" {
+		return false
+	}
+	if _, err := exec.LookPath("systemctl"); err != nil {
+		return false
+	}
+	baseCtx := ctx
+	if baseCtx == nil {
+		baseCtx = context.Background()
+	}
+	c, cancel := context.WithTimeout(baseCtx, 1200*time.Millisecond)
+	defer cancel()
+	cmd := exec.CommandContext(c, "systemctl", "is-active", "podman.socket")
+	out, err := cmd.CombinedOutput()
+	_ = err
+	return strings.TrimSpace(string(out)) == "active"
 }
 
 func shouldUpdateDockerSockPath(cur string) bool {
@@ -213,4 +261,3 @@ func podmanMachineHasAny() (bool, error) {
 	}
 	return true, nil
 }
-

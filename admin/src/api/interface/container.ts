@@ -311,8 +311,19 @@ export namespace Container {
 		file: string
 	}
 	export interface DaemonJsonConf {
+		containerType?: string
+		runtimeKind?: string
+		runtimeHost?: string
+		capabilities?: {
+			daemonJson?: boolean
+			dockerApi?: boolean
+			podmanCli?: boolean
+			compose?: boolean
+		}
 		isSwarm: boolean
 		status: string
+		serviceActive?: boolean
+		apiReady?: boolean
 		version: string
 		registryMirrors: Array<string>
 		insecureRegistries: Array<string>

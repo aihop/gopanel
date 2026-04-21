@@ -11,6 +11,8 @@ type DaemonJsonConf struct {
 	Capabilities  RuntimeCapabilities `json:"capabilities"`
 	IsSwarm       bool     `json:"isSwarm"`
 	Status        string   `json:"status"`
+	ServiceActive bool     `json:"serviceActive"`
+	ApiReady      bool     `json:"apiReady"`
 	Version       string   `json:"version"`
 	Mirrors       []string `json:"registryMirrors"`
 	Registries    []string `json:"insecureRegistries"`

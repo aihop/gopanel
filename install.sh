@@ -782,6 +782,7 @@ ensure_podman_socket_access() {
 SocketUser=root
 SocketGroup=${grp}
 SocketMode=0660
+DirectoryMode=0755
 EOF
 
   run_privileged systemctl daemon-reload

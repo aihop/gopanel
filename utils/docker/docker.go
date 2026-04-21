@@ -369,6 +369,24 @@ func CanPingHost(ctx context.Context, host string) bool {
 	return canPingHost(ctx, host)
 }
 
+func PingHost(ctx context.Context, host string) error {
+	if strings.HasPrefix(host, "unix://") {
+		sockPath := strings.TrimPrefix(host, "unix://")
+		if _, err := os.Stat(sockPath); err != nil {
+			return err
+		}
+	}
+
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithHost(host), client.WithAPIVersionNegotiation())
+	if err != nil {
+		return err
+	}
+	defer cli.Close()
+
+	_, err = cli.Ping(ctx)
+	return err
+}
+
 func unixSockExists(host string) bool {
 	if !strings.HasPrefix(host, "unix://") {
 		return false

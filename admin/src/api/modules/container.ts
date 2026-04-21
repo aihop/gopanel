@@ -190,6 +190,14 @@ export const loadInstanceStatus = () => {
 export const containerPrecheck = () => {
 	return http.get<any>(`/container/precheck`)
 }
+
+export const repairPodmanSocketAPI = (group?: string) => {
+	return http.post(`/container/repair/podman-socket`, group ? { group } : {})
+}
+
+export const repairSystemdLingerAPI = () => {
+	return http.post(`/container/repair/linger`, {})
+}
 export const updateDaemonUpdate = (key: string, value: string) => {
 	return http.post(`/container/daemon/update`, { key: key, value: value }, TimeoutEnum.T_60S)
 }

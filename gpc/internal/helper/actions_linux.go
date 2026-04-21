@@ -264,8 +264,76 @@ func systemctlShow(ctx context.Context, name, prop string) string {
 	return strings.TrimSpace(string(out))
 }
 
-var serviceNameRe = regexp.MustCompile(`^[A-Za-z0-9_.@-]+(\.service)?$`)
+var serviceNameRe = regexp.MustCompile(`^[A-Za-z0-9_.@-]+(\.(service|socket))?$`)
 
 func validServiceName(s string) bool {
 	return serviceNameRe.MatchString(s)
+}
+
+func (s *Server) actionPodmanSocketRepair(ctx context.Context, params map[string]interface{}) (string, error) {
+	group := strings.TrimSpace(getString(params, "group"))
+	if group == "" {
+		return "", errors.New("invalid params: group is empty")
+	}
+	if _, err := exec.LookPath("systemctl"); err != nil {
+		return "", err
+	}
+	select {
+	case <-ctx.Done():
+		return "", ctx.Err()
+	default:
+	}
+
+	if err := os.MkdirAll("/etc/systemd/system/podman.socket.d", 0755); err != nil {
+		return "", err
+	}
+	content := "[Socket]\nSocketUser=root\nSocketGroup=" + group + "\nSocketMode=0660\nDirectoryMode=0755\n"
+	if err := os.WriteFile("/etc/systemd/system/podman.socket.d/override.conf", []byte(content), 0644); err != nil {
+		return "", err
+	}
+
+	steps := [][]string{
+		{"systemctl", "daemon-reload"},
+		{"systemctl", "stop", "podman.socket"},
+		{"rm", "-f", "/run/podman/podman.sock"},
+		{"systemctl", "start", "podman.socket"},
+	}
+	var outs []string
+	for _, args := range steps {
+		c := exec.CommandContext(ctx, args[0], args[1:]...)
+		out, err := c.CombinedOutput()
+		s := strings.TrimSpace(string(out))
+		if s != "" {
+			outs = append(outs, s)
+		}
+		if err != nil {
+			if args[0] == "systemctl" && len(args) >= 3 && args[1] == "stop" && args[2] == "podman.socket" {
+				continue
+			}
+			return strings.Join(outs, "\n"), fmt.Errorf("%w: %s", err, s)
+		}
+	}
+	return strings.Join(outs, "\n"), nil
+}
+
+func (s *Server) actionSystemdEnableLinger(ctx context.Context, params map[string]interface{}) (string, error) {
+	uid, ok := getInt(params, "uid")
+	if !ok {
+		return "", errors.New("invalid params: uid is required")
+	}
+	if _, err := exec.LookPath("loginctl"); err != nil {
+		return "", err
+	}
+	select {
+	case <-ctx.Done():
+		return "", ctx.Err()
+	default:
+	}
+	c := exec.CommandContext(ctx, "loginctl", "enable-linger", strconv.Itoa(uid))
+	out, err := c.CombinedOutput()
+	sout := strings.TrimSpace(string(out))
+	if err != nil {
+		return sout, fmt.Errorf("%w: %s", err, sout)
+	}
+	return sout, nil
 }

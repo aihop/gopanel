@@ -96,6 +96,13 @@
               </template>
               是否重启
             </n-popconfirm>
+            <n-button
+              :disabled="!precheck"
+              :type="repairHintType"
+              @click="openRepairModal"
+            >
+              问题修复
+            </n-button>
           </n-space>
         </div>
       </div>
@@ -342,12 +349,87 @@
         placeholder='请输入 "立即重启"'
       />
     </n-modal>
+
+    <n-modal
+      :show="showRepairModal"
+      @update:show="showRepairModal = $event"
+      preset="dialog"
+      title="容器运行时问题修复"
+      positive-text="关闭"
+      :show-icon="false"
+      @positive-click="showRepairModal = false"
+    >
+      <div class="space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="text-sm text-gray-600">
+            Runtime: {{ precheck?.runtimeKind || '-' }} / Host: {{ precheck?.runtimeHost || '-' }}
+          </div>
+          <n-button
+            v-if="precheck?.os === 'linux' && precheck?.runtimeKind === 'podman'"
+            :loading="autoRepairLoading"
+            :disabled="!precheck?.gpc?.reachable"
+            type="primary"
+            @click="autoRepair"
+          >
+            自动修复
+          </n-button>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <n-tag :type="precheck?.runtime?.serviceActive ? 'success' : 'warning'">
+            Service: {{ precheck?.runtime?.serviceActive ? 'active' : 'inactive' }}
+          </n-tag>
+          <n-tag :type="precheck?.runtime?.apiReady ? 'success' : 'warning'">
+            API: {{ precheck?.runtime?.apiReady ? 'ready' : 'not ready' }}
+          </n-tag>
+          <n-tag :type="precheck?.gpc?.reachable ? 'success' : 'warning'">
+            GPC: {{ precheck?.gpc?.reachable ? 'OK' : '未连接' }}
+          </n-tag>
+        </div>
+
+        <div
+          v-if="precheck?.notes?.length"
+          class="rounded-lg bg-orange-50 p-3 text-xs text-orange-700"
+        >
+          <div
+            v-for="(n, i) in precheck.notes"
+            :key="i"
+          >- {{ n }}</div>
+        </div>
+
+        <div class="flex flex-wrap gap-2">
+          <n-button
+            v-if="precheck?.os === 'linux' && precheck?.runtimeKind === 'podman'"
+            :loading="repairSocketLoading"
+            :disabled="!precheck?.gpc?.reachable || autoRepairLoading"
+            type="warning"
+            @click="repairPodmanSocket"
+          >
+            修复 Podman Socket 权限
+          </n-button>
+          <n-button
+            v-if="precheck?.os === 'linux' && precheck?.runtimeKind === 'podman'"
+            :loading="repairLingerLoading"
+            :disabled="!precheck?.gpc?.reachable || autoRepairLoading"
+            @click="repairLinger"
+          >
+            启用 Linger（rootless 保活）
+          </n-button>
+        </div>
+
+        <div
+          v-if="precheck && precheck?.os === 'linux' && precheck?.runtimeKind === 'podman' && !precheck?.gpc?.reachable"
+          class="text-xs text-gray-500"
+        >
+          GPC 未连接时无法执行一键修复，请先在服务器上启用/启动 gpc helper。
+        </div>
+      </div>
+    </n-modal>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onMounted, ref } from "vue"
-import { loadDaemonFile, updateDaemonUpdate, updateDaemonByfile, containerInstanceOperateAPI, containerDaemonConfigAPI, containerPrecheck } from "../../../api/modules/container"
+import { loadDaemonFile, updateDaemonUpdate, updateDaemonByfile, containerInstanceOperateAPI, containerDaemonConfigAPI, containerPrecheck, repairPodmanSocketAPI, repairSystemdLingerAPI } from "../../../api/modules/container"
 import { dockerStatus, dockerStatusText } from "../../../enums/dockerStatus.enum"
 import { isSucc } from "../../../utils/is"
 import { useMessage } from "naive-ui"
@@ -387,6 +469,97 @@ const dockerOnly = computed(() => {
 	if (!precheck.value?.runtimeKind) return false
 	return precheck.value.runtimeKind !== "docker"
 })
+const repairHintType = computed(() => {
+	if (!precheck.value) return "default"
+	if (precheck.value?.runtime?.serviceActive && !precheck.value?.runtime?.apiReady) return "warning"
+	return "default"
+})
+
+const showRepairModal = ref(false)
+const repairSocketLoading = ref(false)
+const repairLingerLoading = ref(false)
+const autoRepairLoading = ref(false)
+
+async function openRepairModal() {
+	await loadPrecheck()
+	showRepairModal.value = true
+	await autoRepair()
+}
+
+async function autoRepair() {
+	if (autoRepairLoading.value) return
+	await loadPrecheck()
+	if (!precheck.value) return
+	if (precheck.value?.os !== "linux" || precheck.value?.runtimeKind !== "podman") return
+	if (!precheck.value?.gpc?.reachable) return
+	if (precheck.value?.runtime?.apiReady) return
+
+	autoRepairLoading.value = true
+	try {
+		message.info("正在尝试自动修复…")
+		await repairPodmanSocket()
+		await loadPrecheck()
+		if (precheck.value?.runtime?.apiReady) {
+			message.success("自动修复成功")
+			return
+		}
+		const notes = Array.isArray(precheck.value?.notes) ? precheck.value.notes.join(" ").toLowerCase() : ""
+		const maybeRootless =
+			typeof precheck.value?.runtimeHost === "string" && precheck.value.runtimeHost.includes("/run/user/")
+		const needLinger =
+			maybeRootless ||
+			notes.includes("linger") ||
+			notes.includes("user session") ||
+			notes.includes("no medium found") ||
+			notes.includes("cgroupv2")
+		if (needLinger) {
+			await repairLinger()
+			await loadPrecheck()
+			if (precheck.value?.runtime?.apiReady) {
+				message.success("自动修复成功")
+				return
+			}
+		}
+		message.warning("自动修复未完全成功，请查看提示信息")
+	} finally {
+		autoRepairLoading.value = false
+	}
+}
+
+async function repairPodmanSocket() {
+	repairSocketLoading.value = true
+	try {
+		const res: any = await repairPodmanSocketAPI()
+		if (isSucc(res.code)) {
+			message.success("已触发修复，正在刷新状态…")
+			await loadPrecheck()
+			getDaemon()
+		} else {
+			message.error(res.msg || "修复失败")
+		}
+	} catch (e: any) {
+		message.error(e?.message || "修复失败")
+	} finally {
+		repairSocketLoading.value = false
+	}
+}
+
+async function repairLinger() {
+	repairLingerLoading.value = true
+	try {
+		const res: any = await repairSystemdLingerAPI()
+		if (isSucc(res.code)) {
+			message.success("已启用 linger")
+			await loadPrecheck()
+		} else {
+			message.error(res.msg || "操作失败")
+		}
+	} catch (e: any) {
+		message.error(e?.message || "操作失败")
+	} finally {
+		repairLingerLoading.value = false
+	}
+}
 
 async function loadPrecheck() {
 	try {

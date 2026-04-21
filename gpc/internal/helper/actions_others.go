@@ -41,3 +41,15 @@ func (s *Server) actionGoPanelInfo(ctx context.Context, params map[string]interf
 	_ = params
 	return "", errors.New("unsupported platform")
 }
+
+func (s *Server) actionPodmanSocketRepair(ctx context.Context, params map[string]interface{}) (string, error) {
+	_ = ctx
+	_ = params
+	return "", errors.New("unsupported platform")
+}
+
+func (s *Server) actionSystemdEnableLinger(ctx context.Context, params map[string]interface{}) (string, error) {
+	_ = ctx
+	_ = params
+	return "", errors.New("unsupported platform")
+}

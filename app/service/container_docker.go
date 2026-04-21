@@ -62,6 +62,29 @@ func (u *DockerService) LoadDockerStatus() string {
 		}
 		return constant.StatusRunning
 	}
+	if docker.IsPodmanRuntime(ctx) && runtime.GOOS == "linux" {
+		resolved := docker.ResolveRuntime(ctx)
+		socketExists := false
+		if resolved.Kind == docker.RuntimePodman && strings.HasPrefix(resolved.Host, "unix://") {
+			if _, err := os.Stat(strings.TrimPrefix(resolved.Host, "unix://")); err == nil {
+				socketExists = true
+			}
+		}
+		serviceActive := podmanSocketServiceActive(ctx) || socketExists
+		client, err := docker.NewDockerClient()
+		if err == nil {
+			defer client.Close()
+			pingCtx, cancel := context.WithTimeout(ctx, 800*time.Millisecond)
+			defer cancel()
+			if _, err := client.Ping(pingCtx); err == nil {
+				return constant.StatusRunning
+			}
+		}
+		if serviceActive {
+			return constant.StatusRunning
+		}
+		return constant.Stopped
+	}
 	socketExists := false
 	if runtime.GOOS == "linux" {
 		resolved := docker.ResolveRuntime(ctx)
@@ -108,10 +131,12 @@ func (u *DockerService) LoadDockerConf() *dto.DaemonJsonConf {
 		if runtime.GOOS == "darwin" {
 			if err := docker.PodmanEnsureReady(ctx); err == nil {
 				data.Status = constant.StatusRunning
+				data.ServiceActive = true
 			}
 			if v, err := docker.PodmanVersion(ctx); err == nil && strings.TrimSpace(v) != "" {
 				data.Version = v
 			}
+			data.ApiReady = false
 		} else {
 			socketExists := false
 			if strings.HasPrefix(resolved.Host, "unix://") {
@@ -119,18 +144,22 @@ func (u *DockerService) LoadDockerConf() *dto.DaemonJsonConf {
 					socketExists = true
 				}
 			}
-			client, err := docker.NewDockerClient()
-			if err == nil {
-				defer client.Close()
-				if _, err := client.Ping(ctx); err == nil {
-					data.Status = constant.StatusRunning
-				}
-				itemVersion, err := client.ServerVersion(ctx)
+			data.ServiceActive = podmanSocketServiceActive(ctx) || socketExists
+			pingCtx, cancel := context.WithTimeout(ctx, 800*time.Millisecond)
+			defer cancel()
+			data.ApiReady = docker.CanPingHost(pingCtx, resolved.Host)
+			if data.ApiReady {
+				client, err := docker.NewDockerClient()
 				if err == nil {
-					data.Version = itemVersion.Version
+					defer client.Close()
+					data.Status = constant.StatusRunning
+					itemVersion, err := client.ServerVersion(ctx)
+					if err == nil {
+						data.Version = itemVersion.Version
+					}
 				}
 			}
-			if data.Status != constant.StatusRunning && socketExists {
+			if data.Status != constant.StatusRunning && data.ServiceActive {
 				data.Status = constant.StatusRunning
 			}
 		}
@@ -155,6 +184,8 @@ func (u *DockerService) LoadDockerConf() *dto.DaemonJsonConf {
 			data.IsSwarm = strings.ToLower(string(info.Swarm.LocalNodeState)) == "active"
 		}
 	}
+	data.ServiceActive = data.Status == constant.StatusRunning
+	data.ApiReady = data.Status == constant.StatusRunning
 
 	if runtime.GOOS != "linux" {
 		return &data

@@ -166,6 +166,12 @@ func (s *Server) doAction(ctx context.Context, req proto.Request) (string, error
 	case "GOPANEL_USER_INFO":
 		out, err := s.actionGoPanelUserInfo(ctx, req.Params)
 		return out, err
+	case "PODMAN_SOCKET_REPAIR":
+		out, err := s.actionPodmanSocketRepair(ctx, req.Params)
+		return out, err
+	case "SYSTEMD_ENABLE_LINGER":
+		out, err := s.actionSystemdEnableLinger(ctx, req.Params)
+		return out, err
 	case "FILE_STAT":
 		return s.actionFileStat(ctx, req.Params)
 	case "FILE_LIST":
@@ -197,6 +203,10 @@ func lockKeyForAction(action string) string {
 		return "chown"
 	case "GOPANEL_SERVICE_ACTION":
 		return "gopanel_service"
+	case "PODMAN_SOCKET_REPAIR":
+		return "podman_socket_repair"
+	case "SYSTEMD_ENABLE_LINGER":
+		return "systemd_enable_linger"
 	case "RESTART_HOST":
 		return "restart_host"
 	case "FILE_WRITE", "FILE_MKDIR", "FILE_CREATE", "FILE_REMOVE", "FILE_CHMOD", "FILE_CHOWN":
