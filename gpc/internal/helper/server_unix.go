@@ -175,6 +175,12 @@ func (s *Server) doAction(ctx context.Context, req proto.Request) (string, error
 	case "SYSTEMD_ENABLE_LINGER":
 		out, err := s.actionSystemdEnableLinger(ctx, req.Params)
 		return out, err
+	case "PODMAN_REGISTRIES_GET":
+		out, err := s.actionPodmanRegistriesGet(ctx, req.Params)
+		return out, err
+	case "PODMAN_REGISTRIES_SET":
+		out, err := s.actionPodmanRegistriesSet(ctx, req.Params)
+		return out, err
 	case "COMPOSE_INSTALL":
 		out, err := s.actionComposeInstall(ctx, req.Params)
 		return out, err

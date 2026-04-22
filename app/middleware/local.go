@@ -131,6 +131,10 @@ const NoEntrance = `<!doctype html>
         <div class="action-box">
             请使用管理员配置的 <strong>专属安全入口 URL</strong> 重新进行访问。
         </div>
+        <div class="action-box">
+            <p>可在 SSH 终端输入以下命令来查看面板入口：</p>
+            <p>gpc service user-info</p>
+        </div>
     </div>
 </body>
 </html>

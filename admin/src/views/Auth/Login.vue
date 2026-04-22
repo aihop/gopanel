@@ -63,7 +63,7 @@
                   {{ appBrand }}
                 </div>
                 <h1 class="font-family-[PingFang SC] max-w-[620px] text-4xl font-bold leading-[1.05] sm:text-5xl lg:text-[56px]">
-                  高颜值实用面板
+                  安全、好用的服务器面板
                 </h1>
                 <p
                   class="max-w-[620px] text-base leading-8 sm:text-lg"

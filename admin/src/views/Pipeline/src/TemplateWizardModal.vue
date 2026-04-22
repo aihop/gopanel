@@ -84,7 +84,7 @@ const handleGenerate = () => {
     templateConfig = {
       name: `PHP ${phpVersion.value} 部署流水线`,
       description: `自动化部署 ${phpFramework.value.toUpperCase()} 项目 (PHP ${phpVersion.value})`,
-      buildEnv: "docker",
+      buildEnv: "container",
       buildImage: `swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/php:${phpVersion.value}-cli-alpine`,
       buildScript: script,
       artifactPath: "./",
@@ -107,7 +107,7 @@ const handleGenerate = () => {
     templateConfig = {
       name: `Node.js ${nodeVersion.value} 部署流水线`,
       description: `构建 ${nodeFramework.value.toUpperCase()} 前端项目 (Node ${nodeVersion.value})`,
-      buildEnv: "docker",
+      buildEnv: "container",
       buildImage: `swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/node:${nodeVersion.value}-alpine`,
       buildScript: script,
       artifactPath: artifact,
@@ -117,7 +117,7 @@ const handleGenerate = () => {
     templateConfig = {
       name: `Go ${goVersion.value} 部署流水线`,
       description: "编译构建 Go 项目可执行文件",
-      buildEnv: "docker",
+      buildEnv: "container",
       buildImage: `swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/golang:${goVersion.value}-alpine`,
       buildScript: `go env -w GO111MODULE=on\ngo env -w GOPROXY=${goProxy.value}\ngo build -o app main.go`,
       artifactPath: "app",
@@ -127,7 +127,7 @@ const handleGenerate = () => {
     templateConfig = {
       name: `Java ${javaVersion.value} 部署流水线`,
       description: `使用 ${javaTool.value.toUpperCase()} 构建 Java 项目`,
-      buildEnv: "docker",
+      buildEnv: "container",
       buildImage: javaTool.value === 'maven' 
         ? `swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/maven:3.9-eclipse-temurin-${javaVersion.value}-alpine`
         : `swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/gradle:8-jdk${javaVersion.value}-alpine`,
@@ -162,9 +162,16 @@ const modalTitle = computed(() => {
   >
     <div class="px-2 py-4">
       <!-- PHP 配置 -->
-      <n-form v-if="templateType === 'php'" label-placement="left" label-width="120">
+      <n-form
+        v-if="templateType === 'php'"
+        label-placement="left"
+        label-width="120"
+      >
         <n-form-item label="PHP 版本">
-          <n-select v-model:value="phpVersion" :options="phpVersionOptions" />
+          <n-select
+            v-model:value="phpVersion"
+            :options="phpVersionOptions"
+          />
         </n-form-item>
         <n-form-item label="项目框架">
           <n-radio-group v-model:value="phpFramework">
@@ -182,16 +189,28 @@ const modalTitle = computed(() => {
         <n-form-item label="常用扩展">
           <n-checkbox-group v-model:value="phpExtensions">
             <div class="grid grid-cols-2 gap-2">
-              <n-checkbox v-for="ext in phpExtOptions" :key="ext.value" :value="ext.value" :label="ext.label" />
+              <n-checkbox
+                v-for="ext in phpExtOptions"
+                :key="ext.value"
+                :value="ext.value"
+                :label="ext.label"
+              />
             </div>
           </n-checkbox-group>
         </n-form-item>
       </n-form>
 
       <!-- Node.js 配置 -->
-      <n-form v-if="templateType === 'node'" label-placement="left" label-width="120">
+      <n-form
+        v-if="templateType === 'node'"
+        label-placement="left"
+        label-width="120"
+      >
         <n-form-item label="Node 版本">
-          <n-select v-model:value="nodeVersion" :options="nodeVersionOptions" />
+          <n-select
+            v-model:value="nodeVersion"
+            :options="nodeVersionOptions"
+          />
         </n-form-item>
         <n-form-item label="包管理器">
           <n-radio-group v-model:value="nodePackageManager">
@@ -210,17 +229,31 @@ const modalTitle = computed(() => {
       </n-form>
 
       <!-- Go 配置 -->
-      <n-form v-if="templateType === 'go'" label-placement="left" label-width="120">
+      <n-form
+        v-if="templateType === 'go'"
+        label-placement="left"
+        label-width="120"
+      >
         <n-form-item label="Go 版本">
-          <n-input v-model:value="goVersion" placeholder="例如: 1.21" />
+          <n-input
+            v-model:value="goVersion"
+            placeholder="例如: 1.21"
+          />
         </n-form-item>
         <n-form-item label="GOPROXY 镜像">
-          <n-input v-model:value="goProxy" placeholder="https://goproxy.cn,direct" />
+          <n-input
+            v-model:value="goProxy"
+            placeholder="https://goproxy.cn,direct"
+          />
         </n-form-item>
       </n-form>
 
       <!-- Java 配置 -->
-      <n-form v-if="templateType === 'java'" label-placement="left" label-width="120">
+      <n-form
+        v-if="templateType === 'java'"
+        label-placement="left"
+        label-width="120"
+      >
         <n-form-item label="Java 版本">
           <n-radio-group v-model:value="javaVersion">
             <n-radio value="17">JDK 17</n-radio>
@@ -235,16 +268,19 @@ const modalTitle = computed(() => {
           </n-radio-group>
         </n-form-item>
       </n-form>
-      
+
       <div class="mt-4 p-3 bg-blue-50 text-blue-600 rounded-lg text-sm">
         💡 提示：生成模板后，您依然可以在“构建脚本”中自由修改任何执行细节。
       </div>
     </div>
-    
+
     <template #footer>
       <div class="flex justify-end gap-3">
         <n-button @click="handleClose">取消</n-button>
-        <n-button type="primary" @click="handleGenerate">一键生成流水线</n-button>
+        <n-button
+          type="primary"
+          @click="handleGenerate"
+        >一键生成流水线</n-button>
       </div>
     </template>
   </n-modal>

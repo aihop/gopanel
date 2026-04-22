@@ -27,8 +27,8 @@ const formModel = reactive({
   version: "1.0.0", // 默认初始版本号
   authType: "none",
   authData: "",
-  buildEnv: "docker", // 新增前端状态：host | docker
-  buildImage: "node:18-alpine",
+  buildEnv: "container", // 新增前端状态：host | container
+  buildImage: "node:20-alpine",
   buildScript: "npm install && npm run build",
   outputImage: "",
   artifactPath: "dist/",
@@ -91,8 +91,8 @@ watch(() => props.show, (val) => {
         version: props.editData.version || "1.0.0",
         authType: props.editData.authType || "none",
         authData: props.editData.authData || "",
-        buildEnv: isHost ? "host" : "docker",
-        buildImage: isHost ? "node:18-alpine" : props.editData.buildImage,
+        buildEnv: isHost ? "host" : "container",
+        buildImage: isHost ? "node:20-alpine" : props.editData.buildImage,
         buildScript: props.editData.buildScript || "",
         outputImage: props.editData.outputImage || "",
         artifactPath: props.editData.artifactPath || "",
@@ -107,8 +107,8 @@ watch(() => props.show, (val) => {
         version: "1.0.0",
         authType: "none",
         authData: "",
-        buildEnv: props.initialTemplate.buildEnv || "docker",
-        buildImage: props.initialTemplate.buildImage || "node:18-alpine",
+        buildEnv: props.initialTemplate.buildEnv || "container",
+        buildImage: props.initialTemplate.buildImage || "node:20-alpine",
         buildScript: props.initialTemplate.buildScript || "",
         outputImage: "",
         artifactPath: props.initialTemplate.artifactPath || "dist/",
@@ -123,8 +123,8 @@ watch(() => props.show, (val) => {
         version: "1.0.0",
         authType: "none",
         authData: "",
-        buildEnv: "docker",
-        buildImage: "node:18-alpine",
+        buildEnv: "container",
+        buildImage: "node:20-alpine",
         buildScript: "npm install && npm run build",
         outputImage: "",
         artifactPath: "dist/",
@@ -224,18 +224,18 @@ watch(() => props.show, (val) => {
         path="buildEnv"
       >
         <n-radio-group v-model:value="formModel.buildEnv">
-          <n-radio value="host">宿主机本地构建</n-radio>
-          <n-radio value="docker">Docker 容器构建</n-radio>
+          <n-radio value="container">容器化构建 (推荐，基于 Docker/Podman)</n-radio>
+          <n-radio value="host">宿主机本地构建 (环境依赖复杂，仅限专家)</n-radio>
         </n-radio-group>
       </n-form-item>
       <n-form-item
-        v-if="formModel.buildEnv === 'docker'"
+        v-if="formModel.buildEnv === 'container' || formModel.buildEnv === 'docker'"
         label="构建镜像"
         path="buildImage"
       >
         <n-input
           v-model:value="formModel.buildImage"
-          placeholder="node:18-alpine"
+          placeholder="node:20-alpine"
         />
       </n-form-item>
       <n-form-item

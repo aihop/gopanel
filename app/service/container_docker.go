@@ -17,6 +17,7 @@ import (
 	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/utils/cmd"
 	"github.com/aihop/gopanel/utils/docker"
+	"github.com/aihop/gopanel/utils/gpc"
 	"github.com/aihop/gopanel/utils/systemctl"
 )
 
@@ -162,6 +163,22 @@ func (u *DockerService) LoadDockerConf() *dto.DaemonJsonConf {
 			if data.Status != constant.StatusRunning && data.ServiceActive {
 				data.Status = constant.StatusRunning
 			}
+			// Load registries.conf for mirrors in linux podman
+			if runtime.GOOS == "linux" {
+				out, err := gpc.Do(ctx, "PODMAN_REGISTRIES_GET", nil)
+				if err == nil {
+					var pmRes map[string]interface{}
+					if json.Unmarshal([]byte(out.Output), &pmRes) == nil {
+						if m, ok := pmRes["mirrors"].([]interface{}); ok {
+							for _, v := range m {
+								if s, ok := v.(string); ok {
+									data.Mirrors = append(data.Mirrors, s)
+								}
+							}
+						}
+					}
+				}
+			}
 		}
 		return &data
 	}
@@ -233,12 +250,25 @@ func (u *DockerService) LoadDockerConf() *dto.DaemonJsonConf {
 }
 
 func (u *DockerService) UpdateConf(req dto.SettingUpdate) error {
-	if docker.IsPodmanRuntime(context.Background()) {
-		return errors.New("podman runtime does not support docker daemon.json management")
-	}
 	if runtime.GOOS != "linux" {
 		return errors.New("unsupported platform")
 	}
+
+	if docker.IsPodmanRuntime(context.Background()) {
+		if req.Key == "Mirrors" {
+			req.Value = strings.TrimSuffix(req.Value, ",")
+			var mirrors []string
+			if len(req.Value) > 0 {
+				mirrors = strings.Split(req.Value, ",")
+			}
+			_, err := gpc.Do(context.Background(), "PODMAN_REGISTRIES_SET", map[string]interface{}{
+				"mirrors": mirrors,
+			})
+			return err
+		}
+		return errors.New("podman runtime does not support docker daemon.json management")
+	}
+
 	err := createIfNotExistDaemonJsonFile()
 	if err != nil {
 		return err

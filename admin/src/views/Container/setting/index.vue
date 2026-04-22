@@ -134,7 +134,7 @@
                     <n-input
                       v-if="daemon.registryMirrors"
                       type="textarea"
-                      :disabled="dockerOnly"
+                      :disabled="!daemon.capabilities?.daemonJson && !daemon.capabilities?.podmanCLI"
                       :value="daemon.registryMirrors.join('\n')"
                       style="min-height: 34px"
                       placeholder="https://dockerpull.pw\nhttps://dockerhub.icu\nhttps://hub.rat.dev\nhttps://register.librax.org\nhttps://docker-0.unsee.tech"
@@ -142,7 +142,7 @@
                       @update:value="updateMirrorUrls($event, 'registryMirrors')"
                     />
                     <n-button
-                      :disabled="dockerOnly"
+                      :disabled="!daemon.capabilities?.daemonJson && !daemon.capabilities?.podmanCLI"
                       @click="openDrawer('registryMirrors')"
                     >
                       <template #icon>
