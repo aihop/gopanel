@@ -185,6 +185,7 @@ import { GetUploadList, CheckFile, ChunkUploadFileData, BatchDeleteFile } from "
 import { settingSystemBaseDirAPI } from "@/api/modules/setting"
 import { backupRecoverByUploadAPI } from "@/api/modules/backup"
 import { MsgError, MsgSuccess } from "@/utils/message"
+import { useAuthStore } from "@/store/auth"
 import { File } from "@/api/interface/file"
 const { t } = useI18n()
 const dialog = useDialog()
@@ -350,10 +351,26 @@ const onHandleRecover = async () => {
 	}
 	loading.value = true
 	try {
-		await backupRecoverByUploadAPI(params)
-		MsgSuccess(t("commons.msg.operationSuccess"))
+		const res = await backupRecoverByUploadAPI(params)
+		if (res.code !== 0) {
+			MsgError(res.msg || "恢复提交失败")
+			return
+		}
+		const key = (res.data as any)?.key
+		if (!key) {
+			MsgError("恢复提交失败")
+			return
+		}
 		handleBackupClose()
-		search()
+		const apiUrl = (window as any).__VITE_API_URL__ || "/api"
+		const authStore = useAuthStore()
+		const safeToken = encodeURIComponent(authStore.auth || "")
+		opRef.value?.acceptParams({
+			title: t("commons.button.recover"),
+			msg: "恢复已开始，正在输出实时日志...",
+			names: [],
+			sseUrl: `${apiUrl}/backup/logs?key=${encodeURIComponent(key)}&token=${safeToken}`
+		})
 	} catch {
 		// ignore
 	} finally {

@@ -2,6 +2,7 @@ package client
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"database/sql"
 	"errors"
@@ -147,9 +148,11 @@ func (r *Remote) Backup(info BackupInfo) error {
 		return err
 	}
 	runCmd.Stdout = outfile
-	out, runErr := runCmd.CombinedOutput()
+	var stderr bytes.Buffer
+	runCmd.Stderr = &stderr
+	runErr := runCmd.Run()
 	if runErr != nil {
-		msg := strings.TrimSpace(string(out))
+		msg := strings.TrimSpace(stderr.String())
 		if msg == "" {
 			return runErr
 		}

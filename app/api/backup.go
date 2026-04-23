@@ -23,7 +23,7 @@ func BackupHandle(c fiber.Ctx) error {
 	}
 	key := "backup_" + common.RandStrAndNum(20)
 	logger := service.GetBackupLogger(key)
-	logger.Appendf("backup submitted: type=%s name=%s detail=%s detailId=%d", req.Type, req.Name, req.DetailName, req.DetailId)
+	logger.Appendf("已提交备份任务：类型=%s，实例=%s，数据=%s，ID=%d", req.Type, req.Name, req.DetailName, req.DetailId)
 
 	go func() {
 		defer func() {
@@ -38,15 +38,15 @@ func BackupHandle(c fiber.Ctx) error {
 		case constant.AppPostgresql:
 			runErr = backupService.PostgresqlBackup(req, logger)
 		default:
-			runErr = fmt.Errorf("unsupported backup type: %s", req.Type)
+			runErr = fmt.Errorf("暂不支持的备份类型：%s", req.Type)
 		}
 
 		if runErr != nil {
-			logger.Appendf("backup failed: %v", runErr)
+			logger.Appendf("备份失败：%v", runErr)
 			logger.SetStatus("failed")
 			return
 		}
-		logger.AppendLine("backup completed")
+		logger.AppendLine("备份完成")
 		logger.SetStatus("success")
 	}()
 
@@ -133,24 +133,44 @@ func BackupRecover(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	backupService := service.NewBackup()
+	key := "recover_" + common.RandStrAndNum(20)
+	logger := service.GetBackupLogger(key)
+	logger.Appendf("已提交恢复任务：类型=%s，实例=%s，数据=%s，文件=%s", req.Type, req.Name, req.DetailName, req.File)
 
-	downloadPath, err := backupService.DownloadRecord(dto.DownloadRecord{Source: req.Source, FileDir: path.Dir(req.File), FileName: path.Base(req.File)})
-	if err != nil {
-		return c.JSON(e.Fail(errors.New("download file failed, err: " + err.Error())))
-	}
-	req.File = downloadPath
-	switch req.Type {
-	case "mysql", "mariadb":
-		if err := backupService.MysqlRecover(req); err != nil {
-			return c.JSON(e.Fail(err))
+	go func() {
+		defer func() {
+			service.RemoveBackupLogger(key)
+		}()
+
+		backupService := service.NewBackup()
+		logger.AppendLine("正在下载备份文件...")
+		downloadPath, err := backupService.DownloadRecord(dto.DownloadRecord{Source: req.Source, FileDir: path.Dir(req.File), FileName: path.Base(req.File)})
+		if err != nil {
+			logger.Appendf("下载备份文件失败：%v", err)
+			logger.SetStatus("failed")
+			return
 		}
-	case constant.AppPostgresql:
-		if err := backupService.PostgresqlRecover(req); err != nil {
-			return c.JSON(e.Fail(err))
+
+		req.File = downloadPath
+		var runErr error
+		switch req.Type {
+		case "mysql", "mariadb":
+			runErr = backupService.MysqlRecover(req, logger)
+		case constant.AppPostgresql:
+			runErr = backupService.PostgresqlRecover(req, logger)
+		default:
+			runErr = fmt.Errorf("暂不支持的恢复类型：%s", req.Type)
 		}
-	}
-	return c.JSON(e.Succ())
+		if runErr != nil {
+			logger.Appendf("恢复失败：%v", runErr)
+			logger.SetStatus("failed")
+			return
+		}
+		logger.AppendLine("恢复完成")
+		logger.SetStatus("success")
+	}()
+
+	return c.JSON(e.Succ(map[string]interface{}{"key": key}))
 }
 
 // @Tags Backup Account
@@ -167,16 +187,33 @@ func BackupRecoverByUpload(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	backupService := service.NewBackup()
-	switch req.Type {
-	case "mysql", "mariadb":
-		if err := backupService.MysqlRecoverByUpload(req); err != nil {
-			return c.JSON(e.Fail(err))
+	key := "recover_" + common.RandStrAndNum(20)
+	logger := service.GetBackupLogger(key)
+	logger.Appendf("已提交上传恢复任务：类型=%s，实例=%s，数据=%s，文件=%s", req.Type, req.Name, req.DetailName, req.File)
+
+	go func() {
+		defer func() {
+			service.RemoveBackupLogger(key)
+		}()
+
+		backupService := service.NewBackup()
+		var runErr error
+		switch req.Type {
+		case "mysql", "mariadb":
+			runErr = backupService.MysqlRecoverByUpload(req, logger)
+		case constant.AppPostgresql:
+			runErr = backupService.PostgresqlRecoverByUpload(req, logger)
+		default:
+			runErr = fmt.Errorf("暂不支持的恢复类型：%s", req.Type)
 		}
-	case constant.AppPostgresql:
-		if err := backupService.PostgresqlRecoverByUpload(req); err != nil {
-			return c.JSON(e.Fail(err))
+		if runErr != nil {
+			logger.Appendf("恢复失败：%v", runErr)
+			logger.SetStatus("failed")
+			return
 		}
-	}
-	return c.JSON(e.Succ())
+		logger.AppendLine("恢复完成")
+		logger.SetStatus("success")
+	}()
+
+	return c.JSON(e.Succ(map[string]interface{}{"key": key}))
 }

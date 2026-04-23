@@ -27,13 +27,13 @@ func (u *BackupService) PostgresqlBackup(req *dto.CommonBackup, logger *BackupLo
 	targetDir := path.Join(localDir, itemDir)
 	fileName := fmt.Sprintf("%s_%s.sql.gz", req.DetailName, timeNow+common.RandStrAndNum(5))
 	if logger != nil {
-		logger.Appendf("prepare backup: type=%s db=%s target=%s", req.Type, req.DetailName, path.Join(targetDir, fileName))
+		logger.Appendf("准备备份：类型=%s，数据库=%s，目标=%s", req.Type, req.DetailName, path.Join(targetDir, fileName))
 	}
 	if err := handlePostgresqlBackup(req.Name, req.DetailName, targetDir, fileName, logger); err != nil {
 		return err
 	}
 	if logger != nil {
-		logger.AppendLine("backup file generated, saving record")
+		logger.AppendLine("备份文件已生成，正在保存记录")
 	}
 
 	record := &model.BackupRecord{
@@ -49,21 +49,24 @@ func (u *BackupService) PostgresqlBackup(req *dto.CommonBackup, logger *BackupLo
 	if err := backupRepo.Create(record); err != nil {
 		global.LOG.Errorf("save backup record failed, err: %v", err)
 		if logger != nil {
-			logger.Appendf("save backup record failed: %v", err)
+			logger.Appendf("保存备份记录失败：%v", err)
 		}
 	}
 	return nil
 }
-func (u *BackupService) PostgresqlRecover(req *dto.CommonRecover) error {
-	if err := handlePostgresqlRecover(req, false); err != nil {
+func (u *BackupService) PostgresqlRecover(req *dto.CommonRecover, logger *BackupLogger) error {
+	if err := handlePostgresqlRecover(req, false, logger); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (u *BackupService) PostgresqlRecoverByUpload(req *dto.CommonRecover) error {
+func (u *BackupService) PostgresqlRecoverByUpload(req *dto.CommonRecover, logger *BackupLogger) error {
 	file := req.File
 	fileName := path.Base(req.File)
+	if logger != nil {
+		logger.Appendf("准备从上传文件恢复：%s", req.File)
+	}
 	if strings.HasSuffix(fileName, ".tar.gz") {
 		fileNameItem := time.Now().Format(constant.DateTimeSlimLayout)
 		dstDir := fmt.Sprintf("%s/%s", path.Dir(req.File), fileNameItem)
@@ -75,6 +78,9 @@ func (u *BackupService) PostgresqlRecoverByUpload(req *dto.CommonRecover) error 
 		if err := handleUnTar(req.File, dstDir, ""); err != nil {
 			_ = os.RemoveAll(dstDir)
 			return err
+		}
+		if logger != nil {
+			logger.Appendf("压缩包已解压到：%s", dstDir)
 		}
 		global.LOG.Infof("decompress file %s successful, now start to check test.sql is exist", req.File)
 		hasTestSql := false
@@ -91,7 +97,7 @@ func (u *BackupService) PostgresqlRecoverByUpload(req *dto.CommonRecover) error 
 		})
 		if !hasTestSql {
 			_ = os.RemoveAll(dstDir)
-			return fmt.Errorf("no such file named test.sql in %s", fileName)
+			return fmt.Errorf("压缩包中未找到 test.sql：%s", fileName)
 		}
 		defer func() {
 			_ = os.RemoveAll(dstDir)
@@ -99,10 +105,16 @@ func (u *BackupService) PostgresqlRecoverByUpload(req *dto.CommonRecover) error 
 	}
 
 	req.File = path.Dir(file) + "/" + fileName
-	if err := handlePostgresqlRecover(req, false); err != nil {
+	if logger != nil {
+		logger.Appendf("已确定恢复源文件：%s", req.File)
+	}
+	if err := handlePostgresqlRecover(req, false, logger); err != nil {
 		return err
 	}
 	global.LOG.Info("recover from uploads successful!")
+	if logger != nil {
+		logger.AppendLine("上传文件恢复完成")
+	}
 	return nil
 }
 func handlePostgresqlBackup(database, dbName, targetDir, fileName string, logger *BackupLogger) error {
@@ -116,7 +128,7 @@ func handlePostgresqlBackup(database, dbName, targetDir, fileName string, logger
 	if estimate, ok := estimatePostgresqlDBBytes(cli, dbName); ok && estimate > 0 {
 		estimatedBytes = estimate
 		if logger != nil {
-			logger.Appendf("estimated db size: %s", formatBytes(estimatedBytes))
+			logger.Appendf("预估数据库大小：%s", formatBytes(estimatedBytes))
 		}
 	}
 
@@ -128,7 +140,7 @@ func handlePostgresqlBackup(database, dbName, targetDir, fileName string, logger
 		Timeout: 300,
 	}
 	if logger != nil {
-		logger.AppendLine("starting pg_dump via docker exec")
+		logger.AppendLine("开始执行 PostgreSQL 备份")
 	}
 
 	outputFile := path.Join(targetDir, fileName)
@@ -153,9 +165,9 @@ func handlePostgresqlBackup(database, dbName, targetDir, fileName string, logger
 					speed := int64(float64(size-lastSize) / dt)
 					elapsed := time.Since(startAt).Round(time.Second)
 					if estimatedBytes > 0 {
-						logger.Appendf("dumping... elapsed=%s output=%s speed=%s/s (db≈%s)", elapsed, formatBytes(size), formatBytes(speed), formatBytes(estimatedBytes))
+						logger.Appendf("备份中：耗时=%s，已输出=%s，速度=%s/s（数据库约=%s）", elapsed, formatBytes(size), formatBytes(speed), formatBytes(estimatedBytes))
 					} else {
-						logger.Appendf("dumping... elapsed=%s output=%s speed=%s/s", elapsed, formatBytes(size), formatBytes(speed))
+						logger.Appendf("备份中：耗时=%s，已输出=%s，速度=%s/s", elapsed, formatBytes(size), formatBytes(speed))
 					}
 					lastSize = size
 					lastAt = time.Now()
@@ -167,14 +179,14 @@ func handlePostgresqlBackup(database, dbName, targetDir, fileName string, logger
 	if err := cli.Backup(backupInfo); err != nil {
 		close(stop)
 		if logger != nil {
-			logger.Appendf("pg_dump failed: %v", err)
+			logger.Appendf("PostgreSQL 备份失败：%v", err)
 		}
 		return err
 	}
 	close(stop)
 	if logger != nil {
-		logger.AppendLine("pg_dump finished")
-		logger.Appendf("output file size: %s", formatBytes(readFileSize(outputFile)))
+		logger.AppendLine("PostgreSQL 备份完成")
+		logger.Appendf("备份文件大小：%s", formatBytes(readFileSize(outputFile)))
 	}
 	return nil
 }
@@ -204,11 +216,14 @@ func estimatePostgresqlDBBytes(cli interface{}, dbName string) (int64, bool) {
 	return 0, false
 }
 
-func handlePostgresqlRecover(req *dto.CommonRecover, isRollback bool) error {
+func handlePostgresqlRecover(req *dto.CommonRecover, isRollback bool, logger *BackupLogger) error {
 	isOk := false
 	fileOp := files.NewFileOp()
 	if !fileOp.Stat(req.File) {
 		return errors.New("the recover file does not exist" + req.File)
+	}
+	if logger != nil {
+		logger.Appendf("开始 PostgreSQL 恢复：数据库=%s，文件=%s，回滚模式=%v", req.DetailName, req.File, isRollback)
 	}
 	// dbInfo, err := postgresqlRepo.Get(commonRepo.WithByName(req.DetailName), postgresqlRepo.WithByPostgresqlName(req.Name))
 	// if err != nil {
@@ -219,9 +234,15 @@ func handlePostgresqlRecover(req *dto.CommonRecover, isRollback bool) error {
 		return err
 	}
 	defer cli.Close()
+	if logger != nil {
+		logger.Appendf("已连接 PostgreSQL 服务：%s", req.Name)
+	}
 
 	if !isRollback {
 		rollbackFile := path.Join(global.CONF.System.TmpDir, fmt.Sprintf("database/%s/%s_%s.sql.gz", req.Type, req.DetailName, time.Now().Format(constant.DateTimeSlimLayout)))
+		if logger != nil {
+			logger.Appendf("正在生成恢复前回滚备份：%s", rollbackFile)
+		}
 		if err := cli.Backup(pgClient.BackupInfo{
 			Name:      req.DetailName,
 			TargetDir: path.Dir(rollbackFile),
@@ -231,9 +252,15 @@ func handlePostgresqlRecover(req *dto.CommonRecover, isRollback bool) error {
 		}); err != nil {
 			return fmt.Errorf("backup postgresql db %s for rollback before recover failed, err: %v", req.DetailName, err)
 		}
+		if logger != nil {
+			logger.AppendLine("回滚备份已完成")
+		}
 		defer func() {
 			if !isOk {
 				global.LOG.Info("recover failed, start to rollback now")
+				if logger != nil {
+					logger.AppendLine("恢复失败，开始执行回滚")
+				}
 				if err := cli.Recover(pgClient.RecoverInfo{
 					Name:       req.DetailName,
 					SourceFile: rollbackFile,
@@ -241,14 +268,23 @@ func handlePostgresqlRecover(req *dto.CommonRecover, isRollback bool) error {
 					Timeout: 300,
 				}); err != nil {
 					global.LOG.Errorf("rollback postgresql db %s from %s failed, err: %v", req.DetailName, rollbackFile, err)
+					if logger != nil {
+						logger.Appendf("回滚失败：%v", err)
+					}
 				} else {
 					global.LOG.Infof("rollback postgresql db %s from %s successful", req.DetailName, rollbackFile)
+					if logger != nil {
+						logger.AppendLine("回滚完成")
+					}
 				}
 				_ = os.RemoveAll(rollbackFile)
 			} else {
 				_ = os.RemoveAll(rollbackFile)
 			}
 		}()
+	}
+	if logger != nil {
+		logger.AppendLine("开始执行 PostgreSQL 恢复")
 	}
 	if err := cli.Recover(pgClient.RecoverInfo{
 		Name:       req.DetailName,
@@ -260,5 +296,8 @@ func handlePostgresqlRecover(req *dto.CommonRecover, isRollback bool) error {
 		return err
 	}
 	isOk = true
+	if logger != nil {
+		logger.AppendLine("PostgreSQL 恢复完成")
+	}
 	return nil
 }

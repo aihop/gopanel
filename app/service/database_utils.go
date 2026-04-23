@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/aihop/gopanel/app/model"
+	"github.com/aihop/gopanel/app/repo"
 	"github.com/aihop/gopanel/init/db"
 	"github.com/aihop/gopanel/utils/mysql"
 	clientMysql "github.com/aihop/gopanel/utils/mysql/client"
@@ -96,7 +97,7 @@ func trimVersionPrefix(s string) string {
 	s = strings.TrimSpace(s)
 	start := -1
 	for i, r := range s {
-		if (r >= '0' && r <= '9') {
+		if r >= '0' && r <= '9' {
 			start = i
 			break
 		}
@@ -128,7 +129,19 @@ func LoadPostgresqlClientByFrom(database string) (postgresql.PostgresqlClient, e
 		dbInfo clientPostgresql.DBInfo
 		err    error
 	)
+	serverRepo := repo.NewDatabaseServer()
+	server, err := serverRepo.GetByNameType(database, model.DatabaseTypePostgresql)
+	if err != nil {
+		return nil, err
+	}
+
 	dbInfo.Timeout = 300
+	dbInfo.Port = server.Port
+	dbInfo.Username = server.Username
+	dbInfo.Password = server.Password
+	dbInfo.Address = server.Host
+	dbInfo.From = string(server.Mode)
+
 	cli, err := postgresql.NewPostgresqlClient(dbInfo)
 	if err != nil {
 		return nil, err

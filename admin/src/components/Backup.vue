@@ -327,12 +327,28 @@ const onSubmit = async () => {
 	}
 	loading.value = true
 	try {
-		await backupRecoverAPI(params)
+		const res = await backupRecoverAPI(params)
 		loading.value = false
 		handleClose()
 		handleBackupClose()
-		MsgSuccess(t("commons.msg.operationSuccess"))
-		getData()
+		if (res.code !== 0) {
+			MsgError(res.msg || "恢复提交失败")
+			return
+		}
+		const key = (res.data as any)?.key
+		if (!key) {
+			MsgError("恢复提交失败")
+			return
+		}
+		const apiUrl = (window as any).__VITE_API_URL__ || "/api"
+		const authStore = useAuthStore()
+		const safeToken = encodeURIComponent(authStore.auth || "")
+		opRef.value.acceptParams({
+			title: t("commons.button.recover"),
+			msg: "恢复已开始，正在输出实时日志...",
+			names: [],
+			sseUrl: `${apiUrl}/backup/logs?key=${encodeURIComponent(key)}&token=${safeToken}`
+		})
 	} catch {
 		loading.value = false
 	}
