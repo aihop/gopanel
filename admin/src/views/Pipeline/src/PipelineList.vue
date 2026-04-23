@@ -53,6 +53,16 @@ const incrementVersion = (v: string) => {
 const columns = [
   { title: "ID", key: "id", width: 60 },
   { title: t("pipeline.pipelineName"), key: "name" },
+  {
+    title: "模式",
+    key: "runnerMode",
+    render: (row: Pipeline.ResPipeline) => {
+      const isRunner = (row.runnerMode || "").toLowerCase() === "runner"
+      return h(NTag, { type: isRunner ? "success" : "warning", size: "small" }, {
+        default: () => isRunner ? "代码产物部署" : "纯脚本"
+      })
+    }
+  },
   { title: t("pipeline.branch"), key: "branch", render: (row: Pipeline.ResPipeline) => h(NTag, { type: "info", size: "small" }, { default: () => row.branch }) },
   { title: t("pipeline.currentVersion"), key: "version", render: (row: Pipeline.ResPipeline) => h(NTag, { type: "success", size: "small" }, { default: () => `v${row.version}` }) },
   { title: t("pipeline.artifactPath"), key: "artifactPath" },
@@ -159,6 +169,28 @@ const confirmRun = async () => {
   }
 }
 
+const handleRetryFromLogs = async () => {
+  if (!currentRunRow.value) return
+  runLoading.value = true
+  try {
+    const res = await runPipeline({ 
+      id: currentRunRow.value.id,
+      version: runFormModel.value.version
+    })
+    message.success(`已重新触发流水线执行，版本号: v${runFormModel.value.version}`)
+    
+    if (res.data && res.data.recordId) {
+      currentRecordId.value = res.data.recordId
+    }
+    
+    fetchData()
+  } catch (error: any) {
+    message.error(error.message || "重新触发失败")
+  } finally {
+    runLoading.value = false
+  }
+}
+
 const handleViewRecords = (row: Pipeline.ResPipeline) => {
   currentPipelineId.value = row.id
   recordsModalShow.value = true
@@ -213,7 +245,9 @@ defineExpose({
       v-if="currentRecordId"
       v-model:show="logsModalShow"
       :record-id="currentRecordId"
+      :pipeline-id="currentRunRow?.id || currentPipelineId"
       @finished="fetchData"
+      @retry="handleRetryFromLogs"
     />
 
     <!-- 执行流水线配置版本号弹窗 -->

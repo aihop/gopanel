@@ -78,6 +78,12 @@ func (s *Server) actionComposeInstall(ctx context.Context, params map[string]int
 	return "", errors.New("unsupported platform")
 }
 
+func (s *Server) actionRepairPodmanSubuid(ctx context.Context, params map[string]interface{}) (string, error) {
+	_ = ctx
+	_ = params
+	return "", errors.New("unsupported platform")
+}
+
 func (s *Server) actionSecurityScanSSH(ctx context.Context, params map[string]interface{}) (string, error) {
 	return "", errors.New("unsupported platform")
 }

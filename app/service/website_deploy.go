@@ -175,6 +175,22 @@ func deployProxyWebsite(website *model.Website) error {
 }
 
 func deployWebAppWebsite(website *model.Website, releaseDir, runtimeDir, imageTag string, pipelineRecordID uint) (int, string, string, error) {
+	if website.PipelineID > 0 {
+		if hostPort, containerID, actualRuntimeDir, ok, err := resolvePipelineRunnerBridge(website, pipelineRecordID); err != nil {
+			return 0, "", "", err
+		} else if ok {
+			website.Proxy = fmt.Sprintf("127.0.0.1:%d", hostPort)
+			website.ContainerID = containerID
+			website.RuntimeDir = actualRuntimeDir
+			website.Status = "Running"
+			if err := global.DB.Save(website).Error; err != nil {
+				return 0, "", "", err
+			}
+			appendPipelineDeployInfoLog(pipelineRecordID, website.Alias, fmt.Sprintf("检测到流水线 Runner 结果，已桥接代理到 127.0.0.1:%d", hostPort))
+			return hostPort, containerID, actualRuntimeDir, nil
+		}
+	}
+
 	imageRef := strings.TrimSpace(imageTag)
 	if imageRef == "" {
 		imageRef = strings.TrimSpace(website.EngineEnv)
@@ -239,6 +255,39 @@ func deployWebAppWebsite(website *model.Website, releaseDir, runtimeDir, imageTa
 	// }
 
 	return hostPort, containerID, actualRuntimeDir, nil
+}
+
+func resolvePipelineRunnerBridge(website *model.Website, pipelineRecordID uint) (int, string, string, bool, error) {
+	if website == nil || website.PipelineID == 0 {
+		return 0, "", "", false, nil
+	}
+	pipeline, err := repo.NewPipeline(global.DB).Get(website.PipelineID)
+	if err != nil {
+		return 0, "", "", false, fmt.Errorf("读取流水线配置失败: %w", err)
+	}
+	if !strings.EqualFold(strings.TrimSpace(pipeline.RunnerMode), "runner") {
+		return 0, "", "", false, nil
+	}
+
+	recordRepo := repo.NewPipelineRecord(global.DB)
+	var record *model.PipelineRecord
+	if pipelineRecordID > 0 {
+		rec, err := recordRepo.Get(pipelineRecordID)
+		if err == nil && rec != nil && rec.PipelineID == website.PipelineID {
+			record = rec
+		}
+	}
+	if record == nil {
+		rec, err := recordRepo.LatestByPipelineID(website.PipelineID)
+		if err != nil {
+			return 0, "", "", false, nil
+		}
+		record = rec
+	}
+	if record == nil || record.RunnerHostPort <= 0 {
+		return 0, "", "", false, nil
+	}
+	return record.RunnerHostPort, strings.TrimSpace(record.RunnerContainerID), strings.TrimSpace(record.RunnerReleaseDir), true, nil
 }
 
 func cleanupPreviousContainer(containerID string) error {

@@ -31,7 +31,7 @@ import (
 // @Success 200 {object} response.FileInfo
 // @Security ApiKeyAuth
 // @Security Timestamp
-// @Router /files/search [post]
+// @Router /files/list [post]
 func ListFiles(c fiber.Ctx) error {
 	req, err := e.BodyToStruct[request.FileOption](c.Body())
 	if err != nil {

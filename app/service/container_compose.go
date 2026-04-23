@@ -24,7 +24,6 @@ import (
 	"github.com/aihop/gopanel/utils/cmd"
 	"github.com/aihop/gopanel/utils/compose"
 	"github.com/aihop/gopanel/utils/docker"
-	"github.com/docker/docker/api/types/filters"
 )
 
 const composeProjectLabel = "com.docker.compose.project"
@@ -55,19 +54,8 @@ func (u *ContainerService) PageCompose(req *dto.SearchWithPage) (int64, interfac
 		records   []dto.ComposeInfo
 		BackDatas []dto.ComposeInfo
 	)
-	client, err := docker.NewDockerClient()
-	if err != nil {
-		return 0, nil, err
-	}
-	defer client.Close()
-
 	options := container.ListOptions{All: true}
-	if !docker.IsPodmanRuntime(context.Background()) {
-		options.Filters = filters.NewArgs()
-		options.Filters.Add("label", composeProjectLabel)
-	}
-
-	list, err := client.ContainerList(context.Background(), options)
+	list, err := docker.ListContainersMerged(context.Background(), options)
 	if err != nil {
 		return 0, nil, err
 	}

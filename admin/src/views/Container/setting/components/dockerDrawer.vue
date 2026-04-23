@@ -50,7 +50,7 @@
 <script setup lang="ts">
 import { updateDaemonUpdate } from "@/api/modules/container"
 import RebootAlert from "@/components/RebootAlert.vue"
-import { MsgSuccess } from "@/utils/message"
+import { MsgError, MsgSuccess } from "@/utils/message"
 import { ref } from "vue"
 
 const emit = defineEmits(["save"])
@@ -59,15 +59,21 @@ const visible = ref(false)
 const title = ref("")
 const inputVal = ref("")
 const inputKey = ref("")
+const needRestart = ref(true)
 const loading = ref(false)
 const titles = {
 	registryMirrors: "镜像加速",
 	insecureRegistries: "私有仓库"
 }
-function open(data: string[] | string | undefined, key: "registryMirrors" | "insecureRegistries") {
+function open(
+	data: string[] | string | undefined,
+	key: "registryMirrors" | "insecureRegistries",
+	opts?: { needRestart?: boolean }
+) {
 	visible.value = true
 	inputKey.value = key
 	title.value = titles[key]
+	needRestart.value = opts?.needRestart !== undefined ? !!opts.needRestart : true
 
 	// 兼容多种 data 形式：数组 / 逗号分隔字符串 / 单一字符串 / undefined
 	if (Array.isArray(data)) {
@@ -94,15 +100,15 @@ defineExpose({ open, close })
 const RebootAlertModel = ref()
 
 function save() {
-	RebootAlertModel.value.open({
-		title: `配置修改`,
-		input: "立即重启",
-		msg: `修改配置后需要重启生效。`
-	})
+	if (!needRestart.value) {
+		alertConfirm()
+		return
+	}
+	RebootAlertModel.value.open({ title: `配置修改`, input: "立即重启", msg: `修改配置后需要重启生效。` })
 }
 
 async function alertConfirm() {
-	RebootAlertModel.value.close()
+	RebootAlertModel.value?.close()
 	loading.value = true
 	try {
 		let value = inputVal.value
@@ -119,14 +125,14 @@ async function alertConfirm() {
 		}
 		const res = await updateDaemonUpdate(keyMap[inputKey.value], value)
 		if (res && res.code === 0) {
-			MsgSuccess("保存成功，Docker正在重启...")
+			MsgSuccess(needRestart.value ? "保存成功，正在应用配置..." : "保存成功，已生效")
 			visible.value = false
 			emit("save") // 通知父组件刷新
 		} else {
-			MsgSuccess(res.msg || "保存失败")
+			MsgError(res?.msg || "保存失败")
 		}
-	} catch (e) {
-		MsgSuccess("保存异常")
+	} catch (e: any) {
+		MsgError(e?.message || "保存异常")
 	} finally {
 		loading.value = false
 	}

@@ -14,7 +14,7 @@ func FileRouter(r fiber.Router) {
 
 	{
 		fileRouter.Get("/download", middleware.Session(), api.Download)
-		fileRouter.Post("/search", api.ListFiles)
+		fileRouter.Post("/list", api.ListFiles)
 		fileRouter.Post("/dirExist", api.DirExist)
 		fileRouter.Post("/create", api.CreateFile)
 		fileRouter.Post("/del", api.DeleteFile)

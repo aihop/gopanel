@@ -88,9 +88,6 @@ func NewIContainerService() IContainerService {
 }
 
 func (u *ContainerService) Page(req *dto.PageContainer) (int64, interface{}, error) {
-	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
-		return u.pagePodman(req)
-	}
 	var (
 		records []types.Container
 		list    []types.Container
@@ -100,13 +97,13 @@ func (u *ContainerService) Page(req *dto.PageContainer) (int64, interface{}, err
 	options := container.ListOptions{
 		All: true,
 	}
-	if len(req.Filters) != 0 {
+	if len(req.Filters) != 0 && !isPodman {
 		options.Filters = filters.NewArgs()
 		options.Filters.Add("label", normalizeContainerLabelFilter(req.Filters, isPodman))
 	}
 	var containers []types.Container
 	var sourceByID map[string]string
-	if isPodman && runtime.GOOS == "linux" {
+	if isPodman {
 		list2, source2, err := listContainersMergedByHostWithSource(ctx, options)
 		if err != nil {
 			return 0, nil, err
@@ -134,11 +131,27 @@ func (u *ContainerService) Page(req *dto.PageContainer) (int64, interface{}, err
 	} else {
 		list = containers
 	}
+	if isPodman && strings.TrimSpace(req.Filters) != "" {
+		k, v, ok := splitLabelFilter(req.Filters)
+		if ok {
+			k = normalizeContainerLabelFilter(k, true)
+			var filtered []types.Container
+			for _, item := range list {
+				if item.Labels == nil {
+					continue
+				}
+				if lv, ok := item.Labels[k]; ok && (v == "" || lv == v) {
+					filtered = append(filtered, item)
+				}
+			}
+			list = filtered
+		}
+	}
 
 	if len(req.Name) != 0 {
 		length, count := len(list), 0
 		for count < length {
-			if !strings.Contains(list[count].Names[0][1:], req.Name) {
+			if !strings.Contains(containerPrimaryName(list[count]), req.Name) {
 				list = append(list[:count], list[(count+1):]...)
 				length--
 			} else {
@@ -161,9 +174,9 @@ func (u *ContainerService) Page(req *dto.PageContainer) (int64, interface{}, err
 	case "name":
 		sort.Slice(list, func(i, j int) bool {
 			if req.Order == constant.OrderAsc {
-				return list[i].Names[0][1:] < list[j].Names[0][1:]
+				return containerPrimaryName(list[i]) < containerPrimaryName(list[j])
 			}
-			return list[i].Names[0][1:] > list[j].Names[0][1:]
+			return containerPrimaryName(list[i]) > containerPrimaryName(list[j])
 		})
 	case "state":
 		sort.Slice(list, func(i, j int) bool {
@@ -224,7 +237,7 @@ func (u *ContainerService) Page(req *dto.PageContainer) (int64, interface{}, err
 			IsFromApp:     IsFromApp,
 			IsFromCompose: IsFromCompose,
 		}
-		if isPodman && runtime.GOOS == "linux" && sourceByID != nil {
+		if isPodman && sourceByID != nil {
 			info.RuntimeHost = strings.TrimSpace(sourceByID[item.ID])
 		}
 		appInstallRepo := repo.NewIAppInstallRepo()
@@ -263,11 +276,22 @@ func normalizeContainerLabelFilter(filter string, isPodman bool) string {
 	return f
 }
 
+func containerPrimaryName(item types.Container) string {
+	if len(item.Names) == 0 {
+		return ""
+	}
+	return strings.TrimPrefix(item.Names[0], "/")
+}
+
 func (u *ContainerService) List() ([]string, error) {
 	ctx := context.Background()
 	var containers []types.Container
-	if docker.IsPodmanRuntime(ctx) && runtime.GOOS == "linux" {
-		containers, _ = listContainersMergedByHost(ctx, container.ListOptions{All: true})
+	if docker.IsPodmanRuntime(ctx) {
+		list2, err := listContainersMergedByHost(ctx, container.ListOptions{All: true})
+		if err != nil {
+			return nil, err
+		}
+		containers = list2
 	} else {
 		client, err := docker.NewDockerClient()
 		if err != nil {
@@ -293,11 +317,8 @@ func (u *ContainerService) List() ([]string, error) {
 }
 
 func (u *ContainerService) ContainerListStats() ([]dto.ContainerListStats, error) {
-	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
-		return u.containerListStatsPodman()
-	}
 	ctx := context.Background()
-	if docker.IsPodmanRuntime(ctx) && runtime.GOOS == "linux" {
+	if docker.IsPodmanRuntime(ctx) {
 		list, source, err := listContainersMergedByHostWithSource(ctx, container.ListOptions{All: true})
 		if err != nil {
 			return nil, err
@@ -308,11 +329,7 @@ func (u *ContainerService) ContainerListStats() ([]dto.ContainerListStats, error
 		for i := 0; i < len(list); i++ {
 			go func(index int, item types.Container) {
 				host := strings.TrimSpace(source[item.ID])
-				if host == "" {
-					wg.Done()
-					return
-				}
-				if host == "podman-cli" {
+				if host == "" || host == "podman-cli" {
 					datas[index] = loadContainerListStatPodmanCLI(item.ID)
 					wg.Done()
 					return
@@ -380,6 +397,50 @@ func loadContainerListStatPodmanCLI(containerID string) dto.ContainerListStats {
 	}
 }
 
+func podmanLinuxContainerHostMaps(ctx context.Context) (map[string]string, map[string]string, error) {
+	list, source, err := listContainersMergedByHostWithSource(ctx, container.ListOptions{All: true})
+	if err != nil {
+		return nil, nil, err
+	}
+	idToHost := make(map[string]string)
+	nameToHost := make(map[string]string)
+	for _, it := range list {
+		host := strings.TrimSpace(source[it.ID])
+		if host != "" {
+			idToHost[it.ID] = host
+		}
+		for _, n := range it.Names {
+			name := strings.TrimPrefix(strings.TrimSpace(n), "/")
+			if name == "" {
+				continue
+			}
+			if _, ok := nameToHost[name]; ok {
+				continue
+			}
+			nameToHost[name] = host
+		}
+	}
+	return idToHost, nameToHost, nil
+}
+
+func resolveLinuxPodmanContainerHost(ctx context.Context, key string) (string, error) {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return "", nil
+	}
+	idToHost, nameToHost, err := podmanLinuxContainerHostMaps(ctx)
+	if err != nil {
+		return "", err
+	}
+	if host := strings.TrimSpace(idToHost[key]); host != "" {
+		return host, nil
+	}
+	if host := strings.TrimSpace(nameToHost[key]); host != "" {
+		return host, nil
+	}
+	return "", nil
+}
+
 func (u *ContainerService) Inspect(req *dto.InspectReq) (string, error) {
 	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
 		return inspectPodman(req)
@@ -388,12 +449,9 @@ func (u *ContainerService) Inspect(req *dto.InspectReq) (string, error) {
 	isPodman := docker.IsPodmanRuntime(ctx)
 
 	host := strings.TrimSpace(req.RuntimeHost)
-	if host == "" && isPodman && runtime.GOOS == "linux" {
+	if host == "" && isPodman {
 		if req.Type == "container" {
-			_, source, err := listContainersMergedByHostWithSource(ctx, container.ListOptions{All: true})
-			if err == nil {
-				host = strings.TrimSpace(source[req.ID])
-			}
+			host, _ = resolveLinuxPodmanContainerHost(ctx, req.ID)
 		} else if req.Type == "image" {
 			_, imgSource, _, err := listImagesMergedByHostWithSource(ctx)
 			if err == nil {
@@ -402,7 +460,7 @@ func (u *ContainerService) Inspect(req *dto.InspectReq) (string, error) {
 		}
 	}
 
-	if host == "podman-cli" && isPodman {
+	if isPodman && (host == "podman-cli" || host == "") {
 		return inspectPodman(req)
 	}
 
@@ -445,7 +503,7 @@ func (u *ContainerService) Inspect(req *dto.InspectReq) (string, error) {
 
 func (u *ContainerService) Prune(req *dto.ContainerPrune) (dto.ContainerPruneReport, error) {
 	report := dto.ContainerPruneReport{}
-	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
+	if docker.IsPodmanRuntime(context.Background()) {
 		return u.prunePodman(req)
 	}
 	client, err := docker.NewDockerClient()
@@ -584,41 +642,12 @@ func (u *ContainerService) ContainerInfo(req *dto.OperationWithName) (*dto.Conta
 
 	isPodman := docker.IsPodmanRuntime(ctx)
 	host := strings.TrimSpace(req.RuntimeHost)
-	if host == "" && isPodman && runtime.GOOS == "linux" {
-		list, source, err := listContainersMergedByHostWithSource(ctx, container.ListOptions{All: true})
-		if err == nil {
-			idToHost := make(map[string]string)
-			nameToHost := make(map[string]string)
-			for _, it := range list {
-				h := strings.TrimSpace(source[it.ID])
-				if h != "" {
-					idToHost[it.ID] = h
-				}
-				for _, n := range it.Names {
-					name := strings.TrimPrefix(strings.TrimSpace(n), "/")
-					if name == "" {
-						continue
-					}
-					if _, ok := nameToHost[name]; ok {
-						continue
-					}
-					nameToHost[name] = h
-				}
-			}
-			key := strings.TrimSpace(req.Name)
-			if key != "" {
-				host = strings.TrimSpace(idToHost[key])
-				if host == "" {
-					host = strings.TrimSpace(nameToHost[key])
-				}
-			}
-		}
+	if host == "" && isPodman {
+		host, _ = resolveLinuxPodmanContainerHost(ctx, req.Name)
 	}
-	if isPodman && runtime.GOOS == "linux" {
-		if host == "podman-cli" || host == "" {
-			req2 := &dto.OperationWithName{Name: req.Name, RuntimeHost: host}
-			return containerInfoPodman(req2)
-		}
+	if isPodman && (host == "podman-cli" || host == "") {
+		req2 := &dto.OperationWithName{Name: req.Name, RuntimeHost: host}
+		return containerInfoPodman(req2)
 	}
 
 	var cli *client.Client
@@ -635,7 +664,7 @@ func (u *ContainerService) ContainerInfo(req *dto.OperationWithName) (*dto.Conta
 
 	oldContainer, err := cli.ContainerInspect(ctx, req.Name)
 	if err != nil {
-		if isPodman && runtime.GOOS == "linux" {
+		if isPodman {
 			req2 := &dto.OperationWithName{Name: req.Name, RuntimeHost: host}
 			return containerInfoPodman(req2)
 		}
@@ -1049,37 +1078,16 @@ func (u *ContainerService) ContainerCommit(req *dto.ContainerCommit) error {
 
 func (u *ContainerService) ContainerOperation(req *dto.ContainerOperation) error {
 	ctx := context.Background()
-	if docker.IsPodmanRuntime(ctx) && runtime.GOOS == "darwin" {
-		return u.containerOperationPodman(req)
-	}
 	runtimeHost := strings.TrimSpace(req.RuntimeHost)
 
-	if docker.IsPodmanRuntime(ctx) && runtime.GOOS == "linux" {
+	if docker.IsPodmanRuntime(ctx) {
 		if runtimeHost != "" {
 			return containerOperationPodmanCLI(ctx, runtimeHost, req.Names, req.Operation)
 		}
 
-		list, source, err := listContainersMergedByHostWithSource(ctx, container.ListOptions{All: true})
+		idToHost, nameToHost, err := podmanLinuxContainerHostMaps(ctx)
 		if err != nil {
 			return containerOperationPodmanCLI(ctx, "", req.Names, req.Operation)
-		}
-		idToHost := make(map[string]string)
-		nameToHost := make(map[string]string)
-		for _, it := range list {
-			host := strings.TrimSpace(source[it.ID])
-			if host != "" {
-				idToHost[it.ID] = host
-			}
-			for _, n := range it.Names {
-				name := strings.TrimPrefix(strings.TrimSpace(n), "/")
-				if name == "" {
-					continue
-				}
-				if _, ok := nameToHost[name]; ok {
-					continue
-				}
-				nameToHost[name] = host
-			}
 		}
 
 		group := make(map[string][]string)
@@ -1146,68 +1154,30 @@ func containerOperationPodmanCLI(ctx context.Context, runtimeHost string, names 
 		return err
 	}
 	host := strings.TrimSpace(runtimeHost)
-	base := make([]string, 0, 4)
-	if strings.HasPrefix(host, "unix://") {
-		base = append(base, "--url", host)
-	}
 	for _, item := range names {
 		global.LOG.Infof("start container %s operation %s", item, op)
 		var args []string
 		switch op {
 		case constant.ContainerOpStart:
-			args = append(base, "start", item)
+			args = []string{"start", item}
 		case constant.ContainerOpStop:
-			args = append(base, "stop", item)
+			args = []string{"stop", item}
 		case constant.ContainerOpRestart:
-			args = append(base, "restart", item)
+			args = []string{"restart", item}
 		case constant.ContainerOpKill:
-			args = append(base, "kill", "-s", "SIGKILL", item)
+			args = []string{"kill", "-s", "SIGKILL", item}
 		case constant.ContainerOpPause:
-			args = append(base, "pause", item)
+			args = []string{"pause", item}
 		case constant.ContainerOpUnpause:
-			args = append(base, "unpause", item)
+			args = []string{"unpause", item}
 		case constant.ContainerOpRemove:
-			args = append(base, "rm", "-f", "-v", item)
+			args = []string{"rm", "-f", "-v", item}
 		default:
 			return errors.New("operation is empty")
 		}
-		c := exec.Command("podman", args...)
-		out, err := c.CombinedOutput()
+		c, err := docker.RuntimeCommandWithHost(ctx, host, args...)
 		if err != nil {
-			msg := strings.TrimSpace(string(out))
-			if msg == "" {
-				return err
-			}
-			return errors.New(msg)
-		}
-	}
-	return nil
-}
-
-func (u *ContainerService) containerOperationPodman(req *dto.ContainerOperation) error {
-	if err := docker.PodmanEnsureReady(context.Background()); err != nil {
-		return err
-	}
-	for _, item := range req.Names {
-		global.LOG.Infof("start container %s operation %s", item, req.Operation)
-		var c *exec.Cmd
-		switch req.Operation {
-		case constant.ContainerOpStart:
-			c = exec.Command("podman", "start", item)
-		case constant.ContainerOpStop:
-			c = exec.Command("podman", "stop", item)
-		case constant.ContainerOpRestart:
-			c = exec.Command("podman", "restart", item)
-		case constant.ContainerOpKill:
-			c = exec.Command("podman", "kill", "-s", "SIGKILL", item)
-		case constant.ContainerOpPause:
-			c = exec.Command("podman", "pause", item)
-		case constant.ContainerOpUnpause:
-			c = exec.Command("podman", "unpause", item)
-		case constant.ContainerOpRemove:
-			c = exec.Command("podman", "rm", "-f", "-v", item)
-		default:
-			return errors.New("operation is empty")
+			return err
 		}
 		out, err := c.CombinedOutput()
 		if err != nil {
@@ -1225,15 +1195,29 @@ func (u *ContainerService) ContainerLogClean(req *dto.OperationWithName) error {
 	if cmd.CheckIllegal(req.Name) {
 		return buserr.New(constant.ErrCmdIllegal)
 	}
-	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
-		return errors.New("podman on darwin does not support cleaning container log files (logs are stored inside podman machine); please restart/recreate the container to clear logs")
+	ctx := context.Background()
+	if docker.IsPodmanRuntime(ctx) {
+		if runtime.GOOS == "darwin" {
+			return errors.New("podman on darwin does not support cleaning container log files (logs are stored inside podman machine); please restart/recreate the container to clear logs")
+		}
+		host := strings.TrimSpace(req.RuntimeHost)
+		if host == "" {
+			host, _ = resolveLinuxPodmanContainerHost(ctx, req.Name)
+		}
+		logPath, err := podmanContainerLogPath(ctx, req.Name, host)
+		if err != nil {
+			return err
+		}
+		if logPath == "" {
+			return errors.New("container log path is empty")
+		}
+		return truncateContainerLogFiles(logPath)
 	}
 	client, err := docker.NewDockerClient()
 	if err != nil {
 		return err
 	}
 	defer client.Close()
-	ctx := context.Background()
 	containerItem, err := client.ContainerInspect(ctx, req.Name)
 	if err != nil {
 		return err
@@ -1241,21 +1225,7 @@ func (u *ContainerService) ContainerLogClean(req *dto.OperationWithName) error {
 	if containerItem.LogPath == "" {
 		return errors.New("container log path is empty")
 	}
-
-	file, err := os.OpenFile(containerItem.LogPath, os.O_WRONLY, 0)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	if err = file.Truncate(0); err != nil {
-		return err
-	}
-
-	files, _ := filepath.Glob(fmt.Sprintf("%s.*", containerItem.LogPath))
-	for _, file := range files {
-		_ = os.Remove(file)
-	}
-	return nil
+	return truncateContainerLogFiles(containerItem.LogPath)
 }
 
 func (u *ContainerService) ContainerLogs(wsConn *websocket.Conn, containerType, containerID, since, tail, runtimeHost string, follow bool) error {
@@ -1284,27 +1254,12 @@ func (u *ContainerService) ContainerLogs(wsConn *websocket.Conn, containerType, 
 		ctx := context.Background()
 		isPodman := docker.IsPodmanRuntime(ctx)
 		host := strings.TrimSpace(runtimeHost)
-		if host == "" && isPodman && runtime.GOOS == "linux" {
-			_, source, err := listContainersMergedByHostWithSource(ctx, container.ListOptions{All: true})
-			if err == nil {
-				host = strings.TrimSpace(source[containerID])
-			}
+		if host == "" && isPodman {
+			host, _ = resolveLinuxPodmanContainerHost(ctx, containerID)
 		}
 
-		commandName := "docker"
 		commandArg := make([]string, 0, 12)
-		if isPodman {
-			commandName = "podman"
-			if strings.HasPrefix(host, "unix://") {
-				commandArg = append(commandArg, "--url", host)
-			}
-			commandArg = append(commandArg, "logs")
-		} else {
-			if strings.HasPrefix(host, "unix://") {
-				commandArg = append(commandArg, "-H", host)
-			}
-			commandArg = append(commandArg, "logs")
-		}
+		commandArg = append(commandArg, "logs")
 		if tail != "0" {
 			commandArg = append(commandArg, "--tail", tail)
 		}
@@ -1315,7 +1270,11 @@ func (u *ContainerService) ContainerLogs(wsConn *websocket.Conn, containerType, 
 			commandArg = append(commandArg, "-f")
 		}
 		commandArg = append(commandArg, containerID)
-		cmdExec = exec.Command(commandName, commandArg...)
+		c, err := docker.RuntimeCommandWithHost(ctx, host, commandArg...)
+		if err != nil {
+			return err
+		}
+		cmdExec = c
 	}
 	if !follow {
 		cmdExec.Stderr = cmdExec.Stdout
@@ -1399,27 +1358,12 @@ func (u *ContainerService) DownloadContainerLogs(containerType, containerID, sin
 		ctx := context.Background()
 		isPodman := docker.IsPodmanRuntime(ctx)
 		host := strings.TrimSpace(runtimeHost)
-		if host == "" && isPodman && runtime.GOOS == "linux" {
-			_, source, err := listContainersMergedByHostWithSource(ctx, container.ListOptions{All: true})
-			if err == nil {
-				host = strings.TrimSpace(source[containerID])
-			}
+		if host == "" && isPodman {
+			host, _ = resolveLinuxPodmanContainerHost(ctx, containerID)
 		}
 
-		commandName := "docker"
 		commandArg := make([]string, 0, 12)
-		if isPodman {
-			commandName = "podman"
-			if strings.HasPrefix(host, "unix://") {
-				commandArg = append(commandArg, "--url", host)
-			}
-			commandArg = append(commandArg, "logs")
-		} else {
-			if strings.HasPrefix(host, "unix://") {
-				commandArg = append(commandArg, "-H", host)
-			}
-			commandArg = append(commandArg, "logs")
-		}
+		commandArg = append(commandArg, "logs")
 		if tail != "0" {
 			commandArg = append(commandArg, "--tail", tail)
 		}
@@ -1427,7 +1371,11 @@ func (u *ContainerService) DownloadContainerLogs(containerType, containerID, sin
 			commandArg = append(commandArg, "--since", since)
 		}
 		commandArg = append(commandArg, containerID)
-		cmdExec = exec.Command(commandName, commandArg...)
+		c, err := docker.RuntimeCommandWithHost(ctx, host, commandArg...)
+		if err != nil {
+			return "", err
+		}
+		cmdExec = c
 	}
 
 	stdout, err := cmdExec.StdoutPipe()
@@ -1474,8 +1422,11 @@ func (u *ContainerService) DownloadContainerLogs(containerType, containerID, sin
 }
 
 func (u *ContainerService) ContainerStats(id string) (*dto.ContainerStats, error) {
-	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
-		return containerStatsPodman(id)
+	ctx := context.Background()
+	if docker.IsPodmanRuntime(ctx) {
+		host := ""
+		host, _ = resolveLinuxPodmanContainerHost(ctx, id)
+		return containerStatsPodman(id, host)
 	}
 	client, err := docker.NewDockerClient()
 	if err != nil {
@@ -1542,11 +1493,16 @@ func inspectPodman(req *dto.InspectReq) (string, error) {
 	return string(out), nil
 }
 
-func containerStatsPodman(id string) (*dto.ContainerStats, error) {
+func containerStatsPodman(id string, runtimeHost string) (*dto.ContainerStats, error) {
 	if err := docker.PodmanEnsureReady(context.Background()); err != nil {
 		return nil, err
 	}
-	c := exec.Command("podman", "stats", "--no-stream", "--format", "{{.ID}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.NetIO}}\t{{.BlockIO}}", id)
+	args := make([]string, 0, 10)
+	if host := strings.TrimSpace(runtimeHost); strings.HasPrefix(host, "unix://") {
+		args = append(args, "--url", host)
+	}
+	args = append(args, "stats", "--no-stream", "--format", "{{.ID}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.NetIO}}\t{{.BlockIO}}", id)
+	c := exec.Command("podman", args...)
 	out, err := c.CombinedOutput()
 	if err != nil {
 		msg := strings.TrimSpace(string(out))
@@ -1578,36 +1534,36 @@ func containerStatsPodman(id string) (*dto.ContainerStats, error) {
 	}, nil
 }
 
-func (u *ContainerService) containerListStatsPodman() ([]dto.ContainerListStats, error) {
-	if err := docker.PodmanEnsureReady(context.Background()); err != nil {
-		return nil, err
+func podmanContainerLogPath(ctx context.Context, containerName string, runtimeHost string) (string, error) {
+	c, err := docker.RuntimeCommandWithHost(ctx, runtimeHost, "container", "inspect", containerName, "--format", "{{.LogPath}}")
+	if err != nil {
+		return "", err
 	}
-	c := exec.Command("podman", "stats", "--no-stream", "--format", "{{.ID}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}")
 	out, err := c.CombinedOutput()
 	if err != nil {
 		msg := strings.TrimSpace(string(out))
 		if msg == "" {
-			return nil, err
+			return "", err
 		}
-		return nil, errors.New(msg)
+		return "", errors.New(msg)
 	}
-	lines := splitNonEmptyLines(string(out))
-	datas := make([]dto.ContainerListStats, 0, len(lines))
-	for _, line := range lines {
-		parts := strings.Split(line, "\t")
-		if len(parts) < 4 {
-			continue
-		}
-		memUsage, memLimit := parseMemUsagePairToBytes(parts[2])
-		datas = append(datas, dto.ContainerListStats{
-			ContainerID:   strings.TrimSpace(parts[0]),
-			CPUPercent:    parsePercent(parts[1]),
-			MemoryUsage:   memUsage,
-			MemoryLimit:   memLimit,
-			MemoryPercent: parsePercent(parts[3]),
-		})
+	return strings.TrimSpace(string(out)), nil
+}
+
+func truncateContainerLogFiles(logPath string) error {
+	file, err := os.OpenFile(logPath, os.O_WRONLY, 0)
+	if err != nil {
+		return err
 	}
-	return datas, nil
+	defer file.Close()
+	if err = file.Truncate(0); err != nil {
+		return err
+	}
+	files, _ := filepath.Glob(fmt.Sprintf("%s.*", logPath))
+	for _, file := range files {
+		_ = os.Remove(file)
+	}
+	return nil
 }
 
 func splitNonEmptyLines(s string) []string {
@@ -1646,16 +1602,6 @@ func parseMemUsagePairToMB(s string) (float64, bool) {
 	}
 	a, ok := parseSizeToMB(parts[0])
 	return a, ok
-}
-
-func parseMemUsagePairToBytes(s string) (uint64, uint64) {
-	parts := strings.Split(s, "/")
-	if len(parts) != 2 {
-		return 0, 0
-	}
-	used, _ := parseSizeToBytes(parts[0])
-	limit, _ := parseSizeToBytes(parts[1])
-	return uint64(used), uint64(limit)
 }
 
 func parseSizeToMB(s string) (float64, bool) {
@@ -1706,22 +1652,32 @@ func parseSizeToBytes(s string) (float64, bool) {
 func (u *ContainerService) LoadContainerLogs(req *dto.OperationWithNameAndType) string {
 	filePath := ""
 	if req.Type == "compose-detail" {
-		cli, err := docker.NewDockerClient()
-		if err != nil {
-			return ""
-		}
-		defer cli.Close()
+		ctx := context.Background()
 		options := container.ListOptions{All: true}
-		if !docker.IsPodmanRuntime(context.Background()) {
+		isPodman := docker.IsPodmanRuntime(ctx)
+		if !isPodman {
 			options.Filters = filters.NewArgs()
 			options.Filters.Add("label", fmt.Sprintf("%s=%s", composeProjectLabel, req.Name))
 		}
-		containers, err := cli.ContainerList(context.Background(), options)
+		var (
+			containers []types.Container
+			err        error
+		)
+		if isPodman {
+			containers, err = docker.ListContainersMerged(ctx, options)
+		} else {
+			cli, err := docker.NewDockerClient()
+			if err != nil {
+				return ""
+			}
+			defer cli.Close()
+			containers, err = cli.ContainerList(ctx, options)
+		}
 		if err != nil {
 			return ""
 		}
 		for _, container := range containers {
-			if docker.IsPodmanRuntime(context.Background()) {
+			if isPodman {
 				name, ok := firstLabel(container.Labels, composeProjectLabel, podmanComposeProjectLabel)
 				if !ok || name != req.Name {
 					continue

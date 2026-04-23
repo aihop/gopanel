@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"math"
 	"path"
-	"runtime"
 	"strconv"
 	"strings"
 
@@ -269,13 +268,20 @@ func synAppInstall(containers map[string]types.Container, appInstall *model.AppI
 	}
 	notFoundNames := make([]string, 0)
 	exitNames := make([]string, 0)
+	createdNames := make([]string, 0)
+	restartingNames := make([]string, 0)
+	deadNames := make([]string, 0)
+	unknownNames := make([]string, 0)
 	exitedCount := 0
 	pausedCount := 0
 	runningCount := 0
+	createdCount := 0
+	restartingCount := 0
+	deadCount := 0
 	total := len(containerNames)
 	for _, name := range containerNames {
 		if con, ok := containers["/"+name]; ok {
-			switch con.State {
+			switch strings.ToLower(strings.TrimSpace(con.State)) {
 			case "exited":
 				exitedCount++
 				exitNames = append(exitNames, name)
@@ -283,6 +289,17 @@ func synAppInstall(containers map[string]types.Container, appInstall *model.AppI
 				runningCount++
 			case "paused":
 				pausedCount++
+			case "created", "configured":
+				createdCount++
+				createdNames = append(createdNames, name)
+			case "restarting":
+				restartingCount++
+				restartingNames = append(restartingNames, name)
+			case "dead":
+				deadCount++
+				deadNames = append(deadNames, name)
+			default:
+				unknownNames = append(unknownNames, fmt.Sprintf("%s(%s)", name, con.State))
 			}
 		} else {
 			notFoundNames = append(notFoundNames, name)
@@ -295,6 +312,9 @@ func synAppInstall(containers map[string]types.Container, appInstall *model.AppI
 		appInstall.Status = constant.Running
 	case pausedCount == total:
 		appInstall.Status = constant.Paused
+	case createdCount == total || restartingCount == total || deadCount == total:
+		appInstall.Status = constant.UnHealthy
+		appInstall.Message = buildAppContainerStateMessage(exitNames, createdNames, restartingNames, deadNames, notFoundNames, unknownNames)
 	case len(notFoundNames) == total:
 		if appInstall.Status == constant.UpErr && !force {
 			return
@@ -302,13 +322,7 @@ func synAppInstall(containers map[string]types.Container, appInstall *model.AppI
 		appInstall.Status = constant.Error
 		appInstall.Message = "ErrContainerNotFound" + strings.Join(notFoundNames, ",")
 	default:
-		var msg string
-		if exitedCount > 0 {
-			msg = "ErrContainerMsg" + strings.Join(exitNames, ",") + " exited. "
-		}
-		if len(notFoundNames) > 0 {
-			msg += "ErrContainerNotFound" + strings.Join(notFoundNames, ",") + " not found."
-		}
+		msg := buildAppContainerStateMessage(exitNames, createdNames, restartingNames, deadNames, notFoundNames, unknownNames)
 		if msg == "" {
 			msg = "ErrAppWarn"
 		}
@@ -316,6 +330,29 @@ func synAppInstall(containers map[string]types.Container, appInstall *model.AppI
 		appInstall.Status = constant.UnHealthy
 	}
 	_ = appInstallRepo.Save(context.Background(), appInstall)
+}
+
+func buildAppContainerStateMessage(exitNames, createdNames, restartingNames, deadNames, notFoundNames, unknownNames []string) string {
+	var parts []string
+	if len(exitNames) > 0 {
+		parts = append(parts, "ErrContainerMsg"+strings.Join(exitNames, ",")+" exited.")
+	}
+	if len(createdNames) > 0 {
+		parts = append(parts, "ErrContainerMsg"+strings.Join(createdNames, ",")+" created.")
+	}
+	if len(restartingNames) > 0 {
+		parts = append(parts, "ErrContainerMsg"+strings.Join(restartingNames, ",")+" restarting.")
+	}
+	if len(deadNames) > 0 {
+		parts = append(parts, "ErrContainerMsg"+strings.Join(deadNames, ",")+" dead.")
+	}
+	if len(notFoundNames) > 0 {
+		parts = append(parts, "ErrContainerNotFound"+strings.Join(notFoundNames, ",")+" not found.")
+	}
+	if len(unknownNames) > 0 {
+		parts = append(parts, "ErrContainerMsg"+strings.Join(unknownNames, ",")+" unknown state.")
+	}
+	return strings.Join(parts, " ")
 }
 
 func getAppInstallByKey(key string) (model.AppInstall, error) {
@@ -331,61 +368,15 @@ func getAppInstallByKey(key string) (model.AppInstall, error) {
 }
 
 func checkContainerNameIsExist(containerName, appDir string) (bool, error) {
-	if composeV2.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
-		if err := composeV2.PodmanEnsureReady(context.Background()); err != nil {
-			return false, err
-		}
-		containers, err := composeV2.PodmanListContainers(context.Background(), true)
-		if err != nil {
-			return false, err
-		}
-		for _, c := range containers {
-			if strings.TrimPrefix(c.Name, "/") != containerName {
-				continue
-			}
-			if c.Labels != nil {
-				if workDir, ok := c.Labels[composeWorkdirLabel]; ok {
-					if workDir != appDir {
-						return true, nil
-					}
-					return false, nil
-				}
-				if workDir, ok := c.Labels[podmanComposeWorkdirLabel]; ok {
-					if workDir != appDir {
-						return true, nil
-					}
-					return false, nil
-				}
-			}
-			return true, nil
-		}
-		return false, nil
-	}
-
-	client, err := composeV2.NewDockerClient()
+	list, err := composeV2.ListContainersMerged(context.Background(), container.ListOptions{All: true})
 	if err != nil {
 		return false, err
 	}
-	defer client.Close()
-	var options container.ListOptions
-	list, err := client.ContainerList(context.Background(), options)
-	if err != nil {
-		return false, err
-	}
-	for _, container := range list {
-		if len(container.Names) == 0 {
+	for _, item := range list {
+		if containerPrimaryName(item) != containerName {
 			continue
 		}
-		if strings.TrimPrefix(container.Names[0], "/") != containerName {
-			continue
-		}
-		if workDir, ok := container.Labels[composeWorkdirLabel]; ok {
-			if workDir != appDir {
-				return true, nil
-			}
-			return false, nil
-		}
-		if workDir, ok := container.Labels[podmanComposeWorkdirLabel]; ok {
+		if workDir, ok := firstLabel(item.Labels, composeWorkdirLabel, podmanComposeWorkdirLabel); ok {
 			if workDir != appDir {
 				return true, nil
 			}

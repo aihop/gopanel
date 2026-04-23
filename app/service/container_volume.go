@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
-	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -21,7 +20,7 @@ import (
 )
 
 func (u *ContainerService) PageVolume(req *dto.SearchWithPage) (int64, interface{}, error) {
-	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
+	if docker.IsPodmanRuntime(context.Background()) {
 		return u.pageVolumePodman(req)
 	}
 	client, err := docker.NewDockerClient()
@@ -86,7 +85,7 @@ func (u *ContainerService) PageVolume(req *dto.SearchWithPage) (int64, interface
 	return int64(total), data, nil
 }
 func (u *ContainerService) ListVolume() ([]dto.Options, error) {
-	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
+	if docker.IsPodmanRuntime(context.Background()) {
 		return u.listVolumePodman()
 	}
 	client, err := docker.NewDockerClient()
@@ -110,7 +109,7 @@ func (u *ContainerService) ListVolume() ([]dto.Options, error) {
 	return datas, nil
 }
 func (u *ContainerService) DeleteVolume(req *dto.BatchDelete) error {
-	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
+	if docker.IsPodmanRuntime(context.Background()) {
 		return u.deleteVolumePodman(req)
 	}
 	client, err := docker.NewDockerClient()
@@ -129,7 +128,7 @@ func (u *ContainerService) DeleteVolume(req *dto.BatchDelete) error {
 	return nil
 }
 func (u *ContainerService) CreateVolume(req *dto.VolumeCreate) error {
-	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
+	if docker.IsPodmanRuntime(context.Background()) {
 		return u.createVolumePodman(req)
 	}
 	client, err := docker.NewDockerClient()

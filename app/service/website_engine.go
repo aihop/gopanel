@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -33,11 +35,19 @@ func DeployWebsiteEngine(ctx context.Context, alias string, req *request.Website
 	var containerPort string
 	var cmd []string
 	var envs []string
+	rc := parseRunnerConfig(req.RunnerConfig)
+	isRunnerPipeline := req.CodeSource == "pipeline" && req.RunnerConfig != nil
 
 	if req.CodeSource == "git" || req.CodeSource == "pipeline" {
-		imageName = req.GitRepo
+		imageName = strings.TrimSpace(req.GitRepo)
 	} else {
 		return 0, "", "", errors.New("unsupported container deployment source: " + req.CodeSource)
+	}
+	if req.CodeSource == "pipeline" && strings.TrimSpace(rc.BaseImage) != "" {
+		imageName = strings.TrimSpace(rc.BaseImage)
+	}
+	if imageName == "" {
+		imageName = "node:20-alpine"
 	}
 	// 检查镜像是否存在，本地存在就用本地镜像
 	if _, _, err := cli.ImageInspectWithRaw(ctx, imageName); err == nil {
@@ -68,10 +78,17 @@ func DeployWebsiteEngine(ctx context.Context, alias string, req *request.Website
 		envs = append(envs, imageInspect.Config.Env...)
 	}
 
-	// 容器内部监听端口只认镜像自身元数据，不接受外部 Proxy、流水线端口或旧容器配置干预。
-	containerPort = detectEngineContainerPort(imageInspect)
+	// 容器内部监听端口默认优先使用 Runner 配置，否则回退到镜像元数据探测。
+	containerPort = strings.TrimSpace(rc.ContainerPort)
+	if containerPort == "" {
+		containerPort = detectEngineContainerPort(imageInspect)
+	}
 
-	workingDir := detectEngineWorkingDir(imageInspect)
+	workingDir := strings.TrimSpace(rc.WorkingDir)
+	if workingDir == "" {
+		workingDir = detectEngineWorkingDir(imageInspect)
+	}
+
 	logEngineProgress(progress, "镜像运行配置: workingDir=%s, containerPort=%s", workingDir, containerPort)
 
 	containerName := fmt.Sprintf("gopanel-engine-%s-%d", alias, time.Now().Unix())
@@ -79,7 +96,7 @@ func DeployWebsiteEngine(ctx context.Context, alias string, req *request.Website
 	// 选择代码目录
 	codeDir := req.CodeDir
 	if codeDir == "" {
-		codeDir = filepath.Join(global.CONF.System.BaseDir, "wwwroot", alias)
+		codeDir = filepath.Join(global.CONF.System.BaseDir, "www", alias)
 	}
 
 	hostConfig := &container.HostConfig{
@@ -95,61 +112,90 @@ func DeployWebsiteEngine(ctx context.Context, alias string, req *request.Website
 	}
 	selectedCodeDir := ""
 	if req.CodeSource == "pipeline" {
-		runtimeTemplate := detectReusableRuntimeTemplate(ctx, cli, imageName, workingDir, req.PreviousContainerID)
-
-		// 如果我们通过模板探测到了历史容器，更新 PreviousContainerID，这样后面的深度继承和清理逻辑才会生效
-		if runtimeTemplate.ContainerID != "" && req.PreviousContainerID == "" {
-			req.PreviousContainerID = runtimeTemplate.ContainerID
-		}
-
-		if len(runtimeTemplate.Binds) > 0 {
-			hostConfig.Binds = append(hostConfig.Binds, runtimeTemplate.Binds...)
-			if runtimeTemplate.NetworkMode != "" && runtimeTemplate.NetworkMode != "default" {
-				hostConfig.NetworkMode = container.NetworkMode(runtimeTemplate.NetworkMode)
+		envs = mergeRunnerEnvs(envs, rc, containerPort)
+		cmd = []string{"sh", "-lc", buildRunnerScript(rc)}
+		logEngineProgress(progress, "Runner 配置: baseImage=%s, mode=%s", imageName, strings.TrimSpace(rc.Mode))
+		logEngineProgress(progress, "Runner 启动脚本已生成")
+		if isRunnerPipeline {
+			selectedCodeDir = strings.TrimSpace(req.CodeDirFallback)
+			if selectedCodeDir == "" {
+				selectedCodeDir = strings.TrimSpace(codeDir)
 			}
-			if len(runtimeTemplate.ExtraHosts) > 0 {
-				hostConfig.ExtraHosts = append(hostConfig.ExtraHosts, runtimeTemplate.ExtraHosts...)
+			if selectedCodeDir == "" {
+				return 0, "", "", fmt.Errorf("runner 代码目录为空")
 			}
-			if len(runtimeTemplate.Env) > 0 {
-				// 合并继承自旧容器的环境变量。
-				// 但 PORT/HOST 这种决定容器监听行为的关键变量必须以镜像为准，
-				// 不能被历史容器再次覆盖，否则会出现“这里探测到 3100 / 最终又带回 3000”这类撕裂问题。
-				envMap := make(map[string]string)
-				for _, e := range envs {
-					parts := strings.SplitN(e, "=", 2)
-					if len(parts) == 2 {
-						envMap[parts[0]] = parts[1]
-					}
-				}
-				for _, e := range runtimeTemplate.Env {
-					parts := strings.SplitN(e, "=", 2)
-					if len(parts) == 2 {
-						if parts[0] == "PORT" || parts[0] == "HOST" {
-							continue
-						}
-						envMap[parts[0]] = parts[1]
-					}
-				}
-				envs = []string{}
-				for k, v := range envMap {
-					envs = append(envs, fmt.Sprintf("%s=%s", k, v))
-				}
+			hostConfig.Binds = append(hostConfig.Binds, fmt.Sprintf("%s:%s", selectedCodeDir, workingDir))
+			logEngineProgress(progress, "强制挂载 Runner 代码目录: %s -> %s", selectedCodeDir, workingDir)
+			persistentBinds, err := buildRunnerPersistentBinds(req.RunnerKey, rc, workingDir)
+			if err != nil {
+				return 0, "", "", fmt.Errorf("failed to prepare runner persistent dirs: %w", err)
 			}
-			selectedCodeDir = runtimeTemplate.RuntimeDir
-			logEngineProgress(progress, "复用历史成功容器模板(%s): mounts=%d, networkMode=%s", runtimeTemplate.Source, len(runtimeTemplate.Binds), runtimeTemplate.NetworkMode)
+			if len(persistentBinds) > 0 {
+				hostConfig.Binds = append(hostConfig.Binds, persistentBinds...)
+				logEngineProgress(progress, "已追加 %d 个持久化目录映射", len(persistentBinds))
+			}
+			ephemeralBinds := buildRunnerEphemeralBinds(rc, workingDir)
+			if len(ephemeralBinds) > 0 {
+				hostConfig.Binds = append(hostConfig.Binds, ephemeralBinds...)
+				logEngineProgress(progress, "已隔离 Runner 依赖目录，避免写脏版本产物")
+			}
 		} else {
-			previousMountDirs := detectPreviousContainerMountDirs(ctx, cli, req.PreviousContainerID, workingDir)
-			selectedCodeDir, mountReason := resolveAutoMountCodeDir(
-				imageInspect,
-				workingDir,
-				append([]string{codeDir}, append(previousMountDirs, req.CodeDirFallback)...)...,
-			)
-			if selectedCodeDir != "" {
-				global.LOG.Infof("Auto mounting pipeline code dir %s -> %s", selectedCodeDir, workingDir)
-				logEngineProgress(progress, "自动挂载流水线产物目录: %s -> %s", selectedCodeDir, workingDir)
-				hostConfig.Binds = append(hostConfig.Binds, fmt.Sprintf("%s:%s", selectedCodeDir, workingDir))
-			} else if mountReason != "" {
-				logEngineProgress(progress, "跳过自动挂载: %s", mountReason)
+			runtimeTemplate := detectReusableRuntimeTemplate(ctx, cli, imageName, workingDir, req.PreviousContainerID)
+
+			// 如果我们通过模板探测到了历史容器，更新 PreviousContainerID，这样后面的深度继承和清理逻辑才会生效
+			if runtimeTemplate.ContainerID != "" && req.PreviousContainerID == "" {
+				req.PreviousContainerID = runtimeTemplate.ContainerID
+			}
+
+			if len(runtimeTemplate.Binds) > 0 {
+				hostConfig.Binds = append(hostConfig.Binds, runtimeTemplate.Binds...)
+				if runtimeTemplate.NetworkMode != "" && runtimeTemplate.NetworkMode != "default" {
+					hostConfig.NetworkMode = container.NetworkMode(runtimeTemplate.NetworkMode)
+				}
+				if len(runtimeTemplate.ExtraHosts) > 0 {
+					hostConfig.ExtraHosts = append(hostConfig.ExtraHosts, runtimeTemplate.ExtraHosts...)
+				}
+				if len(runtimeTemplate.Env) > 0 {
+					// 合并继承自旧容器的环境变量。
+					// 但 PORT/HOST 这种决定容器监听行为的关键变量必须以镜像为准，
+					// 不能被历史容器再次覆盖，否则会出现“这里探测到 3100 / 最终又带回 3000”这类撕裂问题。
+					envMap := make(map[string]string)
+					for _, e := range envs {
+						parts := strings.SplitN(e, "=", 2)
+						if len(parts) == 2 {
+							envMap[parts[0]] = parts[1]
+						}
+					}
+					for _, e := range runtimeTemplate.Env {
+						parts := strings.SplitN(e, "=", 2)
+						if len(parts) == 2 {
+							if parts[0] == "PORT" || parts[0] == "HOST" {
+								continue
+							}
+							envMap[parts[0]] = parts[1]
+						}
+					}
+					envs = []string{}
+					for k, v := range envMap {
+						envs = append(envs, fmt.Sprintf("%s=%s", k, v))
+					}
+				}
+				selectedCodeDir = runtimeTemplate.RuntimeDir
+				logEngineProgress(progress, "复用历史成功容器模板(%s): mounts=%d, networkMode=%s", runtimeTemplate.Source, len(runtimeTemplate.Binds), runtimeTemplate.NetworkMode)
+			} else {
+				previousMountDirs := detectPreviousContainerMountDirs(ctx, cli, req.PreviousContainerID, workingDir)
+				selectedCodeDir, mountReason := resolveAutoMountCodeDir(
+					imageInspect,
+					workingDir,
+					append([]string{codeDir}, append(previousMountDirs, req.CodeDirFallback)...)...,
+				)
+				if selectedCodeDir != "" {
+					global.LOG.Infof("Auto mounting pipeline code dir %s -> %s", selectedCodeDir, workingDir)
+					logEngineProgress(progress, "自动挂载流水线产物目录: %s -> %s", selectedCodeDir, workingDir)
+					hostConfig.Binds = append(hostConfig.Binds, fmt.Sprintf("%s:%s", selectedCodeDir, workingDir))
+				} else if mountReason != "" {
+					logEngineProgress(progress, "跳过自动挂载: %s", mountReason)
+				}
 			}
 		}
 	}
@@ -169,7 +215,7 @@ func DeployWebsiteEngine(ctx context.Context, alias string, req *request.Website
 	config.ExposedPorts[nat.Port(containerPort+"/tcp")] = struct{}{}
 
 	// 完整继承旧容器的配置 (如果存在)
-	if req.CodeSource == "pipeline" && req.PreviousContainerID != "" {
+	if req.CodeSource == "pipeline" && req.PreviousContainerID != "" && !isRunnerPipeline {
 		if oldInspect, err := cli.ContainerInspect(ctx, req.PreviousContainerID); err == nil {
 			if oldInspect.Config != nil {
 				// 继承原有配置
@@ -252,6 +298,9 @@ func DeployWebsiteEngine(ctx context.Context, alias string, req *request.Website
 			return 0, "", "", fmt.Errorf("failed to start engine container: %w", err)
 		}
 	}
+
+	stopStreaming := startEngineContainerLogStreaming(ctx, cli, resp.ID, progress)
+	defer stopStreaming()
 
 	logEngineProgress(progress, "正在等待容器端口绑定: %s/tcp", containerPort)
 	bindings, err := waitForEnginePortBinding(ctx, cli, resp.ID, containerPort)
@@ -376,4 +425,252 @@ func detectRelativeEntrypoint(imageInspect image.InspectResponse) string {
 		}
 	}
 	return ""
+}
+
+type runnerConfig struct {
+	Mode            string
+	BaseImage       string
+	WorkingDir      string
+	ContainerPort   string
+	StartCommand    string
+	BuildCommand    string
+	PreStart        string
+	Env             map[string]string
+	PersistentPaths []string
+}
+
+func parseRunnerConfig(raw map[string]interface{}) runnerConfig {
+	rc := runnerConfig{
+		Mode:          "build_run",
+		BaseImage:     "node:20-alpine",
+		WorkingDir:    "/var/www/app",
+		ContainerPort: "3000",
+		StartCommand:  "node .output/server/index.mjs",
+		Env:           map[string]string{},
+	}
+	if raw == nil {
+		return rc
+	}
+	if v := strings.TrimSpace(asString(raw["mode"])); v != "" {
+		rc.Mode = v
+	}
+	if v := strings.TrimSpace(asString(raw["baseImage"])); v != "" {
+		rc.BaseImage = v
+	}
+	if v := strings.TrimSpace(asString(raw["workingDir"])); v != "" {
+		rc.WorkingDir = v
+	}
+	if v := strings.TrimSpace(asNumberString(raw["containerPort"])); v != "" {
+		rc.ContainerPort = v
+	}
+	if v := strings.TrimSpace(asString(raw["startCommand"])); v != "" {
+		rc.StartCommand = v
+	}
+	if v := strings.TrimSpace(asString(raw["buildCommand"])); v != "" {
+		rc.BuildCommand = v
+	}
+	if v := asString(raw["preStart"]); strings.TrimSpace(v) != "" {
+		rc.PreStart = v
+	}
+	if envRaw, ok := raw["env"].(map[string]interface{}); ok {
+		for k, v := range envRaw {
+			rc.Env[k] = asString(v)
+		}
+	} else if envRaw, ok := raw["env"].(map[string]string); ok {
+		for k, v := range envRaw {
+			rc.Env[k] = v
+		}
+	}
+	if pathsRaw, ok := raw["persistentPaths"].([]interface{}); ok {
+		for _, item := range pathsRaw {
+			if v := strings.TrimSpace(asString(item)); v != "" {
+				rc.PersistentPaths = append(rc.PersistentPaths, v)
+			}
+		}
+	} else if pathsRaw, ok := raw["persistentPaths"].([]string); ok {
+		for _, item := range pathsRaw {
+			if v := strings.TrimSpace(item); v != "" {
+				rc.PersistentPaths = append(rc.PersistentPaths, v)
+			}
+		}
+	}
+	return rc
+}
+
+func asString(v interface{}) string {
+	switch t := v.(type) {
+	case nil:
+		return ""
+	case string:
+		return t
+	case fmt.Stringer:
+		return t.String()
+	default:
+		return fmt.Sprintf("%v", v)
+	}
+}
+
+func asNumberString(v interface{}) string {
+	switch t := v.(type) {
+	case nil:
+		return ""
+	case int:
+		return strconv.Itoa(t)
+	case int64:
+		return strconv.FormatInt(t, 10)
+	case float64:
+		return strconv.FormatInt(int64(t), 10)
+	case float32:
+		return strconv.FormatInt(int64(t), 10)
+	case uint:
+		return strconv.FormatUint(uint64(t), 10)
+	case uint64:
+		return strconv.FormatUint(t, 10)
+	case string:
+		return t
+	default:
+		return ""
+	}
+}
+
+func mergeRunnerEnvs(base []string, rc runnerConfig, containerPort string) []string {
+	envMap := make(map[string]string)
+	for _, e := range base {
+		parts := strings.SplitN(e, "=", 2)
+		if len(parts) == 2 {
+			envMap[parts[0]] = parts[1]
+		}
+	}
+	for k, v := range rc.Env {
+		ks := strings.TrimSpace(k)
+		if ks == "" {
+			continue
+		}
+		envMap[ks] = v
+	}
+	if strings.TrimSpace(containerPort) != "" {
+		envMap["PORT"] = strings.TrimSpace(containerPort)
+	}
+	if _, ok := envMap["HOST"]; !ok {
+		envMap["HOST"] = "0.0.0.0"
+	}
+
+	out := make([]string, 0, len(envMap))
+	for k, v := range envMap {
+		out = append(out, fmt.Sprintf("%s=%s", k, v))
+	}
+	return out
+}
+
+func buildRunnerPersistentBinds(runnerKey string, rc runnerConfig, workingDir string) ([]string, error) {
+	if len(rc.PersistentPaths) == 0 {
+		return nil, nil
+	}
+	wd := strings.TrimSpace(workingDir)
+	if wd == "" {
+		wd = "/var/www/app"
+	}
+	key := strings.TrimSpace(runnerKey)
+	if key == "" {
+		key = "pipeline-runtime"
+	}
+	baseDir := filepath.Join(global.CONF.System.BaseDir, "apps", key)
+	binds := make([]string, 0, len(rc.PersistentPaths))
+	for _, raw := range rc.PersistentPaths {
+		subPath, target, ok := normalizeRunnerPersistentPath(wd, raw)
+		if !ok {
+			continue
+		}
+		hostDir := filepath.Join(baseDir, filepath.FromSlash(subPath))
+		if err := os.MkdirAll(hostDir, 0755); err != nil {
+			return nil, err
+		}
+		binds = append(binds, fmt.Sprintf("%s:%s", hostDir, target))
+	}
+	return binds, nil
+}
+
+func normalizeRunnerPersistentPath(workingDir string, raw string) (string, string, bool) {
+	wd := path.Clean(strings.TrimSpace(workingDir))
+	if wd == "." || wd == "/" || wd == "" {
+		wd = "/var/www/app"
+	}
+	candidate := strings.TrimSpace(strings.ReplaceAll(raw, "\\", "/"))
+	if candidate == "" {
+		return "", "", false
+	}
+	if strings.HasPrefix(candidate, wd+"/") {
+		candidate = strings.TrimPrefix(candidate, wd+"/")
+	} else {
+		candidate = strings.TrimPrefix(candidate, "/")
+	}
+	candidate = strings.TrimPrefix(path.Clean("/"+candidate), "/")
+	if candidate == "" || candidate == "." {
+		return "", "", false
+	}
+	target := path.Join(wd, candidate)
+	return candidate, target, true
+}
+
+func buildRunnerEphemeralBinds(rc runnerConfig, workingDir string) []string {
+	if strings.ToLower(strings.TrimSpace(rc.Mode)) != "build_run" {
+		return nil
+	}
+	wd := path.Clean(strings.TrimSpace(workingDir))
+	if wd == "." || wd == "/" || wd == "" {
+		wd = "/var/www/app"
+	}
+	for _, raw := range rc.PersistentPaths {
+		subPath, _, ok := normalizeRunnerPersistentPath(wd, raw)
+		if ok && subPath == "node_modules" {
+			return nil
+		}
+	}
+	return []string{path.Join(wd, "node_modules")}
+}
+
+func buildRunnerScript(rc runnerConfig) string {
+	mode := strings.ToLower(strings.TrimSpace(rc.Mode))
+	wd := strings.TrimSpace(rc.WorkingDir)
+	if wd == "" {
+		wd = "/var/www/app"
+	}
+	startCmd := strings.TrimSpace(rc.StartCommand)
+	if startCmd == "" {
+		startCmd = "node .output/server/index.mjs"
+	}
+	installCmd := strings.TrimSpace(rc.BuildCommand)
+
+	var b strings.Builder
+	b.WriteString("set -e\n")
+	b.WriteString("cd \"")
+	b.WriteString(strings.ReplaceAll(wd, "\"", "\\\""))
+	b.WriteString("\"\n")
+	if strings.TrimSpace(rc.PreStart) != "" {
+		b.WriteString(rc.PreStart)
+		if !strings.HasSuffix(rc.PreStart, "\n") {
+			b.WriteString("\n")
+		}
+	}
+	if mode == "build_run" {
+		b.WriteString("if [ -f .output/server/index.mjs ]; then\n")
+		b.WriteString("  echo \"[RUN] detected .output, start directly\"\n")
+		b.WriteString("else\n")
+		b.WriteString("  echo \"[BUILD+RUN] .output missing, building...\"\n")
+		if installCmd != "" {
+			b.WriteString("  ")
+			b.WriteString(installCmd)
+			b.WriteString("\n")
+		} else {
+			b.WriteString("  if [ -f pnpm-lock.yaml ]; then pnpm install --frozen-lockfile; ")
+			b.WriteString("elif [ -f yarn.lock ]; then yarn install --frozen-lockfile; ")
+			b.WriteString("elif [ -f package-lock.json ]; then npm ci; else npm install; fi\n")
+		}
+		b.WriteString("  npm run build\n")
+		b.WriteString("fi\n")
+	}
+	b.WriteString("exec ")
+	b.WriteString(startCmd)
+	b.WriteString("\n")
+	return b.String()
 }

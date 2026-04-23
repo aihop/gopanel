@@ -321,6 +321,7 @@ export namespace Container {
 			daemonJson?: boolean
 			dockerApi?: boolean
 			podmanCli?: boolean
+			podmanRegistriesConf?: boolean
 			compose?: boolean
 		}
 		isSwarm: boolean

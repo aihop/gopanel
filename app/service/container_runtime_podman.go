@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"time"
 
@@ -104,38 +104,29 @@ func ensurePodmanAPIReady() error {
 	baseCtx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
 
-	uid := os.Getuid()
-	userHost := "unix:///run/user/" + strconv.Itoa(uid) + "/podman/podman.sock"
-	rootHost := "unix:///run/podman/podman.sock"
+	candidates := docker.PodmanLinuxCandidateHosts()
+	if len(candidates) == 0 {
+		return errors.New("no podman socket candidates found for current linux environment")
+	}
 
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
 
-	lastUserErr := ""
-	lastRootErr := ""
+	lastErrs := make(map[string]string)
 
 	for {
 		okHost := ""
 		attemptCtx, cancel := context.WithTimeout(baseCtx, 600*time.Millisecond)
-		userErr := error(nil)
-		rootErr := error(nil)
-		if uid != 0 {
-			userErr = docker.PingHost(attemptCtx, userHost)
+		for _, host := range candidates {
+			if err := docker.PingHost(attemptCtx, host); err == nil {
+				okHost = host
+				break
+			} else {
+				lastErrs[host] = err.Error()
+			}
 		}
-		rootErr = docker.PingHost(attemptCtx, rootHost)
 		cancel()
 
-		if uid != 0 && userErr == nil {
-			okHost = userHost
-		} else if rootErr == nil {
-			okHost = rootHost
-		}
-		if userErr != nil {
-			lastUserErr = userErr.Error()
-		}
-		if rootErr != nil {
-			lastRootErr = rootErr.Error()
-		}
 		if okHost != "" {
 			settingRepo := repo.NewISettingRepo()
 			curSetting, err := settingRepo.Get(settingRepo.WithByKey("DockerSockPath"))
@@ -151,10 +142,15 @@ func ensurePodmanAPIReady() error {
 		}
 		select {
 		case <-baseCtx.Done():
-			svcActive := podmanSocketServiceActive(context.Background())
-			msg := fmt.Sprintf("podman.socket 已执行，但 Docker API socket 仍不可用。\n- systemd podman.socket active: %v\n- try1: %s -> %s\n- try2: %s -> %s", svcActive, userHost, strings.TrimSpace(lastUserErr), rootHost, strings.TrimSpace(lastRootErr))
-			if uid != 0 {
-				msg += "\n建议：优先调用接口 POST /container/repair/podman-socket 修复 SocketGroup；rootless 场景再调用 POST /container/repair/linger"
+			systemActive := podmanSocketServiceActive(context.Background())
+			userActive := podmanSocketUserServiceActive(context.Background())
+			var tries []string
+			for _, host := range candidates {
+				tries = append(tries, fmt.Sprintf("- try: %s -> %s", host, strings.TrimSpace(lastErrs[host])))
+			}
+			msg := fmt.Sprintf("podman socket 仍不可用。\n- systemd podman.socket active: %v\n- systemd --user podman.socket active: %v\n%s", systemActive, userActive, strings.Join(tries, "\n"))
+			if anyRootlessCandidate(candidates) {
+				msg += "\n建议：rootless 场景优先启用 linger，并启动用户级 podman.socket"
 			} else {
 				msg += "\n建议：检查 podman.service/podman.socket 日志与 /run/podman/podman.sock 权限"
 			}
@@ -181,6 +177,42 @@ func podmanSocketServiceActive(ctx context.Context) bool {
 	out, err := cmd.CombinedOutput()
 	_ = err
 	return strings.TrimSpace(string(out)) == "active"
+}
+
+func podmanSocketUserServiceActive(ctx context.Context) bool {
+	if runtime.GOOS != "linux" {
+		return false
+	}
+	if _, err := exec.LookPath("systemctl"); err != nil {
+		return false
+	}
+	runtimeDir := strings.TrimSpace(os.Getenv("XDG_RUNTIME_DIR"))
+	if runtimeDir == "" {
+		runtimeDir = fmt.Sprintf("/run/user/%d", os.Geteuid())
+	}
+	baseCtx := ctx
+	if baseCtx == nil {
+		baseCtx = context.Background()
+	}
+	c, cancel := context.WithTimeout(baseCtx, 1200*time.Millisecond)
+	defer cancel()
+	cmd := exec.CommandContext(c, "systemctl", "--user", "is-active", "podman.socket")
+	cmd.Env = append(os.Environ(),
+		"XDG_RUNTIME_DIR="+runtimeDir,
+		"DBUS_SESSION_BUS_ADDRESS=unix:path="+filepath.Join(runtimeDir, "bus"),
+	)
+	out, err := cmd.CombinedOutput()
+	_ = err
+	return strings.TrimSpace(string(out)) == "active"
+}
+
+func anyRootlessCandidate(hosts []string) bool {
+	for _, host := range hosts {
+		if docker.IsRootlessPodmanHost(host) {
+			return true
+		}
+	}
+	return false
 }
 
 func shouldUpdateDockerSockPath(cur string) bool {

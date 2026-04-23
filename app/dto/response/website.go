@@ -26,9 +26,9 @@ type WebsiteRes struct {
 	PipelineID    uint      `json:"pipelineId"`
 	RuntimeType   string    `json:"runtimeType"`
 
-	AntiCrawler    bool      `json:"antiCrawler"`
-	AntiLeech      bool      `json:"antiLeech"`
-	RateLimitMode  string    `json:"rateLimitMode"`
-	WafEnable      bool      `json:"wafEnable"`
-	BlockSensitive bool      `json:"blockSensitive"`
+	AntiCrawler    bool   `json:"antiCrawler"`
+	AntiLeech      bool   `json:"antiLeech"`
+	RateLimitMode  string `json:"rateLimitMode"`
+	WafEnable      bool   `json:"wafEnable"`
+	BlockSensitive bool   `json:"blockSensitive"`
 }

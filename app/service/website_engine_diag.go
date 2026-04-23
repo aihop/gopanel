@@ -98,6 +98,68 @@ func readEngineContainerLogs(ctx context.Context, cli *dockerclient.Client, cont
 	return logs
 }
 
+func startEngineContainerLogStreaming(ctx context.Context, cli *dockerclient.Client, containerID string, progress func(format string, a ...interface{})) context.CancelFunc {
+	if progress == nil {
+		return func() {}
+	}
+	streamCtx, cancel := context.WithCancel(ctx)
+	go func() {
+		reader, err := cli.ContainerLogs(streamCtx, containerID, container.LogsOptions{
+			ShowStdout: true,
+			ShowStderr: true,
+			Follow:     true,
+			Tail:       "0",
+		})
+		if err != nil {
+			logEngineProgress(progress, "附加 Runner 容器日志失败: %v", err)
+			return
+		}
+		defer reader.Close()
+
+		writer := &progressLineWriter{
+			progress: progress,
+			prefix:   "[Runner Log] ",
+		}
+		defer writer.Flush()
+		_, _ = stdcopy.StdCopy(writer, writer, reader)
+	}()
+	return cancel
+}
+
+type progressLineWriter struct {
+	progress func(format string, a ...interface{})
+	prefix   string
+	buffer   strings.Builder
+}
+
+func (w *progressLineWriter) Write(p []byte) (int, error) {
+	s := string(p)
+	for len(s) > 0 {
+		idx := strings.IndexByte(s, '\n')
+		if idx < 0 {
+			w.buffer.WriteString(s)
+			break
+		}
+		w.buffer.WriteString(s[:idx])
+		w.flushLine()
+		s = s[idx+1:]
+	}
+	return len(p), nil
+}
+
+func (w *progressLineWriter) Flush() {
+	w.flushLine()
+}
+
+func (w *progressLineWriter) flushLine() {
+	line := strings.TrimSpace(w.buffer.String())
+	w.buffer.Reset()
+	if line == "" {
+		return
+	}
+	logEngineProgress(w.progress, "%s%s", w.prefix, line)
+}
+
 func RemoveEngineContainer(ctx context.Context, cli *dockerclient.Client, containerID string) error {
 	err := cli.ContainerStop(ctx, containerID, container.StopOptions{})
 	if err != nil {

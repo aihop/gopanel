@@ -406,6 +406,16 @@ create_linux_user_if_needed() {
   else
     run_privileged useradd --system --create-home --shell /bin/bash "$username"
   fi
+
+  # Ensure subuid and subgid for rootless podman
+  if ! grep -q "^${username}:" /etc/subuid 2>/dev/null; then
+    log "为用户 ${username} 配置 subuid 映射..."
+    run_privileged usermod --add-subuids 100000-165535 "${username}" || warn "配置 subuid 失败，可能需要手动配置"
+  fi
+  if ! grep -q "^${username}:" /etc/subgid 2>/dev/null; then
+    log "为用户 ${username} 配置 subgid 映射..."
+    run_privileged usermod --add-subgids 100000-165535 "${username}" || warn "配置 subgid 失败，可能需要手动配置"
+  fi
 }
 
 create_macos_user_if_needed() {

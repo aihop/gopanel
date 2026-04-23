@@ -28,6 +28,31 @@ const pagination = ref({
 
 const logsModalShow = ref(false)
 const currentRecordId = ref<number | null>(null)
+const currentRecordVersion = ref<string>("")
+
+const copyText = async (text: string, successText = "已复制") => {
+  try {
+    await navigator.clipboard.writeText(text)
+    message.success(successText)
+  } catch (error: any) {
+    message.error(error?.message || "复制失败")
+  }
+}
+
+const handleRetryFromLogs = async () => {
+  try {
+    const res = await runPipeline({ id: props.pipelineId, version: currentRecordVersion.value })
+    message.success(`已重新触发执行，版本号: v${currentRecordVersion.value}`)
+    
+    if (res.data && res.data.recordId) {
+      currentRecordId.value = res.data.recordId
+    }
+    
+    fetchData()
+  } catch (error: any) {
+    message.error(error.message || "触发失败")
+  }
+}
 
 const handleRerun = async (row: Pipeline.ResRecord) => {
   try {
@@ -36,6 +61,7 @@ const handleRerun = async (row: Pipeline.ResRecord) => {
     
     if (res.data && res.data.recordId) {
       currentRecordId.value = res.data.recordId
+      currentRecordVersion.value = row.version || ""
       logsModalShow.value = true
     }
     
@@ -73,6 +99,25 @@ const columns = [
   { title: "创建时间", key: "createdAt", width: 180, render: (row: Pipeline.ResRecord) => row.createdAt ? dayjs(row.createdAt).format("YYYY-MM-DD HH:mm") : "-" },
   { title: "版本", key: "version", render: (row: Pipeline.ResRecord) => h(NTag, { type: "success", size: "small" }, { default: () => `v${row.version || '-'}` }) },
   {
+    title: "Commit",
+    key: "commitHash",
+    width: 170,
+    render(row: Pipeline.ResRecord) {
+      if (!row.commitHash) {
+        return h("span", { class: "text-slate-400 text-xs" }, "-")
+      }
+      return h("div", { class: "flex flex-col gap-1 text-xs" }, [
+        h("span", { class: "font-mono text-slate-700" }, row.commitHash.slice(0, 12)),
+        h(NButton, {
+          size: "tiny",
+          quaternary: true,
+          type: "primary",
+          onClick: () => copyText(row.commitHash || "", "Commit SHA 已复制")
+        }, { default: () => "复制 SHA" })
+      ])
+    }
+  },
+  {
     title: "状态",
     key: "status",
     render(row: Pipeline.ResRecord) {
@@ -86,6 +131,26 @@ const columns = [
         case "failed": type = "error"; break
       }
       return h(NTag, { type }, { default: () => row.status })
+    }
+  },
+  {
+    title: "Runner",
+    key: "runner",
+    width: 220,
+    render(row: Pipeline.ResRecord) {
+      if (!row.runnerHostPort) {
+        return h("span", { class: "text-slate-400 text-xs" }, "未启用 / 未产出")
+      }
+      return h("div", { class: "flex flex-col gap-1 text-xs" }, [
+        h("span", { class: "font-mono text-emerald-600" }, `127.0.0.1:${row.runnerHostPort}`),
+        row.runnerContainerId ? h("span", { class: "font-mono text-slate-500" }, row.runnerContainerId.slice(0, 12)) : null,
+        h(NButton, {
+          size: "tiny",
+          quaternary: true,
+          type: "primary",
+          onClick: () => copyText(`127.0.0.1:${row.runnerHostPort}`, "Runner 地址已复制")
+        }, { default: () => "复制地址" })
+      ])
     }
   },
   { title: "错误信息", key: "errorMessage", ellipsis: true },
@@ -104,6 +169,7 @@ const columns = [
           ghost: true,
           onClick: () => {
             currentRecordId.value = row.id
+            currentRecordVersion.value = row.version || ""
             logsModalShow.value = true
           }
         }, { default: () => "日志" })
@@ -209,7 +275,9 @@ watch(
       v-if="currentRecordId"
       v-model:show="logsModalShow"
       :record-id="currentRecordId"
+      :pipeline-id="props.pipelineId"
       @finished="fetchData"
+      @retry="handleRetryFromLogs"
     />
   </n-modal>
 </template>

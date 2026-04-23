@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/aihop/gopanel/utils/docker"
+	dockerimage "github.com/docker/docker/api/types/image"
 	"gopkg.in/yaml.v3"
 )
 
@@ -13,23 +14,44 @@ func shouldSkipComposePull(ctx context.Context, composeYml string, envContent st
 	if len(images) == 0 {
 		return false, nil
 	}
-	client, err := docker.NewDockerClient()
+	list, _, err := docker.ListImagesMerged(ctx)
 	if err != nil {
 		return false, nil
 	}
-	defer client.Close()
 
 	var missing []string
 	for _, img := range images {
 		if img == "" {
 			continue
 		}
-		_, _, err := client.ImageInspectWithRaw(ctx, img)
-		if err != nil {
+		if !imageExistsInRuntimeView(list, img) {
 			missing = append(missing, img)
 		}
 	}
 	return len(missing) == 0, missing
+}
+
+func imageExistsInRuntimeView(list []dockerimage.Summary, ref string) bool {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return false
+	}
+	for _, item := range list {
+		if item.ID == ref {
+			return true
+		}
+		for _, tag := range item.RepoTags {
+			if strings.TrimSpace(tag) == ref {
+				return true
+			}
+		}
+		for _, digest := range item.RepoDigests {
+			if strings.TrimSpace(digest) == ref {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func extractComposeImages(composeYml string, envContent string) []string {
@@ -141,4 +163,3 @@ func dedupeStrings(in []string) []string {
 	}
 	return out
 }
-

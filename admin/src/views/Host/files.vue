@@ -311,20 +311,19 @@ const options = [
 // 分页配置
 const pagination = reactive({
 	page: 1,
-	limit: 50,
+	pageSize: 50,
 	showSizePicker: true,
 	pageSizes: [10, 20, 50, 100],
 	itemCount: 0,
 	onChange: (page: number) => {
-		console.log("页码变化:", page)
 		pagination.page = page
 		searchParams.value.page = page
 		loadData()
 	},
-	onUpdatePageSize: (limit: number) => {
-		pagination.limit = limit
+	onUpdatePageSize: (pageSize: number) => {
+		pagination.pageSize = pageSize
 		pagination.page = 1
-		searchParams.value.limit = limit
+		searchParams.value.limit = pageSize
 		searchParams.value.page = 1
 		loadData()
 	}
@@ -566,7 +565,7 @@ async function loadData() {
 			}
 			// 更新分页信息
 			pagination.page = searchParams.value.page
-			pagination.limit = searchParams.value.limit
+			pagination.pageSize = searchParams.value.limit
 			pagination.itemCount = totalItems.value
 			if (!moveOpen.value) {
 				selects.value = []

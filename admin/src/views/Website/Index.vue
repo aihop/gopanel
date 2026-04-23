@@ -17,6 +17,7 @@
               :class="httpServerStatus ? 'bg-emerald-500' : 'bg-rose-500'"
             ></span>
             {{ httpServerStatus ? "HTTP服务 运行中" : "HTTP服务 未启动" }}
+            {{ statusStartErrorText }}
           </div>
           <div class="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-500">
             当前共管理 {{ total }} 个网站
@@ -163,6 +164,7 @@ const createRef = ref<InstanceType<typeof Create> | null>(null)
 const deployHistoryRef = ref<any>(null)
 
 const httpServerStatus = ref(false)
+const statusStartErrorText = ref("")
 
 const loading = ref(false)
 const tableData = ref<Website.WebsiteDTO[]>([])
@@ -498,6 +500,9 @@ onMounted(() => {
 	httpDefaultStatusAPI()
 		.then(res => {
 			httpServerStatus.value = res.data.running || res.data.status
+			if (res.code !== 0) {
+				statusStartErrorText.value = res.msg || "获取HTTP服务状态失败"
+			}
 		})
 		.catch(err => {
 			console.error("获取HTTP服务状态失败", err)

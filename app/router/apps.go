@@ -23,10 +23,11 @@ func AppsRouter(r fiber.Router) {
 		AppsRouter.Post("/sync", api.AppSync)
 
 		// 安装
-		AppsRouter.Post("/install", api.AppInstall)
+		AppsRouter.Post("/install", api.AppsInstall)
 		AppsRouter.Get("/precheck", api.PrecheckAppInstall)
 		AppsRouter.Post("/repair/compose", api.RepairCompose)
 		AppsRouter.Post("/repair/short-name", api.RepairPodmanShortName)
+		AppsRouter.Post("/repair/subuid", api.RepairPodmanSubuid)
 		AppsRouter.Post("/repair/port-conflict", api.RepairPortConflict)
 		AppsRouter.Post("/local/install", api.AppLocalInstall)
 		AppsRouter.Get("/local/list", api.AppLocalList)
@@ -50,7 +51,7 @@ func AppsRouter(r fiber.Router) {
 		AppsRouter.Get("/ignored/detail", api.GetIgnoredAppDetail)
 
 		// 卸载
-		AppsRouter.Post("/uninstall", api.UninstallApp)
+		AppsRouter.Post("/uninstall", api.AppsUninstall)
 
 		// 基础安装目录
 		AppsRouter.Get("/base-dir", api.AppGetBaseDir)

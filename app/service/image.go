@@ -66,34 +66,39 @@ func normalizeImageRefForPull(input string) (string, error) {
 	}
 	return s, nil
 }
+
+func loadImagesWithRuntimeView(ctx context.Context) ([]image.Summary, []types.Container, error) {
+	if docker.IsPodmanRuntime(ctx) && runtime.GOOS == "linux" {
+		return docker.ListImagesMerged(ctx)
+	}
+	client, err := docker.NewDockerClient()
+	if err != nil {
+		return nil, nil, err
+	}
+	defer client.Close()
+	list, err := client.ImageList(ctx, image.ListOptions{})
+	if err != nil {
+		return nil, nil, err
+	}
+	containers, _ := client.ContainerList(ctx, container.ListOptions{All: true})
+	return list, containers, nil
+}
+
 func (u *ImageService) Page(req dto.SearchWithPage) (int64, interface{}, error) {
 	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
 		return u.pagePodman(req)
 	}
 	var (
-		list      []image.Summary
-		records   []dto.ImageInfo
-		backDatas []dto.ImageInfo
+		list       []image.Summary
+		containers []types.Container
+		records    []dto.ImageInfo
+		backDatas  []dto.ImageInfo
 	)
 	ctx := context.Background()
-	var containers []types.Container
-	if docker.IsPodmanRuntime(ctx) && runtime.GOOS == "linux" {
-		var err error
-		list, containers, err = listImagesMergedByHost(ctx)
-		if err != nil {
-			return 0, nil, err
-		}
-	} else {
-		client, err := docker.NewDockerClient()
-		if err != nil {
-			return 0, nil, err
-		}
-		defer client.Close()
-		list, err = client.ImageList(ctx, image.ListOptions{})
-		if err != nil {
-			return 0, nil, err
-		}
-		containers, _ = client.ContainerList(ctx, container.ListOptions{All: true})
+	var err error
+	list, containers, err = loadImagesWithRuntimeView(ctx)
+	if err != nil {
+		return 0, nil, err
 	}
 	if len(req.Info) != 0 {
 		length, count := len(list), 0
@@ -154,23 +159,10 @@ func (u *ImageService) ListAll() ([]dto.ImageInfo, error) {
 		list       []image.Summary
 		containers []types.Container
 	)
-	if docker.IsPodmanRuntime(ctx) && runtime.GOOS == "linux" {
-		var err error
-		list, containers, err = listImagesMergedByHost(ctx)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		client, err := docker.NewDockerClient()
-		if err != nil {
-			return nil, err
-		}
-		defer client.Close()
-		list, err = client.ImageList(ctx, image.ListOptions{})
-		if err != nil {
-			return nil, err
-		}
-		containers, _ = client.ContainerList(ctx, container.ListOptions{All: true})
+	var err error
+	list, containers, err = loadImagesWithRuntimeView(ctx)
+	if err != nil {
+		return nil, err
 	}
 	for _, image := range list {
 		size := formatFileSize(image.Size)
@@ -204,22 +196,10 @@ func (u *ImageService) List() ([]dto.Options, error) {
 		backDatas []dto.Options
 	)
 	ctx := context.Background()
-	if docker.IsPodmanRuntime(ctx) && runtime.GOOS == "linux" {
-		var err error
-		list, _, err = listImagesMergedByHost(ctx)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		client, err := docker.NewDockerClient()
-		if err != nil {
-			return nil, err
-		}
-		defer client.Close()
-		list, err = client.ImageList(ctx, image.ListOptions{})
-		if err != nil {
-			return nil, err
-		}
+	var err error
+	list, _, err = loadImagesWithRuntimeView(ctx)
+	if err != nil {
+		return nil, err
 	}
 	for _, image := range list {
 		for _, tag := range image.RepoTags {
@@ -232,7 +212,7 @@ func (u *ImageService) List() ([]dto.Options, error) {
 }
 
 func (u *ImageService) ImageBuild(req dto.ImageBuild) (string, error) {
-	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
+	if docker.IsPodmanRuntime(context.Background()) {
 		fileName := "Dockerfile"
 		if req.From == "edit" {
 			dir := fmt.Sprintf("%s/docker/build/%s", global.CONF.System.BaseDir, strings.ReplaceAll(req.Name, ":", "_"))
@@ -271,7 +251,7 @@ func (u *ImageService) ImageBuild(req dto.ImageBuild) (string, error) {
 		go func() {
 			defer file.Close()
 			_ = docker.PodmanEnsureReady(context.Background())
-			out, err := docker.PodmanRunBuild(context.Background(), req.Dockerfile, fileName, req.Name)
+			out, err := docker.PodmanBuild(context.Background(), req.Dockerfile, fileName, []string{req.Name}, stringsToMap(req.Tags))
 			if err != nil {
 				_, _ = file.WriteString(out + "\n" + err.Error())
 				_, _ = file.WriteString("\nimage build failed!")
@@ -366,7 +346,7 @@ func (u *ImageService) ImageBuild(req dto.ImageBuild) (string, error) {
 }
 
 func (u *ImageService) ImagePull(req dto.ImagePull) (string, error) {
-	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
+	if docker.IsPodmanRuntime(context.Background()) {
 		imageRef, err := normalizeImageRefForPull(req.ImageName)
 		if err != nil {
 			return "", err
@@ -399,6 +379,8 @@ func (u *ImageService) ImagePull(req dto.ImagePull) (string, error) {
 				if repoItem.Auth {
 					creds = strings.TrimSpace(repoItem.Username) + ":" + repoItem.Password
 				}
+			} else if hasCreds, authCreds := loadAuthCredentials(imageRef); hasCreds {
+				creds = authCreds
 			}
 			out, err := docker.PodmanPull(context.Background(), target, creds)
 			if err != nil {
@@ -490,6 +472,11 @@ func (u *ImageService) ImagePull(req dto.ImagePull) (string, error) {
 }
 
 func (u *ImageService) ImageLoad(req dto.ImageLoad) error {
+	if docker.IsPodmanRuntime(context.Background()) {
+		_ = docker.PodmanEnsureReady(context.Background())
+		_, err := docker.PodmanLoad(context.Background(), req.Path)
+		return err
+	}
 	file, err := os.Open(req.Path)
 	if err != nil {
 		return err
@@ -517,7 +504,7 @@ func (u *ImageService) ImageLoad(req dto.ImageLoad) error {
 }
 
 func (u *ImageService) ImageSave(req dto.ImageSave) error {
-	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
+	if docker.IsPodmanRuntime(context.Background()) {
 		_ = docker.PodmanEnsureReady(context.Background())
 		outPath := path.Join(req.Path, req.Name)
 		_, err := docker.PodmanSave(context.Background(), req.TagName, outPath)
@@ -546,7 +533,7 @@ func (u *ImageService) ImageSave(req dto.ImageSave) error {
 }
 
 func (u *ImageService) ImageTag(req dto.ImageTag) error {
-	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
+	if docker.IsPodmanRuntime(context.Background()) {
 		_ = docker.PodmanEnsureReady(context.Background())
 		_, err := docker.PodmanTag(context.Background(), req.SourceID, req.TargetName)
 		return err
@@ -564,7 +551,11 @@ func (u *ImageService) ImageTag(req dto.ImageTag) error {
 }
 
 func (u *ImageService) ImagePush(req dto.ImagePush) (string, error) {
-	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
+	if docker.IsPodmanRuntime(context.Background()) {
+		repoItem, err := repo.NewIImageRepoRepo().Get(repo.NewCommonRepo().WithByID(req.RepoID))
+		if err != nil {
+			return "", err
+		}
 		dockerLogDir := path.Join(global.CONF.System.TmpDir, "docker_logs")
 		if _, err := os.Stat(dockerLogDir); err != nil && os.IsNotExist(err) {
 			if err = os.MkdirAll(dockerLogDir, os.ModePerm); err != nil {
@@ -580,9 +571,24 @@ func (u *ImageService) ImagePush(req dto.ImagePush) (string, error) {
 		go func() {
 			defer file.Close()
 			_ = docker.PodmanEnsureReady(context.Background())
-			out, err := docker.PodmanPush(context.Background(), req.TagName, "")
+			targetName := fmt.Sprintf("%s/%s", repoItem.DownloadUrl, req.Name)
+			if targetName != req.TagName {
+				if _, err := docker.PodmanTag(context.Background(), req.TagName, targetName); err != nil {
+					_, _ = file.WriteString(err.Error())
+					_, _ = file.WriteString("\nimage push failed!")
+					return
+				}
+			}
+			creds := ""
+			if repoItem.Auth {
+				creds = strings.TrimSpace(repoItem.Username) + ":" + repoItem.Password
+			}
+			out, err := docker.PodmanPush(context.Background(), targetName, creds)
 			if err != nil {
-				_, _ = file.WriteString(out + "\n" + err.Error())
+				if strings.TrimSpace(out) != "" {
+					_, _ = file.WriteString(out + "\n")
+				}
+				_, _ = file.WriteString(err.Error())
 				_, _ = file.WriteString("\nimage push failed!")
 				return
 			}
@@ -648,7 +654,7 @@ func (u *ImageService) ImagePush(req dto.ImagePush) (string, error) {
 }
 
 func (u *ImageService) ImageRemove(req dto.BatchDelete) error {
-	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
+	if docker.IsPodmanRuntime(context.Background()) {
 		_ = docker.PodmanEnsureReady(context.Background())
 		for _, name := range req.Names {
 			if strings.TrimSpace(name) == "" {
@@ -708,6 +714,27 @@ func checkUsed(imageID string, containers []types.Container) bool {
 }
 
 func loadAuthInfo(image string) (bool, string) {
+	hasCreds, creds := loadAuthCredentials(image)
+	if !hasCreds {
+		return false, ""
+	}
+	parts := strings.SplitN(creds, ":", 2)
+	if len(parts) != 2 {
+		return false, ""
+	}
+	authConfig := registry.AuthConfig{
+		Username: parts[0],
+		Password: parts[1],
+	}
+	encodedJSON, err := json.Marshal(authConfig)
+	if err != nil {
+		return false, ""
+	}
+	authStr := base64.URLEncoding.EncodeToString(encodedJSON)
+	return true, authStr
+}
+
+func loadAuthCredentials(image string) (bool, string) {
 	if !strings.Contains(image, "/") {
 		return false, ""
 	}
@@ -734,16 +761,10 @@ func loadAuthInfo(image string) (bool, string) {
 			passwd = strings.Split(itemStr, ":")[1]
 		}
 	}
-	authConfig := registry.AuthConfig{
-		Username: user,
-		Password: passwd,
-	}
-	encodedJSON, err := json.Marshal(authConfig)
-	if err != nil {
+	if user == "" {
 		return false, ""
 	}
-	authStr := base64.URLEncoding.EncodeToString(encodedJSON)
-	return true, authStr
+	return true, user + ":" + passwd
 }
 
 type dockerConfig struct {

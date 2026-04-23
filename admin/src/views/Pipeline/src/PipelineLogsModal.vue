@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { ref, watch, nextTick } from "vue"
-import { NModal, NButton, NPopconfirm, useMessage } from "naive-ui"
+import { ref, watch, nextTick, computed } from "vue"
+import { NModal, NButton, NPopconfirm, useMessage, NAlert, NSpace } from "naive-ui"
 import { useAuthStore } from "@/store/auth"
 import { stopPipeline } from "@/api/modules/pipeline"
+import { appsRepairPodmanSubuidAPI } from "@/api/modules/apps"
+import { websiteListAPI } from "@/api/modules/website"
+import type { Website } from "@/api/interface/website"
 
-const props = defineProps<{ show: boolean; recordId: number }>()
-const emit = defineEmits(["update:show", "finished"])
+const props = defineProps<{ show: boolean; recordId: number; pipelineId?: number | null }>()
+const emit = defineEmits(["update:show", "finished", "retry"])
 
 const logs = ref<string[]>([])
 const terminalRef = ref<HTMLElement | null>(null)
@@ -15,6 +18,16 @@ const message = useMessage()
 
 const isRunning = ref(false)
 const isStopping = ref(false)
+const runnerResult = ref<{ hostPort: number; containerId: string } | null>(null)
+const linkedWebsite = ref<Website.WebsiteRes | null>(null)
+
+const repairTipVisible = ref(false)
+const repairTipTitle = ref("")
+const repairTipMessage = ref("")
+const repairTipAction = ref("")
+const repairTipOutput = ref("")
+const repairing = ref(false)
+const repairSuccess = ref(false)
 
 const scrollToBottom = () => {
   nextTick(() => {
@@ -24,6 +37,68 @@ const scrollToBottom = () => {
   })
 }
 
+const handleRepair = async () => {
+  if (repairing.value) return
+  repairing.value = true
+  repairTipOutput.value = ""
+  try {
+    let res: any
+    if (repairTipAction.value === "subuid") {
+      res = await appsRepairPodmanSubuidAPI()
+    }
+    
+    if (res && res.code === 0) {
+      repairTipOutput.value = res.data?.output || "已执行修复，请点击继续执行。"
+      repairSuccess.value = true
+      message.success("修复已执行")
+    } else {
+      message.error(res?.msg || "修复失败")
+    }
+  } catch (e: any) {
+    message.error(e?.message || "修复过程发生错误")
+  } finally {
+    repairing.value = false
+  }
+}
+
+const handleRetry = () => {
+  emit("retry")
+}
+
+const copyRunnerAddress = async () => {
+  if (!runnerResult.value) return
+  try {
+    await navigator.clipboard.writeText(`127.0.0.1:${runnerResult.value.hostPort}`)
+    message.success("Runner 地址已复制")
+  } catch (error: any) {
+    message.error(error?.message || "复制失败")
+  }
+}
+
+const linkedWebsiteUrl = computed(() => {
+  if (!linkedWebsite.value?.primaryDomain) return ""
+  return `https://${linkedWebsite.value.primaryDomain}`
+})
+
+const openLinkedWebsite = () => {
+  if (!linkedWebsiteUrl.value) return
+  window.open(linkedWebsiteUrl.value, "_blank")
+}
+
+const fetchLinkedWebsite = async () => {
+  if (!props.pipelineId) {
+    linkedWebsite.value = null
+    return
+  }
+  try {
+    const res = await websiteListAPI()
+    const items = Array.isArray(res.data?.items) ? res.data.items : []
+    linkedWebsite.value = items.find((item: Website.WebsiteRes) => Number(item.pipelineId || 0) === Number(props.pipelineId)) || null
+  } catch (error) {
+    linkedWebsite.value = null
+  }
+}
+
 const startLogs = () => {
   if (eventSource) {
     eventSource.close()
@@ -31,6 +106,15 @@ const startLogs = () => {
   logs.value = []
   isRunning.value = true
   isStopping.value = false
+  runnerResult.value = null
+  fetchLinkedWebsite()
+  
+  repairTipVisible.value = false
+  repairSuccess.value = false
+  repairTipTitle.value = ""
+  repairTipMessage.value = ""
+  repairTipAction.value = ""
+  repairTipOutput.value = ""
   
   const apiUrl = (window as any).__VITE_API_URL__ || "/api"
   const safeToken = encodeURIComponent(authStore.auth)
@@ -54,6 +138,22 @@ const startLogs = () => {
         logs.value.unshift("... 之前的日志已折叠，请在后台查看完整日志文件 ...")
       }
       logs.value.push(event.data)
+
+      const runnerMatch = event.data.match(/Runner 容器已启动：containerId=([^,\s]+), hostPort=(\d+)/)
+      if (runnerMatch) {
+        runnerResult.value = {
+          containerId: runnerMatch[1],
+          hostPort: Number(runnerMatch[2])
+        }
+      }
+
+      if (event.data.includes("insufficient UIDs or GIDs")) {
+        repairTipVisible.value = true
+        repairTipTitle.value = "检测到 UID/GID 映射不足"
+        repairTipMessage.value = "当前用户缺乏足够的子 UID/GID 映射，导致无法创建容器命名空间。可以点击一键修复，系统将自动配置并重置命名空间。"
+        repairTipAction.value = "subuid"
+      }
+
       scrollToBottom()
     }
   }
@@ -109,6 +209,76 @@ watch(
     class="w-full !rounded-[24px] shadow-[0_24px_48px_rgba(0,0,0,0.5)] sm:w-[90%]"
     @update:show="(val) => emit('update:show', val)"
   >
+    <n-alert
+      v-if="runnerResult"
+      type="success"
+      title="Runner 已启动"
+      class="mb-4"
+    >
+      <div class="text-sm">
+        当前流水线已产出 Runner 容器，访问桥接目标：
+        <span class="font-mono text-emerald-700">127.0.0.1:{{ runnerResult.hostPort }}</span>
+        <span class="ml-2 text-slate-500">容器 ID：{{ runnerResult.containerId.slice(0, 12) }}</span>
+        <n-button
+          size="tiny"
+          class="ml-3"
+          type="primary"
+          quaternary
+          @click="copyRunnerAddress"
+        >
+          复制地址
+        </n-button>
+        <n-button
+          v-if="linkedWebsiteUrl"
+          size="tiny"
+          class="ml-2"
+          type="primary"
+          quaternary
+          @click="openLinkedWebsite"
+        >
+          打开关联站点
+        </n-button>
+      </div>
+    </n-alert>
+
+    <n-alert
+      v-if="repairTipVisible"
+      type="warning"
+      :title="repairTipTitle"
+      closable
+      class="mb-4"
+      @close="repairTipVisible = false"
+    >
+      <div class="text-sm">
+        <div v-if="repairTipMessage">{{ repairTipMessage }}</div>
+        <div
+          v-if="repairTipOutput"
+          class="mt-2 whitespace-pre-wrap rounded-md bg-slate-50 p-3 font-mono text-xs text-slate-700"
+        >
+          {{ repairTipOutput }}
+        </div>
+        <n-space class="mt-3">
+          <n-button
+            v-if="!repairSuccess"
+            size="small"
+            type="primary"
+            :loading="repairing"
+            @click="handleRepair"
+          >
+            一键修复
+          </n-button>
+          <n-button
+            v-else
+            size="small"
+            type="success"
+            @click="handleRetry"
+          >
+            继续执行
+          </n-button>
+        </n-space>
+      </div>
+    </n-alert>
+
     <div
       ref="terminalRef"
       class="h-[500px] overflow-y-auto rounded-lg bg-[#0F0F0F] p-4 font-mono text-sm leading-relaxed text-gray-300 shadow-inner"

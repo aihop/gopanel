@@ -32,6 +32,7 @@ func Init() {
 		log.Fatalf("failed to create database directory: %v", err)
 	}
 	dbPath := filepath.Join(global.CONF.System.DbPath, "gopanel.db")
+	fmt.Printf("db path: %v\n", dbPath)
 	db, err := openSQLite(dbPath)
 	if err != nil {
 		log.Fatalf("failed to open database connection: %v", err)

@@ -4,70 +4,19 @@ import (
 	"context"
 	"errors"
 	"os/exec"
-	"runtime"
 	"strings"
 )
 
 func RuntimeCLI(ctx context.Context) (string, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	resolved := ResolveRuntime(ctx)
-	var preferred string
-	if resolved.Kind == RuntimePodman {
-		preferred = "podman"
-	} else {
-		preferred = "docker"
-	}
-	if _, err := exec.LookPath(preferred); err == nil {
-		return preferred, nil
-	}
-	alt := "docker"
-	if preferred == "docker" {
-		alt = "podman"
-	}
-	if _, err := exec.LookPath(alt); err == nil {
-		return alt, nil
-	}
-	return "", errors.New("container runtime cli not found")
+	return DefaultRuntimeAdapter().CLI(ctx)
 }
 
 func RuntimeCommand(ctx context.Context, args ...string) (*exec.Cmd, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	bin, err := RuntimeCLI(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if bin == "podman" && runtime.GOOS == "darwin" {
-		_ = PodmanEnsureReady(ctx)
-	}
-	c := exec.CommandContext(ctx, bin, args...)
-	return c, nil
+	return DefaultRuntimeAdapter().Command(ctx, args...)
 }
 
 func RuntimeCommandWithHost(ctx context.Context, host string, args ...string) (*exec.Cmd, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	bin, err := RuntimeCLI(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if bin == "podman" && runtime.GOOS == "darwin" {
-		_ = PodmanEnsureReady(ctx)
-	}
-	h := strings.TrimSpace(host)
-	if h != "" && h != "podman-cli" && strings.HasPrefix(h, "unix://") {
-		if bin == "podman" {
-			args = append([]string{"--url", h}, args...)
-		} else {
-			args = append([]string{"-H", h}, args...)
-		}
-	}
-	c := exec.CommandContext(ctx, bin, args...)
-	return c, nil
+	return DefaultRuntimeAdapter().CommandWithHost(ctx, host, args...)
 }
 
 func InspectContainerRunning(ctx context.Context, containerName string) (bool, bool, error) {

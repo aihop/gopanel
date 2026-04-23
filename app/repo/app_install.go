@@ -104,7 +104,13 @@ func (a *AppInstallRepo) WithServiceName(serviceName string) DBOption {
 
 func (a *AppInstallRepo) WithContainerName(containerName string) DBOption {
 	return func(db *gorm.DB) *gorm.DB {
-		return db.Where("container_name = ?", containerName)
+		return db.Where(
+			"container_name = ? OR container_name LIKE ? OR container_name LIKE ? OR container_name LIKE ?",
+			containerName,
+			containerName+",%",
+			"%,"+containerName+",%",
+			"%,"+containerName,
+		)
 	}
 }
 

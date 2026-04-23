@@ -53,6 +53,10 @@ export function appsRepairPodmanShortNameAPI() {
 	return http.post(`/apps/repair/short-name`)
 }
 
+export function appsRepairPodmanSubuidAPI() {
+	return http.post(`/apps/repair/subuid`)
+}
+
 export function appsRepairPortConflictAPI(installId: number) {
 	return http.post(`/apps/repair/port-conflict`, { installId })
 }
@@ -79,7 +83,7 @@ export const PrecheckAppInstall = () => {
 	return http.get<any>("/apps/precheck")
 }
 
-export const InstallApp = (install: App.AppInstall) => {
+export const appsInstallAPI = (install: App.AppInstall) => {
 	return http.post<any>("/apps/install", install)
 }
 

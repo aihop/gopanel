@@ -47,6 +47,21 @@ func (r *PipelineRepo) Page(page, limit int) (int64, []model.Pipeline, error) {
 	return total, list, err
 }
 
+func (r *PipelineRepo) ExistsRunnerKey(runnerKey string, excludeID uint) (bool, error) {
+	if runnerKey == "" {
+		return false, nil
+	}
+	query := r.db.Model(&model.Pipeline{}).Where("runner_key = ?", runnerKey)
+	if excludeID > 0 {
+		query = query.Where("id <> ?", excludeID)
+	}
+	var count int64
+	if err := query.Count(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
 type PipelineRecordRepo struct {
 	db *gorm.DB
 }
@@ -83,6 +98,42 @@ func (r *PipelineRecordRepo) UpdateStatus(id uint, status, errMsg string) error 
 
 func (r *PipelineRecordRepo) UpdateArchive(id uint, archiveFile string) error {
 	return r.db.Model(&model.PipelineRecord{}).Where("id = ?", id).Update("archive_file", archiveFile).Error
+}
+
+func (r *PipelineRecordRepo) UpdateCommitHash(id uint, commitHash string) error {
+	return r.db.Model(&model.PipelineRecord{}).Where("id = ?", id).Update("commit_hash", commitHash).Error
+}
+
+func (r *PipelineRecordRepo) UpdateRunnerResult(id uint, releaseDir, containerID string, hostPort int) error {
+	return r.db.Model(&model.PipelineRecord{}).Where("id = ?", id).Updates(map[string]interface{}{
+		"runner_release_dir":  releaseDir,
+		"runner_container_id": containerID,
+		"runner_host_port":    hostPort,
+	}).Error
+}
+
+func (r *PipelineRecordRepo) LatestRunnerContainerID(pipelineId uint) (string, error) {
+	var rec model.PipelineRecord
+	err := r.db.Model(&model.PipelineRecord{}).
+		Where("pipeline_id = ? AND runner_container_id <> ''", pipelineId).
+		Order("id desc").
+		First(&rec).Error
+	if err != nil {
+		return "", err
+	}
+	return rec.RunnerContainerID, nil
+}
+
+func (r *PipelineRecordRepo) LatestByPipelineID(pipelineId uint) (*model.PipelineRecord, error) {
+	var rec model.PipelineRecord
+	err := r.db.Model(&model.PipelineRecord{}).
+		Where("pipeline_id = ?", pipelineId).
+		Order("id desc").
+		First(&rec).Error
+	if err != nil {
+		return nil, err
+	}
+	return &rec, nil
 }
 
 func (r *PipelineRecordRepo) PageByPipeline(pipelineId uint, page, limit int) (int64, []model.PipelineRecord, error) {

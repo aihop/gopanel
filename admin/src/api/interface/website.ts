@@ -47,6 +47,13 @@ export namespace Website {
         appName: string;
         runtimeName: string;
         runtimeDir?: string;
+        pipelineId?: number;
+        codeSource?: string;
+        proxy?: string;
+        IPV6?: boolean;
+        engineEnv?: string;
+        engineMode?: string;
+        engineConfig?: any;
         sslExpireDate: Date;
     }
 
@@ -83,6 +90,8 @@ export namespace Website {
         gitRepo?: string;
         codeDir?: string;
         pipelineId?: number;
+        engineMode?: string;
+        engineConfig?: any;
     }
 
     export interface WebSiteUpdateReq {
@@ -95,6 +104,9 @@ export namespace Website {
         proxy?: string;
         pipelineId?: number;
         codeSource?: string;
+        engineEnv?: string;
+        engineMode?: string;
+        engineConfig?: any;
     }
 
     export interface WebSiteOp {

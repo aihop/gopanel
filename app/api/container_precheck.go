@@ -2,9 +2,11 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -22,10 +24,13 @@ type containerPrecheckResult struct {
 	OS          string `json:"os"`
 	Arch        string `json:"arch"`
 	Runtime     struct {
-		ServiceActive bool `json:"serviceActive"`
-		ApiReady      bool `json:"apiReady"`
+		ServiceActive       bool `json:"serviceActive"`
+		UserServiceActive   bool `json:"userServiceActive"`
+		SystemServiceActive bool `json:"systemServiceActive"`
+		ApiReady            bool `json:"apiReady"`
+		Rootless            bool `json:"rootless"`
 	} `json:"runtime"`
-	CLI         struct {
+	CLI struct {
 		Docker        bool `json:"docker"`
 		Podman        bool `json:"podman"`
 		DockerCompose bool `json:"dockerCompose"`
@@ -55,15 +60,14 @@ func ContainerPrecheck(c fiber.Ctx) error {
 	res.RuntimeKind = string(resolved.Kind)
 	res.RuntimeHost = resolved.Host
 	if res.RuntimeKind == "podman" && runtime.GOOS == "linux" {
-		active := false
-		if _, err := exec.LookPath("systemctl"); err == nil {
-			ctx, cancel := context.WithTimeout(context.Background(), 1200*time.Millisecond)
-			defer cancel()
-			cmd := exec.CommandContext(ctx, "systemctl", "is-active", "podman.socket")
-			out, _ := cmd.CombinedOutput()
-			active = strings.TrimSpace(string(out)) == "active"
+		res.Runtime.Rootless = udocker.IsRootlessPodmanHost(resolved.Host)
+		res.Runtime.SystemServiceActive = systemctlServiceActive(context.Background(), false, "podman.socket")
+		if res.Runtime.Rootless {
+			res.Runtime.UserServiceActive = systemctlServiceActive(context.Background(), true, "podman.socket")
+			res.Runtime.ServiceActive = res.Runtime.UserServiceActive || res.Runtime.SystemServiceActive
+		} else {
+			res.Runtime.ServiceActive = res.Runtime.SystemServiceActive
 		}
-		res.Runtime.ServiceActive = active
 		pingCtx, cancel := context.WithTimeout(context.Background(), 800*time.Millisecond)
 		defer cancel()
 		res.Runtime.ApiReady = udocker.CanPingHost(pingCtx, resolved.Host)
@@ -120,9 +124,10 @@ func ContainerPrecheck(c fiber.Ctx) error {
 	}
 	if res.RuntimeKind == "podman" && runtime.GOOS == "linux" {
 		if res.Runtime.ServiceActive && !res.Runtime.ApiReady {
-			uid := os.Getuid()
 			res.Notes = append(res.Notes, "podman.socket 已启动但 Docker API 不可用：通常是 socket 权限/组不匹配或 rootless user session 未就绪")
-			if uid != 0 {
+			if res.Runtime.Rootless {
+				res.Notes = append(res.Notes, "当前是 rootless Podman：优先检查 linger、user session、systemctl --user podman.socket 和 /run/user/<uid>/podman/podman.sock")
+			} else if os.Getuid() != 0 {
 				res.Notes = append(res.Notes, "可尝试：修复 podman.socket 权限（SocketGroup）或启用 linger（loginctl enable-linger）")
 			}
 		}
@@ -131,4 +136,33 @@ func ContainerPrecheck(c fiber.Ctx) error {
 		res.Notes = append(res.Notes, "gpc helper 未连接：需要 sudo 启动 gpc helper 并配置 --file-roots")
 	}
 	return c.JSON(e.Succ(res))
+}
+
+func systemctlServiceActive(ctx context.Context, user bool, unit string) bool {
+	if _, err := exec.LookPath("systemctl"); err != nil {
+		return false
+	}
+	baseCtx := ctx
+	if baseCtx == nil {
+		baseCtx = context.Background()
+	}
+	c, cancel := context.WithTimeout(baseCtx, 1200*time.Millisecond)
+	defer cancel()
+	args := []string{"is-active", unit}
+	if user {
+		args = append([]string{"--user"}, args...)
+	}
+	cmd := exec.CommandContext(c, "systemctl", args...)
+	if user {
+		runtimeDir := strings.TrimSpace(os.Getenv("XDG_RUNTIME_DIR"))
+		if runtimeDir == "" {
+			runtimeDir = fmt.Sprintf("/run/user/%d", os.Geteuid())
+		}
+		cmd.Env = append(os.Environ(),
+			"XDG_RUNTIME_DIR="+runtimeDir,
+			"DBUS_SESSION_BUS_ADDRESS=unix:path="+filepath.Join(runtimeDir, "bus"),
+		)
+	}
+	out, _ := cmd.CombinedOutput()
+	return strings.TrimSpace(string(out)) == "active"
 }

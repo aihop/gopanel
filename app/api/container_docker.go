@@ -36,6 +36,15 @@ func LoadDockerStatus(c fiber.Ctx) error {
 // @Security Timestamp
 // @Router /container/daemonjson/file [get]
 func LoadDaemonJsonFile(c fiber.Ctx) error {
+	resolved := udocker.ResolveRuntime(context.Background())
+	c.Set("X-Container-Runtime", string(resolved.Kind))
+	c.Set("X-Container-Runtime-Host", resolved.Host)
+	if resolved.Kind != udocker.RuntimeDocker {
+		return c.JSON(e.Succ(""))
+	}
+	if docker.DaemonJsonPath == "" {
+		return c.JSON(e.Succ(""))
+	}
 	if _, err := os.Stat(docker.DaemonJsonPath); err != nil {
 		return c.JSON(e.Error(buserr.Err(err)))
 	}

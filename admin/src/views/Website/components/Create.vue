@@ -119,7 +119,7 @@
           >
             <n-input
               v-model:value="form.codeDir"
-              placeholder="默认：/opt/gopanel/wwwroot/{代号}/releases"
+              placeholder="默认：/opt/gopanel/www/{代号}/releases"
             />
           </n-form-item>
 

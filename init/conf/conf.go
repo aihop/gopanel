@@ -100,11 +100,6 @@ func Init() {
 	gpAgentSock := filepath.Join(base_dir, "agent", "run", "gp-agent.sock")
 	p.SetDefault("system.gp_agent_socket_path", gpAgentSock)
 	gpcSock := filepath.Join(base_dir, "gpc.sock")
-	if runtime.GOOS == "darwin" {
-		if homeDir, err := os.UserHomeDir(); err == nil && homeDir != "" {
-			gpcSock = filepath.Join(homeDir, ".gopanel", "gpc.sock")
-		}
-	}
 	if runtime.GOOS == "windows" {
 		gpcSock = `\\.\pipe\gopanel-gpc`
 	}
@@ -179,9 +174,13 @@ func GlobalConfInit(v *viper.Viper) {
 	global.CONF.System.LicenseVerify = os.Getenv("GOPANEL_LICENSE_VERIFY")
 	global.Viper = v
 
-	if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
+	if baseDir := strings.TrimSpace(os.Getenv("GOPANEL_BASE_DIR")); baseDir != "" {
+		global.CONF.System.BaseDir = filepath.Clean(baseDir)
+	} else if baseDir := strings.TrimSpace(os.Getenv("GPC_BASE_DIR")); baseDir != "" {
+		global.CONF.System.BaseDir = filepath.Clean(baseDir)
+	} else if (runtime.GOOS == "darwin" || runtime.GOOS == "windows") && strings.TrimSpace(global.CONF.System.BaseDir) == "" {
 		homeDir, err := os.UserHomeDir()
-		if err == nil {
+		if err == nil && strings.TrimSpace(homeDir) != "" {
 			global.CONF.System.BaseDir = filepath.Join(homeDir, ".gopanel")
 		}
 	}
@@ -223,4 +222,6 @@ func GlobalConfInit(v *viper.Viper) {
 	global.CONF.System.DbPath = path.Join(global.CONF.System.BaseDir, "db")
 	global.CONF.System.LogPath = path.Join(global.CONF.System.BaseDir, "log")
 	global.CONF.System.TmpDir = path.Join(global.CONF.System.BaseDir, "tmp")
+
+	fmt.Printf("run base dir: %v\n", global.CONF.System.BaseDir)
 }

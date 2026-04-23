@@ -159,13 +159,12 @@ func HttpDefaultStatus(c fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	resp, err := gpagent.Do(ctx, "CADDY_STATUS", nil)
-	fmt.Println("resp", resp, err)
 	if err != nil {
-		return c.JSON(e.Fail(err))
+		return c.JSON(e.Result(err))
 	}
 	var out any
 	if err := json.Unmarshal([]byte(resp.Output), &out); err != nil {
-		return c.JSON(e.Fail(err))
+		return c.JSON(e.Result(err))
 	}
 	return c.JSON(e.Succ(out))
 }

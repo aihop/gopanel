@@ -22,6 +22,10 @@ type Pipeline struct {
 	OutputImage  string `gorm:"column:output_image;type:varchar(255)" json:"outputImage"`
 	ArtifactPath string `gorm:"column:artifact_path;type:varchar(255);not null;default:'dist/'" json:"artifactPath"`
 	ExposePort   int    `gorm:"column:expose_port;type:int;not null;default:80" json:"exposePort"`
+	RunnerKey    string `gorm:"column:runner_key;type:varchar(100)" json:"runnerKey"`
+
+	RunnerMode   string `gorm:"column:runner_mode;type:varchar(32)" json:"runnerMode"`
+	RunnerConfig string `gorm:"column:runner_config;type:longtext" json:"runnerConfig"`
 }
 
 func (Pipeline) TableName() string {
@@ -35,8 +39,13 @@ type PipelineRecord struct {
 	PipelineID   uint      `gorm:"column:pipeline_id;type:integer;not null" json:"pipelineId"`
 	Status       string    `gorm:"column:status;type:varchar(20);not null;default:'pending'" json:"status"` // pending, cloning, building, deploying, success, failed
 	Version      string    `gorm:"column:version;type:varchar(50)" json:"version"`                          // 记录本次执行的版本号
+	CommitHash   string    `gorm:"column:commit_hash;type:varchar(64)" json:"commitHash"`
 	ErrorMessage string    `gorm:"column:error_message;type:text" json:"errorMessage"`
 	ArchiveFile  string    `gorm:"column:archive_file;type:varchar(255)" json:"archiveFile"` // Path to the zip backup
+
+	RunnerReleaseDir  string `gorm:"column:runner_release_dir;type:varchar(255)" json:"runnerReleaseDir"`
+	RunnerContainerID string `gorm:"column:runner_container_id;type:varchar(128)" json:"runnerContainerId"`
+	RunnerHostPort    int    `gorm:"column:runner_host_port;type:int" json:"runnerHostPort"`
 }
 
 func (PipelineRecord) TableName() string {

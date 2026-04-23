@@ -64,7 +64,7 @@ func ListAppInstalled(c fiber.Ctx) error {
 	return c.JSON(e.Succ(list))
 }
 
-func UninstallApp(c fiber.Ctx) error {
+func AppsUninstall(c fiber.Ctx) error {
 	req, err := e.BodyToStruct[service.AppUninstall](c.Body())
 	if err != nil {
 		return c.JSON(e.Fail(err))
@@ -390,7 +390,7 @@ func AppGetBaseDir(c fiber.Ctx) error {
 // @Security ApiKeyAuth
 // @Security Timestamp
 // @Router /apps/install [post]
-func AppInstall(c fiber.Ctx) error {
+func AppsInstall(c fiber.Ctx) error {
 	req, err := e.BodyToStruct[request.AppInstallCreate](c.Body())
 	if err != nil {
 		return c.JSON(e.Fail(err))
@@ -414,6 +414,7 @@ func AppInstallLogsStream(c fiber.Ctx) error {
 		return c.SendString("event: error\ndata: invalid app install name\n\n")
 	}
 
+	active := service.IsAppInstallLoggerActive(name)
 	logger := service.GetAppInstallLogger(name)
 	ch := logger.Subscribe()
 
@@ -429,11 +430,17 @@ func AppInstallLogsStream(c fiber.Ctx) error {
 				return
 			}
 		}
+		if !active {
+			fmt.Fprintf(w, "data: EOF\n\n")
+			_ = w.Flush()
+			return
+		}
 
 		for {
 			select {
 			case logMsg, ok := <-ch:
-				if !ok || logMsg == "EOF" || logMsg == "[\"EOF\"]" || strings.Contains(logMsg, "EOF") {
+				trimmed := strings.TrimSpace(logMsg)
+				if !ok || trimmed == "EOF" || trimmed == "[\"EOF\"]" || strings.HasSuffix(trimmed, " INFO: EOF") {
 					fmt.Fprintf(w, "data: EOF\n\n")
 					_ = w.Flush()
 					return

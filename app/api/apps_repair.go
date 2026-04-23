@@ -6,12 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"runtime"
 	"strconv"
 	"strings"
 
 	"github.com/aihop/gopanel/app/e"
 	"github.com/aihop/gopanel/app/repo"
+	"github.com/aihop/gopanel/app/service"
 	"github.com/aihop/gopanel/utils/env"
 	"github.com/aihop/gopanel/utils/gpc"
 	"github.com/gofiber/fiber/v3"
@@ -61,6 +63,36 @@ func RepairCompose(c fiber.Ctx) error {
 		msg := strings.ToLower(err.Error())
 		if strings.Contains(msg, "unknown action") {
 			return c.JSON(e.Error(errors.New("gpc helper 版本过旧，缺少 COMPOSE_INSTALL 动作；请更新服务器上的 gpc 并重启 gpc.service 后再试")))
+		}
+		return c.JSON(e.Error(err))
+	}
+	return c.JSON(e.Succ(map[string]any{
+		"output": strings.TrimSpace(resp.Output),
+	}))
+}
+
+func RepairPodmanSubuid(c fiber.Ctx) error {
+	if runtime.GOOS != "linux" {
+		return c.JSON(e.Error(errors.New("unsupported platform")))
+	}
+
+	// Default to gopanel user or get from process env
+	username := os.Getenv("USER")
+	if username == "" {
+		username = "gopanel"
+	}
+	if username == "root" {
+		return c.JSON(e.Error(errors.New("subuid repair is not needed for root user")))
+	}
+
+	resp, err := gpc.Do(context.Background(), "REPAIR_PODMAN_SUBUID", map[string]interface{}{
+		"username": username,
+	})
+
+	if err != nil {
+		msg := strings.ToLower(err.Error())
+		if strings.Contains(msg, "unknown action") {
+			return c.JSON(e.Error(errors.New("gpc helper 版本过旧，缺少 REPAIR_PODMAN_SUBUID 动作；请更新服务器上的 gpc 并重启 gpc.service 后再试")))
 		}
 		return c.JSON(e.Error(err))
 	}
@@ -168,6 +200,15 @@ func RepairPortConflict(c fiber.Ctx) error {
 }
 
 func RepairPodmanShortName(c fiber.Ctx) error {
+	if runtime.GOOS == "darwin" {
+		out, err := service.RepairPodmanShortNameOnDarwin(context.Background())
+		if err != nil {
+			return c.JSON(e.Error(err))
+		}
+		return c.JSON(e.Succ(map[string]any{
+			"output": strings.TrimSpace(out),
+		}))
+	}
 	if runtime.GOOS != "linux" {
 		return c.JSON(e.Error(errors.New("unsupported platform")))
 	}

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
-	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -19,7 +18,7 @@ import (
 )
 
 func (u *ContainerService) PageNetwork(req *dto.SearchWithPage) (int64, interface{}, error) {
-	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
+	if docker.IsPodmanRuntime(context.Background()) {
 		return u.pageNetworkPodman(req)
 	}
 	client, err := docker.NewDockerClient()
@@ -85,7 +84,7 @@ func (u *ContainerService) PageNetwork(req *dto.SearchWithPage) (int64, interfac
 }
 
 func (u *ContainerService) ListNetwork() ([]dto.Options, error) {
-	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
+	if docker.IsPodmanRuntime(context.Background()) {
 		return u.listNetworkPodman()
 	}
 	client, err := docker.NewDockerClient()
@@ -108,7 +107,7 @@ func (u *ContainerService) ListNetwork() ([]dto.Options, error) {
 }
 
 func (u *ContainerService) DeleteNetwork(req *dto.BatchDelete) error {
-	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
+	if docker.IsPodmanRuntime(context.Background()) {
 		return u.deleteNetworkPodman(req)
 	}
 	client, err := docker.NewDockerClient()
@@ -127,7 +126,7 @@ func (u *ContainerService) DeleteNetwork(req *dto.BatchDelete) error {
 	return nil
 }
 func (u *ContainerService) CreateNetwork(req *dto.NetworkCreate) error {
-	if docker.IsPodmanRuntime(context.Background()) && runtime.GOOS == "darwin" {
+	if docker.IsPodmanRuntime(context.Background()) {
 		return u.createNetworkPodman(req)
 	}
 	client, err := docker.NewDockerClient()

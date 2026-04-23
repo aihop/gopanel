@@ -73,20 +73,20 @@ func (s WebsiteService) Create(ctx context.Context, req *request.WebsiteCreate, 
 
 	defaultDate, _ := time.Parse(constant.DateLayout, constant.DefaultDate)
 	website := &model.Website{
-		PrimaryDomain: req.PrimaryDomain,
-		Type:          req.Type,
-		Alias:         alias,
-		Remark:        req.Remark,
-		Status:        constant.WebRunning,
-		ExpireDate:    defaultDate,
-		Protocol:      req.Protocol,
-		Proxy:         req.Proxy,
-		SiteDir:       "/",
-		CodeSource:    req.CodeSource,
-		AccessLog:     true,
-		ErrorLog:      true,
-		IPV6:          req.IPV6,
-		PipelineID:    req.PipelineId,
+		PrimaryDomain:  req.PrimaryDomain,
+		Type:           req.Type,
+		Alias:          alias,
+		Remark:         req.Remark,
+		Status:         constant.WebRunning,
+		ExpireDate:     defaultDate,
+		Protocol:       req.Protocol,
+		Proxy:          req.Proxy,
+		SiteDir:        "/",
+		CodeSource:     req.CodeSource,
+		AccessLog:      true,
+		ErrorLog:       true,
+		IPV6:           req.IPV6,
+		PipelineID:     req.PipelineId,
 		AntiCrawler:    req.AntiCrawler,
 		AntiLeech:      req.AntiLeech,
 		RateLimitMode:  req.RateLimitMode,
@@ -132,9 +132,8 @@ func (s WebsiteService) Create(ctx context.Context, req *request.WebsiteCreate, 
 	case constant.WebApp:
 		codeDir := req.CodeDir
 		if codeDir == "" {
-			codeDir = filepath.Join(global.CONF.System.BaseDir, "wwwroot", alias)
+			codeDir = filepath.Join(global.CONF.System.BaseDir, "www", alias)
 		}
-
 		if req.CodeSource == "pipeline" {
 			website.Status = "Pending"
 			website.ContainerID = ""

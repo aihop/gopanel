@@ -55,28 +55,28 @@ func (s *WebsiteService) List(ctx *gormx.Contextx) (websiteDTOs []*response.Webs
 		}
 
 		websiteDTOs = append(websiteDTOs, &response.WebsiteRes{
-			ID:            web.ID,
-			CreatedAt:     web.CreatedAt,
-			UpdatedAt:     web.UpdatedAt,
-			Protocol:      web.Protocol,
-			PrimaryDomain: web.PrimaryDomain,
-			Type:          web.Type,
-			Remark:        web.Remark,
-			Status:        web.Status,
-			CodeSource:    web.CodeSource,
-			Alias:         web.Alias,
-			AppName:       appName,
-			ExpireDate:    web.ExpireDate,
-			RuntimeName:   runtimeName,
-			RuntimeDir:    web.RuntimeDir,
-			SitePath:      sitePath,
-			AppInstallID:  appInstallID,
-			PipelineID:    web.PipelineID,
-			RuntimeType:   runtimeType,
-			OtherDomains:  otherDomains,
-			DefaultServer: web.DefaultServer,
-			Proxy:         web.Proxy,
-			IPV6:          web.IPV6,
+			ID:             web.ID,
+			CreatedAt:      web.CreatedAt,
+			UpdatedAt:      web.UpdatedAt,
+			Protocol:       web.Protocol,
+			PrimaryDomain:  web.PrimaryDomain,
+			Type:           web.Type,
+			Remark:         web.Remark,
+			Status:         web.Status,
+			CodeSource:     web.CodeSource,
+			Alias:          web.Alias,
+			AppName:        appName,
+			ExpireDate:     web.ExpireDate,
+			RuntimeName:    runtimeName,
+			RuntimeDir:     web.RuntimeDir,
+			SitePath:       sitePath,
+			AppInstallID:   appInstallID,
+			PipelineID:     web.PipelineID,
+			RuntimeType:    runtimeType,
+			OtherDomains:   otherDomains,
+			DefaultServer:  web.DefaultServer,
+			Proxy:          web.Proxy,
+			IPV6:           web.IPV6,
 			AntiCrawler:    web.AntiCrawler,
 			AntiLeech:      web.AntiLeech,
 			RateLimitMode:  web.RateLimitMode,
@@ -115,7 +115,7 @@ func (s *WebsiteService) DeployFromPipeline(ctx context.Context, pipelineID uint
 			return summary, ctx.Err()
 		}
 		global.LOG.Infof("Triggering deployment for website %s (ID: %d) from pipeline %d", w.Alias, w.ID, pipelineID)
-		releaseDir := filepath.Join(global.CONF.System.BaseDir, "wwwroot", w.Alias, "releases", version)
+		releaseDir := filepath.Join(global.CONF.System.BaseDir, "www", w.Alias, "releases", version)
 		if _, err := ProcessWebsiteDeployment(w, pipelineRecordID, version, artifactPath, releaseDir, "", imageTag); err != nil {
 			summary.Failed++
 			failed = append(failed, fmt.Sprintf("%s: %v", w.Alias, err))

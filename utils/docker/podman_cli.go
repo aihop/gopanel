@@ -187,8 +187,31 @@ func PodmanPush(ctx context.Context, tagName string, creds string) (string, erro
 	return runPodman(ctx, args...)
 }
 
+func PodmanBuild(ctx context.Context, contextDir string, dockerfileName string, tags []string, labels map[string]string) (string, error) {
+	args := []string{"build"}
+	for _, tag := range tags {
+		tag = strings.TrimSpace(tag)
+		if tag == "" {
+			continue
+		}
+		args = append(args, "-t", tag)
+	}
+	if strings.TrimSpace(dockerfileName) != "" {
+		args = append(args, "-f", dockerfileName)
+	}
+	for key, value := range labels {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		args = append(args, "--label", key+"="+value)
+	}
+	args = append(args, contextDir)
+	return runPodman(ctx, args...)
+}
+
 func PodmanRunBuild(ctx context.Context, contextDir string, dockerfileName string, tag string) (string, error) {
-	return runPodman(ctx, "build", "-t", tag, "-f", dockerfileName, contextDir)
+	return PodmanBuild(ctx, contextDir, dockerfileName, []string{tag}, nil)
 }
 
 func PodmanVersion(ctx context.Context) (string, error) {

@@ -64,7 +64,6 @@ func AppDetailGet(c fiber.Ctx) error {
 	if err != nil || id <= 0 {
 		return c.JSON(e.Fail(errors.New("invalid app id")))
 	}
-
 	version := c.Query("version")
 	res, err := appService.GetAppDetail(c, uint(id), version)
 	if err != nil {

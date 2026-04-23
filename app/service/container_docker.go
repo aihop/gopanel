@@ -7,8 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/user"
 	"path"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -57,53 +59,37 @@ type logOption struct {
 
 func (u *DockerService) LoadDockerStatus() string {
 	ctx := context.Background()
-	if docker.IsPodmanRuntime(ctx) && runtime.GOOS == "darwin" {
-		if err := docker.PodmanEnsureReady(ctx); err != nil {
-			return constant.Stopped
+	resolved := docker.ResolveRuntime(ctx)
+	if resolved.Kind == docker.RuntimePodman {
+		if runtime.GOOS == "darwin" {
+			if err := docker.PodmanEnsureReady(ctx); err != nil {
+				return constant.Stopped
+			}
+			return constant.StatusRunning
 		}
-		return constant.StatusRunning
-	}
-	if docker.IsPodmanRuntime(ctx) && runtime.GOOS == "linux" {
-		resolved := docker.ResolveRuntime(ctx)
 		socketExists := false
-		if resolved.Kind == docker.RuntimePodman && strings.HasPrefix(resolved.Host, "unix://") {
+		if strings.HasPrefix(resolved.Host, "unix://") {
 			if _, err := os.Stat(strings.TrimPrefix(resolved.Host, "unix://")); err == nil {
 				socketExists = true
 			}
 		}
 		serviceActive := podmanSocketServiceActive(ctx) || socketExists
-		client, err := docker.NewDockerClient()
-		if err == nil {
-			defer client.Close()
-			pingCtx, cancel := context.WithTimeout(ctx, 800*time.Millisecond)
-			defer cancel()
-			if _, err := client.Ping(pingCtx); err == nil {
-				return constant.StatusRunning
-			}
+		pingCtx, cancel := context.WithTimeout(ctx, 800*time.Millisecond)
+		defer cancel()
+		if docker.CanPingHost(pingCtx, resolved.Host) {
+			return constant.StatusRunning
 		}
 		if serviceActive {
 			return constant.StatusRunning
 		}
 		return constant.Stopped
 	}
-	socketExists := false
-	if runtime.GOOS == "linux" {
-		resolved := docker.ResolveRuntime(ctx)
-		if resolved.Kind == docker.RuntimePodman && strings.HasPrefix(resolved.Host, "unix://") {
-			if _, err := os.Stat(strings.TrimPrefix(resolved.Host, "unix://")); err == nil {
-				socketExists = true
-			}
-		}
-	}
-	client, err := docker.NewDockerClient()
+	client, err := docker.NewRuntimeAPIClient()
 	if err != nil {
 		return constant.Stopped
 	}
 	defer client.Close()
 	if _, err := client.Ping(context.Background()); err != nil {
-		if socketExists {
-			return constant.StatusRunning
-		}
 		return constant.Stopped
 	}
 
@@ -122,10 +108,11 @@ func (u *DockerService) LoadDockerConf() *dto.DaemonJsonConf {
 	data.RuntimeKind = string(resolved.Kind)
 	data.RuntimeHost = resolved.Host
 	data.Capabilities = dto.RuntimeCapabilities{
-		DaemonJson: resolved.Kind == docker.RuntimeDocker && runtime.GOOS == "linux",
-		DockerAPI:  !(resolved.Kind == docker.RuntimePodman && runtime.GOOS == "darwin"),
-		PodmanCLI:  resolved.Kind == docker.RuntimePodman && runtime.GOOS == "darwin",
-		Compose:    composeAvailable(),
+		DaemonJson:           resolved.Kind == docker.RuntimeDocker && runtime.GOOS == "linux",
+		DockerAPI:            !(resolved.Kind == docker.RuntimePodman && runtime.GOOS == "darwin"),
+		PodmanCLI:            resolved.Kind == docker.RuntimePodman,
+		PodmanRegistriesConf: resolved.Kind == docker.RuntimePodman && (runtime.GOOS == "linux" || runtime.GOOS == "darwin"),
+		Compose:              composeAvailable(),
 	}
 	if resolved.Kind == docker.RuntimePodman {
 		data.ContainerType = "podman"
@@ -133,6 +120,13 @@ func (u *DockerService) LoadDockerConf() *dto.DaemonJsonConf {
 			if err := docker.PodmanEnsureReady(ctx); err == nil {
 				data.Status = constant.StatusRunning
 				data.ServiceActive = true
+				if mirrors, err := podmanMachineRegistriesGet(ctx); err == nil {
+					data.Mirrors = append(data.Mirrors, mirrors...)
+				} else {
+					data.Capabilities.PodmanRegistriesConf = false
+				}
+			} else {
+				data.Capabilities.PodmanRegistriesConf = false
 			}
 			if v, err := docker.PodmanVersion(ctx); err == nil && strings.TrimSpace(v) != "" {
 				data.Version = v
@@ -150,7 +144,7 @@ func (u *DockerService) LoadDockerConf() *dto.DaemonJsonConf {
 			defer cancel()
 			data.ApiReady = docker.CanPingHost(pingCtx, resolved.Host)
 			if data.ApiReady {
-				client, err := docker.NewDockerClient()
+				client, err := docker.NewRuntimeAPIClient()
 				if err == nil {
 					defer client.Close()
 					data.Status = constant.StatusRunning
@@ -165,8 +159,14 @@ func (u *DockerService) LoadDockerConf() *dto.DaemonJsonConf {
 			}
 			// Load registries.conf for mirrors in linux podman
 			if runtime.GOOS == "linux" {
-				out, err := gpc.Do(ctx, "PODMAN_REGISTRIES_GET", nil)
-				if err == nil {
+				var params map[string]interface{}
+				if home := podmanRootlessHomeFromHost(resolved.Host); home != "" {
+					params = map[string]interface{}{"home": home}
+				}
+				out, err := gpc.Do(ctx, "PODMAN_REGISTRIES_GET", params)
+				if err != nil {
+					data.Capabilities.PodmanRegistriesConf = false
+				} else {
 					var pmRes map[string]interface{}
 					if json.Unmarshal([]byte(out.Output), &pmRes) == nil {
 						if m, ok := pmRes["mirrors"].([]interface{}); ok {
@@ -182,7 +182,7 @@ func (u *DockerService) LoadDockerConf() *dto.DaemonJsonConf {
 		}
 		return &data
 	}
-	client, err := docker.NewDockerClient()
+	client, err := docker.NewRuntimeAPIClient()
 	if err != nil {
 		data.Status = constant.Stopped
 	} else {
@@ -250,23 +250,24 @@ func (u *DockerService) LoadDockerConf() *dto.DaemonJsonConf {
 }
 
 func (u *DockerService) UpdateConf(req dto.SettingUpdate) error {
-	if runtime.GOOS != "linux" {
-		return errors.New("unsupported platform")
-	}
-
-	if docker.IsPodmanRuntime(context.Background()) {
-		if req.Key == "Mirrors" {
+	if err := ensureLinuxDockerConfigRuntime(); err != nil {
+		if isPodmanRuntimeConfigured() && req.Key == "Mirrors" {
 			req.Value = strings.TrimSuffix(req.Value, ",")
 			var mirrors []string
 			if len(req.Value) > 0 {
 				mirrors = strings.Split(req.Value, ",")
 			}
-			_, err := gpc.Do(context.Background(), "PODMAN_REGISTRIES_SET", map[string]interface{}{
-				"mirrors": mirrors,
-			})
+			if runtime.GOOS == "darwin" {
+				return podmanMachineRegistriesSet(context.Background(), mirrors)
+			}
+			params := map[string]interface{}{"mirrors": mirrors}
+			if home := podmanRootlessHomeFromHost(docker.ResolveRuntime(context.Background()).Host); home != "" {
+				params["home"] = home
+			}
+			_, err := gpc.Do(context.Background(), "PODMAN_REGISTRIES_SET", params)
 			return err
 		}
-		return errors.New("podman runtime does not support docker daemon.json management")
+		return err
 	}
 
 	err := createIfNotExistDaemonJsonFile()
@@ -392,11 +393,8 @@ func createIfNotExistDaemonJsonFile() error {
 }
 
 func (u *DockerService) UpdateLogOption(req dto.LogOption) error {
-	if docker.IsPodmanRuntime(context.Background()) {
-		return errors.New("podman runtime does not support docker daemon.json management")
-	}
-	if runtime.GOOS != "linux" {
-		return errors.New("unsupported platform")
+	if err := ensureLinuxDockerConfigRuntime(); err != nil {
+		return err
 	}
 	err := createIfNotExistDaemonJsonFile()
 	if err != nil {
@@ -433,11 +431,8 @@ func (u *DockerService) UpdateLogOption(req dto.LogOption) error {
 }
 
 func (u *DockerService) UpdateIpv6Option(req dto.Ipv6Option) error {
-	if docker.IsPodmanRuntime(context.Background()) {
-		return errors.New("podman runtime does not support docker daemon.json management")
-	}
-	if runtime.GOOS != "linux" {
-		return errors.New("unsupported platform")
+	if err := ensureLinuxDockerConfigRuntime(); err != nil {
+		return err
 	}
 	err := createIfNotExistDaemonJsonFile()
 	if err != nil {
@@ -482,11 +477,8 @@ func (u *DockerService) UpdateIpv6Option(req dto.Ipv6Option) error {
 }
 
 func (u *DockerService) UpdateConfByFile(req dto.DaemonJsonUpdateByFile) error {
-	if docker.IsPodmanRuntime(context.Background()) {
-		return errors.New("podman runtime does not support docker daemon.json management")
-	}
-	if runtime.GOOS != "linux" {
-		return errors.New("unsupported platform")
+	if err := ensureLinuxDockerConfigRuntime(); err != nil {
+		return err
 	}
 	if len(req.File) == 0 {
 		_ = os.Remove(constant.DaemonJsonPath)
@@ -524,15 +516,8 @@ func (u *DockerService) OperateDocker(req dto.DockerOperation) error {
 		return errors.New("operation is empty")
 	}
 
-	if docker.IsPodmanRuntime(context.Background()) {
+	if isPodmanRuntimeConfigured() {
 		return u.operatePodman(req.Operation)
-	}
-
-	if (strings.TrimSpace(global.CONF.System.ContainerRuntime) == "" || strings.EqualFold(global.CONF.System.ContainerRuntime, "auto")) && !hasDockerSockPathSetting() && isPodmanInstalled() {
-		if err := u.operatePodman(req.Operation); err != nil {
-			return err
-		}
-		return nil
 	}
 
 	if runtime.GOOS == "darwin" {
@@ -670,6 +655,58 @@ func changeLogOption(daemonMap map[string]interface{}, logMaxFile, logMaxSize st
 			daemonMap["log-opts"] = optsMap
 		}
 	}
+}
+
+func isPodmanRuntimeConfigured() bool {
+	return docker.ResolveRuntime(context.Background()).Kind == docker.RuntimePodman
+}
+
+func podmanRootlessHomeFromHost(host string) string {
+	if !docker.IsRootlessPodmanHost(host) {
+		return ""
+	}
+	host = strings.TrimSpace(host)
+	if !strings.HasPrefix(host, "unix://") {
+		return ""
+	}
+	sockPath := strings.TrimPrefix(host, "unix://")
+
+	var uidStr string
+	if idx := strings.Index(sockPath, "/run/user/"); idx >= 0 {
+		rest := sockPath[idx+len("/run/user/"):]
+		if cut := strings.Index(rest, "/"); cut > 0 {
+			uidStr = rest[:cut]
+		}
+	}
+	if uidStr == "" {
+		if runtimeDir := strings.TrimSpace(os.Getenv("XDG_RUNTIME_DIR")); runtimeDir != "" {
+			runtimeDir = strings.TrimSuffix(runtimeDir, "/")
+			if parts := strings.Split(runtimeDir, "/"); len(parts) > 0 {
+				last := parts[len(parts)-1]
+				if _, err := strconv.Atoi(last); err == nil {
+					uidStr = last
+				}
+			}
+		}
+	}
+	if uidStr == "" {
+		return ""
+	}
+	usr, err := user.LookupId(uidStr)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(usr.HomeDir)
+}
+
+func ensureLinuxDockerConfigRuntime() error {
+	if runtime.GOOS != "linux" {
+		return errors.New("unsupported platform")
+	}
+	if isPodmanRuntimeConfigured() {
+		return errors.New("podman runtime does not support docker daemon.json management")
+	}
+	return nil
 }
 
 func validateDockerConfig() error {

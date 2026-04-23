@@ -2,9 +2,13 @@ package api
 
 import (
 	"bufio"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/aihop/gopanel/app/dto/request"
@@ -56,6 +60,7 @@ func sanitizePipelineListForSubAdmin(list []model.Pipeline) []model.Pipeline {
 		item.AuthData = ""
 		item.BuildScript = ""
 		item.RepoUrl = ""
+		item.RunnerConfig = ""
 		sanitized = append(sanitized, item)
 	}
 	return sanitized
@@ -71,6 +76,12 @@ func PipelineCreate(c fiber.Ctx) error {
 	}
 
 	pipelineRepo := repo.NewPipeline(global.DB)
+	runnerKey := normalizeRunnerKey(req.RunnerKey)
+	if req.RunnerMode == "runner" {
+		if err := validateRunnerKey(pipelineRepo, runnerKey, 0, ""); err != nil {
+			return c.JSON(e.Fail(err))
+		}
+	}
 	pipeline := &model.Pipeline{
 		Name:         req.Name,
 		Description:  req.Description,
@@ -84,6 +95,13 @@ func PipelineCreate(c fiber.Ctx) error {
 		OutputImage:  req.OutputImage,
 		ArtifactPath: req.ArtifactPath,
 		ExposePort:   req.ExposePort,
+		RunnerKey:    runnerKey,
+		RunnerMode:   req.RunnerMode,
+	}
+	if len(req.RunnerConfig) > 0 {
+		if b, e := json.Marshal(req.RunnerConfig); e == nil {
+			pipeline.RunnerConfig = string(b)
+		}
 	}
 
 	if err := pipelineRepo.Create(pipeline); err != nil {
@@ -106,6 +124,12 @@ func PipelineUpdate(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
+	runnerKey := normalizeRunnerKey(req.RunnerKey)
+	if req.RunnerMode == "runner" {
+		if err := validateRunnerKey(pipelineRepo, runnerKey, pipeline.ID, pipeline.RunnerKey); err != nil {
+			return c.JSON(e.Fail(err))
+		}
+	}
 
 	pipeline.Name = req.Name
 	pipeline.Description = req.Description
@@ -119,11 +143,63 @@ func PipelineUpdate(c fiber.Ctx) error {
 	pipeline.OutputImage = req.OutputImage
 	pipeline.ArtifactPath = req.ArtifactPath
 	pipeline.ExposePort = req.ExposePort
+	pipeline.RunnerKey = runnerKey
+	pipeline.RunnerMode = req.RunnerMode
+	if req.RunnerConfig != nil {
+		if len(req.RunnerConfig) == 0 {
+			pipeline.RunnerConfig = ""
+		} else if b, e := json.Marshal(req.RunnerConfig); e == nil {
+			pipeline.RunnerConfig = string(b)
+		}
+	}
 
 	if err := pipelineRepo.Update(pipeline); err != nil {
 		return c.JSON(e.Fail(err))
 	}
 	return c.JSON(e.Succ())
+}
+
+func normalizeRunnerKey(raw string) string {
+	key := strings.ToLower(strings.TrimSpace(raw))
+	if key == "" {
+		return ""
+	}
+	var b strings.Builder
+	lastDash := false
+	for _, r := range key {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+			lastDash = false
+		case r == '-' || r == '_' || r == ' ':
+			if b.Len() > 0 && !lastDash {
+				b.WriteByte('-')
+				lastDash = true
+			}
+		}
+	}
+	out := strings.Trim(b.String(), "-")
+	return out
+}
+
+func validateRunnerKey(pipelineRepo *repo.PipelineRepo, runnerKey string, excludeID uint, currentRunnerKey string) error {
+	if runnerKey == "" {
+		return errors.New("流水线标识不能为空")
+	}
+	exists, err := pipelineRepo.ExistsRunnerKey(runnerKey, excludeID)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return fmt.Errorf("流水线标识 `%s` 已存在，请换一个", runnerKey)
+	}
+	appDir := filepath.Join(global.CONF.System.BaseDir, "apps", runnerKey)
+	if _, err := os.Stat(appDir); err == nil && strings.TrimSpace(currentRunnerKey) != runnerKey {
+		return fmt.Errorf("安装目录 `%s` 已存在，流水线标识重复了，请换其他的", appDir)
+	} else if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 func PipelineDelete(c fiber.Ctx) error {

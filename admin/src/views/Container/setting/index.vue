@@ -43,7 +43,7 @@
         v-if="dockerOnly"
         class="mt-3 rounded-lg bg-orange-50 p-3 text-xs text-orange-700"
       >
-        当前运行时为 {{ precheck.runtimeKind }}，此页面的 daemon.json/镜像加速/iptables 等配置主要针对 Docker。Podman 模式下将禁用相关编辑项。
+        当前运行时为 {{ precheck.runtimeKind }}，此页面的 daemon.json/iptables 等配置主要针对 Docker。Podman 模式下仅支持镜像加速（Linux 需连接 GPC；macOS 需 podman machine 可用）。
       </div>
     </div>
 
@@ -134,7 +134,7 @@
                     <n-input
                       v-if="daemon.registryMirrors"
                       type="textarea"
-                      :disabled="!daemon.capabilities?.daemonJson && !daemon.capabilities?.podmanCLI"
+                      :disabled="!(daemon.capabilities?.daemonJson || daemon.capabilities?.podmanRegistriesConf || (precheck?.os === 'linux' && precheck?.runtimeKind === 'podman' && precheck?.gpc?.reachable))"
                       :value="daemon.registryMirrors.join('\n')"
                       style="min-height: 34px"
                       placeholder="https://dockerpull.pw\nhttps://dockerhub.icu\nhttps://hub.rat.dev\nhttps://register.librax.org\nhttps://docker-0.unsee.tech"
@@ -142,7 +142,7 @@
                       @update:value="updateMirrorUrls($event, 'registryMirrors')"
                     />
                     <n-button
-                      :disabled="!daemon.capabilities?.daemonJson && !daemon.capabilities?.podmanCLI"
+                      :disabled="!(daemon.capabilities?.daemonJson || daemon.capabilities?.podmanRegistriesConf || (precheck?.os === 'linux' && precheck?.runtimeKind === 'podman' && precheck?.gpc?.reachable))"
                       @click="openDrawer('registryMirrors')"
                     >
                       <template #icon>
@@ -463,6 +463,15 @@ async function updateDockerStatus(operation: string) {
 }
 const daemon = ref<any>({})
 const daemonLoading = ref(false)
+const daemonRetryCount = ref(0)
+const daemonRetryTimer = ref<number | null>(null)
+
+function clearDaemonRetry() {
+	if (daemonRetryTimer.value) {
+		window.clearTimeout(daemonRetryTimer.value)
+		daemonRetryTimer.value = null
+	}
+}
 
 const precheck = ref<any>(null)
 const dockerOnly = computed(() => {
@@ -504,15 +513,12 @@ async function autoRepair() {
 	autoRepairLoading.value = true
 	try {
 		message.info("正在尝试自动修复…")
-		await repairPodmanSocket()
-		await loadPrecheck()
-		if (precheck.value?.runtime?.apiReady) {
-			message.success("自动修复成功")
-			return
-		}
+		const runtimeInfo: any = precheck.value?.runtime || {}
+		const isRootless = !!runtimeInfo.rootless
 		const notes = Array.isArray(precheck.value?.notes) ? precheck.value.notes.join(" ").toLowerCase() : ""
 		const maybeRootless = typeof precheck.value?.runtimeHost === "string" && precheck.value.runtimeHost.includes("/run/user/")
 		const needLinger =
+			isRootless ||
 			maybeRootless ||
 			notes.includes("linger") ||
 			notes.includes("user session") ||
@@ -525,6 +531,12 @@ async function autoRepair() {
 				message.success("自动修复成功")
 				return
 			}
+		}
+		await repairPodmanSocket()
+		await loadPrecheck()
+		if (precheck.value?.runtime?.apiReady) {
+			message.success("自动修复成功")
+			return
 		}
 		message.warning("自动修复未完全成功，请查看提示信息")
 	} finally {
@@ -575,17 +587,32 @@ async function loadPrecheck() {
 		}
 	} catch (e) {}
 }
-function getDaemon() {
+
+function getDaemon(resetRetry = false) {
+	if (resetRetry) {
+		daemonRetryCount.value = 0
+	}
+	clearDaemonRetry()
 	daemonLoading.value = true
 	containerDaemonConfigAPI()
 		.then((res: any) => {
 			if (isSucc(res.code)) {
 				daemon.value = res.data || {}
+				daemonRetryCount.value = 0
 			}
 		})
-		.then(() => {
-			daemonLoading.value = false
-		}, () => {
+		.catch((e: any) => {
+			if (daemonRetryCount.value === 0) {
+				message.warning("容器运行时配置暂时不可用，正在自动重试…")
+			}
+			if (daemonRetryCount.value < 8) {
+				daemonRetryCount.value += 1
+				daemonRetryTimer.value = window.setTimeout(() => getDaemon(false), 1500)
+				return
+			}
+			message.error(e?.message || "获取容器运行时配置失败")
+		})
+		.finally(() => {
 			daemonLoading.value = false
 		})
 }
@@ -602,7 +629,8 @@ const showMirrorSettingsDrawer = ref(false)
 
 const DockerDrawerModel = ref()
 function openDrawer(key: string) {
-	DockerDrawerModel.value.open(daemon.value[key], key)
+	const needRestart = !!daemon.value?.capabilities?.daemonJson
+	DockerDrawerModel.value.open(daemon.value[key], key, { needRestart })
 }
 
 const confirmationInput = ref("")
@@ -625,6 +653,9 @@ const dockerConf = ref("")
 
 // 拉取daemon.json文件内容
 async function fetchDaemonJsonFile() {
+	if (!daemon.value?.capabilities?.daemonJson) {
+		return
+	}
 	const res = await loadDaemonFile()
 	if (res && res.code === 0 && typeof res.data === "string") {
 		dockerConf.value = res.data
@@ -633,9 +664,8 @@ async function fetchDaemonJsonFile() {
 
 // 页面加载时拉取一次
 onMounted(() => {
-	fetchDaemonJsonFile()
 	loadPrecheck()
-	getDaemon()
+	getDaemon(true)
 })
 
 // naive-ui n-tabs的change事件

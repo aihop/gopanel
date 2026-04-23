@@ -1,0 +1,20 @@
+config: ./conf.dev.yaml
+help: false
+log:
+  level: debug
+  log_name: default
+  log_suffix: .log
+  max_backup: 10
+reset-password: false
+show-config: false
+system:
+  base_dir: /Users/coller/.gopanel
+  container_runtime: auto
+  encrypt_key: TfJNY0Lk7YqRLwD2CZKn1nZVwWkcXnya
+  entrance: default
+  gp_agent_socket_path: /Users/coller/.gopanel/agent/run/gp-agent.sock
+  gpc_socket_path: /Users/coller/.gopanel/gpc.sock
+  mode: dev
+  port: :5470
+  version: 1.0.0
+version: false

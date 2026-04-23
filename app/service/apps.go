@@ -35,6 +35,7 @@ import (
 	"github.com/aihop/gopanel/utils/env"
 	"github.com/aihop/gopanel/utils/files"
 	httpUtil "github.com/aihop/gopanel/utils/http"
+	"github.com/aihop/gopanel/utils/random"
 )
 
 type AppService struct {
@@ -211,8 +212,23 @@ func (a AppService) GetAppDetail(ctx fiber.Ctx, id uint, version string) (*respo
 		global.DB.Save(&appDetail)
 	}
 
-	paramMap := make(map[string]interface{})
+	var paramMap dto.AppForm
 	if err := json.Unmarshal([]byte(appDetail.Params), &paramMap); err == nil {
+		if len(paramMap.FormFields) > 0 {
+			for i := range paramMap.FormFields {
+				v := &paramMap.FormFields[i]
+				switch v.Type {
+				case "user":
+					if str, ok := v.Default.(string); ok {
+						v.Default = "gopanel_" + str
+					}
+				case "password":
+					if _, ok := v.Default.(string); ok {
+						v.Default = random.RandString(16)
+					}
+				}
+			}
+		}
 		res.Params = paramMap
 	}
 
@@ -340,11 +356,12 @@ var InitTypes = map[string]struct{}{
 }
 
 func (a AppService) Install(ctx context.Context, req request.AppInstallCreate) (appInstall *model.AppInstall, err error) {
+	// 创建默认网络
 	if err = docker.CreateDefaultDockerNetwork(); err != nil {
 		err = errors.New(constant.ErrGoPanelNetworkFailed + err.Error())
 		return
 	}
-
+	// 检查应用名称是否存在
 	if list, _ := appInstallRepo.ListBy(commonRepo.WithByLowerName(req.Name)); len(list) > 0 {
 		err = errors.New(constant.ErrAppNameExist)
 		return
@@ -355,11 +372,13 @@ func (a AppService) Install(ctx context.Context, req request.AppInstallCreate) (
 		appDetail model.AppDetail
 		app       model.App
 	)
+	// 检查应用详情是否存在
 	appDetailRepo := repo.NewAppDetail()
 	appDetail, err = appDetailRepo.GetFirst(commonRepo.WithByID(req.AppDetailId))
 	if err != nil {
 		return
 	}
+	// 检查应用是否存在
 	app, err = appRepo.GetFirst(commonRepo.WithByID(appDetail.AppId))
 	if err != nil {
 		return
@@ -383,6 +402,7 @@ func (a AppService) Install(ctx context.Context, req request.AppInstallCreate) (
 		}
 	}
 
+	// 检查应用是否需要端口
 	if err = checkRequiredAndLimit(app); err != nil {
 		return
 	}
@@ -499,7 +519,15 @@ func (a AppService) Install(ctx context.Context, req request.AppInstallCreate) (
 				logger.Error("Installation failed: %s", installErr.Error())
 				_ = appInstallRepo.Save(context.Background(), appInstall)
 			} else {
-				logger.Info("Installation completed successfully")
+				if appInstall.Status == constant.Running {
+					logger.Info("Installation completed successfully")
+				} else {
+					finalMsg := strings.TrimSpace(appInstall.Message)
+					if finalMsg == "" {
+						finalMsg = fmt.Sprintf("installation finished but final status is %s", appInstall.Status)
+					}
+					logger.Error("Installation did not enter running state: %s", finalMsg)
+				}
 			}
 			logger.Info("EOF")
 		}()
@@ -586,6 +614,10 @@ func upApp(appInstall *model.AppInstall, pullImages bool, logger *AppInstallLogg
 					err = errors.New("podman short-name not resolved")
 				} else if strings.Contains(msg, "invalid status code") && strings.Contains(msg, "404") && strings.Contains(msg, "error fetching blob") {
 					err = errors.New("compose pull registry 404")
+				} else if strings.Contains(msg, "unable to copy from source") && strings.Contains(msg, "parsing image configuration") && strings.Contains(msg, ": eof") {
+					err = errors.New("compose pull image configuration eof")
+				} else if strings.Contains(msg, "unable to copy from source") && strings.Contains(msg, ": eof") {
+					err = errors.New("compose pull stream eof")
 				}
 			}
 			if err != nil {
@@ -619,6 +651,10 @@ location = "docker.io"
 							err2 = errors.New("compose pull exit code not zero")
 						} else if strings.Contains(msg2, "short-name") && strings.Contains(msg2, "did not resolve") {
 							err2 = errors.New("podman short-name not resolved")
+						} else if strings.Contains(msg2, "unable to copy from source") && strings.Contains(msg2, "parsing image configuration") && strings.Contains(msg2, ": eof") {
+							err2 = errors.New("compose pull image configuration eof")
+						} else if strings.Contains(msg2, "unable to copy from source") && strings.Contains(msg2, ": eof") {
+							err2 = errors.New("compose pull stream eof")
 						}
 					}
 					if err2 == nil {
@@ -650,25 +686,108 @@ location = "docker.io"
 	}
 	runErr := upProject(appInstall)
 	if runErr == nil {
+		// 先退出 Installing，避免安装后首次同步被短路跳过。
 		appInstall.Status = constant.Running
+		appInstall.Message = ""
 	} else {
 		appInstall.Status = constant.UpErr
 	}
 	exist, _ := appInstallRepo.GetFirst(commonRepo.WithByID(appInstall.ID))
 	if exist.ID > 0 {
-		containerNames, err := getContainerNames(*appInstall)
-		if err != nil {
-			if runErr != nil {
+		if runErr == nil {
+			if confirmErr := waitForInstalledContainers(appInstall, logger); confirmErr != nil {
+				appInstall.Status = constant.UpErr
+				appInstall.Message = confirmErr.Error()
+				_ = appInstallRepo.Save(context.Background(), appInstall)
+				return confirmErr
+			}
+		} else {
+			containerNames, err := getContainerNames(*appInstall)
+			if err != nil {
 				return runErr
 			}
-			return err
-		}
-		if len(containerNames) > 0 {
-			appInstall.ContainerName = strings.Join(containerNames, ",")
+			if len(containerNames) > 0 {
+				appInstall.ContainerName = strings.Join(containerNames, ",")
+			}
 		}
 		_ = appInstallRepo.Save(context.Background(), appInstall)
 	}
 	return runErr
+}
+
+func waitForInstalledContainers(appInstall *model.AppInstall, logger *AppInstallLogger) error {
+	deadline := time.Now().Add(15 * time.Second)
+	var lastErr error
+	for attempt := 1; ; attempt++ {
+		containerNames, err := getContainerNames(*appInstall)
+		if err != nil {
+			lastErr = err
+		} else if len(containerNames) > 0 {
+			appInstall.ContainerName = strings.Join(containerNames, ",")
+		}
+
+		appInstall.Status = constant.Running
+		appInstall.Message = ""
+		if err := syncAppInstallStatus(appInstall, true); err != nil {
+			lastErr = err
+		} else {
+			stateDesc, descErr := describeInstallContainerState(appInstall)
+			if descErr != nil {
+				lastErr = descErr
+			}
+			diagDesc := ""
+			if d, diagErr := describeInstallContainerDiagnostics(appInstall); diagErr == nil {
+				diagDesc = strings.TrimSpace(d)
+			}
+			switch appInstall.Status {
+			case constant.Running:
+				return nil
+			case constant.Error, constant.UnHealthy, constant.Stopped:
+				if stateDesc != "" {
+					if diagDesc != "" {
+						lastErr = errors.New(stateDesc + "; " + diagDesc)
+					} else {
+						lastErr = errors.New(stateDesc)
+					}
+				} else if strings.TrimSpace(appInstall.Message) != "" {
+					lastErr = errors.New(appInstall.Message)
+				} else {
+					lastErr = fmt.Errorf("container status is %s", appInstall.Status)
+				}
+			default:
+				if stateDesc != "" || diagDesc != "" {
+					if stateDesc != "" && diagDesc != "" {
+						lastErr = errors.New(stateDesc + "; " + diagDesc)
+					} else if stateDesc != "" {
+						lastErr = errors.New(stateDesc)
+					} else {
+						lastErr = errors.New(diagDesc)
+					}
+				}
+			}
+		}
+
+		if time.Now().After(deadline) {
+			break
+		}
+		if logger != nil && (attempt == 1 || attempt%3 == 0) {
+			logger.Info("Waiting for container(s) to enter running state...")
+			if stateDesc, err := describeInstallContainerState(appInstall); err == nil && strings.TrimSpace(stateDesc) != "" {
+				logger.Info("%s", stateDesc)
+			}
+			if diagDesc, err := describeInstallContainerDiagnostics(appInstall); err == nil && strings.TrimSpace(diagDesc) != "" {
+				logger.Info("%s", diagDesc)
+			}
+		}
+		time.Sleep(time.Second)
+	}
+	if lastErr != nil {
+		return lastErr
+	}
+	if strings.TrimSpace(appInstall.Message) != "" {
+		return errors.New(appInstall.Message)
+	}
+	return errors.New("container did not enter running state after compose up")
 }
 
 var composeVarRe = regexp.MustCompile(`\\$\\{([^}]+)\\}`)

@@ -6,7 +6,7 @@ import http from "@/api"
 import { TimeoutEnum } from "@/enums/http-enum"
 
 export function GetFilesList(params: File.ReqFile) {
-	return http.post<File.File>("/file/search", params, TimeoutEnum.T_5M)
+	return http.post<File.File>("/file/list", params, TimeoutEnum.T_5M)
 }
 
 export function GetUploadList(params: File.SearchUploadInfo) {
@@ -104,14 +104,7 @@ export function reduceFile(params: File.RecycleBinReduce) {
 export function clearRecycle() {
 	return http.post<any>("/file/recycle/clear")
 }
-
-export function SearchFavorite(params: ReqPage) {
-	return http.post<ResPage<File.Favorite>>("/file/favorite/search", params)
-}
-
-export function AddFavorite(path: string) {
-	return http.post<any>("/file/favorite", { path })
-}
+ 
 
 export function ReadByLine(req: File.FileReadByLine) {
 	return http.post<any>("/file/read", req)

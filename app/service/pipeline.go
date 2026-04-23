@@ -1,8 +1,10 @@
 package service
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/url"
@@ -13,11 +15,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/aihop/gopanel/app/dto/request"
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
 	"github.com/aihop/gopanel/global"
 	udocker "github.com/aihop/gopanel/utils/docker"
-	"github.com/aihop/gopanel/utils/files"
 	"gorm.io/gorm"
 )
 
@@ -97,7 +99,7 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 	// 1. Clone
 	if p.RepoUrl != "" {
 		s.recordRepo.UpdateStatus(recordID, "cloning", "")
-		err := s.stepClone(ctx, logger, p, workspaceDir)
+		commitHash, err := s.stepClone(ctx, logger, p, workspaceDir)
 		if err != nil {
 			if ctx.Err() != nil {
 				s.recordRepo.UpdateStatus(recordID, "failed", "用户手动终止")
@@ -106,6 +108,9 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 				s.recordRepo.UpdateStatus(recordID, "failed", fmt.Sprintf("Clone failed: %v", err))
 			}
 			return
+		}
+		if strings.TrimSpace(commitHash) != "" {
+			_ = s.recordRepo.UpdateCommitHash(recordID, commitHash)
 		}
 	} else {
 		logger.Info("未配置 RepoUrl，采用纯脚本模式，跳过自动拉取...")
@@ -151,7 +156,29 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 		s.recordRepo.UpdateArchive(recordID, archivePath)
 	}
 
-	// 4. Trigger Website Deployment
+	// 4. Runner Step (可选)
+	s.recordRepo.UpdateStatus(recordID, "deploying", "准备执行 Runner 步骤...")
+	if strings.EqualFold(strings.TrimSpace(p.RunnerMode), "runner") {
+		hostPort, containerID, releaseDir, err := s.stepRunner(ctx, logger, p, workspaceDir)
+		if err != nil {
+			if ctx.Err() != nil {
+				s.recordRepo.UpdateStatus(recordID, "failed", "用户手动终止")
+				logger.Error("流水线已手动取消")
+			} else {
+				s.recordRepo.UpdateStatus(recordID, "failed", fmt.Sprintf("Runner failed: %v", err))
+				logger.Error("Runner 步骤失败: %v", err)
+			}
+			return
+		}
+		if containerID != "" {
+			_ = s.recordRepo.UpdateRunnerResult(recordID, releaseDir, containerID, hostPort)
+			logger.Info("Runner 容器已启动：containerId=%s, hostPort=%d", containerID, hostPort)
+		}
+	} else {
+		logger.Info("未启用 Runner 步骤，跳过...")
+	}
+
+	// 5. Trigger Website Deployment
 	s.recordRepo.UpdateStatus(recordID, "deploying", "通知关联网站进行部署...")
 	logger.Info("正在通知所有关联此流水线的网站进行部署...")
 
@@ -181,6 +208,206 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 	}
 	s.recordRepo.UpdateStatus(recordID, "success", msg)
 	logger.Info("====== Pipeline #%d 执行成功！======", recordID)
+}
+
+func (s *PipelineService) stepRunner(ctx context.Context, logger *PipelineLogger, p *model.Pipeline, workspaceDir string) (int, string, string, error) {
+	if ctx.Err() != nil {
+		return 0, "", "", ctx.Err()
+	}
+	codeRoot, err := resolveRunnerCodeRoot(logger, p, workspaceDir)
+	if err != nil {
+		return 0, "", "", err
+	}
+
+	var runnerCfg map[string]interface{}
+	if strings.TrimSpace(p.RunnerConfig) != "" {
+		_ = json.Unmarshal([]byte(p.RunnerConfig), &runnerCfg)
+	}
+	if runnerCfg == nil {
+		runnerCfg = map[string]interface{}{}
+	}
+	s.logRunnerProjectProfile(logger, codeRoot, runnerCfg)
+	if err := validateRunnerModeSource(codeRoot, runnerCfg); err != nil {
+		return 0, "", "", err
+	}
+
+	previousContainerID := ""
+	if prev, err := s.recordRepo.LatestRunnerContainerID(p.ID); err == nil {
+		previousContainerID = strings.TrimSpace(prev)
+	}
+	if previousContainerID != "" {
+		cli, err := udocker.NewDockerClient()
+		if err == nil {
+			_ = RemoveEngineContainer(ctx, cli, previousContainerID)
+			cli.Close()
+		}
+	}
+
+	req := &request.WebsiteCreate{
+		CodeSource:          "pipeline",
+		GitRepo:             "",
+		CodeDir:             "",
+		CodeDirFallback:     codeRoot,
+		PreviousContainerID: "",
+		RunnerKey:           strings.TrimSpace(p.RunnerKey),
+		RunnerConfig:        runnerCfg,
+	}
+
+	progress := func(format string, a ...interface{}) {
+		logger.Info("[Runner] "+format, a...)
+	}
+	alias := fmt.Sprintf("pipeline-%d", p.ID)
+	hostPort, containerID, _, err := DeployWebsiteEngine(ctx, alias, req, progress)
+	if err != nil {
+		return 0, "", "", err
+	}
+	return hostPort, containerID, codeRoot, nil
+}
+
+func resolveRunnerCodeRoot(logger *PipelineLogger, p *model.Pipeline, workspaceDir string) (string, error) {
+	sourceDir := strings.TrimSpace(workspaceDir)
+	sourceLabel := "工作区目录"
+
+	if sourceDir == "" {
+		return "", fmt.Errorf("Runner 工作区目录为空")
+	}
+
+	artifactPath := strings.TrimSpace(p.ArtifactPath)
+	if artifactPath != "" {
+		artifactSrc := filepath.Join(sourceDir, artifactPath)
+		info, err := os.Stat(artifactSrc)
+		if err == nil {
+			if info.IsDir() {
+				sourceDir = artifactSrc
+				sourceLabel = fmt.Sprintf("产物目录(%s)", artifactPath)
+			} else {
+				sourceDir = filepath.Dir(artifactSrc)
+				sourceLabel = fmt.Sprintf("产物所在目录(%s)", artifactPath)
+			}
+		} else if !os.IsNotExist(err) {
+			return "", fmt.Errorf("检查 Runner 产物目录失败: %w", err)
+		}
+	}
+
+	codeRoot := detectRunnerCodeRoot(sourceDir)
+	logger.Info("Runner: 直接使用%s作为运行目录: %s", sourceLabel, sourceDir)
+	if codeRoot != sourceDir {
+		logger.Info("Runner: 检测到单一子目录，自动切换代码根目录到 %s", codeRoot)
+	}
+	return codeRoot, nil
+}
+
+func validateRunnerModeSource(codeRoot string, runnerCfg map[string]interface{}) error {
+	mode := strings.ToLower(strings.TrimSpace(asString(runnerCfg["mode"])))
+	if mode == "" {
+		mode = "build_run"
+	}
+	if mode != "build_run" {
+		return nil
+	}
+	if _, err := os.Stat(filepath.Join(codeRoot, ".output/server/index.mjs")); err == nil {
+		return nil
+	}
+	if _, err := os.Stat(filepath.Join(codeRoot, "package.json")); err == nil {
+		return nil
+	}
+	return fmt.Errorf("Runner 当前为 build_run 模式，但运行目录 %s 中既没有 package.json，也没有 .output/server/index.mjs；请改为 run 模式，或让 Runner 直接使用包含 package.json 的项目目录", codeRoot)
+}
+
+func detectRunnerCodeRoot(releaseDir string) string {
+	current := releaseDir
+	for i := 0; i < 4; i++ {
+		if runnerDirLooksLikeAppRoot(current) {
+			return current
+		}
+		entries, err := os.ReadDir(current)
+		if err != nil {
+			return current
+		}
+		dirs := make([]string, 0, 1)
+		for _, entry := range entries {
+			name := entry.Name()
+			if name == ".DS_Store" || name == "__MACOSX" {
+				continue
+			}
+			if !entry.IsDir() {
+				return current
+			}
+			dirs = append(dirs, filepath.Join(current, name))
+		}
+		if len(dirs) != 1 {
+			return current
+		}
+		current = dirs[0]
+	}
+	return current
+}
+
+func runnerDirLooksLikeAppRoot(dir string) bool {
+	markers := []string{
+		"package.json",
+		".output",
+		".next",
+		"dist",
+		"Dockerfile",
+		"index.html",
+		"server.js",
+		"docker-compose.yml",
+	}
+	for _, marker := range markers {
+		if _, err := os.Stat(filepath.Join(dir, marker)); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *PipelineService) logRunnerProjectProfile(logger *PipelineLogger, releaseDir string, runnerCfg map[string]interface{}) {
+	type marker struct {
+		path  string
+		label string
+	}
+	markers := []marker{
+		{path: ".output/server/index.mjs", label: "Nuxt SSR"},
+		{path: ".next/standalone/server.js", label: "Next.js standalone"},
+		{path: ".next", label: "Next.js"},
+		{path: "server.js", label: "Node server.js"},
+		{path: "dist/index.html", label: "静态站 dist"},
+		{path: "index.html", label: "静态站 root index"},
+		{path: "package.json", label: "Node package"},
+	}
+
+	hits := make([]string, 0, len(markers))
+	for _, m := range markers {
+		if _, err := os.Stat(filepath.Join(releaseDir, m.path)); err == nil {
+			hits = append(hits, m.label)
+		}
+	}
+	if len(hits) > 0 {
+		logger.Info("Runner: 项目特征识别 => %s", strings.Join(hits, ", "))
+	}
+
+	startCmd := strings.TrimSpace(asString(runnerCfg["startCommand"]))
+	mode := strings.TrimSpace(asString(runnerCfg["mode"]))
+	if mode == "" {
+		mode = "build_run"
+	}
+	if startCmd == "" {
+		startCmd = "node .output/server/index.mjs"
+	}
+	logger.Info("Runner: 当前策略 => mode=%s, startCommand=%s", mode, startCmd)
+
+	staticOnly := false
+	if _, err := os.Stat(filepath.Join(releaseDir, "dist/index.html")); err == nil {
+		if _, err2 := os.Stat(filepath.Join(releaseDir, ".output/server/index.mjs")); err2 != nil {
+			if _, err3 := os.Stat(filepath.Join(releaseDir, "server.js")); err3 != nil {
+				staticOnly = true
+			}
+		}
+	}
+	if staticOnly {
+		logger.Error("Runner 警告: 当前产物更像静态站点（存在 dist/index.html，缺少 .output/server/index.mjs / server.js），若继续使用 Node Runner 可能无法正常运行")
+	}
 }
 
 func detectBuiltImageRef(p *model.Pipeline, version string, logs []string) string {
@@ -265,7 +492,7 @@ func sameImageRepo(imageRef, outputImage string) bool {
 	return repo == outputImage || strings.HasSuffix(repo, "/"+outputImage)
 }
 
-func (s *PipelineService) stepClone(ctx context.Context, logger *PipelineLogger, p *model.Pipeline, workspace string) error {
+func (s *PipelineService) stepClone(ctx context.Context, logger *PipelineLogger, p *model.Pipeline, workspace string) (string, error) {
 	logger.Info("准备代码拉取目录...")
 	_ = os.MkdirAll(workspace, 0755)
 
@@ -336,7 +563,7 @@ func (s *PipelineService) stepClone(ctx context.Context, logger *PipelineLogger,
 		checkoutCmd := exec.CommandContext(ctx, "git", "checkout", p.Branch)
 		checkoutCmd.Dir = workspace
 		if err := runGitCommand(checkoutCmd, "Git checkout"); err != nil {
-			return err
+			return "", err
 		}
 
 		// 现在 pull 时使用 origin
@@ -344,13 +571,13 @@ func (s *PipelineService) stepClone(ctx context.Context, logger *PipelineLogger,
 		pullCmd.Dir = workspace
 
 		if err := runGitCommand(pullCmd, "Git pull"); err != nil {
-			return err
+			return "", err
 		}
 	} else {
 		logger.Info("首次执行或缓存丢失，正在执行 git clone (分支: %s)...", p.Branch)
 		cloneCmd := exec.CommandContext(ctx, "git", "clone", "-b", p.Branch, "--single-branch", "--depth", "1", repoUrl, workspace)
 		if err := runGitCommand(cloneCmd, "Git clone"); err != nil {
-			return err
+			return "", err
 		}
 	}
 
@@ -358,7 +585,9 @@ func (s *PipelineService) stepClone(ctx context.Context, logger *PipelineLogger,
 	hashCmd := exec.CommandContext(ctx, "git", "rev-parse", "HEAD")
 	hashCmd.Dir = workspace
 	if hashBytes, err := hashCmd.Output(); err == nil {
-		logger.Info("代码拉取成功, Commit Hash: %s", strings.TrimSpace(string(hashBytes)))
+		commitHash := strings.TrimSpace(string(hashBytes))
+		logger.Info("代码拉取成功, Commit Hash: %s", commitHash)
+		return commitHash, nil
 	} else {
 		// 为了排错，把 git 的真实地址隐去敏感信息后输出
 		safeUrl := repoUrl
@@ -370,7 +599,7 @@ func (s *PipelineService) stepClone(ctx context.Context, logger *PipelineLogger,
 		logger.Error("注意: 拉取可能失败，当前使用的远端地址: %s", safeUrl)
 	}
 
-	return nil
+	return "", nil
 }
 
 func (s *PipelineService) stepBuild(ctx context.Context, logger *PipelineLogger, p *model.Pipeline, workspace string, version string) error {
@@ -389,14 +618,32 @@ func (s *PipelineService) stepBuild(ctx context.Context, logger *PipelineLogger,
 			logger.Error("未找到可用容器运行时命令: %v", rerr)
 			return rerr
 		}
+		resolvedRuntime := udocker.DefaultRuntimeAdapter().Resolve(ctx)
 		compatHeader := fmt.Sprintf(`
+# 1. 补全基础环境变量
+export PATH=$PATH:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+
+# 2. 使用后端已解析好的运行时，避免脚本再次自探测导致与后端判定不一致
+RUNTIME="%s"
+CONTAINER_RUNTIME_KIND="%s"
+
 CONTAINER_CLI="%s"
 export CONTAINER_CLI
-if [ "$CONTAINER_CLI" = "podman" ]; then
-	docker() { podman "$@"; }
+export RUNTIME
+export CONTAINER_RUNTIME_KIND
+
+# 兼容旧脚本：优先保留 docker 命令语义，只给 podman/podman-compose 做向后兼容别名
+if [ "$CONTAINER_CLI" = "docker" ]; then
+	podman() { docker "$@"; }
+	podman-compose() { docker compose "$@"; }
+elif [ "$CONTAINER_CLI" = "podman" ]; then
+	if command -v docker > /dev/null 2>&1; then
+		podman() { docker "$@"; }
+		podman-compose() { docker compose "$@"; }
+	fi
 fi
-echo "Current Runtime CLI: ${CONTAINER_CLI}"
-`, runtimeCLI)
+echo "--- 使用运行时: $RUNTIME (类型: $CONTAINER_RUNTIME_KIND, 兼容别名: $CONTAINER_CLI) ---"
+`, runtimeCLI, resolvedRuntime.Kind, runtimeCLI)
 		// 注入 runtime 兼容层：历史脚本里写 docker ... 也可在 podman 环境运行
 		fullScript := fmt.Sprintf("#!/bin/sh\nset -e\ncd \"%s\"\necho \"Current PWD: $(pwd)\"\n%s\n%s", workspace, compatHeader, p.BuildScript)
 		_ = os.WriteFile(scriptPath, []byte(fullScript), 0755)
@@ -486,7 +733,22 @@ echo "Current Runtime CLI: ${CONTAINER_CLI}"
 	}
 
 	// 无痕注入脚本内容
-	scriptContent := fmt.Sprintf("set -e\nif [ \"$CONTAINER_CLI\" = \"podman\" ]; then docker() { podman \"$@\"; }; fi\n%s\n", p.BuildScript)
+	// 兼容旧的 docker/podman alias
+	compatHeader := fmt.Sprintf(`
+CONTAINER_CLI="%s"
+export CONTAINER_CLI
+if [ "$CONTAINER_CLI" = "docker" ]; then
+	podman() { docker "$@"; }
+	podman-compose() { docker compose "$@"; }
+elif [ "$CONTAINER_CLI" = "podman" ]; then
+	if command -v docker > /dev/null 2>&1; then
+		podman() { docker "$@"; }
+		podman-compose() { docker compose "$@"; }
+	fi
+fi
+`, runtimeCLI)
+
+	scriptContent := fmt.Sprintf("set -e\n%s\n%s\n", compatHeader, p.BuildScript)
 	cmd.Stdin = strings.NewReader(scriptContent)
 
 	// 捕获日志
@@ -526,12 +788,119 @@ func (s *PipelineService) stepArchive(ctx context.Context, logger *PipelineLogge
 	archivePath := filepath.Join(archiveDir, archiveName)
 
 	logger.Info("正在对产物进行 Zip 归档留档...")
-	err := files.NewFileOp().Compress([]string{artifactSrc}, archiveDir, archiveName, files.Zip, "")
+	err := createFilteredZipArchive(artifactSrc, archivePath)
 	if err != nil {
 		return "", err
 	}
 	logger.Info("产物归档成功: %s", archiveName)
 	return archivePath, nil
+}
+
+var archiveExcludedNames = map[string]struct{}{
+	".git":              {},
+	".gopanel_artifact": {},
+	"node_modules":      {},
+	"__MACOSX":          {},
+}
+
+func createFilteredZipArchive(srcPath, archivePath string) error {
+	info, err := os.Stat(srcPath)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(archivePath), 0755); err != nil {
+		return err
+	}
+	out, err := os.OpenFile(archivePath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	zw := zip.NewWriter(out)
+	defer zw.Close()
+
+	rootName := filepath.Base(filepath.Clean(srcPath))
+	if !info.IsDir() {
+		return addArchiveFileToZip(zw, srcPath, filepath.ToSlash(rootName), info)
+	}
+
+	rootHeader := &zip.FileHeader{
+		Name:     filepath.ToSlash(rootName) + "/",
+		Method:   zip.Deflate,
+		Modified: info.ModTime(),
+	}
+	rootHeader.SetMode(info.Mode())
+	if _, err := zw.CreateHeader(rootHeader); err != nil {
+		return err
+	}
+
+	return filepath.Walk(srcPath, func(current string, currentInfo os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		rel, err := filepath.Rel(srcPath, current)
+		if err != nil {
+			return err
+		}
+		if rel == "." {
+			return nil
+		}
+		if shouldSkipArchiveEntry(rel, currentInfo) {
+			if currentInfo.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		nameInArchive := filepath.ToSlash(filepath.Join(rootName, rel))
+		if currentInfo.IsDir() {
+			header := &zip.FileHeader{
+				Name:     nameInArchive + "/",
+				Method:   zip.Deflate,
+				Modified: currentInfo.ModTime(),
+			}
+			header.SetMode(currentInfo.Mode())
+			_, err = zw.CreateHeader(header)
+			return err
+		}
+		return addArchiveFileToZip(zw, current, nameInArchive, currentInfo)
+	})
+}
+
+func shouldSkipArchiveEntry(rel string, info os.FileInfo) bool {
+	name := info.Name()
+	if name == ".DS_Store" || strings.HasPrefix(name, "._") {
+		return true
+	}
+	if _, ok := archiveExcludedNames[name]; ok {
+		return true
+	}
+	for _, part := range strings.Split(filepath.ToSlash(rel), "/") {
+		if _, ok := archiveExcludedNames[part]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func addArchiveFileToZip(zw *zip.Writer, diskPath, nameInArchive string, info os.FileInfo) error {
+	header, err := zip.FileInfoHeader(info)
+	if err != nil {
+		return err
+	}
+	header.Name = nameInArchive
+	header.Method = zip.Deflate
+	writer, err := zw.CreateHeader(header)
+	if err != nil {
+		return err
+	}
+	file, err := os.Open(diskPath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	_, err = io.Copy(writer, file)
+	return err
 }
 
 // 辅助日志写入器，将 os/exec 的输出桥接到 PipelineLogger

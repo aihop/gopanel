@@ -63,7 +63,7 @@ func WebsiteDeploySwitch(c fiber.Ctx) error {
 	if targetDeploy.SourceType == "pipeline" || targetDeploy.SourceType == "git" || targetDeploy.ArchiveFile != "" || targetDeploy.ImageTag != "" {
 		releaseDir := targetDeploy.ReleaseDir
 		if releaseDir == "" {
-			releaseDir = filepath.Join(global.CONF.System.BaseDir, "wwwroot", website.Alias, "releases", targetDeploy.Version)
+			releaseDir = filepath.Join(global.CONF.System.BaseDir, "www", website.Alias, "releases", targetDeploy.Version)
 		}
 		archiveFile := targetDeploy.ArchiveFile
 		if archiveFile == "" {
@@ -147,7 +147,7 @@ func WebsiteDeployTrigger(c fiber.Ctx) error {
 	}
 
 	version := fmt.Sprintf("v%d", time.Now().Unix())
-	releaseDir := filepath.Join(global.CONF.System.BaseDir, "wwwroot", website.Alias, "releases", version)
+	releaseDir := filepath.Join(global.CONF.System.BaseDir, "www", website.Alias, "releases", version)
 
 	// Trigger async deployment
 	go service.ProcessWebsiteDeployment(website, 0, version, R.ZipPath, releaseDir, "", R.ImageTag)

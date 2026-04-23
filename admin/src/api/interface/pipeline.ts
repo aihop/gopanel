@@ -12,6 +12,9 @@ export namespace Pipeline {
     outputImage?: string;
     artifactPath: string;
     exposePort?: number;
+    runnerKey?: string;
+    runnerMode?: string;
+    runnerConfig?: any;
   }
 
   export interface ReqUpdate extends ReqCreate {
@@ -34,6 +37,9 @@ export namespace Pipeline {
     outputImage?: string;
     artifactPath: string;
     exposePort: number;
+    runnerKey?: string;
+    runnerMode?: string;
+    runnerConfig?: any;
   }
 
   export interface ResRecord {
@@ -43,7 +49,11 @@ export namespace Pipeline {
     pipelineId: number;
     status: string;
     version: string; // 新增版本号
+    commitHash?: string;
     errorMessage: string;
     archiveFile: string;
+    runnerReleaseDir?: string;
+    runnerContainerId?: string;
+    runnerHostPort?: number;
   }
 }

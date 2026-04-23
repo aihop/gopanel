@@ -396,8 +396,9 @@
           <n-button
             size="small"
             secondary
-            @click="submitInstall"
+            @click="retryInstall"
             v-if="isInstallFinished && repairTipAction && repairTipAction !== 'port-conflict'"
+            :loading="retryingInstall"
           >重新安装</n-button>
           <n-button
             size="small"
@@ -443,7 +444,7 @@ import { ref, watch, reactive, nextTick } from "vue"
 import { MdPreview } from 'md-editor-v3'
 import 'md-editor-v3/lib/preview.css'
 // @ts-ignore
-import { appsInstalledListAPI, appsListAPI, appsRepairComposeAPI, appsRepairPodmanShortNameAPI, appsRepairPortConflictAPI, GetApp, InstallApp, PrecheckAppInstall, GetAppDetail, InstalledOp } from "@/api/modules/apps"
+import { appsInstalledListAPI, appsListAPI, appsRepairComposeAPI, appsRepairPodmanShortNameAPI, appsRepairPodmanSubuidAPI, appsRepairPortConflictAPI, GetApp, appsInstallAPI, PrecheckAppInstall, GetAppDetail, InstalledOp } from "@/api/modules/apps"
 // @ts-ignore
 import { repairSystemdLingerAPI } from "@/api/modules/container"
 import type { AppsSearchParams } from "@/api/modules/apps"
@@ -491,9 +492,12 @@ const repairTipCommands = ref("")
 const repairTipOutput = ref("")
 const repairTipAction = ref("")
 const currentInstallId = ref<number>(0)
+const currentInstallName = ref("")
 const repairingCompose = ref(false)
+const retryingInstall = ref(false)
 const formFields = ref<any[]>([])
 const formRef = ref<any>(null)
+const lastInstallReq = ref<any | null>(null)
 
 const formModel = reactive({
 	name: "",
@@ -654,6 +658,8 @@ async function submitInstall() {
 					pullImage: true,
 					editCompose: false
 				}
+				lastInstallReq.value = JSON.parse(JSON.stringify(reqData))
+				currentInstallName.value = reqData.name
 
 				try {
 					const precheckRes = await PrecheckAppInstall()
@@ -688,9 +694,25 @@ async function submitInstall() {
 	})
 }
 
+async function retryInstall() {
+	if (retryingInstall.value) return
+	if (lastInstallReq.value) {
+		retryingInstall.value = true
+		try {
+			await doSubmitInstall(JSON.parse(JSON.stringify(lastInstallReq.value)))
+		} catch (e: any) {
+			message.error(e?.message || "重新安装异常")
+		} finally {
+			retryingInstall.value = false
+		}
+		return
+	}
+	message.warning("未找到上一次安装参数，请重新打开安装表单提交一次")
+}
+
 async function doSubmitInstall(reqData: any) {
 	try {
-		const res = await InstallApp(reqData as any)
+		const res = await appsInstallAPI(reqData as any)
 				if (res.code === 0) {
 					message.success("应用开始安装")
 					showInstallModal.value = false
@@ -754,6 +776,12 @@ async function doSubmitInstall(reqData: any) {
 					repairTipMessage.value = "当前容器运行时配置不允许直接拉取简写镜像名。可以先一键修复（自动向 /etc/containers/registries.conf 追加 docker.io 源）。"
 					repairTipCommands.value = ""
 					repairTipAction.value = "short-name"
+				} else if (event.data.includes("insufficient UIDs or GIDs")) {
+					repairTipVisible.value = true
+					repairTipTitle.value = "检测到 UID/GID 映射不足"
+					repairTipMessage.value = "当前用户缺乏足够的子 UID/GID 映射，导致无法创建容器命名空间。可以点击一键修复，系统将自动配置并重置命名空间。"
+					repairTipCommands.value = ""
+					repairTipAction.value = "subuid"
 				} else if (event.data.includes("cgroup-manager") || event.data.includes("enable-linger")) {
 					repairTipVisible.value = true
 					repairTipTitle.value = "建议开启用户 Linger (保活) 支持"
@@ -802,6 +830,7 @@ const checkInstallResult = async (name: string) => {
 		const data = res.data as any
 		const item = data?.items?.[0]
 		if (!item) return
+		if (typeof item.name === "string" && item.name) currentInstallName.value = item.name
 		if (item.status === "UpErr" || item.status === "DownloadErr" || item.status === "SyncFailed" || item.status === "Error") {
 			if (!repairTipVisible.value && typeof item.message === "string" && item.message.includes("no compose command found")) {
 				repairTipVisible.value = true
@@ -842,6 +871,8 @@ const handleRepairCompose = async () => {
 		let res: any
 		if (repairTipAction.value === "short-name") {
 			res = await appsRepairPodmanShortNameAPI()
+		} else if (repairTipAction.value === "subuid") {
+			res = await appsRepairPodmanSubuidAPI()
 		} else if (repairTipAction.value === "linger") {
 			res = await repairSystemdLingerAPI()
 		} else if (repairTipAction.value === "port-conflict") {
@@ -894,15 +925,16 @@ const handleRebuild = async () => {
 			// 我们需要知道 currentApp.name 也就是安装的名称
 			// 如果 reqData 还在作用域里就好了，但是由于是组件级别的方法，我们可以保存 currentInstallName
 			// 或者从 appsInstalledListAPI 获取
-			const resInfo = await appsInstalledListAPI({ page: 1, limit: 1, name: "" })
-			let installName = ""
+			let installName = currentInstallName.value || lastInstallReq.value?.name || ""
+			const resInfo = await appsInstalledListAPI({ page: 1, limit: 50, name: "" })
 			if (resInfo.data && (resInfo.data as any).items) {
 				const item = (resInfo.data as any).items.find((i: any) => i.id === currentInstallId.value)
-				if (item) installName = item.name
+				if (item?.name) installName = item.name
 			}
 			if (!installName) {
 				installName = currentApp.value?.key || ""
 			}
+			currentInstallName.value = installName
 			logEventSource = new EventSource(`${apiUrl}/apps/install/${installName}/logs?token=${token}`)
 			logEventSource.onmessage = (event) => {
 				if (event.data === "ping") return

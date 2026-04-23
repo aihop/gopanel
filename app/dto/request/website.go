@@ -13,12 +13,14 @@ type WebsiteCreate struct {
 	AppID         uint          `json:"appID"`
 	AppInstallID  uint          `json:"appInstallID"`
 
-	CodeSource          string `json:"codeSource"` // upload, git, pipeline, app_store
-	GitRepo             string `json:"gitRepo"`    // Git URL or Docker Image Name
-	PipelineId          uint   `json:"pipelineId"`
-	CodeDir             string `json:"codeDir"`
-	CodeDirFallback     string `json:"-"`
-	PreviousContainerID string `json:"-"`
+	CodeSource          string                 `json:"codeSource"` // upload, git, pipeline, app_store
+	GitRepo             string                 `json:"gitRepo"`    // Git URL or Docker Image Name
+	PipelineId          uint                   `json:"pipelineId"`
+	CodeDir             string                 `json:"codeDir"`
+	CodeDirFallback     string                 `json:"-"`
+	PreviousContainerID string                 `json:"-"`
+	RunnerKey           string                 `json:"-"`
+	RunnerConfig        map[string]interface{} `json:"-"`
 
 	AntiCrawler    bool   `json:"antiCrawler"`
 	AntiLeech      bool   `json:"antiLeech"`

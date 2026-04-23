@@ -2,8 +2,13 @@ package service
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
+
+	"github.com/aihop/gopanel/global"
 )
 
 var (
@@ -16,6 +21,37 @@ type AppInstallLogger struct {
 	logs      []string
 	Listeners []chan string
 	mu        sync.RWMutex
+	file      *os.File
+}
+
+func getAppInstallLogFilePath(name string) string {
+	logDir := filepath.Join(global.CONF.System.LogPath, "app_install")
+	_ = os.MkdirAll(logDir, 0o755)
+	safeName := strings.NewReplacer("/", "_", "\\", "_", ":", "_").Replace(strings.TrimSpace(name))
+	if safeName == "" {
+		safeName = "unknown"
+	}
+	return filepath.Join(logDir, safeName+".log")
+}
+
+func loadAppInstallLogsFromFile(name string) []string {
+	content, err := os.ReadFile(getAppInstallLogFilePath(name))
+	if err != nil {
+		return []string{}
+	}
+	text := strings.ReplaceAll(string(content), "\r\n", "\n")
+	text = strings.TrimRight(text, "\n")
+	if text == "" {
+		return []string{}
+	}
+	return strings.Split(text, "\n")
+}
+
+func IsAppInstallLoggerActive(name string) bool {
+	appInstallLoggersMu.RLock()
+	defer appInstallLoggersMu.RUnlock()
+	_, exists := appInstallLoggers[name]
+	return exists
 }
 
 func GetAppInstallLogger(name string) *AppInstallLogger {
@@ -24,10 +60,16 @@ func GetAppInstallLogger(name string) *AppInstallLogger {
 	if logger, exists := appInstallLoggers[name]; exists {
 		return logger
 	}
+
+	f, err := os.OpenFile(getAppInstallLogFilePath(name), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil && global.LOG != nil {
+		global.LOG.Errorf("failed to open app install log file: %v", err)
+	}
 	logger := &AppInstallLogger{
 		Name:      name,
-		logs:      []string{},
+		logs:      loadAppInstallLogsFromFile(name),
 		Listeners: make([]chan string, 0),
+		file:      f,
 	}
 	appInstallLoggers[name] = logger
 	return logger
@@ -40,6 +82,11 @@ func RemoveAppInstallLogger(name string) {
 		logger.mu.Lock()
 		for _, listener := range logger.Listeners {
 			close(listener)
+		}
+		logger.Listeners = nil
+		if logger.file != nil {
+			_ = logger.file.Close()
+			logger.file = nil
 		}
 		logger.mu.Unlock()
 		delete(appInstallLoggers, name)
@@ -60,6 +107,9 @@ func (l *AppInstallLogger) appendLog(msg string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.logs = append(l.logs, msg)
+	if l.file != nil {
+		_, _ = l.file.WriteString(msg + "\n")
+	}
 	for _, listener := range l.Listeners {
 		// Non-blocking send
 		select {

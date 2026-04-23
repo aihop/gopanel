@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/user"
 	"runtime"
 	"strings"
 
 	"github.com/aihop/gopanel/app/e"
 	"github.com/aihop/gopanel/app/service"
+	udocker "github.com/aihop/gopanel/utils/docker"
 	"github.com/aihop/gopanel/utils/files"
 	"github.com/aihop/gopanel/utils/gpc"
 	"github.com/gofiber/fiber/v3"
@@ -35,9 +37,20 @@ func RepairPodmanSocket(c fiber.Ctx) error {
 		return c.JSON(e.Error(errors.New("cannot determine current process group")))
 	}
 
-	resp, err := gpc.Do(context.Background(), "PODMAN_SOCKET_REPAIR", map[string]interface{}{
+	resolved := udocker.ResolveRuntime(context.Background())
+	rootless := udocker.IsRootlessPodmanHost(resolved.Host)
+	payload := map[string]interface{}{
 		"group": group,
-	})
+	}
+	if rootless {
+		payload["rootless"] = true
+		payload["uid"] = os.Getuid()
+		if curUser, err := user.Current(); err == nil && curUser != nil {
+			payload["username"] = strings.TrimSpace(curUser.Username)
+		}
+	}
+
+	resp, err := gpc.Do(context.Background(), "PODMAN_SOCKET_REPAIR", payload)
 	if err != nil {
 		msg := err.Error()
 		if strings.Contains(strings.ToLower(msg), "unknown action") {
@@ -49,8 +62,9 @@ func RepairPodmanSocket(c fiber.Ctx) error {
 		return c.JSON(e.Error(errors.New(strings.TrimSpace(resp.Output) + "\n" + err.Error())))
 	}
 	return c.JSON(e.Succ(map[string]any{
-		"group":  group,
-		"output": strings.TrimSpace(resp.Output),
+		"group":    group,
+		"rootless": rootless,
+		"output":   strings.TrimSpace(resp.Output),
 	}))
 }
 

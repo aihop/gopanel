@@ -3,7 +3,6 @@ package docker
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -61,10 +60,7 @@ func ResolveRuntime(ctx context.Context) ResolvedRuntime {
 
 		if host != "" && !canPingHost(pingCtx, host) {
 			if kindFromHost(host) == RuntimePodman {
-				uid := os.Getuid()
-				podmanRootHost := "unix:///run/podman/podman.sock"
-				podmanUserHost := "unix:///run/user/" + strconv.Itoa(uid) + "/podman/podman.sock"
-				candidates := []string{podmanUserHost, podmanRootHost}
+				candidates := PodmanLinuxCandidateHosts()
 				for _, c := range candidates {
 					if canPingHost(pingCtx, c) {
 						host = c
@@ -72,11 +68,13 @@ func ResolveRuntime(ctx context.Context) ResolvedRuntime {
 					}
 				}
 				if host == normalizeHost(ctx, settingItem.Value) {
-					if uid != 0 && unixSockExists(podmanUserHost) {
-						host = podmanUserHost
-					} else if unixSockExists(podmanRootHost) {
-						host = podmanRootHost
-					} else {
+					for _, c := range candidates {
+						if unixSockExists(c) {
+							host = c
+							break
+						}
+					}
+					if host == normalizeHost(ctx, settingItem.Value) {
 						host = ""
 					}
 				}
@@ -129,7 +127,6 @@ auto_detect:
 	if mode == "podman" {
 		switch runtime.GOOS {
 		case "linux":
-			uid := os.Getuid()
 			host := strings.TrimSpace(settingItem.Value)
 			if host != "" {
 				host = normalizeHost(ctx, host)
@@ -145,31 +142,23 @@ auto_detect:
 			defer cancel()
 
 			if host == "" {
-				podmanRootHost := "unix:///run/podman/podman.sock"
-				podmanUserHost := "unix:///run/user/" + strconv.Itoa(uid) + "/podman/podman.sock"
-				if uid == 0 {
-					if canPingHost(pingCtx, podmanRootHost) {
-						host = podmanRootHost
-					} else {
-						host = podmanRootHost
+				candidates := PodmanLinuxCandidateHosts()
+				for _, c := range candidates {
+					if canPingHost(pingCtx, c) {
+						host = c
+						break
 					}
-				} else {
-					candidates := []string{podmanUserHost, podmanRootHost}
-					for _, c := range candidates {
+				}
+				if host == "" && len(candidates) > 0 {
+					host = candidates[0]
+				}
+			} else if IsRootlessPodmanHost(host) || os.Getuid() != 0 {
+				if !canPingHost(pingCtx, host) {
+					for _, c := range PodmanLinuxCandidateHosts() {
 						if canPingHost(pingCtx, c) {
 							host = c
 							break
 						}
-					}
-					if host == "" {
-						host = podmanUserHost
-					}
-				}
-			} else if uid != 0 {
-				if !canPingHost(pingCtx, host) {
-					podmanRootHost := "unix:///run/podman/podman.sock"
-					if canPingHost(pingCtx, podmanRootHost) {
-						host = podmanRootHost
 					}
 				}
 			}
@@ -226,6 +215,59 @@ func autoDetectDockerUnixHost(ctx context.Context) string {
 	return ""
 }
 
+func PodmanLinuxCandidateHosts() []string {
+	if runtime.GOOS != "linux" {
+		return nil
+	}
+
+	uid := os.Getuid()
+	seen := make(map[string]struct{})
+	var hosts []string
+
+	addSock := func(sockPath string) {
+		sockPath = strings.TrimSpace(sockPath)
+		if sockPath == "" {
+			return
+		}
+		if !filepath.IsAbs(sockPath) {
+			return
+		}
+		host := "unix://" + sockPath
+		if _, ok := seen[host]; ok {
+			return
+		}
+		seen[host] = struct{}{}
+		hosts = append(hosts, host)
+	}
+
+	if uid != 0 {
+		if runtimeDir := strings.TrimSpace(os.Getenv("XDG_RUNTIME_DIR")); runtimeDir != "" {
+			addSock(filepath.Join(runtimeDir, "podman", "podman.sock"))
+		}
+		addSock(filepath.Join("/run/user", strconv.Itoa(uid), "podman", "podman.sock"))
+	}
+
+	addSock("/run/podman/podman.sock")
+	return hosts
+}
+
+func IsRootlessPodmanHost(host string) bool {
+	if runtime.GOOS != "linux" {
+		return false
+	}
+	host = strings.TrimSpace(host)
+	if !strings.HasPrefix(host, "unix://") {
+		return false
+	}
+	sockPath := strings.TrimPrefix(host, "unix://")
+	if runtimeDir := strings.TrimSpace(os.Getenv("XDG_RUNTIME_DIR")); runtimeDir != "" {
+		if strings.HasPrefix(sockPath, filepath.Clean(runtimeDir)+string(os.PathSeparator)) {
+			return true
+		}
+	}
+	return strings.Contains(sockPath, "/run/user/") && strings.HasSuffix(sockPath, "/podman/podman.sock")
+}
+
 func normalizeHost(ctx context.Context, host string) string {
 	h := strings.TrimSpace(host)
 	if runtime.GOOS != "darwin" {
@@ -261,36 +303,20 @@ func autoDetectUnixHost(ctx context.Context) string {
 	pingCtx, cancel := context.WithTimeout(baseCtx, 800*time.Millisecond)
 	defer cancel()
 
-	uid := os.Getuid()
 	homeDir, _ := os.UserHomeDir()
 	dockerHost := "unix:///var/run/docker.sock"
-	podmanRootHost := "unix:///run/podman/podman.sock"
-	podmanUserHost := "unix:///run/user/" + strconv.Itoa(uid) + "/podman/podman.sock"
 
 	if runtime.GOOS == "linux" {
-		if uid == 0 {
-			candidates := []string{podmanRootHost, dockerHost}
-			for _, host := range candidates {
-				if canPingHost(pingCtx, host) {
-					return host
-				}
-			}
-			if unixSockExists(podmanRootHost) {
-				return podmanRootHost
-			}
-			return ""
-		}
-		candidates := []string{podmanUserHost, podmanRootHost, dockerHost}
+		candidates := append(PodmanLinuxCandidateHosts(), dockerHost)
 		for _, host := range candidates {
 			if canPingHost(pingCtx, host) {
 				return host
 			}
 		}
-		if unixSockExists(podmanUserHost) {
-			return podmanUserHost
-		}
-		if unixSockExists(podmanRootHost) {
-			return podmanRootHost
+		for _, host := range candidates {
+			if unixSockExists(host) {
+				return host
+			}
 		}
 		return ""
 	}
@@ -439,12 +465,8 @@ func darwinPodmanMachineHost(ctx context.Context) string {
 	return ""
 }
 
-func NewClient() (Client, error) {
-	resolved := ResolveRuntime(context.Background())
-	if resolved.Kind == RuntimePodman && runtime.GOOS == "darwin" {
-		return Client{}, errors.New("podman on darwin does not support docker api client")
-	}
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithHost(resolved.Host), client.WithAPIVersionNegotiation())
+func NewRuntimeClient() (Client, error) {
+	cli, err := DefaultRuntimeAdapter().DockerClient(context.Background())
 	if err != nil {
 		return Client{}, err
 	}
@@ -454,20 +476,20 @@ func NewClient() (Client, error) {
 	}, nil
 }
 
+func NewClient() (Client, error) {
+	return NewRuntimeClient()
+}
+
 func (c Client) Close() {
 	_ = c.cli.Close()
 }
 
+func NewRuntimeAPIClient() (*client.Client, error) {
+	return DefaultRuntimeAdapter().DockerClient(context.Background())
+}
+
 func NewDockerClient() (*client.Client, error) {
-	resolved := ResolveRuntime(context.Background())
-	if resolved.Kind == RuntimePodman && runtime.GOOS == "darwin" {
-		return nil, errors.New("podman on darwin does not support docker api client")
-	}
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithHost(resolved.Host), client.WithAPIVersionNegotiation())
-	if err != nil {
-		return nil, err
-	}
-	return cli, nil
+	return NewRuntimeAPIClient()
 }
 
 func (c Client) ListContainersByName(names []string) ([]types.Container, error) {
@@ -650,52 +672,17 @@ func ensurePodmanNetwork(name string) error {
 	if _, err := exec.LookPath("podman"); err != nil {
 		return err
 	}
+	if err := PodmanEnsureReady(context.Background()); err != nil {
+		return err
+	}
 	existsCmd := exec.Command("podman", "network", "exists", name)
 	if err := existsCmd.Run(); err == nil {
 		return nil
-	}
-	if runtime.GOOS == "darwin" {
-		_ = podmanMachineEnsureStarted()
-		existsCmd2 := exec.Command("podman", "network", "exists", name)
-		if err := existsCmd2.Run(); err == nil {
-			return nil
-		}
 	}
 	createCmd := exec.Command("podman", "network", "create", name)
 	out, err := createCmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))
-	}
-	return nil
-}
-
-func podmanMachineEnsureStarted() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
-	defer cancel()
-
-	hasAny := false
-	{
-		c := exec.CommandContext(ctx, "podman", "machine", "list", "--format", "json")
-		out, err := c.CombinedOutput()
-		if err == nil {
-			var items []map[string]interface{}
-			if e := json.Unmarshal(out, &items); e == nil && len(items) > 0 {
-				hasAny = true
-			}
-		}
-	}
-	if !hasAny {
-		c := exec.CommandContext(ctx, "podman", "machine", "init")
-		_, _ = c.CombinedOutput()
-	}
-	c := exec.CommandContext(ctx, "podman", "machine", "start")
-	out, err := c.CombinedOutput()
-	if err != nil {
-		msg := strings.TrimSpace(string(out))
-		if msg != "" {
-			return errors.New(msg)
-		}
-		return err
 	}
 	return nil
 }

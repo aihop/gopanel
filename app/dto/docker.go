@@ -33,6 +33,7 @@ type RuntimeCapabilities struct {
 	DaemonJson bool `json:"daemonJson"`
 	DockerAPI  bool `json:"dockerApi"`
 	PodmanCLI  bool `json:"podmanCli"`
+	PodmanRegistriesConf bool `json:"podmanRegistriesConf"`
 	Compose    bool `json:"compose"`
 }
 

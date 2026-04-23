@@ -276,6 +276,15 @@ func (s *Server) actionPodmanSocketRepair(ctx context.Context, params map[string
 	if group == "" {
 		return "", errors.New("invalid params: group is empty")
 	}
+	rootless := false
+	if v, ok := params["rootless"]; ok {
+		switch t := v.(type) {
+		case bool:
+			rootless = t
+		case string:
+			rootless = strings.EqualFold(strings.TrimSpace(t), "true")
+		}
+	}
 	if _, err := exec.LookPath("systemctl"); err != nil {
 		return "", err
 	}
@@ -283,6 +292,77 @@ func (s *Server) actionPodmanSocketRepair(ctx context.Context, params map[string
 	case <-ctx.Done():
 		return "", ctx.Err()
 	default:
+	}
+
+	if rootless {
+		uid, ok := getInt(params, "uid")
+		if !ok {
+			return "", errors.New("invalid params: uid is required for rootless podman repair")
+		}
+		username := strings.TrimSpace(getString(params, "username"))
+		if username == "" {
+			return "", errors.New("invalid params: username is required for rootless podman repair")
+		}
+
+		runtimeDir := fmt.Sprintf("/run/user/%d", uid)
+		socketPath := filepath.Join(runtimeDir, "podman", "podman.sock")
+		var outs []string
+
+		runStep := func(args ...string) error {
+			c := exec.CommandContext(ctx, args[0], args[1:]...)
+			out, err := c.CombinedOutput()
+			s := strings.TrimSpace(string(out))
+			if s != "" {
+				outs = append(outs, s)
+			}
+			if err != nil {
+				return fmt.Errorf("%w: %s", err, s)
+			}
+			return nil
+		}
+		runUserStep := func(script string) error {
+			c := exec.CommandContext(ctx, "su", "-s", "/bin/bash", username, "-c", script)
+			out, err := c.CombinedOutput()
+			s := strings.TrimSpace(string(out))
+			if s != "" {
+				outs = append(outs, s)
+			}
+			if err != nil {
+				return fmt.Errorf("%w: %s", err, s)
+			}
+			return nil
+		}
+
+		if err := runStep("loginctl", "enable-linger", strconv.Itoa(uid)); err != nil {
+			return strings.Join(outs, "\n"), err
+		}
+		_ = runStep("systemctl", "start", fmt.Sprintf("user@%d.service", uid))
+		_ = os.MkdirAll(runtimeDir, 0700)
+		_ = os.Chown(runtimeDir, uid, uid)
+		_ = os.Chmod(runtimeDir, 0700)
+		_ = os.MkdirAll(filepath.Dir(socketPath), 0700)
+		_ = os.Chown(filepath.Dir(socketPath), uid, uid)
+		_ = os.Chmod(filepath.Dir(socketPath), 0700)
+
+		userScript := fmt.Sprintf(
+			"export XDG_RUNTIME_DIR=%s; export DBUS_SESSION_BUS_ADDRESS=unix:path=%s; systemctl --user daemon-reload || true; systemctl --user enable podman.socket || true; systemctl --user restart podman.socket || systemctl --user start podman.socket",
+			runtimeDir,
+			filepath.Join(runtimeDir, "bus"),
+		)
+		if err := runUserStep(userScript); err != nil {
+			return strings.Join(outs, "\n"), err
+		}
+
+		_ = runUserStep(fmt.Sprintf(
+			"export XDG_RUNTIME_DIR=%s; export DBUS_SESSION_BUS_ADDRESS=unix:path=%s; podman system migrate",
+			runtimeDir,
+			filepath.Join(runtimeDir, "bus"),
+		))
+
+		if _, err := os.Stat(socketPath); err != nil {
+			return strings.Join(outs, "\n"), fmt.Errorf("rootless podman socket not ready: %w", err)
+		}
+		return strings.Join(outs, "\n"), nil
 	}
 
 	if err := os.MkdirAll("/etc/systemd/system/podman.socket.d", 0755); err != nil {

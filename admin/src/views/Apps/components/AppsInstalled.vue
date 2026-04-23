@@ -269,7 +269,7 @@
 import { ref, watch, reactive, nextTick, computed } from "vue"
 import { useMessage, useDialog } from "naive-ui"
 // @ts-ignore
-import { appsInstalledListAPI, appsUninstall, InstalledOp, appsRepairComposeAPI, appsRepairPodmanShortNameAPI, appsRepairPortConflictAPI } from "../../../api/modules/apps"
+import { appsInstalledListAPI, appsUninstall, InstalledOp, appsRepairComposeAPI, appsRepairPodmanShortNameAPI, appsRepairPodmanSubuidAPI, appsRepairPortConflictAPI } from "../../../api/modules/apps"
 // @ts-ignore
 import { repairSystemdLingerAPI } from "@/api/modules/container"
 import type { AppsInstalledSearchParams } from "../../../api/modules/apps"
@@ -556,6 +556,12 @@ function openLog(item: any) {
 					repairTipMessage.value = "当前容器运行时配置不允许直接拉取简写镜像名。可以先一键修复（自动向 /etc/containers/registries.conf 追加 docker.io 源）。"
 					repairTipCommands.value = ""
 					repairTipAction.value = "short-name"
+				} else if (event.data.includes("insufficient UIDs or GIDs")) {
+					repairTipVisible.value = true
+					repairTipTitle.value = "检测到 UID/GID 映射不足"
+					repairTipMessage.value = "当前用户缺乏足够的子 UID/GID 映射，导致无法创建容器命名空间。可以点击一键修复，系统将自动配置并重置命名空间。"
+					repairTipCommands.value = ""
+					repairTipAction.value = "subuid"
 				} else if (event.data.includes("cgroup-manager") || event.data.includes("enable-linger")) {
 					repairTipVisible.value = true
 					repairTipTitle.value = "建议开启用户 Linger (保活) 支持"
@@ -602,6 +608,12 @@ const checkInstallResult = async (name: string) => {
 				repairTipMessage.value = item.message
 				repairTipCommands.value = ""
 				repairTipAction.value = "short-name"
+			} else if (!repairTipVisible.value && typeof item.message === "string" && item.message.includes("insufficient UIDs or GIDs")) {
+				repairTipVisible.value = true
+				repairTipTitle.value = "检测到 UID/GID 映射不足"
+				repairTipMessage.value = item.message
+				repairTipCommands.value = ""
+				repairTipAction.value = "subuid"
 			} else if (!repairTipVisible.value && typeof item.message === "string" && (item.message.includes("cgroup-manager") || item.message.includes("enable-linger"))) {
 				repairTipVisible.value = true
 				repairTipTitle.value = "建议开启用户 Linger (保活) 支持"
@@ -629,6 +641,8 @@ const handleRepairCompose = async () => {
 		let res: any
 		if (repairTipAction.value === "short-name") {
 			res = await appsRepairPodmanShortNameAPI()
+		} else if (repairTipAction.value === "subuid") {
+			res = await appsRepairPodmanSubuidAPI()
 		} else if (repairTipAction.value === "linger") {
 			res = await repairSystemdLingerAPI()
 		} else if (repairTipAction.value === "port-conflict") {
