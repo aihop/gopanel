@@ -177,6 +177,14 @@
                   />
                 </n-form-item>
 
+                <div
+                  v-if="captchaRequired"
+                  class="mb-5 rounded-2xl border px-4 py-3 text-sm leading-6"
+                  :class="isDark ? 'border-amber-400/20 bg-amber-400/10 text-amber-100' : 'border-amber-200 bg-amber-50 text-amber-700'"
+                >
+                  检测到一次登录失败，后续登录前需要先完成滑块验证。
+                </div>
+
                 <div class="mt-2 flex flex-col gap-6">
                   <div class="flex items-center justify-between gap-4">
                     <n-checkbox
@@ -201,6 +209,11 @@
                   </n-button>
                 </div>
               </n-form>
+
+              <LoginCaptcha
+                ref="captchaRef"
+                @success="handleCaptchaSuccess"
+              />
             </div>
           </div>
         </div>
@@ -223,8 +236,10 @@
 import type { FormType } from "@/components/auth/types.d"
 import type { FormInst, FormRules, FormValidationError } from "naive-ui"
 import { authSignInAPI } from "@/api/modules/auth"
+import LoginCaptcha from "@/components/auth/LoginCaptcha.vue"
 import Logo from "@/layouts/common/Logo.vue"
 import { useAuthStore } from "@/store/auth"
+import GlobalStore from "@/store/modules/global"
 import { useThemeStore } from "@/store/theme"
 import { useMessage, useNotification } from "naive-ui"
 import { computed, onBeforeMount, onMounted, ref, watch } from "vue"
@@ -240,11 +255,17 @@ interface ModelType {
 	password: string | null
 }
 
+interface LoginCaptchaExpose {
+	show: () => void
+	close: () => void
+}
+
 const { t } = useI18n()
 const themeStore = useThemeStore()
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+const globalStore = GlobalStore()
 const message = useMessage()
 const notification = useNotification()
 
@@ -254,6 +275,10 @@ const isLogged = computed(() => authStore.isLogged)
 const appBrand = import.meta.env.VITE_APP_BRAND || "GoPanel"
 const rememberMe = ref(localStorage.getItem("gopanel-admin-remembered") === "true")
 const formRef = ref<FormInst | null>(null)
+const captchaRef = ref<LoginCaptchaExpose | null>(null)
+const captchaRequired = ref(false)
+const captchaToken = ref("")
+const pendingSubmitAfterCaptcha = ref(false)
 
 const model = ref<ModelType>({
 	email: localStorage.getItem("gopanel-admin-email") || "",
@@ -266,6 +291,9 @@ onBeforeMount(() => {
 	if (window.location.hostname === "demo.gopanel.run") {
 		model.value.email = "demo@gopanel.run"
 		model.value.password = "123456"
+	}
+	if (typeof route.query.entrance === "string" && route.query.entrance.trim()) {
+		globalStore.setEntrance(route.query.entrance.trim())
 	}
 })
 
@@ -335,33 +363,58 @@ async function signIn() {
 			return
 		}
 
-		const { data } = await authSignInAPI({
-			email: model.value.email!,
-			password: model.value.password!
-		})
-
-		if (rememberMe.value) {
-			localStorage.setItem("gopanel-admin-email", model.value.email!)
-			localStorage.setItem("gopanel-admin-password", model.value.password!)
-			localStorage.setItem("gopanel-admin-remembered", "true")
-		} else {
-			localStorage.removeItem("gopanel-admin-email")
-			localStorage.removeItem("gopanel-admin-password")
-			localStorage.removeItem("gopanel-admin-remembered")
+		if (captchaRequired.value && !captchaToken.value) {
+			pendingSubmitAfterCaptcha.value = true
+			captchaRef.value?.show()
+			return
 		}
 
-		authStore.setLogged({
-			auth: data.xAuth,
-			user: data.userInfo
-		})
+		try {
+			const { data } = await authSignInAPI({
+				email: model.value.email!,
+				password: model.value.password!,
+				captchaToken: captchaToken.value || undefined
+			})
 
-		await router.push({ path: "/", replace: true })
-		notification.success({
-			title: t("auth.login_success"),
-			content: t("auth.login_success_tips"),
-			duration: 3000
-		})
+			if (rememberMe.value) {
+				localStorage.setItem("gopanel-admin-email", model.value.email!)
+				localStorage.setItem("gopanel-admin-password", model.value.password!)
+				localStorage.setItem("gopanel-admin-remembered", "true")
+			} else {
+				localStorage.removeItem("gopanel-admin-email")
+				localStorage.removeItem("gopanel-admin-password")
+				localStorage.removeItem("gopanel-admin-remembered")
+			}
+
+			authStore.setLogged({
+				auth: data.xAuth,
+				user: data.userInfo
+			})
+			captchaRequired.value = false
+			captchaToken.value = ""
+			pendingSubmitAfterCaptcha.value = false
+
+			await router.push({ path: "/", replace: true })
+			notification.success({
+				title: t("auth.login_success"),
+				content: t("auth.login_success_tips"),
+				duration: 3000
+			})
+		} catch (error) {
+			console.error(error)
+			captchaRequired.value = true
+			captchaToken.value = ""
+			pendingSubmitAfterCaptcha.value = false
+		}
 	})
+}
+
+function handleCaptchaSuccess(token: string) {
+	captchaToken.value = token
+	if (pendingSubmitAfterCaptcha.value) {
+		pendingSubmitAfterCaptcha.value = false
+		void signIn()
+	}
 }
 
 onBeforeMount(() => {

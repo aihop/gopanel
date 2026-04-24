@@ -88,8 +88,17 @@ func DeployWebsiteEngine(ctx context.Context, alias string, req *request.Website
 	if workingDir == "" {
 		workingDir = detectEngineWorkingDir(imageInspect)
 	}
+	publishedHostPort := resolveRunnerPublishedHostPort(rc)
 
 	logEngineProgress(progress, "镜像运行配置: workingDir=%s, containerPort=%s", workingDir, containerPort)
+	if publishedHostPort == "0" {
+		logEngineProgress(progress, "Runner 发布端口策略: 自动分配宿主机端口")
+	} else {
+		logEngineProgress(progress, "Runner 发布端口策略: 固定宿主机端口 %s", publishedHostPort)
+		if strings.TrimSpace(req.PreviousContainerID) != "" {
+			logEngineProgress(progress, "检测到固定端口模式且存在旧容器，新容器需要等待旧容器释放端口后才能完成切换，期间可能有短暂中断")
+		}
+	}
 
 	containerName := fmt.Sprintf("gopanel-engine-%s-%d", alias, time.Now().Unix())
 
@@ -105,7 +114,7 @@ func DeployWebsiteEngine(ctx context.Context, alias string, req *request.Website
 			nat.Port(containerPort + "/tcp"): []nat.PortBinding{
 				{
 					HostIP:   "127.0.0.1",
-					HostPort: "0",
+					HostPort: publishedHostPort,
 				},
 			},
 		},
@@ -117,6 +126,12 @@ func DeployWebsiteEngine(ctx context.Context, alias string, req *request.Website
 		logEngineProgress(progress, "Runner 配置: baseImage=%s, mode=%s", imageName, strings.TrimSpace(rc.Mode))
 		logEngineProgress(progress, "Runner 启动脚本已生成")
 		if isRunnerPipeline {
+			const runnerNetworkName = "gopanel-network"
+			if err := docker.EnsureNetwork(runnerNetworkName); err != nil {
+				return 0, "", "", fmt.Errorf("failed to ensure runner network %s: %w", runnerNetworkName, err)
+			}
+			hostConfig.NetworkMode = container.NetworkMode(runnerNetworkName)
+			logEngineProgress(progress, "Runner 默认接入网络: %s", runnerNetworkName)
 			selectedCodeDir = strings.TrimSpace(req.CodeDirFallback)
 			if selectedCodeDir == "" {
 				selectedCodeDir = strings.TrimSpace(codeDir)
@@ -267,7 +282,7 @@ func DeployWebsiteEngine(ctx context.Context, alias string, req *request.Website
 					nat.Port(containerPort + "/tcp"): []nat.PortBinding{
 						{
 							HostIP:   "127.0.0.1",
-							HostPort: "0",
+							HostPort: publishedHostPort,
 						},
 					},
 				}
@@ -284,7 +299,7 @@ func DeployWebsiteEngine(ctx context.Context, alias string, req *request.Website
 
 	logEngineProgress(progress, "正在启动容器...")
 	if err := cli.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
-		// 容错处理：即使我们改用了 HostPort: "0"，但在某些极端情况下（比如旧容器强行绑定了某个系统级独占资源，或是 IP 被占用），
+		// 容错处理：即使我们使用了自动/固定 HostPort，在某些极端情况下（比如旧容器强行占用固定端口），
 		// 依然可能启动失败。如果是端口分配冲突，我们退回“抢占旧容器”的安全策略。
 		if req.PreviousContainerID != "" && strings.Contains(err.Error(), "port is already allocated") {
 			logEngineProgress(progress, "检测到固定端口冲突，正在停止旧容器以释放端口...")
@@ -432,6 +447,7 @@ type runnerConfig struct {
 	BaseImage       string
 	WorkingDir      string
 	ContainerPort   string
+	HostPort        string
 	StartCommand    string
 	BuildCommand    string
 	PreStart        string
@@ -462,6 +478,9 @@ func parseRunnerConfig(raw map[string]interface{}) runnerConfig {
 	}
 	if v := strings.TrimSpace(asNumberString(raw["containerPort"])); v != "" {
 		rc.ContainerPort = v
+	}
+	if v := strings.TrimSpace(asNumberString(raw["hostPort"])); v != "" {
+		rc.HostPort = v
 	}
 	if v := strings.TrimSpace(asString(raw["startCommand"])); v != "" {
 		rc.StartCommand = v
@@ -495,6 +514,13 @@ func parseRunnerConfig(raw map[string]interface{}) runnerConfig {
 		}
 	}
 	return rc
+}
+
+func resolveRunnerPublishedHostPort(rc runnerConfig) string {
+	if v := strings.TrimSpace(rc.HostPort); v != "" {
+		return v
+	}
+	return "0"
 }
 
 func asString(v interface{}) string {

@@ -179,14 +179,12 @@ func deployWebAppWebsite(website *model.Website, releaseDir, runtimeDir, imageTa
 		if hostPort, containerID, actualRuntimeDir, ok, err := resolvePipelineRunnerBridge(website, pipelineRecordID); err != nil {
 			return 0, "", "", err
 		} else if ok {
-			website.Proxy = fmt.Sprintf("127.0.0.1:%d", hostPort)
-			website.ContainerID = containerID
-			website.RuntimeDir = actualRuntimeDir
-			website.Status = "Running"
-			if err := global.DB.Save(website).Error; err != nil {
+			oldContainerID := strings.TrimSpace(website.ContainerID)
+			if err := switchWebsiteRuntimeTarget(website, fmt.Sprintf("127.0.0.1:%d", hostPort), containerID, actualRuntimeDir); err != nil {
 				return 0, "", "", err
 			}
 			appendPipelineDeployInfoLog(pipelineRecordID, website.Alias, fmt.Sprintf("检测到流水线 Runner 结果，已桥接代理到 127.0.0.1:%d", hostPort))
+			cleanupPreviousWebsiteContainer(oldContainerID, containerID, pipelineRecordID, website.Alias)
 			return hostPort, containerID, actualRuntimeDir, nil
 		}
 	}
@@ -232,14 +230,15 @@ func deployWebAppWebsite(website *model.Website, releaseDir, runtimeDir, imageTa
 		return 0, "", "", fmt.Errorf("启动容器失败: %w", err)
 	}
 
-	website.Proxy = fmt.Sprintf("127.0.0.1:%d", hostPort)
-	website.ContainerID = containerID
+	oldContainerID := strings.TrimSpace(previousContainerID)
+	if err := switchWebsiteRuntimeTarget(website, fmt.Sprintf("127.0.0.1:%d", hostPort), containerID, actualRuntimeDir); err != nil {
+		return 0, "", "", err
+	}
 	website.EngineEnv = imageRef
-	website.RuntimeDir = actualRuntimeDir
-	website.Status = "Running"
 	if err := global.DB.Save(website).Error; err != nil {
 		return 0, "", "", err
 	}
+	cleanupPreviousWebsiteContainer(oldContainerID, containerID, pipelineRecordID, website.Alias)
 
 	// if _, err := NewCaddy().ReplaceServerBlock(buildDeployCaddyDomain(*website), website.Proxy, BuildOtherDomains(*website), website.Protocol); err != nil {
 	// 	return 0, "", "", fmt.Errorf("更新代理失败: %w", err)
@@ -255,6 +254,48 @@ func deployWebAppWebsite(website *model.Website, releaseDir, runtimeDir, imageTa
 	// }
 
 	return hostPort, containerID, actualRuntimeDir, nil
+}
+
+func switchWebsiteRuntimeTarget(website *model.Website, proxy, containerID, runtimeDir string) error {
+	if website == nil {
+		return fmt.Errorf("website is nil")
+	}
+
+	prevProxy := website.Proxy
+	prevContainerID := website.ContainerID
+	prevRuntimeDir := website.RuntimeDir
+	prevStatus := website.Status
+
+	website.Proxy = proxy
+	website.ContainerID = containerID
+	website.RuntimeDir = runtimeDir
+	website.Status = "Running"
+	if err := global.DB.Save(website).Error; err != nil {
+		return err
+	}
+
+	if err := ApplyCaddyFromDB(context.Background()); err != nil {
+		website.Proxy = prevProxy
+		website.ContainerID = prevContainerID
+		website.RuntimeDir = prevRuntimeDir
+		website.Status = prevStatus
+		_ = global.DB.Save(website).Error
+		return fmt.Errorf("切换网站代理失败: %w", err)
+	}
+	return nil
+}
+
+func cleanupPreviousWebsiteContainer(oldContainerID, newContainerID string, pipelineRecordID uint, websiteAlias string) {
+	oldContainerID = strings.TrimSpace(oldContainerID)
+	newContainerID = strings.TrimSpace(newContainerID)
+	if oldContainerID == "" || oldContainerID == newContainerID {
+		return
+	}
+	if err := cleanupPreviousContainer(oldContainerID); err != nil {
+		appendPipelineDeployErrorLog(pipelineRecordID, websiteAlias, fmt.Sprintf("清理旧容器 %s 失败: %v", oldContainerID, err))
+		return
+	}
+	appendPipelineDeployInfoLog(pipelineRecordID, websiteAlias, fmt.Sprintf("已在切换成功后清理旧容器 %s", oldContainerID))
 }
 
 func resolvePipelineRunnerBridge(website *model.Website, pipelineRecordID uint) (int, string, string, bool, error) {

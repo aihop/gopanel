@@ -33,6 +33,7 @@
       <n-data-table
         :columns="columns"
         :data="repositoryData"
+        :loading="loading"
         :pagination="pagination"
         :bordered="false"
         :row-key="rowKey"
@@ -200,6 +201,7 @@ const message = useMessage()
 const dialog = useDialog() // Initialize dialog service
 const drawerMode = ref<"add" | "edit">("add") // To manage add/edit mode
 const editingRepoId = ref<number | null>(null) // To store ID of repo being edited
+const loading = ref(false)
 
 // Initialize with an empty array, will be populated by API call
 const repositoryData = ref<RepositoryRow[]>([])
@@ -492,6 +494,7 @@ const handleSearch = () => {
 
 // Fetch data from API
 const fetchRepositoryData = async () => {
+	loading.value = true
 	try {
 		const params: any = {
 			page: pagination.value.page,
@@ -540,6 +543,8 @@ const fetchRepositoryData = async () => {
 		pagination.value.itemCount = 0
 		console.error("Error fetching repository data:", error)
 		message.error(error.message )
+	} finally {
+		loading.value = false
 	}
 }
  

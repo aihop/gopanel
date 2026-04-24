@@ -235,20 +235,13 @@ func (s *PipelineService) stepRunner(ctx context.Context, logger *PipelineLogger
 	if prev, err := s.recordRepo.LatestRunnerContainerID(p.ID); err == nil {
 		previousContainerID = strings.TrimSpace(prev)
 	}
-	if previousContainerID != "" {
-		cli, err := udocker.NewDockerClient()
-		if err == nil {
-			_ = RemoveEngineContainer(ctx, cli, previousContainerID)
-			cli.Close()
-		}
-	}
 
 	req := &request.WebsiteCreate{
 		CodeSource:          "pipeline",
 		GitRepo:             "",
 		CodeDir:             "",
 		CodeDirFallback:     codeRoot,
-		PreviousContainerID: "",
+		PreviousContainerID: previousContainerID,
 		RunnerKey:           strings.TrimSpace(p.RunnerKey),
 		RunnerConfig:        runnerCfg,
 	}

@@ -45,6 +45,7 @@
       <n-data-table
         :columns="columns"
         :data="tableData"
+        :loading="loading"
         :pagination="false"
         :bordered="false"
         class="mb-4"

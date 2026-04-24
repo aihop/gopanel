@@ -36,16 +36,6 @@ func ListContainersMergedWithSource(ctx context.Context, options container.ListO
 	}
 
 	var lastErr error
-	if resolved.Kind == RuntimePodman {
-		if rootless, err := PodmanListContainers(baseCtx, options.All); err == nil {
-			for _, it := range rootless {
-				addContainer(podmanCLIContainerToDockerTypes(it), "podman-cli")
-			}
-		} else {
-			lastErr = err
-		}
-	}
-
 	for _, host := range runtimeViewAPIHosts(resolved) {
 		items, err := listContainersFromHost(baseCtx, host, options)
 		if err != nil {
@@ -54,6 +44,16 @@ func ListContainersMergedWithSource(ctx context.Context, options container.ListO
 		}
 		for _, it := range items {
 			addContainer(it, host)
+		}
+	}
+
+	if resolved.Kind == RuntimePodman {
+		if rootless, err := PodmanListContainers(baseCtx, options.All); err == nil {
+			for _, it := range rootless {
+				addContainer(podmanCLIContainerToDockerTypes(it), "podman-cli")
+			}
+		} else {
+			lastErr = err
 		}
 	}
 
@@ -231,7 +231,7 @@ func podmanCLIContainerToDockerTypes(it PodmanContainer) types.Container {
 func podmanCLIImageToDockerSummary(it PodmanImage) image.Summary {
 	var sizeBytes int64
 	if s := strings.TrimSpace(it.Size); s != "" {
-		if n, err := strconv.ParseInt(s, 10, 64); err == nil {
+		if n, ok := ParsePodmanImageSizeBytes(s); ok {
 			sizeBytes = n
 		}
 	}

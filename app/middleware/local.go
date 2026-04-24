@@ -4,7 +4,9 @@ import (
 	"encoding/base64"
 	"net"
 	"strings"
+	"time"
 
+	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
 	"github.com/gofiber/fiber/v3"
 )
@@ -142,22 +144,78 @@ const NoEntrance = `<!doctype html>
 
 // 安全入口
 func Entrance(c fiber.Ctx) error {
-	// 安全入口登录路由
-	if global.CONF.System.Entrance == "" {
+	entrance := strings.TrimSpace(global.CONF.System.Entrance)
+	if entrance == "" || shouldBypassEntrance(c.Path()) {
 		return c.Next()
 	}
-	securityEntrance := "/" + global.CONF.System.Entrance
-	if c.Path() == securityEntrance {
-		return c.Next()
-	}
-	cookie, err := base64.StdEncoding.DecodeString(c.Cookies("Entrance"))
-	if err != nil {
-		return renderNoEntrance(c)
-	}
-	if string(cookie) == global.CONF.System.Entrance {
+	if authorizeEntrance(c, entrance) {
 		return c.Next()
 	}
 	return renderNoEntrance(c)
+}
+
+func shouldBypassEntrance(path string) bool {
+	switch path {
+	case "/health":
+		return true
+	default:
+		return false
+	}
+}
+
+func authorizeEntrance(c fiber.Ctx, entrance string) bool {
+	securityEntrance := "/" + strings.TrimPrefix(entrance, "/")
+	currentPath := strings.TrimRight(c.Path(), "/")
+	if currentPath == "" {
+		currentPath = "/"
+	}
+	if currentPath == securityEntrance {
+		setEntranceCookie(c, entrance)
+		return true
+	}
+
+	if matchesEntranceValue(c.Query("entrance"), entrance) {
+		setEntranceCookie(c, entrance)
+		return true
+	}
+
+	if matchesEntranceValue(c.Get("EntranceCode"), entrance) {
+		setEntranceCookie(c, entrance)
+		return true
+	}
+
+	if matchesEntranceValue(c.Cookies(constant.Entrance), entrance) {
+		return true
+	}
+	return false
+}
+
+func matchesEntranceValue(raw string, expected string) bool {
+	raw = strings.TrimSpace(raw)
+	expected = strings.TrimSpace(expected)
+	if raw == "" || expected == "" {
+		return false
+	}
+	if raw == expected {
+		return true
+	}
+	decoded, err := base64.StdEncoding.DecodeString(raw)
+	if err != nil {
+		return false
+	}
+	return string(decoded) == expected
+}
+
+func setEntranceCookie(c fiber.Ctx, entrance string) {
+	c.Cookie(&fiber.Cookie{
+		Name:     constant.Entrance,
+		Value:    base64.StdEncoding.EncodeToString([]byte(entrance)),
+		Expires:  time.Now().Add(24 * time.Hour),
+		Path:     "/",
+		HTTPOnly: false,
+		SameSite: "Lax",
+		Secure:   c.Scheme() == "https",
+	})
 }
 
 func renderNoEntrance(c fiber.Ctx) error {

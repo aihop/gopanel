@@ -19,6 +19,7 @@
         ref="tableRef"
         v-slots="slots"
         :columns="tableColumns"
+        :loading="loading"
         :row-key="getRowKey"
         :checked-row-keys="checkedRowKeys"
         @update:checked-row-keys="handleSelectionChange"
@@ -66,6 +67,10 @@ const props = defineProps({
 		type: Object,
 		required: false,
 		default: () => {}
+	},
+	loading: {
+		type: Boolean,
+		default: false
 	}
 })
 

@@ -1,5 +1,5 @@
 <template>
-  <div v-loading="loading">
+  <div>
     <div v-if="dockerStatus !== 'Running'">
       <n-alert
         title="Tips"
@@ -116,6 +116,7 @@
       </template>
       <template #main>
         <ComplexTable
+          :loading="loading"
           :data="data"
           :columns="visibleColumns"
           :pagination-config="paginationConfig"

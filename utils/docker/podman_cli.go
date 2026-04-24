@@ -31,6 +31,62 @@ type PodmanImage struct {
 	Size    string
 }
 
+func ParsePodmanImageSizeBytes(raw string) (int64, bool) {
+	s := strings.TrimSpace(strings.ToUpper(raw))
+	if s == "" {
+		return 0, false
+	}
+	if n, err := strconv.ParseInt(s, 10, 64); err == nil {
+		return n, true
+	}
+
+	s = strings.ReplaceAll(s, ",", "")
+	s = strings.ReplaceAll(s, "IB", "")
+	s = strings.ReplaceAll(s, "I", "")
+	s = strings.ReplaceAll(s, "B", "")
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, false
+	}
+
+	unit := ""
+	switch {
+	case strings.HasSuffix(s, "K"):
+		unit = "K"
+		s = strings.TrimSuffix(s, "K")
+	case strings.HasSuffix(s, "M"):
+		unit = "M"
+		s = strings.TrimSuffix(s, "M")
+	case strings.HasSuffix(s, "G"):
+		unit = "G"
+		s = strings.TrimSuffix(s, "G")
+	case strings.HasSuffix(s, "T"):
+		unit = "T"
+		s = strings.TrimSuffix(s, "T")
+	case strings.HasSuffix(s, "P"):
+		unit = "P"
+		s = strings.TrimSuffix(s, "P")
+	}
+
+	v, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
+	if err != nil {
+		return 0, false
+	}
+	switch unit {
+	case "K":
+		v *= 1024
+	case "M":
+		v *= 1024 * 1024
+	case "G":
+		v *= 1024 * 1024 * 1024
+	case "T":
+		v *= 1024 * 1024 * 1024 * 1024
+	case "P":
+		v *= 1024 * 1024 * 1024 * 1024 * 1024
+	}
+	return int64(v), true
+}
+
 func PodmanEnsureReady(ctx context.Context) error {
 	if runtime.GOOS != "darwin" {
 		return nil

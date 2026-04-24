@@ -11,6 +11,14 @@ import { enc } from "crypto-js"
 
 let router: Router | null = null
 
+const buildLoginRoute = (entrance: string) => {
+	const value = String(entrance || "").trim()
+	if (value) {
+		return { path: "/login", query: { entrance: value } }
+	}
+	return { path: "/login" }
+}
+
 // 模块顶部router还未被初始化 useRouter() 无效,初始化后使用参数传进来
 export const setRouter = (r: Router) => {
 	router = r
@@ -37,7 +45,7 @@ class RequestHttp {
 					...config.headers,
 					"x-auth": authStore.auth || ""
 				}
-				if (config.url === "/auth/mfalogin") {
+				if (globalStore.entrance) {
 					let entrance = enc.Base64.stringify(enc.Utf8.parse(globalStore.entrance))
 					config.headers.EntranceCode = entrance
 				}
@@ -72,10 +80,7 @@ class RequestHttp {
 
 				if (data.code == ResultEnum.OVERDUE || data.code == ResultEnum.FORBIDDEN) {
 					globalStore.setLogStatus(false)
-					router?.push({
-						name: "entrance",
-						params: { code: globalStore.entrance }
-					})
+					router?.push(buildLoginRoute(globalStore.entrance))
 					return Promise.reject(data)
 				}
 				if (data.code == ResultEnum.NOTFOUND) {
@@ -131,24 +136,15 @@ class RequestHttp {
 					switch (response.status) {
 						case 310:
 							globalStore.errStatus = "err-ip"
-							router?.push({
-								name: "entrance",
-								params: { code: globalStore.entrance }
-							})
+							router?.push(buildLoginRoute(globalStore.entrance))
 							return
 						case 311:
 							globalStore.errStatus = "err-domain"
-							router?.push({
-								name: "entrance",
-								params: { code: globalStore.entrance }
-							})
+							router?.push(buildLoginRoute(globalStore.entrance))
 							return
 						case 312:
 							globalStore.errStatus = "err-entrance"
-							router?.push({
-								name: "entrance",
-								params: { code: globalStore.entrance }
-							})
+							router?.push(buildLoginRoute(globalStore.entrance))
 							return
 						case 313:
 							router?.push({ name: "Expired" })
@@ -160,10 +156,7 @@ class RequestHttp {
 						default:
 							globalStore.isLogin = false
 							globalStore.errStatus = "code-" + response.status
-							router?.push({
-								name: "entrance",
-								params: { code: globalStore.entrance }
-							})
+							router?.push(buildLoginRoute(globalStore.entrance))
 							return Promise.reject(error)
 					}
 				}

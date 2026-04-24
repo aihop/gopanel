@@ -2,7 +2,7 @@ package api
 
 import (
 	"encoding/base64"
-	"errors"
+	"strings"
 	"time"
 
 	"github.com/aihop/gopanel/app/dto"
@@ -24,12 +24,37 @@ func Login(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(buserr.Err(err)))
 	}
+	r.Email = strings.TrimSpace(r.Email)
+	r.Mobile = strings.TrimSpace(r.Mobile)
 
 	logService := service.NewLogService()
 	loginLog := model.LoginLog{
 		IP:      c.IP(),
 		Agent:   string(c.Request().Header.UserAgent()),
 		Address: geo.Region(c.IP()),
+	}
+	if message, blocked := defaultLoginAttemptGuard.Check(c.IP(), r); blocked {
+		loginLog.Status = constant.StatusFailed
+		loginLog.Message = "login blocked by rate limiter"
+		_ = logService.CreateLoginLog(loginLog)
+		return c.JSON(e.RetError(constant.StatusCodeFullFail, message))
+	}
+	if defaultLoginAttemptGuard.RequiresCaptcha(c.IP(), r) {
+		if err := consumeVerifiedLoginCaptchaToken(r.CaptchaToken); err != nil {
+			loginLog.Status = constant.StatusFailed
+			loginLog.Message = "captcha verification required"
+			_ = logService.CreateLoginLog(loginLog)
+			return c.JSON(e.RetError(constant.StatusCodeFullFail, "请先完成滑块验证"))
+		}
+	}
+
+	failLogin := func(logMessage string) error {
+		loginLog.Status = constant.StatusFailed
+		loginLog.Message = logMessage
+		defaultLoginAttemptGuard.RegisterFailure(c.IP(), r)
+		time.Sleep(loginAttemptDelay)
+		_ = logService.CreateLoginLog(loginLog)
+		return c.JSON(e.Fail(buserr.WithDetail("ErrLoginFailed", logMessage)))
 	}
 
 	userService := service.NewUser()
@@ -40,16 +65,10 @@ func Login(c fiber.Ctx) error {
 		user, err = userService.GetByMobile(r.Mobile)
 	}
 	if err != nil || user == nil {
-		loginLog.Status = constant.StatusFailed
-		loginLog.Message = "user not found"
-		_ = logService.CreateLoginLog(loginLog)
-		return c.JSON(e.Fail(errors.New("account does not exist or password is incorrect")))
+		return failLogin("user not found")
 	}
 	if !cryptx.ValidatePassword(user.Password, r.Password) {
-		loginLog.Status = constant.StatusFailed
-		loginLog.Message = "Password verification failed"
-		_ = logService.CreateLoginLog(loginLog)
-		return c.JSON(e.RetError(constant.StatusCodeFullFail, "Password verification failed"))
+		return failLogin("Password verification failed")
 	}
 	jwt, err := token.Create(user.ID, user.Role, user.Salt, user.FileBaseDir, time.Duration(constant.AuthAdminLoginExpires))
 	if err != nil {
@@ -62,6 +81,7 @@ func Login(c fiber.Ctx) error {
 	loginLog.Status = constant.StatusSuccess
 	loginLog.Message = "Login success"
 	_ = logService.CreateLoginLog(loginLog)
+	defaultLoginAttemptGuard.RegisterSuccess(c.IP(), r)
 
 	user.LoginAt = time.Now()
 	userService.Update(&model.User{ID: user.ID, LoginAt: time.Now()})
@@ -78,6 +98,7 @@ func Login(c fiber.Ctx) error {
 		Expires:  time.Now().Add(1 * 24 * time.Hour),
 		Path:     "/",
 		HTTPOnly: false,
+		SameSite: "Lax",
 		Secure:   c.Scheme() == "https",
 	})
 
@@ -91,7 +112,8 @@ func Login(c fiber.Ctx) error {
 			Value:    sID,
 			Expires:  time.Now().Add(1 * 24 * time.Hour),
 			Path:     "/",
-			HTTPOnly: false,
+			HTTPOnly: true,
+			SameSite: "Lax",
 			Secure:   c.Scheme() == "https",
 		})
 		err := global.SESSION.Set(sID, sessionUser, 86400)

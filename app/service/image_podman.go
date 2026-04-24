@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"strconv"
 	"strings"
 	"time"
 
@@ -43,7 +42,7 @@ func (u *ImageService) pagePodman(req dto.SearchWithPage) (int64, interface{}, e
 		}
 		_, isUsed := used[img.ID]
 		displaySize := strings.TrimSpace(img.Size)
-		if n, e := strconv.ParseInt(displaySize, 10, 64); e == nil {
+		if n, ok := docker.ParsePodmanImageSizeBytes(displaySize); ok {
 			displaySize = formatFileSize(n)
 		}
 		records = append(records, dto.ImageInfo{

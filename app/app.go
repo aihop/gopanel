@@ -94,6 +94,7 @@ func (r *App) newFiber() *fiber.App {
 	// 捕捉堆栈错误
 	app.Use(appRecover.New())
 	app.Use(middleware.CatchPanicError)
+	app.Use(middleware.Entrance)
 
 	app.Get("/health", func(c fiber.Ctx) error {
 		return c.JSON(dto.Result{Code: 0, Msg: "success", Data: map[string]interface{}{"appBrand": constant.AppBrand, "appVersion": constant.AppVersion, "appSite": constant.AppSite, "appName": constant.AppName}})

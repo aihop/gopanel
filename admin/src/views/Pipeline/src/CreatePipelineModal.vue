@@ -20,6 +20,17 @@ const runnerKeyTouched = ref(false)
 
 const isEdit = computed(() => !!props.editData)
 
+const validateOptionalPort = (_rule: any, value: string) => {
+  const text = String(value || "").trim()
+  if (!text) return true
+  if (!/^\d+$/.test(text)) return new Error("端口必须是数字")
+  const port = Number(text)
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    return new Error("端口范围必须在 1-65535")
+  }
+  return true
+}
+
 const formModel = reactive({
   name: "",
   description: "",
@@ -43,6 +54,7 @@ const formModel = reactive({
   runnerBaseImage: "node:20-alpine",
   runnerWorkingDir: "/var/www/app",
   runnerContainerPort: "3000",
+  runnerHostPort: "",
   runnerInstallCommand: "",
   runnerStartCommand: "node .output/server/index.mjs",
   runnerPreStart: "",
@@ -60,6 +72,14 @@ const rules = {
       if (!String(value || "").trim()) return new Error("请输入流水线标识")
       return true
     },
+    trigger: ["blur", "input"]
+  },
+  runnerContainerPort: {
+    validator: validateOptionalPort,
+    trigger: ["blur", "input"]
+  },
+  runnerHostPort: {
+    validator: validateOptionalPort,
     trigger: ["blur", "input"]
   }
 }
@@ -131,6 +151,7 @@ const inferRunnerAdvanced = (runnerConfig: any) => {
   const baseImage = String(runnerConfig.baseImage || "").trim()
   const workingDir = String(runnerConfig.workingDir || "").trim()
   const containerPort = String(runnerConfig.containerPort || "").trim()
+  const hostPort = String(runnerConfig.hostPort || "").trim()
   const startCommand = String(runnerConfig.startCommand || "").trim()
   const preStart = String(runnerConfig.preStart || "").trim()
   const buildCommand = String(runnerConfig.buildCommand || "").trim()
@@ -145,6 +166,7 @@ const inferRunnerAdvanced = (runnerConfig: any) => {
     || (baseImage && baseImage !== "node:20-alpine")
     || (workingDir && workingDir !== "/var/www/app")
     || (containerPort && containerPort !== "3000")
+    || !!hostPort
     || (startCommand && startCommand !== "node .output/server/index.mjs")
   )
 }
@@ -199,6 +221,8 @@ const handleSubmit = () => {
         }
 
         if (payload.runnerEnabled) {
+          payload.runnerContainerPort = String(payload.runnerContainerPort || "").trim()
+          payload.runnerHostPort = String(payload.runnerHostPort || "").trim()
           payload.runnerMode = "runner"
           payload.runnerConfig = {
             advanced: !!payload.runnerAdvanced,
@@ -206,6 +230,7 @@ const handleSubmit = () => {
             baseImage: payload.runnerBaseImage || "node:20-alpine",
             workingDir: payload.runnerWorkingDir || "/var/www/app",
             containerPort: payload.runnerContainerPort || "3000",
+            hostPort: payload.runnerHostPort || "",
             buildCommand: payload.runnerInstallCommand || "",
             startCommand: payload.runnerStartCommand || "node .output/server/index.mjs",
             preStart: payload.runnerPreStart || "",
@@ -276,6 +301,7 @@ watch(() => props.show, (val) => {
         runnerBaseImage: runnerConfig.baseImage || "node:20-alpine",
         runnerWorkingDir: runnerConfig.workingDir || "/var/www/app",
         runnerContainerPort: String(runnerConfig.containerPort || "3000"),
+        runnerHostPort: String(runnerConfig.hostPort || ""),
         runnerInstallCommand: runnerConfig.buildCommand || "",
         runnerStartCommand: runnerConfig.startCommand || "node .output/server/index.mjs",
         runnerPreStart: runnerConfig.preStart || "",
@@ -308,6 +334,7 @@ watch(() => props.show, (val) => {
         runnerBaseImage: "node:20-alpine",
         runnerWorkingDir: "/var/www/app",
         runnerContainerPort: "3000",
+        runnerHostPort: "",
         runnerInstallCommand: "",
         runnerStartCommand: "node .output/server/index.mjs",
         runnerPreStart: "",
@@ -340,6 +367,7 @@ watch(() => props.show, (val) => {
         runnerBaseImage: "node:20-alpine",
         runnerWorkingDir: "/var/www/app",
         runnerContainerPort: "3000",
+        runnerHostPort: "",
         runnerInstallCommand: "",
         runnerStartCommand: "node .output/server/index.mjs",
         runnerPreStart: "",
@@ -557,11 +585,29 @@ watch(() => formModel.pipelineMode, (mode) => {
             />
           </n-form-item>
 
-          <n-form-item label="容器端口">
+          <n-form-item
+            label="容器端口"
+            path="runnerContainerPort"
+          >
             <n-input
               v-model:value="formModel.runnerContainerPort"
               placeholder="默认：3000"
             />
+          </n-form-item>
+
+          <n-form-item
+            label="固定发布端口"
+            path="runnerHostPort"
+          >
+            <div class="w-full">
+              <n-input
+                v-model:value="formModel.runnerHostPort"
+                placeholder="留空则自动分配，例如：3101"
+              />
+              <div class="mt-2 text-xs text-slate-500">
+                这是宿主机稳定入口端口，不是容器内部监听端口。留空时每次自动分配并同步网站代理；填写后会固定绑定到 `127.0.0.1:该端口`，后续发布无需再变更网站端口。
+              </div>
+            </div>
           </n-form-item>
 
           <n-form-item label="启动命令">

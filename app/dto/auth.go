@@ -18,8 +18,30 @@ type AuthMFALogin struct {
 }
 
 type AuthSignin struct {
-	Email    string `json:"email"`
-	Mobile   string `json:"mobile"`
-	Code     string `json:"code"`
-	Password string `json:"password"`
+	Email        string `json:"email"`
+	Mobile       string `json:"mobile"`
+	Code         string `json:"code"`
+	Password     string `json:"password"`
+	CaptchaToken string `json:"captchaToken"`
+}
+
+type VerifyCaptchaGetReq struct {
+	CaptchaType string `json:"captchaType"`
+}
+
+type VerifyCaptchaCheckReq struct {
+	CaptchaType string `json:"captchaType"`
+	Point       string `json:"point" validate:"required"`
+	Token       string `json:"token" validate:"required"`
+}
+
+type VerifyCaptchaGetResp struct {
+	OriginalImg string `json:"originalImg"`
+	BlockImg    string `json:"blockImg"`
+	Token       string `json:"token"`
+	SecretKey   string `json:"secretKey"`
+	IsOK        bool   `json:"isOk"`
+	PieceTop    int    `json:"pieceTop"`
+	PieceWidth  int    `json:"pieceWidth"`
+	PieceHeight int    `json:"pieceHeight"`
 }

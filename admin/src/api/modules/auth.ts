@@ -32,7 +32,7 @@ export const checkIsIntl = () => {
 	return http.get<boolean>("/auth/intl")
 }
 
-export async function authSignInAPI(data: { email: string; password: string }) {
+export async function authSignInAPI(data: { email: string; password: string; captchaToken?: string }) {
 	return await request<Response<AuthData>>(`/auth/signin`, {
 		method: "POST",
 		data

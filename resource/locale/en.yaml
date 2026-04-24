@@ -590,3 +590,4 @@ FileAISearchEmptyDir: "No files or directories found under this path (or all ent
 ErrFirewallNone: "Firewall is not enabled"
 ErrImagePullFailed: "Image pull failed: {{ .err }}"
 ErrImagePullTimeOut: "Image pull timeout: {{ .err }}"
+ErrLoginFailed: "Login failed: {{ .detail }}"

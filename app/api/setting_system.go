@@ -162,6 +162,7 @@ func SettingSystemEntrance(c fiber.Ctx) error {
 	updateConfYamlFile(map[string]interface{}{
 		"system.entrance": req.Entrance,
 	})
+	global.CONF.System.Entrance = req.Entrance
 
 	// 返回当前配置
 	return c.JSON(e.Succ())

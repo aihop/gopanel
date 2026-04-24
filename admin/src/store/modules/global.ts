@@ -61,6 +61,9 @@ const GlobalStore = defineStore("GlobalState", {
 		setLogStatus(login: boolean) {
 			this.isLogin = login
 		},
+		setEntrance(entrance: string) {
+			this.entrance = entrance
+		},
 		setGlobalLoading(loading: boolean) {
 			this.isLoading = loading
 		},

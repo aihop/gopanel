@@ -8,4 +8,6 @@ import (
 func AuthRouter(r fiber.Router) {
 	r.Post("/auth/signin", api.Login)
 	r.Post("/auth/login", api.Login)
+	r.Post("/auth/verify/captcha/get", api.VerifyCaptchaGet)
+	r.Post("/auth/verify/captcha/check", api.VerifyCaptchaCheck)
 }

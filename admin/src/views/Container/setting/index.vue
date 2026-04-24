@@ -47,66 +47,64 @@
       </div>
     </div>
 
-    <n-spin :show="daemonLoading">
-      <div class="bg-base-100 mt-3 rounded-[20px] p-4 px-6 shadow">
-        <div class="flex items-center justify-between">
-          <n-space align="center">
-            <n-tag
-              type="success"
-              class="uppercase"
-            >{{ daemon.containerType }}</n-tag>
-            <n-tag
-              type="warning"
-              v-if="daemon.status"
-            >
-              {{ dockerStatusText[daemon.status] }}
-            </n-tag>
-            <span class="text-sm text-gray-500">版本: {{ daemon.version }}</span>
-          </n-space>
-          <n-space v-if="daemon.status">
-            <n-button
-              v-if="daemon.status === dockerStatus.Stopped"
-              :loading="statusLoading"
-              type="primary"
-              @click="updateDockerStatus('start')"
-            >
-              {{ $t("container.start") }}
-            </n-button>
-            <n-popconfirm
-              v-else
-              @positive-click="updateDockerStatus('stop')"
-            >
-              <template #trigger>
-                <n-button
-                  :loading="statusLoading"
-                  type="warning"
-                >停止</n-button>
-              </template>
-              是否停止？
-            </n-popconfirm>
-            <n-popconfirm @positive-click="updateDockerStatus('restart')">
-              <template #trigger>
-                <n-button
-                  :loading="reloadLoading"
-                  :disabled="daemon.status === dockerStatus.Stopped"
-                  type="error"
-                >
-                  重启
-                </n-button>
-              </template>
-              是否重启
-            </n-popconfirm>
-            <n-button
-              :disabled="!precheck"
-              :type="repairHintType"
-              @click="openRepairModal"
-            >
-              问题修复
-            </n-button>
-          </n-space>
-        </div>
+    <div class="bg-base-100 mt-3 rounded-[20px] p-4 px-6 shadow">
+      <div class="flex items-center justify-between">
+        <n-space align="center">
+          <n-tag
+            type="success"
+            class="uppercase"
+          >{{ daemon.containerType }}</n-tag>
+          <n-tag
+            type="warning"
+            v-if="daemon.status"
+          >
+            {{ dockerStatusText[daemon.status] }}
+          </n-tag>
+          <span class="text-sm text-gray-500">版本: {{ daemon.version }}</span>
+        </n-space>
+        <n-space v-if="daemon.status">
+          <n-button
+            v-if="daemon.status === dockerStatus.Stopped"
+            :loading="statusLoading"
+            type="primary"
+            @click="updateDockerStatus('start')"
+          >
+            {{ $t("container.start") }}
+          </n-button>
+          <n-popconfirm
+            v-else
+            @positive-click="updateDockerStatus('stop')"
+          >
+            <template #trigger>
+              <n-button
+                :loading="statusLoading"
+                type="warning"
+              >停止</n-button>
+            </template>
+            是否停止？
+          </n-popconfirm>
+          <n-popconfirm @positive-click="updateDockerStatus('restart')">
+            <template #trigger>
+              <n-button
+                :loading="reloadLoading"
+                :disabled="daemon.status === dockerStatus.Stopped"
+                type="error"
+              >
+                重启
+              </n-button>
+            </template>
+            是否重启
+          </n-popconfirm>
+          <n-button
+            :disabled="!precheck"
+            :type="repairHintType"
+            @click="openRepairModal"
+          >
+            问题修复
+          </n-button>
+        </n-space>
       </div>
-    </n-spin>
+    </div>
 
     <div class="bg-base-100 mt-8 rounded-[28px] p-8 shadow">
       <n-tabs
@@ -130,7 +128,7 @@
               <!-- 镜像加速 -->
               <n-form-item label="镜像加速">
                 <div>
-                  <div class="flex items-end">
+                  <div class="flex items-end gap-2">
                     <n-input
                       v-if="daemon.registryMirrors"
                       type="textarea"

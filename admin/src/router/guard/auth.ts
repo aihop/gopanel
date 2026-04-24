@@ -1,12 +1,12 @@
 import type { NavigationGuardNext, RouteLocationNormalized, Router } from "vue-router"
 import { useAuthStore } from "@/store/auth"
+import GlobalStore from "@/store/modules/global"
 
 export function checkAuth(router: Router) {
 	router.beforeEach(authCheck)
 }
 
-// 检查 entrance cookie 是否存在且有效
-function checkEntranceCookie(): boolean {
+function readEntranceCookie(): string {
 	try {
 		const entranceCookie = document.cookie
 			.split("; ")
@@ -14,15 +14,13 @@ function checkEntranceCookie(): boolean {
 			?.split("=")[1]
 
 		if (!entranceCookie) {
-			return false
+			return ""
 		}
 
-		// 尝试解码 base64，如果成功说明 cookie 有效
-		atob(entranceCookie)
-		return true
+		return atob(entranceCookie)
 	} catch (error) {
 		console.warn("Invalid entrance cookie:", error)
-		return false
+		return ""
 	}
 }
 
@@ -32,12 +30,19 @@ async function authCheck(
 	next: NavigationGuardNext
 ): Promise<string | false | void> {
 	const authStore = useAuthStore()
+	const globalStore = GlobalStore()
+	const routeEntrance = typeof to.query.entrance === "string" ? to.query.entrance.trim() : ""
+	const cookieEntrance = readEntranceCookie()
 
-	// 第一步：检查 entrance cookie（优先级高）
-	const hasValidEntranceCookie = checkEntranceCookie()
+	if (routeEntrance) {
+		globalStore.setEntrance(routeEntrance)
+	} else if (cookieEntrance) {
+		globalStore.setEntrance(cookieEntrance)
+	}
 
-	// 如果没有有效的 entrance cookie
-	if (!hasValidEntranceCookie) {
+	const hasValidEntrance = !!routeEntrance || !!cookieEntrance
+
+	if (!hasValidEntrance) {
 		// 清除可能存在的登录状态
 		if (authStore.isLogged) {
 			authStore.setLogout()

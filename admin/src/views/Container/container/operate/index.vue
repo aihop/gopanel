@@ -480,7 +480,7 @@
 </template>
 
 <script lang="ts" setup>
-import { reactive, ref, h } from "vue"
+import { reactive, ref, h, watch } from "vue"
 import {
 	NForm,
 	NFormItem,
@@ -777,6 +777,17 @@ const loadNetworkOptions = async () => {
 	const res = await listNetwork()
 	networks.value = res.data.map(item => ({ ...item, key: item.option }))
 }
+
+watch(
+	() => dialogData.value.rowData.network,
+	(newValue, oldValue) => {
+		if (!oldValue || newValue === oldValue) {
+			return
+		}
+		dialogData.value.rowData.ipv4 = ""
+		dialogData.value.rowData.ipv6 = ""
+	}
+)
 
 const onSubmit = async (formEl: FormInst | undefined) => {
 	if (dialogData.value.rowData.volumes.length !== 0) {

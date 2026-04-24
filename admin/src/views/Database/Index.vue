@@ -12,11 +12,9 @@ import { computed, ref, onMounted } from "vue"
 import CommonPage from "@/components/page/Common.vue"
 import { databaseServerListAPI } from "@/api/modules/database"
 import { useI18n } from "vue-i18n"
-import { useMessage } from "naive-ui"
 
 const { t } = useI18n()
-const message = useMessage()
-const currentTab = ref("manager")
+const currentTab = ref("database")
 
 const createDatabaseModalShow = ref(false)
 const createUserModalShow = ref(false)
@@ -127,10 +125,6 @@ provide("globalSelectedServerId", globalSelectedServerId)
                   @update:value="value => (currentTab = value)"
                 >
                   <n-tab
-                    name="manager"
-                    :tab="$t('database.workspaceTitle')"
-                  />
-                  <n-tab
                     name="database"
                     :tab="$t('database.database')"
                   />
@@ -141,6 +135,10 @@ provide("globalSelectedServerId", globalSelectedServerId)
                   <n-tab
                     name="server"
                     :tab="$t('database.server')"
+                  />
+                  <n-tab
+                    name="manager"
+                    :tab="$t('database.workspaceTitle')"
                   />
                 </n-tabs>
               </div>
@@ -182,10 +180,10 @@ provide("globalSelectedServerId", globalSelectedServerId)
       </template>
       <template #tabbar></template>
 
-      <database-manager v-if="currentTab === 'manager'" />
       <database-list v-if="currentTab === 'database'" />
       <user-list v-if="currentTab === 'user'" />
       <server-list v-if="currentTab === 'server'" />
+      <database-manager v-if="currentTab === 'manager'" />
 
     </common-page>
     <create-database-modal

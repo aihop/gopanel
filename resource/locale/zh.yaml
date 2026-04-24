@@ -590,3 +590,4 @@ FileAISearchEmptyDir: "当前目录下没有可列出的文件或文件夹（或
 ErrFirewallNone: "防火墙未启用"
 ErrImagePullFailed: "镜像拉取失败：{{ .err }}"
 ErrImagePullTimeOut: "镜像拉取超时：{{ .err }}"
+ErrLoginFailed: "登录失败：{{ .detail }}"

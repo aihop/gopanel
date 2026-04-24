@@ -15,9 +15,5 @@ func XGetAuth(c fiber.Ctx) string {
 	if xAuth != "" {
 		return xAuth
 	}
-	xAuth = c.Cookies(constant.AppXAuth)
-	if xAuth != "" {
-		return xAuth
-	}
 	return ""
 }

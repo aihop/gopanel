@@ -58,6 +58,7 @@
       <n-data-table
         :columns="columns"
         :data="imageData"
+        :loading="loading"
         :pagination="pagination"
         :bordered="false"
       />
@@ -564,7 +565,10 @@ const createColumns = (): DataTableColumns<ImageRow> => [
 	},
 	{
 		title: "大小",
-		key: "size"
+		key: "size",
+		render(row) {
+			return h(NText, null, { default: () => row.size || "-" })
+		}
 	},
 	{
 		title: "时间",

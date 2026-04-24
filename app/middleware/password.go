@@ -20,7 +20,8 @@ func PasswordPublicKey() func(fiber.Ctx) error {
 			Value:    base64Key,
 			Expires:  time.Now().Add(1 * 24 * time.Hour),
 			Path:     "/",
-			HTTPOnly: false,
+			HTTPOnly: true,
+			SameSite: "Lax",
 			Secure:   c.Scheme() == "https",
 		})
 		return c.Next()
