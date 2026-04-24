@@ -11,6 +11,7 @@ func LogsRouter(r fiber.Router) {
 	logsRouter := r.Group("logs", middleware.JWT(constant.UserRoleAdmin))
 	{
 		logsRouter.Post("/login", api.GetLoginLogs)
+		logsRouter.Post("/ssh", api.GetSSHLoginLogs)
 		logsRouter.Post("/operation", api.GetOperationLogs)
 		logsRouter.Get("/system/files", api.GetSystemLogFiles)
 		logsRouter.Post("/system", api.GetSystemLogs)

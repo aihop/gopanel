@@ -10,6 +10,10 @@ export const getLoginLogs = (info: Log.SearchLgLog) => {
 	return http.post<ResPage<Log.LoginLog>>(`/logs/login`, info)
 }
 
+export const getSSHLoginLogs = (info: Log.SearchSSHLog) => {
+	return http.post<Log.SSHLoginLogResult>(`/logs/ssh`, info)
+}
+
 export const getSystemFiles = () => {
 	return http.get<Array<string>>(`/logs/system/files`)
 }

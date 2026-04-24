@@ -2,6 +2,8 @@ package service
 
 import (
 	"compress/gzip"
+	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -14,6 +16,7 @@ import (
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
 	"github.com/aihop/gopanel/global"
+	"github.com/aihop/gopanel/utils/gpc"
 	"github.com/jinzhu/copier"
 )
 
@@ -155,6 +158,35 @@ func (u *LogService) ReadSystemLog(name string) (string, error) {
 		return "", err
 	}
 	return string(data), nil
+}
+
+func (u *LogService) PageSSHLoginLog(req dto.SearchSSHLogWithPage) (*dto.SSHLoginLogResult, error) {
+	resp, err := gpc.Do(context.Background(), "SSH_LOGIN_LOG_LIST", map[string]interface{}{
+		"page":     req.Page,
+		"limit":    req.Limit,
+		"ip":       req.IP,
+		"status":   req.Status,
+		"username": req.Username,
+	})
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "unsupported platform") {
+			return &dto.SSHLoginLogResult{
+				Supported: false,
+				Warning:   "当前平台暂不支持 SSH 登录日志采集",
+				Items:     []dto.SSHLoginLog{},
+			}, nil
+		}
+		return nil, err
+	}
+
+	var result dto.SSHLoginLogResult
+	if err := json.Unmarshal([]byte(resp.Output), &result); err != nil {
+		return nil, err
+	}
+	if result.Items == nil {
+		result.Items = []dto.SSHLoginLog{}
+	}
+	return &result, nil
 }
 
 func (u *LogService) CleanLogs(logtype string) error {

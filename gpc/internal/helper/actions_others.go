@@ -95,3 +95,9 @@ func (s *Server) actionSecurityFixSSH(ctx context.Context, params map[string]int
 func (s *Server) actionSecurityScanPort(ctx context.Context, params map[string]interface{}) (string, error) {
 	return "", errors.New("unsupported platform")
 }
+
+func (s *Server) actionSSHLoginLogList(ctx context.Context, params map[string]interface{}) (string, error) {
+	_ = ctx
+	_ = params
+	return "", errors.New("unsupported platform")
+}

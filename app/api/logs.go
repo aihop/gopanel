@@ -74,6 +74,28 @@ func GetLoginLogs(c fiber.Ctx) error {
 }
 
 // @Tags Logs
+// @Summary Page ssh login logs
+// @Accept json
+// @Param request body dto.SearchSSHLogWithPage true "request"
+// @Success 200 {object} dto.SSHLoginLogResult
+// @Security ApiKeyAuth
+// @Security Timestamp
+// @Router /logs/ssh [post]
+func GetSSHLoginLogs(c fiber.Ctx) error {
+	req, err := e.BodyToStruct[dto.SearchSSHLogWithPage](c.Body())
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	logService := service.NewLogService()
+	result, err := logService.PageSSHLoginLog(*req)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+
+	return c.JSON(e.Succ(result))
+}
+
+// @Tags Logs
 // @Summary Page operation logs
 // @Accept json
 // @Param request body dto.SearchOpLogWithPage true "request"

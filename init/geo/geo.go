@@ -26,7 +26,7 @@ type GeoInfo struct {
 
 func Init() error {
 	once.Do(func() {
-		data, err := global.EmbedFS.ReadFile("resource/region.xdb")
+		data, err := global.EmbedFS.ReadFile("resource/geo/region.xdb")
 		if err != nil {
 			initErr = fmt.Errorf("read xdb file failed: %w", err)
 			return

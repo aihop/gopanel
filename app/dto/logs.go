@@ -35,6 +35,13 @@ type SearchLgLogWithPage struct {
 	Status string `json:"status"`
 }
 
+type SearchSSHLogWithPage struct {
+	PageInfo
+	IP       string `json:"ip"`
+	Status   string `json:"status"`
+	Username string `json:"username"`
+}
+
 type LoginLog struct {
 	ID        uint      `json:"id"`
 	IP        string    `json:"ip"`
@@ -43,6 +50,31 @@ type LoginLog struct {
 	Status    string    `json:"status"`
 	Message   string    `json:"message"`
 	CreatedAt time.Time `json:"createdAt"`
+}
+
+type SSHLoginLog struct {
+	CreatedAt  string `json:"createdAt"`
+	Status     string `json:"status"`
+	Username   string `json:"username"`
+	SourceIP   string `json:"sourceIp"`
+	SourcePort string `json:"sourcePort"`
+	AuthMethod string `json:"authMethod"`
+	Message    string `json:"message"`
+	Raw        string `json:"raw"`
+	Platform   string `json:"platform"`
+	Source     string `json:"source"`
+}
+
+type SSHLoginLogResult struct {
+	Supported       bool          `json:"supported"`
+	Platform        string        `json:"platform"`
+	Source          string        `json:"source"`
+	Partial         bool          `json:"partial"`
+	Warning         string        `json:"warning"`
+	Items           []SSHLoginLog `json:"items"`
+	Total           int           `json:"total"`
+	SuccessfulCount int           `json:"successfulCount"`
+	FailedCount     int           `json:"failedCount"`
 }
 
 type CleanLog struct {

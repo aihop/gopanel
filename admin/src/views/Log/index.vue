@@ -23,6 +23,7 @@ import { ref, computed } from "vue"
 import RouterButton from "@/components/RouterButton.vue"
 import LoginLog from "./components/LoginLog.vue"
 import OperationLog from "./components/OperationLog.vue"
+import SSHLoginLog from "./components/SSHLoginLog.vue"
 import SystemLog from "./components/SystemLog.vue"
 
 const activeTab = ref("操作日志")
@@ -30,6 +31,7 @@ const activeTab = ref("操作日志")
 const tabList = [
 	{ label: "操作日志" },
 	{ label: "登录日志" },
+	{ label: "SSH 登录" },
 	{ label: "系统日志" }
 ]
 
@@ -39,6 +41,8 @@ const currentComponent = computed(() => {
 			return OperationLog
 		case "登录日志":
 			return LoginLog
+		case "SSH 登录":
+			return SSHLoginLog
 		case "系统日志":
 			return SystemLog
 		default:
