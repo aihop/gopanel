@@ -35,6 +35,8 @@ require (
 	github.com/studio-b12/gowebdav v0.9.0
 	github.com/valyala/bytebufferpool v1.0.0
 	github.com/valyala/fasthttp v1.69.0
+	github.com/wenlng/go-captcha-assets v1.0.7
+	github.com/wenlng/go-captcha/v2 v2.0.5
 	golang.org/x/crypto v0.49.0
 	golang.org/x/net v0.52.0
 	golang.org/x/sync v0.20.0
@@ -51,20 +53,17 @@ require (
 	github.com/google/flatbuffers v25.2.10+incompatible // indirect
 	github.com/kr/fs v0.1.0 // indirect
 	github.com/morikuni/aec v1.1.0 // indirect
-	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
-	github.com/wenlng/go-captcha-assets v1.0.7 // indirect
-	github.com/wenlng/go-captcha/v2 v2.0.5 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.43.0 // indirect
 	go.opentelemetry.io/otel/sdk v1.43.0 // indirect
 	go.opentelemetry.io/otel/sdk/metric v1.43.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	go4.org v0.0.0-20230225012048-214862532bf5 // indirect
-	modernc.org/libc v1.70.0 // indirect
-	modernc.org/mathutil v1.7.1 // indirect
-	modernc.org/memory v1.11.0 // indirect
+	modernc.org/libc v1.22.5 // indirect
+	modernc.org/mathutil v1.5.0 // indirect
+	modernc.org/memory v1.5.0 // indirect
 	modernc.org/sqlite v1.23.1 // indirect
 )
 
@@ -121,7 +120,7 @@ require (
 	github.com/moby/term v0.5.2 // indirect
 	github.com/nwaples/rardecode/v2 v2.0.0-beta.4 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
-	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
+	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/philhofer/fwd v1.2.0 // indirect
 	github.com/pierrec/lz4/v4 v4.1.22 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
