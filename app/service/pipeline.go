@@ -621,18 +621,37 @@ RUNTIME="%s"
 CONTAINER_RUNTIME_KIND="%s"
 
 CONTAINER_CLI="%s"
+GOPANEL_SHIM_DIR="$PWD/.gopanel_shims"
 export CONTAINER_CLI
 export RUNTIME
 export CONTAINER_RUNTIME_KIND
+export GOPANEL_SHIM_DIR
+
+cleanup_gopanel_shims() {
+	rm -rf "$GOPANEL_SHIM_DIR"
+}
+trap cleanup_gopanel_shims EXIT
+
+rm -rf "$GOPANEL_SHIM_DIR"
+mkdir -p "$GOPANEL_SHIM_DIR"
+export PATH="$GOPANEL_SHIM_DIR:$PATH"
 
 # 兼容旧脚本：优先保留 docker 命令语义，只给 podman/podman-compose 做向后兼容别名
 if [ "$CONTAINER_CLI" = "docker" ]; then
 	podman() { docker "$@"; }
-	podman-compose() { docker compose "$@"; }
+	cat > "$GOPANEL_SHIM_DIR/podman-compose" <<'EOF'
+#!/bin/sh
+exec docker compose "$@"
+EOF
+	chmod +x "$GOPANEL_SHIM_DIR/podman-compose"
 elif [ "$CONTAINER_CLI" = "podman" ]; then
 	if command -v docker > /dev/null 2>&1; then
 		podman() { docker "$@"; }
-		podman-compose() { docker compose "$@"; }
+		cat > "$GOPANEL_SHIM_DIR/podman-compose" <<'EOF'
+#!/bin/sh
+exec docker compose "$@"
+EOF
+		chmod +x "$GOPANEL_SHIM_DIR/podman-compose"
 	fi
 fi
 echo "--- 使用运行时: $RUNTIME (类型: $CONTAINER_RUNTIME_KIND, 兼容别名: $CONTAINER_CLI) ---"
@@ -729,14 +748,31 @@ echo "--- 使用运行时: $RUNTIME (类型: $CONTAINER_RUNTIME_KIND, 兼容别�
 	// 兼容旧的 docker/podman alias
 	compatHeader := fmt.Sprintf(`
 CONTAINER_CLI="%s"
+GOPANEL_SHIM_DIR="$PWD/.gopanel_shims"
 export CONTAINER_CLI
+export GOPANEL_SHIM_DIR
+cleanup_gopanel_shims() {
+	rm -rf "$GOPANEL_SHIM_DIR"
+}
+trap cleanup_gopanel_shims EXIT
+rm -rf "$GOPANEL_SHIM_DIR"
+mkdir -p "$GOPANEL_SHIM_DIR"
+export PATH="$GOPANEL_SHIM_DIR:$PATH"
 if [ "$CONTAINER_CLI" = "docker" ]; then
 	podman() { docker "$@"; }
-	podman-compose() { docker compose "$@"; }
+	cat > "$GOPANEL_SHIM_DIR/podman-compose" <<'EOF'
+#!/bin/sh
+exec docker compose "$@"
+EOF
+	chmod +x "$GOPANEL_SHIM_DIR/podman-compose"
 elif [ "$CONTAINER_CLI" = "podman" ]; then
 	if command -v docker > /dev/null 2>&1; then
 		podman() { docker "$@"; }
-		podman-compose() { docker compose "$@"; }
+		cat > "$GOPANEL_SHIM_DIR/podman-compose" <<'EOF'
+#!/bin/sh
+exec docker compose "$@"
+EOF
+		chmod +x "$GOPANEL_SHIM_DIR/podman-compose"
 	fi
 fi
 `, runtimeCLI)

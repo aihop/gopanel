@@ -41,8 +41,8 @@
               @change="onFileSelect"
             />
             <div class="upload-inner">
-              <div class="upload-icon">{{ t("database.dropHelper") }}</div>
-              <div class="upload-sub">{{ t("database.clickHelper") }}</div>
+              <div class="upload-icon text-gray-500 mb-3">{{ t("database.dropHelper") }}</div>
+              <n-button type="primary">{{ t("database.clickHelper") }}</n-button>
               <div
                 v-if="isUpload"
                 class="progress-wrap mt-3"
@@ -56,14 +56,14 @@
                 <div class="progress-text">{{ uploadPercent }}%</div>
               </div>
               <div
-                class="upload-tips"
+                class="upload-tips mt-3 text-gray-500"
                 v-if="type === 'mysql' || type === 'mariadb' || type === 'postgresql'"
               >
                 <div class="input-help">{{ t("database.supportUpType") }}</div>
                 <div class="input-help">{{ t("database.zipFormat") }}</div>
               </div>
               <div
-                class="upload-tips"
+                class="upload-tips mt-3"
                 v-else
               >
                 <div class="input-help">{{ t("website.supportUpType") }}</div>
