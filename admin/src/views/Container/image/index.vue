@@ -481,12 +481,13 @@ const handleDeleteImage = (row: ImageRow, specificTag?: string) => {
 		? `您确定要删除镜像标签 "${targetName}" 吗？此操作不可撤销。`
 		: `您确定要删除镜像及其所有标签 "${row.tags.join(", ")}" 吗？此操作不可撤销。`
 
-	dialog.warning({
+	const dialogReactive = dialog.warning({
 		title: "确认删除",
 		content: contentMsg,
 		positiveText: "确定",
 		negativeText: "取消",
 		onPositiveClick: async () => {
+			dialogReactive.loading = true
 			try {
 				const payload: Container.BatchDelete = { names: [targetName] }
 				const response = await imageRemove(payload)
@@ -499,6 +500,8 @@ const handleDeleteImage = (row: ImageRow, specificTag?: string) => {
 			} catch (error: any) {
 				console.error("删除镜像失败:", error)
 				message.error(error.msg || "删除镜像时发生错误")
+			} finally {
+				dialogReactive.loading = false
 			}
 		}
 	})

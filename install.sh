@@ -18,6 +18,7 @@ RUNTIME_USER=""
 RUN_AS_NORMAL_USER="false"
 INVOKING_USER=""
 PREEXISTING_INSTALL="false"
+UPDATE_MODE="false"
 
 os_name=""
 arch_name=""
@@ -102,15 +103,29 @@ json_get() {
   local json="$2"
 
   if command -v python3 >/dev/null 2>&1; then
-    python3 -c 'import json,sys; key=sys.argv[1]; data=json.loads(sys.stdin.read() or "{}"); v=data.get(key, ""); print("" if v is None else v)' "$key" <<<"$json"
+    python3 -c 'import json,sys
+key=sys.argv[1]
+try:
+    data=json.loads(sys.stdin.read() or "{}")
+except Exception:
+    sys.exit(1)
+v=data.get(key, "")
+print("" if v is None else v)' "$key" <<<"$json"
     return 0
   fi
   if command -v python >/dev/null 2>&1; then
-    python -c 'import json,sys; key=sys.argv[1]; data=json.loads(sys.stdin.read() or "{}"); v=data.get(key, ""); print("" if v is None else v)' "$key" <<<"$json"
+    python -c 'import json,sys
+key=sys.argv[1]
+try:
+    data=json.loads(sys.stdin.read() or "{}")
+except Exception:
+    sys.exit(1)
+v=data.get(key, "")
+print("" if v is None else v)' "$key" <<<"$json"
     return 0
   fi
   if command -v node >/dev/null 2>&1; then
-    node -e 'const fs=require("fs");const key=process.argv[1];const data=JSON.parse(fs.readFileSync(0,"utf8")||"{}");const v=data[key];process.stdout.write((v===undefined||v===null)?"":String(v));' "$key" <<<"$json"
+    node -e 'const fs=require("fs");const key=process.argv[1];let data={};try{data=JSON.parse(fs.readFileSync(0,"utf8")||"{}")}catch(e){process.exit(1)}const v=data[key];process.stdout.write((v===undefined||v===null)?"":String(v));' "$key" <<<"$json"
     return 0
   fi
   die "缺少 JSON 解析工具（python3/python/node 任一即可）"
@@ -254,6 +269,36 @@ detect_preexisting_install() {
   PREEXISTING_INSTALL="false"
 }
 
+prompt_update_if_installed() {
+  if [ "${PREEXISTING_INSTALL}" != "true" ]; then
+    return 0
+  fi
+
+  echo
+  warn "检测到当前机器已经安装 GoPanel：${CONFIG_INSTALL_DIR}"
+  echo "将检查最新版信息，并可直接执行原地升级。"
+
+  fetch_upgrade_info
+
+  local answer
+  read -r -p "是否升级到最新版 ${version} (code: ${version_code})？[Y/n]: " answer || true
+  answer="${answer:-Y}"
+  case "${answer}" in
+    y|Y|yes|YES)
+      UPDATE_MODE="true"
+      log "已选择升级现有 GoPanel。"
+      ;;
+    n|N|no|NO)
+      log "已取消升级，安装流程结束。"
+      exit 0
+      ;;
+    *)
+      warn "输入无效，默认执行升级。"
+      UPDATE_MODE="true"
+      ;;
+  esac
+}
+
 track_install_event() {
   local event="$1"
   local ver="${2:-}"
@@ -391,9 +436,11 @@ fetch_upgrade_info() {
   fi
 
   local latest_name latest_code download_url
-  latest_name="$(json_get "latestVersionName" "$json")"
-  latest_code="$(json_get "latestVersionCode" "$json")"
-  download_url="$(json_get "downloadUrl" "$json")"
+  if ! latest_name="$(json_get "latestVersionName" "$json")" \
+    || ! latest_code="$(json_get "latestVersionCode" "$json")" \
+    || ! download_url="$(json_get "downloadUrl" "$json")"; then
+    die "版本接口返回非 JSON 或格式异常: ${url}"
+  fi
   download_url="$(echo "$download_url" | sed -e 's/`//g' -e 's/^ *//g' -e 's/ *$//g')"
 
   if [ -z "$latest_name" ] || [ -z "$latest_code" ] || [ -z "$download_url" ]; then
@@ -412,7 +459,7 @@ fetch_gpagent_upgrade_info() {
   local cur_version="${CUR_VERSION:-0.0.0}"
   local cur_version_code="${CUR_VERSION_CODE:-0}"
   local url
-  url="${API_UPGRADE_URL}?versionCode=${cur_version_code}&version=${cur_version}&os=${os_name}&arch=${arch_name}&appBrand=${APP_BRAND}"
+  url="${API_UPGRADE_URL}?versionCode=${cur_version_code}&version=${cur_version}&os=${os_name}&arch=${arch_name}&appBrand=${APP_BRAND}&package=gp-agent"
 
   GPAGENT_FETCH_ERROR=""
   log "获取 gp-agent 最新安装包信息..."
@@ -424,9 +471,12 @@ fetch_gpagent_upgrade_info() {
   fi
 
   local latest_name latest_code download_url
-  latest_name="$(json_get "latestVersionName" "$json")"
-  latest_code="$(json_get "latestVersionCode" "$json")"
-  download_url="$(json_get "downloadUrl" "$json")"
+  if ! latest_name="$(json_get "latestVersionName" "$json")" \
+    || ! latest_code="$(json_get "latestVersionCode" "$json")" \
+    || ! download_url="$(json_get "downloadUrl" "$json")"; then
+    GPAGENT_FETCH_ERROR="版本接口返回非 JSON 或格式异常: ${url}"
+    return 1
+  fi
   download_url="$(echo "$download_url" | sed -e 's/`//g' -e 's/^ *//g' -e 's/ *$//g')"
 
   if [ -z "$latest_name" ] || [ -z "$latest_code" ] || [ -z "$download_url" ]; then
@@ -558,6 +608,31 @@ download_package() {
   curl -fSL -o "${PACKAGE_NAME}" "${PACKAGE_URL}" || die "下载安装包失败"
 }
 
+stop_existing_services() {
+  if [ "${UPDATE_MODE}" != "true" ]; then
+    return 0
+  fi
+
+  log "升级模式：先停止本机 gopanel/gpc 服务..."
+  if [ "$os_name" = "linux" ]; then
+    if command -v systemctl >/dev/null 2>&1; then
+      run_privileged systemctl stop gopanel.service >/dev/null 2>&1 || true
+      run_privileged systemctl stop gpc.service >/dev/null 2>&1 || true
+    fi
+  else
+    run_privileged launchctl bootout system /Library/LaunchDaemons/io.aihop.gopanel.plist >/dev/null 2>&1 || true
+    run_privileged launchctl bootout system /Library/LaunchDaemons/io.aihop.gpc.plist >/dev/null 2>&1 || true
+  fi
+}
+
+stop_gpagent_service() {
+  if [ "$os_name" = "linux" ]; then
+    if command -v systemctl >/dev/null 2>&1; then
+      run_privileged systemctl stop gp-agent.service >/dev/null 2>&1 || true
+    fi
+  fi
+}
+
 extract_and_find_binaries() {
   WORK_DIR="$(mktemp -d -t gopanel_install.XXXXXX)"
   log "解压安装包到临时目录: ${WORK_DIR}"
@@ -597,7 +672,15 @@ prepare_gpagent_binary() {
         warn "最新安装包中未找到 gp-agent，回退到当前主包内置的 gp-agent。"
         return 0
       fi
-      die "最新安装包中未找到 gp-agent 二进制文件"
+      if [ "${UPDATE_MODE}" = "true" ] && [ -x "${CONFIG_INSTALL_DIR}/gp-agent" ]; then
+        warn "最新安装包中未找到 gp-agent，保留本机现有 gp-agent。"
+        BIN_GPAGENT_PATH=""
+        return 0
+      fi
+      warn "最新安装包中未找到 gp-agent 二进制文件，已跳过 gp-agent 安装。"
+      CONFIG_INSTALL_GPAGENT="false"
+      BIN_GPAGENT_PATH=""
+      return 0
     fi
 
     BIN_GPAGENT_PATH="${latest_gpagent_path}"
@@ -606,6 +689,12 @@ prepare_gpagent_binary() {
 
   if [ -n "${BIN_GPAGENT_PATH}" ]; then
     warn "获取 gp-agent 最新安装包失败，回退到当前主包内置的 gp-agent。原因: ${GPAGENT_FETCH_ERROR}"
+    return 0
+  fi
+
+  if [ "${UPDATE_MODE}" = "true" ] && [ -x "${CONFIG_INSTALL_DIR}/gp-agent" ]; then
+    warn "获取 gp-agent 最新安装包失败，保留本机现有 gp-agent。原因: ${GPAGENT_FETCH_ERROR}"
+    BIN_GPAGENT_PATH=""
     return 0
   fi
 
@@ -632,7 +721,14 @@ install_gpagent_binary() {
     return 0
   fi
   if [ -z "${BIN_GPAGENT_PATH}" ]; then
+    if [ "${UPDATE_MODE}" = "true" ] && [ -x "${CONFIG_INSTALL_DIR}/gp-agent" ]; then
+      log "升级模式：继续保留现有 gp-agent 二进制。"
+      return 0
+    fi
     die "已选择安装 gp-agent，但未找到可用的 gp-agent 二进制文件"
+  fi
+  if [ "${UPDATE_MODE}" = "true" ]; then
+    stop_gpagent_service
   fi
   log "安装 gp-agent 到 ${CONFIG_INSTALL_DIR}/gp-agent"
   run_privileged mkdir -p "${CONFIG_INSTALL_DIR}"
@@ -641,6 +737,11 @@ install_gpagent_binary() {
 }
 
 write_init_yaml() {
+  if [ "${UPDATE_MODE}" = "true" ] && [ -f "${CONFIG_INSTALL_DIR}/conf.yaml" ]; then
+    log "升级模式：保留现有 conf.yaml/init.yaml，不重写初始化配置。"
+    return 0
+  fi
+
   local tmp_file
   tmp_file="$(mktemp -t gopanel_init.XXXXXX)"
   cat >"${tmp_file}" <<EOF
@@ -1284,18 +1385,34 @@ main() {
   init_privilege
   ensure_curl
   require_cmds
-  if ! detect_local_package; then
-    fetch_upgrade_info
+  detect_preexisting_install
+  prompt_update_if_installed
+
+  if [ "${UPDATE_MODE}" != "true" ]; then
+    if ! detect_local_package; then
+      fetch_upgrade_info
+    fi
+
+    echo "GoPanel 安装向导 (版本: ${version}, code: ${version_code})"
+    echo "==============================================="
+
+    prompt_basic_config
+    prompt_gpagent_install
+    choose_gopanel_runtime_user
+  else
+    echo "GoPanel 升级向导 (目标版本: ${version}, code: ${version_code})"
+    echo "==============================================="
+    if [ -z "${RUNTIME_USER}" ]; then
+      if [ "$os_name" = "darwin" ]; then
+        RUNTIME_USER="${INVOKING_USER}"
+      else
+        RUNTIME_USER="$(stat -c '%U' "${CONFIG_INSTALL_DIR}" 2>/dev/null || echo root)"
+      fi
+    fi
   fi
 
-  echo "GoPanel 安装向导 (版本: ${version}, code: ${version_code})"
-  echo "==============================================="
-
-  prompt_basic_config
-  prompt_gpagent_install
-  choose_gopanel_runtime_user
-  detect_preexisting_install
   ensure_install_id
+  stop_existing_services
   download_package
   extract_and_find_binaries
   prepare_gpagent_binary

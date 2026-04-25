@@ -52,15 +52,13 @@ echo "==========================================="
 # 前端构建逻辑 (保持不变)
 if [ -d "${PROJECT_ROOT}/admin" ]; then
   echo "Building frontend..."
-  # 这里删除public下的所有文件
-  rm -rf "${PROJECT_ROOT}/public"
   if [ "${APP_BRAND}" = "ConsoleX" ]; then
     (cd "${PROJECT_ROOT}/admin" && npm install && npm run build:consolex)
   else
     (cd "${PROJECT_ROOT}/admin" && npm install && npm run build)
   fi
-  # mkdir -p "${PROJECT_ROOT}/public"
-  # cp -r "${PROJECT_ROOT}/admin/dist/"* "${PROJECT_ROOT}/public/"
+  mkdir -p "${PROJECT_ROOT}/public"
+  cp -r "${PROJECT_ROOT}/admin/dist/"* "${PROJECT_ROOT}/public/"
 fi
 
 rm -rf "${OUTDIR}"

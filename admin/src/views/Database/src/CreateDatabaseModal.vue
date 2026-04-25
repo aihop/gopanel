@@ -19,7 +19,7 @@ const createModel = ref({
 	host: "localhost"
 })
 
-const servers = ref<{ label: string; value: string }[]>([])
+const servers = ref<{ label: string; value: number }[]>([])
 
 const hostType = [
 	{ label: t("database.localhost"), value: "localhost" },
@@ -41,8 +41,9 @@ watch(
 		if (value) {
 			createModel.value.serverId = globalSelectedServerId?.value || null as any
 			databaseServerListAPI({ page: 1, limit: 10000 }).then(({ data }: { data: any }) => {
+				const items = Array.isArray(data) ? data : (data?.items || [])
 				servers.value = []
-				for (const server of data) {
+				for (const server of items) {
 					servers.value.push({
 						label: server.name,
 						value: server.id
