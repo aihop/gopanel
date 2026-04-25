@@ -115,14 +115,15 @@ func renderCaddyfile(websites []model.Website, domainByWebsite map[uint][]model.
 
 		if w.RateLimitMode != "" && w.RateLimitMode != "none" {
 			b.WriteString("  rate_limit {\n")
-			b.WriteString("    zone website_" + strconv.Itoa(int(w.ID)) + "\n")
-			b.WriteString("    key {remote_ip}\n")
-			b.WriteString("    window 1s\n")
+			b.WriteString("    zone website_" + strconv.Itoa(int(w.ID)) + " {\n")
+			b.WriteString("      key {remote_ip}\n")
+			b.WriteString("      window 1s\n")
 			if w.RateLimitMode == "strict" {
-				b.WriteString("    events 3\n")
+				b.WriteString("      events 3\n")
 			} else { // normal
-				b.WriteString("    events 10\n")
+				b.WriteString("      events 10\n")
 			}
+			b.WriteString("    }\n")
 			b.WriteString("  }\n\n")
 		}
 
