@@ -4,7 +4,7 @@
     width="50%"
     :mask-closable="false"
   >
-    <n-drawer-content>
+    <n-drawer-content closable>
       <template #header>
         <DrawerHeader
           :header="t('commons.button.import')"
