@@ -5,14 +5,19 @@ trap 'echo "错误：安装脚本在第 ${LINENO} 行中断，命令: ${BASH_COM
 # ---- 基础变量 ----
 APP_BRAND="${1:-GoPanel}"
 API_UPGRADE_URL="${API_UPGRADE_URL:-https://gopanel.cn/api/panel/upgrade}"
+API_TRACK_URL="${API_TRACK_URL:-https://gopanel.cn/api/panel/installs/track}"
 CONFIG_INSTALL_DIR="${CONFIG_INSTALL_DIR:-}"
 CONFIG_PORT="${CONFIG_PORT:-5470}"
+CONFIG_INSTALL_GPAGENT="${CONFIG_INSTALL_GPAGENT:-true}"
 CONFIG_USER="${CONFIG_USER:-admin}"
 CONFIG_PASSWORD="${CONFIG_PASSWORD:-$(openssl rand -hex 8)}"
 CONFIG_SAFE_ENTER="${CONFIG_SAFE_ENTER:-$(openssl rand -hex 8)}"
+CONFIG_CHANNEL="${CONFIG_CHANNEL:-${CHANNEL:-}}"
+CONFIG_INSTALL_ID="${CONFIG_INSTALL_ID:-${INSTALL_ID:-}}"
 RUNTIME_USER=""
 RUN_AS_NORMAL_USER="false"
 INVOKING_USER=""
+PREEXISTING_INSTALL="false"
 
 os_name=""
 arch_name=""
@@ -20,8 +25,14 @@ version=""
 version_code=""
 PACKAGE_URL=""
 PACKAGE_NAME=""
+GPAGENT_VERSION=""
+GPAGENT_VERSION_CODE=""
+GPAGENT_PACKAGE_URL=""
+GPAGENT_PACKAGE_NAME=""
+GPAGENT_FETCH_ERROR=""
 SUDO_CMD=""
 WORK_DIR=""
+GPAGENT_WORK_DIR=""
 BIN_GPC_PATH=""
 BIN_GOPANEL_PATH=""
 BIN_GPAGENT_PATH=""
@@ -69,8 +80,22 @@ cleanup() {
   if [ -n "${WORK_DIR}" ] && [ -d "${WORK_DIR}" ]; then
     rm -rf "${WORK_DIR}"
   fi
+  if [ -n "${GPAGENT_WORK_DIR}" ] && [ -d "${GPAGENT_WORK_DIR}" ]; then
+    rm -rf "${GPAGENT_WORK_DIR}"
+  fi
 }
 trap cleanup EXIT
+
+bool_is_true() {
+  case "${1:-}" in
+    1|true|TRUE|True|yes|YES|Yes|y|Y|on|ON|On)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
 
 json_get() {
   local key="$1"
@@ -152,6 +177,125 @@ detect_platform() {
       CONFIG_INSTALL_DIR="/opt/gopanel"
     fi
   fi
+}
+
+detect_server_ip() {
+  local ip_address=""
+  if [ "${os_name:-}" = "linux" ]; then
+    ip_address="$(hostname -I 2>/dev/null | awk '{print $1}' 2>/dev/null || true)"
+    if [ -n "${ip_address}" ]; then
+      echo "${ip_address}"
+      return 0
+    fi
+  fi
+  if [ "${os_name:-}" = "darwin" ]; then
+    ip_address="$(ipconfig getifaddr en0 2>/dev/null || true)"
+    if [ -z "${ip_address}" ]; then
+      ip_address="$(ipconfig getifaddr en1 2>/dev/null || true)"
+    fi
+    if [ -n "${ip_address}" ]; then
+      echo "${ip_address}"
+      return 0
+    fi
+  fi
+  ip_address="$(hostname 2>/dev/null || echo "127.0.0.1")"
+  echo "${ip_address}"
+}
+
+detect_distro() {
+  if [ "${os_name:-}" != "linux" ]; then
+    echo ""
+    return 0
+  fi
+  if [ -f /etc/os-release ]; then
+    local id version_id
+    id="$(awk -F= '$1=="ID"{gsub("\"","",$2);print $2}' /etc/os-release 2>/dev/null | head -n 1 || true)"
+    version_id="$(awk -F= '$1=="VERSION_ID"{gsub("\"","",$2);print $2}' /etc/os-release 2>/dev/null | head -n 1 || true)"
+    if [ -n "${id}" ] && [ -n "${version_id}" ]; then
+      echo "${id}_${version_id}"
+      return 0
+    fi
+    echo "${id}"
+    return 0
+  fi
+  echo ""
+}
+
+detect_runtime() {
+  if command -v docker >/dev/null 2>&1; then
+    echo "docker"
+    return 0
+  fi
+  if command -v podman >/dev/null 2>&1; then
+    echo "podman"
+    return 0
+  fi
+  echo ""
+}
+
+ensure_install_id() {
+  if [ -z "${CONFIG_INSTALL_ID}" ]; then
+    if [ -f "${CONFIG_INSTALL_DIR}/install_id" ]; then
+      CONFIG_INSTALL_ID="$(cat "${CONFIG_INSTALL_DIR}/install_id" 2>/dev/null | tr -d ' \n\r\t' || true)"
+    fi
+  fi
+  if [ -z "${CONFIG_INSTALL_ID}" ]; then
+    CONFIG_INSTALL_ID="$(openssl rand -hex 16)"
+  fi
+  run_privileged mkdir -p "${CONFIG_INSTALL_DIR}"
+  echo -n "${CONFIG_INSTALL_ID}" | run_privileged tee "${CONFIG_INSTALL_DIR}/install_id" >/dev/null 2>&1 || true
+}
+
+detect_preexisting_install() {
+  if [ -f "${CONFIG_INSTALL_DIR}/gopanel" ] || [ -f "${CONFIG_INSTALL_DIR}/conf.yaml" ] || [ -d "${CONFIG_INSTALL_DIR}/db" ]; then
+    PREEXISTING_INSTALL="true"
+    return 0
+  fi
+  PREEXISTING_INSTALL="false"
+}
+
+track_install_event() {
+  local event="$1"
+  local ver="${2:-}"
+  if [ -z "${API_TRACK_URL}" ] || [ -z "${event}" ]; then
+    return 0
+  fi
+  local channel="${CONFIG_CHANNEL}"
+  if [ -z "${channel}" ]; then
+    channel="unknown"
+  fi
+  local distro machine kernel runtime ip
+  distro="$(detect_distro)"
+  machine="$(uname -m 2>/dev/null || true)"
+  kernel="$(uname -r 2>/dev/null || true)"
+  runtime="$(detect_runtime)"
+  ip="$(detect_server_ip)"
+
+  local args=()
+  args+=(--get)
+  args+=(--data-urlencode "event=${event}")
+  args+=(--data-urlencode "install_id=${CONFIG_INSTALL_ID}")
+  args+=(--data-urlencode "channel=${channel}")
+  args+=(--data-urlencode "os=${os_name}")
+  args+=(--data-urlencode "arch=${arch_name}")
+  args+=(--data-urlencode "ip=${ip}")
+  if [ -n "${ver}" ]; then
+    args+=(--data-urlencode "version=${ver}")
+  fi
+  if [ -n "${distro}" ]; then
+    args+=(--data-urlencode "distro=${distro}")
+  fi
+  if [ -n "${machine}" ]; then
+    args+=(--data-urlencode "machine=${machine}")
+  fi
+  if [ -n "${kernel}" ]; then
+    args+=(--data-urlencode "kernel=${kernel}")
+  fi
+  if [ -n "${runtime}" ]; then
+    args+=(--data-urlencode "runtime=${runtime}")
+  fi
+
+  curl -fsSL --max-time 3 "${args[@]}" "${API_TRACK_URL}" >/dev/null 2>&1 || true
 }
 
 init_privilege() {
@@ -264,6 +408,39 @@ fetch_upgrade_info() {
   log "最新版本: ${version} (code: ${version_code})"
 }
 
+fetch_gpagent_upgrade_info() {
+  local cur_version="${CUR_VERSION:-0.0.0}"
+  local cur_version_code="${CUR_VERSION_CODE:-0}"
+  local url
+  url="${API_UPGRADE_URL}?versionCode=${cur_version_code}&version=${cur_version}&os=${os_name}&arch=${arch_name}&appBrand=${APP_BRAND}"
+
+  GPAGENT_FETCH_ERROR=""
+  log "获取 gp-agent 最新安装包信息..."
+
+  local json
+  if ! json="$(curl -fsSL "$url")"; then
+    GPAGENT_FETCH_ERROR="无法获取版本信息，请检查网络或接口地址: ${url}"
+    return 1
+  fi
+
+  local latest_name latest_code download_url
+  latest_name="$(json_get "latestVersionName" "$json")"
+  latest_code="$(json_get "latestVersionCode" "$json")"
+  download_url="$(json_get "downloadUrl" "$json")"
+  download_url="$(echo "$download_url" | sed -e 's/`//g' -e 's/^ *//g' -e 's/ *$//g')"
+
+  if [ -z "$latest_name" ] || [ -z "$latest_code" ] || [ -z "$download_url" ]; then
+    GPAGENT_FETCH_ERROR="版本接口返回不完整: ${json}"
+    return 1
+  fi
+
+  GPAGENT_VERSION="$latest_name"
+  GPAGENT_VERSION_CODE="$latest_code"
+  GPAGENT_PACKAGE_URL="$download_url"
+  GPAGENT_PACKAGE_NAME="$(basename "$download_url")"
+  return 0
+}
+
 prompt_basic_config() {
   if [ "$os_name" = "linux" ]; then
     while true; do
@@ -333,6 +510,45 @@ prompt_basic_config() {
   done
 }
 
+prompt_gpagent_install() {
+  local default_install="true"
+  local prompt_hint="Y/n"
+  local prompt_default="Y"
+  if ! bool_is_true "${CONFIG_INSTALL_GPAGENT}"; then
+    default_install="false"
+    prompt_hint="y/N"
+    prompt_default="N"
+  fi
+
+  echo
+  echo "gp-agent 提供网站托管、进程守护等能力。"
+  echo "如果你准备用 GoPanel 来做网站，建议安装 gp-agent。"
+
+  local answer
+  read -r -p "是否安装 gp-agent？[${prompt_hint}]: " answer || true
+  answer="${answer:-$prompt_default}"
+
+  case "${answer}" in
+    y|Y|yes|YES)
+      CONFIG_INSTALL_GPAGENT="true"
+      log "已选择安装 gp-agent。"
+      ;;
+    n|N|no|NO)
+      CONFIG_INSTALL_GPAGENT="false"
+      log "已跳过 gp-agent 安装。"
+      ;;
+    *)
+      if [ "${default_install}" = "true" ]; then
+        warn "输入无效，默认安装 gp-agent。"
+        CONFIG_INSTALL_GPAGENT="true"
+      else
+        warn "输入无效，默认跳过 gp-agent。"
+        CONFIG_INSTALL_GPAGENT="false"
+      fi
+      ;;
+  esac
+}
+
 download_package() {
   if [ -f "${PACKAGE_NAME}" ]; then
     log "发现本地安装包: ${PACKAGE_NAME}，跳过下载。"
@@ -355,6 +571,47 @@ extract_and_find_binaries() {
   [ -n "${BIN_GOPANEL_PATH}" ] || die "安装包中未找到 gopanel 二进制文件"
 }
 
+prepare_gpagent_binary() {
+  if ! bool_is_true "${CONFIG_INSTALL_GPAGENT}"; then
+    BIN_GPAGENT_PATH=""
+    return 0
+  fi
+
+  if fetch_gpagent_upgrade_info; then
+    log "gp-agent 将使用最新安装包: ${GPAGENT_VERSION} (code: ${GPAGENT_VERSION_CODE})"
+    if [ -n "${BIN_GPAGENT_PATH}" ] && [ -n "${PACKAGE_URL}" ] && [ "${GPAGENT_PACKAGE_URL}" = "${PACKAGE_URL}" ]; then
+      log "gp-agent 复用当前主包中的二进制文件。"
+      return 0
+    fi
+
+    GPAGENT_WORK_DIR="$(mktemp -d -t gpagent_install.XXXXXX)"
+    local gpagent_archive="${GPAGENT_WORK_DIR}/${GPAGENT_PACKAGE_NAME}"
+    log "开始下载 gp-agent 最新安装包: ${GPAGENT_PACKAGE_NAME}"
+    curl -fSL -o "${gpagent_archive}" "${GPAGENT_PACKAGE_URL}" || die "下载 gp-agent 安装包失败"
+    tar -zxf "${gpagent_archive}" -C "${GPAGENT_WORK_DIR}" || die "解压 gp-agent 安装包失败"
+
+    local latest_gpagent_path
+    latest_gpagent_path="$(find "${GPAGENT_WORK_DIR}" -type f -name gp-agent | head -n 1)"
+    if [ -z "${latest_gpagent_path}" ]; then
+      if [ -n "${BIN_GPAGENT_PATH}" ]; then
+        warn "最新安装包中未找到 gp-agent，回退到当前主包内置的 gp-agent。"
+        return 0
+      fi
+      die "最新安装包中未找到 gp-agent 二进制文件"
+    fi
+
+    BIN_GPAGENT_PATH="${latest_gpagent_path}"
+    return 0
+  fi
+
+  if [ -n "${BIN_GPAGENT_PATH}" ]; then
+    warn "获取 gp-agent 最新安装包失败，回退到当前主包内置的 gp-agent。原因: ${GPAGENT_FETCH_ERROR}"
+    return 0
+  fi
+
+  die "已选择安装 gp-agent，但无法获取最新安装包，且当前主包未包含 gp-agent。原因: ${GPAGENT_FETCH_ERROR}"
+}
+
 install_gpc_binary() {
   log "安装 gpc 到 /usr/local/bin/gpc"
   run_privileged mkdir -p /usr/local/bin
@@ -370,9 +627,12 @@ install_gopanel_binary() {
 }
 
 install_gpagent_binary() {
-  if [ -z "${BIN_GPAGENT_PATH}" ]; then
-    warn "安装包未包含 gp-agent，将跳过 gp-agent 安装与自启配置"
+  if ! bool_is_true "${CONFIG_INSTALL_GPAGENT}"; then
+    log "已按选择跳过 gp-agent 安装。"
     return 0
+  fi
+  if [ -z "${BIN_GPAGENT_PATH}" ]; then
+    die "已选择安装 gp-agent，但未找到可用的 gp-agent 二进制文件"
   fi
   log "安装 gp-agent 到 ${CONFIG_INSTALL_DIR}/gp-agent"
   run_privileged mkdir -p "${CONFIG_INSTALL_DIR}"
@@ -389,6 +649,7 @@ port: ${CONFIG_PORT}
 user: "${CONFIG_USER}"
 password: "${CONFIG_PASSWORD}"
 safe_enter: "${CONFIG_SAFE_ENTER}"
+install_id: "${CONFIG_INSTALL_ID}"
 EOF
   run_privileged cp "${tmp_file}" "${CONFIG_INSTALL_DIR}/init.yaml"
   rm -f "${tmp_file}"
@@ -590,6 +851,10 @@ EOF
 }
 
 install_service_gpagent_linux() {
+  if ! bool_is_true "${CONFIG_INSTALL_GPAGENT}"; then
+    log "已跳过 gp-agent 自启动配置。"
+    return 0
+  fi
   if [ ! -x "${CONFIG_INSTALL_DIR}/gp-agent" ]; then
     warn "未检测到 gp-agent 二进制，跳过 gp-agent service 配置"
     return 0
@@ -994,10 +1259,7 @@ check_container_runtime() {
 
 show_result() {
   local ip_address
-  ip_address="$(hostname -I 2>/dev/null | awk '{print $1}' 2>/dev/null || true)"
-  if [ -z "${ip_address}" ]; then
-    ip_address="$(hostname 2>/dev/null || echo "127.0.0.1")"
-  fi
+  ip_address="$(detect_server_ip)"
 
   echo
   echo "GoPanel 安装完成"
@@ -1005,6 +1267,11 @@ show_result() {
   echo "安装目录: ${CONFIG_INSTALL_DIR}"
   echo "gpc 路径: /usr/local/bin/gpc"
   echo "gopanel 运行用户: ${RUNTIME_USER}"
+  if bool_is_true "${CONFIG_INSTALL_GPAGENT}"; then
+    echo "gp-agent: 已安装（网站托管、进程守护等能力）"
+  else
+    echo "gp-agent: 已跳过"
+  fi
   echo "用户名: ${CONFIG_USER}"
   echo "密码: ${CONFIG_PASSWORD}"
   echo "访问地址: http://${ip_address}:${CONFIG_PORT}/${CONFIG_SAFE_ENTER}"
@@ -1025,9 +1292,13 @@ main() {
   echo "==============================================="
 
   prompt_basic_config
+  prompt_gpagent_install
   choose_gopanel_runtime_user
+  detect_preexisting_install
+  ensure_install_id
   download_package
   extract_and_find_binaries
+  prepare_gpagent_binary
   install_gpc_binary
   install_gopanel_binary
   install_gpagent_binary
@@ -1036,6 +1307,11 @@ main() {
   install_autostart_services
   check_container_runtime
   show_result
+  if [ "${PREEXISTING_INSTALL}" = "true" ]; then
+    track_install_event "upgrade_success" "${version}"
+  else
+    track_install_event "install_success" ""
+  fi
 }
 
 main

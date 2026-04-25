@@ -27,6 +27,10 @@ type WebsiteCreate struct {
 	RateLimitMode  string `json:"rateLimitMode"`
 	WafEnable      bool   `json:"wafEnable"`
 	BlockSensitive bool   `json:"blockSensitive"`
+	IPAllowlist    string `json:"ipAllowlist"`
+	IPBlocklist    string `json:"ipBlocklist"`
+	SecurityHeader bool   `json:"securityHeader"`
+	HstsEnabled    bool   `json:"hstsEnabled"`
 }
 
 type NewAppInstall struct {
@@ -53,4 +57,20 @@ type WebsiteUpdate struct {
 	RateLimitMode  string `json:"rateLimitMode"`
 	WafEnable      bool   `json:"wafEnable"`
 	BlockSensitive bool   `json:"blockSensitive"`
+	IPAllowlist    string `json:"ipAllowlist"`
+	IPBlocklist    string `json:"ipBlocklist"`
+	SecurityHeader bool   `json:"securityHeader"`
+	HstsEnabled    bool   `json:"hstsEnabled"`
+}
+
+type WebsiteLogRead struct {
+	WebsiteID uint   `json:"websiteId" validate:"required"`
+	Page      int    `json:"page" validate:"required"`
+	Limit     int    `json:"limit" validate:"required"`
+	Latest    bool   `json:"latest"`
+	LogType   string `json:"logType"`
+}
+
+type WebsiteLogTodayIPStats struct {
+	WebsiteID uint `json:"websiteId" validate:"required"`
 }

@@ -74,3 +74,27 @@ func WebsiteDelete(c fiber.Ctx) error {
 	}
 	return c.JSON(e.Succ())
 }
+
+func WebsiteLog(c fiber.Ctx) error {
+	req, err := e.BodyToStruct[request.WebsiteLogRead](c.Body())
+	if err != nil {
+		return c.JSON(e.Fail(buserr.Err(err)))
+	}
+	res, err := service.NewWebsite().ReadWebsiteLog(*req)
+	if err != nil {
+		return c.JSON(e.Fail(buserr.Err(err)))
+	}
+	return c.JSON(e.Succ(res))
+}
+
+func WebsiteLogTodayIPStats(c fiber.Ctx) error {
+	req, err := e.BodyToStruct[request.WebsiteLogTodayIPStats](c.Body())
+	if err != nil {
+		return c.JSON(e.Fail(buserr.Err(err)))
+	}
+	res, err := service.NewWebsite().ReadWebsiteTodayIPStats(*req)
+	if err != nil {
+		return c.JSON(e.Fail(buserr.Err(err)))
+	}
+	return c.JSON(e.Succ(res))
+}

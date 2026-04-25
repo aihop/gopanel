@@ -21,6 +21,7 @@ import (
 	"github.com/aihop/gopanel/utils/cmd"
 	"github.com/aihop/gopanel/utils/common"
 	"github.com/aihop/gopanel/utils/files"
+	"github.com/aihop/gopanel/utils/gpc"
 )
 
 func NewIAppVersionService() IAppVersionService {
@@ -40,7 +41,7 @@ type IAppVersionService interface {
 
 func (a *AppVersionService) GetUpdateInfo(checkUrl string, upgradeVersion *dto.SettingUpgradeVersion) (*dto.AppUpdateData, error) {
 	client := &http.Client{Timeout: 10 * time.Second}
-	req, err := http.NewRequest("GET", checkUrl+"?versionCode="+strconv.FormatInt(upgradeVersion.VersionCode, 10)+"&version="+upgradeVersion.VersionName+"&os="+upgradeVersion.OS+"&arch="+upgradeVersion.Lang+"&appBrand="+upgradeVersion.AppBrand, nil)
+	req, err := http.NewRequest("GET", checkUrl+"?versionCode="+strconv.FormatInt(upgradeVersion.VersionCode, 10)+"&version="+upgradeVersion.VersionName+"&os="+upgradeVersion.OS+"&arch="+upgradeVersion.Arch+"&appBrand="+upgradeVersion.AppBrand+"&package="+upgradeVersion.Package, nil)
 	if err != nil {
 		return nil, nil
 	}
@@ -164,6 +165,11 @@ func (a *AppVersionService) GoPanelUpload(downloadUrl string, installPath string
 		"gopanel.exe",
 		filepath.Join("bin", "gopanel"),
 	)
+	gpcFile := findPath(sourcePath,
+		filepath.Join("gpc", "gpc"),
+		"gpc",
+		filepath.Join("bin", "gpc"),
+	)
 	if gopanelFile != "" {
 		writeLog("detected binary file", gopanelFile)
 		targetBin := filepath.Join(installPath, filepath.Base(gopanelFile))
@@ -249,6 +255,30 @@ func (a *AppVersionService) GoPanelUpload(downloadUrl string, installPath string
 		}
 	} else {
 		writeLog("no gopanel binary found in extracted package", sourcePath)
+	}
+
+	if runtime.GOOS != "windows" {
+		if gpcFile != "" {
+			writeLog("detected gpc binary file", gpcFile)
+			helperCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			defer cancel()
+			resp, err := gpc.Do(helperCtx, "GOPANEL_GPC_INSTALL", map[string]interface{}{
+				"source_path": gpcFile,
+			})
+			if err != nil {
+				writeLog("gpc helper update skipped", err)
+				if resp != nil && strings.TrimSpace(resp.Output) != "" {
+					writeLog("gpc helper update output", resp.Output)
+				}
+			} else {
+				if strings.TrimSpace(resp.Output) != "" {
+					writeLog("gpc helper update output", resp.Output)
+				}
+				writeLog("gpc helper update scheduled", "/usr/local/bin/gpc")
+			}
+		} else {
+			writeLog("no gpc binary found in extracted package", sourcePath)
+		}
 	}
 
 	// 替换成功后，尝试把文件属主设置为 installPath 的属主（若可行）

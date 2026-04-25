@@ -64,7 +64,7 @@ const NoEntrance = `<!doctype html>
             padding: 48px 40px;
             text-align: center;
             width: 90%;
-            max-width: 440px;
+            max-width: 470px;
             position: relative;
             overflow: hidden;
             animation: float-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
@@ -109,6 +109,7 @@ const NoEntrance = `<!doctype html>
             padding: 16px;
             font-size: 14px;
             color: var(--text-sub);
+            margin-bottom: 12px;
         }
         .action-box strong {
             color: var(--text-main);
@@ -131,11 +132,11 @@ const NoEntrance = `<!doctype html>
         <h1>安全访问受限</h1>
         <p>当前系统环境已开启安全防护模式，为保障数据安全，拦截了您的非法访问请求。</p>
         <div class="action-box">
-            请使用管理员配置的 <strong>专属安全入口 URL</strong> 重新进行访问。
+            请使用管理员配置的 <strong>专属安全入口 URL</strong> 重新进行访问
         </div>
         <div class="action-box">
             <p>可在 SSH 终端输入以下命令来查看面板入口：</p>
-            <p>gpc service user-info</p>
+            <p><strong>gpc panel user-info</strong></p>
         </div>
     </div>
 </body>

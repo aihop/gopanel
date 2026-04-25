@@ -42,6 +42,10 @@ func (s WebsiteService) Update(ctx context.Context, req *request.WebsiteUpdate) 
 	website.RateLimitMode = req.RateLimitMode
 	website.WafEnable = req.WafEnable
 	website.BlockSensitive = req.BlockSensitive
+	website.IPAllowlist = strings.TrimSpace(req.IPAllowlist)
+	website.IPBlocklist = strings.TrimSpace(req.IPBlocklist)
+	website.SecurityHeader = req.SecurityHeader
+	website.HstsEnabled = req.HstsEnabled
 
 	var newContent, updatedContent string
 	var domains []model.WebsiteDomain
@@ -136,16 +140,14 @@ func (s WebsiteService) Update(ctx context.Context, req *request.WebsiteUpdate) 
 	if shouldEnsureWebsiteCaddyConfig(&website) {
 		shouldRewriteCaddy = true
 	}
-	if shouldRewriteCaddy {
+	if shouldRewriteCaddy || newContent != "" {
 		if targetOtherDomains == "" && len(website.Domains) > 0 {
 			targetOtherDomains = buildWebsiteOtherDomains(&website)
 		}
-		return rewriteWebsiteCaddyConfig(ctx, &website, targetOtherDomains)
+		_ = targetOtherDomains
+		return ApplyCaddyFromDB(ctx)
 	}
-	if newContent != "" {
-		return CaddySaveContent(ctx, newContent)
-	}
-	return nil
+	return ApplyCaddyFromDB(ctx)
 }
 
 func shouldEnsureWebsiteCaddyConfig(website *model.Website) bool {
@@ -180,18 +182,4 @@ func buildWebsiteOtherDomains(website *model.Website) string {
 		domains = append(domains, d.Domain)
 	}
 	return strings.Join(domains, "\n")
-}
-
-func rewriteWebsiteCaddyConfig(ctx context.Context, website *model.Website, otherDomains string) error {
-	domain := BuildWebsiteCaddyDomain(website.PrimaryDomain, website.Protocol)
-	switch website.Type {
-	case constant.Static:
-		_, err := CaddyReplaceStaticServerBlock(ctx, domain, website.SiteDir, otherDomains, website.Protocol)
-		return err
-	case constant.Proxy, constant.WebApp:
-		_, err := CaddyReplaceServerBlock(ctx, domain, website.Proxy, otherDomains, website.Protocol)
-		return err
-	default:
-		return nil
-	}
 }

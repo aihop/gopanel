@@ -75,6 +75,30 @@
           </n-button>
         </div>
       </div>
+
+      <n-alert
+        v-if="!agentStatus.online"
+        class="mt-6"
+        type="warning"
+        :show-icon="true"
+        title="Agent 未初始化"
+      >
+        <div class="text-sm leading-6">
+          <div>gp-agent 未启动或未安装，守护进程功能暂不可用。</div>
+          <div
+            v-if="agentStatus.error"
+            class="mt-1 text-slate-500"
+          >{{ agentStatus.error }}</div>
+          <n-space class="mt-3">
+            <n-button
+              size="small"
+              type="primary"
+              :loading="ensuringAgent"
+              @click="ensureAgent"
+            >一键初始化</n-button>
+          </n-space>
+        </div>
+      </n-alert>
     </div>
 
     <div class="rounded-[28px] border border-blue-100/80 bg-base-100 p-6 shadow-[0_18px_48px_rgba(15,23,42,0.08)] sm:p-8">
@@ -136,14 +160,18 @@
       >
         <DaemonConfigFile />
       </div>
+
+      <DaemonPost
+        ref="DaemonPostModel"
+        @confirm="postConfirm"
+      />
+      <DaemonProcessLog ref="DaemonProcessLogRef"></DaemonProcessLog>
+      <OpDialog
+        ref="opDialogRef"
+        @search="handleEnsureFinished"
+      />
     </div>
   </div>
-
-  <DaemonPost
-    ref="DaemonPostModel"
-    @confirm="postConfirm"
-  />
-  <DaemonProcessLog ref="DaemonProcessLogRef"></DaemonProcessLog>
 </template>
 <script setup lang="ts">
 import { useTable } from "@/composables/useTable"
@@ -158,7 +186,8 @@ import {
 	useDialog,
 	NTabs,
 	NTabPane,
-	NSpace
+	NSpace,
+	NAlert
 } from "naive-ui"
 import type { DataTableColumns } from "naive-ui"
 import type { Ref } from "vue"
@@ -166,6 +195,9 @@ import { computed, h, onMounted, reactive, ref, watch } from "vue"
 import DaemonConfigFile from "./components/DaemonConfigFile.vue"
 import DaemonProcessLog from "./components/DaemonProcessLog.vue"
 import { copyText } from "@/utils/util"
+import { AgentEnsureAPI, AgentStatusAPI } from "@/api/modules/agent"
+import { useAuthStore } from "@/store/auth"
+import OpDialog from "@/components/OpDialog.vue"
 import {
 	DaemonStatus,
 	DaemonStart,
@@ -454,6 +486,47 @@ const openPost = (record?: any) => {
 	DaemonPostModel.value.open(record)
 }
 
+const authStore = useAuthStore()
+const opDialogRef = ref<InstanceType<typeof OpDialog> | null>(null)
+const ensuringAgent = ref(false)
+const agentStatus = ref<{ online: boolean; error?: string }>({ online: true })
+
+const fetchAgentStatus = async () => {
+	try {
+		const res = await AgentStatusAPI()
+		agentStatus.value = {
+			online: !!res?.data?.online,
+			error: res?.data?.error
+		}
+	} catch (e: any) {
+		agentStatus.value = { online: false, error: e?.message || "获取 Agent 状态失败" }
+	}
+}
+
+const ensureAgent = async () => {
+	if (ensuringAgent.value) return
+	ensuringAgent.value = true
+	try {
+		const res = await AgentEnsureAPI()
+		const log = res?.data?.log
+		const token = authStore.getAuth() || authStore.auth || ""
+		if (log) {
+			opDialogRef.value?.acceptParams({
+				title: "初始化 Agent",
+				sseUrl: `/api/agent/ensure/logs?log=${encodeURIComponent(log)}&token=${encodeURIComponent(token)}`
+			})
+		}
+	} catch (e) {
+	} finally {
+		ensuringAgent.value = false
+	}
+}
+
+const handleEnsureFinished = () => {
+	fetchAgentStatus()
+	refreshAll()
+}
+
 const postConfirm = async (data: any, loading: Ref<boolean>) => {
 	loading.value = true
 	if (data.config) {
@@ -467,6 +540,7 @@ const postConfirm = async (data: any, loading: Ref<boolean>) => {
 }
 
 onMounted(() => {
+	fetchAgentStatus()
 	refreshAll()
 })
 </script>

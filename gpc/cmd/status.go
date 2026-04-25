@@ -64,4 +64,3 @@ func bytesHuman(n uint64) string {
 	}
 	return fmt.Sprintf("%.1f%ciB", float64(n)/float64(div), "KMGTPE"[exp])
 }
-

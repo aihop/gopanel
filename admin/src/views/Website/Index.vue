@@ -40,6 +40,28 @@
       </div>
     </div>
 
+    <n-alert
+      v-if="!agentStatus.online"
+      type="warning"
+      :show-icon="true"
+      title="Agent 未初始化"
+      class="rounded-[28px] border border-blue-100/80 bg-base-100 p-6 shadow-[0_18px_48px_rgba(15,23,42,0.08)]"
+    >
+      <div class="text-sm leading-7 text-slate-600">
+        <div>gp-agent 未启动或未安装，网站功能暂不可用。</div>
+        <div
+          v-if="agentStatus.error"
+          class="mt-1 text-slate-500"
+        >{{ agentStatus.error }}</div>
+        <n-space class="mt-4">
+          <n-button
+            type="primary"
+            :loading="ensuringAgent"
+            @click="ensureAgent"
+          >一键初始化</n-button>
+        </n-space>
+      </div>
+    </n-alert>
     <div class="rounded-[28px] border border-blue-100/80 bg-base-100 shadow-[0_24px_72px_rgba(15,23,42,0.08)]">
       <div class="flex flex-col gap-5 border-b border-slate-100 px-8 py-7 lg:flex-row lg:items-center lg:justify-between">
         <div class="space-y-2">
@@ -140,6 +162,18 @@
       ref="deployHistoryRef"
       @confirm="postConfirm"
     />
+
+    <AccessLogDrawer ref="accessLogDrawerRef" />
+
+    <SecurityDrawer
+      ref="securityDrawerRef"
+      @confirm="fetchData"
+    />
+
+    <OpDialog
+      ref="opDialogRef"
+      @search="handleEnsureFinished"
+    />
   </div>
 </template>
 
@@ -147,42 +181,88 @@
 import type { Website } from "@/api/interface/website"
 import type { DataTableColumns } from "naive-ui"
 import { httpDefaultReloadAPI, httpDefaultStatusAPI, httpDefaultStopAPI } from "@/api/modules/http"
+import { AgentEnsureAPI, AgentStatusAPI } from "@/api/modules/agent"
 import { websiteDeleteAPI, websiteListAPI } from "@/api/modules/website"
-import { NButton, NSpace, NTag, useDialog, useMessage } from "naive-ui"
-import { computed, h, onMounted, ref, watch } from "vue"
-import { useRouter } from "vue-router"
+import { NButton, NSpace, NTag, useDialog, useMessage, NAlert } from "naive-ui"
+import { h, onMounted, ref, watch } from "vue"
 import HttpConfigFile from "./components/HttpConfigFile.vue"
 import Create from "./components/Create.vue"
 import DeployHistory from "./components/DeployHistory.vue"
+import AccessLogDrawer from "./components/AccessLogDrawer.vue"
+import SecurityDrawer from "./components/SecurityDrawer.vue"
 import { formatTime } from "@/utils/date"
 import { t } from "@/i18n"
+import { useAuthStore } from "@/store/auth"
+import OpDialog from "@/components/OpDialog.vue"
 
  
 const message = useMessage()
 const dialog = useDialog()
 const createRef = ref<InstanceType<typeof Create> | null>(null)
 const deployHistoryRef = ref<any>(null)
+const accessLogDrawerRef = ref<InstanceType<typeof AccessLogDrawer> | null>(null)
+const securityDrawerRef = ref<InstanceType<typeof SecurityDrawer> | null>(null)
 
 const httpServerStatus = ref(false)
 const statusStartErrorText = ref("")
+const authStore = useAuthStore()
+const opDialogRef = ref<InstanceType<typeof OpDialog> | null>(null)
+const ensuringAgent = ref(false)
+const agentStatus = ref<{ online: boolean; error?: string }>({ online: true })
+
+const fetchAgentStatus = async () => {
+	try {
+		const res = await AgentStatusAPI()
+		agentStatus.value = {
+			online: !!res?.data?.online,
+			error: res?.data?.error
+		}
+	} catch (e: any) {
+		agentStatus.value = { online: false, error: e?.message || "获取 Agent 状态失败" }
+	}
+}
+
+const ensureAgent = async () => {
+	if (ensuringAgent.value) return
+	ensuringAgent.value = true
+	try {
+		const res = await AgentEnsureAPI()
+		const log = res?.data?.log
+		const token = authStore.getAuth() || authStore.auth || ""
+		if (log) {
+			opDialogRef.value?.acceptParams({
+				title: "初始化 Agent",
+				sseUrl: `/api/agent/ensure/logs?log=${encodeURIComponent(log)}&token=${encodeURIComponent(token)}`
+			})
+		}
+	} catch (e) {
+	} finally {
+		ensuringAgent.value = false
+	}
+}
+
+const handleEnsureFinished = () => {
+	fetchAgentStatus()
+	if (agentStatus.value.online) {
+		httpDefaultStatusAPI()
+			.then(res => {
+				httpServerStatus.value = res.data.running || res.data.status
+				if (res.code !== 0) {
+					statusStartErrorText.value = res.msg || "获取HTTP服务状态失败"
+				}
+			})
+			.catch(err => {
+				console.error("获取HTTP服务状态失败", err)
+			})
+		fetchData()
+	}
+}
 
 const loading = ref(false)
 const tableData = ref<Website.WebsiteDTO[]>([])
 const total = ref(0)
 
 const activeTab = ref("list")
-
-const siteSummary = computed(() => {
-	const rows = tableData.value || []
-	return {
-		total: rows.length,
-		static: rows.filter((item: Website.WebsiteDTO) => item.type !== "proxy").length,
-		proxy: rows.filter((item: Website.WebsiteDTO) => item.type === "proxy").length,
-		defaultServer: rows.filter((item: Website.WebsiteDTO) => item.defaultServer).length
-	}
-})
-
-const featuredPrimaryDomain = computed(() => tableData.value[0]?.primaryDomain || "暂无网站")
 
 function normalizeDomainList(row: Website.WebsiteDTO) {
 	if (Array.isArray(row.domains)) {
@@ -235,6 +315,17 @@ function getStatusTagType(status: unknown): "success" | "warning" | "default" {
 		return "warning"
 	}
 	return "default"
+}
+
+function getSecuritySummary(row: Website.WebsiteDTO) {
+	const tags: string[] = []
+	if (row.antiCrawler) tags.push("防爬虫")
+	if (row.antiLeech) tags.push("防盗链")
+	if (row.rateLimitMode === "normal") tags.push("常规限流")
+	if (row.rateLimitMode === "strict") tags.push("严格限流")
+	if (row.wafEnable) tags.push("轻量 WAF")
+	if (row.blockSensitive) tags.push("敏感保护")
+	return tags
 }
 
 const columns: DataTableColumns<any> = [
@@ -355,6 +446,31 @@ const columns: DataTableColumns<any> = [
 		}
 	},
 	{
+		title: "安全防护",
+		key: "security",
+		render(row) {
+			const tags = getSecuritySummary(row)
+			return h(
+				"div",
+				{ class: "flex flex-wrap gap-2" },
+				tags.length
+					? tags.slice(0, 3).map((item: string) =>
+							h(
+								NTag,
+								{
+									size: "small",
+									round: true,
+									bordered: false,
+									type: "success",
+								},
+								{ default: () => item }
+							)
+						)
+					: [h("span", { class: "text-sm text-slate-400" }, "未启用")]
+			)
+		},
+	},
+	{
 		title: t("commons.table.createdAt"),
 		key: "updatedAt",
 		render(row) {
@@ -366,6 +482,33 @@ const columns: DataTableColumns<any> = [
 		key: "actions",
 		render(row) {
 			const buttons = [
+				h(
+					NButton,
+					{
+						text: true,
+						type: "info",
+						onClick: () => handleAccessLog(row)
+					},
+					{ default: () => "访问记录" }
+				),
+				h(
+					NButton,
+					{
+						text: true,
+						type: "error",
+						onClick: () => handleErrorLog(row)
+					},
+					{ default: () => "错误日志" }
+				),
+				h(
+					NButton,
+					{
+						text: true,
+						type: "warning",
+						onClick: () => handleSecurity(row)
+					},
+					{ default: () => "安全防护" }
+				),
 				h(
 					NButton,
 					{
@@ -440,16 +583,24 @@ function handleAdd() {
 	createRef.value?.open()
 }
 
-function handleOpenConfig() {
-	activeTab.value = "config"
-}
-
 function handleUpdate(row: any) {
 	createRef.value?.open(row, "update")
 }
 
 function handleDeploy(row: any) {
 	deployHistoryRef.value?.open(row)
+}
+
+function handleSecurity(row: Website.WebsiteDTO) {
+	securityDrawerRef.value?.open(row)
+}
+
+function handleAccessLog(row: Website.WebsiteDTO) {
+	accessLogDrawerRef.value?.open(row, "access")
+}
+
+function handleErrorLog(row: Website.WebsiteDTO) {
+	accessLogDrawerRef.value?.open(row, "error")
 }
 
 function postConfirm() {
@@ -497,17 +648,20 @@ watch(activeTab, newVal => {
 })
 
 onMounted(() => {
-	httpDefaultStatusAPI()
-		.then(res => {
-			httpServerStatus.value = res.data.running || res.data.status
-			if (res.code !== 0) {
-				statusStartErrorText.value = res.msg || "获取HTTP服务状态失败"
-			}
-		})
-		.catch(err => {
-			console.error("获取HTTP服务状态失败", err)
-		})
-	fetchData()
+	fetchAgentStatus().then(() => {
+		if (!agentStatus.value.online) return
+		httpDefaultStatusAPI()
+			.then(res => {
+				httpServerStatus.value = res.data.running || res.data.status
+				if (res.code !== 0) {
+					statusStartErrorText.value = res.msg || "获取HTTP服务状态失败"
+				}
+			})
+			.catch(err => {
+				console.error("获取HTTP服务状态失败", err)
+			})
+		fetchData()
+	})
 })
 </script>
 

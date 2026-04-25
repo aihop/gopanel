@@ -18,6 +18,14 @@ export const websiteDeleteAPI = (params: Website.WebSiteDel) => {
 	return http.delete<any>(`/website/${params.id}`,params)
 }
 
+export const WebsiteLogAPI = (req: Website.WebSiteLogReadReq) => {
+	return http.post<Website.WebSiteLog>(`/website/log`, req)
+}
+
+export const WebsiteTodayIPStatsAPI = (req: Website.WebSiteTodayIPStatsReq) => {
+	return http.post<Website.WebSiteTodayIPStats>(`/website/log/today-ip`, req)
+}
+
 
 export const WebsiteDeployListAPI = (req: { websiteId: number }) => {
 	return http.post<any[]>(`/website/deploy/list`, req)

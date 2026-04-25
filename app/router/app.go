@@ -33,6 +33,7 @@ func AppRegister(r fiber.Router) {
 	AIAgentRouter(apiRouter)   // AI助手终端
 	LogsRouter(apiRouter)      // 日志
 	DaemonRouter(apiRouter)    // 守护进程
+	AgentRouter(apiRouter)     // gp-agent
 
 	staticRouter(r) // 静态资源文件
 }

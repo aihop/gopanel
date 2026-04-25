@@ -24,6 +24,16 @@ export namespace Website {
         containerId?: string;
         pipelineId?: number;
         codeSource?: string;
+        proxy?: string;
+        antiCrawler?: boolean;
+        antiLeech?: boolean;
+        rateLimitMode?: string;
+        wafEnable?: boolean;
+        blockSensitive?: boolean;
+        ipAllowlist?: string;
+        ipBlocklist?: string;
+        securityHeader?: boolean;
+        hstsEnabled?: boolean;
     }
 
     export interface WebsiteDTO extends Website {
@@ -92,6 +102,15 @@ export namespace Website {
         pipelineId?: number;
         engineMode?: string;
         engineConfig?: any;
+        antiCrawler?: boolean;
+        antiLeech?: boolean;
+        rateLimitMode?: string;
+        wafEnable?: boolean;
+        blockSensitive?: boolean;
+        ipAllowlist?: string;
+        ipBlocklist?: string;
+        securityHeader?: boolean;
+        hstsEnabled?: boolean;
     }
 
     export interface WebSiteUpdateReq {
@@ -107,6 +126,15 @@ export namespace Website {
         engineEnv?: string;
         engineMode?: string;
         engineConfig?: any;
+        antiCrawler?: boolean;
+        antiLeech?: boolean;
+        rateLimitMode?: string;
+        wafEnable?: boolean;
+        blockSensitive?: boolean;
+        ipAllowlist?: string;
+        ipBlocklist?: string;
+        securityHeader?: boolean;
+        hstsEnabled?: boolean;
     }
 
     export interface WebSiteOp {
@@ -127,6 +155,31 @@ export namespace Website {
         content: string;
         end: boolean;
         path: string;
+        total?: number;
+        lines?: string[];
+    }
+
+    export interface WebSiteLogReadReq {
+        websiteId: number;
+        page: number;
+        limit: number;
+        latest: boolean;
+        logType?: "access" | "error";
+    }
+
+    export interface WebSiteTodayIPStatsReq {
+        websiteId: number;
+    }
+
+    export interface WebSiteTodayIPStats {
+        date: string;
+        uniqueIpCount: number;
+        requestCount: number;
+        path: string;
+        topIps: Array<{
+            ip: string;
+            count: number;
+        }>;
     }
 
     export interface Domain {

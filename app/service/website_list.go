@@ -44,6 +44,8 @@ func (s *WebsiteService) List(ctx *gormx.Contextx) (websiteDTOs []*response.Webs
 			appInstallID = 0
 		}
 		sitePath := path.Join(constant.AppInstallDir, "www", "sites", web.Alias)
+		accessLogPath := websiteAccessLogPath(web.Alias)
+		errorLogPath := websiteErrorLogPath(web.Alias)
 
 		var otherDomains string
 		if len(web.Domains) > 0 {
@@ -70,6 +72,8 @@ func (s *WebsiteService) List(ctx *gormx.Contextx) (websiteDTOs []*response.Webs
 			RuntimeName:    runtimeName,
 			RuntimeDir:     web.RuntimeDir,
 			SitePath:       sitePath,
+			AccessLogPath:  accessLogPath,
+			ErrorLogPath:   errorLogPath,
 			AppInstallID:   appInstallID,
 			PipelineID:     web.PipelineID,
 			RuntimeType:    runtimeType,
@@ -82,6 +86,10 @@ func (s *WebsiteService) List(ctx *gormx.Contextx) (websiteDTOs []*response.Webs
 			RateLimitMode:  web.RateLimitMode,
 			WafEnable:      web.WafEnable,
 			BlockSensitive: web.BlockSensitive,
+			IPAllowlist:    web.IPAllowlist,
+			IPBlocklist:    web.IPBlocklist,
+			SecurityHeader: web.SecurityHeader,
+			HstsEnabled:    web.HstsEnabled,
 		})
 	}
 	return websiteDTOs, nil

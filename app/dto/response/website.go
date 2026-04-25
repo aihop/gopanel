@@ -19,6 +19,8 @@ type WebsiteRes struct {
 	CodeSource    string    `json:"codeSource"`
 	ExpireDate    time.Time `json:"expireDate"`
 	SitePath      string    `json:"sitePath"`
+	AccessLogPath string    `json:"accessLogPath"`
+	ErrorLogPath  string    `json:"errorLogPath"`
 	AppName       string    `json:"appName"`
 	RuntimeName   string    `json:"runtimeName"`
 	RuntimeDir    string    `json:"runtimeDir"`
@@ -31,4 +33,21 @@ type WebsiteRes struct {
 	RateLimitMode  string `json:"rateLimitMode"`
 	WafEnable      bool   `json:"wafEnable"`
 	BlockSensitive bool   `json:"blockSensitive"`
+	IPAllowlist    string `json:"ipAllowlist"`
+	IPBlocklist    string `json:"ipBlocklist"`
+	SecurityHeader bool   `json:"securityHeader"`
+	HstsEnabled    bool   `json:"hstsEnabled"`
+}
+
+type WebsiteLogTopIP struct {
+	IP    string `json:"ip"`
+	Count int    `json:"count"`
+}
+
+type WebsiteLogTodayIPStats struct {
+	Date          string            `json:"date"`
+	UniqueIPCount int               `json:"uniqueIpCount"`
+	RequestCount  int               `json:"requestCount"`
+	Path          string            `json:"path"`
+	TopIPs        []WebsiteLogTopIP `json:"topIps"`
 }

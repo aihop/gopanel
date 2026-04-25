@@ -179,44 +179,60 @@
 
         <n-divider class="!my-6 text-slate-400">安全防护</n-divider>
 
-        <n-form-item label="防爬虫 (拦截恶意扫描)">
-          <div class="flex flex-col gap-2">
-            <n-switch v-model:value="form.antiCrawler" />
-            <div class="text-xs text-slate-500">开启后将在 Caddy 层拦截常见恶意扫描器、无头浏览器及部分不规范 User-Agent，降低服务器开销。</div>
+        <div class="mb-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+          <div class="flex items-start justify-between gap-4">
+            <div class="space-y-2">
+              <div class="text-sm font-semibold text-slate-700">轻量安全策略</div>
+              <div class="text-xs leading-6 text-slate-500">
+                添加/修改网站时只保留预设策略，细粒度开关请在网站列表中的“安全防护”入口里集中维护。
+              </div>
+            </div>
+            <n-tag
+              round
+              :bordered="false"
+              type="info"
+            >
+              推荐抽离
+            </n-tag>
           </div>
+        </div>
+
+        <n-form-item label="安全策略">
+          <n-radio-group
+            v-model:value="securityPreset"
+            @update:value="handleSecurityPresetChange"
+          >
+            <n-space vertical>
+              <n-radio value="off">
+                关闭防护
+              </n-radio>
+              <n-radio value="recommended">
+                推荐策略
+              </n-radio>
+              <n-radio value="strict">
+                严格策略
+              </n-radio>
+            </n-space>
+          </n-radio-group>
         </n-form-item>
 
-        <n-form-item label="防盗链 (保护静态资源)">
-          <div class="flex flex-col gap-2">
-            <n-switch v-model:value="form.antiLeech" />
-            <div class="text-xs text-slate-500">开启后仅允许本站域名引用图片、视频等静态资源，防止流量被外部网站“薅羊毛”。</div>
-          </div>
-        </n-form-item>
-
-        <n-form-item label="并发与频率限制 (防 CC)">
-          <n-select
-            v-model:value="form.rateLimitMode"
-            :options="[
-              { label: '关闭 (默认)', value: 'none' },
-              { label: '常规防护 (推荐)', value: 'normal' },
-              { label: '严格防护 (应急)', value: 'strict' }
-            ]"
-          />
-        </n-form-item>
-
-        <n-form-item label="轻量级 WAF (防注入/XSS)">
-          <div class="flex flex-col gap-2">
-            <n-switch v-model:value="form.wafEnable" />
-            <div class="text-xs text-slate-500">拦截常见的 SQL 注入、跨站脚本及系统路径穿越攻击，为建站程序提供基础防护。</div>
-          </div>
-        </n-form-item>
-
-        <n-form-item label="保护敏感配置文件">
-          <div class="flex flex-col gap-2">
-            <n-switch v-model:value="form.blockSensitive" />
-            <div class="text-xs text-slate-500">禁止外部访问 .env、.git 等隐藏文件及 .sql、.bak 等备份数据，防止源码与数据库泄露。</div>
-          </div>
-        </n-form-item>
+        <div class="mb-4 flex flex-wrap gap-2">
+          <n-tag
+            v-for="item in securitySummary"
+            :key="item"
+            round
+            :bordered="false"
+            type="success"
+          >
+            {{ item }}
+          </n-tag>
+          <span
+            v-if="securitySummary.length === 0"
+            class="text-xs text-slate-400"
+          >
+            当前预设不会启用网站级安全防护
+          </span>
+        </div>
 
         <n-divider class="!my-4" />
 
@@ -249,7 +265,7 @@
 // @ts-nocheck
 import type { FormInst } from "naive-ui"
 import type { Website } from "@/api/interface/website"
-import { ref, watch, onMounted } from "vue"
+import { computed, ref, watch, onMounted } from "vue"
 import { websiteCreateAPI, websiteUpdateAPI } from "@/api/modules/website"
 import { ListAppInstalled } from "@/api/modules/apps"
 import { getPipelinePage } from "@/api/modules/pipeline"
@@ -264,6 +280,7 @@ const message = useMessage()
 const actionType = ref("add")
 
 const title = ref("添加域名")
+const securityPreset = ref<"off" | "recommended" | "strict">("recommended")
 
 const appInstallOptions = ref<{ label: string; value: number }[]>([])
 const rawAppList = ref<any[]>([])
@@ -272,6 +289,66 @@ const pipelineOptions = ref<any[]>([])
 const rawPipelineList = ref<any[]>([])
 
 const localImageOptions = ref<{ label: string; value: string }[]>([])
+
+const securitySummary = computed(() => {
+	const list: string[] = []
+	if (form.value.antiCrawler) list.push("防爬虫")
+	if (form.value.antiLeech) list.push("防盗链")
+	if (form.value.rateLimitMode === "normal") list.push("常规限流")
+	if (form.value.rateLimitMode === "strict") list.push("严格限流")
+	if (form.value.wafEnable) list.push("轻量 WAF")
+	if (form.value.blockSensitive) list.push("敏感文件保护")
+	if (form.value.securityHeader) list.push("安全响应头")
+	if (form.value.hstsEnabled) list.push("HSTS")
+	return list
+})
+
+function applySecurityPreset(preset: "off" | "recommended" | "strict") {
+	if (preset === "off") {
+		form.value.antiCrawler = false
+		form.value.antiLeech = false
+		form.value.rateLimitMode = "none"
+		form.value.wafEnable = false
+		form.value.blockSensitive = false
+		form.value.securityHeader = false
+		form.value.hstsEnabled = false
+		return
+	}
+	if (preset === "strict") {
+		form.value.antiCrawler = true
+		form.value.antiLeech = true
+		form.value.rateLimitMode = "strict"
+		form.value.wafEnable = true
+		form.value.blockSensitive = true
+		form.value.securityHeader = true
+		form.value.hstsEnabled = form.value.protocol === "https"
+		return
+	}
+	form.value.antiCrawler = true
+	form.value.antiLeech = true
+	form.value.rateLimitMode = "normal"
+	form.value.wafEnable = true
+	form.value.blockSensitive = true
+	form.value.securityHeader = true
+	form.value.hstsEnabled = form.value.protocol === "https"
+}
+
+function syncSecurityPreset() {
+	if (!form.value.antiCrawler && !form.value.antiLeech && form.value.rateLimitMode === "none" && !form.value.wafEnable && !form.value.blockSensitive && !form.value.securityHeader && !form.value.hstsEnabled) {
+		securityPreset.value = "off"
+		return
+	}
+	if (form.value.antiCrawler && form.value.antiLeech && form.value.rateLimitMode === "strict" && form.value.wafEnable && form.value.blockSensitive && form.value.securityHeader) {
+		securityPreset.value = "strict"
+		return
+	}
+	securityPreset.value = "recommended"
+}
+
+function handleSecurityPresetChange(value: "off" | "recommended" | "strict") {
+	securityPreset.value = value
+	applySecurityPreset(value)
+}
 
 const fetchApps = async () => {
 	try {
@@ -363,7 +440,11 @@ const form = ref({
 	antiLeech: false,
 	rateLimitMode: "none",
 	wafEnable: false,
-	blockSensitive: false
+	blockSensitive: false,
+	ipAllowlist: "",
+	ipBlocklist: "",
+	securityHeader: false,
+	hstsEnabled: false
 })
 
 const rules = {
@@ -430,6 +511,10 @@ const onConfirm = async () => {
 			rateLimitMode: form.value.rateLimitMode,
 			wafEnable: form.value.wafEnable,
 			blockSensitive: form.value.blockSensitive,
+			ipAllowlist: form.value.ipAllowlist,
+			ipBlocklist: form.value.ipBlocklist,
+			securityHeader: form.value.securityHeader,
+			hstsEnabled: form.value.hstsEnabled,
 		}
 		const updatePayload: Website.WebSiteUpdateReq = {
 			id: form.value.id || 0,
@@ -445,7 +530,11 @@ const onConfirm = async () => {
 			antiLeech: form.value.antiLeech,
 			rateLimitMode: form.value.rateLimitMode,
 			wafEnable: form.value.wafEnable,
-			blockSensitive: form.value.blockSensitive
+			blockSensitive: form.value.blockSensitive,
+			ipAllowlist: form.value.ipAllowlist,
+			ipBlocklist: form.value.ipBlocklist,
+			securityHeader: form.value.securityHeader,
+			hstsEnabled: form.value.hstsEnabled
 		}
 		let res = await (actionType.value === "add" ? websiteCreateAPI(createPayload) : websiteUpdateAPI(updatePayload))
 		emit("confirm", res, loading)
@@ -476,12 +565,17 @@ const open = (record?: any, action: string = "add") => {
 			gitRepo: "",
 			codeDir: "",
 			pipelineId: undefined,
-			antiCrawler: false,
-			antiLeech: false,
-			rateLimitMode: "none",
-			wafEnable: false,
-			blockSensitive: false
+			antiCrawler: true,
+			antiLeech: true,
+			rateLimitMode: "normal",
+			wafEnable: true,
+			blockSensitive: true,
+			ipAllowlist: "",
+			ipBlocklist: "",
+			securityHeader: true,
+			hstsEnabled: false
 		}
+		securityPreset.value = "recommended"
 	} else {
 		actionType.value = "update"
 		title.value = "更新网站"
@@ -505,8 +599,13 @@ const open = (record?: any, action: string = "add") => {
 			...record,
 			rateLimitMode: record.rateLimitMode || "none",
 			wafEnable: record.wafEnable || false,
-			blockSensitive: record.blockSensitive || false
+			blockSensitive: record.blockSensitive || false,
+			ipAllowlist: record.ipAllowlist || "",
+			ipBlocklist: record.ipBlocklist || "",
+			securityHeader: !!record.securityHeader,
+			hstsEnabled: !!record.hstsEnabled
 		}
+		syncSecurityPreset()
 	}
 }
 watch(

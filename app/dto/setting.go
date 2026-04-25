@@ -110,6 +110,7 @@ type SettingUpgradeVersion struct {
 	Arch        string `json:"arch"`
 	Lang        string `json:"lang"`
 	AppBrand    string `json:"appBrand"`
+	Package     string `json:"package"`
 }
 
 type SSLUpdate struct {

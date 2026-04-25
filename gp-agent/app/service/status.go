@@ -32,6 +32,11 @@ type LocalStatus struct {
 
 type AgentStatus struct {
 	Version          string `json:"version"`
+	VersionCode      string `json:"version_code"`
+	BuildTime        string `json:"build_time"`
+	AppBrand         string `json:"app_brand"`
+	GitCommit        string `json:"git_commit"`
+	GitDirty         string `json:"git_dirty"`
 	UptimeSeconds    int64  `json:"uptime_seconds"`
 	BaseDir          string `json:"base_dir"`
 	SocketPath       string `json:"socket"`
@@ -42,6 +47,11 @@ type AgentStatus struct {
 }
 
 var Version = "dev"
+var VersionCode = "0"
+var BuildTime = ""
+var AppBrand = "GoPanel"
+var GitCommit = ""
+var GitDirty = ""
 
 func GetLocalStatus(ctx context.Context) (LocalStatus, error) {
 	out := LocalStatus{AtUnixMs: time.Now().UnixMilli()}
@@ -92,6 +102,11 @@ func GetAgentStatus() AgentStatus {
 	}
 	return AgentStatus{
 		Version:          Version,
+		VersionCode:      VersionCode,
+		BuildTime:        BuildTime,
+		AppBrand:         AppBrand,
+		GitCommit:        GitCommit,
+		GitDirty:         GitDirty,
 		UptimeSeconds:    uptime,
 		BaseDir:          global.CONF.BaseDir,
 		SocketPath:       global.CONF.SocketPath,

@@ -102,6 +102,9 @@ export const operateForwardRule = (params: { rules: Host.RuleForward[]; forceDel
 export const operateIPRule = (params: Host.RuleIP) => {
 	return http.post<Host.RuleIP>(`/host/firewall/ip`, params, TimeoutEnum.T_40S)
 }
+export const searchFirewallRules = (params: Host.RuleSearch) => {
+	return http.post<ResPage<Host.RuleInfo>>(`/host/firewall/list`, params, TimeoutEnum.T_40S)
+}
 export const updatePortRule = (params: Host.UpdatePortRule) => {
 	return http.post(`/host/firewall/update/port`, params, TimeoutEnum.T_40S)
 }

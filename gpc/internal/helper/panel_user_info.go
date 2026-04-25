@@ -2,23 +2,24 @@ package helper
 
 import (
 	"context"
-	"errors"
 	"encoding/json"
+	"errors"
 	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 )
 
 type goPanelUserInfo struct {
-	AdminEmail       string `json:"admin_email"`
+	AdminUser        string `json:"admin_user"`
+	AdminPassword    string `json:"admin_password"`
 	Entrance         string `json:"entrance"`
 	Listen           string `json:"listen"`
 	LoginURL         string `json:"login_url"`
 	BaseDir          string `json:"base_dir"`
 	ConfigPath       string `json:"config_path"`
+	InitPath         string `json:"init_path"`
 	DatabasePath     string `json:"database_path"`
 	AtUnixMs         int64  `json:"at_unix_ms"`
 	ResetPasswordTip string `json:"reset_password_tip"`
@@ -42,38 +43,61 @@ func (s *Server) actionGoPanelUserInfo(ctx context.Context, params map[string]in
 
 	entrance := strings.TrimSpace(cfg.System.Entrance)
 	listen := strings.TrimSpace(cfg.HTTP.Listen)
-	dbPath := strings.TrimSpace(cfg.DB.Database)
-	if dbPath == "" {
-		dbPath = strings.TrimSpace(cfg.DB.Path)
-	}
-	if dbPath == "" {
-		return "", errors.New("db.database is empty in config")
-	}
-	if !filepath.IsAbs(dbPath) {
-		dbPath = filepath.Join(strings.TrimSpace(s.cfg.BaseDir), dbPath)
+
+	dbPath := ""
+	{
+		p := strings.TrimSpace(cfg.DB.Database)
+		if p == "" {
+			p = strings.TrimSpace(cfg.DB.Path)
+		}
+		if p != "" {
+			if !filepath.IsAbs(p) {
+				p = filepath.Join(strings.TrimSpace(s.cfg.BaseDir), p)
+			}
+			dbPath = p
+		}
 	}
 
-	adminEmail := ""
-	if e, err := queryAdminEmailBySqlite3(ctx, dbPath); err == nil {
-		adminEmail = e
+	initPath := filepath.Join(strings.TrimSpace(s.cfg.BaseDir), "init.yaml")
+	adminUser := ""
+	adminPassword := ""
+	if init, err := readInitInstallSimple(initPath); err == nil {
+		adminUser = strings.TrimSpace(init.User)
+		adminPassword = strings.TrimSpace(init.Password)
+		if entrance == "" {
+			entrance = strings.TrimSpace(init.SafeEnter)
+		}
+		if listen == "" && init.Port > 0 {
+			listen = ":" + intToString(init.Port)
+		}
 	}
 
 	out := goPanelUserInfo{
-		AdminEmail:       adminEmail,
+		AdminUser:        adminUser,
+		AdminPassword:    adminPassword,
 		Entrance:         entrance,
 		Listen:           listen,
 		LoginURL:         buildLoginURL(listen, entrance),
 		BaseDir:          s.cfg.BaseDir,
 		ConfigPath:       s.cfg.GoPanelConfigPath,
+		InitPath:         initPath,
 		DatabasePath:     dbPath,
 		AtUnixMs:         time.Now().UnixMilli(),
-		ResetPasswordTip: "Use gopanel --reset-password to reset SUPER admin password if forgotten.",
+		ResetPasswordTip: "If init.yaml is missing, password cannot be recovered without reset. Use gopanel --reset-password.",
 	}
 	b, err := json.Marshal(out)
 	if err != nil {
 		return "", err
 	}
 	return string(b), nil
+}
+
+type initInstallSimple struct {
+	BaseDir   string
+	Port      int
+	User      string
+	Password  string
+	SafeEnter string
 }
 
 type goPanelConfSimple struct {
@@ -137,31 +161,42 @@ func readGoPanelConfigSimple(p string) (goPanelConfSimple, error) {
 	return c, nil
 }
 
-func queryAdminEmailBySqlite3(ctx context.Context, dbPath string) (string, error) {
-	if _, err := exec.LookPath("sqlite3"); err != nil {
-		return "", err
+func readInitInstallSimple(p string) (initInstallSimple, error) {
+	var c initInstallSimple
+	b, err := os.ReadFile(p)
+	if err != nil {
+		return c, err
 	}
-	q := func(sqlStr string) (string, error) {
-		c := exec.CommandContext(ctx, "sqlite3", "-batch", "-noheader", dbPath, sqlStr)
-		out, err := c.CombinedOutput()
-		s := strings.TrimSpace(string(out))
-		if err != nil {
-			if s == "" {
-				return "", err
-			}
-			return "", errors.New(s)
+	lines := strings.Split(strings.ReplaceAll(string(b), "\r\n", "\n"), "\n")
+	for _, raw := range lines {
+		line := strings.TrimSpace(raw)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
 		}
-		return s, nil
+		if !strings.Contains(line, ":") {
+			continue
+		}
+		parts := strings.SplitN(line, ":", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		k := strings.TrimSpace(parts[0])
+		v := strings.TrimSpace(parts[1])
+		v = strings.Trim(v, `"'`)
+		switch k {
+		case "base_dir":
+			c.BaseDir = v
+		case "port":
+			c.Port = parseInt(v)
+		case "user":
+			c.User = v
+		case "password":
+			c.Password = v
+		case "safe_enter":
+			c.SafeEnter = v
+		}
 	}
-	email, err := q(`SELECT email FROM user WHERE status = 20 AND role = 'SUPER' LIMIT 1;`)
-	if err == nil && strings.TrimSpace(email) != "" {
-		return email, nil
-	}
-	email, err = q(`SELECT email FROM user WHERE status = 20 AND role = 'ADMIN' LIMIT 1;`)
-	if err == nil && strings.TrimSpace(email) != "" {
-		return email, nil
-	}
-	return "", errors.New("admin user not found")
+	return c, nil
 }
 
 func buildLoginURL(listen string, entrance string) string {
@@ -194,4 +229,43 @@ func buildLoginURL(listen string, entrance string) string {
 		return base
 	}
 	return base + "/" + strings.TrimPrefix(entrance, "/")
+}
+
+func parseInt(s string) int {
+	n := 0
+	sign := 1
+	ss := strings.TrimSpace(s)
+	if ss == "" {
+		return 0
+	}
+	if strings.HasPrefix(ss, "-") {
+		sign = -1
+		ss = strings.TrimPrefix(ss, "-")
+	}
+	for _, r := range ss {
+		if r < '0' || r > '9' {
+			break
+		}
+		n = n*10 + int(r-'0')
+	}
+	return n * sign
+}
+
+func intToString(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	sign := ""
+	if n < 0 {
+		sign = "-"
+		n = -n
+	}
+	var b [32]byte
+	i := len(b)
+	for n > 0 {
+		i--
+		b[i] = byte('0' + n%10)
+		n /= 10
+	}
+	return sign + string(b[i:])
 }

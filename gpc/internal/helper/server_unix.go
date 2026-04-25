@@ -166,6 +166,15 @@ func (s *Server) doAction(ctx context.Context, req proto.Request) (string, error
 	case "GOPANEL_USER_INFO":
 		out, err := s.actionGoPanelUserInfo(ctx, req.Params)
 		return out, err
+	case "GOPANEL_AGENT_ENSURE":
+		out, err := s.actionGoPanelAgentEnsure(ctx, req.Params)
+		return out, err
+	case "GOPANEL_AGENT_INSTALL":
+		out, err := s.actionGoPanelAgentInstall(ctx, req.Params)
+		return out, err
+	case "GOPANEL_GPC_INSTALL":
+		out, err := s.actionGoPanelGPCInstall(ctx, req.Params)
+		return out, err
 	case "PODMAN_SOCKET_REPAIR":
 		out, err := s.actionPodmanSocketRepair(ctx, req.Params)
 		return out, err
@@ -226,6 +235,10 @@ func lockKeyForAction(action string) string {
 		return "chown"
 	case "GOPANEL_SERVICE_ACTION":
 		return "gopanel_service"
+	case "GOPANEL_AGENT_ENSURE", "GOPANEL_AGENT_INSTALL":
+		return "gp_agent_install"
+	case "GOPANEL_GPC_INSTALL":
+		return "gpc_install"
 	case "PODMAN_SOCKET_REPAIR":
 		return "podman_socket_repair"
 	case "REPAIR_PODMAN_SHORT_NAME":

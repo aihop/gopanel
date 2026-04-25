@@ -69,6 +69,32 @@ func renderCaddyfile(websites []model.Website, domainByWebsite map[uint][]model.
 		b.WriteString(strings.Join(addrs, ", "))
 		b.WriteString(" {\n")
 
+		if w.AccessLog {
+			accessLogPath := websiteAccessLogPath(w.Alias)
+			if err := ensureWebsiteLogDir(w.Alias); err == nil {
+				b.WriteString("  log {\n")
+				b.WriteString("    output file ")
+				b.WriteString(accessLogPath)
+				b.WriteString("\n")
+				b.WriteString("  }\n\n")
+			}
+		}
+
+		if allowlist := normalizeSecurityIPList(w.IPAllowlist); len(allowlist) > 0 {
+			b.WriteString("  @ip_allow_only {\n")
+			b.WriteString("    not remote_ip ")
+			b.WriteString(strings.Join(allowlist, " "))
+			b.WriteString("\n  }\n")
+			b.WriteString("  respond @ip_allow_only \"Forbidden by IP Allowlist\" 403\n\n")
+		}
+
+		if blocklist := normalizeSecurityIPList(w.IPBlocklist); len(blocklist) > 0 {
+			b.WriteString("  @ip_blocked remote_ip ")
+			b.WriteString(strings.Join(blocklist, " "))
+			b.WriteString("\n")
+			b.WriteString("  respond @ip_blocked \"Forbidden by IP Blocklist\" 403\n\n")
+		}
+
 		if w.AntiCrawler {
 			b.WriteString("  @blocked_ua {\n")
 			b.WriteString("    header_regexp User-Agent \"(?i)(curl|python|sqlmap|nmap|wget|headless|dirbuster|nikto|java|perl|ruby)\"\n")
@@ -105,7 +131,7 @@ func renderCaddyfile(websites []model.Website, domainByWebsite map[uint][]model.
 			b.WriteString("    query ~*(?i)(union.*select|waitfor.*delay|select.*from.*information_schema|1=1)\n")
 			b.WriteString("  }\n")
 			b.WriteString("  respond @waf_sqli \"Forbidden by WAF (SQLi)\" 403\n\n")
-			
+
 			b.WriteString("  @waf_xss {\n")
 			b.WriteString("    query ~*(?i)(<script>|javascript:|onerror=)\n")
 			b.WriteString("  }\n")
@@ -128,6 +154,19 @@ func renderCaddyfile(websites []model.Website, domainByWebsite map[uint][]model.
 			b.WriteString("    path *.sql *.bak *.log *.conf *.ini\n")
 			b.WriteString("  }\n")
 			b.WriteString("  respond @sensitive_ext \"Access Denied\" 403\n\n")
+		}
+
+		if w.SecurityHeader || (w.HstsEnabled && strings.EqualFold(w.Protocol, constant.ProtocolHTTPS)) {
+			b.WriteString("  header {\n")
+			if w.SecurityHeader {
+				b.WriteString("    X-Frame-Options \"SAMEORIGIN\"\n")
+				b.WriteString("    X-Content-Type-Options \"nosniff\"\n")
+				b.WriteString("    Referrer-Policy \"strict-origin-when-cross-origin\"\n")
+			}
+			if w.HstsEnabled && strings.EqualFold(w.Protocol, constant.ProtocolHTTPS) {
+				b.WriteString("    Strict-Transport-Security \"max-age=31536000; includeSubDomains; preload\"\n")
+			}
+			b.WriteString("  }\n\n")
 		}
 
 		switch w.Type {
@@ -164,6 +203,29 @@ func renderCaddyfile(websites []model.Website, domainByWebsite map[uint][]model.
 	return b.String()
 }
 
+func normalizeSecurityIPList(value string) []string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	replacer := strings.NewReplacer(",", "\n", ";", "\n", "\r", "\n", "\t", "\n")
+	value = replacer.Replace(value)
+	seen := map[string]struct{}{}
+	var result []string
+	for _, line := range strings.Split(value, "\n") {
+		item := strings.TrimSpace(line)
+		if item == "" {
+			continue
+		}
+		if _, ok := seen[item]; ok {
+			continue
+		}
+		seen[item] = struct{}{}
+		result = append(result, item)
+	}
+	return result
+}
+
 func collectAddresses(w model.Website, domains []model.WebsiteDomain) []string {
 	addrSet := map[string]struct{}{}
 	for _, d := range domains {
@@ -191,4 +253,3 @@ func collectAddresses(w model.Website, domains []model.WebsiteDomain) []string {
 	sort.Strings(addrs)
 	return addrs
 }
-

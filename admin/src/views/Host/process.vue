@@ -63,7 +63,7 @@
           :columns="processColumns"
           :data="processData"
           :loading="loading"
-          :pagination="processWsReady ? pagination : false"
+          :pagination="processWsReady ? processPagination : false"
           :bordered="false"
           :scroll-x="900"
         />
@@ -123,7 +123,7 @@
         <n-data-table
           :columns="networkColumns"
           :data="networkData"
-          :pagination="pagination"
+          :pagination="networkPagination"
           :bordered="false"
         />
       </n-tab-pane>
@@ -274,7 +274,8 @@ import {
 	NSpace,
 	NTabPane,
 	NTabs,
-	NTag
+	NTag,
+	useDialog
 } from "naive-ui"
 import { computed, h, onMounted, onUnmounted, reactive, ref } from "vue"
 
@@ -332,6 +333,7 @@ async function loadInitialProcessList() {
 		const list = Array.isArray(res.data) ? res.data : []
 		oldData.value = list
 		processData.value = normalizeProcessRows(list)
+		processPagination.value.itemCount = list.length
 	} finally {
 		loading.value = false
 	}
@@ -517,6 +519,7 @@ function initProcess() {
 			processWsReady.value = true
 			oldData.value = newData
 			processData.value = normalizeProcessRows(newData)
+			processPagination.value.itemCount = newData.length
 			loading.value = false
 		}
 	}
@@ -553,6 +556,7 @@ async function handleStopProcess(row: any) {
 }
 
 async function handleSearch() {
+	processPagination.value.page = 1
 	await loadInitialProcessList()
 	if (isWsOpen(processSocket.value) && !isGetData.value) {
 		isGetData.value = true
@@ -655,9 +659,34 @@ const drawerNetworkConnectionsColumns = [
 
 const networkData = ref<any[]>([])
 
-const pagination = ref<PaginationProps>({
+const processPagination = ref<PaginationProps>({
 	page: 1,
-	pageSize: 10
+	pageSize: 10,
+	itemCount: 0,
+	pageSizes: [10, 20, 50, 100],
+	showSizePicker: true,
+	onChange: (page: number) => {
+		processPagination.value.page = page
+	},
+	onUpdatePageSize: (pageSize: number) => {
+		processPagination.value.pageSize = pageSize
+		processPagination.value.page = 1
+	}
+})
+
+const networkPagination = ref<PaginationProps>({
+	page: 1,
+	pageSize: 10,
+	itemCount: 0,
+	pageSizes: [10, 20, 50, 100],
+	showSizePicker: true,
+	onChange: (page: number) => {
+		networkPagination.value.page = page
+	},
+	onUpdatePageSize: (pageSize: number) => {
+		networkPagination.value.pageSize = pageSize
+		networkPagination.value.page = 1
+	}
 })
 
 // 新增：网络数据 WebSocket 相关逻辑
@@ -673,6 +702,7 @@ const networkSearch = reactive({
 
 // 网络搜索事件
 function handleNetworkSearch() {
+	networkPagination.value.page = 1
 	if (isWsOpen(networkSocket.value)) {
 		const searchData: any = {
 			type: "net"
@@ -717,6 +747,7 @@ function initNetwork() {
 		if (Array.isArray(newData) && newData.length && newData[0].hasOwnProperty("type")) {
 			// 直接赋值即可，字段已适配
 			networkData.value = newData
+			networkPagination.value.itemCount = newData.length
 		}
 	}
 

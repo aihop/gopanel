@@ -92,6 +92,10 @@ func (s WebsiteService) Create(ctx context.Context, req *request.WebsiteCreate, 
 		RateLimitMode:  req.RateLimitMode,
 		WafEnable:      req.WafEnable,
 		BlockSensitive: req.BlockSensitive,
+		IPAllowlist:    strings.TrimSpace(req.IPAllowlist),
+		IPBlocklist:    strings.TrimSpace(req.IPBlocklist),
+		SecurityHeader: req.SecurityHeader,
+		HstsEnabled:    req.HstsEnabled,
 	}
 
 	var appInstall *model.AppInstall
@@ -216,5 +220,5 @@ func (s WebsiteService) Create(ctx context.Context, req *request.WebsiteCreate, 
 	}
 
 	tx.Commit()
-	return
+	return ApplyCaddyFromDB(ctx)
 }

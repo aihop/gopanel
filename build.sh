@@ -39,7 +39,10 @@ else
   OUTDIR="${PROJECT_ROOT}/dist/v${VERSION}"
 fi
 MAIN_PKG="./main.go"
+GPC_ROOT="${PROJECT_ROOT}/gpc"
+GPC_MAIN_PKG="./main.go"
 LDFLAGS="-s -w -X github.com/aihop/gopanel/constant.AppVersion=${VERSION} -X github.com/aihop/gopanel/constant.BuildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ) -X github.com/aihop/gopanel/constant.BuildVersionCode=${VERSION_CODE} -X github.com/aihop/gopanel/constant.AppBrand=${APP_BRAND}"
+GPC_LDFLAGS="-s -w"
 
 echo "==========================================="
 echo "Building Project: ${APP_BRAND}"
@@ -49,13 +52,15 @@ echo "==========================================="
 # 前端构建逻辑 (保持不变)
 if [ -d "${PROJECT_ROOT}/admin" ]; then
   echo "Building frontend..."
+  # 这里删除public下的所有文件
+  rm -rf "${PROJECT_ROOT}/public"
   if [ "${APP_BRAND}" = "ConsoleX" ]; then
     (cd "${PROJECT_ROOT}/admin" && npm install && npm run build:consolex)
   else
     (cd "${PROJECT_ROOT}/admin" && npm install && npm run build)
   fi
-  mkdir -p "${PROJECT_ROOT}/public"
-  cp -r "${PROJECT_ROOT}/admin/dist/"* "${PROJECT_ROOT}/public/"
+  # mkdir -p "${PROJECT_ROOT}/public"
+  # cp -r "${PROJECT_ROOT}/admin/dist/"* "${PROJECT_ROOT}/public/"
 fi
 
 rm -rf "${OUTDIR}"
@@ -80,6 +85,27 @@ build_local() {
   # 验证生成的文件架构 (防止在 Debian 看到 darwin 的核心预防步骤)
   if command -v file >/dev/null; then
     echo "    Verify: $(file "${output_path}" | cut -d: -f2-)"
+  fi
+}
+
+build_gpc_local() {
+  local goos="$1" goarch="$2" outdir="$3"
+  echo ">>> [Build] gpc ${goos}/${goarch} (CGO_ENABLED=0)"
+
+  mkdir -p "${outdir}"
+  local output_path="${outdir}/gpc"
+  if [ "${goos}" = "windows" ]; then output_path="${output_path}.exe"; fi
+
+  (
+    cd "${GPC_ROOT}"
+    GOOS="${goos}" GOARCH="${goarch}" CGO_ENABLED=0 \
+    go build -trimpath -ldflags "${GPC_LDFLAGS}" -o "${output_path}" "${GPC_MAIN_PKG}"
+  )
+
+  if [ "${goos}" != "windows" ]; then chmod +x "${output_path}"; fi
+
+  if command -v file >/dev/null; then
+    echo "    Verify gpc: $(file "${output_path}" | cut -d: -f2-)"
   fi
 }
 
@@ -117,6 +143,7 @@ for t in "${TARGETS[@]}"; do
         continue
       fi
       build_local "${GOOS}" "${GOARCH}" "${dist_dir}" "${APP_NAME}" "${CGO}"
+      build_gpc_local "${GOOS}" "${GOARCH}" "${dist_dir}"
       ;;
     linux)
       if [ "${CGO}" = "0" ]; then
@@ -125,9 +152,11 @@ for t in "${TARGETS[@]}"; do
         # 强制 Docker 构建以确保 CGO 环境正确
         build_docker_linux "${GOARCH}" "${dist_dir}" "${APP_NAME}"
       fi
+      build_gpc_local "linux" "${GOARCH}" "${dist_dir}"
       ;;
     windows)
       build_local "windows" "${GOARCH}" "${dist_dir}" "${APP_NAME}" "0"
+      build_gpc_local "windows" "${GOARCH}" "${dist_dir}"
       ;;
   esac
 

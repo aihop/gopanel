@@ -19,13 +19,13 @@ type DiskUsage struct {
 }
 
 type Status struct {
-	AtUnixMs      int64       `json:"at_unix_ms"`
-	CPUPercent    float64     `json:"cpu_percent"`
-	MemTotal      uint64      `json:"mem_total"`
-	MemUsed       uint64      `json:"mem_used"`
-	MemFree       uint64      `json:"mem_free"`
-	MemUsedPercent float64    `json:"mem_used_percent"`
-	Disks         []DiskUsage `json:"disks"`
+	AtUnixMs       int64       `json:"at_unix_ms"`
+	CPUPercent     float64     `json:"cpu_percent"`
+	MemTotal       uint64      `json:"mem_total"`
+	MemUsed        uint64      `json:"mem_used"`
+	MemFree        uint64      `json:"mem_free"`
+	MemUsedPercent float64     `json:"mem_used_percent"`
+	Disks          []DiskUsage `json:"disks"`
 }
 
 func Collect(ctx context.Context) (Status, error) {
@@ -74,3 +74,6 @@ func Collect(ctx context.Context) (Status, error) {
 	return out, nil
 }
 
+func allowedMountpoints() func(string) bool {
+	return func(string) bool { return true }
+}

@@ -35,6 +35,10 @@ type Website struct {
 	RateLimitMode  string `json:"rateLimitMode" gorm:"type:varchar(32);default:'none'"`
 	WafEnable      bool   `json:"wafEnable" gorm:"type:boolean;default:false"`
 	BlockSensitive bool   `json:"blockSensitive" gorm:"type:boolean;default:false"`
+	IPAllowlist    string `json:"ipAllowlist" gorm:"type:text"`
+	IPBlocklist    string `json:"ipBlocklist" gorm:"type:text"`
+	SecurityHeader bool   `json:"securityHeader" gorm:"type:boolean;default:false"`
+	HstsEnabled    bool   `json:"hstsEnabled" gorm:"type:boolean;default:false"`
 
 	User    string           `gorm:"type:varchar;" json:"user"`
 	Group   string           `gorm:"type:varchar;" json:"group"`

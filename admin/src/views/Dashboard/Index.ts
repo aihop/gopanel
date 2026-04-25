@@ -1,4 +1,5 @@
 import type { Dashboard } from "@/api/interface/dashboard"
+import { ref, reactive } from 'vue'
 
 const ioReadBytes = ref<Array<number>>([])
 const ioWriteBytes = ref<Array<number>>([])
