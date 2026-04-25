@@ -210,6 +210,9 @@ func podmanComposeAvailable() bool {
 		msg := strings.ToLower(string(out))
 		if strings.Contains(msg, "no compose provider") ||
 			strings.Contains(msg, "unknown command") ||
+			strings.Contains(msg, "unrecognized command") ||
+			strings.Contains(msg, "not a podman command") ||
+			strings.Contains(msg, "unknown shorthand flag") ||
 			strings.Contains(msg, "podman-compose") ||
 			strings.Contains(msg, "docker-compose") {
 			return false
