@@ -272,7 +272,16 @@ onUnmounted(() => {
 		}"
   />
   <Backup ref="dialogBackupRef" />
-  <UploadDialog ref="uploadRef" />
+  <UploadDialog ref="uploadRef">
+    <template #actions="{ openLocalRecover, loading: slotLoading, isUpload: slotUploading }">
+      <n-button
+        :disabled="slotLoading || slotUploading"
+        @click="openLocalRecover"
+      >
+        输入本地地址
+      </n-button>
+    </template>
+  </UploadDialog>
   <n-modal
     v-model:show="managerModalShow"
     preset="card"

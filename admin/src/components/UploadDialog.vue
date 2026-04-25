@@ -80,6 +80,12 @@
             >
               {{ t("commons.button.upload") }}
             </n-button>
+            <slot
+              name="actions"
+              :open-local-recover="openLocalRecoverDialog"
+              :loading="loading"
+              :is-upload="isUpload"
+            />
           </div>
 
           <n-divider />
@@ -152,6 +158,49 @@
         </template>
       </n-modal>
 
+      <n-modal
+        v-model:show="localRecoverVisible"
+        title="本地路径恢复"
+        :mask-closable="false"
+        style="width: 400px;"
+        preset="card"
+      >
+        <n-form :model="{ localRecoverPath, secret }">
+          <n-form-item label="本地恢复包路径">
+            <n-input
+              v-model:value="localRecoverPath"
+              placeholder="请输入服务器上的恢复包绝对路径"
+            />
+          </n-form-item>
+          <n-form-item
+            v-if="type === 'app' || type === 'website'"
+            :label="t('setting.compressPassword')"
+          >
+            <n-input
+              v-model:value="secret"
+              :placeholder="t('setting.backupRecoverMessage')"
+            />
+          </n-form-item>
+        </n-form>
+        <template #footer>
+          <div style="display: flex; justify-content: flex-end; gap: 12px">
+            <n-button
+              @click="localRecoverVisible = false"
+              :disabled="loading"
+            >
+              {{ t("commons.button.cancel") }}
+            </n-button>
+            <n-button
+              type="primary"
+              @click="onHandleLocalRecover"
+              :loading="loading"
+            >
+              {{ t("commons.button.confirm") }}
+            </n-button>
+          </div>
+        </template>
+      </n-modal>
+
       <OpDialog
         ref="opRef"
         @search="search"
@@ -198,6 +247,7 @@ const baseDir = ref("")
 const opRef = ref<any>(null)
 
 const open = ref(false)
+const localRecoverVisible = ref(false)
 const currentRow = ref<File.File | null>(null)
 
 const data = ref<any[]>([])
@@ -215,6 +265,7 @@ const detailName = ref("")
 const detailId = ref(0)
 const remark = ref("")
 const secret = ref("")
+const localRecoverPath = ref("")
 
 const uploaderFiles = ref<File[]>([])
 const fileInput = ref<HTMLInputElement | null>(null)
@@ -339,13 +390,17 @@ const handleBackupClose = () => {
 
 const onHandleRecover = async () => {
 	if (!currentRow.value) return
+	await submitRecover(baseDir.value + currentRow.value.name)
+}
+
+const submitRecover = async (filePath: string) => {
 	const params = {
 		source: "LOCAL",
 		type: type.value,
 		name: name.value,
 		detailName: detailName.value,
 		detailId: detailId.value,
-		file: baseDir.value + currentRow.value.name,
+		file: filePath,
 		secret: secret.value,
 		recoverType: "upload"
 	}
@@ -362,6 +417,7 @@ const onHandleRecover = async () => {
 			return
 		}
 		handleBackupClose()
+		localRecoverVisible.value = false
 		const apiUrl = (window as any).__VITE_API_URL__ || "/api"
 		const authStore = useAuthStore()
 		const safeToken = encodeURIComponent(authStore.auth || "")
@@ -376,6 +432,37 @@ const onHandleRecover = async () => {
 	} finally {
 		loading.value = false
 	}
+}
+
+const isSupportedRecoverFile = (filePath: string) => {
+	if (type.value === "app" || type.value === "website") {
+		return filePath.endsWith(".tar.gz")
+	}
+	return filePath.endsWith(".sql") || filePath.endsWith(".tar.gz") || filePath.endsWith(".sql.gz")
+}
+
+const openLocalRecoverDialog = () => {
+	localRecoverPath.value = ""
+	localRecoverVisible.value = true
+}
+
+const onHandleLocalRecover = async () => {
+	const filePath = localRecoverPath.value.trim()
+	if (!filePath) {
+		MsgError("请输入本地恢复包路径")
+		return
+	}
+	if (!isSupportedRecoverFile(filePath)) {
+		MsgError(t("commons.msg.unSupportType"))
+		return
+	}
+	const existsRes = await CheckFile(filePath)
+	if (!existsRes.data) {
+		MsgError("本地恢复包不存在")
+		return
+	}
+	currentRow.value = null
+	await submitRecover(filePath)
 }
 
 const onFileSelect = (e: Event) => {
@@ -519,6 +606,8 @@ const handleClose = () => {
 	data.value = []
 	selects.value = []
 	secret.value = ""
+	localRecoverPath.value = ""
+	localRecoverVisible.value = false
 }
 
 defineExpose({ acceptParams })
