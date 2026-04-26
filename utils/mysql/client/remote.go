@@ -18,6 +18,7 @@ import (
 	udocker "github.com/aihop/gopanel/utils/docker"
 	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/utils/files"
+	"github.com/aihop/gopanel/utils/gpc"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
 )
@@ -256,6 +257,16 @@ func (r *Remote) Backup(info BackupInfo) error {
 		global.LOG.Warnf("ignoring invalid charset value: %s", info.Format)
 	}
 
+	if dumpCmd, err = ensureHostDumpCmd(dumpCmd); err != nil {
+		return err
+	} else if dumpCmd != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(info.Timeout)*time.Second)
+		defer cancel()
+		if err := r.backupWithHostClient(ctx, info, dumpCmd, charset, outfile); err == nil {
+			return nil
+		}
+	}
+
 	// 构造 docker run 参数，使用 MYSQL_PWD 环境变量传密码，避免 -pPASSWORD 警告
 	dockerArgs := []string{
 		"run", "--rm", "--net=host", "-i",
@@ -370,6 +381,16 @@ func (r *Remote) Recover(info RecoverInfo) error {
 		clientCmd = "mariadb"
 	}
 
+	if clientCmd, err = ensureHostMysqlCmd(clientCmd); err != nil {
+		return err
+	} else if clientCmd != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(info.Timeout)*time.Second)
+		defer cancel()
+		if err := r.recoverWithHostClient(ctx, info, clientCmd); err == nil {
+			return nil
+		}
+	}
+
 	// 构造 docker run args，使用 MYSQL_PWD 环境变量传密码
 	dockerArgs := []string{
 		"run", "--rm", "--net=host", "-i",
@@ -436,6 +457,173 @@ func (r *Remote) Recover(info RecoverInfo) error {
 	}
 	if strings.HasPrefix(outStr, "ERROR ") || strings.Contains(strings.ToLower(outStr), "error") {
 		return fmt.Errorf("%s", outStr)
+	}
+	return nil
+}
+
+func (r *Remote) backupWithHostClient(ctx context.Context, info BackupInfo, dumpCmd, charset string, outfile *os.File) error {
+	host := strings.TrimPrefix(r.Address, "[")
+	host = strings.TrimSuffix(host, "]")
+	args := []string{
+		"--routines",
+		"--single-transaction",
+		"--skip-lock-tables",
+		"-h", host,
+		"-P", fmt.Sprintf("%d", r.Port),
+		"-u", r.User,
+	}
+	if s := sslSkip(info.Version, r.Type); s != "" {
+		parts := strings.Fields(s)
+		args = append(args, parts...)
+	}
+	if charset != "" {
+		args = append(args, "--default-character-set="+charset)
+	}
+	if info.Name != "" {
+		args = append(args, info.Name)
+	}
+	cmd := exec.CommandContext(ctx, dumpCmd, args...)
+	cmd.Env = append(os.Environ(), "MYSQL_PWD="+r.Password)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	out, err := cmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+
+	gzipCmd := exec.CommandContext(ctx, "gzip", "-cf")
+	gzipCmd.Stdin = out
+	gzipCmd.Stdout = outfile
+	var gzErr bytes.Buffer
+	gzipCmd.Stderr = &gzErr
+
+	if err := gzipCmd.Start(); err != nil {
+		return err
+	}
+	if err := cmd.Start(); err != nil {
+		_ = gzipCmd.Process.Kill()
+		return err
+	}
+	if err := cmd.Wait(); err != nil {
+		_ = gzipCmd.Process.Kill()
+		return fmt.Errorf("mysqldump failed: %s", strings.TrimSpace(stderr.String()))
+	}
+	if err := gzipCmd.Wait(); err != nil {
+		return fmt.Errorf("gzip failed: %s", strings.TrimSpace(gzErr.String()))
+	}
+	return nil
+}
+
+func (r *Remote) recoverWithHostClient(ctx context.Context, info RecoverInfo, clientCmd string) error {
+	host := strings.TrimPrefix(r.Address, "[")
+	host = strings.TrimSuffix(host, "]")
+	args := []string{
+		"-h", host,
+		"-P", fmt.Sprintf("%d", r.Port),
+		"-u", r.User,
+	}
+	if s := sslSkip(info.Version, r.Type); s != "" {
+		parts := strings.Fields(s)
+		args = append(args, parts...)
+	}
+	if info.Format != "" && !strings.Contains(info.Format, ".") {
+		args = append(args, "--default-character-set="+info.Format)
+	}
+	if info.Name != "" {
+		args = append(args, info.Name)
+	}
+
+	cmd := exec.CommandContext(ctx, clientCmd, args...)
+	cmd.Env = append(os.Environ(), "MYSQL_PWD="+r.Password)
+
+	fi, err := os.Open(info.SourceFile)
+	if err != nil {
+		return err
+	}
+	defer fi.Close()
+
+	if strings.HasSuffix(info.SourceFile, ".gz") {
+		gr, err := gzip.NewReader(fi)
+		if err != nil {
+			return err
+		}
+		defer gr.Close()
+		cmd.Stdin = gr
+	} else {
+		cmd.Stdin = fi
+	}
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		s := strings.TrimSpace(string(out))
+		if s == "" {
+			return err
+		}
+		return errors.New(s)
+	}
+	return nil
+}
+
+func ensureHostDumpCmd(preferred string) (string, error) {
+	if cmd := lookupMysqlCommand(preferred); cmd != "" {
+		return cmd, nil
+	}
+	if err := ensureMysqlClientInstalled(); err != nil {
+		return "", err
+	}
+	if cmd := lookupMysqlCommand(preferred); cmd != "" {
+		return cmd, nil
+	}
+	return "", errors.New("mysql client is not installed on host (need mysql/mysqldump or mariadb/mariadb-dump)")
+}
+
+func ensureHostMysqlCmd(preferred string) (string, error) {
+	if cmd := lookupMysqlCommand(preferred); cmd != "" {
+		return cmd, nil
+	}
+	if err := ensureMysqlClientInstalled(); err != nil {
+		return "", err
+	}
+	if cmd := lookupMysqlCommand(preferred); cmd != "" {
+		return cmd, nil
+	}
+	return "", errors.New("mysql client is not installed on host (need mysql/mysqldump or mariadb/mariadb-dump)")
+}
+
+func lookupMysqlCommand(preferred string) string {
+	candidates := []string{preferred}
+	switch preferred {
+	case "mariadb-dump":
+		candidates = append(candidates, "mysqldump")
+	case "mysqldump":
+		candidates = append(candidates, "mariadb-dump")
+	case "mariadb":
+		candidates = append(candidates, "mysql")
+	case "mysql":
+		candidates = append(candidates, "mariadb")
+	}
+	for _, item := range candidates {
+		if strings.TrimSpace(item) == "" {
+			continue
+		}
+		if _, err := exec.LookPath(item); err == nil {
+			return item
+		}
+	}
+	return ""
+}
+
+func ensureMysqlClientInstalled() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	resp, err := gpc.Do(ctx, "MYSQL_CLIENT_INSTALL", nil)
+	if err != nil {
+		global.LOG.Warnf("ensure mysql client via gpc failed: %v", err)
+		return errors.New("mysql client auto-install failed via gpc: " + err.Error())
+	}
+	if resp != nil && strings.TrimSpace(resp.Output) != "" {
+		global.LOG.Infof("ensure mysql client via gpc: %s", strings.TrimSpace(resp.Output))
 	}
 	return nil
 }

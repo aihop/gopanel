@@ -21,6 +21,12 @@
         label-placement="top"
         :rules="rules"
       >
+        <div
+          v-if="runtimeSummary"
+          class="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600"
+        >
+          {{ runtimeSummary }}
+        </div>
         <n-form-item
           :label="$t('commons.table.user')"
           path="user"
@@ -99,6 +105,7 @@ const { t } = useI18n()
 const title = ref()
 const terminalVisible = ref(false)
 const terminalOpen = ref(false)
+const runtimeSummary = ref("")
 const form = reactive({
 	isCustom: false,
 	command: "",
@@ -121,11 +128,13 @@ interface DialogProps {
 	containerID: string
 	container: string
 	runtimeHost?: string
+	runtimeSummary?: string
 }
 async function acceptParams(params: DialogProps): Promise<void> {
 	terminalVisible.value = true
 	form.containerID = params.containerID
 	form.runtimeHost = params.runtimeHost || ""
+	runtimeSummary.value = params.runtimeSummary || ""
 	title.value = params.container
 	form.isCustom = false
 	form.user = ""
@@ -161,6 +170,7 @@ function onClose() {
 function handleClose() {
 	onClose()
 	terminalVisible.value = false
+	runtimeSummary.value = ""
 }
 
 defineExpose({

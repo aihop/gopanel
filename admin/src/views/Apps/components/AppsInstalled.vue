@@ -48,6 +48,21 @@
                   >取消安装</n-button>
                 </div>
                 <div class="mt-1 truncate text-sm text-slate-500">容器名：{{ item.containerName || "-" }}</div>
+                <div class="mt-2 flex flex-wrap items-center gap-2">
+                  <n-tag
+                    size="small"
+                    round
+                    :bordered="false"
+                    type="info"
+                  >{{ getRuntimeKindLabel(item) }}</n-tag>
+                  <n-tag
+                    size="small"
+                    round
+                    :bordered="false"
+                    :type="item.runtimeMode === 'rootless' ? 'success' : 'default'"
+                  >{{ getRuntimeModeLabel(item) }}</n-tag>
+                </div>
+                <div class="mt-1 text-xs text-slate-500">运行用户：{{ getRunUserLabel(item) }}</div>
               </div>
             </div>
 
@@ -274,6 +289,7 @@ import { appsInstalledListAPI, appsUninstall, InstalledOp, appsRepairComposeAPI,
 import { repairSystemdLingerAPI } from "@/api/modules/container"
 import type { AppsInstalledSearchParams } from "../../../api/modules/apps"
 import { useAuthStore } from "../../../store/auth"
+import { getRuntimeKindLabel, getRuntimeModeLabel, getRunUserLabel } from "@/utils/runtime"
 
 const logConfig = reactive({
 	id: 0,

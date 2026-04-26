@@ -2,10 +2,11 @@
 import { ref, watch, nextTick, computed } from "vue"
 import { NModal, NButton, NPopconfirm, useMessage, NAlert, NSpace } from "naive-ui"
 import { useAuthStore } from "@/store/auth"
-import { stopPipeline } from "@/api/modules/pipeline"
+import { getPipelineRecords, stopPipeline } from "@/api/modules/pipeline"
 import { appsRepairPodmanSubuidAPI } from "@/api/modules/apps"
 import { websiteListAPI } from "@/api/modules/website"
 import type { Website } from "@/api/interface/website"
+import type { Pipeline } from "@/api/interface/pipeline"
 
 const props = defineProps<{ show: boolean; recordId: number; pipelineId?: number | null }>()
 const emit = defineEmits(["update:show", "finished", "retry"])
@@ -20,6 +21,7 @@ const isRunning = ref(false)
 const isStopping = ref(false)
 const runnerResult = ref<{ hostPort: number; containerId: string } | null>(null)
 const linkedWebsite = ref<Website.WebsiteRes | null>(null)
+const currentRecord = ref<Pipeline.ResRecord | null>(null)
 
 const repairTipVisible = ref(false)
 const repairTipTitle = ref("")
@@ -80,6 +82,15 @@ const linkedWebsiteUrl = computed(() => {
   return `https://${linkedWebsite.value.primaryDomain}`
 })
 
+const runnerRuntimeText = computed(() => {
+  const row = currentRecord.value
+  if (!row?.runnerContainerId) return ""
+  const kind = String(row.runtimeKind || "").toLowerCase() === "podman" ? "Podman" : String(row.runtimeKind || "").toLowerCase() === "docker" ? "Docker" : "Runtime"
+  const mode = String(row.runtimeMode || "").toLowerCase() || "default"
+  const runUser = row.runUser || "镜像默认"
+  return `${kind}/${mode} · 运行用户：${runUser}`
+})
+
 const openLinkedWebsite = () => {
   if (!linkedWebsiteUrl.value) return
   window.open(linkedWebsiteUrl.value, "_blank")
@@ -99,6 +110,24 @@ const fetchLinkedWebsite = async () => {
   }
 }
 
+const fetchCurrentRecord = async () => {
+  if (!props.pipelineId || !props.recordId) {
+    currentRecord.value = null
+    return
+  }
+  try {
+    const res = await getPipelineRecords({
+      pipelineId: props.pipelineId,
+      page: 1,
+      limit: 100
+    })
+    const items = Array.isArray(res.data?.items) ? res.data.items : []
+    currentRecord.value = items.find((item: Pipeline.ResRecord) => Number(item.id) === Number(props.recordId)) || null
+  } catch (error) {
+    currentRecord.value = null
+  }
+}
+
 const startLogs = () => {
   if (eventSource) {
     eventSource.close()
@@ -108,6 +137,7 @@ const startLogs = () => {
   isStopping.value = false
   runnerResult.value = null
   fetchLinkedWebsite()
+  fetchCurrentRecord()
   
   repairTipVisible.value = false
   repairSuccess.value = false
@@ -219,6 +249,10 @@ watch(
         当前流水线已产出 Runner 容器，访问桥接目标：
         <span class="font-mono text-emerald-700">127.0.0.1:{{ runnerResult.hostPort }}</span>
         <span class="ml-2 text-slate-500">容器 ID：{{ runnerResult.containerId.slice(0, 12) }}</span>
+        <span
+          v-if="runnerRuntimeText"
+          class="ml-2 text-slate-500"
+        >{{ runnerRuntimeText }}</span>
         <n-button
           size="tiny"
           class="ml-3"

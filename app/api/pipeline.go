@@ -2,6 +2,7 @@ package api
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -42,6 +43,7 @@ func PipelinePage(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
+	service.FillPipelineRuntimeMeta(context.Background(), list)
 	if claims, err := middleware.JwtClaims(c); err == nil && claims.Role == constant.UserRoleSubAdmin {
 		list = sanitizePipelineListForSubAdmin(list)
 	}
@@ -254,6 +256,7 @@ func PipelineRecordPage(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
+	service.FillPipelineRecordRuntimeMeta(context.Background(), list)
 	return c.JSON(e.Succ(fiber.Map{
 		"total": total,
 		"items": list,

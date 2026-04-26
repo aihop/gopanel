@@ -20,11 +20,13 @@ import (
 
 // 初始安装配置
 type InitInstallConfig struct {
-	BaseDir   string `mapstructure:"base_dir" required:"true"`
-	Port      int    `mapstructure:"port" required:"true"`
-	User      string `mapstructure:"user" required:"true"`
-	Password  string `mapstructure:"password" required:"true"`
-	SafeEnter string `mapstructure:"safe_enter" required:"true"`
+	BaseDir          string `mapstructure:"base_dir" required:"true"`
+	Port             int    `mapstructure:"port" required:"true"`
+	User             string `mapstructure:"user" required:"true"`
+	Password         string `mapstructure:"password" required:"true"`
+	SafeEnter        string `mapstructure:"safe_enter" required:"true"`
+	ContainerRuntime string `mapstructure:"container_runtime"`
+	DockerSockPath   string `mapstructure:"docker_sock_path"`
 }
 
 var (
@@ -96,7 +98,11 @@ func Init() {
 		base_dir = InitInstall.BaseDir
 	}
 	p.SetDefault("system.base_dir", base_dir)
-	p.SetDefault("system.container_runtime", "auto")
+	containerRuntime := "auto"
+	if strings.TrimSpace(InitInstall.ContainerRuntime) != "" {
+		containerRuntime = strings.TrimSpace(InitInstall.ContainerRuntime)
+	}
+	p.SetDefault("system.container_runtime", containerRuntime)
 	gpAgentSock := filepath.Join(base_dir, "agent", "run", "gp-agent.sock")
 	p.SetDefault("system.gp_agent_socket_path", gpAgentSock)
 	gpcSock := filepath.Join(base_dir, "gpc.sock")

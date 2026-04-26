@@ -1,12 +1,14 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
 	"github.com/aihop/gopanel/init/db"
+	udocker "github.com/aihop/gopanel/utils/docker"
 	"github.com/aihop/gopanel/utils/mysql"
 	clientMysql "github.com/aihop/gopanel/utils/mysql/client"
 	"github.com/aihop/gopanel/utils/postgresql"
@@ -57,6 +59,12 @@ func LoadMysqlClientByFrom(server *model.DatabaseServer) (mysql.MysqlClient, str
 
 	cli, err := mysql.NewMysqlClient(dbInfo)
 	if err != nil {
+		if shouldFallbackMysqlLocalToRemote(server, err) {
+			dbInfo.From = string(model.DatabaseModeRemote)
+			cli, err = mysql.NewMysqlClient(dbInfo)
+		}
+	}
+	if err != nil {
 		return nil, "", err
 	}
 
@@ -64,6 +72,37 @@ func LoadMysqlClientByFrom(server *model.DatabaseServer) (mysql.MysqlClient, str
 		version = v
 	}
 	return cli, version, nil
+}
+
+func shouldFallbackMysqlLocalToRemote(server *model.DatabaseServer, err error) bool {
+	if server == nil || server.Mode != model.DatabaseModeLocal || err == nil {
+		return false
+	}
+	host := strings.TrimSpace(server.Host)
+	if host == "" || server.Port == 0 {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	if !strings.Contains(msg, "docker daemon") &&
+		!strings.Contains(msg, "docker.sock") &&
+		!strings.Contains(msg, "podman.sock") &&
+		!strings.Contains(msg, "container runtime") &&
+		!strings.Contains(msg, "no such host") &&
+		!strings.Contains(msg, "cannot connect") {
+		return false
+	}
+
+	resolved := udocker.ResolveRuntime(context.Background())
+	if strings.TrimSpace(resolved.Host) != "" {
+		return false
+	}
+
+	testDB, testErr := db.NewMySQL(server.Username, server.Password, fmt.Sprintf("%s:%d", host, server.Port))
+	if testErr != nil {
+		return false
+	}
+	_ = testDB.Close()
+	return true
 }
 
 func inferMysqlVersion(cli mysql.MysqlClient) (string, bool) {

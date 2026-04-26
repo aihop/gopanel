@@ -55,17 +55,39 @@ func (a *defaultRuntimeAdapter) CLI(ctx context.Context) (string, error) {
 	} else {
 		preferred = "docker"
 	}
-	if _, err := exec.LookPath(preferred); err == nil {
-		return preferred, nil
-	}
 	alt := "docker"
 	if preferred == "docker" {
 		alt = "podman"
+	}
+
+	if _, err := exec.LookPath(preferred); err == nil {
+		if preferred == "docker" && !dockerDaemonHealthy(ctx) {
+			if _, aerr := exec.LookPath(alt); aerr == nil {
+				return alt, nil
+			}
+		}
+		return preferred, nil
 	}
 	if _, err := exec.LookPath(alt); err == nil {
 		return alt, nil
 	}
 	return "", errors.New("container runtime cli not found")
+}
+
+func dockerDaemonHealthy(ctx context.Context) bool {
+	baseCtx := ctx
+	if baseCtx == nil {
+		baseCtx = context.Background()
+	}
+	hc, cancel := context.WithTimeout(baseCtx, 900*time.Millisecond)
+	defer cancel()
+	cmd := exec.CommandContext(hc, "docker", "version", "--format", "{{.Server.Version}}")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return false
+	}
+	s := strings.TrimSpace(string(out))
+	return s != "" && s != "<no value>"
 }
 
 func (a *defaultRuntimeAdapter) DockerClient(ctx context.Context) (*client.Client, error) {
@@ -102,7 +124,7 @@ func (a *defaultRuntimeAdapter) CommandWithHost(ctx context.Context, host string
 		_ = PodmanEnsureReady(ctx)
 	}
 	h := strings.TrimSpace(host)
-	if h != "" && h != "podman-cli" && strings.HasPrefix(h, "unix://") {
+	if h != "" && h != "podman-cli" && h != "podman://local" {
 		if bin == "podman" {
 			args = append([]string{"--url", h}, args...)
 		} else {
@@ -161,6 +183,7 @@ func (a *defaultRuntimeAdapter) ResolveComposeCommand(ctx context.Context) (stri
 }
 
 func (a *defaultRuntimeAdapter) ComposeCommand(ctx context.Context, args ...string) (*exec.Cmd, error) {
+	resolved := a.Resolve(ctx)
 	bin, prefix, err := a.ResolveComposeCommand(ctx)
 	if err != nil {
 		return nil, err
@@ -174,8 +197,31 @@ func (a *defaultRuntimeAdapter) ComposeCommand(ctx context.Context, args ...stri
 		}
 	}
 	var extraEnv []string
+	host := strings.TrimSpace(resolved.Host)
+	if host != "" && host != "podman-cli" && host != "podman://local" {
+		switch bin {
+		case "podman":
+			allArgs = append([]string{"--url", host}, allArgs...)
+		case "docker":
+			allArgs = append([]string{"-H", host}, allArgs...)
+		case "podman-compose":
+			// podman-compose 本身没有统一的 host flag，改走环境变量把目标 socket 传下去。
+			extraEnv = append(extraEnv,
+				"CONTAINER_HOST="+host,
+				"DOCKER_HOST="+host,
+				"PODMAN_HOST="+host,
+			)
+		}
+	}
 	if bin == "podman" && len(prefix) > 0 && prefix[0] == "compose" {
 		extraEnv = append(extraEnv, "PODMAN_COMPOSE_WARNING_LOGS=false")
+		if host != "" && host != "podman-cli" && host != "podman://local" {
+			extraEnv = append(extraEnv,
+				"CONTAINER_HOST="+host,
+				"DOCKER_HOST="+host,
+				"PODMAN_HOST="+host,
+			)
+		}
 		if _, err := exec.LookPath("podman-compose"); err == nil {
 			extraEnv = append(extraEnv, "PODMAN_COMPOSE_PROVIDER=podman-compose")
 		} else if _, err := exec.LookPath("docker-compose"); err == nil {

@@ -11,6 +11,12 @@
 			<template #header>
 				<DrawerHeader :header="header" :back="handleClose" />
 			</template>
+			<div
+				v-if="summary"
+				class="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600"
+			>
+				{{ summary }}
+			</div>
 			<FtEditor v-model="detailInfo" height="calc(100vh - 160px)" :readonly="true" />
 			<template #footer>
 				<n-space justify="end">
@@ -27,21 +33,25 @@ import FtEditor from "@/components/FtEditor/index.vue"
 import DrawerHeader from "@/components/DrawerHeader.vue"
 const header = ref()
 const detailInfo = ref()
+const summary = ref("")
 const codeVisible = ref(false)
 
 interface DialogProps {
 	header: string
 	detailInfo: string
+	summary?: string
 }
 
 const acceptParams = (props: DialogProps): void => {
 	header.value = props.header
 	detailInfo.value = props.detailInfo
+	summary.value = props.summary || ""
 	codeVisible.value = true
 }
 
 const handleClose = () => {
 	codeVisible.value = false
+	summary.value = ""
 }
 
 defineExpose({

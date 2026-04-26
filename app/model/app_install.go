@@ -26,6 +26,10 @@ type AppInstall struct {
 	WebUI         string `json:"webUI"`
 	Favorite      bool   `json:"favorite"`
 	SortOrder     int    `json:"sortOrder" gorm:"default:0"`
+	RuntimeHost   string `json:"runtimeHost" gorm:"-"`
+	RuntimeKind   string `json:"runtimeKind" gorm:"-"`
+	RuntimeMode   string `json:"runtimeMode" gorm:"-"`
+	RunUser       string `json:"runUser" gorm:"-"`
 
 	App App `json:"app" gorm:"-:migration"`
 }

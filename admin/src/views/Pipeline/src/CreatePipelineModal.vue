@@ -3,6 +3,7 @@ import { ref, reactive, watch, computed } from "vue"
 import { NForm, NFormItem, NInput, NSelect, NButton, NRadioGroup, NRadio, useMessage, NInputNumber, NSwitch, NSpace } from "naive-ui"
 import { createPipeline, updatePipeline } from "@/api/modules/pipeline"
 import { Pipeline } from "@/api/interface/pipeline"
+import { containerPrecheck } from "@/api/modules/container"
 import FullModal from "@/components/FullModal.vue"
 import FtEditor from "@/components/FtEditor/index.vue"
 
@@ -17,8 +18,48 @@ const message = useMessage()
 const formRef = ref()
 const loading = ref(false)
 const runnerKeyTouched = ref(false)
+const runtimePrecheck = ref<any>(null)
+const runtimePrecheckLoading = ref(false)
 
 const isEdit = computed(() => !!props.editData)
+
+const currentRuntimeKindLabel = computed(() => {
+  const kind = String(runtimePrecheck.value?.runtimeKind || "").toLowerCase()
+  if (kind === "podman") return "Podman"
+  if (kind === "docker") return "Docker"
+  return "容器运行时"
+})
+
+const currentRuntimeModeLabel = computed(() => {
+  const runtimeInfo = runtimePrecheck.value?.runtime || {}
+  const isRootless = !!runtimePrecheck.value?.rootlessHost || !!runtimeInfo?.rootless
+  if (isRootless) return "rootless"
+  if (runtimePrecheck.value?.runtimeKind) return "rootful"
+  return "default"
+})
+
+const runnerRuntimeHint = computed(() => {
+  if (!runtimePrecheck.value?.runtimeKind) {
+    return "简单模式 Runner 会跟随当前面板已选中的容器运行时。`runnerUser` 只影响容器内进程用户，不会改变宿主机是 rootless 还是 rootful。"
+  }
+  const host = String(runtimePrecheck.value?.runtimeHost || "").trim()
+  const hostText = host ? `；当前 Host：${host}` : ""
+  return `简单模式 Runner 当前会跟随 ${currentRuntimeKindLabel.value} / ${currentRuntimeModeLabel.value}${hostText}。非 root 安装通常应落到 rootless 运行时；这里的“容器内运行用户”仅控制进程身份，不改变宿主机运行时模式。`
+})
+
+const loadRuntimePrecheck = async () => {
+  if (runtimePrecheckLoading.value) return
+  runtimePrecheckLoading.value = true
+  try {
+    const res: any = await containerPrecheck()
+    if (res?.code === 0) {
+      runtimePrecheck.value = res.data || null
+    }
+  } catch (e) {
+  } finally {
+    runtimePrecheckLoading.value = false
+  }
+}
 
 const validateOptionalPort = (_rule: any, value: string) => {
   const text = String(value || "").trim()
@@ -55,11 +96,13 @@ const formModel = reactive({
   runnerWorkingDir: "/var/www/app",
   runnerContainerPort: "3000",
   runnerHostPort: "",
+  runnerUser: "",
   runnerInstallCommand: "",
   runnerStartCommand: "node .output/server/index.mjs",
   runnerPreStart: "",
   runnerEnvText: "",
-  runnerPersistentPathsText: ""
+  runnerPersistentPathsText: "",
+  runnerExtraNetworksText: ""
 })
 
 const rules = {
@@ -135,6 +178,20 @@ const parsePersistentPathsText = (text: string) => {
   return items
 }
 
+const parseExtraNetworksText = (text: string) => {
+  const items: string[] = []
+  const seen = new Set<string>()
+  const lines = (text || "").split("\n")
+  for (const lineRaw of lines) {
+    const line = String(lineRaw || "").trim()
+    if (!line) continue
+    if (seen.has(line)) continue
+    seen.add(line)
+    items.push(line)
+  }
+  return items
+}
+
 const normalizeRunnerKey = (text: string) => {
   const raw = String(text || "").trim().toLowerCase()
   if (!raw) return ""
@@ -152,21 +209,25 @@ const inferRunnerAdvanced = (runnerConfig: any) => {
   const workingDir = String(runnerConfig.workingDir || "").trim()
   const containerPort = String(runnerConfig.containerPort || "").trim()
   const hostPort = String(runnerConfig.hostPort || "").trim()
+  const runnerUser = String(runnerConfig.runnerUser || "").trim()
   const startCommand = String(runnerConfig.startCommand || "").trim()
   const preStart = String(runnerConfig.preStart || "").trim()
   const buildCommand = String(runnerConfig.buildCommand || "").trim()
   const env = runnerConfig.env && typeof runnerConfig.env === "object" ? runnerConfig.env : {}
   const persistentPaths = Array.isArray(runnerConfig.persistentPaths) ? runnerConfig.persistentPaths : []
+  const extraNetworks = Array.isArray(runnerConfig.extraNetworks) ? runnerConfig.extraNetworks : []
 
   return Boolean(
     preStart
     || buildCommand
     || Object.keys(env).length > 0
     || persistentPaths.length > 0
+    || extraNetworks.length > 0
     || (baseImage && baseImage !== "node:20-alpine")
     || (workingDir && workingDir !== "/var/www/app")
     || (containerPort && containerPort !== "3000")
     || !!hostPort
+    || !!runnerUser
     || (startCommand && startCommand !== "node .output/server/index.mjs")
   )
 }
@@ -231,11 +292,13 @@ const handleSubmit = () => {
             workingDir: payload.runnerWorkingDir || "/var/www/app",
             containerPort: payload.runnerContainerPort || "3000",
             hostPort: payload.runnerHostPort || "",
+            runnerUser: payload.runnerUser || "",
             buildCommand: payload.runnerInstallCommand || "",
             startCommand: payload.runnerStartCommand || "node .output/server/index.mjs",
             preStart: payload.runnerPreStart || "",
             env: parseEnvText(payload.runnerEnvText || ""),
-            persistentPaths: parsePersistentPathsText(payload.runnerPersistentPathsText || "")
+            persistentPaths: parsePersistentPathsText(payload.runnerPersistentPathsText || ""),
+            extraNetworks: parseExtraNetworksText(payload.runnerExtraNetworksText || "")
           }
         } else {
           payload.runnerMode = ""
@@ -263,6 +326,7 @@ const handleSubmit = () => {
 
 watch(() => props.show, (val) => {
   if (val) {
+    loadRuntimePrecheck()
     if (props.editData) {
       const isHost = props.editData.buildImage === "host" || props.editData.buildImage === ""
       let runnerConfig: any = props.editData.runnerConfig || {}
@@ -277,6 +341,7 @@ watch(() => props.show, (val) => {
       const envObj = runnerConfig.env || {}
       const runnerEnvText = Object.keys(envObj).map((k: string) => `${k}=${envObj[k]}`).join("\n")
       const runnerPersistentPathsText = Array.isArray(runnerConfig.persistentPaths) ? runnerConfig.persistentPaths.join("\n") : ""
+      const runnerExtraNetworksText = Array.isArray(runnerConfig.extraNetworks) ? runnerConfig.extraNetworks.join("\n") : ""
       const runnerAdvanced = inferRunnerAdvanced(runnerConfig)
       Object.assign(formModel, {
         name: props.editData.name || "",
@@ -302,11 +367,13 @@ watch(() => props.show, (val) => {
         runnerWorkingDir: runnerConfig.workingDir || "/var/www/app",
         runnerContainerPort: String(runnerConfig.containerPort || "3000"),
         runnerHostPort: String(runnerConfig.hostPort || ""),
+        runnerUser: runnerConfig.runnerUser || "",
         runnerInstallCommand: runnerConfig.buildCommand || "",
         runnerStartCommand: runnerConfig.startCommand || "node .output/server/index.mjs",
         runnerPreStart: runnerConfig.preStart || "",
         runnerEnvText,
-        runnerPersistentPathsText
+        runnerPersistentPathsText,
+        runnerExtraNetworksText
       })
       runnerKeyTouched.value = !!props.editData.runnerKey
       runnerPreset.value = detectRunnerPreset(formModel.runnerStartCommand)
@@ -335,11 +402,13 @@ watch(() => props.show, (val) => {
         runnerWorkingDir: "/var/www/app",
         runnerContainerPort: "3000",
         runnerHostPort: "",
+        runnerUser: "",
         runnerInstallCommand: "",
         runnerStartCommand: "node .output/server/index.mjs",
         runnerPreStart: "",
         runnerEnvText: "",
-        runnerPersistentPathsText: ""
+        runnerPersistentPathsText: "",
+        runnerExtraNetworksText: ""
       })
       runnerKeyTouched.value = false
       runnerPreset.value = "custom"
@@ -368,11 +437,13 @@ watch(() => props.show, (val) => {
         runnerWorkingDir: "/var/www/app",
         runnerContainerPort: "3000",
         runnerHostPort: "",
+        runnerUser: "",
         runnerInstallCommand: "",
         runnerStartCommand: "node .output/server/index.mjs",
         runnerPreStart: "",
         runnerEnvText: "",
-        runnerPersistentPathsText: ""
+        runnerPersistentPathsText: "",
+        runnerExtraNetworksText: ""
       })
       runnerKeyTouched.value = false
       runnerPreset.value = "nuxt"
@@ -491,6 +562,9 @@ watch(() => formModel.pipelineMode, (mode) => {
 
       <template v-if="formModel.pipelineMode === 'runner'">
         <div class="mb-4 mt-6 text-sm font-semibold text-slate-700">简单模式 (代码产物部署)</div>
+        <div class="mb-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+          {{ runnerRuntimeHint }}
+        </div>
         <n-form-item label="项目预设">
           <div class="w-full">
             <n-select
@@ -610,6 +684,18 @@ watch(() => formModel.pipelineMode, (mode) => {
             </div>
           </n-form-item>
 
+          <n-form-item label="容器内运行用户">
+            <div class="w-full">
+              <n-input
+                v-model:value="formModel.runnerUser"
+                placeholder="留空则使用镜像默认用户，例如：node / 1000 / 1000:1000"
+              />
+              <div class="mt-2 text-xs text-slate-500">
+                这里只控制容器内进程用户，不影响宿主机容器运行时。适合避免 `node:20-alpine` 这类镜像默认以 `root` 启动时写入 root 权限产物；是否 rootless / rootful 取决于当前面板命中的运行时。
+              </div>
+            </div>
+          </n-form-item>
+
           <n-form-item label="启动命令">
             <n-input
               v-model:value="formModel.runnerStartCommand"
@@ -643,6 +729,19 @@ watch(() => formModel.pipelineMode, (mode) => {
               />
               <div class="mt-2 text-xs text-slate-500">
                 只填写容器内需要持久化的子目录即可，例如 `uploads`、`.data`、`storage`。系统会自动映射到 `安装目录/apps/流水线标识/对应子目录`，并保持代码目录与数据目录分离。
+              </div>
+            </div>
+          </n-form-item>
+
+          <n-form-item label="额外网络 (可选)">
+            <div class="w-full">
+              <n-input
+                type="textarea"
+                v-model:value="formModel.runnerExtraNetworksText"
+                placeholder="一行一个，例如：postgres-app_default"
+              />
+              <div class="mt-2 text-xs text-slate-500">
+                默认会接入 `gopanel-network`。当你需要直连其他容器应用（如 PostgreSQL / MySQL / Redis）时，可在这里补充它所在的现有网络名，一行一个；系统不会自动创建不存在的网络。
               </div>
             </div>
           </n-form-item>

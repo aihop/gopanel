@@ -3,6 +3,7 @@ package repo
 import (
 	"time"
 
+	"github.com/aihop/gopanel/init/conf"
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/utils/common"
@@ -41,8 +42,13 @@ func NewSetting(db *gorm.DB) *SettingRepo {
 }
 
 func (r *SettingRepo) InitData() error {
-	err := r.Create("JWTSigningKey", common.RandStr(16))
-	return err
+	if err := r.Create("JWTSigningKey", common.RandStr(16)); err != nil {
+		return err
+	}
+	if v := conf.InitInstall.DockerSockPath; v != "" {
+		return r.UpdateOrCreate("DockerSockPath", v)
+	}
+	return nil
 }
 
 func (r *SettingRepo) MigrateTable() error {
@@ -50,7 +56,13 @@ func (r *SettingRepo) MigrateTable() error {
 		r.DB.AutoMigrate(&model.Setting{})
 		return r.InitData()
 	} else {
-		return r.DB.AutoMigrate(&model.Setting{})
+		if err := r.DB.AutoMigrate(&model.Setting{}); err != nil {
+			return err
+		}
+		if v := conf.InitInstall.DockerSockPath; v != "" {
+			return r.UpdateOrCreate("DockerSockPath", v)
+		}
+		return nil
 	}
 }
 

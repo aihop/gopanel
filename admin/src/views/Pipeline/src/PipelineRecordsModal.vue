@@ -6,7 +6,7 @@ import { Pipeline } from "@/api/interface/pipeline"
 import PipelineLogsModal from "./PipelineLogsModal.vue"
 import { useAuthStore } from "@/store/auth"
 import dayjs from "dayjs"
-
+import { getRuntimeKindLabel, getRuntimeModeLabel, getRunUserLabel } from "@/utils/runtime"
 const props = defineProps<{ show: boolean; pipelineId: number }>()
 const emit = defineEmits(["update:show"])
 
@@ -136,7 +136,7 @@ const columns = [
   {
     title: "Runner",
     key: "runner",
-    width: 220,
+    width: 260,
     render(row: Pipeline.ResRecord) {
       if (!row.runnerHostPort) {
         return h("span", { class: "text-slate-400 text-xs" }, "未启用 / 未产出")
@@ -150,6 +150,27 @@ const columns = [
           type: "primary",
           onClick: () => copyText(`127.0.0.1:${row.runnerHostPort}`, "Runner 地址已复制")
         }, { default: () => "复制地址" })
+      ])
+    }
+  },
+  {
+    title: "运行类型",
+    key: "runtimeType",
+    width: 220,
+    render(row: Pipeline.ResRecord) {
+      if (!row.runnerContainerId) {
+        return h("span", { class: "text-slate-400 text-xs" }, "无 Runner 容器")
+      }
+      return h("div", { class: "flex flex-col gap-1 text-xs" }, [
+        h("div", { class: "flex flex-wrap items-center gap-2" }, [
+          h(NTag, { size: "small", type: row.runtimeKind === "docker" ? "success" : "warning" }, {
+            default: () => getRuntimeKindLabel(row, { kindFallback: "运行时" })
+          }),
+          h(NTag, { size: "small", type: row.runtimeMode === "rootless" ? "warning" : "default" }, {
+            default: () => getRuntimeModeLabel(row)
+          })
+        ]),
+        h("span", { class: "text-slate-500" }, `运行用户: ${getRunUserLabel(row)}`)
       ])
     }
   },

@@ -140,6 +140,32 @@
             prop="imageName"
           />
           <n-table-column
+            :label="$t('container.runtimeType')"
+            min-width="160"
+          >
+            <template #default="{ row }">
+              <div class="flex flex-col gap-1">
+                <div class="flex flex-wrap items-center gap-2">
+                  <n-tag
+                    size="small"
+                    :type="row.runtimeKind === 'docker' ? 'success' : 'warning'"
+                  >
+                    {{ getRuntimeKindLabel(row) }}
+                  </n-tag>
+                  <n-tag
+                    size="small"
+                    :type="row.runtimeMode === 'rootless' ? 'warning' : 'default'"
+                  >
+                    {{ getRuntimeModeLabel(row) }}
+                  </n-tag>
+                </div>
+                <div class="text-xs text-slate-500">
+                  {{ $t("container.runUser") }}: {{ getRunUserLabel(row) }}
+                </div>
+              </div>
+            </template>
+          </n-table-column>
+          <n-table-column
             :label="$t('commons.table.status')"
             min-width="50"
             prop="state"
@@ -267,11 +293,13 @@ async function search() {
 const detailInfo = ref()
 const mydetail = ref()
 async function onInspect(id: string) {
-	const res = await inspect({ id, type: "container" })
+	const row = (data.value || []).find((item: Container.ContainerInfo) => item.containerID === id)
+	const res = await inspect({ id, type: "container", runtimeHost: row?.runtimeHost || "" })
 	detailInfo.value = JSON.stringify(JSON.parse(res.data), null, 2)
 	let param = {
 		header: t("commons.button.view"),
-		detailInfo: detailInfo.value
+		detailInfo: detailInfo.value,
+		summary: `${row.runtimeKind || "Runtime"} / ${getRuntimeModeLabel(row)} / ${t("container.runUser")}: ${getRunUserLabel(row)}`
 	}
 	mydetail.value!.acceptParams(param)
 }
@@ -310,6 +338,32 @@ function checkStatus(operation: string) {
 			}
 			return false
 	}
+}
+
+function getRuntimeKindLabel(row: Container.ContainerInfo) {
+	switch ((row.runtimeKind || "").toLowerCase()) {
+		case "docker":
+			return "Docker"
+		case "podman":
+			return "Podman"
+		default:
+			return t("container.runtimeType")
+	}
+}
+
+function getRuntimeModeLabel(row: Container.ContainerInfo) {
+	switch ((row.runtimeMode || "").toLowerCase()) {
+		case "rootless":
+			return t("container.rootless")
+		case "rootful":
+			return t("container.rootful")
+		default:
+			return t("container.defaultMode")
+	}
+}
+
+function getRunUserLabel(row: Container.ContainerInfo) {
+	return row.runUser || t("container.userDefault")
 }
 
 async function onOperate(op: string) {
@@ -368,12 +422,21 @@ async function onComposeOperate(operation: string) {
 
 const dialogMonitorRef = ref()
 function onMonitor(row: any) {
-	dialogMonitorRef.value!.acceptParams({ containerID: row.containerID, container: row.name })
+	dialogMonitorRef.value!.acceptParams({
+		containerID: row.containerID,
+		container: row.name,
+		runtimeSummary: `${row.runtimeKind || "Runtime"} / ${getRuntimeModeLabel(row)} / ${t("container.runUser")}: ${getRunUserLabel(row)}`
+	})
 }
 
 const dialogTerminalRef = ref()
 function onTerminal(row: any) {
-	dialogTerminalRef.value!.acceptParams({ containerID: row.containerID, container: row.name, runtimeHost: row.runtimeHost || "" })
+	dialogTerminalRef.value!.acceptParams({
+		containerID: row.containerID,
+		container: row.name,
+		runtimeHost: row.runtimeHost || "",
+		runtimeSummary: `${row.runtimeKind || "Runtime"} / ${getRuntimeModeLabel(row)} / ${t("container.runUser")}: ${getRunUserLabel(row)}`
+	})
 }
 
 const buttons = [
@@ -398,7 +461,12 @@ const buttons = [
 	{
 		label: t("commons.button.log"),
 		click: (row: Container.ContainerInfo) => {
-			dialogContainerLogRef.value!.acceptParams({ containerID: row.containerID, container: row.name, runtimeHost: row.runtimeHost || "" })
+			dialogContainerLogRef.value!.acceptParams({
+				containerID: row.containerID,
+				container: row.name,
+				runtimeHost: row.runtimeHost || "",
+				runtimeSummary: `${row.runtimeKind || "Runtime"} / ${getRuntimeModeLabel(row)} / ${t("container.runUser")}: ${getRunUserLabel(row)}`
+			})
 		}
 	}
 ]

@@ -24,6 +24,12 @@
         />
       </template>
       <n-form label-placement="top">
+        <div
+          v-if="runtimeSummary"
+          class="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600"
+        >
+          {{ runtimeSummary }}
+        </div>
         <n-form-item :label="$t('container.refreshTime')">
           <n-select
             v-model:value="timeInterval"
@@ -92,11 +98,13 @@ const { t } = useI18n()
 const title = ref()
 const monitorVisible = ref(false)
 const timeInterval = ref(5)
+const runtimeSummary = ref("")
 let timer: ReturnType<typeof setInterval> | null = null
 let isInit = ref<boolean>(true)
 interface DialogProps {
 	containerID: string
 	container: string
+	runtimeSummary?: string
 }
 const dialogData = ref<DialogProps>({
 	containerID: "",
@@ -107,6 +115,7 @@ const acceptParams = async (params: DialogProps): Promise<void> => {
 	monitorVisible.value = true
 	dialogData.value.containerID = params.containerID
 	title.value = params.container
+	runtimeSummary.value = params.runtimeSummary || ""
 	cpuDatas.value = []
 	memDatas.value = []
 	cacheDatas.value = []
@@ -231,6 +240,7 @@ const loadData = async () => {
 }
 const handleClose = async () => {
 	monitorVisible.value = false
+	runtimeSummary.value = ""
 	clearInterval(Number(timer))
 	timer = null
 }

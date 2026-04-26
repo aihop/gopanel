@@ -81,6 +81,12 @@
         </n-form-item>
 
         <template v-if="form.type === 'web_app' || form.type === 'static'">
+          <div
+            v-if="actionType === 'update' && bindingRuntimeSummary"
+            class="mb-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600"
+          >
+            {{ bindingRuntimeSummary }}
+          </div>
           <n-form-item
             label="代码来源 / 部署方式"
             path="codeSource"
@@ -156,12 +162,20 @@
           path="appInstallId"
           v-if="form.codeSource === 'app_store'"
         >
-          <n-select
-            v-model:value="form.appInstallId"
-            :options="appInstallOptions"
-            placeholder="请选择已安装的容器应用"
-            @update:value="handleAppSelect"
-          />
+          <div class="w-full">
+            <n-select
+              v-model:value="form.appInstallId"
+              :options="appInstallOptions"
+              placeholder="请选择已安装的容器应用"
+              @update:value="handleAppSelect"
+            />
+            <div
+              v-if="selectedAppRuntimeText"
+              class="mt-2 text-xs text-slate-500"
+            >
+              {{ selectedAppRuntimeText }}
+            </div>
+          </div>
         </n-form-item>
 
         <n-form-item
@@ -169,12 +183,20 @@
           path="pipelineId"
           v-if="form.codeSource === 'pipeline'"
         >
-          <n-select
-            v-model:value="form.pipelineId"
-            :options="pipelineOptions"
-            placeholder="请选择关联的部署流水线"
-            @update:value="handlePipelineSelect"
-          />
+          <div class="w-full">
+            <n-select
+              v-model:value="form.pipelineId"
+              :options="pipelineOptions"
+              placeholder="请选择关联的部署流水线"
+              @update:value="handlePipelineSelect"
+            />
+            <div
+              v-if="selectedPipelineRuntimeText"
+              class="mt-2 text-xs text-slate-500"
+            >
+              {{ selectedPipelineRuntimeText }}
+            </div>
+          </div>
         </n-form-item>
 
         <n-divider class="!my-6 text-slate-400">安全防护</n-divider>
@@ -271,6 +293,7 @@ import { ListAppInstalled } from "@/api/modules/apps"
 import { getPipelinePage } from "@/api/modules/pipeline"
 import { listAllImage } from "@/api/modules/container"
 import { useMessage } from "naive-ui"
+import { buildRuntimeBadgeText, buildRuntimeDetailText as formatRuntimeDetailText, getRunUserLabel } from "@/utils/runtime"
 
 const visible = ref(false)
 const loading = ref(false)
@@ -281,6 +304,7 @@ const actionType = ref("add")
 
 const title = ref("添加域名")
 const securityPreset = ref<"off" | "recommended" | "strict">("recommended")
+const bindingRuntimeSummary = ref("")
 
 const appInstallOptions = ref<{ label: string; value: number }[]>([])
 const rawAppList = ref<any[]>([])
@@ -289,6 +313,18 @@ const pipelineOptions = ref<any[]>([])
 const rawPipelineList = ref<any[]>([])
 
 const localImageOptions = ref<{ label: string; value: string }[]>([])
+
+const selectedAppRuntimeText = computed(() => {
+	const item = rawAppList.value.find((app: any) => app.id === form.value.appInstallId)
+	if (!item) return ""
+	return buildRuntimeDetailText(item, item.containerName ? `容器：${item.containerName}` : "")
+})
+
+const selectedPipelineRuntimeText = computed(() => {
+	const item = rawPipelineList.value.find((pipeline: any) => pipeline.id === form.value.pipelineId)
+	if (!item) return ""
+	return buildRuntimeDetailText(item, item.runnerKey ? `标识：${item.runnerKey}` : `流水线 #${item.id}`)
+})
 
 const securitySummary = computed(() => {
 	const list: string[] = []
@@ -356,7 +392,7 @@ const fetchApps = async () => {
 		if (res.data) {
 			rawAppList.value = res.data
 			appInstallOptions.value = res.data.map((app: any) => ({
-				label: `${app.name} ${app.httpPort ? `(端口: ${app.httpPort})` : ''}`,
+				label: buildAppOptionLabel(app),
 				value: app.id
 			}))
 		}
@@ -385,7 +421,7 @@ const getPipelineList = async () => {
 		rawPipelineList.value = res.data.items
 		pipelineOptions.value = res.data.items.map((item: any) => {
 			return {
-				label: `${item.name} (#${item.id})`,
+				label: buildPipelineOptionLabel(item),
 				value: item.id
 			}
 		})
@@ -413,6 +449,25 @@ const handlePipelineSelect = (val: number) => {
 	if (!form.value.proxy) {
 		form.value.proxy = "http://127.0.0.1:80"
 	}
+}
+
+function buildRuntimeDetailText(item: any, prefix = "") {
+	return formatRuntimeDetailText(item, {
+		prefix,
+		kindFallback: "Runtime",
+		userFallback: "镜像默认",
+		runtimePrefix: "运行时：",
+		runUserPrefix: "用户："
+	})
+}
+
+function buildAppOptionLabel(app: any) {
+	const port = app.httpPort ? `端口:${app.httpPort}` : app.httpsPort ? `HTTPS:${app.httpsPort}` : "无端口"
+	return `${app.name} · ${port} · ${buildRuntimeBadgeText(app, { kindFallback: "Runtime" })} · 用户:${getRunUserLabel(app, { userFallback: "镜像默认" })}`
+}
+
+function buildPipelineOptionLabel(item: any) {
+	return `${item.name} (#${item.id}) · ${buildRuntimeBadgeText(item, { kindFallback: "Runtime" })} · 用户:${getRunUserLabel(item, { userFallback: "镜像默认" })}`
 }
 
 onMounted(() => {
@@ -550,6 +605,7 @@ const open = (record?: any, action: string = "add") => {
 	if (action === "add") {
 		actionType.value = "add"
 		title.value = "添加网站"
+		bindingRuntimeSummary.value = ""
 		form.value = {
 			id: undefined,
 			type: "static",
@@ -579,6 +635,7 @@ const open = (record?: any, action: string = "add") => {
 	} else {
 		actionType.value = "update"
 		title.value = "更新网站"
+		bindingRuntimeSummary.value = record.runtimeBindingSummary || ""
 		if (record.domains && record.domains.length > 0) {
 			let otherDomain = ""
 			for (let i = 0; i < record.domains.length; i++) {

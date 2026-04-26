@@ -154,12 +154,23 @@ export namespace App {
 		appKey: string
 		appType: string
 		appStatus: string
+		runtimeHost?: string
+		runtimeKind?: string
+		runtimeMode?: string
+		runUser?: string
 	}
 
 	export interface AppInstalledInfo {
 		id: number
 		key: string
 		name: string
+		httpPort?: number
+		httpsPort?: number
+		containerName?: string
+		runtimeHost?: string
+		runtimeKind?: string
+		runtimeMode?: string
+		runUser?: string
 	}
 
 	export interface CheckInstalled {

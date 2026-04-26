@@ -19,6 +19,7 @@ func ListContainersMergedWithSource(ctx context.Context, options container.ListO
 		baseCtx = context.Background()
 	}
 	resolved := ResolveRuntime(baseCtx)
+	pinnedHost := RuntimeHostPinned()
 
 	seen := make(map[string]struct{})
 	source := make(map[string]string)
@@ -47,7 +48,7 @@ func ListContainersMergedWithSource(ctx context.Context, options container.ListO
 		}
 	}
 
-	if resolved.Kind == RuntimePodman {
+	if resolved.Kind == RuntimePodman && !pinnedHost {
 		if rootless, err := PodmanListContainers(baseCtx, options.All); err == nil {
 			for _, it := range rootless {
 				addContainer(podmanCLIContainerToDockerTypes(it), "podman-cli")
@@ -74,6 +75,7 @@ func ListImagesMergedWithSource(ctx context.Context) ([]image.Summary, map[strin
 		baseCtx = context.Background()
 	}
 	resolved := ResolveRuntime(baseCtx)
+	pinnedHost := RuntimeHostPinned()
 
 	imgSeen := make(map[string]struct{})
 	conSeen := make(map[string]struct{})
@@ -103,7 +105,7 @@ func ListImagesMergedWithSource(ctx context.Context) ([]image.Summary, map[strin
 	}
 
 	var lastErr error
-	if resolved.Kind == RuntimePodman {
+	if resolved.Kind == RuntimePodman && !pinnedHost {
 		if rootlessImages, err := PodmanListImages(baseCtx); err == nil {
 			for _, it := range rootlessImages {
 				addImage(podmanCLIImageToDockerSummary(it), "podman-cli")
@@ -161,7 +163,7 @@ func runtimeViewAPIHosts(resolved ResolvedRuntime) []string {
 	}
 
 	add(resolved.Host)
-	if resolved.Kind == RuntimePodman && runtime.GOOS == "linux" {
+	if resolved.Kind == RuntimePodman && runtime.GOOS == "linux" && !RuntimeHostPinned() {
 		for _, host := range PodmanLinuxCandidateHosts() {
 			add(host)
 		}

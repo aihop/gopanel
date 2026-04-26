@@ -148,7 +148,7 @@
           v-else
           class="overflow-hidden rounded-3xl border border-slate-100 bg-slate-50/70"
         >
-          <HttpConfigFile />
+          <HttpConfigFile scope-summary="这里编辑的是全局 HTTP 服务配置，作用于代理层本身，不对应某一个网站的应用运行时。具体网站绑定的是 Docker/Podman、rootless/rootful 与运行用户，请在网站列表、部署管理或安全/日志入口查看。" />
         </div>
       </div>
     </div>
@@ -183,6 +183,8 @@ import type { DataTableColumns } from "naive-ui"
 import { httpDefaultReloadAPI, httpDefaultStatusAPI, httpDefaultStopAPI } from "@/api/modules/http"
 import { AgentEnsureAPI, AgentStatusAPI } from "@/api/modules/agent"
 import { websiteDeleteAPI, websiteListAPI } from "@/api/modules/website"
+import { ListAppInstalled } from "@/api/modules/apps"
+import { getPipelinePage } from "@/api/modules/pipeline"
 import { NButton, NSpace, NTag, useDialog, useMessage, NAlert } from "naive-ui"
 import { h, onMounted, ref, watch } from "vue"
 import HttpConfigFile from "./components/HttpConfigFile.vue"
@@ -261,6 +263,8 @@ const handleEnsureFinished = () => {
 const loading = ref(false)
 const tableData = ref<Website.WebsiteDTO[]>([])
 const total = ref(0)
+const appInstallMap = ref<Record<number, any>>({})
+const pipelineMap = ref<Record<number, any>>({})
 
 const activeTab = ref("list")
 
@@ -326,6 +330,48 @@ function getSecuritySummary(row: Website.WebsiteDTO) {
 	if (row.wafEnable) tags.push("轻量 WAF")
 	if (row.blockSensitive) tags.push("敏感保护")
 	return tags
+}
+
+function getRuntimeKindLabel(item: any) {
+	const kind = String(item?.runtimeKind || "").toLowerCase()
+	if (kind === "podman") return "Podman"
+	if (kind === "docker") return "Docker"
+	return "Runtime"
+}
+
+function getRuntimeModeLabel(item: any) {
+	switch (String(item?.runtimeMode || "").toLowerCase()) {
+		case "rootless":
+			return "rootless"
+		case "rootful":
+			return "rootful"
+		default:
+			return "default"
+	}
+}
+
+function getRunUserLabel(item: any) {
+	return item?.runUser || "镜像默认"
+}
+
+function getWebsiteBindingMeta(row: Website.WebsiteDTO) {
+	if (row.codeSource === "app_store" && row.appInstallId) {
+		const item = appInstallMap.value[row.appInstallId]
+		if (!item) return { source: "应用商店", detail: `应用 #${row.appInstallId}` }
+		return {
+			source: "应用商店",
+			detail: `${item.name} · ${getRuntimeKindLabel(item)}/${getRuntimeModeLabel(item)} · 用户:${getRunUserLabel(item)}`
+		}
+	}
+	if (row.codeSource === "pipeline" && row.pipelineId) {
+		const item = pipelineMap.value[row.pipelineId]
+		if (!item) return { source: "流水线", detail: `流水线 #${row.pipelineId}` }
+		return {
+			source: "流水线",
+			detail: `${item.name} · ${getRuntimeKindLabel(item)}/${getRuntimeModeLabel(item)} · 用户:${getRunUserLabel(item)}`
+		}
+	}
+	return null
 }
 
 const columns: DataTableColumns<any> = [
@@ -425,7 +471,13 @@ const columns: DataTableColumns<any> = [
 				)
 			}
 
-			return h('div', { class: 'flex items-center' }, tags)
+			const bindingMeta = getWebsiteBindingMeta(row)
+			return h("div", { class: "flex flex-col gap-2" }, [
+				h('div', { class: 'flex items-center flex-wrap gap-1' }, tags),
+				bindingMeta
+					? h("div", { class: "text-xs text-slate-500" }, `${bindingMeta.source} · ${bindingMeta.detail}`)
+					: null
+			])
 		}
 	},
 	{
@@ -555,9 +607,34 @@ async function fetchData() {
 		const res = await websiteListAPI()
 		tableData.value = res.data.items || []
 		total.value = res.data.total || 0
+		await fetchBindingMeta()
 	} catch (error: any) {
 	} finally {
 		loading.value = false
+	}
+}
+
+async function fetchBindingMeta() {
+	try {
+		const [appsRes, pipelinesRes] = await Promise.all([
+			ListAppInstalled(),
+			getPipelinePage({ page: 1, limit: 200 })
+		])
+		const apps = Array.isArray(appsRes.data) ? appsRes.data : []
+		const nextAppMap: Record<number, any> = {}
+		for (const item of apps) {
+			nextAppMap[item.id] = item
+		}
+		appInstallMap.value = nextAppMap
+		const pipelines = Array.isArray(pipelinesRes.data?.items) ? pipelinesRes.data.items : []
+		const nextPipelineMap: Record<number, any> = {}
+		for (const item of pipelines) {
+			nextPipelineMap[item.id] = item
+		}
+		pipelineMap.value = nextPipelineMap
+	} catch (error) {
+		appInstallMap.value = {}
+		pipelineMap.value = {}
 	}
 }
 
@@ -584,7 +661,11 @@ function handleAdd() {
 }
 
 function handleUpdate(row: any) {
-	createRef.value?.open(row, "update")
+	const bindingMeta = getWebsiteBindingMeta(row)
+	createRef.value?.open({
+		...row,
+		runtimeBindingSummary: bindingMeta ? `${bindingMeta.source} · ${bindingMeta.detail}` : ""
+	}, "update")
 }
 
 function handleDeploy(row: any) {

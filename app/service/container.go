@@ -90,10 +90,12 @@ func NewIContainerService() IContainerService {
 
 func (u *ContainerService) Page(req *dto.PageContainer) (int64, interface{}, error) {
 	var (
-		records []types.Container
-		list    []types.Container
+		records      []types.Container
+		list         []types.Container
+		dockerClient *client.Client
 	)
 	ctx := context.Background()
+	resolved := docker.ResolveRuntime(ctx)
 	isPodman := docker.IsPodmanRuntime(ctx)
 	options := container.ListOptions{
 		All: true,
@@ -117,6 +119,7 @@ func (u *ContainerService) Page(req *dto.PageContainer) (int64, interface{}, err
 			return 0, nil, err
 		}
 		defer client.Close()
+		dockerClient = client
 		containers, err = client.ContainerList(ctx, options)
 		if err != nil {
 			return 0, nil, err
@@ -206,6 +209,8 @@ func (u *ContainerService) Page(req *dto.PageContainer) (int64, interface{}, err
 	}
 
 	backDatas := make([]dto.ContainerInfo, len(records))
+	appInstallRepo := repo.NewIAppInstallRepo()
+	websiteRepo := repo.NewWebsite()
 	for i := 0; i < len(records); i++ {
 		item := records[i]
 		IsFromCompose := false
@@ -237,33 +242,216 @@ func (u *ContainerService) Page(req *dto.PageContainer) (int64, interface{}, err
 			Ports:         exposePorts,
 			IsFromApp:     IsFromApp,
 			IsFromCompose: IsFromCompose,
+			RuntimeKind:   string(resolved.Kind),
+			RuntimeMode:   inferContainerRuntimeMode(string(resolved.Kind), ""),
+			SourceType:    "manual",
 		}
 		if isPodman && sourceByID != nil {
 			info.RuntimeHost = strings.TrimSpace(sourceByID[item.ID])
 		}
-		appInstallRepo := repo.NewIAppInstallRepo()
-		websiteRepo := repo.NewWebsite()
+		info.RuntimeMode = inferContainerRuntimeMode(info.RuntimeKind, info.RuntimeHost)
 		install, _ := appInstallRepo.GetFirst(appInstallRepo.WithContainerName(info.Name))
 		if install.ID > 0 {
 			info.AppInstallName = install.Name
-			info.AppName = "namemem"
+			info.SourceType = "app"
 			websites, _ := websiteRepo.GetBy(websiteRepo.WithAppInstallId(install.ID))
 			for _, website := range websites {
 				info.Websites = append(info.Websites, website.PrimaryDomain)
 			}
 		}
+		if info.SourceType == "manual" {
+			if website, err := websiteRepo.GetFirst(websiteRepo.WithContainerID(item.ID)); err == nil && website.ID > 0 {
+				if strings.TrimSpace(website.PrimaryDomain) != "" {
+					info.Websites = append(info.Websites, website.PrimaryDomain)
+				}
+				if website.PipelineID > 0 {
+					info.SourceType = "pipeline"
+				} else {
+					info.SourceType = "website"
+				}
+			} else if strings.HasPrefix(strings.ToLower(info.Name), "gopanel-engine-pipeline-") {
+				info.SourceType = "pipeline"
+			}
+		}
+		if info.SourceType == "manual" && info.IsFromCompose {
+			info.SourceType = "compose"
+		}
 		backDatas[i] = info
 		if item.NetworkSettings != nil && len(item.NetworkSettings.Networks) > 0 {
 			networks := make([]string, 0, len(item.NetworkSettings.Networks))
 			for key := range item.NetworkSettings.Networks {
-				networks = append(networks, item.NetworkSettings.Networks[key].IPAddress)
+				if ip := strings.TrimSpace(item.NetworkSettings.Networks[key].IPAddress); ip != "" {
+					networks = append(networks, ip)
+				}
 			}
-			sort.Strings(networks)
-			backDatas[i].Network = networks
+			backDatas[i].Network = normalizeContainerIPList(networks)
 		}
+		if len(backDatas[i].Network) == 0 {
+			runtimeHost := ""
+			if isPodman && sourceByID != nil {
+				runtimeHost = strings.TrimSpace(sourceByID[item.ID])
+			}
+			backDatas[i].Network = inspectContainerIPsForList(ctx, dockerClient, item.ID, runtimeHost)
+		}
+		backDatas[i].RunUser = inspectContainerRunUserForList(ctx, dockerClient, item.ID, backDatas[i].RuntimeHost)
 	}
 
 	return int64(total), backDatas, nil
+}
+
+func normalizeContainerIPList(items []string) []string {
+	if len(items) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(items))
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		ip := strings.TrimSpace(item)
+		if ip == "" {
+			continue
+		}
+		if _, ok := seen[ip]; ok {
+			continue
+		}
+		seen[ip] = struct{}{}
+		out = append(out, ip)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	sort.Strings(out)
+	return out
+}
+
+func inferContainerRuntimeMode(runtimeKind string, runtimeHost string) string {
+	host := strings.TrimSpace(runtimeHost)
+	if runtime.GOOS != "linux" {
+		return "default"
+	}
+	if host != "" && strings.Contains(host, "/run/user/") {
+		return "rootless"
+	}
+	switch strings.TrimSpace(runtimeKind) {
+	case string(docker.RuntimeDocker), string(docker.RuntimePodman):
+		return "rootful"
+	default:
+		return "default"
+	}
+}
+
+func inspectContainerIPsForList(ctx context.Context, dockerClient *client.Client, containerID string, runtimeHost string) []string {
+	if dockerClient != nil {
+		inspect, err := dockerClient.ContainerInspect(ctx, containerID)
+		if err == nil && inspect.NetworkSettings != nil {
+			networks := make([]string, 0, len(inspect.NetworkSettings.Networks))
+			for _, endpoint := range inspect.NetworkSettings.Networks {
+				if endpoint == nil {
+					continue
+				}
+				if ip := strings.TrimSpace(endpoint.IPAddress); ip != "" {
+					networks = append(networks, ip)
+				}
+				if ip := strings.TrimSpace(endpoint.GlobalIPv6Address); ip != "" {
+					networks = append(networks, ip)
+				}
+			}
+			return normalizeContainerIPList(networks)
+		}
+	}
+	if strings.TrimSpace(runtimeHost) == "" {
+		return nil
+	}
+	raw, err := inspectPodman(&dto.InspectReq{ID: containerID, Type: "container", RuntimeHost: runtimeHost})
+	if err != nil {
+		return nil
+	}
+	return extractContainerIPsFromInspectJSON(raw)
+}
+
+func extractContainerIPsFromInspectJSON(raw string) []string {
+	type endpointView struct {
+		IPAddress         string `json:"IPAddress"`
+		GlobalIPv6Address string `json:"GlobalIPv6Address"`
+	}
+	type networkSettingsView struct {
+		Networks map[string]endpointView `json:"Networks"`
+	}
+	type inspectView struct {
+		NetworkSettings networkSettingsView `json:"NetworkSettings"`
+	}
+	parse := func(items []inspectView) []string {
+		if len(items) == 0 {
+			return nil
+		}
+		networks := make([]string, 0)
+		for _, item := range items {
+			for _, endpoint := range item.NetworkSettings.Networks {
+				if ip := strings.TrimSpace(endpoint.IPAddress); ip != "" {
+					networks = append(networks, ip)
+				}
+				if ip := strings.TrimSpace(endpoint.GlobalIPv6Address); ip != "" {
+					networks = append(networks, ip)
+				}
+			}
+		}
+		return normalizeContainerIPList(networks)
+	}
+
+	var list []inspectView
+	if err := json.Unmarshal([]byte(raw), &list); err == nil {
+		return parse(list)
+	}
+
+	var single inspectView
+	if err := json.Unmarshal([]byte(raw), &single); err == nil {
+		return parse([]inspectView{single})
+	}
+	return nil
+}
+
+func inspectContainerRunUserForList(ctx context.Context, dockerClient *client.Client, containerID string, runtimeHost string) string {
+	if dockerClient != nil {
+		inspect, err := dockerClient.ContainerInspect(ctx, containerID)
+		if err == nil && inspect.Config != nil {
+			return strings.TrimSpace(inspect.Config.User)
+		}
+	}
+	if strings.TrimSpace(runtimeHost) == "" {
+		return ""
+	}
+	raw, err := inspectPodman(&dto.InspectReq{ID: containerID, Type: "container", RuntimeHost: runtimeHost})
+	if err != nil {
+		return ""
+	}
+	return extractContainerUserFromInspectJSON(raw)
+}
+
+func extractContainerUserFromInspectJSON(raw string) string {
+	type configView struct {
+		User string `json:"User"`
+	}
+	type inspectView struct {
+		Config configView `json:"Config"`
+	}
+	parse := func(items []inspectView) string {
+		for _, item := range items {
+			if v := strings.TrimSpace(item.Config.User); v != "" {
+				return v
+			}
+		}
+		return ""
+	}
+
+	var list []inspectView
+	if err := json.Unmarshal([]byte(raw), &list); err == nil {
+		return parse(list)
+	}
+
+	var single inspectView
+	if err := json.Unmarshal([]byte(raw), &single); err == nil {
+		return parse([]inspectView{single})
+	}
+	return ""
 }
 
 func normalizeContainerLabelFilter(filter string, isPodman bool) string {

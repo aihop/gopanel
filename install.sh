@@ -194,6 +194,31 @@ detect_platform() {
   fi
 }
 
+runtime_user_uid() {
+  local username="$1"
+  id -u "${username}" 2>/dev/null || true
+}
+
+runtime_user_runtime_dir() {
+  local username="$1"
+  local uid
+  uid="$(runtime_user_uid "${username}")"
+  if [ -z "${uid}" ]; then
+    return 0
+  fi
+  echo "/run/user/${uid}"
+}
+
+runtime_user_podman_socket() {
+  local username="$1"
+  local runtime_dir
+  runtime_dir="$(runtime_user_runtime_dir "${username}")"
+  if [ -z "${runtime_dir}" ]; then
+    return 0
+  fi
+  echo "unix://${runtime_dir}/podman/podman.sock"
+}
+
 detect_server_ip() {
   local ip_address=""
   if [ "${os_name:-}" = "linux" ]; then
@@ -752,6 +777,14 @@ password: "${CONFIG_PASSWORD}"
 safe_enter: "${CONFIG_SAFE_ENTER}"
 install_id: "${CONFIG_INSTALL_ID}"
 EOF
+  if [ "${os_name}" = "linux" ] && [ "${RUN_AS_NORMAL_USER}" = "true" ] && command -v podman >/dev/null 2>&1; then
+    local podman_socket
+    podman_socket="$(runtime_user_podman_socket "${RUNTIME_USER}")"
+    cat >>"${tmp_file}" <<EOF
+container_runtime: "podman"
+docker_sock_path: "${podman_socket}"
+EOF
+  fi
   run_privileged cp "${tmp_file}" "${CONFIG_INSTALL_DIR}/init.yaml"
   rm -f "${tmp_file}"
 }
@@ -924,12 +957,27 @@ EOF
 
 install_service_gopanel_linux() {
   local tmp_service
+  local runtime_home runtime_dir
+  runtime_home="$(user_home_dir "${RUNTIME_USER}")"
+  runtime_dir="$(runtime_user_runtime_dir "${RUNTIME_USER}")"
   tmp_service="$(mktemp -t gopanel.service.XXXXXX)"
+  local unit_after="network.target gpc.service"
+  local unit_wants=""
+  if [ "${RUNTIME_USER}" = "root" ]; then
+    unit_after="network.target docker.socket podman.socket gpc.service"
+    unit_wants="docker.socket podman.socket"
+  fi
   cat >"${tmp_service}" <<EOF
 [Unit]
 Description=GoPanel
-After=network.target docker.socket podman.socket gpc.service
-Wants=docker.socket podman.socket
+After=${unit_after}
+EOF
+  if [ -n "${unit_wants}" ]; then
+    cat >>"${tmp_service}" <<EOF
+Wants=${unit_wants}
+EOF
+  fi
+  cat >>"${tmp_service}" <<EOF
 Requires=gpc.service
 
 [Service]
@@ -940,6 +988,15 @@ WorkingDirectory=${CONFIG_INSTALL_DIR}
 ExecStart=${CONFIG_INSTALL_DIR}/gopanel
 Restart=always
 RestartSec=2
+Environment="HOME=${runtime_home}"
+EOF
+  if [ "${RUNTIME_USER}" != "root" ] && [ -n "${runtime_dir}" ]; then
+    cat >>"${tmp_service}" <<EOF
+Environment="XDG_RUNTIME_DIR=${runtime_dir}"
+Environment="DBUS_SESSION_BUS_ADDRESS=unix:path=${runtime_dir}/bus"
+EOF
+  fi
+  cat >>"${tmp_service}" <<EOF
 
 [Install]
 WantedBy=multi-user.target
@@ -961,13 +1018,27 @@ install_service_gpagent_linux() {
     return 0
   fi
   local tmp_service
+  local runtime_home runtime_dir
+  runtime_home="$(user_home_dir "${RUNTIME_USER}")"
+  runtime_dir="$(runtime_user_runtime_dir "${RUNTIME_USER}")"
   tmp_service="$(mktemp -t gp-agent.service.XXXXXX)"
+  local unit_after="network.target"
+  local unit_wants=""
+  if [ "${RUNTIME_USER}" = "root" ]; then
+    unit_after="network.target docker.socket podman.socket"
+    unit_wants="docker.socket podman.socket"
+  fi
   cat >"${tmp_service}" <<EOF
 [Unit]
 Description=GoPanel Agent (gp-agent)
-After=network.target docker.socket podman.socket
-Wants=docker.socket podman.socket
-
+After=${unit_after}
+EOF
+  if [ -n "${unit_wants}" ]; then
+    cat >>"${tmp_service}" <<EOF
+Wants=${unit_wants}
+EOF
+  fi
+  cat >>"${tmp_service}" <<EOF
 [Service]
 Type=simple
 User=${RUNTIME_USER}
@@ -977,14 +1048,21 @@ ExecStart=${CONFIG_INSTALL_DIR}/gp-agent service --base-dir ${CONFIG_INSTALL_DIR
 Restart=always
 RestartSec=2
 
-Environment="HOME=${CONFIG_INSTALL_DIR}"
+Environment="HOME=${runtime_home}"
 Environment="CADDY_DATA_DIR=${CONFIG_INSTALL_DIR}/caddy/data"
-
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 
 LimitNOFILE=65535
 OOMScoreAdjust=-100
+EOF
+  if [ "${RUNTIME_USER}" != "root" ] && [ -n "${runtime_dir}" ]; then
+    cat >>"${tmp_service}" <<EOF
+Environment="XDG_RUNTIME_DIR=${runtime_dir}"
+Environment="DBUS_SESSION_BUS_ADDRESS=unix:path=${runtime_dir}/bus"
+EOF
+  fi
+  cat >>"${tmp_service}" <<EOF
 
 [Install]
 WantedBy=multi-user.target
@@ -1249,31 +1327,26 @@ ensure_podman_socket_access() {
   if [ "${RUNTIME_USER}" = "root" ]; then
     return 0
   fi
-
-  if ! run_privileged systemctl list-unit-files podman.socket >/dev/null 2>&1; then
+  if ! command -v loginctl >/dev/null 2>&1; then
+    warn "未检测到 loginctl，无法自动启用 rootless Podman 用户会话，请手动为 ${RUNTIME_USER} 启用 linger 与 podman.socket。"
     return 0
   fi
 
-  local grp
-  grp="$(id -gn "${RUNTIME_USER}" 2>/dev/null || true)"
-  [ -n "${grp}" ] || return 0
+  local runtime_uid runtime_dir user_home
+  runtime_uid="$(runtime_user_uid "${RUNTIME_USER}")"
+  runtime_dir="$(runtime_user_runtime_dir "${RUNTIME_USER}")"
+  user_home="$(user_home_dir "${RUNTIME_USER}")"
+  if [ -z "${runtime_uid}" ] || [ -z "${runtime_dir}" ]; then
+    warn "未能解析运行用户 ${RUNTIME_USER} 的 uid/runtime dir，跳过 rootless Podman socket 初始化。"
+    return 0
+  fi
 
-  log "配置 Podman socket 访问权限（SocketGroup=${grp}）"
-  run_privileged mkdir -p /etc/systemd/system/podman.socket.d
-  cat <<EOF | run_privileged tee /etc/systemd/system/podman.socket.d/override.conf >/dev/null
-[Socket]
-SocketUser=root
-SocketGroup=${grp}
-SocketMode=0660
-DirectoryMode=0755
-EOF
-
-  run_privileged systemctl daemon-reload
-  run_privileged systemctl stop podman.socket >/dev/null 2>&1 || true
-  run_privileged mkdir -p /run/podman >/dev/null 2>&1 || true
-  run_privileged chmod 0755 /run/podman >/dev/null 2>&1 || true
-  run_privileged rm -f /run/podman/podman.sock >/dev/null 2>&1 || true
-  run_privileged systemctl start podman.socket >/dev/null 2>&1 || true
+  log "为用户 ${RUNTIME_USER} 启用 rootless Podman socket"
+  run_privileged loginctl enable-linger "${RUNTIME_USER}" >/dev/null 2>&1 || true
+  run_privileged mkdir -p "${runtime_dir}" >/dev/null 2>&1 || true
+  run_privileged chown "${runtime_uid}:${runtime_uid}" "${runtime_dir}" >/dev/null 2>&1 || true
+  run_privileged chmod 0700 "${runtime_dir}" >/dev/null 2>&1 || true
+  run_privileged su -s /bin/sh - "${RUNTIME_USER}" -c "export HOME='${user_home}'; export XDG_RUNTIME_DIR='${runtime_dir}'; export DBUS_SESSION_BUS_ADDRESS='unix:path=${runtime_dir}/bus'; systemctl --user daemon-reload >/dev/null 2>&1 || true; systemctl --user enable --now podman.socket >/dev/null 2>&1 || true"
   return 0
 }
 

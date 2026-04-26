@@ -40,6 +40,10 @@ export namespace Pipeline {
     runnerKey?: string;
     runnerMode?: string;
     runnerConfig?: any;
+    runtimeHost?: string;
+    runtimeKind?: string;
+    runtimeMode?: string;
+    runUser?: string;
   }
 
   export interface ResRecord {
@@ -55,5 +59,9 @@ export namespace Pipeline {
     runnerReleaseDir?: string;
     runnerContainerId?: string;
     runnerHostPort?: number;
+    runtimeHost?: string;
+    runtimeKind?: string;
+    runtimeMode?: string;
+    runUser?: string;
   }
 }

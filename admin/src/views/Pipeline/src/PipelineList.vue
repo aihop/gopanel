@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { h, onMounted, ref, computed } from "vue"
-import { NButton, NDataTable, NSpace, NTag, useMessage, NModal, NForm, NFormItem, NInput } from "naive-ui"
+import { NButton, NDataTable, NSpace, NTag, useMessage, useDialog, NModal, NForm, NFormItem, NInput } from "naive-ui"
 import { getPipelinePage, deletePipeline, runPipeline } from "@/api/modules/pipeline"
 import { Pipeline } from "@/api/interface/pipeline"
 import PipelineRecordsModal from "./PipelineRecordsModal.vue"
 import PipelineLogsModal from "./PipelineLogsModal.vue"
 import { useAuthStore } from "@/store/auth"
 import { t } from "@/i18n"
+import { getRuntimeKindLabel, getRuntimeModeLabel, getRunUserLabel } from "@/utils/runtime"
+import { formatTime } from "@/utils/date"
 const authStore = useAuthStore()
 const isSubAdmin = computed(() => authStore.user?.role === 'SUB_ADMIN')
 const isSuperAdmin = computed(() => authStore.user?.role === 'SUPER')
@@ -63,14 +65,37 @@ const columns = [
       })
     }
   },
+  {
+    title: t("container.runtimeType"),
+    key: "runtimeType",
+    minWidth: 220,
+    render: (row: Pipeline.ResPipeline) => {
+      return h("div", { class: "flex flex-col gap-1" }, [
+        h("div", { class: "flex flex-wrap items-center gap-2" }, [
+          h(NTag, { type: row.runtimeKind === "docker" ? "success" : "warning", size: "small" }, {
+            default: () => getRuntimeKindLabel(row, { kindFallback: t("container.runtimeType") })
+          }),
+          h(NTag, { type: row.runtimeMode === "rootless" ? "warning" : "default", size: "small" }, {
+            default: () => getRuntimeModeLabel(row, {
+              rootlessLabel: t("container.rootless"),
+              rootfulLabel: t("container.rootful"),
+              defaultModeLabel: t("container.defaultMode")
+            })
+          })
+        ]),
+        h("div", { class: "text-xs text-slate-500" }, `${t("container.runUser")}: ${getRunUserLabel(row, { userFallback: t("container.userDefault") })}`)
+      ])
+    }
+  },
   { title: t("pipeline.branch"), key: "branch", render: (row: Pipeline.ResPipeline) => h(NTag, { type: "info", size: "small" }, { default: () => row.branch }) },
   { title: t("pipeline.currentVersion"), key: "version", render: (row: Pipeline.ResPipeline) => h(NTag, { type: "success", size: "small" }, { default: () => `v${row.version}` }) },
   { title: t("pipeline.artifactPath"), key: "artifactPath" },
-  { title: t("commons.table.createdAt"), key: "createdAt" },
+  { title: t("commons.table.createdAt"), key: "createdAt", render: (row: Pipeline.ResPipeline) => h("div", { class: "text-xs text-slate-500" }, formatTime(row.createdAt || "")) },
   {
     title: t("pipeline.actions"),
     key: "actions",
-    width: 300,
+    width: 150,
+    fixed: "right",
     render(row: Pipeline.ResPipeline) {
       return h(NSpace, {}, {
         default: () => {
@@ -232,6 +257,7 @@ defineExpose({
       :loading="loading"
       :pagination="pagination"
       :bordered="false"
+      :scroll-x="1080"
       class="bg-transparent"
     />
     <PipelineRecordsModal

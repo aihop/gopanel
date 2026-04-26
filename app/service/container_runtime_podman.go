@@ -222,12 +222,6 @@ func shouldUpdateDockerSockPath(cur string) bool {
 	if strings.Contains(cur, "/var/run/docker.sock") {
 		return true
 	}
-	if strings.Contains(cur, "/run/user/") {
-		return true
-	}
-	if strings.Contains(cur, "podman.sock") {
-		return true
-	}
 	return false
 }
 

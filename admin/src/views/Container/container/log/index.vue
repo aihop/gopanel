@@ -98,6 +98,13 @@
         </n-button>
       </div>
 
+      <div
+        v-if="runtimeSummary"
+        class="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600"
+      >
+        {{ runtimeSummary }}
+      </div>
+
       <div class="mt-4 h-[70vh] overflow-auto">
         <FtEditor
           ref="editorRef"
@@ -141,6 +148,7 @@ const logInfo = ref<string>("")
 const editorRef = ref<InstanceType<typeof FtEditor> | null>(null)
 const globalStore = GlobalStore()
 const terminalSocket = ref<WebSocket>()
+const runtimeSummary = ref("")
 
 const logSearch = reactive({
 	isWatch: true,
@@ -173,6 +181,7 @@ async function handleClose() {
 	}
 
 	logVisible.value = false
+	runtimeSummary.value = ""
 	globalStore.isFullScreen = false
 }
 
@@ -259,12 +268,14 @@ interface DialogProps {
 	container: string
 	containerID: string
 	runtimeHost?: string
+	runtimeSummary?: string
 }
 
 function acceptParams(props: DialogProps): void {
 	logVisible.value = true
 	logSearch.containerID = props.containerID
 	logSearch.runtimeHost = props.runtimeHost || ""
+	runtimeSummary.value = props.runtimeSummary || ""
 	logSearch.tail = 100
 	logSearch.mode = "all"
 	logSearch.isWatch = true

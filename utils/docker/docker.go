@@ -41,6 +41,16 @@ type ResolvedRuntime struct {
 	Host string
 }
 
+func ConfiguredDockerSockPath() string {
+	var settingItem model.Setting
+	_ = global.DB.Where("key = ?", "DockerSockPath").First(&settingItem).Error
+	return strings.TrimSpace(settingItem.Value)
+}
+
+func RuntimeHostPinned() bool {
+	return ConfiguredDockerSockPath() != ""
+}
+
 func ResolveRuntime(ctx context.Context) ResolvedRuntime {
 	mode := strings.ToLower(strings.TrimSpace(global.CONF.System.ContainerRuntime))
 	if mode == "" {

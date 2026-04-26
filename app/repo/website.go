@@ -30,6 +30,12 @@ func (w *WebsiteRepo) WithAppInstallId(appInstallID uint) DBOption {
 	}
 }
 
+func (w *WebsiteRepo) WithContainerID(containerID string) DBOption {
+	return func(db *gorm.DB) *gorm.DB {
+		return db.Where("container_id = ?", containerID)
+	}
+}
+
 func (w *WebsiteRepo) WithIDs(ids []uint) DBOption {
 	return func(db *gorm.DB) *gorm.DB {
 		return db.Where("id in (?)", ids)

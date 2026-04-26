@@ -29,6 +29,10 @@ type ContainerInfo struct {
 	State       string `json:"state"`
 	RunTime     string `json:"runTime"`
 	RuntimeHost string `json:"runtimeHost"`
+	RuntimeKind string `json:"runtimeKind"`
+	RuntimeMode string `json:"runtimeMode"`
+	RunUser     string `json:"runUser"`
+	SourceType  string `json:"sourceType"`
 
 	Network []string `json:"network"`
 	Ports   []string `json:"ports"`

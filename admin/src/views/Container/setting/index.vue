@@ -12,7 +12,21 @@
           >
             Runtime: {{ precheck.runtimeKind }}
           </n-tag>
-          <span class="text-sm text-gray-500">Host: {{ precheck.runtimeHost || '-' }}</span>
+          <n-tag
+            size="small"
+            :type="precheck.hostPinned ? 'success' : 'default'"
+          >
+            {{ precheck.hostPinned ? '固定 Socket' : '自动探测' }}
+          </n-tag>
+          <n-tag
+            v-if="precheck.runtimeKind === 'podman'"
+            size="small"
+            :type="precheck.rootlessHost ? 'warning' : 'info'"
+          >
+            {{ precheck.rootlessHost ? 'rootless' : 'rootful' }}
+          </n-tag>
+          <span class="text-sm text-gray-500">Current: {{ precheck.runtimeHost || '-' }}</span>
+          <span class="text-sm text-gray-500">Configured: {{ precheck.configuredHost || '-' }}</span>
           <span class="text-sm text-gray-500">OS: {{ precheck.os }}/{{ precheck.arch }}</span>
         </div>
         <div class="flex flex-wrap items-center gap-2">
@@ -360,7 +374,10 @@
       <div class="space-y-3">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <div class="text-sm text-gray-600">
-            Runtime: {{ precheck?.runtimeKind || '-' }} / Host: {{ precheck?.runtimeHost || '-' }}
+            Runtime: {{ precheck?.runtimeKind || '-' }} / Current: {{ precheck?.runtimeHost || '-' }}
+          </div>
+          <div class="text-xs text-gray-500">
+            Configured: {{ precheck?.configuredHost || '-' }} / 模式: {{ precheck?.hostPinned ? '固定 Socket' : '自动探测' }}
           </div>
           <n-button
             v-if="canAutoRepair"
@@ -512,7 +529,7 @@ async function autoRepair() {
 	try {
 		message.info("正在尝试自动修复…")
 		const runtimeInfo: any = precheck.value?.runtime || {}
-		const isRootless = !!runtimeInfo.rootless
+		const isRootless = !!runtimeInfo.rootless || !!precheck.value?.rootlessHost
 		const notes = Array.isArray(precheck.value?.notes) ? precheck.value.notes.join(" ").toLowerCase() : ""
 		const maybeRootless = typeof precheck.value?.runtimeHost === "string" && precheck.value.runtimeHost.includes("/run/user/")
 		const needLinger =

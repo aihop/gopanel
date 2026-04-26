@@ -80,10 +80,16 @@ export namespace Container {
 		state: string
 		runTime: string
 		runtimeHost?: string
+		runtimeKind?: string
+		runtimeMode?: string
+		runUser?: string
+		sourceType?: string
 		network: Array<string>
 		ports: Array<string>
 		isFromApp: boolean
 		isFromCompose: boolean
+		appInstallName?: string
+		websites?: string[]
 
 		hasLoad?: boolean
 		cpuPercent?: number

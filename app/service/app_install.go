@@ -80,6 +80,7 @@ func (a *AppInstallService) SearchForWebsite(req request.AppInstalledSearch) (in
 	if err != nil {
 		return 0, nil, err
 	}
+	FillAppInstallRuntimeMeta(context.Background(), installs)
 
 	return total, installs, nil
 }
@@ -90,6 +91,7 @@ func (a *AppInstallService) GetInstallList() ([]dto.AppInstallInfo, error) {
 	if err != nil {
 		return nil, err
 	}
+	FillAppInstallRuntimeMeta(context.Background(), appInstalls)
 	for _, install := range appInstalls {
 		datas = append(datas, dto.AppInstallInfo{
 			ID:            install.ID,
@@ -98,6 +100,10 @@ func (a *AppInstallService) GetInstallList() ([]dto.AppInstallInfo, error) {
 			HttpPort:      install.HttpPort,
 			HttpsPort:     install.HttpsPort,
 			ContainerName: install.ContainerName,
+			RuntimeHost:   install.RuntimeHost,
+			RuntimeKind:   install.RuntimeKind,
+			RuntimeMode:   install.RuntimeMode,
+			RunUser:       install.RunUser,
 		})
 	}
 	return datas, nil

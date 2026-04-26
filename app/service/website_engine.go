@@ -18,6 +18,7 @@ import (
 	"github.com/aihop/gopanel/utils/docker"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
+	"github.com/docker/docker/api/types/network"
 	dockerclient "github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
 )
@@ -119,6 +120,7 @@ func DeployWebsiteEngine(ctx context.Context, alias string, req *request.Website
 			},
 		},
 	}
+	runnerExtraNetworks := make([]string, 0, len(rc.ExtraNetworks))
 	selectedCodeDir := ""
 	if req.CodeSource == "pipeline" {
 		envs = mergeRunnerEnvs(envs, rc, containerPort)
@@ -132,6 +134,18 @@ func DeployWebsiteEngine(ctx context.Context, alias string, req *request.Website
 			}
 			hostConfig.NetworkMode = container.NetworkMode(runnerNetworkName)
 			logEngineProgress(progress, "Runner 默认接入网络: %s", runnerNetworkName)
+			for _, networkName := range rc.ExtraNetworks {
+				if networkName == runnerNetworkName {
+					continue
+				}
+				if _, err := cli.NetworkInspect(ctx, networkName, network.InspectOptions{}); err != nil {
+					return 0, "", "", fmt.Errorf("runner extra network %s 不存在或不可用: %w", networkName, err)
+				}
+				runnerExtraNetworks = append(runnerExtraNetworks, networkName)
+			}
+			if len(runnerExtraNetworks) > 0 {
+				logEngineProgress(progress, "Runner 额外接入网络: %s", strings.Join(runnerExtraNetworks, ", "))
+			}
 			selectedCodeDir = strings.TrimSpace(req.CodeDirFallback)
 			if selectedCodeDir == "" {
 				selectedCodeDir = strings.TrimSpace(codeDir)
@@ -222,6 +236,10 @@ func DeployWebsiteEngine(ctx context.Context, alias string, req *request.Website
 		WorkingDir:   workingDir,
 		ExposedPorts: imageInspect.Config.ExposedPorts, // 默认使用新镜像自带的所有暴露端口
 	}
+	if v := strings.TrimSpace(rc.RunnerUser); v != "" {
+		config.User = v
+		logEngineProgress(progress, "Runner 容器内运行用户: %s", v)
+	}
 
 	// 确保探测到的主端口一定被包含在内
 	if config.ExposedPorts == nil {
@@ -296,6 +314,13 @@ func DeployWebsiteEngine(ctx context.Context, alias string, req *request.Website
 		return 0, "", "", fmt.Errorf("failed to create engine container: %w", err)
 	}
 	logEngineProgress(progress, "已创建容器: %s", containerName)
+	for _, networkName := range runnerExtraNetworks {
+		if err := cli.NetworkConnect(ctx, networkName, resp.ID, &network.EndpointSettings{}); err != nil {
+			_ = cli.ContainerRemove(ctx, resp.ID, container.RemoveOptions{Force: true})
+			return 0, "", "", fmt.Errorf("runner 接入额外网络 %s 失败: %w", networkName, err)
+		}
+		logEngineProgress(progress, "已接入额外网络: %s", networkName)
+	}
 
 	logEngineProgress(progress, "正在启动容器...")
 	if err := cli.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
@@ -448,11 +473,13 @@ type runnerConfig struct {
 	WorkingDir      string
 	ContainerPort   string
 	HostPort        string
+	RunnerUser      string
 	StartCommand    string
 	BuildCommand    string
 	PreStart        string
 	Env             map[string]string
 	PersistentPaths []string
+	ExtraNetworks   []string
 }
 
 func parseRunnerConfig(raw map[string]interface{}) runnerConfig {
@@ -482,8 +509,11 @@ func parseRunnerConfig(raw map[string]interface{}) runnerConfig {
 	if v := strings.TrimSpace(asNumberString(raw["hostPort"])); v != "" {
 		rc.HostPort = v
 	}
-	if v := strings.TrimSpace(asString(raw["startCommand"])); v != "" {
-		rc.StartCommand = v
+	if v := strings.TrimSpace(asString(raw["runnerUser"])); v != "" {
+		rc.RunnerUser = v
+	}
+	if v, ok := raw["startCommand"]; ok {
+		rc.StartCommand = strings.TrimSpace(asString(v))
 	}
 	if v := strings.TrimSpace(asString(raw["buildCommand"])); v != "" {
 		rc.BuildCommand = v
@@ -513,6 +543,20 @@ func parseRunnerConfig(raw map[string]interface{}) runnerConfig {
 			}
 		}
 	}
+	if networksRaw, ok := raw["extraNetworks"].([]interface{}); ok {
+		for _, item := range networksRaw {
+			if v := strings.TrimSpace(asString(item)); v != "" {
+				rc.ExtraNetworks = append(rc.ExtraNetworks, v)
+			}
+		}
+	} else if networksRaw, ok := raw["extraNetworks"].([]string); ok {
+		for _, item := range networksRaw {
+			if v := strings.TrimSpace(item); v != "" {
+				rc.ExtraNetworks = append(rc.ExtraNetworks, v)
+			}
+		}
+	}
+	rc.ExtraNetworks = normalizeRunnerExtraNetworks(rc.ExtraNetworks)
 	return rc
 }
 
@@ -655,6 +699,29 @@ func buildRunnerEphemeralBinds(rc runnerConfig, workingDir string) []string {
 	return []string{path.Join(wd, "node_modules")}
 }
 
+func normalizeRunnerExtraNetworks(items []string) []string {
+	if len(items) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(items))
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		name := strings.TrimSpace(item)
+		if name == "" {
+			continue
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		out = append(out, name)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 func buildRunnerScript(rc runnerConfig) string {
 	mode := strings.ToLower(strings.TrimSpace(rc.Mode))
 	wd := strings.TrimSpace(rc.WorkingDir)
@@ -662,9 +729,6 @@ func buildRunnerScript(rc runnerConfig) string {
 		wd = "/var/www/app"
 	}
 	startCmd := strings.TrimSpace(rc.StartCommand)
-	if startCmd == "" {
-		startCmd = "node .output/server/index.mjs"
-	}
 	installCmd := strings.TrimSpace(rc.BuildCommand)
 
 	var b strings.Builder
@@ -695,8 +759,12 @@ func buildRunnerScript(rc runnerConfig) string {
 		b.WriteString("  npm run build\n")
 		b.WriteString("fi\n")
 	}
-	b.WriteString("exec ")
-	b.WriteString(startCmd)
-	b.WriteString("\n")
+	if startCmd != "" {
+		b.WriteString("exec ")
+		b.WriteString(startCmd)
+		b.WriteString("\n")
+	} else {
+		b.WriteString("echo \"[RUN] start command empty, skip auto start\"\n")
+	}
 	return b.String()
 }

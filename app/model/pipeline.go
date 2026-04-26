@@ -26,6 +26,10 @@ type Pipeline struct {
 
 	RunnerMode   string `gorm:"column:runner_mode;type:varchar(32)" json:"runnerMode"`
 	RunnerConfig string `gorm:"column:runner_config;type:longtext" json:"runnerConfig"`
+	RuntimeHost  string `gorm:"-" json:"runtimeHost"`
+	RuntimeKind  string `gorm:"-" json:"runtimeKind"`
+	RuntimeMode  string `gorm:"-" json:"runtimeMode"`
+	RunUser      string `gorm:"-" json:"runUser"`
 }
 
 func (Pipeline) TableName() string {
@@ -46,6 +50,10 @@ type PipelineRecord struct {
 	RunnerReleaseDir  string `gorm:"column:runner_release_dir;type:varchar(255)" json:"runnerReleaseDir"`
 	RunnerContainerID string `gorm:"column:runner_container_id;type:varchar(128)" json:"runnerContainerId"`
 	RunnerHostPort    int    `gorm:"column:runner_host_port;type:int" json:"runnerHostPort"`
+	RuntimeHost       string `gorm:"-" json:"runtimeHost"`
+	RuntimeKind       string `gorm:"-" json:"runtimeKind"`
+	RuntimeMode       string `gorm:"-" json:"runtimeMode"`
+	RunUser           string `gorm:"-" json:"runUser"`
 }
 
 func (PipelineRecord) TableName() string {

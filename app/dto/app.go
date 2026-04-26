@@ -162,6 +162,10 @@ type AppInstallInfo struct {
 	HttpsPort     int    `json:"httpsPort"`
 	ContainerName string `json:"containerName"`
 	Name          string `json:"name"`
+	RuntimeHost   string `json:"runtimeHost"`
+	RuntimeKind   string `json:"runtimeKind"`
+	RuntimeMode   string `json:"runtimeMode"`
+	RunUser       string `json:"runUser"`
 }
 
 type AppUpdateData struct {

@@ -107,6 +107,9 @@ func (u *DockerService) LoadDockerConf() *dto.DaemonJsonConf {
 	resolved := docker.ResolveRuntime(ctx)
 	data.RuntimeKind = string(resolved.Kind)
 	data.RuntimeHost = resolved.Host
+	data.ConfiguredHost = docker.ConfiguredDockerSockPath()
+	data.HostPinned = strings.TrimSpace(data.ConfiguredHost) != ""
+	data.RootlessHost = docker.IsRootlessPodmanHost(resolved.Host)
 	data.Capabilities = dto.RuntimeCapabilities{
 		DaemonJson:           resolved.Kind == docker.RuntimeDocker && runtime.GOOS == "linux",
 		DockerAPI:            !(resolved.Kind == docker.RuntimePodman && runtime.GOOS == "darwin"),

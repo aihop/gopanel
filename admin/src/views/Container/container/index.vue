@@ -182,7 +182,6 @@
       :mask-closable="false"
     />
 
-    <PortJumpDialog ref="dialogPortJumpRef" />
   </div>
 </template>
 
@@ -196,14 +195,13 @@ import MonitorDialog from "@/views/Container/container/monitor/index.vue"
 import ContainerLogDialog from "@/views/Container/container/log/index.vue"
 import TerminalDialog from "@/views/Container/container/terminal/index.vue"
 import CodeDialog from "@/components/CodeDialog.vue"
-import PortJumpDialog from "@/components/PortJump.vue"
 import OpDialog from "@/components/OpDialog.vue"
 import LayoutContent from "@/components/LayoutContent.vue"
 import ComplexTable from "@/components/ComplexTable.vue"
 import TableSearch from "@/components/TableSearch.vue"
 import TableSetting from "@/components/TableSetting.vue"
 
-import { reactive, onMounted, ref, computed, h, resolveComponent } from "vue"
+import { reactive, onMounted, ref, computed, h } from "vue"
 import {
 	containerListStats,
 	containerOperator,
@@ -214,10 +212,8 @@ import {
 } from "@/api/modules/container"
 import { type Container } from "@/api/interface/container"
 import { t } from "@/i18n"
-import { MsgWarning } from "@/utils/message"
 import { useRouter } from "vue-router"
-import { NButton, NSpace, NCard, NDropdown, NTag } from "naive-ui"
-import Icon from "@/components/common/Icon.vue"
+import { NButton, NSpace, NDropdown, NTag } from "naive-ui"
 import TableColumnSelect from "@/components/TableColumnSelect.vue"
 
 const router = useRouter()
@@ -232,6 +228,47 @@ const stateOptions = computed(() => [
 	{ label: t("commons.status.exited"), value: "exited" },
 	{ label: t("commons.status.dead"), value: "dead" }
 ])
+
+const getContainerModeLabel = (row: Container.ContainerInfo) => {
+	switch (row.runtimeMode) {
+		case "rootless":
+			return t("container.rootless")
+		case "rootful":
+			return t("container.rootful")
+		default:
+			return t("container.defaultMode")
+	}
+}
+
+const getContainerSourceLabel = (row: Container.ContainerInfo) => {
+	switch (row.sourceType) {
+		case "app":
+			return t("container.typeApp")
+		case "pipeline":
+			return t("container.typePipeline")
+		case "compose":
+			return t("container.typeCompose")
+		case "website":
+			return t("container.typeWebsite")
+		default:
+			return t("container.typeManual")
+	}
+}
+
+const getContainerSourceTagType = (row: Container.ContainerInfo) => {
+	switch (row.sourceType) {
+		case "app":
+			return "success"
+		case "pipeline":
+			return "warning"
+		case "compose":
+			return "info"
+		case "website":
+			return "primary"
+		default:
+			return "default"
+	}
+}
 
 const loading = ref(false)
 const data = ref()
@@ -256,7 +293,6 @@ const searchName = ref()
 const searchState = ref("all")
 const dialogUpgradeRef = ref()
 const dialogCommitRef = ref()
-const dialogPortJumpRef = ref()
 const opRef = ref()
 const includeAppStore = ref()
 const columns = ref([
@@ -318,107 +354,65 @@ const columns = ref([
 	{
 		title: t("container.ip"),
 		key: "network",
-		width: 100
+		width: 140,
+		render(row: Container.ContainerInfo) {
+			const ips = Array.isArray(row.network) ? row.network.filter(Boolean) : []
+			if (!ips.length) {
+				return "--"
+			}
+			return h(
+				"div",
+				{ class: "text-xs leading-5" },
+				ips.map((ip: string) => h("div", { key: ip }, ip))
+			)
+		}
 	},
 	{
-		title: t("container.source"),
+		title: t("container.runtimeType"),
 		key: "source",
-		width: 110,
+		width: 210,
 		render(row: Container.ContainerInfo) {
-			if (!row.hasLoad) {
-				return h("div", {}, h("n-button", { loading: true, text: true, size: "small" }, { default: () => "" }))
-			}
-			return h("div", [
-				h("div", { class: "text-xs" }, `CPU: ${row.cpuPercent?.toFixed(2) ?? "--"}%`),
+			const tags = [
 				h(
-					"div",
-					{ class: "inline-block text-xs" },
-					`${t("monitor.memory")}: ${row.memoryPercent?.toFixed(2) ?? "--"}%`
+					NTag,
+					{
+						size: "small",
+						bordered: false,
+						type: row.runtimeKind === "docker" ? "success" : "warning"
+					},
+					{ default: () => row.runtimeKind || "-" }
 				),
 				h(
-					resolveComponent("n-popover"),
-					{ placement: "right", width: 500, trigger: "click" },
+					NTag,
 					{
-						trigger: () =>
-							h(Icon, {
-								name: "fluent:more-vertical-16-filled",
-								size: 18,
-								class: "ml-2 cursor-pointer text-blue-500 hover:text-blue-600"
-							}),
-						default: () =>
-							h("div", [
-								h("div", { class: "flex gap-4 justify-around w-full" }, [
-									h(
-										resolveComponent("n-statistic"),
-										{
-											class: "w-1/3",
-											label: t("container.cpuUsage"),
-											value: loadCPUValue(row.cpuTotalUsage ?? 0)
-										},
-										{
-											suffix: () => loadCPUUnit(row.cpuTotalUsage ?? 0)
-										}
-									),
-									h(
-										resolveComponent("n-statistic"),
-										{
-											class: "w-1/3",
-											label: t("container.cpuTotal"),
-											value: loadCPUValue(row.systemUsage ?? 0)
-										},
-										{
-											suffix: () => loadCPUUnit(row.systemUsage ?? 0)
-										}
-									),
-									h(resolveComponent("n-statistic"), {
-										class: "w-1/3",
-										label: t("container.core"),
-										value: Array.isArray(row.percpuUsage)
-											? row.percpuUsage.length
-											: (row.percpuUsage ?? "--")
-									})
-								]),
-								h("div", { class: "flex gap-4 justify-around w-full mt-4" }, [
-									h(
-										resolveComponent("n-statistic"),
-										{
-											class: "w-1/3",
-											label: t("container.memUsage"),
-											value: loadMemValue(row.memoryUsage ?? 0),
-											precision: 2
-										},
-										{
-											suffix: () => loadMemUnit(row.memoryUsage ?? 0)
-										}
-									),
-									h(
-										resolveComponent("n-statistic"),
-										{
-											class: "w-1/3",
-											label: t("container.memCache"),
-											value: loadMemValue(row.memoryCache ?? 0),
-											precision: 2
-										},
-										{
-											suffix: () => loadMemUnit(row.memoryCache ?? 0)
-										}
-									),
-									h(
-										resolveComponent("n-statistic"),
-										{
-											class: "w-1/3",
-											label: t("container.memTotal"),
-											value: loadMemValue(row.memoryLimit ?? 0),
-											precision: 2
-										},
-										{
-											suffix: () => loadMemUnit(row.memoryLimit ?? 0)
-										}
-									)
-								])
-							])
-					}
+						size: "small",
+						bordered: false,
+						type: row.runtimeMode === "rootless" ? "warning" : "default"
+					},
+					{ default: () => getContainerModeLabel(row) }
+				),
+				h(
+					NTag,
+					{
+						size: "small",
+						bordered: false,
+						type: getContainerSourceTagType(row) as any
+					},
+					{ default: () => getContainerSourceLabel(row) }
 				)
+			]
+			return h("div", { class: "space-y-1" }, [
+				h(NSpace, { size: "small", wrap: true }, { default: () => tags }),
+				h(
+					"div",
+					{ class: "text-xs text-gray-500 leading-5" },
+					`${t("container.runUser")}: ${row.runUser || t("container.userDefault")}`
+				),
+				row.appInstallName
+					? h("div", { class: "text-xs text-gray-500 leading-5" }, row.appInstallName)
+					: row.websites?.length
+						? h("div", { class: "text-xs text-gray-500 leading-5" }, row.websites[0])
+						: null
 			])
 		}
 	},
@@ -479,7 +473,8 @@ const columns = ref([
 								dialogContainerLogRef.value!.acceptParams({
 									containerID: row.containerID,
 									container: row.name,
-									runtimeHost: row.runtimeHost || ""
+									runtimeHost: row.runtimeHost || "",
+									runtimeSummary: `${row.runtimeKind || "Runtime"} / ${getContainerModeLabel(row)} / ${t("container.runUser")}: ${row.runUser || t("container.userDefault")}`
 								})
 						},
 						{ default: () => t("commons.button.log") }
@@ -558,22 +553,6 @@ const loadStatus = async () => {
 			dockerStatus.value = "Failed"
 			loading.value = false
 		})
-}
-
-const goDashboard = async (port: any) => {
-	if (port.indexOf("127.0.0.1") !== -1) {
-		MsgWarning(t("container.unExposedPort"))
-		return
-	}
-	if (port.indexOf(":") === -1) {
-		MsgWarning(t("commons.msg.errPort"))
-		return
-	}
-	let portEx = port.match(/:(\d+)/)[1]
-
-	let matches = port.match(new RegExp(":", "g"))
-	let ip = matches && matches.length > 1 ? "ipv6" : "ipv4"
-	dialogPortJumpRef.value.acceptParams({ port: portEx, ip: ip })
 }
 
 const goSetting = async () => {
@@ -684,38 +663,6 @@ const loadStats = async () => {
 	}
 }
 
-const loadCPUUnit = (t: number) => {
-	const num = 1000
-	if (t < num) return " ns"
-	if (t < Math.pow(num, 2)) return " μs"
-	if (t < Math.pow(num, 3)) return " ms"
-	return " s"
-}
-function loadCPUValue(t: number) {
-	const num = 1000
-	if (t < num) return t
-	if (t < Math.pow(num, 2)) return Number((t / num).toFixed(2))
-	if (t < Math.pow(num, 3)) return Number((t / Math.pow(num, 2)).toFixed(2))
-	return Number((t / Math.pow(num, 3)).toFixed(2))
-}
-const loadMemUnit = (t: number) => {
-	if (t == 0) {
-		return ""
-	}
-	const num = 1024
-	if (t < num) return " B"
-	if (t < Math.pow(num, 2)) return " KiB"
-	if (t < Math.pow(num, 3)) return " MiB"
-	return " GiB"
-}
-function loadMemValue(t: number) {
-	const num = 1024
-	if (t < num) return t
-	if (t < Math.pow(num, 2)) return Number((t / num).toFixed(2))
-	if (t < Math.pow(num, 3)) return Number((t / Math.pow(num, 2)).toFixed(2))
-	return Number((t / Math.pow(num, 3)).toFixed(2))
-}
-
 const dialogOperateRef = ref()
 const onEdit = async (row: Container.ContainerInfo) => {
 	const res = await loadContainerInfo(row.containerID, row.runtimeHost || "")
@@ -749,7 +696,11 @@ const onOpenDialog = async (
 
 const dialogMonitorRef = ref()
 const onMonitor = (row: any) => {
-	dialogMonitorRef.value!.acceptParams({ containerID: row.containerID, container: row.name })
+	dialogMonitorRef.value!.acceptParams({
+		containerID: row.containerID,
+		container: row.name,
+		runtimeSummary: `${row.runtimeKind || "Runtime"} / ${getContainerModeLabel(row)} / ${t("container.runUser")}: ${row.runUser || t("container.userDefault")}`
+	})
 }
 
 const dialogTerminalRef = ref()
@@ -757,7 +708,8 @@ const onTerminal = (row: any) => {
 	dialogTerminalRef.value!.acceptParams({
 		containerID: row.containerID,
 		container: row.name,
-		runtimeHost: row.runtimeHost || ""
+		runtimeHost: row.runtimeHost || "",
+		runtimeSummary: `${row.runtimeKind || "Runtime"} / ${getContainerModeLabel(row)} / ${t("container.runUser")}: ${row.runUser || t("container.userDefault")}`
 	})
 }
 
@@ -767,7 +719,8 @@ const onInspect = async (row: Container.ContainerInfo) => {
 	let detailInfo = JSON.stringify(JSON.parse(res.data), null, 2)
 	let param = {
 		header: t("commons.button.view"),
-		detailInfo: detailInfo
+		detailInfo: detailInfo,
+		summary: `${row.runtimeKind || "Runtime"} / ${getContainerModeLabel(row)} / ${t("container.runUser")}: ${row.runUser || t("container.userDefault")}`
 	}
 	console.log("myDetail", myDetail.value)
 	myDetail.value?.acceptParams(param)

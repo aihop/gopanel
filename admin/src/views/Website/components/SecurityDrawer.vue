@@ -27,6 +27,12 @@
               <div class="text-xs uppercase tracking-[0.18em] text-slate-300">Website Security Center</div>
               <div class="mt-2 text-3xl font-semibold">{{ securityScore }}</div>
               <div class="mt-2 text-sm text-slate-300">{{ securitySummaryText }}</div>
+              <div
+                v-if="bindingRuntimeText"
+                class="mt-2 text-xs text-slate-300"
+              >
+                {{ bindingRuntimeText }}
+              </div>
             </div>
             <div class="rounded-2xl bg-white/10 px-4 py-3 text-right">
               <div class="text-xs text-slate-300">主机风险</div>
@@ -330,6 +336,8 @@ import type { Website } from "@/api/interface/website"
 import { computed, ref } from "vue"
 import { useDialog, useMessage } from "naive-ui"
 import { websiteUpdateAPI } from "@/api/modules/website"
+import { ListAppInstalled } from "@/api/modules/apps"
+import { getPipelinePage } from "@/api/modules/pipeline"
 import { getSSHLoginLogs } from "@/api/modules/log"
 import http from "@/api"
 import { formatTime } from "@/utils/date"
@@ -366,6 +374,8 @@ const sshAlerts = ref<Log.SSHLoginLog[]>([])
 const operatingIP = ref("")
 const blockedIPs = ref<string[]>([])
 const blockedRuleItems = ref<Host.RuleInfo[]>([])
+const appInstallMap = ref<Record<number, any>>({})
+const pipelineMap = ref<Record<number, any>>({})
 
 const rateLimitOptions = [
   { label: "关闭", value: "none" },
@@ -433,6 +443,21 @@ const securitySummaryText = computed(() => {
 
 const exposedPortsText = computed(() => {
   return exposedPorts.value.length ? exposedPorts.value.join("、") : "未发现高危端口暴露"
+})
+
+const bindingRuntimeText = computed(() => {
+  if (!website.value) return ""
+  if (website.value.codeSource === "app_store" && website.value.appInstallId) {
+    const item = appInstallMap.value[website.value.appInstallId]
+    if (!item) return `绑定目标：应用商店应用 #${website.value.appInstallId}`
+    return buildBindingText("应用商店", item.name, item)
+  }
+  if (website.value.codeSource === "pipeline" && website.value.pipelineId) {
+    const item = pipelineMap.value[website.value.pipelineId]
+    if (!item) return `绑定目标：流水线 #${website.value.pipelineId}`
+    return buildBindingText("流水线", item.name, item)
+  }
+  return ""
 })
 
 function normalizeIP(value: string) {
@@ -514,6 +539,28 @@ async function loadSecuritySignals() {
     console.error(error)
   } finally {
     securityLoading.value = false
+  }
+}
+
+async function loadBindingMeta() {
+  try {
+    if (website.value.appInstallId) {
+      const res = await ListAppInstalled()
+      const list = Array.isArray(res.data) ? res.data : []
+      const nextMap: Record<number, any> = {}
+      for (const item of list) nextMap[item.id] = item
+      appInstallMap.value = nextMap
+    }
+    if (website.value.pipelineId) {
+      const res = await getPipelinePage({ page: 1, limit: 200 })
+      const list = Array.isArray(res.data?.items) ? res.data.items : []
+      const nextMap: Record<number, any> = {}
+      for (const item of list) nextMap[item.id] = item
+      pipelineMap.value = nextMap
+    }
+  } catch (error) {
+    appInstallMap.value = {}
+    pipelineMap.value = {}
   }
 }
 
@@ -648,7 +695,34 @@ function open(record: Website.WebsiteDTO) {
     hstsEnabled: !!record.hstsEnabled,
   }
   visible.value = true
+  loadBindingMeta()
   loadSecuritySignals()
+}
+
+function getRuntimeKindLabel(item: any) {
+  const kind = String(item?.runtimeKind || "").toLowerCase()
+  if (kind === "podman") return "Podman"
+  if (kind === "docker") return "Docker"
+  return "Runtime"
+}
+
+function getRuntimeModeLabel(item: any) {
+  switch (String(item?.runtimeMode || "").toLowerCase()) {
+    case "rootless":
+      return "rootless"
+    case "rootful":
+      return "rootful"
+    default:
+      return "default"
+  }
+}
+
+function getRunUserLabel(item: any) {
+  return item?.runUser || "镜像默认"
+}
+
+function buildBindingText(source: string, name: string, item: any) {
+  return `绑定目标：${source} · ${name} · ${getRuntimeKindLabel(item)}/${getRuntimeModeLabel(item)} · 运行用户：${getRunUserLabel(item)}`
 }
 
 function close() {

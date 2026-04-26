@@ -11,6 +11,13 @@
         closable
       >
         <div class="space-y-4">
+          <div
+            v-if="bindingRuntimeText"
+            class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600"
+          >
+            <div class="font-medium text-slate-800">当前绑定目标</div>
+            <div class="mt-1">{{ bindingRuntimeText }}</div>
+          </div>
           <div class="flex justify-between items-center mb-6">
             <div class="text-sm text-slate-500">
               <span v-if="website?.type === 'deployment'">
@@ -79,6 +86,12 @@
       title="发布新版本"
     >
       <div class="mt-4">
+        <div
+          v-if="bindingRuntimeText"
+          class="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600"
+        >
+          {{ bindingRuntimeText }}
+        </div>
         <div class="mb-4 text-slate-500 text-sm">上传包含最新代码的压缩包 (.zip)。系统将自动解压并创建一个新版本，然后把流量切换到新版本上。</div>
         <n-upload
           :custom-request="customRequest"
@@ -97,6 +110,12 @@
       :show-icon="false"
     >
       <div class="mt-4">
+        <div
+          v-if="bindingRuntimeText"
+          class="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600"
+        >
+          {{ bindingRuntimeText }}
+        </div>
         <div class="mb-4 text-slate-500 text-sm">
           请输入或选择要部署的容器镜像地址。例如：<code>shoply-base:v1.0.1</code>。系统将自动拉取并启动新容器，完成版本更迭。
         </div>
@@ -124,13 +143,15 @@
 
 <script setup lang="ts">
 // @ts-nocheck
-import { ref, h } from "vue"
+import { computed, ref, h } from "vue"
 import { NButton, NTag, NSpace, useMessage, useDialog, NModal, NUpload } from "naive-ui"
 import { formatTime } from "@/utils/date"
 import { UploadFileData } from "@/api/modules/file"
 import type { UploadCustomRequestOptions } from "naive-ui"
 import { WebsiteDeployDeleteAPI, WebsiteDeployListAPI, WebsiteDeploySwitchAPI, WebsiteDeployTriggerAPI, WebsiteDeploySnapshotAPI } from "@/api/modules/website"
 import { listAllImage } from "@/api/modules/container"
+import { ListAppInstalled } from "@/api/modules/apps"
+import { getPipelinePage } from "@/api/modules/pipeline"
 
 const visible = ref(false)
 const showUploadModal = ref(false)
@@ -144,11 +165,31 @@ const selectedDeploy = ref<any>(null)
 
 const localImageOptions = ref<{ label: string; value: string }[]>([])
 const targetImageTag = ref("")
+const appInstallMap = ref<Record<number, any>>({})
+const pipelineMap = ref<Record<number, any>>({})
 
 const message = useMessage()
 const dialog = useDialog()
 
 const emit = defineEmits(["confirm"])
+
+const bindingRuntimeText = computed(() => {
+	if (!website.value) return ""
+	if (website.value.codeSource === "app_store" && website.value.appInstallId) {
+		const item = appInstallMap.value[website.value.appInstallId]
+		if (!item) return `应用商店应用 #${website.value.appInstallId}`
+		return buildBindingText("应用商店", item.name, item)
+	}
+	if (website.value.codeSource === "pipeline" && website.value.pipelineId) {
+		const item = pipelineMap.value[website.value.pipelineId]
+		if (!item) return `流水线 #${website.value.pipelineId}`
+		return buildBindingText("流水线", item.name, item)
+	}
+	if (website.value.codeSource === "git") {
+		return `自定义镜像 · 当前镜像：${website.value.engineEnv || website.value.proxy || "-"}`
+	}
+	return ""
+})
 
 async function handleCreateSnapshot() {
 	snapshotLoading.value = true
@@ -214,6 +255,24 @@ async function openImageDeployModal() {
 	}
 }
 
+async function loadBindingMeta() {
+	if (!website.value) return
+	try {
+		if (website.value.appInstallId) {
+			const res = await ListAppInstalled()
+			const list = Array.isArray(res.data) ? res.data : []
+			appInstallMap.value = Object.fromEntries(list.map((item: any) => [item.id, item]))
+		}
+		if (website.value.pipelineId) {
+			const res: any = await getPipelinePage({ page: 1, limit: 200 })
+			const list = Array.isArray(res?.data?.items) ? res.data.items : []
+			pipelineMap.value = Object.fromEntries(list.map((item: any) => [item.id, item]))
+		}
+	} catch (error) {
+		console.error(error)
+	}
+}
+
 async function handleImageDeploy() {
 	if (!targetImageTag.value) {
 		message.warning("请输入镜像地址")
@@ -241,6 +300,9 @@ function open(row: any) {
 	website.value = row
 	visible.value = true
 	selectedDeploy.value = null
+	appInstallMap.value = {}
+	pipelineMap.value = {}
+	loadBindingMeta()
 	fetchData()
 }
 
@@ -296,6 +358,32 @@ function handleDelete(row: any) {
 			}
 		}
 	})
+}
+
+function getRuntimeKindLabel(item: any) {
+	const kind = String(item?.runtimeKind || "").toLowerCase()
+	if (kind === "podman") return "Podman"
+	if (kind === "docker") return "Docker"
+	return "Runtime"
+}
+
+function getRuntimeModeLabel(item: any) {
+	switch (String(item?.runtimeMode || "").toLowerCase()) {
+		case "rootless":
+			return "rootless"
+		case "rootful":
+			return "rootful"
+		default:
+			return "default"
+	}
+}
+
+function getRunUserLabel(item: any) {
+	return item?.runUser || "镜像默认"
+}
+
+function buildBindingText(source: string, name: string, item: any) {
+	return `${source} · ${name} · 运行时：${getRuntimeKindLabel(item)}/${getRuntimeModeLabel(item)} · 用户：${getRunUserLabel(item)}`
 }
 
 const columns = [

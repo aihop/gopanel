@@ -8,6 +8,9 @@ type DaemonJsonConf struct {
 	ContainerType string   `json:"containerType"`
 	RuntimeKind   string   `json:"runtimeKind"`
 	RuntimeHost   string   `json:"runtimeHost"`
+	ConfiguredHost string  `json:"configuredHost"`
+	HostPinned    bool     `json:"hostPinned"`
+	RootlessHost  bool     `json:"rootlessHost"`
 	Capabilities  RuntimeCapabilities `json:"capabilities"`
 	IsSwarm       bool     `json:"isSwarm"`
 	Status        string   `json:"status"`

@@ -196,6 +196,9 @@ func (s *Server) doAction(ctx context.Context, req proto.Request) (string, error
 	case "COMPOSE_INSTALL":
 		out, err := s.actionComposeInstall(ctx, req.Params)
 		return out, err
+	case "MYSQL_CLIENT_INSTALL":
+		out, err := s.actionMysqlClientInstall(ctx, req.Params)
+		return out, err
 	case "SECURITY_SCAN_SSH":
 		return s.actionSecurityScanSSH(ctx, req.Params)
 	case "SECURITY_FIX_SSH":
@@ -249,6 +252,8 @@ func lockKeyForAction(action string) string {
 		return "systemd_enable_linger"
 	case "COMPOSE_INSTALL":
 		return "compose_install"
+	case "MYSQL_CLIENT_INSTALL":
+		return "mysql_client_install"
 	case "RESTART_HOST":
 		return "restart_host"
 	case "FILE_WRITE", "FILE_MKDIR", "FILE_CREATE", "FILE_REMOVE", "FILE_CHMOD", "FILE_CHOWN":

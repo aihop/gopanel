@@ -1,21 +1,29 @@
 lu
 <template>
-  <FtEditor
-    v-model="content"
-    language="ini"
-    height="400px"
-  />
-  <n-space class="mt-6">
-    <n-button
-      type="primary"
-      :loading="saving"
-      @click="onSave"
-    >保存</n-button>
-    <n-button
-      class="ml-2"
-      @click="onReload"
-    >重新加载</n-button>
-  </n-space>
+  <div>
+    <div
+      v-if="scopeSummary"
+      class="mb-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600"
+    >
+      {{ scopeSummary }}
+    </div>
+    <FtEditor
+      v-model="content"
+      language="ini"
+      height="400px"
+    />
+    <n-space class="mt-6">
+      <n-button
+        type="primary"
+        :loading="saving"
+        @click="onSave"
+      >保存</n-button>
+      <n-button
+        class="ml-2"
+        @click="onReload"
+      >重新加载</n-button>
+    </n-space>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -23,6 +31,10 @@ import { ref, onMounted } from "vue"
 import { NButton, useMessage } from "naive-ui"
 import FtEditor from "@/components/FtEditor/index.vue"
 import { httpDefaultConfigAPI, httpDefaultUpdateAPI } from "@/api/modules/http"
+
+defineProps<{
+	scopeSummary?: string
+}>()
 
 const message = useMessage()
 const content = ref("")
