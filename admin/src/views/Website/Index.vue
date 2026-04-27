@@ -184,7 +184,6 @@ import { httpDefaultReloadAPI, httpDefaultStatusAPI, httpDefaultStopAPI } from "
 import { AgentEnsureAPI, AgentStatusAPI } from "@/api/modules/agent"
 import { websiteDeleteAPI, websiteListAPI } from "@/api/modules/website"
 import { ListAppInstalled } from "@/api/modules/apps"
-import { getPipelinePage } from "@/api/modules/pipeline"
 import { NButton, NSpace, NTag, useDialog, useMessage, NAlert } from "naive-ui"
 import { h, onMounted, ref, watch } from "vue"
 import HttpConfigFile from "./components/HttpConfigFile.vue"
@@ -196,6 +195,9 @@ import { formatTime } from "@/utils/date"
 import { t } from "@/i18n"
 import { useAuthStore } from "@/store/auth"
 import OpDialog from "@/components/OpDialog.vue"
+import { buildRuntimeDetailText } from "@/utils/runtime"
+import { listAllPipelines } from "@/utils/pipeline"
+import { needsWebsiteBindingLookup, resolveWebsiteBindingMeta } from "@/utils/websiteRuntime"
 
  
 const message = useMessage()
@@ -332,46 +334,17 @@ function getSecuritySummary(row: Website.WebsiteDTO) {
 	return tags
 }
 
-function getRuntimeKindLabel(item: any) {
-	const kind = String(item?.runtimeKind || "").toLowerCase()
-	if (kind === "podman") return "Podman"
-	if (kind === "docker") return "Docker"
-	return "Runtime"
-}
-
-function getRuntimeModeLabel(item: any) {
-	switch (String(item?.runtimeMode || "").toLowerCase()) {
-		case "rootless":
-			return "rootless"
-		case "rootful":
-			return "rootful"
-		default:
-			return "default"
-	}
-}
-
-function getRunUserLabel(item: any) {
-	return item?.runUser || "镜像默认"
-}
-
 function getWebsiteBindingMeta(row: Website.WebsiteDTO) {
-	if (row.codeSource === "app_store" && row.appInstallId) {
-		const item = appInstallMap.value[row.appInstallId]
-		if (!item) return { source: "应用商店", detail: `应用 #${row.appInstallId}` }
-		return {
-			source: "应用商店",
-			detail: `${item.name} · ${getRuntimeKindLabel(item)}/${getRuntimeModeLabel(item)} · 用户:${getRunUserLabel(item)}`
-		}
-	}
-	if (row.codeSource === "pipeline" && row.pipelineId) {
-		const item = pipelineMap.value[row.pipelineId]
-		if (!item) return { source: "流水线", detail: `流水线 #${row.pipelineId}` }
-		return {
-			source: "流水线",
-			detail: `${item.name} · ${getRuntimeKindLabel(item)}/${getRuntimeModeLabel(item)} · 用户:${getRunUserLabel(item)}`
-		}
-	}
-	return null
+	return resolveWebsiteBindingMeta(row, {
+		appInstallMap: appInstallMap.value,
+		pipelineMap: pipelineMap.value
+	}, {
+		includeSourceInDetail: false,
+		kindFallback: "Runtime",
+		userFallback: "镜像默认",
+		runtimePrefix: "",
+		runUserPrefix: "用户:"
+	})
 }
 
 const columns: DataTableColumns<any> = [
@@ -607,7 +580,12 @@ async function fetchData() {
 		const res = await websiteListAPI()
 		tableData.value = res.data.items || []
 		total.value = res.data.total || 0
-		await fetchBindingMeta()
+		if (tableData.value.some(row => needsWebsiteBindingLookup(row))) {
+			await fetchBindingMeta()
+		} else {
+			appInstallMap.value = {}
+			pipelineMap.value = {}
+		}
 	} catch (error: any) {
 	} finally {
 		loading.value = false
@@ -616,9 +594,9 @@ async function fetchData() {
 
 async function fetchBindingMeta() {
 	try {
-		const [appsRes, pipelinesRes] = await Promise.all([
+		const [appsRes, pipelines] = await Promise.all([
 			ListAppInstalled(),
-			getPipelinePage({ page: 1, limit: 200 })
+			listAllPipelines()
 		])
 		const apps = Array.isArray(appsRes.data) ? appsRes.data : []
 		const nextAppMap: Record<number, any> = {}
@@ -626,7 +604,6 @@ async function fetchBindingMeta() {
 			nextAppMap[item.id] = item
 		}
 		appInstallMap.value = nextAppMap
-		const pipelines = Array.isArray(pipelinesRes.data?.items) ? pipelinesRes.data.items : []
 		const nextPipelineMap: Record<number, any> = {}
 		for (const item of pipelines) {
 			nextPipelineMap[item.id] = item

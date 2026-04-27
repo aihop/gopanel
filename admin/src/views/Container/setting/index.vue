@@ -1,55 +1,48 @@
 <template>
   <div>
     <div
-      v-if="precheck"
+      v-if="validate"
       class="bg-base-100 mt-3 rounded-[20px] p-4 px-6 shadow"
     >
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div class="flex items-center gap-3">
           <n-tag
             class="uppercase"
-            :type="precheck.runtimeKind === 'docker' ? 'success' : 'warning'"
+            :type="validate.runtimeKind === 'docker' ? 'success' : validate.runtimeKind === 'podman' ? 'warning' : 'default'"
           >
-            Runtime: {{ precheck.runtimeKind }}
+            {{ runtimeBadgeText }}
           </n-tag>
           <n-tag
             size="small"
-            :type="precheck.hostPinned ? 'success' : 'default'"
+            :type="validate.hostPinned ? 'success' : 'default'"
           >
-            {{ precheck.hostPinned ? '固定 Socket' : '自动探测' }}
+            {{ validate.hostPinned ? '固定 Socket' : '自动探测' }}
           </n-tag>
-          <n-tag
-            v-if="precheck.runtimeKind === 'podman'"
-            size="small"
-            :type="precheck.rootlessHost ? 'warning' : 'info'"
-          >
-            {{ precheck.rootlessHost ? 'rootless' : 'rootful' }}
-          </n-tag>
-          <span class="text-sm text-gray-500">Current: {{ precheck.runtimeHost || '-' }}</span>
-          <span class="text-sm text-gray-500">Configured: {{ precheck.configuredHost || '-' }}</span>
-          <span class="text-sm text-gray-500">OS: {{ precheck.os }}/{{ precheck.arch }}</span>
+          <span class="text-sm text-gray-500">Current: {{ currentRuntimeHost }}</span>
+          <span class="text-sm text-gray-500">Configured: {{ validate.configuredHost || '-' }}</span>
+          <span class="text-sm text-gray-500">OS: {{ validate.os }}/{{ validate.arch }}</span>
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <n-tag
             size="small"
-            :type="precheck.compose?.ok ? 'success' : 'error'"
+            :type="validate.compose?.ok ? 'success' : 'error'"
           >
-            Compose: {{ precheck.compose?.ok ? (precheck.compose.bin + ' ' + precheck.compose.prefix) : '不可用' }}
+            Compose: {{ validate.compose?.ok ? (validate.compose.bin + ' ' + validate.compose.prefix) : '不可用' }}
           </n-tag>
           <n-tag
             size="small"
-            :type="precheck.gpc?.reachable ? 'success' : 'warning'"
+            :type="validate.gpc?.reachable ? 'success' : 'warning'"
           >
-            GPC: {{ precheck.gpc?.reachable ? 'OK' : '未连接' }}
+            GPC: {{ validate.gpc?.reachable ? 'OK' : '未连接' }}
           </n-tag>
         </div>
       </div>
       <div
-        v-if="precheck.notes?.length"
+        v-if="validate.notes?.length"
         class="mt-3 space-y-1 text-xs text-orange-600"
       >
         <div
-          v-for="(n, i) in precheck.notes"
+          v-for="(n, i) in validate.notes"
           :key="i"
         >- {{ n }}</div>
       </div>
@@ -57,7 +50,7 @@
         v-if="dockerOnly"
         class="mt-3 rounded-lg bg-orange-50 p-3 text-xs text-orange-700"
       >
-        当前运行时为 {{ precheck.runtimeKind }}，此页面的 daemon.json/iptables 等配置主要针对 Docker。Podman 模式下仅支持镜像加速（Linux 需连接 GPC；macOS 需 podman machine 可用）。
+        当前运行时为 {{ validate.runtimeKind }}，此页面的 daemon.json/iptables 等配置主要针对 Docker。Podman 模式下仅支持镜像加速（Linux 需连接 GPC；macOS 需 podman machine 可用）。
       </div>
     </div>
 
@@ -110,7 +103,7 @@
             是否重启
           </n-popconfirm>
           <n-button
-            :disabled="!precheck"
+            :disabled="!validate"
             :type="repairHintType"
             @click="openRepairModal"
           >
@@ -146,7 +139,7 @@
                     <n-input
                       v-if="daemon.registryMirrors"
                       type="textarea"
-                      :disabled="!(daemon.capabilities?.daemonJson || daemon.capabilities?.podmanRegistriesConf || (precheck?.os === 'linux' && precheck?.runtimeKind === 'podman' && precheck?.gpc?.reachable))"
+                      :disabled="!(daemon.capabilities?.daemonJson || daemon.capabilities?.podmanRegistriesConf || (validate?.os === 'linux' && validate?.runtimeKind === 'podman' && validate?.gpc?.reachable))"
                       :value="daemon.registryMirrors.join('\n')"
                       style="min-height: 34px"
                       placeholder="https://dockerpull.pw\nhttps://dockerhub.icu\nhttps://hub.rat.dev\nhttps://register.librax.org\nhttps://docker-0.unsee.tech"
@@ -154,7 +147,7 @@
                       @update:value="updateMirrorUrls($event, 'registryMirrors')"
                     />
                     <n-button
-                      :disabled="!(daemon.capabilities?.daemonJson || daemon.capabilities?.podmanRegistriesConf || (precheck?.os === 'linux' && precheck?.runtimeKind === 'podman' && precheck?.gpc?.reachable))"
+                      :disabled="!(daemon.capabilities?.daemonJson || daemon.capabilities?.podmanRegistriesConf || (validate?.os === 'linux' && validate?.runtimeKind === 'podman' && validate?.gpc?.reachable))"
                       @click="openDrawer('registryMirrors')"
                     >
                       <template #icon>
@@ -374,15 +367,15 @@
       <div class="space-y-3">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <div class="text-sm text-gray-600">
-            Runtime: {{ precheck?.runtimeKind || '-' }} / Current: {{ precheck?.runtimeHost || '-' }}
+            {{ runtimeDetailText }}
           </div>
           <div class="text-xs text-gray-500">
-            Configured: {{ precheck?.configuredHost || '-' }} / 模式: {{ precheck?.hostPinned ? '固定 Socket' : '自动探测' }}
+            Configured: {{ validate?.configuredHost || '-' }} / 模式: {{ validate?.hostPinned ? '固定 Socket' : '自动探测' }}
           </div>
           <n-button
             v-if="canAutoRepair"
             :loading="autoRepairLoading"
-            :disabled="!precheck?.gpc?.reachable"
+            :disabled="!validate?.gpc?.reachable"
             type="primary"
             @click="autoRepair"
           >
@@ -390,23 +383,23 @@
           </n-button>
         </div>
         <div class="flex flex-wrap items-center gap-2">
-          <n-tag :type="precheck?.runtime?.serviceActive ? 'success' : 'warning'">
-            Service: {{ precheck?.runtime?.serviceActive ? 'active' : 'inactive' }}
+          <n-tag :type="validate?.runtime?.serviceActive ? 'success' : 'warning'">
+            Service: {{ validate?.runtime?.serviceActive ? 'active' : 'inactive' }}
           </n-tag>
-          <n-tag :type="precheck?.runtime?.apiReady ? 'success' : 'warning'">
-            API: {{ precheck?.runtime?.apiReady ? 'ready' : 'not ready' }}
+          <n-tag :type="validate?.runtime?.apiReady ? 'success' : 'warning'">
+            API: {{ validate?.runtime?.apiReady ? 'ready' : 'not ready' }}
           </n-tag>
-          <n-tag :type="precheck?.gpc?.reachable ? 'success' : 'warning'">
-            GPC: {{ precheck?.gpc?.reachable ? 'OK' : '未连接' }}
+          <n-tag :type="validate?.gpc?.reachable ? 'success' : 'warning'">
+            GPC: {{ validate?.gpc?.reachable ? 'OK' : '未连接' }}
           </n-tag>
         </div>
 
         <div
-          v-if="precheck?.notes?.length"
+          v-if="validate?.notes?.length"
           class="rounded-lg bg-orange-50 p-3 text-xs text-orange-700"
         >
           <div
-            v-for="(n, i) in precheck.notes"
+            v-for="(n, i) in validate.notes"
             :key="i"
           >- {{ n }}</div>
         </div>
@@ -415,7 +408,7 @@
           <n-button
             v-if="canAutoRepair"
             :loading="repairSocketLoading"
-            :disabled="!precheck?.gpc?.reachable || autoRepairLoading"
+            :disabled="!validate?.gpc?.reachable || autoRepairLoading"
             type="warning"
             @click="repairPodmanSocket"
           >
@@ -424,7 +417,7 @@
           <n-button
             v-if="canAutoRepair"
             :loading="repairLingerLoading"
-            :disabled="!precheck?.gpc?.reachable || autoRepairLoading"
+            :disabled="!validate?.gpc?.reachable || autoRepairLoading"
             @click="repairLinger"
           >
             启用 Linger（rootless 保活）
@@ -432,7 +425,7 @@
         </div>
 
         <div
-          v-if="precheck && canAutoRepair && !precheck?.gpc?.reachable"
+          v-if="validate && canAutoRepair && !validate?.gpc?.reachable"
           class="text-xs text-gray-500"
         >
           GPC 未连接时无法执行一键修复，请先在服务器上启用/启动 gpc helper。
@@ -444,10 +437,11 @@
 
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onMounted, ref } from "vue"
-import { loadDaemonFile, updateDaemonUpdate, updateDaemonByfile, containerInstanceOperateAPI, containerDaemonConfigAPI, containerPrecheck, repairPodmanSocketAPI, repairSystemdLingerAPI } from "../../../api/modules/container"
+import { loadDaemonFile, updateDaemonUpdate, updateDaemonByfile, containerInstanceOperateAPI, containerDaemonConfigAPI, containerValidateAPI, repairPodmanSocketAPI, repairSystemdLingerAPI } from "../../../api/modules/container"
 import { dockerStatus, dockerStatusText } from "../../../enums/dockerStatus.enum"
 import { isSucc } from "../../../utils/is"
 import { useMessage } from "naive-ui"
+import { buildRuntimeBadgeText, buildRuntimeDetailText } from "../../../utils/runtime"
 
 const FtEditor = defineAsyncComponent(() => import("../../../components/FtEditor/index.vue"))
 const RebootAlert = defineAsyncComponent(() => import("../../../components/RebootAlert.vue"))
@@ -488,21 +482,39 @@ function clearDaemonRetry() {
 	}
 }
 
-const precheck = ref<any>(null)
+const validate = ref<any>(null)
+const currentRuntimeHost = computed(() => validate.value?.runtimeHost || "-")
+const runtimeBadgeText = computed(() =>
+	buildRuntimeBadgeText(validate.value, {
+		kindFallback: "Runtime",
+		rootlessLabel: "rootless",
+		rootfulLabel: "rootful",
+		defaultModeLabel: "default"
+	})
+)
+const runtimeDetailText = computed(() => {
+	const detail = buildRuntimeDetailText(validate.value, {
+		kindFallback: "Runtime",
+		userFallback: "面板默认",
+		runtimePrefix: "运行时：",
+		runUserPrefix: "运行用户："
+	})
+	return `${detail} · Current: ${currentRuntimeHost.value}`
+})
 const dockerOnly = computed(() => {
-	if (!precheck.value?.runtimeKind) return false
-	return precheck.value.runtimeKind !== "docker"
+	if (!validate.value?.runtimeKind) return false
+	return validate.value.runtimeKind !== "docker"
 })
 const canAutoRepair = computed(() => {
-	if (!precheck.value) return false
-	if (precheck.value?.os !== "linux") return false
-	if (precheck.value?.runtimeKind === "podman") return true
-	if (precheck.value?.runtimeKind === "docker" && !precheck.value?.cli?.docker && precheck.value?.cli?.podman) return true
+	if (!validate.value) return false
+	if (validate.value?.os !== "linux") return false
+	if (validate.value?.runtimeKind === "podman") return true
+	if (validate.value?.runtimeKind === "docker" && !validate.value?.cli?.docker && validate.value?.cli?.podman) return true
 	return false
 })
 const repairHintType = computed(() => {
-	if (!precheck.value) return "default"
-	if (precheck.value?.runtime?.serviceActive && !precheck.value?.runtime?.apiReady) return "warning"
+	if (!validate.value) return "default"
+	if (validate.value?.runtime?.serviceActive && !validate.value?.runtime?.apiReady) return "warning"
 	return "default"
 })
 
@@ -512,26 +524,26 @@ const repairLingerLoading = ref(false)
 const autoRepairLoading = ref(false)
 
 async function openRepairModal() {
-	await loadPrecheck()
+	await loadValidate()
 	showRepairModal.value = true
 	await autoRepair()
 }
 
 async function autoRepair() {
 	if (autoRepairLoading.value) return
-	await loadPrecheck()
-	if (!precheck.value) return
+	await loadValidate()
+	if (!validate.value) return
 	if (!canAutoRepair.value) return
-	if (!precheck.value?.gpc?.reachable) return
-	if (precheck.value?.runtime?.apiReady) return
+	if (!validate.value?.gpc?.reachable) return
+	if (validate.value?.runtime?.apiReady) return
 
 	autoRepairLoading.value = true
 	try {
 		message.info("正在尝试自动修复…")
-		const runtimeInfo: any = precheck.value?.runtime || {}
-		const isRootless = !!runtimeInfo.rootless || !!precheck.value?.rootlessHost
-		const notes = Array.isArray(precheck.value?.notes) ? precheck.value.notes.join(" ").toLowerCase() : ""
-		const maybeRootless = typeof precheck.value?.runtimeHost === "string" && precheck.value.runtimeHost.includes("/run/user/")
+		const runtimeInfo: any = validate.value?.runtime || {}
+		const isRootless = !!runtimeInfo.rootless || !!validate.value?.rootlessHost
+		const notes = Array.isArray(validate.value?.notes) ? validate.value.notes.join(" ").toLowerCase() : ""
+		const maybeRootless = typeof validate.value?.runtimeHost === "string" && validate.value.runtimeHost.includes("/run/user/")
 		const needLinger =
 			isRootless ||
 			maybeRootless ||
@@ -541,15 +553,15 @@ async function autoRepair() {
 			notes.includes("cgroupv2")
 		if (needLinger) {
 			await repairLinger()
-			await loadPrecheck()
-			if (precheck.value?.runtime?.apiReady) {
+			await loadValidate()
+			if (validate.value?.runtime?.apiReady) {
 				message.success("自动修复成功")
 				return
 			}
 		}
 		await repairPodmanSocket()
-		await loadPrecheck()
-		if (precheck.value?.runtime?.apiReady) {
+		await loadValidate()
+		if (validate.value?.runtime?.apiReady) {
 			message.success("自动修复成功")
 			return
 		}
@@ -565,7 +577,7 @@ async function repairPodmanSocket() {
 		const res: any = await repairPodmanSocketAPI()
 		if (isSucc(res.code)) {
 			message.success("已触发修复，正在刷新状态…")
-			await loadPrecheck()
+			await loadValidate()
 			getDaemon()
 		} else {
 			message.error(res.msg || "修复失败")
@@ -583,7 +595,7 @@ async function repairLinger() {
 		const res: any = await repairSystemdLingerAPI()
 		if (isSucc(res.code)) {
 			message.success("已启用 linger")
-			await loadPrecheck()
+			await loadValidate()
 		} else {
 			message.error(res.msg || "操作失败")
 		}
@@ -594,11 +606,11 @@ async function repairLinger() {
 	}
 }
 
-async function loadPrecheck() {
+async function loadValidate() {
 	try {
-		const res: any = await containerPrecheck()
+		const res: any = await containerValidateAPI()
 		if (isSucc(res.code)) {
-			precheck.value = res.data
+			validate.value = res.data
 		}
 	} catch (e) {}
 }
@@ -679,7 +691,7 @@ async function fetchDaemonJsonFile() {
 
 // 页面加载时拉取一次
 onMounted(() => {
-	loadPrecheck()
+	loadValidate()
 	getDaemon(true)
 })
 

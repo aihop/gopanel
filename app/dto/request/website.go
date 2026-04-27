@@ -19,7 +19,7 @@ type WebsiteCreate struct {
 	CodeDir             string                 `json:"codeDir"`
 	CodeDirFallback     string                 `json:"-"`
 	PreviousContainerID string                 `json:"-"`
-	RunnerKey           string                 `json:"-"`
+	PipelineKey         string                 `json:"-"`
 	RunnerConfig        map[string]interface{} `json:"-"`
 
 	AntiCrawler    bool   `json:"antiCrawler"`

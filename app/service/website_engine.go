@@ -18,12 +18,15 @@ import (
 	"github.com/aihop/gopanel/utils/docker"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
+	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/network"
 	dockerclient "github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
 )
 
 // Removed DetectEngineEnv as we are shifting to pure containerized pipelines.
+
+const runnerWorkspaceMountPath = "/gopanel/workspace"
 
 func DeployWebsiteEngine(ctx context.Context, alias string, req *request.WebsiteCreate, progress func(format string, a ...interface{})) (int, string, string, error) {
 	cli, err := docker.NewDockerClient()
@@ -124,7 +127,7 @@ func DeployWebsiteEngine(ctx context.Context, alias string, req *request.Website
 	selectedCodeDir := ""
 	if req.CodeSource == "pipeline" {
 		envs = mergeRunnerEnvs(envs, rc, containerPort)
-		cmd = []string{"sh", "-lc", buildRunnerScript(rc)}
+		cmd = []string{"sh", "-lc", buildRunnerScript(rc, runnerWorkspaceMountPath)}
 		logEngineProgress(progress, "Runner 配置: baseImage=%s, mode=%s", imageName, strings.TrimSpace(rc.Mode))
 		logEngineProgress(progress, "Runner 启动脚本已生成")
 		if isRunnerPipeline {
@@ -153,9 +156,9 @@ func DeployWebsiteEngine(ctx context.Context, alias string, req *request.Website
 			if selectedCodeDir == "" {
 				return 0, "", "", fmt.Errorf("runner 代码目录为空")
 			}
-			hostConfig.Binds = append(hostConfig.Binds, fmt.Sprintf("%s:%s", selectedCodeDir, workingDir))
-			logEngineProgress(progress, "强制挂载 Runner 代码目录: %s -> %s", selectedCodeDir, workingDir)
-			persistentBinds, err := buildRunnerPersistentBinds(req.RunnerKey, rc, workingDir)
+			hostConfig.Binds = append(hostConfig.Binds, fmt.Sprintf("%s:%s:ro", selectedCodeDir, runnerWorkspaceMountPath))
+			logEngineProgress(progress, "强制挂载 Runner 工作目录: %s -> %s (ro)", selectedCodeDir, runnerWorkspaceMountPath)
+			persistentBinds, err := buildRunnerPersistentBinds(req.PipelineKey, rc, workingDir)
 			if err != nil {
 				return 0, "", "", fmt.Errorf("failed to prepare runner persistent dirs: %w", err)
 			}
@@ -163,10 +166,10 @@ func DeployWebsiteEngine(ctx context.Context, alias string, req *request.Website
 				hostConfig.Binds = append(hostConfig.Binds, persistentBinds...)
 				logEngineProgress(progress, "已追加 %d 个持久化目录映射", len(persistentBinds))
 			}
-			ephemeralBinds := buildRunnerEphemeralBinds(rc, workingDir)
-			if len(ephemeralBinds) > 0 {
-				hostConfig.Binds = append(hostConfig.Binds, ephemeralBinds...)
-				logEngineProgress(progress, "已隔离 Runner 依赖目录，避免写脏版本产物")
+			ephemeralMounts := buildRunnerEphemeralMounts(rc, workingDir)
+			if len(ephemeralMounts) > 0 {
+				hostConfig.Mounts = append(hostConfig.Mounts, ephemeralMounts...)
+				logEngineProgress(progress, "已显式隔离 Runner 依赖目录，避免复用工作区 node_modules")
 			}
 		} else {
 			runtimeTemplate := detectReusableRuntimeTemplate(ctx, cli, imageName, workingDir, req.PreviousContainerID)
@@ -308,6 +311,7 @@ func DeployWebsiteEngine(ctx context.Context, alias string, req *request.Website
 			logEngineProgress(progress, "深度继承旧容器(%s)的完整运行参数和配置", req.PreviousContainerID)
 		}
 	}
+	docker.EnsureContainerLogConfig(hostConfig)
 
 	resp, err := cli.ContainerCreate(ctx, config, hostConfig, nil, nil, containerName)
 	if err != nil {
@@ -632,7 +636,7 @@ func mergeRunnerEnvs(base []string, rc runnerConfig, containerPort string) []str
 	return out
 }
 
-func buildRunnerPersistentBinds(runnerKey string, rc runnerConfig, workingDir string) ([]string, error) {
+func buildRunnerPersistentBinds(pipelineKey string, rc runnerConfig, workingDir string) ([]string, error) {
 	if len(rc.PersistentPaths) == 0 {
 		return nil, nil
 	}
@@ -640,7 +644,7 @@ func buildRunnerPersistentBinds(runnerKey string, rc runnerConfig, workingDir st
 	if wd == "" {
 		wd = "/var/www/app"
 	}
-	key := strings.TrimSpace(runnerKey)
+	key := strings.TrimSpace(pipelineKey)
 	if key == "" {
 		key = "pipeline-runtime"
 	}
@@ -682,7 +686,7 @@ func normalizeRunnerPersistentPath(workingDir string, raw string) (string, strin
 	return candidate, target, true
 }
 
-func buildRunnerEphemeralBinds(rc runnerConfig, workingDir string) []string {
+func buildRunnerEphemeralMounts(rc runnerConfig, workingDir string) []mount.Mount {
 	if strings.ToLower(strings.TrimSpace(rc.Mode)) != "build_run" {
 		return nil
 	}
@@ -696,7 +700,12 @@ func buildRunnerEphemeralBinds(rc runnerConfig, workingDir string) []string {
 			return nil
 		}
 	}
-	return []string{path.Join(wd, "node_modules")}
+	return []mount.Mount{
+		{
+			Type:   mount.TypeVolume,
+			Target: path.Join(wd, "node_modules"),
+		},
+	}
 }
 
 func normalizeRunnerExtraNetworks(items []string) []string {
@@ -722,17 +731,68 @@ func normalizeRunnerExtraNetworks(items []string) []string {
 	return out
 }
 
-func buildRunnerScript(rc runnerConfig) string {
+func buildRunnerScript(rc runnerConfig, sourceDir string) string {
 	mode := strings.ToLower(strings.TrimSpace(rc.Mode))
 	wd := strings.TrimSpace(rc.WorkingDir)
 	if wd == "" {
 		wd = "/var/www/app"
+	}
+	srcDir := strings.TrimSpace(sourceDir)
+	if srcDir == "" {
+		srcDir = runnerWorkspaceMountPath
 	}
 	startCmd := strings.TrimSpace(rc.StartCommand)
 	installCmd := strings.TrimSpace(rc.BuildCommand)
 
 	var b strings.Builder
 	b.WriteString("set -e\n")
+	b.WriteString("mkdir -p \"")
+	b.WriteString(strings.ReplaceAll(wd, "\"", "\\\""))
+	b.WriteString("\"\n")
+	b.WriteString("if [ -d \"")
+	b.WriteString(strings.ReplaceAll(srcDir, "\"", "\\\""))
+	b.WriteString("\" ]; then\n")
+	b.WriteString("  echo \"[RUNNER] syncing source into working dir\"\n")
+	b.WriteString("  if command -v tar >/dev/null 2>&1; then\n")
+	b.WriteString("    if tar --help 2>/dev/null | grep -q -- '--exclude'; then\n")
+	b.WriteString("      (cd \"")
+	b.WriteString(strings.ReplaceAll(srcDir, "\"", "\\\""))
+	b.WriteString("\" && tar --exclude='./node_modules' --exclude='./.git' --exclude='./.gopanel_artifact' --exclude='./__MACOSX' -cf - .) | (cd \"")
+	b.WriteString(strings.ReplaceAll(wd, "\"", "\\\""))
+	b.WriteString("\" && tar xpf -)\n")
+	b.WriteString("    else\n")
+	b.WriteString("      (cd \"")
+	b.WriteString(strings.ReplaceAll(srcDir, "\"", "\\\""))
+	b.WriteString("\" && tar cf - .) | (cd \"")
+	b.WriteString(strings.ReplaceAll(wd, "\"", "\\\""))
+	b.WriteString("\" && tar xpf -)\n")
+	b.WriteString("      rm -rf \"")
+	b.WriteString(strings.ReplaceAll(wd, "\"", "\\\""))
+	b.WriteString("/node_modules\" \"")
+	b.WriteString(strings.ReplaceAll(wd, "\"", "\\\""))
+	b.WriteString("/.git\" \"")
+	b.WriteString(strings.ReplaceAll(wd, "\"", "\\\""))
+	b.WriteString("/.gopanel_artifact\" \"")
+	b.WriteString(strings.ReplaceAll(wd, "\"", "\\\""))
+	b.WriteString("/__MACOSX\"\n")
+	b.WriteString("    fi\n")
+	b.WriteString("  else\n")
+	b.WriteString("    cp -a \"")
+	b.WriteString(strings.ReplaceAll(srcDir, "\"", "\\\""))
+	b.WriteString("\"/. \"")
+	b.WriteString(strings.ReplaceAll(wd, "\"", "\\\""))
+	b.WriteString("\"/\n")
+	b.WriteString("    rm -rf \"")
+	b.WriteString(strings.ReplaceAll(wd, "\"", "\\\""))
+	b.WriteString("/node_modules\" \"")
+	b.WriteString(strings.ReplaceAll(wd, "\"", "\\\""))
+	b.WriteString("/.git\" \"")
+	b.WriteString(strings.ReplaceAll(wd, "\"", "\\\""))
+	b.WriteString("/.gopanel_artifact\" \"")
+	b.WriteString(strings.ReplaceAll(wd, "\"", "\\\""))
+	b.WriteString("/__MACOSX\"\n")
+	b.WriteString("  fi\n")
+	b.WriteString("fi\n")
 	b.WriteString("cd \"")
 	b.WriteString(strings.ReplaceAll(wd, "\"", "\\\""))
 	b.WriteString("\"\n")
@@ -743,10 +803,8 @@ func buildRunnerScript(rc runnerConfig) string {
 		}
 	}
 	if mode == "build_run" {
-		b.WriteString("if [ -f .output/server/index.mjs ]; then\n")
-		b.WriteString("  echo \"[RUN] detected .output, start directly\"\n")
-		b.WriteString("else\n")
-		b.WriteString("  echo \"[BUILD+RUN] .output missing, building...\"\n")
+		b.WriteString("if [ -f package.json ]; then\n")
+		b.WriteString("  echo \"[BUILD+RUN] package.json detected, rebuilding app\"\n")
 		if installCmd != "" {
 			b.WriteString("  ")
 			b.WriteString(installCmd)
@@ -757,6 +815,11 @@ func buildRunnerScript(rc runnerConfig) string {
 			b.WriteString("elif [ -f package-lock.json ]; then npm ci; else npm install; fi\n")
 		}
 		b.WriteString("  npm run build\n")
+		b.WriteString("elif [ -f .output/server/index.mjs ]; then\n")
+		b.WriteString("  echo \"[RUN] detected standalone .output, start directly\"\n")
+		b.WriteString("else\n")
+		b.WriteString("  echo \"[BUILD+RUN] no package.json or .output found\" >&2\n")
+		b.WriteString("  exit 1\n")
 		b.WriteString("fi\n")
 	}
 	if startCmd != "" {

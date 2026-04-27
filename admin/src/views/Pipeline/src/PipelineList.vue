@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { h, onMounted, ref, computed } from "vue"
 import { NButton, NDataTable, NSpace, NTag, useMessage, useDialog, NModal, NForm, NFormItem, NInput } from "naive-ui"
+import type { DataTableColumns } from "naive-ui"
 import { getPipelinePage, deletePipeline, runPipeline } from "@/api/modules/pipeline"
 import { Pipeline } from "@/api/interface/pipeline"
 import PipelineRecordsModal from "./PipelineRecordsModal.vue"
 import PipelineLogsModal from "./PipelineLogsModal.vue"
 import { useAuthStore } from "@/store/auth"
 import { t } from "@/i18n"
-import { getRuntimeKindLabel, getRuntimeModeLabel, getRunUserLabel } from "@/utils/runtime"
+import { buildRuntimeDetailText, getRuntimeKindLabel, getRuntimeModeLabel, getRunUserLabel } from "@/utils/runtime"
 import { formatTime } from "@/utils/date"
 const authStore = useAuthStore()
 const isSubAdmin = computed(() => authStore.user?.role === 'SUB_ADMIN')
@@ -52,7 +53,20 @@ const incrementVersion = (v: string) => {
   return v + ".1"
 }
 
-const columns = [
+const buildPipelineRuntimeText = (row: Pipeline.ResPipeline | null, options?: { prefix?: string; runUserPrefix?: string }) => {
+  if (!row) return ""
+  const detail = buildRuntimeDetailText(row, {
+    prefix: options?.prefix || "",
+    kindFallback: t("container.runtimeType"),
+    userFallback: t("container.userDefault"),
+    runtimePrefix: "",
+    runUserPrefix: options?.runUserPrefix || `${t("container.runUser")}: `
+  })
+  const host = String(row.runtimeHost || "").trim()
+  return host ? `${detail} · Host: ${host}` : detail
+}
+
+const columns: DataTableColumns<Pipeline.ResPipeline> = [
   { title: "ID", key: "id", width: 60 },
   { title: t("pipeline.pipelineName"), key: "name" },
   {
@@ -68,7 +82,7 @@ const columns = [
   {
     title: t("container.runtimeType"),
     key: "runtimeType",
-    minWidth: 220,
+    minWidth: 300,
     render: (row: Pipeline.ResPipeline) => {
       return h("div", { class: "flex flex-col gap-1" }, [
         h("div", { class: "flex flex-wrap items-center gap-2" }, [
@@ -83,7 +97,10 @@ const columns = [
             })
           })
         ]),
-        h("div", { class: "text-xs text-slate-500" }, `${t("container.runUser")}: ${getRunUserLabel(row, { userFallback: t("container.userDefault") })}`)
+        h("div", { class: "text-xs text-slate-500" }, `${t("container.runUser")}: ${getRunUserLabel(row, { userFallback: t("container.userDefault") })}`),
+        row.runtimeHost
+          ? h("div", { class: "text-xs text-slate-500 break-all" }, `Host: ${row.runtimeHost}`)
+          : null
       ])
     }
   },
@@ -290,6 +307,12 @@ defineExpose({
       >
         正在触发 <span class="font-semibold text-blue-600">{{ currentRunRow.name }}</span> 流水线<br />
         当前版本: <span class="font-mono font-semibold">v{{ currentRunRow.version }}</span>
+      </div>
+      <div
+        v-if="currentRunRow"
+        class="mb-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600"
+      >
+        {{ buildPipelineRuntimeText(currentRunRow) }}
       </div>
       <n-form
         :model="runFormModel"

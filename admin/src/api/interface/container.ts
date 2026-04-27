@@ -33,6 +33,10 @@ export namespace Container {
 		containerID: string
 		name: string
 		image: string
+		runtimeHost?: string
+		runtimeKind?: string
+		runtimeMode?: string
+		runUser?: string
 		imageInput: boolean
 		forcePull: boolean
 		network: string

@@ -12,7 +12,7 @@ export namespace Pipeline {
     outputImage?: string;
     artifactPath: string;
     exposePort?: number;
-    runnerKey?: string;
+    pipelineKey?: string;
     runnerMode?: string;
     runnerConfig?: any;
   }
@@ -37,7 +37,7 @@ export namespace Pipeline {
     outputImage?: string;
     artifactPath: string;
     exposePort: number;
-    runnerKey?: string;
+    pipelineKey?: string;
     runnerMode?: string;
     runnerConfig?: any;
     runtimeHost?: string;

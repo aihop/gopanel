@@ -92,6 +92,7 @@ func (s *WebsiteService) List(ctx *gormx.Contextx) (websiteDTOs []*response.Webs
 			HstsEnabled:    web.HstsEnabled,
 		})
 	}
+	FillWebsiteRuntimeMeta(context.Background(), websiteDTOs)
 	return websiteDTOs, nil
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/aihop/gopanel/app/dto/response"
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
 	"github.com/aihop/gopanel/global"
@@ -81,6 +82,39 @@ func FillPipelineRecordRuntimeMeta(ctx context.Context, records []model.Pipeline
 		records[i].RuntimeKind = meta.RuntimeKind
 		records[i].RuntimeMode = meta.RuntimeMode
 		records[i].RunUser = meta.RunUser
+	}
+}
+
+func FillWebsiteRuntimeMeta(ctx context.Context, websites []*response.WebsiteRes) {
+	if len(websites) == 0 {
+		return
+	}
+	lookup, err := newContainerRuntimeLookup(ctx)
+	if err != nil {
+		return
+	}
+	defer lookup.Close()
+
+	recordRepo := repo.NewPipelineRecord(global.DB)
+	for i := range websites {
+		if websites[i] == nil {
+			continue
+		}
+		meta := lookup.defaultMeta
+		switch {
+		case websites[i].AppInstallID > 0:
+			appInstall, err := appInstallRepo.GetFirst(commonRepo.WithByID(websites[i].AppInstallID))
+			if err == nil {
+				meta = lookup.metaForContainerNames(appInstall.ContainerName)
+			}
+		case websites[i].PipelineID > 0:
+			containerID, _ := recordRepo.LatestRunnerContainerID(websites[i].PipelineID)
+			meta = lookup.metaForContainerID(containerID)
+		}
+		websites[i].RuntimeHost = meta.RuntimeHost
+		websites[i].RuntimeKind = meta.RuntimeKind
+		websites[i].RuntimeMode = meta.RuntimeMode
+		websites[i].RunUser = meta.RunUser
 	}
 }
 

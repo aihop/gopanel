@@ -444,7 +444,7 @@ import { ref, watch, reactive, nextTick } from "vue"
 import { MdPreview } from 'md-editor-v3'
 import 'md-editor-v3/lib/preview.css'
 // @ts-ignore
-import { appsInstalledListAPI, appsListAPI, appsRepairComposeAPI, appsRepairPodmanShortNameAPI, appsRepairPodmanSubuidAPI, appsRepairPortConflictAPI, GetApp, appsInstallAPI, PrecheckAppInstall, GetAppDetail, InstalledOp } from "@/api/modules/apps"
+import { appsInstalledListAPI, appsListAPI, appsRepairComposeAPI, appsRepairPodmanShortNameAPI, appsRepairPodmanSubuidAPI, appsRepairPortConflictAPI, GetApp, appsInstallAPI, AppsValidateAPI, GetAppDetail, InstalledOp } from "@/api/modules/apps"
 // @ts-ignore
 import { repairSystemdLingerAPI } from "@/api/modules/container"
 import type { AppsSearchParams } from "@/api/modules/apps"
@@ -662,12 +662,12 @@ async function submitInstall() {
 				currentInstallName.value = reqData.name
 
 				try {
-					const precheckRes = await PrecheckAppInstall()
-					if (precheckRes.code === 0 && precheckRes.data && precheckRes.data.isWarning) {
+					const validateRes = await AppsValidateAPI()
+					if (validateRes.code === 0 && validateRes.data && validateRes.data.isWarning) {
 						installLoading.value = false
 						dialog.warning({
 							title: "资源预警",
-							content: precheckRes.data.message,
+							content: validateRes.data.message,
 							positiveText: "强制继续",
 							negativeText: "取消",
 							onPositiveClick: async () => {

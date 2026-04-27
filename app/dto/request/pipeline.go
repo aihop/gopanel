@@ -13,7 +13,7 @@ type PipelineCreate struct {
 	OutputImage  string                 `json:"outputImage"`
 	ArtifactPath string                 `json:"artifactPath"`
 	ExposePort   int                    `json:"exposePort"`
-	RunnerKey    string                 `json:"runnerKey"`
+	PipelineKey  string                 `json:"pipelineKey"`
 	RunnerMode   string                 `json:"runnerMode"`
 	RunnerConfig map[string]interface{} `json:"runnerConfig"`
 }
@@ -32,7 +32,7 @@ type PipelineUpdate struct {
 	OutputImage  string                 `json:"outputImage"`
 	ArtifactPath string                 `json:"artifactPath"`
 	ExposePort   int                    `json:"exposePort"`
-	RunnerKey    string                 `json:"runnerKey"`
+	PipelineKey  string                 `json:"pipelineKey"`
 	RunnerMode   string                 `json:"runnerMode"`
 	RunnerConfig map[string]interface{} `json:"runnerConfig"`
 }

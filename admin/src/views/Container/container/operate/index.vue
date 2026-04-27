@@ -18,6 +18,12 @@
           :back="handleClose"
         />
       </template>
+      <div
+        v-if="dialogData.title === 'edit' && runtimeSummary"
+        class="mb-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600"
+      >
+        {{ runtimeSummary }}
+      </div>
       <n-form
         ref="formRef"
         label-placement="top"
@@ -480,7 +486,7 @@
 </template>
 
 <script lang="ts" setup>
-import { reactive, ref, h, watch } from "vue"
+import { computed, reactive, ref, h, watch } from "vue"
 import {
 	NForm,
 	NFormItem,
@@ -521,6 +527,7 @@ import { type Container } from "@/api/interface/container"
 import { MsgError, MsgSuccess } from "@/utils/message"
 import { checkIpV4V6, checkPort } from "@/utils/util"
 import { useRouter } from "vue-router"
+import { buildRuntimeDetailText } from "@/utils/runtime"
 
 const router = useRouter()
 const { t } = useI18n()
@@ -535,6 +542,19 @@ interface DialogProps {
 const title = ref<string>("")
 const drawerVisible = ref(false)
 const dialogVisible = ref(false)
+
+const runtimeSummary = computed(() => {
+	if (dialogData.value.title !== "edit") return ""
+	const row = dialogData.value.rowData
+	const detail = buildRuntimeDetailText(row, {
+		kindFallback: t("container.runtimeType"),
+		userFallback: t("container.userDefault"),
+		runtimePrefix: "",
+		runUserPrefix: `${t("container.runUser")}: `
+	})
+	const host = String(row.runtimeHost || "").trim()
+	return host ? `${detail} · Host: ${host}` : detail
+})
 
 const dialogData = ref<DialogProps>({
 	title: "",

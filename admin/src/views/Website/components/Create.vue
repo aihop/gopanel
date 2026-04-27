@@ -290,10 +290,10 @@ import type { Website } from "@/api/interface/website"
 import { computed, ref, watch, onMounted } from "vue"
 import { websiteCreateAPI, websiteUpdateAPI } from "@/api/modules/website"
 import { ListAppInstalled } from "@/api/modules/apps"
-import { getPipelinePage } from "@/api/modules/pipeline"
 import { listAllImage } from "@/api/modules/container"
 import { useMessage } from "naive-ui"
 import { buildRuntimeBadgeText, buildRuntimeDetailText as formatRuntimeDetailText, getRunUserLabel } from "@/utils/runtime"
+import { listAllPipelines } from "@/utils/pipeline"
 
 const visible = ref(false)
 const loading = ref(false)
@@ -317,13 +317,25 @@ const localImageOptions = ref<{ label: string; value: string }[]>([])
 const selectedAppRuntimeText = computed(() => {
 	const item = rawAppList.value.find((app: any) => app.id === form.value.appInstallId)
 	if (!item) return ""
-	return buildRuntimeDetailText(item, item.containerName ? `容器：${item.containerName}` : "")
+	return formatRuntimeDetailText(item, {
+		prefix: item.containerName ? `容器：${item.containerName}` : "",
+		kindFallback: "Runtime",
+		userFallback: "镜像默认",
+		runtimePrefix: "运行时：",
+		runUserPrefix: "用户："
+	})
 })
 
 const selectedPipelineRuntimeText = computed(() => {
 	const item = rawPipelineList.value.find((pipeline: any) => pipeline.id === form.value.pipelineId)
 	if (!item) return ""
-	return buildRuntimeDetailText(item, item.runnerKey ? `标识：${item.runnerKey}` : `流水线 #${item.id}`)
+	return formatRuntimeDetailText(item, {
+		prefix: item.pipelineKey ? `标识：${item.pipelineKey}` : `流水线 #${item.id}`,
+		kindFallback: "Runtime",
+		userFallback: "镜像默认",
+		runtimePrefix: "运行时：",
+		runUserPrefix: "用户："
+	})
 })
 
 const securitySummary = computed(() => {
@@ -417,9 +429,9 @@ const fetchLocalImages = async () => {
 
 const getPipelineList = async () => {
 	try {
-		const res: any = await getPipelinePage({ page: 1, limit: 100 })
-		rawPipelineList.value = res.data.items
-		pipelineOptions.value = res.data.items.map((item: any) => {
+		const items = await listAllPipelines()
+		rawPipelineList.value = items
+		pipelineOptions.value = items.map((item: any) => {
 			return {
 				label: buildPipelineOptionLabel(item),
 				value: item.id
@@ -449,16 +461,6 @@ const handlePipelineSelect = (val: number) => {
 	if (!form.value.proxy) {
 		form.value.proxy = "http://127.0.0.1:80"
 	}
-}
-
-function buildRuntimeDetailText(item: any, prefix = "") {
-	return formatRuntimeDetailText(item, {
-		prefix,
-		kindFallback: "Runtime",
-		userFallback: "镜像默认",
-		runtimePrefix: "运行时：",
-		runUserPrefix: "用户："
-	})
 }
 
 function buildAppOptionLabel(app: any) {

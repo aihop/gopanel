@@ -3,9 +3,10 @@ import { ref, reactive, watch, computed } from "vue"
 import { NForm, NFormItem, NInput, NSelect, NButton, NRadioGroup, NRadio, useMessage, NInputNumber, NSwitch, NSpace } from "naive-ui"
 import { createPipeline, updatePipeline } from "@/api/modules/pipeline"
 import { Pipeline } from "@/api/interface/pipeline"
-import { containerPrecheck } from "@/api/modules/container"
+import { containerValidateAPI } from "@/api/modules/container"
 import FullModal from "@/components/FullModal.vue"
 import FtEditor from "@/components/FtEditor/index.vue"
+import { buildRuntimeDetailText, getRuntimeKindLabel, getRuntimeModeLabel } from "@/utils/runtime"
 
 const props = defineProps<{ 
   show: boolean,
@@ -17,47 +18,62 @@ const emit = defineEmits(["update:show", "success"])
 const message = useMessage()
 const formRef = ref()
 const loading = ref(false)
-const runnerKeyTouched = ref(false)
-const runtimePrecheck = ref<any>(null)
-const runtimePrecheckLoading = ref(false)
+const pipelineKeyTouched = ref(false)
+const runtimeValidate = ref<any>(null)
+const runtimeValidateLoading = ref(false)
 
 const isEdit = computed(() => !!props.editData)
 
 const currentRuntimeKindLabel = computed(() => {
-  const kind = String(runtimePrecheck.value?.runtimeKind || "").toLowerCase()
-  if (kind === "podman") return "Podman"
-  if (kind === "docker") return "Docker"
-  return "容器运行时"
+  return getRuntimeKindLabel(runtimeValidate.value, {
+    kindFallback: "容器运行时"
+  })
 })
 
 const currentRuntimeModeLabel = computed(() => {
-  const runtimeInfo = runtimePrecheck.value?.runtime || {}
-  const isRootless = !!runtimePrecheck.value?.rootlessHost || !!runtimeInfo?.rootless
-  if (isRootless) return "rootless"
-  if (runtimePrecheck.value?.runtimeKind) return "rootful"
-  return "default"
+  const runtimeInfo = runtimeValidate.value?.runtime || {}
+  const mode = !!runtimeValidate.value?.rootlessHost || !!runtimeInfo?.rootless
+    ? "rootless"
+    : runtimeValidate.value?.runtimeKind
+      ? "rootful"
+      : ""
+  return getRuntimeModeLabel({ runtimeMode: mode }, {
+    defaultModeLabel: "default"
+  })
 })
 
 const runnerRuntimeHint = computed(() => {
-  if (!runtimePrecheck.value?.runtimeKind) {
+  if (!runtimeValidate.value?.runtimeKind) {
     return "简单模式 Runner 会跟随当前面板已选中的容器运行时。`runnerUser` 只影响容器内进程用户，不会改变宿主机是 rootless 还是 rootful。"
   }
-  const host = String(runtimePrecheck.value?.runtimeHost || "").trim()
+  const host = String(runtimeValidate.value?.runtimeHost || "").trim()
   const hostText = host ? `；当前 Host：${host}` : ""
   return `简单模式 Runner 当前会跟随 ${currentRuntimeKindLabel.value} / ${currentRuntimeModeLabel.value}${hostText}。非 root 安装通常应落到 rootless 运行时；这里的“容器内运行用户”仅控制进程身份，不改变宿主机运行时模式。`
 })
 
-const loadRuntimePrecheck = async () => {
-  if (runtimePrecheckLoading.value) return
-  runtimePrecheckLoading.value = true
+const existingRuntimeHint = computed(() => {
+  if (!props.editData?.runnerMode) return ""
+  if (!(props.editData.runtimeKind || props.editData.runtimeMode || props.editData.runUser)) return ""
+  return buildRuntimeDetailText(props.editData, {
+    prefix: "该流水线当前记录",
+    kindFallback: "Runtime",
+    userFallback: "镜像默认",
+    runtimePrefix: "运行时：",
+    runUserPrefix: "用户："
+  })
+})
+
+const loadRuntimeValidate = async () => {
+  if (runtimeValidateLoading.value) return
+  runtimeValidateLoading.value = true
   try {
-    const res: any = await containerPrecheck()
+    const res: any = await containerValidateAPI()
     if (res?.code === 0) {
-      runtimePrecheck.value = res.data || null
+      runtimeValidate.value = res.data || null
     }
   } catch (e) {
   } finally {
-    runtimePrecheckLoading.value = false
+    runtimeValidateLoading.value = false
   }
 }
 
@@ -87,7 +103,7 @@ const formModel = reactive({
   outputImage: "",
   artifactPath: ".",
   exposePort: 80, // 默认访问端口建议值（单个）
-  runnerKey: "",
+  pipelineKey: "",
 
   runnerEnabled: false,
   runnerPolicy: "build_run",
@@ -109,7 +125,7 @@ const rules = {
   name: { required: true, message: "请输入名称", trigger: "blur" },
   branch: { required: true, message: "请输入分支名称", trigger: "blur" },
   version: { required: true, message: "请输入初始版本号", trigger: "blur" },
-  runnerKey: {
+  pipelineKey: {
     validator: (_rule: any, value: string) => {
       if (formModel.pipelineMode !== "runner") return true
       if (!String(value || "").trim()) return new Error("请输入流水线标识")
@@ -192,13 +208,24 @@ const parseExtraNetworksText = (text: string) => {
   return items
 }
 
-const normalizeRunnerKey = (text: string) => {
+const normalizePipelineKey = (text: string) => {
   const raw = String(text || "").trim().toLowerCase()
   if (!raw) return ""
   return raw
     .replace(/[^a-z0-9_-]+/g, "-")
     .replace(/-+/g, "-")
     .replace(/^[-_]+|[-_]+$/g, "")
+}
+
+const hasForbiddenRunnerPersistentPath = (items: string[]) => {
+  return items.some((item) => {
+    const normalized = String(item || "")
+      .trim()
+      .replace(/\\/g, "/")
+      .replace(/^\/+/, "")
+      .replace(/\/+/g, "/")
+    return normalized === "node_modules" || normalized.startsWith("node_modules/")
+  })
 }
 
 const inferRunnerAdvanced = (runnerConfig: any) => {
@@ -267,7 +294,7 @@ const handleSubmit = () => {
       loading.value = true
       try {
         const payload: any = { ...formModel }
-        payload.runnerKey = normalizeRunnerKey(payload.runnerKey || payload.name || "")
+        payload.pipelineKey = normalizePipelineKey(payload.pipelineKey || payload.name || "")
         if (payload.pipelineMode === "runner") {
           payload.buildImage = ""
           payload.buildScript = ""
@@ -282,6 +309,11 @@ const handleSubmit = () => {
         }
 
         if (payload.runnerEnabled) {
+          const runnerPersistentPaths = parsePersistentPathsText(payload.runnerPersistentPathsText || "")
+          if (hasForbiddenRunnerPersistentPath(runnerPersistentPaths)) {
+            message.error("持久化目录不要填写 `node_modules`，依赖目录会由 Runner 自动隔离并在容器内重装。")
+            return
+          }
           payload.runnerContainerPort = String(payload.runnerContainerPort || "").trim()
           payload.runnerHostPort = String(payload.runnerHostPort || "").trim()
           payload.runnerMode = "runner"
@@ -297,12 +329,12 @@ const handleSubmit = () => {
             startCommand: payload.runnerStartCommand || "node .output/server/index.mjs",
             preStart: payload.runnerPreStart || "",
             env: parseEnvText(payload.runnerEnvText || ""),
-            persistentPaths: parsePersistentPathsText(payload.runnerPersistentPathsText || ""),
+            persistentPaths: runnerPersistentPaths,
             extraNetworks: parseExtraNetworksText(payload.runnerExtraNetworksText || "")
           }
         } else {
           payload.runnerMode = ""
-          payload.runnerKey = ""
+          payload.pipelineKey = ""
           payload.runnerConfig = undefined
         }
         
@@ -326,7 +358,7 @@ const handleSubmit = () => {
 
 watch(() => props.show, (val) => {
   if (val) {
-    loadRuntimePrecheck()
+    loadRuntimeValidate()
     if (props.editData) {
       const isHost = props.editData.buildImage === "host" || props.editData.buildImage === ""
       let runnerConfig: any = props.editData.runnerConfig || {}
@@ -358,7 +390,7 @@ watch(() => props.show, (val) => {
         outputImage: props.editData.outputImage || "",
         artifactPath: props.editData.artifactPath || ".",
         exposePort: props.editData.exposePort || 80,
-        runnerKey: props.editData.runnerKey || "",
+        pipelineKey: props.editData.pipelineKey || "",
 
         runnerEnabled,
         runnerPolicy: runnerConfig.mode || "build_run",
@@ -375,7 +407,7 @@ watch(() => props.show, (val) => {
         runnerPersistentPathsText,
         runnerExtraNetworksText
       })
-      runnerKeyTouched.value = !!props.editData.runnerKey
+      pipelineKeyTouched.value = !!props.editData.pipelineKey
       runnerPreset.value = detectRunnerPreset(formModel.runnerStartCommand)
     } else if (props.initialTemplate) {
       Object.assign(formModel, {
@@ -393,7 +425,7 @@ watch(() => props.show, (val) => {
         outputImage: "",
         artifactPath: props.initialTemplate.artifactPath || ".",
         exposePort: 80,
-        runnerKey: "",
+        pipelineKey: "",
 
         runnerEnabled: false,
         runnerPolicy: "build_run",
@@ -410,7 +442,7 @@ watch(() => props.show, (val) => {
         runnerPersistentPathsText: "",
         runnerExtraNetworksText: ""
       })
-      runnerKeyTouched.value = false
+      pipelineKeyTouched.value = false
       runnerPreset.value = "custom"
     } else {
       Object.assign(formModel, {
@@ -428,7 +460,7 @@ watch(() => props.show, (val) => {
         outputImage: "",
         artifactPath: ".",
         exposePort: 80,
-        runnerKey: "",
+        pipelineKey: "",
 
         runnerEnabled: false,
         runnerPolicy: "build_run",
@@ -445,7 +477,7 @@ watch(() => props.show, (val) => {
         runnerPersistentPathsText: "",
         runnerExtraNetworksText: ""
       })
-      runnerKeyTouched.value = false
+      pipelineKeyTouched.value = false
       runnerPreset.value = "nuxt"
     }
   }
@@ -453,13 +485,13 @@ watch(() => props.show, (val) => {
 
 watch(() => formModel.name, (val) => {
   if (formModel.pipelineMode !== "runner") return
-  if (runnerKeyTouched.value) return
-  formModel.runnerKey = normalizeRunnerKey(val)
+  if (pipelineKeyTouched.value) return
+  formModel.pipelineKey = normalizePipelineKey(val)
 })
 
 watch(() => formModel.pipelineMode, (mode) => {
-  if (mode === "runner" && !formModel.runnerKey && formModel.name) {
-    formModel.runnerKey = normalizeRunnerKey(formModel.name)
+  if (mode === "runner" && !formModel.pipelineKey && formModel.name) {
+    formModel.pipelineKey = normalizePipelineKey(formModel.name)
   }
 })
 </script>
@@ -562,6 +594,12 @@ watch(() => formModel.pipelineMode, (mode) => {
 
       <template v-if="formModel.pipelineMode === 'runner'">
         <div class="mb-4 mt-6 text-sm font-semibold text-slate-700">简单模式 (代码产物部署)</div>
+        <div
+          v-if="isEdit && existingRuntimeHint"
+          class="mb-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-4 text-sm text-slate-700"
+        >
+          {{ existingRuntimeHint }}
+        </div>
         <div class="mb-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
           {{ runnerRuntimeHint }}
         </div>
@@ -588,16 +626,16 @@ watch(() => formModel.pipelineMode, (mode) => {
 
         <n-form-item
           label="流水线标识"
-          path="runnerKey"
+          path="pipelineKey"
         >
           <div class="w-full">
             <n-input
-              v-model:value="formModel.runnerKey"
+              v-model:value="formModel.pipelineKey"
               placeholder="例如：aipanel-site"
-              @update:value="runnerKeyTouched = true"
+              @update:value="pipelineKeyTouched = true"
             />
             <div class="mt-2 text-xs text-slate-500">
-              用于生成 Runner 的固定数据目录：`安装目录/apps/流水线标识/`。创建或更新时会检查该目录是否已存在；若已被其他流水线占用，会提示你更换标识。
+              用于生成流水线固定目录：`安装目录/pipelines/流水线标识/`。创建或更新时会检查该目录是否已存在；若已被其他流水线占用，会提示你更换标识。
             </div>
           </div>
         </n-form-item>
@@ -691,7 +729,7 @@ watch(() => formModel.pipelineMode, (mode) => {
                 placeholder="留空则使用镜像默认用户，例如：node / 1000 / 1000:1000"
               />
               <div class="mt-2 text-xs text-slate-500">
-                这里只控制容器内进程用户，不影响宿主机容器运行时。适合避免 `node:20-alpine` 这类镜像默认以 `root` 启动时写入 root 权限产物；是否 rootless / rootful 取决于当前面板命中的运行时。
+                这里只控制容器内进程用户，不影响宿主机容器运行时。若使用非 root 用户，请不要持久化 `node_modules`，否则 npm 容易报权限错。
               </div>
             </div>
           </n-form-item>
@@ -728,7 +766,7 @@ watch(() => formModel.pipelineMode, (mode) => {
                 placeholder="一行一个，例如：uploads&#10;.data&#10;storage"
               />
               <div class="mt-2 text-xs text-slate-500">
-                只填写容器内需要持久化的子目录即可，例如 `uploads`、`.data`、`storage`。系统会自动映射到 `安装目录/apps/流水线标识/对应子目录`，并保持代码目录与数据目录分离。
+                只填写容器内需要持久化的子目录即可，例如 `uploads`、`.data`、`storage`。不要填写 `node_modules` 这类依赖目录；系统会自动映射到 `安装目录/apps/流水线标识/对应子目录`，并保持代码目录与数据目录分离。
               </div>
             </div>
           </n-form-item>

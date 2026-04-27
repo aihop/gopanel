@@ -3,7 +3,7 @@ import type { Website } from "../interface/website"
 import type { ResPage } from "../interface"
  
 export const websiteListAPI = () => {
-	return http.post<ResPage<any>>(`/website/list`)
+	return http.post<ResPage<Website.WebsiteDTO>>(`/website/list`)
 }
 
 export const websiteCreateAPI = (req: Website.WebSiteCreateReq) => {

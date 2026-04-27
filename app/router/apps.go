@@ -24,7 +24,7 @@ func AppsRouter(r fiber.Router) {
 
 		// 安装
 		AppsRouter.Post("/install", api.AppsInstall)
-		AppsRouter.Get("/precheck", api.PrecheckAppInstall)
+		AppsRouter.Get("/validate", api.AppsValidate)
 		AppsRouter.Post("/repair/compose", api.RepairCompose)
 		AppsRouter.Post("/repair/short-name", api.RepairPodmanShortName)
 		AppsRouter.Post("/repair/subuid", api.RepairPodmanSubuid)
@@ -59,5 +59,6 @@ func AppsRouter(r fiber.Router) {
 		AppsRouter.Get("/detail/:id", api.AppDetailGet)
 		AppsRouter.Get("/:key", api.AppsGet)
 		AppsRouter.Get("/install/:name/logs", api.AppInstallLogsStream)
+		AppsRouter.Get("/installed/:name/runtime/logs", api.AppInstalledRuntimeLogsStream)
 	}
 }

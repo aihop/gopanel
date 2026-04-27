@@ -64,7 +64,7 @@
 import { ref, reactive } from "vue"
 import { NDrawer, NDrawerContent, NForm, NFormItem, NInput, NButton, useMessage } from "naive-ui"
 import FtEditor from "@/components/FtEditor/index.vue"
-import { composeUpdate, loadContainerLog } from "@/api/modules/container"
+import { composeUpdate, loadContainerLogs } from "@/api/modules/container"
 
 const emit = defineEmits<{ (e: "search"): void }>()
 const message = useMessage()
@@ -119,7 +119,7 @@ const acceptParams = async (props: DialogProps): Promise<void> => {
 	form.environmentStr = (props.env || []).join("\n")
 	// 获取compose内容
 	try {
-		const res = await loadContainerLog("compose-detail", props.name)
+		const res = await loadContainerLogs("compose-detail", props.name)
 		if (res.data) {
 			form.content = res.data
 		} else {

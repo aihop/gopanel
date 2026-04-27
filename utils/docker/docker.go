@@ -51,11 +51,27 @@ func RuntimeHostPinned() bool {
 	return ConfiguredDockerSockPath() != ""
 }
 
+func strictCurrentUserRootlessPodman() bool {
+	if runtime.GOOS != "linux" {
+		return false
+	}
+	if os.Geteuid() == 0 {
+		return false
+	}
+	mode := strings.ToLower(strings.TrimSpace(global.CONF.System.ContainerRuntime))
+	return mode == "podman"
+}
+
+func StrictCurrentUserRootlessPodman() bool {
+	return strictCurrentUserRootlessPodman()
+}
+
 func ResolveRuntime(ctx context.Context) ResolvedRuntime {
 	mode := strings.ToLower(strings.TrimSpace(global.CONF.System.ContainerRuntime))
 	if mode == "" {
 		mode = "auto"
 	}
+	strictRootless := strictCurrentUserRootlessPodman()
 
 	var settingItem model.Setting
 	_ = global.DB.Where("key = ?", "DockerSockPath").First(&settingItem).Error
@@ -143,6 +159,9 @@ auto_detect:
 				if kindFromHost(host) != RuntimePodman {
 					host = ""
 				}
+				if strictRootless && host != "" && !IsRootlessPodmanHost(host) {
+					host = ""
+				}
 			}
 			baseCtx := ctx
 			if baseCtx == nil {
@@ -150,9 +169,12 @@ auto_detect:
 			}
 			pingCtx, cancel := context.WithTimeout(baseCtx, 800*time.Millisecond)
 			defer cancel()
+			candidates := PodmanLinuxCandidateHosts()
+			if strictRootless {
+				candidates = PodmanLinuxUserCandidateHosts()
+			}
 
 			if host == "" {
-				candidates := PodmanLinuxCandidateHosts()
 				for _, c := range candidates {
 					if canPingHost(pingCtx, c) {
 						host = c
@@ -164,7 +186,7 @@ auto_detect:
 				}
 			} else if IsRootlessPodmanHost(host) || os.Getuid() != 0 {
 				if !canPingHost(pingCtx, host) {
-					for _, c := range PodmanLinuxCandidateHosts() {
+					for _, c := range candidates {
 						if canPingHost(pingCtx, c) {
 							host = c
 							break
@@ -226,6 +248,14 @@ func autoDetectDockerUnixHost(ctx context.Context) string {
 }
 
 func PodmanLinuxCandidateHosts() []string {
+	return podmanLinuxCandidateHosts(true)
+}
+
+func PodmanLinuxUserCandidateHosts() []string {
+	return podmanLinuxCandidateHosts(false)
+}
+
+func podmanLinuxCandidateHosts(includeSystem bool) []string {
 	if runtime.GOOS != "linux" {
 		return nil
 	}
@@ -257,7 +287,9 @@ func PodmanLinuxCandidateHosts() []string {
 		addSock(filepath.Join("/run/user", strconv.Itoa(uid), "podman", "podman.sock"))
 	}
 
-	addSock("/run/podman/podman.sock")
+	if includeSystem {
+		addSock("/run/podman/podman.sock")
+	}
 	return hosts
 }
 
@@ -276,6 +308,24 @@ func IsRootlessPodmanHost(host string) bool {
 		}
 	}
 	return strings.Contains(sockPath, "/run/user/") && strings.HasSuffix(sockPath, "/podman/podman.sock")
+}
+
+func EnsureContainerLogConfig(hostConf *container.HostConfig) {
+	if hostConf == nil || runtime.GOOS != "linux" {
+		return
+	}
+	resolved := ResolveRuntime(context.Background())
+	if resolved.Kind != RuntimePodman || !IsRootlessPodmanHost(resolved.Host) {
+		return
+	}
+	current := strings.TrimSpace(hostConf.LogConfig.Type)
+	if current != "" && !strings.EqualFold(current, "journald") {
+		return
+	}
+	hostConf.LogConfig.Type = "k8s-file"
+	if hostConf.LogConfig.Config == nil {
+		hostConf.LogConfig.Config = map[string]string{}
+	}
 }
 
 func normalizeHost(ctx context.Context, host string) string {

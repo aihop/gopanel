@@ -105,6 +105,9 @@ func ensurePodmanAPIReady() error {
 	defer cancel()
 
 	candidates := docker.PodmanLinuxCandidateHosts()
+	if docker.StrictCurrentUserRootlessPodman() {
+		candidates = docker.PodmanLinuxUserCandidateHosts()
+	}
 	if len(candidates) == 0 {
 		return errors.New("no podman socket candidates found for current linux environment")
 	}

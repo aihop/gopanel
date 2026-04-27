@@ -19,7 +19,7 @@ func ListContainersMergedWithSource(ctx context.Context, options container.ListO
 		baseCtx = context.Background()
 	}
 	resolved := ResolveRuntime(baseCtx)
-	pinnedHost := RuntimeHostPinned()
+	pinnedHost := RuntimeHostPinned() && !strictCurrentUserRootlessPodman()
 
 	seen := make(map[string]struct{})
 	source := make(map[string]string)
@@ -75,7 +75,7 @@ func ListImagesMergedWithSource(ctx context.Context) ([]image.Summary, map[strin
 		baseCtx = context.Background()
 	}
 	resolved := ResolveRuntime(baseCtx)
-	pinnedHost := RuntimeHostPinned()
+	pinnedHost := RuntimeHostPinned() && !strictCurrentUserRootlessPodman()
 
 	imgSeen := make(map[string]struct{})
 	conSeen := make(map[string]struct{})
@@ -150,6 +150,7 @@ func ListImagesMerged(ctx context.Context) ([]image.Summary, []types.Container, 
 func runtimeViewAPIHosts(resolved ResolvedRuntime) []string {
 	seen := make(map[string]struct{})
 	var hosts []string
+	pinnedHost := RuntimeHostPinned() && !strictCurrentUserRootlessPodman()
 	add := func(host string) {
 		host = strings.TrimSpace(host)
 		if host == "" || strings.HasPrefix(host, "podman://") {
@@ -163,8 +164,12 @@ func runtimeViewAPIHosts(resolved ResolvedRuntime) []string {
 	}
 
 	add(resolved.Host)
-	if resolved.Kind == RuntimePodman && runtime.GOOS == "linux" && !RuntimeHostPinned() {
-		for _, host := range PodmanLinuxCandidateHosts() {
+	if resolved.Kind == RuntimePodman && runtime.GOOS == "linux" && !pinnedHost {
+		candidates := PodmanLinuxCandidateHosts()
+		if strictCurrentUserRootlessPodman() {
+			candidates = PodmanLinuxUserCandidateHosts()
+		}
+		for _, host := range candidates {
 			add(host)
 		}
 	}

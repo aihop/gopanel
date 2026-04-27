@@ -27,6 +27,10 @@ type WebsiteRes struct {
 	AppInstallID  uint      `json:"appInstallId"`
 	PipelineID    uint      `json:"pipelineId"`
 	RuntimeType   string    `json:"runtimeType"`
+	RuntimeHost   string    `json:"runtimeHost"`
+	RuntimeKind   string    `json:"runtimeKind"`
+	RuntimeMode   string    `json:"runtimeMode"`
+	RunUser       string    `json:"runUser"`
 
 	AntiCrawler    bool   `json:"antiCrawler"`
 	AntiLeech      bool   `json:"antiLeech"`

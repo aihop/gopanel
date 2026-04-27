@@ -47,11 +47,11 @@ func (r *PipelineRepo) Page(page, limit int) (int64, []model.Pipeline, error) {
 	return total, list, err
 }
 
-func (r *PipelineRepo) ExistsRunnerKey(runnerKey string, excludeID uint) (bool, error) {
-	if runnerKey == "" {
+func (r *PipelineRepo) ExistsPipelineKey(pipelineKey string, excludeID uint) (bool, error) {
+	if pipelineKey == "" {
 		return false, nil
 	}
-	query := r.db.Model(&model.Pipeline{}).Where("runner_key = ?", runnerKey)
+	query := r.db.Model(&model.Pipeline{}).Where("pipeline_key = ?", pipelineKey)
 	if excludeID > 0 {
 		query = query.Where("id <> ?", excludeID)
 	}

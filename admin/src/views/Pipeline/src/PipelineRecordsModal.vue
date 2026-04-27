@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { h, ref, watch } from "vue"
-import { NModal, NDataTable, NButton, NTag, NSpace, NPopconfirm, useMessage } from "naive-ui"
+import { NModal, NDataTable, NButton, NTag, NSpace, NPopconfirm, useMessage, type DataTableColumns } from "naive-ui"
 import { getPipelineRecords, runPipeline, stopPipeline, deletePipelineRecord } from "@/api/modules/pipeline"
 import { Pipeline } from "@/api/interface/pipeline"
 import PipelineLogsModal from "./PipelineLogsModal.vue"
@@ -16,6 +16,32 @@ const loading = ref(false)
 const data = ref<Pipeline.ResRecord[]>([])
 const isSubAdmin = authStore.user?.role === "SUB_ADMIN"
 
+const handleCopy = async (text: string, successText: string) => {
+  const value = String(text || "").trim()
+  if (!value) {
+    message.warning("没有可复制的内容")
+    return
+  }
+  try {
+    if (navigator?.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value)
+    } else {
+      const textarea = document.createElement("textarea")
+      textarea.value = value
+      textarea.setAttribute("readonly", "true")
+      textarea.style.position = "fixed"
+      textarea.style.left = "-9999px"
+      document.body.appendChild(textarea)
+      textarea.select()
+      document.execCommand("copy")
+      document.body.removeChild(textarea)
+    }
+    message.success(successText)
+  } catch (_error) {
+    message.error("复制失败")
+  }
+}
+
 const pagination = ref({
   page: 1,
   limit: 10,
@@ -29,15 +55,6 @@ const pagination = ref({
 const logsModalShow = ref(false)
 const currentRecordId = ref<number | null>(null)
 const currentRecordVersion = ref<string>("")
-
-const copyText = async (text: string, successText = "已复制") => {
-  try {
-    await navigator.clipboard.writeText(text)
-    message.success(successText)
-  } catch (error: any) {
-    message.error(error?.message || "复制失败")
-  }
-}
 
 const handleRetryFromLogs = async () => {
   try {
@@ -94,7 +111,7 @@ const handleDelete = async (row: Pipeline.ResRecord) => {
   }
 }
 
-const columns = [
+const columns: DataTableColumns<Pipeline.ResRecord> = [
   { title: "ID", key: "id", width: 60 },
   { title: "创建时间", key: "createdAt", width: 180, render: (row: Pipeline.ResRecord) => row.createdAt ? dayjs(row.createdAt).format("YYYY-MM-DD HH:mm") : "-" },
   { title: "版本", key: "version", render: (row: Pipeline.ResRecord) => h(NTag, { type: "success", size: "small" }, { default: () => `v${row.version || '-'}` }) },
@@ -106,14 +123,16 @@ const columns = [
       if (!row.commitHash) {
         return h("span", { class: "text-slate-400 text-xs" }, "-")
       }
-      return h("div", { class: "flex flex-col gap-1 text-xs" }, [
-        h("span", { class: "font-mono text-slate-700" }, row.commitHash.slice(0, 12)),
-        h(NButton, {
-          size: "tiny",
-          quaternary: true,
-          type: "primary",
-          onClick: () => copyText(row.commitHash || "", "Commit SHA 已复制")
-        }, { default: () => "复制 SHA" })
+      return h("div", { class: "flex items-center gap-1 text-xs min-w-0" }, [
+        h("span", { class: "font-mono text-slate-700 shrink-0" }, row.commitHash.slice(0, 12)),
+        h("button", {
+          type: "button",
+          class: "shrink-0 text-[12px] leading-none text-blue-600 hover:text-blue-700",
+          onClick: (event: MouseEvent) => {
+            event.stopPropagation()
+            void handleCopy(row.commitHash || "", "Commit SHA 已复制")
+          }
+        }, "复制")
       ])
     }
   },
@@ -141,22 +160,26 @@ const columns = [
       if (!row.runnerHostPort) {
         return h("span", { class: "text-slate-400 text-xs" }, "未启用 / 未产出")
       }
-      return h("div", { class: "flex flex-col gap-1 text-xs" }, [
-        h("span", { class: "font-mono text-emerald-600" }, `127.0.0.1:${row.runnerHostPort}`),
-        row.runnerContainerId ? h("span", { class: "font-mono text-slate-500" }, row.runnerContainerId.slice(0, 12)) : null,
-        h(NButton, {
-          size: "tiny",
-          quaternary: true,
-          type: "primary",
-          onClick: () => copyText(`127.0.0.1:${row.runnerHostPort}`, "Runner 地址已复制")
-        }, { default: () => "复制地址" })
+      return h("div", { class: "flex flex-col gap-0.5 text-xs min-w-0" }, [
+        h("div", { class: "flex items-center gap-1 min-w-0" }, [
+          h("span", { class: "font-mono text-emerald-600 shrink-0" }, `127.0.0.1:${row.runnerHostPort}`),
+          h("button", {
+            type: "button",
+            class: "shrink-0 text-[12px] leading-none text-blue-600 hover:text-blue-700",
+            onClick: (event: MouseEvent) => {
+              event.stopPropagation()
+              void handleCopy(`127.0.0.1:${row.runnerHostPort}`, "Runner 地址已复制")
+            }
+          }, "复制")
+        ]),
+        row.runnerContainerId ? h("span", { class: "font-mono text-slate-500" }, row.runnerContainerId.slice(0, 12)) : null
       ])
     }
   },
   {
     title: "运行类型",
     key: "runtimeType",
-    width: 220,
+    width: 250,
     render(row: Pipeline.ResRecord) {
       if (!row.runnerContainerId) {
         return h("span", { class: "text-slate-400 text-xs" }, "无 Runner 容器")
@@ -170,7 +193,10 @@ const columns = [
             default: () => getRuntimeModeLabel(row)
           })
         ]),
-        h("span", { class: "text-slate-500" }, `运行用户: ${getRunUserLabel(row)}`)
+        h("span", { class: "text-slate-500" }, `运行用户: ${getRunUserLabel(row)}`),
+        row.runtimeHost
+          ? h("span", { class: "text-slate-500 break-all" }, `Host: ${row.runtimeHost}`)
+          : null
       ])
     }
   },
@@ -178,7 +204,8 @@ const columns = [
   {
     title: "操作",
     key: "actions",
-    width: 200,
+    width: 160,
+    fixed: "right",
     render(row: Pipeline.ResRecord, index: number) {
       const isFirstRow = index === 0 && pagination.value.page === 1;
       const isRunning = ["pending", "cloning", "building", "deploying"].includes(row.status);
@@ -278,7 +305,7 @@ watch(
     :show="show"
     preset="card"
     title="执行记录"
-    style="width:900px;"
+    style="width:1080px;"
     class="w-full !rounded-[24px] shadow-[0_24px_48px_rgba(15,23,42,0.12)] sm:w-[90%]"
     @update:show="(val) => emit('update:show', val)"
   >

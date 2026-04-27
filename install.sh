@@ -1346,7 +1346,15 @@ ensure_podman_socket_access() {
   run_privileged mkdir -p "${runtime_dir}" >/dev/null 2>&1 || true
   run_privileged chown "${runtime_uid}:${runtime_uid}" "${runtime_dir}" >/dev/null 2>&1 || true
   run_privileged chmod 0700 "${runtime_dir}" >/dev/null 2>&1 || true
+  run_privileged mkdir -p "${user_home}/.config/containers" >/dev/null 2>&1 || true
+  printf '[containers]\nlog_driver = "k8s-file"\n' | run_privileged tee "${user_home}/.config/containers/containers.conf" >/dev/null 2>&1 || true
+  run_privileged chown -R "${runtime_uid}:${runtime_uid}" "${user_home}/.config" >/dev/null 2>&1 || true
   run_privileged su -s /bin/sh - "${RUNTIME_USER}" -c "export HOME='${user_home}'; export XDG_RUNTIME_DIR='${runtime_dir}'; export DBUS_SESSION_BUS_ADDRESS='unix:path=${runtime_dir}/bus'; systemctl --user daemon-reload >/dev/null 2>&1 || true; systemctl --user enable --now podman.socket >/dev/null 2>&1 || true"
+  if ! run_privileged test -S "${runtime_dir}/podman/podman.sock"; then
+    warn "用户 ${RUNTIME_USER} 的 rootless Podman socket 尚未成功创建: ${runtime_dir}/podman/podman.sock"
+    warn "非 root 运行面板时将优先使用该用户的 rootless Podman；若 socket 缺失，容器/镜像/流水线可能不可用。"
+    warn "请检查 linger、systemd --user 与 podman.socket，必要时手动执行: loginctl enable-linger ${RUNTIME_USER} && su -s /bin/sh - ${RUNTIME_USER} -c 'export HOME=${user_home}; export XDG_RUNTIME_DIR=${runtime_dir}; export DBUS_SESSION_BUS_ADDRESS=unix:path=${runtime_dir}/bus; systemctl --user enable --now podman.socket'"
+  fi
   return 0
 }
 

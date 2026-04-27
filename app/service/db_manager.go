@@ -415,6 +415,23 @@ func popCondition(conditions map[string]interface{}, key string) (interface{}, b
 	return nil, false
 }
 
+func removeVirtualColumns(values map[string]interface{}) {
+	if values == nil {
+		return
+	}
+	for k := range values {
+		key := strings.TrimSpace(k)
+		if key == "" {
+			delete(values, k)
+			continue
+		}
+		// SQLite rowid aliases are virtual selectors, not real table columns.
+		if strings.EqualFold(key, "__rowid__") || strings.EqualFold(key, "rowid") {
+			delete(values, k)
+		}
+	}
+}
+
 func stripComplexConditions(conditions map[string]interface{}) {
 	if conditions == nil {
 		return
@@ -438,6 +455,7 @@ func (s *DBManagerService) InsertRecord(req request.InsertRecordReq) error {
 	server, _ := s.serverRepo.Get(req.ServerID)
 	dbType := server.Type
 	tableName := sanitizeIdent(req.TableName)
+	removeVirtualColumns(req.Data)
 
 	var cols []string
 	var placeholders []string
@@ -476,6 +494,7 @@ func (s *DBManagerService) UpdateRecord(req request.UpdateRecordReq) error {
 	server, _ := s.serverRepo.Get(req.ServerID)
 	dbType := server.Type
 	tableName := sanitizeIdent(req.TableName)
+	removeVirtualColumns(req.Data)
 
 	var setCols []string
 	var args []interface{}

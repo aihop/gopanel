@@ -44,6 +44,10 @@ export namespace Website {
         runtimeName: string;
         runtimeDir?: string;
         runtimeType: string;
+        runtimeHost?: string;
+        runtimeKind?: string;
+        runtimeMode?: string;
+        runUser?: string;
     }
     export interface WebsiteRes extends CommonModel {
         protocol: string;
@@ -64,6 +68,10 @@ export namespace Website {
         engineEnv?: string;
         engineMode?: string;
         engineConfig?: any;
+        runtimeHost?: string;
+        runtimeKind?: string;
+        runtimeMode?: string;
+        runUser?: string;
         sslExpireDate: Date;
     }
 

@@ -125,7 +125,7 @@
 </template>
 
 <script lang="ts" setup>
-import { containerCleanLogAPI, DownloadFile } from "@/api/modules/container"
+import { containerCleanLogsAPI, DownloadFile } from "@/api/modules/container"
 import FtEditor from "@/components/FtEditor/index.vue"
 import { useAuthStore } from "@/store/auth"
 import GlobalStore from "@/store/modules/global"
@@ -204,7 +204,7 @@ async function searchLogs() {
 	const authStore = useAuthStore()
 	const auth = authStore.getAuth() || ""
 
-	const url = `${protocol}://${host}/api/container/search/log?container=${logSearch.containerID}&since=${logSearch.mode}&tail=${logSearch.tail}&follow=${logSearch.isWatch}&runtimeHost=${encodeURIComponent(logSearch.runtimeHost || "")}&auth=${auth}`
+	const url = `${protocol}://${host}/api/container/logs?container=${logSearch.containerID}&since=${logSearch.mode}&tail=${logSearch.tail}&follow=${logSearch.isWatch}&runtimeHost=${encodeURIComponent(logSearch.runtimeHost || "")}&auth=${auth}`
 	terminalSocket.value = new WebSocket(url)
 
 	terminalSocket.value.onmessage = event => {
@@ -255,7 +255,7 @@ async function onClean() {
 		negativeText: t("commons.button.cancel"),
 		onPositiveClick: async () => {
 			try {
-				await containerCleanLogAPI(logSearch.container)
+				await containerCleanLogsAPI(logSearch.container)
 				searchLogs()
 				message.success(t("commons.msg.operationSuccess"))
 			} catch (error) {

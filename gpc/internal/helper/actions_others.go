@@ -101,3 +101,9 @@ func (s *Server) actionSSHLoginLogList(ctx context.Context, params map[string]in
 	_ = params
 	return "", errors.New("unsupported platform")
 }
+
+func (s *Server) actionPodmanContainerJournalLogs(ctx context.Context, params map[string]interface{}) (string, error) {
+	_ = ctx
+	_ = params
+	return "", errors.New("unsupported platform")
+}

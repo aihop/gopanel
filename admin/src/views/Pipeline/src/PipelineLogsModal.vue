@@ -7,6 +7,7 @@ import { appsRepairPodmanSubuidAPI } from "@/api/modules/apps"
 import { websiteListAPI } from "@/api/modules/website"
 import type { Website } from "@/api/interface/website"
 import type { Pipeline } from "@/api/interface/pipeline"
+import { buildRuntimeDetailText } from "@/utils/runtime"
 
 const props = defineProps<{ show: boolean; recordId: number; pipelineId?: number | null }>()
 const emit = defineEmits(["update:show", "finished", "retry"])
@@ -20,7 +21,7 @@ const message = useMessage()
 const isRunning = ref(false)
 const isStopping = ref(false)
 const runnerResult = ref<{ hostPort: number; containerId: string } | null>(null)
-const linkedWebsite = ref<Website.WebsiteRes | null>(null)
+const linkedWebsite = ref<Website.WebsiteDTO | null>(null)
 const currentRecord = ref<Pipeline.ResRecord | null>(null)
 
 const repairTipVisible = ref(false)
@@ -85,10 +86,12 @@ const linkedWebsiteUrl = computed(() => {
 const runnerRuntimeText = computed(() => {
   const row = currentRecord.value
   if (!row?.runnerContainerId) return ""
-  const kind = String(row.runtimeKind || "").toLowerCase() === "podman" ? "Podman" : String(row.runtimeKind || "").toLowerCase() === "docker" ? "Docker" : "Runtime"
-  const mode = String(row.runtimeMode || "").toLowerCase() || "default"
-  const runUser = row.runUser || "镜像默认"
-  return `${kind}/${mode} · 运行用户：${runUser}`
+  return buildRuntimeDetailText(row, {
+    kindFallback: "Runtime",
+    userFallback: "镜像默认",
+    runtimePrefix: "",
+    runUserPrefix: "运行用户："
+  })
 })
 
 const openLinkedWebsite = () => {
@@ -103,8 +106,8 @@ const fetchLinkedWebsite = async () => {
   }
   try {
     const res = await websiteListAPI()
-    const items = Array.isArray(res.data?.items) ? res.data.items : []
-    linkedWebsite.value = items.find((item: Website.WebsiteRes) => Number(item.pipelineId || 0) === Number(props.pipelineId)) || null
+    const items: Website.WebsiteDTO[] = Array.isArray(res.data?.items) ? res.data.items : []
+    linkedWebsite.value = items.find(item => Number(item.pipelineId || 0) === Number(props.pipelineId)) || null
   } catch (error) {
     linkedWebsite.value = null
   }

@@ -182,6 +182,12 @@
             />
           </n-form-item>
         </n-form>
+        <div
+          v-if="selectedSyncWebsiteRuntimeText"
+          class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600"
+        >
+          {{ selectedSyncWebsiteRuntimeText }}
+        </div>
       </div>
       <template #action>
         <n-space justify="end">
@@ -340,6 +346,22 @@
             />
           </div>
         </div>
+
+        <div
+          v-if="currentSSL.websites?.length"
+          class="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+        >
+          <div class="text-xs uppercase tracking-[0.18em] text-slate-400">绑定网站</div>
+          <div class="mt-3 space-y-2">
+            <div
+              v-for="item in currentSSL.websites"
+              :key="item.id"
+              class="rounded-xl bg-white px-4 py-3 text-sm text-slate-600"
+            >
+              {{ buildBoundWebsiteRuntimeText(item) }}
+            </div>
+          </div>
+        </div>
       </div>
     </FullModal>
 
@@ -366,6 +388,12 @@
             />
           </n-form-item>
         </n-form>
+        <div
+          v-if="selectedApplyWebsiteRuntimeText"
+          class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600"
+        >
+          {{ selectedApplyWebsiteRuntimeText }}
+        </div>
       </div>
       <template #action>
         <n-space justify="end">
@@ -505,7 +533,7 @@
 </template>
 
 <script setup lang="ts">
-import type { DataTableColumns, SelectOption, AutoCompleteOption } from "naive-ui"
+import type { DataTableColumns, SelectOption } from "naive-ui"
 import {
 	ApplySSL,
 	CreateSSL,
@@ -522,18 +550,15 @@ import {
 } from "@/api/modules/ssl"
 import { websiteListAPI } from "@/api/modules/website"
 import { CloudCdnDomainsAPI, cloudAccountListAPI } from "@/api/modules/cloud"
-import { NButton, NDropdown, NTag, useDialog, useMessage, NAutoComplete } from "naive-ui"
+import { NButton, NDropdown, NTag, NTooltip, useDialog, useMessage, NAutoComplete } from "naive-ui"
 import { computed, h, onMounted, reactive, ref } from "vue"
 import { useAuthStore } from "@/store/auth"
 import type { Website } from "@/api/interface/website"
 import { t } from "@/i18n"
 import FullModal from "@/components/FullModal.vue"
+import { buildRuntimeDetailText } from "@/utils/runtime"
 
-type WebsiteOption = {
-	id: number
-	name?: string
-	primaryDomain?: string
-}
+type WebsiteOption = Website.WebsiteDTO
 
 type SSLRow = {
 	id: number
@@ -789,12 +814,47 @@ const handleApplyWebsiteChange = (value: number | null) => {
 	applyForm.websiteId = value
 }
 
+const websiteMap = computed<Record<number, WebsiteOption>>(() =>
+	websites.value.reduce<Record<number, WebsiteOption>>((acc, item) => {
+		acc[item.id] = item
+		return acc
+	}, {})
+)
+
+function buildWebsiteRuntimeText(item?: (Partial<WebsiteOption> & { id?: number; name?: string; primaryDomain?: string }) | null) {
+	if (!item) return ""
+	const prefix = item.name ? `${item.name} · ${item.primaryDomain || "--"}` : item.primaryDomain || `#${item.id || "-"}`
+	const detail = buildRuntimeDetailText(item, {
+		prefix,
+		kindFallback: "Runtime",
+		userFallback: "镜像默认",
+		runtimePrefix: "",
+		runUserPrefix: "用户："
+	})
+	const host = String(item.runtimeHost || "").trim()
+	return host ? `${detail} · Host: ${host}` : detail
+}
+
+function buildBoundWebsiteRuntimeText(item: { id: number; name?: string; primaryDomain?: string }) {
+	return buildWebsiteRuntimeText(websiteMap.value[item.id] || item)
+}
+
 const websiteOptions = computed<SelectOption[]>(() =>
 	websites.value.map(item => ({
-		label: item.name ? `${item.name} · ${item.primaryDomain || "--"}` : item.primaryDomain || `#${item.id}`,
+		label: item.primaryDomain || `#${item.id}`,
 		value: item.id
 	}))
 )
+
+const selectedSyncWebsiteRuntimeText = computed(() => {
+	if (!syncForm.websiteId) return ""
+	return buildWebsiteRuntimeText(websiteMap.value[syncForm.websiteId])
+})
+
+const selectedApplyWebsiteRuntimeText = computed(() => {
+	if (!applyForm.websiteId) return ""
+	return buildWebsiteRuntimeText(websiteMap.value[applyForm.websiteId])
+})
 
 const cloudAccountOptions = computed<SelectOption[]>(() =>
 	cloudAccounts.value.map(item => ({
@@ -856,9 +916,17 @@ const columns: DataTableColumns<SSLRow> = [
 				{ class: "flex flex-wrap gap-2" },
 				items.map(item =>
 					h(
-						"span",
-						{ class: "rounded-full bg-blue-50 px-3 py-1 text-xs text-blue-600" },
-						item.name || item.primaryDomain || `#${item.id}`
+						NTooltip,
+						null,
+						{
+							trigger: () =>
+								h(
+									"span",
+									{ class: "rounded-full bg-blue-50 px-3 py-1 text-xs text-blue-600" },
+									item.name || item.primaryDomain || `#${item.id}`
+								),
+							default: () => buildBoundWebsiteRuntimeText(item)
+						}
 					)
 				)
 			)

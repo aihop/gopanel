@@ -79,8 +79,8 @@ export const GetAppDetailByID = (id: number) => {
 	return http.get<App.AppDetail>(`/apps/detail/${id}`)
 }
 
-export const PrecheckAppInstall = () => {
-	return http.get<any>("/apps/precheck")
+export const AppsValidateAPI = () => {
+	return http.get<any>("/apps/validate")
 }
 
 export const appsInstallAPI = (install: App.AppInstall) => {

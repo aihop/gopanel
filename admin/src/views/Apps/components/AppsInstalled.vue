@@ -154,6 +154,28 @@
         title="应用详情"
         v-if="drawerItem"
       >
+        <div class="mb-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+          <div class="font-medium text-slate-800">运行时</div>
+          <div class="mt-2 flex flex-wrap items-center gap-2">
+            <n-tag
+              size="small"
+              round
+              :bordered="false"
+              type="info"
+            >{{ getRuntimeKindLabel(drawerItem) }}</n-tag>
+            <n-tag
+              size="small"
+              round
+              :bordered="false"
+              :type="drawerItem.runtimeMode === 'rootless' ? 'success' : 'default'"
+            >{{ getRuntimeModeLabel(drawerItem) }}</n-tag>
+          </div>
+          <div class="mt-2 text-xs text-slate-500">运行用户：{{ getRunUserLabel(drawerItem) }}</div>
+          <div
+            v-if="drawerItem.runtimeHost"
+            class="mt-1 text-xs text-slate-500 break-all"
+          >Host：{{ drawerItem.runtimeHost }}</div>
+        </div>
         <pre class="whitespace-pre-wrap">{{ JSON.stringify(drawerItem.app, null, 2) }}</pre>
       </n-drawer-content>
     </n-drawer>
@@ -212,7 +234,7 @@
         <span>实时输出，关闭窗口将断开连接</span>
       </div>
       <n-alert
-        v-if="repairTipVisible"
+        v-if="logConfig.type === 'install' && repairTipVisible"
         class="mb-3"
         type="warning"
         :title="repairTipTitle"
@@ -272,7 +294,7 @@
       </div>
       <template #action>
         <n-button
-          :disabled="!isInstallFinished"
+          :disabled="!canCloseLogModal"
           type="primary"
           @click="handleLogModalClose"
         >关闭</n-button>
@@ -293,7 +315,7 @@ import { getRuntimeKindLabel, getRuntimeModeLabel, getRunUserLabel } from "@/uti
 
 const logConfig = reactive({
 	id: 0,
-	type: "install",
+	type: "runtime",
 	name: "",
 	tail: true
 })
@@ -326,7 +348,11 @@ const logsData = ref<string[]>([])
 const isInstallFinished = ref(false)
 const terminalRef = ref<HTMLElement | null>(null)
 let logEventSource: EventSource | null = null
-const logTitle = computed(() => (logConfig.name ? `安装日志 - ${logConfig.name}` : "安装日志"))
+const logTitle = computed(() => {
+	const prefix = logConfig.type === "install" ? "安装日志" : "运行日志"
+	return logConfig.name ? `${prefix} - ${logConfig.name}` : prefix
+})
+const canCloseLogModal = computed(() => logConfig.type !== "install" || isInstallFinished.value)
 
 const repairTipVisible = ref(false)
 const repairTipTitle = ref("")
@@ -509,7 +535,7 @@ async function handleRebuild(item: any) {
 					repairTipCommands.value = ""
 					repairTipOutput.value = ""
 					repairTipAction.value = ""
-					openLog(item)
+					openLog(item, "install")
 				} else {
 					message.error(res.msg || "重建失败")
 				}
@@ -530,12 +556,24 @@ function scrollToBottom() {
 	})
 }
 
-function openLog(item: any) {
+function resetLogTips() {
+	repairTipVisible.value = false
+	repairTipTitle.value = ""
+	repairTipMessage.value = ""
+	repairTipCommands.value = ""
+	repairTipOutput.value = ""
+	repairTipAction.value = ""
+}
+
+function openLog(item: any, type: "install" | "runtime" = "runtime") {
 	logConfig.name = item?.name || ""
 	logConfig.id = item?.id || 0
+	logConfig.type = type
 	currentInstallId.value = item?.id || 0
 	logModalVisible.value = true
 	logsData.value = []
+	isInstallFinished.value = type !== "install"
+	resetLogTips()
 	const token = authStore.auth || ""
 	const apiUrl = "/api"
 	if (logEventSource) {
@@ -546,20 +584,32 @@ function openLog(item: any) {
 		logsData.value.push("[系统提示] 缺少日志名称或登录状态无效")
 		return
 	}
-	logEventSource = new EventSource(`${apiUrl}/apps/install/${encodeURIComponent(logConfig.name)}/logs?token=${encodeURIComponent(token)}`)
+	const endpoint = logConfig.type === "install"
+		? `/apps/install/${encodeURIComponent(logConfig.name)}/logs`
+		: `/apps/installed/${encodeURIComponent(logConfig.name)}/runtime/logs`
+	logEventSource = new EventSource(`${apiUrl}${endpoint}?token=${encodeURIComponent(token)}`)
 	logEventSource.onmessage = (event) => {
 		if (event.data === "ping") return
 		if (event.data === "EOF" || event.data === '["EOF"]') {
 			logEventSource?.close()
 			logEventSource = null
-			isInstallFinished.value = true
+			isInstallFinished.value = logConfig.type === "install"
 			logsData.value.push("\n====== 日志结束 ======")
 			scrollToBottom()
-			checkInstallResult(logConfig.name)
-			fetchData()
+			if (logConfig.type === "install") {
+				checkInstallResult(logConfig.name)
+				fetchData()
+			}
 			return
 		}
 		logsData.value.push(event.data)
+		if (logConfig.type !== "install") {
+			if (logsData.value.length > 2000) {
+				logsData.value = logsData.value.slice(-2000)
+			}
+			scrollToBottom()
+			return
+		}
 				if (event.data.includes("no compose command found")) {
 					repairTipVisible.value = true
 					repairTipTitle.value = "检测到 Compose 环境缺失"
@@ -597,8 +647,10 @@ function openLog(item: any) {
 		scrollToBottom()
 	}
 	logEventSource.onerror = () => {
-		logsData.value.push("\n[系统提示] 与日志服务器的连接已断开或发生错误。")
-		isInstallFinished.value = true
+		logsData.value.push(logConfig.type === "install"
+			? "\n[系统提示] 与安装日志服务器的连接已断开或发生错误。"
+			: "\n[系统提示] 与运行日志服务器的连接已断开或发生错误。")
+		isInstallFinished.value = logConfig.type === "install"
 		logEventSource?.close()
 		logEventSource = null
 		scrollToBottom()
@@ -703,6 +755,7 @@ function handleLogModalClose() {
 		logEventSource.close()
 		logEventSource = null
 	}
+	logModalVisible.value = false
 }
 
  

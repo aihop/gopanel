@@ -78,9 +78,12 @@ func PipelineCreate(c fiber.Ctx) error {
 	}
 
 	pipelineRepo := repo.NewPipeline(global.DB)
-	runnerKey := normalizeRunnerKey(req.RunnerKey)
+	pipelineKey := normalizePipelineKey(req.PipelineKey)
 	if req.RunnerMode == "runner" {
-		if err := validateRunnerKey(pipelineRepo, runnerKey, 0, ""); err != nil {
+		if err := validatePipelineKey(pipelineRepo, pipelineKey, 0, ""); err != nil {
+			return c.JSON(e.Fail(err))
+		}
+		if err := service.ValidateRunnerPersistentPaths(req.RunnerConfig); err != nil {
 			return c.JSON(e.Fail(err))
 		}
 	}
@@ -97,7 +100,7 @@ func PipelineCreate(c fiber.Ctx) error {
 		OutputImage:  req.OutputImage,
 		ArtifactPath: req.ArtifactPath,
 		ExposePort:   req.ExposePort,
-		RunnerKey:    runnerKey,
+		PipelineKey:  pipelineKey,
 		RunnerMode:   req.RunnerMode,
 	}
 	if len(req.RunnerConfig) > 0 {
@@ -126,9 +129,12 @@ func PipelineUpdate(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	runnerKey := normalizeRunnerKey(req.RunnerKey)
+	pipelineKey := normalizePipelineKey(req.PipelineKey)
 	if req.RunnerMode == "runner" {
-		if err := validateRunnerKey(pipelineRepo, runnerKey, pipeline.ID, pipeline.RunnerKey); err != nil {
+		if err := validatePipelineKey(pipelineRepo, pipelineKey, pipeline.ID, pipeline.PipelineKey); err != nil {
+			return c.JSON(e.Fail(err))
+		}
+		if err := service.ValidateRunnerPersistentPaths(req.RunnerConfig); err != nil {
 			return c.JSON(e.Fail(err))
 		}
 	}
@@ -145,7 +151,7 @@ func PipelineUpdate(c fiber.Ctx) error {
 	pipeline.OutputImage = req.OutputImage
 	pipeline.ArtifactPath = req.ArtifactPath
 	pipeline.ExposePort = req.ExposePort
-	pipeline.RunnerKey = runnerKey
+	pipeline.PipelineKey = pipelineKey
 	pipeline.RunnerMode = req.RunnerMode
 	if req.RunnerConfig != nil {
 		if len(req.RunnerConfig) == 0 {
@@ -161,7 +167,7 @@ func PipelineUpdate(c fiber.Ctx) error {
 	return c.JSON(e.Succ())
 }
 
-func normalizeRunnerKey(raw string) string {
+func normalizePipelineKey(raw string) string {
 	key := strings.ToLower(strings.TrimSpace(raw))
 	if key == "" {
 		return ""
@@ -184,19 +190,25 @@ func normalizeRunnerKey(raw string) string {
 	return out
 }
 
-func validateRunnerKey(pipelineRepo *repo.PipelineRepo, runnerKey string, excludeID uint, currentRunnerKey string) error {
-	if runnerKey == "" {
+func validatePipelineKey(pipelineRepo *repo.PipelineRepo, pipelineKey string, excludeID uint, currentPipelineKey string) error {
+	if pipelineKey == "" {
 		return errors.New("流水线标识不能为空")
 	}
-	exists, err := pipelineRepo.ExistsRunnerKey(runnerKey, excludeID)
+	exists, err := pipelineRepo.ExistsPipelineKey(pipelineKey, excludeID)
 	if err != nil {
 		return err
 	}
 	if exists {
-		return fmt.Errorf("流水线标识 `%s` 已存在，请换一个", runnerKey)
+		return fmt.Errorf("流水线标识 `%s` 已存在，请换一个", pipelineKey)
 	}
-	appDir := filepath.Join(global.CONF.System.BaseDir, "apps", runnerKey)
-	if _, err := os.Stat(appDir); err == nil && strings.TrimSpace(currentRunnerKey) != runnerKey {
+	pipelineDir := filepath.Join(global.CONF.System.BaseDir, "pipelines", pipelineKey)
+	if _, err := os.Stat(pipelineDir); err == nil && strings.TrimSpace(currentPipelineKey) != pipelineKey {
+		return fmt.Errorf("流水线目录 `%s` 已存在，流水线标识重复了，请换其他的", pipelineDir)
+	} else if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	appDir := filepath.Join(global.CONF.System.BaseDir, "apps", pipelineKey)
+	if _, err := os.Stat(appDir); err == nil && strings.TrimSpace(currentPipelineKey) != pipelineKey {
 		return fmt.Errorf("安装目录 `%s` 已存在，流水线标识重复了，请换其他的", appDir)
 	} else if err != nil && !os.IsNotExist(err) {
 		return err

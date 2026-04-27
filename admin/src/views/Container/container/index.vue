@@ -215,6 +215,7 @@ import { t } from "@/i18n"
 import { useRouter } from "vue-router"
 import { NButton, NSpace, NDropdown, NTag } from "naive-ui"
 import TableColumnSelect from "@/components/TableColumnSelect.vue"
+import { buildRuntimeSummaryText, getRuntimeKindLabel, getRuntimeModeLabel, getRunUserLabel } from "@/utils/runtime"
 
 const router = useRouter()
 
@@ -228,17 +229,6 @@ const stateOptions = computed(() => [
 	{ label: t("commons.status.exited"), value: "exited" },
 	{ label: t("commons.status.dead"), value: "dead" }
 ])
-
-const getContainerModeLabel = (row: Container.ContainerInfo) => {
-	switch (row.runtimeMode) {
-		case "rootless":
-			return t("container.rootless")
-		case "rootful":
-			return t("container.rootful")
-		default:
-			return t("container.defaultMode")
-	}
-}
 
 const getContainerSourceLabel = (row: Container.ContainerInfo) => {
 	switch (row.sourceType) {
@@ -378,9 +368,9 @@ const columns = ref([
 					{
 						size: "small",
 						bordered: false,
-						type: row.runtimeKind === "docker" ? "success" : "warning"
+						type: row.runtimeKind === "docker" ? "success" : row.runtimeKind === "podman" ? "warning" : "default"
 					},
-					{ default: () => row.runtimeKind || "-" }
+					{ default: () => getRuntimeKindLabel(row, { kindFallback: "-" }) }
 				),
 				h(
 					NTag,
@@ -389,7 +379,13 @@ const columns = ref([
 						bordered: false,
 						type: row.runtimeMode === "rootless" ? "warning" : "default"
 					},
-					{ default: () => getContainerModeLabel(row) }
+					{
+						default: () => getRuntimeModeLabel(row, {
+							rootlessLabel: t("container.rootless"),
+							rootfulLabel: t("container.rootful"),
+							defaultModeLabel: t("container.defaultMode")
+						})
+					}
 				),
 				h(
 					NTag,
@@ -406,7 +402,7 @@ const columns = ref([
 				h(
 					"div",
 					{ class: "text-xs text-gray-500 leading-5" },
-					`${t("container.runUser")}: ${row.runUser || t("container.userDefault")}`
+					`${t("container.runUser")}: ${getRunUserLabel(row, { userFallback: t("container.userDefault") })}`
 				),
 				row.appInstallName
 					? h("div", { class: "text-xs text-gray-500 leading-5" }, row.appInstallName)
@@ -474,7 +470,14 @@ const columns = ref([
 									containerID: row.containerID,
 									container: row.name,
 									runtimeHost: row.runtimeHost || "",
-									runtimeSummary: `${row.runtimeKind || "Runtime"} / ${getContainerModeLabel(row)} / ${t("container.runUser")}: ${row.runUser || t("container.userDefault")}`
+									runtimeSummary: buildRuntimeSummaryText(row, {
+										kindFallback: t("container.runtimeType"),
+										rootlessLabel: t("container.rootless"),
+										rootfulLabel: t("container.rootful"),
+										defaultModeLabel: t("container.defaultMode"),
+										userFallback: t("container.userDefault"),
+										runUserPrefix: `${t("container.runUser")}: `
+									})
 								})
 						},
 						{ default: () => t("commons.button.log") }
@@ -699,7 +702,14 @@ const onMonitor = (row: any) => {
 	dialogMonitorRef.value!.acceptParams({
 		containerID: row.containerID,
 		container: row.name,
-		runtimeSummary: `${row.runtimeKind || "Runtime"} / ${getContainerModeLabel(row)} / ${t("container.runUser")}: ${row.runUser || t("container.userDefault")}`
+		runtimeSummary: buildRuntimeSummaryText(row, {
+			kindFallback: t("container.runtimeType"),
+			rootlessLabel: t("container.rootless"),
+			rootfulLabel: t("container.rootful"),
+			defaultModeLabel: t("container.defaultMode"),
+			userFallback: t("container.userDefault"),
+			runUserPrefix: `${t("container.runUser")}: `
+		})
 	})
 }
 
@@ -709,7 +719,14 @@ const onTerminal = (row: any) => {
 		containerID: row.containerID,
 		container: row.name,
 		runtimeHost: row.runtimeHost || "",
-		runtimeSummary: `${row.runtimeKind || "Runtime"} / ${getContainerModeLabel(row)} / ${t("container.runUser")}: ${row.runUser || t("container.userDefault")}`
+		runtimeSummary: buildRuntimeSummaryText(row, {
+			kindFallback: t("container.runtimeType"),
+			rootlessLabel: t("container.rootless"),
+			rootfulLabel: t("container.rootful"),
+			defaultModeLabel: t("container.defaultMode"),
+			userFallback: t("container.userDefault"),
+			runUserPrefix: `${t("container.runUser")}: `
+		})
 	})
 }
 
@@ -720,7 +737,14 @@ const onInspect = async (row: Container.ContainerInfo) => {
 	let param = {
 		header: t("commons.button.view"),
 		detailInfo: detailInfo,
-		summary: `${row.runtimeKind || "Runtime"} / ${getContainerModeLabel(row)} / ${t("container.runUser")}: ${row.runUser || t("container.userDefault")}`
+		summary: buildRuntimeSummaryText(row, {
+			kindFallback: t("container.runtimeType"),
+			rootlessLabel: t("container.rootless"),
+			rootfulLabel: t("container.rootful"),
+			defaultModeLabel: t("container.defaultMode"),
+			userFallback: t("container.userDefault"),
+			runUserPrefix: `${t("container.runUser")}: `
+		})
 	}
 	console.log("myDetail", myDetail.value)
 	myDetail.value?.acceptParams(param)

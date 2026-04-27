@@ -41,7 +41,7 @@ func ListFiles(c fiber.Ctx) error {
 	// 处理如果 SubAdmin 访问根目录则重定向到它的限制目录
 	if claims, ok := c.Locals(constant.AppAuthName).(*token.CustomClaims); ok && (claims.Role == constant.UserRoleSubAdmin || claims.Role == constant.UserRoleDemo) {
 		baseDir := filepath.Clean(claims.FileBaseDir)
-		if req.Path == "" || req.Path == "/" || strings.HasSuffix(req.Path, "pipelines") || strings.HasSuffix(req.Path, "pipelines_archive") {
+		if req.Path == "" || req.Path == "/" || strings.HasSuffix(req.Path, "pipelines") {
 			req.Path = baseDir
 		} else {
 			if !strings.HasPrefix(filepath.Clean(req.Path), baseDir) {

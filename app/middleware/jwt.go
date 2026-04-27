@@ -31,7 +31,8 @@ func JWT(role string) func(fiber.Ctx) error {
 			return errors.New("demo role is read-only")
 		}
 
-		// 允许 SSE 或 WebSocket 请求在建立连接时绕过 Header JWT 检查，如果在 Query 中带了有效 Token
+		// 允许 SSE 或 WebSocket 请求在建立连接时通过 Query token 兼容鉴权。
+		// EventSource 无法自定义请求头，像 /runtime-logs 这类路径也需要走同一套 JWT 校验。
 		if (strings.HasSuffix(c.Path(), "/logs") || strings.HasSuffix(c.Path(), "/terminal")) && c.Query("token") != "" {
 			c.Request().Header.Set("x-auth", c.Query("token"))
 		}

@@ -28,11 +28,11 @@ export const commitContainer = (params: Container.ContainerCommit) => {
 export const loadContainerInfo = (name: string, runtimeHost?: string) => {
 	return http.post<Container.ContainerHelper>(`/container/info`, { name: name, runtimeHost: runtimeHost || "" })
 }
-export const containerCleanLogAPI = (containerName: string) => {
-	return http.post(`/container/clean/log`, { name: containerName })
+export const containerCleanLogsAPI = (containerName: string) => {
+	return http.post(`/container/clean/logs`, { name: containerName })
 }
-export const loadContainerLog = (type: string, name: string) => {
-	return http.post<string>(`/container/load/log`, { type: type, name: name })
+export const loadContainerLogs = (type: string, name: string) => {
+	return http.post<string>(`/container/load/logs`, { type: type, name: name })
 }
 export const containerListStats = () => {
 	return http.get<Array<Container.ContainerListStats>>(`/container/list/stats`)
@@ -54,7 +54,7 @@ export const inspect = (params: Container.ContainerInspect) => {
 }
 
 export const DownloadFile = (params: Container.ContainerLogInfo) => {
-	return http.download<BlobPart>("/container/download/log", params, {
+	return http.download<BlobPart>("/container/download/logs", params, {
 		responseType: "blob",
 		timeout: TimeoutEnum.T_40S
 	})
@@ -181,14 +181,14 @@ export const dockerOperate = (operation: string) => {
 }
  
 export const loadDaemonFile = () => {
-	return http.get<string>(`/container/daemon/file`)
+	return http.get<string>(`/container/engine/file`)
 }
 export const loadInstanceStatus = () => {
-	return http.get<string>(`/container/instance/status`)
+	return http.get<string>(`/container/engine/status`)
 }
 
-export const containerPrecheck = () => {
-	return http.get<any>(`/container/precheck`)
+export const containerValidateAPI = () => {
+	return http.get<any>(`/container/engine/validate`)
 }
 
 export const repairPodmanSocketAPI = (group?: string) => {
@@ -199,27 +199,27 @@ export const repairSystemdLingerAPI = () => {
 	return http.post(`/container/repair/linger`, {})
 }
 export const updateDaemonUpdate = (key: string, value: string) => {
-	return http.post(`/container/daemon/update`, { key: key, value: value }, TimeoutEnum.T_60S)
+	return http.post(`/container/engine/update`, { key: key, value: value }, TimeoutEnum.T_60S)
 }
 export const updateLogOption = (maxSize: string, maxFile: string) => {
-	return http.post(`/container/logoption/update`, { logMaxSize: maxSize, logMaxFile: maxFile }, TimeoutEnum.T_60S)
+	return http.post(`/container/options/log`, { logMaxSize: maxSize, logMaxFile: maxFile }, TimeoutEnum.T_60S)
 }
 export const updateIpv6Option = (fixedCidrV6: string, ip6Tables: boolean, experimental: boolean) => {
 	return http.post(
-		`/container/ipv6option/update`,
+		`/container/options/ipv6`,
 		{ fixedCidrV6: fixedCidrV6, ip6Tables: ip6Tables, experimental: experimental },
 		TimeoutEnum.T_60S
 	)
 }
 export const updateDaemonByfile = (params: Container.DaemonJsonUpdateByFile) => {
-	return http.post(`/container/daemon/update/byfile`, params)
+	return http.post(`/container/engine/update-file`, params)
 }
 
 export const containerDaemonConfigAPI = () => {
-	return http.get<Response<any>>(`/container/daemon/config`)
+	return http.get<Response<any>>(`/container/engine/config`)
 }
  
 
 export async function containerInstanceOperateAPI(data: any) {
-	return http.post<Response<any>>(`/container/instance/operate`, data)
+	return http.post<Response<any>>(`/container/engine/operate`, data)
 }

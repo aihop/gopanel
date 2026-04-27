@@ -166,9 +166,9 @@ func ContainerPrune(c fiber.Ctx) error {
 // @Success 200
 // @Security ApiKeyAuth
 // @Security Timestamp
-// @Router /container/clean/log [post]
+// @Router /container/clean/logs [post]
 // @x-panel-log {"bodyKeys":["name"],"paramKeys":[],"BeforeFunctions":[],"formatZH":"清理容器 [name] 日志","formatEN":"clean container [name] logs"}
-func ContainerCleanLog(c fiber.Ctx) error {
+func ContainerCleanLogs(c fiber.Ctx) error {
 	R, err := e.BodyToStruct[dto.OperationWithName](c.Body())
 	if err != nil {
 		return c.JSON(e.Fail(buserr.Err(err)))
@@ -187,8 +187,8 @@ func ContainerCleanLog(c fiber.Ctx) error {
 // @Success 200 {string} content
 // @Security ApiKeyAuth
 // @Security Timestamp
-// @Router /container/load/log [post]
-func ContainerLoadLog(c fiber.Ctx) error {
+// @Router /container/load/logs [post]
+func ContainerLoadLogs(c fiber.Ctx) error {
 	R, err := e.BodyToStruct[dto.OperationWithNameAndType](c.Body())
 	if err != nil {
 		return c.JSON(e.Fail(buserr.Err(err)))
@@ -304,7 +304,7 @@ func ContainerInspect(c fiber.Ctx) error {
 // @Success 200
 // @Security ApiKeyAuth
 // @Security Timestamp
-// @Router /container/search/log [get]
+// @Router /container/logs [get]
 func ContainerLogs(c *websocket.Conn) {
 	defer c.Close()
 	// 提取查询参数
@@ -327,7 +327,7 @@ func ContainerLogs(c *websocket.Conn) {
 // @Success 200
 // @Security ApiKeyAuth
 // @Security Timestamp
-// @Router /container/download/log [post]
+// @Router /container/download/logs [post]
 func DownloadContainerLogs(c fiber.Ctx) error {
 	R, err := e.BodyToStruct[dto.ContainerLog](c.Body())
 	if err != nil {
@@ -632,7 +632,7 @@ func ComposeUpdate(c fiber.Ctx) error {
 // @Success 200
 // @Security ApiKeyAuth
 // @Security Timestamp
-// @Router /container/compose/search/log [get]
+// @Router /container/compose/logs [get]
 func ComposeLogs(c *websocket.Conn) {
 	defer c.Close()
 

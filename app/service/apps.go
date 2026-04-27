@@ -578,6 +578,11 @@ func upApp(appInstall *model.AppInstall, pullImages bool, logger *AppInstallLogg
 			_ = files.NewFileOp().WriteFile(appInstall.GetComposePath(), strings.NewReader(fixed2), 0644)
 			logger.Info("Qualified image names in docker-compose.yml")
 		}
+		if fixed, changed, ferr := applyComposeLogCompatYAML(string(composeContent)); ferr == nil && changed {
+			composeContent = []byte(fixed)
+			_ = files.NewFileOp().WriteFile(appInstall.GetComposePath(), strings.NewReader(fixed), 0644)
+			logger.Info("Applied compose log driver compatibility for current runtime")
+		}
 		if validateErr := validateComposeEnvForPortsVolumes(string(composeContent), string(envContent)); validateErr != nil {
 			logger.Error("Compose params invalid: %s", validateErr.Error())
 			appInstall.Message = validateErr.Error()
@@ -1298,6 +1303,71 @@ func addDockerComposeCommonParam(composeMap map[string]interface{}, serviceName 
 		}
 		params[constant.HostIP] = allowHost
 	}
+	applyComposeLogCompat(services)
 	services[serviceName] = serviceValue
 	return nil
+}
+
+func applyComposeLogCompat(services map[string]interface{}) {
+	if runtime.GOOS != "linux" {
+		return
+	}
+	resolved := docker.ResolveRuntime(context.Background())
+	if resolved.Kind != docker.RuntimePodman || !docker.IsRootlessPodmanHost(resolved.Host) {
+		return
+	}
+	for name, raw := range services {
+		serviceMap, ok := raw.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		logging, ok := serviceMap["logging"].(map[string]interface{})
+		if !ok || logging == nil {
+			logging = map[string]interface{}{}
+		}
+		driver := ""
+		if rawDriver, exists := logging["driver"]; exists && rawDriver != nil {
+			driver = strings.TrimSpace(fmt.Sprint(rawDriver))
+		}
+		if driver != "" && !strings.EqualFold(driver, "journald") {
+			serviceMap["logging"] = logging
+			services[name] = serviceMap
+			continue
+		}
+		logging["driver"] = "k8s-file"
+		if _, ok := logging["options"].(map[string]interface{}); !ok && logging["options"] == nil {
+			logging["options"] = map[string]interface{}{}
+		}
+		serviceMap["logging"] = logging
+		services[name] = serviceMap
+	}
+}
+
+func applyComposeLogCompatYAML(composeYml string) (string, bool, error) {
+	var composeMap map[string]interface{}
+	if err := yaml.Unmarshal([]byte(composeYml), &composeMap); err != nil {
+		return "", false, err
+	}
+	services, ok := composeMap["services"].(map[string]interface{})
+	if !ok || services == nil {
+		return composeYml, false, nil
+	}
+	before, err := yaml.Marshal(services)
+	if err != nil {
+		return "", false, err
+	}
+	applyComposeLogCompat(services)
+	after, err := yaml.Marshal(services)
+	if err != nil {
+		return "", false, err
+	}
+	if string(before) == string(after) {
+		return composeYml, false, nil
+	}
+	composeMap["services"] = services
+	out, err := yaml.Marshal(composeMap)
+	if err != nil {
+		return "", false, err
+	}
+	return string(out), true, nil
 }

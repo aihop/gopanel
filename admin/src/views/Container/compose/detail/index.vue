@@ -223,6 +223,7 @@ import Status from "@/components/Status.vue"
 import { t } from "@/i18n"
 import { MsgSuccess } from "@/utils/message"
 import { dateFormat } from "@/utils/util"
+import { buildRuntimeSummaryText, getRuntimeKindLabel, getRuntimeModeLabel, getRunUserLabel } from "@/utils/runtime"
 import ContainerLogDialog from "@/views/Container/container/log/index.vue"
 import MonitorDialog from "@/views/Container/container/monitor/index.vue"
 import TerminalDialog from "@/components/Terminal.vue"
@@ -299,7 +300,14 @@ async function onInspect(id: string) {
 	let param = {
 		header: t("commons.button.view"),
 		detailInfo: detailInfo.value,
-		summary: `${row.runtimeKind || "Runtime"} / ${getRuntimeModeLabel(row)} / ${t("container.runUser")}: ${getRunUserLabel(row)}`
+		summary: buildRuntimeSummaryText(row, {
+			kindFallback: t("container.runtimeType"),
+			rootlessLabel: t("container.rootless"),
+			rootfulLabel: t("container.rootful"),
+			defaultModeLabel: t("container.defaultMode"),
+			userFallback: t("container.userDefault"),
+			runUserPrefix: `${t("container.runUser")}: `
+		})
 	}
 	mydetail.value!.acceptParams(param)
 }
@@ -338,32 +346,6 @@ function checkStatus(operation: string) {
 			}
 			return false
 	}
-}
-
-function getRuntimeKindLabel(row: Container.ContainerInfo) {
-	switch ((row.runtimeKind || "").toLowerCase()) {
-		case "docker":
-			return "Docker"
-		case "podman":
-			return "Podman"
-		default:
-			return t("container.runtimeType")
-	}
-}
-
-function getRuntimeModeLabel(row: Container.ContainerInfo) {
-	switch ((row.runtimeMode || "").toLowerCase()) {
-		case "rootless":
-			return t("container.rootless")
-		case "rootful":
-			return t("container.rootful")
-		default:
-			return t("container.defaultMode")
-	}
-}
-
-function getRunUserLabel(row: Container.ContainerInfo) {
-	return row.runUser || t("container.userDefault")
 }
 
 async function onOperate(op: string) {
@@ -425,7 +407,14 @@ function onMonitor(row: any) {
 	dialogMonitorRef.value!.acceptParams({
 		containerID: row.containerID,
 		container: row.name,
-		runtimeSummary: `${row.runtimeKind || "Runtime"} / ${getRuntimeModeLabel(row)} / ${t("container.runUser")}: ${getRunUserLabel(row)}`
+		runtimeSummary: buildRuntimeSummaryText(row, {
+			kindFallback: t("container.runtimeType"),
+			rootlessLabel: t("container.rootless"),
+			rootfulLabel: t("container.rootful"),
+			defaultModeLabel: t("container.defaultMode"),
+			userFallback: t("container.userDefault"),
+			runUserPrefix: `${t("container.runUser")}: `
+		})
 	})
 }
 
@@ -435,7 +424,14 @@ function onTerminal(row: any) {
 		containerID: row.containerID,
 		container: row.name,
 		runtimeHost: row.runtimeHost || "",
-		runtimeSummary: `${row.runtimeKind || "Runtime"} / ${getRuntimeModeLabel(row)} / ${t("container.runUser")}: ${getRunUserLabel(row)}`
+		runtimeSummary: buildRuntimeSummaryText(row, {
+			kindFallback: t("container.runtimeType"),
+			rootlessLabel: t("container.rootless"),
+			rootfulLabel: t("container.rootful"),
+			defaultModeLabel: t("container.defaultMode"),
+			userFallback: t("container.userDefault"),
+			runUserPrefix: `${t("container.runUser")}: `
+		})
 	})
 }
 
@@ -465,7 +461,14 @@ const buttons = [
 				containerID: row.containerID,
 				container: row.name,
 				runtimeHost: row.runtimeHost || "",
-				runtimeSummary: `${row.runtimeKind || "Runtime"} / ${getRuntimeModeLabel(row)} / ${t("container.runUser")}: ${getRunUserLabel(row)}`
+				runtimeSummary: buildRuntimeSummaryText(row, {
+					kindFallback: t("container.runtimeType"),
+					rootlessLabel: t("container.rootless"),
+					rootfulLabel: t("container.rootful"),
+					defaultModeLabel: t("container.defaultMode"),
+					userFallback: t("container.userDefault"),
+					runUserPrefix: `${t("container.runUser")}: `
+				})
 			})
 		}
 	}

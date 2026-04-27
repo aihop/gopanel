@@ -20,7 +20,7 @@ type repairPodmanSocketReq struct {
 	Group string `json:"group"`
 }
 
-func RepairPodmanSocket(c fiber.Ctx) error {
+func ContainerRepairPodmanSocket(c fiber.Ctx) error {
 	if runtime.GOOS != "linux" {
 		return c.JSON(e.Error(errors.New("unsupported platform")))
 	}
@@ -68,7 +68,7 @@ func RepairPodmanSocket(c fiber.Ctx) error {
 	}))
 }
 
-func RepairSystemdLinger(c fiber.Ctx) error {
+func ContainerRepairSystemdLinger(c fiber.Ctx) error {
 	if runtime.GOOS != "linux" {
 		return c.JSON(e.Error(errors.New("unsupported platform")))
 	}

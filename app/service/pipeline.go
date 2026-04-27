@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -94,7 +95,7 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 	logger.Info("====== Pipeline #%d 执行开始 ======", recordID)
 	logger.Info("应用: %s | 分支: %s", p.Name, p.Branch)
 
-	workspaceDir := filepath.Join(global.CONF.System.BaseDir, "pipelines", fmt.Sprintf("project_%d", p.ID))
+	workspaceDir := pipelineWorkspaceDir(p)
 
 	// 1. Clone
 	if p.RepoUrl != "" {
@@ -242,7 +243,7 @@ func (s *PipelineService) stepRunner(ctx context.Context, logger *PipelineLogger
 		CodeDir:             "",
 		CodeDirFallback:     codeRoot,
 		PreviousContainerID: previousContainerID,
-		RunnerKey:           strings.TrimSpace(p.RunnerKey),
+		PipelineKey:         strings.TrimSpace(p.PipelineKey),
 		RunnerConfig:        runnerCfg,
 	}
 
@@ -291,6 +292,9 @@ func resolveRunnerCodeRoot(logger *PipelineLogger, p *model.Pipeline, workspaceD
 }
 
 func validateRunnerModeSource(codeRoot string, runnerCfg map[string]interface{}) error {
+	if err := ValidateRunnerPersistentPaths(runnerCfg); err != nil {
+		return err
+	}
 	mode := strings.ToLower(strings.TrimSpace(asString(runnerCfg["mode"])))
 	if mode == "" {
 		mode = "build_run"
@@ -305,6 +309,51 @@ func validateRunnerModeSource(codeRoot string, runnerCfg map[string]interface{})
 		return nil
 	}
 	return fmt.Errorf("Runner 当前为 build_run 模式，但运行目录 %s 中既没有 package.json，也没有 .output/server/index.mjs；请改为 run 模式，或让 Runner 直接使用包含 package.json 的项目目录", codeRoot)
+}
+
+func ValidateRunnerPersistentPaths(runnerCfg map[string]interface{}) error {
+	if runnerCfg == nil {
+		return nil
+	}
+	paths := normalizeRunnerPersistentPaths(runnerCfg["persistentPaths"])
+	for _, item := range paths {
+		if isForbiddenRunnerPersistentPath(item) {
+			return fmt.Errorf("Runner 持久化目录不支持 `%s`；`node_modules` 属于依赖目录，会导致 npm/pnpm 权限和脏缓存问题，请删除后重试", item)
+		}
+	}
+	return nil
+}
+
+func normalizeRunnerPersistentPaths(raw interface{}) []string {
+	switch v := raw.(type) {
+	case []string:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			if trimmed := strings.TrimSpace(item); trimmed != "" {
+				out = append(out, trimmed)
+			}
+		}
+		return out
+	case []interface{}:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			if trimmed := strings.TrimSpace(asString(item)); trimmed != "" {
+				out = append(out, trimmed)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func isForbiddenRunnerPersistentPath(raw string) bool {
+	candidate := strings.TrimSpace(strings.ReplaceAll(raw, "\\", "/"))
+	if candidate == "" {
+		return false
+	}
+	candidate = strings.TrimPrefix(path.Clean("/"+candidate), "/")
+	return candidate == "node_modules" || strings.HasPrefix(candidate, "node_modules/")
 }
 
 func detectRunnerCodeRoot(releaseDir string) string {
@@ -810,7 +859,7 @@ func (s *PipelineService) stepArchive(ctx context.Context, logger *PipelineLogge
 		return "", nil
 	}
 
-	archiveDir := filepath.Join(global.CONF.System.BaseDir, "pipelines_archive", fmt.Sprintf("%d", p.ID))
+	archiveDir := pipelineArchiveDir(p)
 	_ = os.MkdirAll(archiveDir, 0755)
 
 	archiveName := fmt.Sprintf("build_%d_%s.zip", recordID, time.Now().Format("20060102150405"))
@@ -830,6 +879,31 @@ var archiveExcludedNames = map[string]struct{}{
 	".gopanel_artifact": {},
 	"node_modules":      {},
 	"__MACOSX":          {},
+}
+
+func pipelineDirName(p *model.Pipeline) string {
+	if p == nil {
+		return "project"
+	}
+	if key := strings.TrimSpace(p.PipelineKey); key != "" {
+		return key
+	}
+	if p.ID > 0 {
+		return fmt.Sprintf("project_%d", p.ID)
+	}
+	return "project"
+}
+
+func pipelineBaseDir(p *model.Pipeline) string {
+	return filepath.Join(global.CONF.System.BaseDir, "pipelines", pipelineDirName(p))
+}
+
+func pipelineWorkspaceDir(p *model.Pipeline) string {
+	return filepath.Join(pipelineBaseDir(p), "workspace")
+}
+
+func pipelineArchiveDir(p *model.Pipeline) string {
+	return filepath.Join(pipelineBaseDir(p), "archive")
 }
 
 func createFilteredZipArchive(srcPath, archivePath string) error {

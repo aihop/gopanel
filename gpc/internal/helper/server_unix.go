@@ -207,6 +207,8 @@ func (s *Server) doAction(ctx context.Context, req proto.Request) (string, error
 		return s.actionSecurityScanPort(ctx, req.Params)
 	case "SSH_LOGIN_LOG_LIST":
 		return s.actionSSHLoginLogList(ctx, req.Params)
+	case "PODMAN_CONTAINER_JOURNAL_LOGS":
+		return s.actionPodmanContainerJournalLogs(ctx, req.Params)
 	case "FILE_STAT":
 		return s.actionFileStat(ctx, req.Params)
 	case "FILE_LIST":

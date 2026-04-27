@@ -147,11 +147,13 @@ import { computed, ref, h } from "vue"
 import { NButton, NTag, NSpace, useMessage, useDialog, NModal, NUpload } from "naive-ui"
 import { formatTime } from "@/utils/date"
 import { UploadFileData } from "@/api/modules/file"
+import { buildRuntimeDetailText } from "@/utils/runtime"
+import { listAllPipelines } from "@/utils/pipeline"
+import { hasWebsiteRuntimeMeta, resolveWebsiteBindingMeta } from "@/utils/websiteRuntime"
 import type { UploadCustomRequestOptions } from "naive-ui"
 import { WebsiteDeployDeleteAPI, WebsiteDeployListAPI, WebsiteDeploySwitchAPI, WebsiteDeployTriggerAPI, WebsiteDeploySnapshotAPI } from "@/api/modules/website"
 import { listAllImage } from "@/api/modules/container"
 import { ListAppInstalled } from "@/api/modules/apps"
-import { getPipelinePage } from "@/api/modules/pipeline"
 
 const visible = ref(false)
 const showUploadModal = ref(false)
@@ -175,16 +177,17 @@ const emit = defineEmits(["confirm"])
 
 const bindingRuntimeText = computed(() => {
 	if (!website.value) return ""
-	if (website.value.codeSource === "app_store" && website.value.appInstallId) {
-		const item = appInstallMap.value[website.value.appInstallId]
-		if (!item) return `应用商店应用 #${website.value.appInstallId}`
-		return buildBindingText("应用商店", item.name, item)
-	}
-	if (website.value.codeSource === "pipeline" && website.value.pipelineId) {
-		const item = pipelineMap.value[website.value.pipelineId]
-		if (!item) return `流水线 #${website.value.pipelineId}`
-		return buildBindingText("流水线", item.name, item)
-	}
+	const binding = resolveWebsiteBindingMeta(website.value, {
+		appInstallMap: appInstallMap.value,
+		pipelineMap: pipelineMap.value
+	}, {
+		includeSourceInDetail: true,
+		kindFallback: "Runtime",
+		userFallback: "镜像默认",
+		runtimePrefix: "运行时：",
+		runUserPrefix: "用户："
+	})
+	if (binding) return binding.detail
 	if (website.value.codeSource === "git") {
 		return `自定义镜像 · 当前镜像：${website.value.engineEnv || website.value.proxy || "-"}`
 	}
@@ -264,8 +267,7 @@ async function loadBindingMeta() {
 			appInstallMap.value = Object.fromEntries(list.map((item: any) => [item.id, item]))
 		}
 		if (website.value.pipelineId) {
-			const res: any = await getPipelinePage({ page: 1, limit: 200 })
-			const list = Array.isArray(res?.data?.items) ? res.data.items : []
+			const list = await listAllPipelines()
 			pipelineMap.value = Object.fromEntries(list.map((item: any) => [item.id, item]))
 		}
 	} catch (error) {
@@ -302,7 +304,9 @@ function open(row: any) {
 	selectedDeploy.value = null
 	appInstallMap.value = {}
 	pipelineMap.value = {}
-	loadBindingMeta()
+	if (!hasWebsiteRuntimeMeta(row)) {
+		loadBindingMeta()
+	}
 	fetchData()
 }
 
@@ -358,32 +362,6 @@ function handleDelete(row: any) {
 			}
 		}
 	})
-}
-
-function getRuntimeKindLabel(item: any) {
-	const kind = String(item?.runtimeKind || "").toLowerCase()
-	if (kind === "podman") return "Podman"
-	if (kind === "docker") return "Docker"
-	return "Runtime"
-}
-
-function getRuntimeModeLabel(item: any) {
-	switch (String(item?.runtimeMode || "").toLowerCase()) {
-		case "rootless":
-			return "rootless"
-		case "rootful":
-			return "rootful"
-		default:
-			return "default"
-	}
-}
-
-function getRunUserLabel(item: any) {
-	return item?.runUser || "镜像默认"
-}
-
-function buildBindingText(source: string, name: string, item: any) {
-	return `${source} · ${name} · 运行时：${getRuntimeKindLabel(item)}/${getRuntimeModeLabel(item)} · 用户：${getRunUserLabel(item)}`
 }
 
 const columns = [

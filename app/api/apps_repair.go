@@ -21,7 +21,7 @@ import (
 	"github.com/shirou/gopsutil/v4/mem"
 )
 
-func PrecheckAppInstall(c fiber.Ctx) error {
+func AppsValidate(c fiber.Ctx) error {
 	v, err := mem.VirtualMemory()
 	if err != nil {
 		return c.JSON(e.Fail(err))
