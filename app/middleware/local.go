@@ -145,6 +145,10 @@ const NoEntrance = `<!doctype html>
 
 // 安全入口
 func Entrance(c fiber.Ctx) error {
+	if isDevMode() {
+		return c.Next()
+	}
+
 	entrance := strings.TrimSpace(global.CONF.System.Entrance)
 	if entrance == "" || shouldBypassEntrance(c.Path()) {
 		return c.Next()
@@ -153,6 +157,10 @@ func Entrance(c fiber.Ctx) error {
 		return c.Next()
 	}
 	return renderNoEntrance(c)
+}
+
+func isDevMode() bool {
+	return strings.EqualFold(strings.TrimSpace(global.CONF.System.Mode), "dev")
 }
 
 func shouldBypassEntrance(path string) bool {

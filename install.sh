@@ -1171,6 +1171,8 @@ install_autostart_services() {
 install_podman() {
   if command -v podman >/dev/null 2>&1; then
     log "Podman 已安装，跳过。"
+    ensure_podman_compose || true
+    ensure_podman_machine_macos || true
     return 0
   fi
 
@@ -1178,8 +1180,10 @@ install_podman() {
   if [ "$os_name" = "darwin" ]; then
     if command -v brew >/dev/null 2>&1; then
       brew install podman || warn "Podman 安装失败，请手动安装。"
+      brew install podman-compose || warn "podman-compose 安装失败，请手动安装。"
+      ensure_podman_machine_macos || true
     else
-      warn "未检测到 Homebrew，请手动安装 Podman。"
+      warn "未检测到 Homebrew，请手动安装 Podman 和 podman-compose。"
     fi
     return 0
   fi
@@ -1289,6 +1293,29 @@ install_podman() {
   ensure_podman_socket_access || true
 }
 
+ensure_podman_machine_macos() {
+  if [ "$os_name" != "darwin" ]; then
+    return 0
+  fi
+  if ! command -v podman >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if ! podman machine inspect >/dev/null 2>&1; then
+    log "初始化 Podman machine"
+    podman machine init || warn "Podman machine 初始化失败，请手动执行: podman machine init"
+  fi
+
+  if podman machine inspect >/dev/null 2>&1; then
+    if podman machine start >/dev/null 2>&1; then
+      log "Podman machine 已启动"
+    else
+      warn "Podman machine 启动失败，请手动执行: podman machine start"
+    fi
+  fi
+  return 0
+}
+
 install_docker() {
   if command -v docker >/dev/null 2>&1; then
     log "Docker 已安装，跳过。"
@@ -1359,10 +1386,25 @@ ensure_podman_socket_access() {
 }
 
 ensure_podman_compose() {
-  if [ "$os_name" != "linux" ]; then
+  if ! command -v podman >/dev/null 2>&1; then
     return 0
   fi
-  if ! command -v podman >/dev/null 2>&1; then
+  if [ "$os_name" = "darwin" ]; then
+    if command -v podman-compose >/dev/null 2>&1; then
+      return 0
+    fi
+    if podman compose version >/dev/null 2>&1; then
+      return 0
+    fi
+    log "检测到 podman compose 不可用，尝试通过 Homebrew 安装 podman-compose"
+    if command -v brew >/dev/null 2>&1; then
+      brew install podman-compose || warn "podman-compose 安装失败，请手动执行: brew install podman-compose"
+    else
+      warn "未检测到 Homebrew，无法自动安装 podman-compose，请手动安装"
+    fi
+    return 0
+  fi
+  if [ "$os_name" != "linux" ]; then
     return 0
   fi
 
@@ -1406,6 +1448,7 @@ check_container_runtime() {
   if command -v docker >/dev/null 2>&1 || command -v podman >/dev/null 2>&1; then
     log "检测到容器运行时已存在。"
     ensure_podman_compose || true
+    ensure_podman_machine_macos || true
     ensure_podman_socket_access || true
     return 0
   fi
