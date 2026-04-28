@@ -98,7 +98,7 @@ func CreateRepo(c fiber.Ctx) error {
 // @Success 200
 // @Security ApiKeyAuth
 // @Security Timestamp
-// @Router /container/repo/del [post]
+// @Router /container/repo/delete [post]
 // @x-panel-log {"bodyKeys":["ids"],"paramKeys":[],"BeforeFunctions":[{"input_column":"id","input_value":"ids","isList":true,"db":"image_repos","output_column":"name","output_value":"names"}],"formatZH":"删除镜像仓库 [names]","formatEN":"delete image repo [names]"}
 func DeleteRepo(c fiber.Ctx) error {
 	req, err := e.BodyToStruct[dto.ImageRepoDelete](c.Body())

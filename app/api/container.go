@@ -397,7 +397,7 @@ func DeleteNetwork(c fiber.Ctx) error {
 		return c.JSON(e.Fail(buserr.Err(err)))
 	}
 	if err := service.NewIContainerService().DeleteNetwork(R); err != nil {
-		return c.JSON(e.RetError(constant.CodeErrInternalServer, err))
+		return c.JSON(e.Fail(buserr.Err(err)))
 	}
 	return c.JSON(e.Succ())
 }
@@ -469,7 +469,7 @@ func ListVolume(c fiber.Ctx) error {
 // @Success 200
 // @Security ApiKeyAuth
 // @Security Timestamp
-// @Router /container/volume/del [post]
+// @Router /container/volume/delete [post]
 // @x-panel-log {"bodyKeys":["names"],"paramKeys":[],"BeforeFunctions":[],"formatZH":"删除容器存储卷 [names]","formatEN":"delete container volume [names]"}
 func DeleteVolume(c fiber.Ctx) error {
 	R, err := e.BodyToStruct[dto.BatchDelete](c.Body())

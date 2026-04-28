@@ -436,7 +436,10 @@ func (a AppService) Install(ctx context.Context, req request.AppInstallCreate) (
 		return
 	}
 	servicesMap := value.(map[string]interface{})
-	containerName := app.Key + "-" + random.RandString(4)
+	containerName := req.Name
+	if containerName == "" {
+		containerName = app.Key + "-" + random.RandString(4)
+	}
 	if req.Advanced && req.ContainerName != "" {
 		containerName = req.ContainerName
 		appInstalls, _ := appInstallRepo.ListBy(appInstallRepo.WithContainerName(containerName))

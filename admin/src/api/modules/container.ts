@@ -101,7 +101,7 @@ export const listNetwork = () => {
 	return http.get<Array<Container.Options>>(`/container/network`)
 }
 export const deleteNetwork = (params: Container.BatchDelete) => {
-	return http.post(`/container/network/del`, params)
+	return http.post(`/container/network/delete`, params)
 }
 export const createNetwork = (params: Container.NetworkCreate) => {
 	return http.post(`/container/network`, params)
@@ -115,7 +115,7 @@ export const listVolume = () => {
 	return http.get<Array<Container.Options>>(`/container/volume`)
 }
 export const deleteVolume = (params: Container.BatchDelete) => {
-	return http.post(`/container/volume/del`, params)
+	return http.post(`/container/volume/delete`, params)
 }
 export const createVolume = (params: Container.VolumeCreate) => {
 	return http.post(`/container/volume`, params)
@@ -138,7 +138,7 @@ export const updateImageRepo = (params: Container.RepoUpdate) => {
 	return http.post(`/container/repo/update`, params, TimeoutEnum.T_40S)
 }
 export const deleteImageRepo = (params: Container.RepoDelete) => {
-	return http.post(`/container/repo/del`, params, TimeoutEnum.T_40S)
+	return http.post(`/container/repo/delete`, params, TimeoutEnum.T_40S)
 }
 
 // composeTemplate

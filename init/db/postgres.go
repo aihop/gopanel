@@ -175,8 +175,53 @@ func (r *Postgres) PrivilegesGrant(user, database string) error {
 	if _, err := r.Exec(fmt.Sprintf("GRANT ALL PRIVILEGES ON DATABASE %s TO %s", database, user)); err != nil {
 		return err
 	}
+	dbConn, err := r.openDatabase(database)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = dbConn.Close()
+	}()
+	grantQueries := []string{
+		fmt.Sprintf("GRANT ALL PRIVILEGES ON SCHEMA public TO %s", user),
+		fmt.Sprintf("GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO %s", user),
+		fmt.Sprintf("GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO %s", user),
+		fmt.Sprintf("GRANT ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public TO %s", user),
+		fmt.Sprintf("ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL PRIVILEGES ON TABLES TO %s", user),
+		fmt.Sprintf("ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL PRIVILEGES ON SEQUENCES TO %s", user),
+		fmt.Sprintf("ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL PRIVILEGES ON FUNCTIONS TO %s", user),
+	}
+	for _, query := range grantQueries {
+		if _, err := dbConn.Exec(query); err != nil {
+			return err
+		}
+	}
 
 	return nil
+}
+
+func (r *Postgres) openDatabase(database string) (*sql.DB, error) {
+	escapedDatabase := url.PathEscape(database)
+	escapedUsername := url.QueryEscape(r.username)
+	escapedPassword := url.QueryEscape(r.password)
+	dsn := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable", escapedUsername, escapedPassword, r.address, r.port, escapedDatabase)
+	if r.password == "" {
+		username := r.username
+		if username == "" {
+			username = "postgres"
+		}
+		escapedUsername = url.QueryEscape(username)
+		dsn = fmt.Sprintf("postgres://%s@%s:%d/%s?sslmode=disable", escapedUsername, r.address, r.port, escapedDatabase)
+	}
+	dbConn, err := sql.Open("pgx", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("init postgres connection failed: %w", err)
+	}
+	if err = dbConn.Ping(); err != nil {
+		_ = dbConn.Close()
+		return nil, fmt.Errorf("connect to postgres database %s failed: %w", database, err)
+	}
+	return dbConn, nil
 }
 
 func (r *Postgres) PrivilegesRevoke(user, database string) error {

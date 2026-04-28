@@ -39,7 +39,7 @@ func ContainerRouter(r fiber.Router) {
 		containerRouter.Post("/repo/list", api.ContainerRepoList)
 		containerRouter.Post("/repo/update", api.UpdateRepo)
 		containerRouter.Post("/repo", api.CreateRepo)
-		containerRouter.Post("/repo/del", api.DeleteRepo)
+		containerRouter.Post("/repo/delete", api.DeleteRepo)
 
 		// 编排
 		containerRouter.Post("/compose/list", api.ContainerComposeList)
@@ -63,13 +63,13 @@ func ContainerRouter(r fiber.Router) {
 
 		// 网络
 		containerRouter.Get("/network", api.ListNetwork)
-		containerRouter.Post("/network/del", api.DeleteNetwork)
+		containerRouter.Post("/network/delete", api.DeleteNetwork)
 		containerRouter.Post("/network/list", api.ContainerNetworkList)
 		containerRouter.Post("/network", api.CreateNetwork)
 
 		// 卷
 		containerRouter.Get("/volume", api.ListVolume)
-		containerRouter.Post("/volume/del", api.DeleteVolume)
+		containerRouter.Post("/volume/delete", api.DeleteVolume)
 		containerRouter.Post("/volume/list", api.ContainerVolumeList)
 		containerRouter.Post("/volume", api.CreateVolume)
 		// 配置
