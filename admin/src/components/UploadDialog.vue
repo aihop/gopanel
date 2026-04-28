@@ -302,6 +302,7 @@ const columns: any = [
 		title: t("commons.table.operate"),
 		key: "actions",
 		width: 150,
+		fixed: "right",
 		render(row: any) {
 			return h(NSpace, null, {
 				default: () => [
