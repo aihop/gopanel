@@ -203,7 +203,7 @@ import TableSetting from "@/components/TableSetting.vue"
 
 import { reactive, onMounted, ref, computed, h } from "vue"
 import {
-	containerListStats,
+	containerStatsAPI,
 	containerOperator,
 	inspect,
 	loadContainerInfo,
@@ -643,7 +643,7 @@ const handlePageSizeChange = (size: number) => {
 }
 
 const loadStats = async () => {
-	const res = await containerListStats()
+	const res = await containerStatsAPI()
 	let stats = res.data || []
 	if (stats.length === 0) {
 		return

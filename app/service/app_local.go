@@ -14,7 +14,6 @@ import (
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
-	"github.com/aihop/gopanel/utils/common"
 	"github.com/aihop/gopanel/utils/compose"
 	"github.com/aihop/gopanel/utils/docker"
 	"github.com/aihop/gopanel/utils/env"
@@ -161,7 +160,7 @@ func (s *LocalAppService) Install(ctx context.Context, req request.AppLocalInsta
 	}
 	composeMap["services"] = servicesMap
 
-	containerName := constant.ContainerPrefix + req.AppKey + "-" + common.RandStr(4)
+	containerName := req.AppKey + "-" + random.RandString(4)
 	if req.Advanced && req.ContainerName != "" {
 		containerName = req.ContainerName
 		appInstalls, _ := appInstallRepo.ListBy(appInstallRepo.WithContainerName(containerName))

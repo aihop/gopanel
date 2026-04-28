@@ -86,12 +86,12 @@ func (a *AppInstallService) SearchForWebsite(req request.AppInstalledSearch) (in
 }
 
 func (a *AppInstallService) GetInstallList() ([]dto.AppInstallInfo, error) {
-	var datas []dto.AppInstallInfo
 	appInstalls, err := appInstallRepo.ListBy()
 	if err != nil {
 		return nil, err
 	}
-	FillAppInstallRuntimeMeta(context.Background(), appInstalls)
+	FillAppInstallRuntimeMetaLite(context.Background(), appInstalls)
+	datas := make([]dto.AppInstallInfo, 0, len(appInstalls))
 	for _, install := range appInstalls {
 		datas = append(datas, dto.AppInstallInfo{
 			ID:            install.ID,

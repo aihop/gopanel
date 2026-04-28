@@ -38,6 +38,8 @@ import (
 	"github.com/aihop/gopanel/utils/random"
 )
 
+var composeShellConditionalExprPattern = regexp.MustCompile(`\$\{[A-Za-z_][A-Za-z0-9_]*:\+[\s\S]*?\}`)
+
 type AppService struct {
 }
 
@@ -434,7 +436,7 @@ func (a AppService) Install(ctx context.Context, req request.AppInstallCreate) (
 		return
 	}
 	servicesMap := value.(map[string]interface{})
-	containerName := constant.ContainerPrefix + app.Key + "-" + common.RandStr(4)
+	containerName := app.Key + "-" + random.RandString(4)
 	if req.Advanced && req.ContainerName != "" {
 		containerName = req.ContainerName
 		appInstalls, _ := appInstallRepo.ListBy(appInstallRepo.WithContainerName(containerName))
@@ -582,6 +584,11 @@ func upApp(appInstall *model.AppInstall, pullImages bool, logger *AppInstallLogg
 			composeContent = []byte(fixed)
 			_ = files.NewFileOp().WriteFile(appInstall.GetComposePath(), strings.NewReader(fixed), 0644)
 			logger.Info("Applied compose log driver compatibility for current runtime")
+		}
+		if fixed, changed, ferr := applyComposeCommandCompatYAML(string(composeContent)); ferr == nil && changed {
+			composeContent = []byte(fixed)
+			_ = files.NewFileOp().WriteFile(appInstall.GetComposePath(), strings.NewReader(fixed), 0644)
+			logger.Info("Applied compose command shell compatibility for 1Panel-style templates")
 		}
 		if validateErr := validateComposeEnvForPortsVolumes(string(composeContent), string(envContent)); validateErr != nil {
 			logger.Error("Compose params invalid: %s", validateErr.Error())
@@ -1304,6 +1311,7 @@ func addDockerComposeCommonParam(composeMap map[string]interface{}, serviceName 
 		params[constant.HostIP] = allowHost
 	}
 	applyComposeLogCompat(services)
+	applyComposeCommandCompat(services)
 	services[serviceName] = serviceValue
 	return nil
 }
@@ -1370,4 +1378,68 @@ func applyComposeLogCompatYAML(composeYml string) (string, bool, error) {
 		return "", false, err
 	}
 	return string(out), true, nil
+}
+
+func applyComposeCommandCompat(services map[string]interface{}) {
+	for name, raw := range services {
+		serviceMap, ok := raw.(map[string]interface{})
+		if !ok || serviceMap == nil {
+			continue
+		}
+		command, exists := serviceMap["command"]
+		if !exists || command == nil {
+			continue
+		}
+		normalized, changed := normalizeComposeCommandShellCompat(command)
+		if !changed {
+			continue
+		}
+		serviceMap["command"] = normalized
+		services[name] = serviceMap
+	}
+}
+
+func applyComposeCommandCompatYAML(composeYml string) (string, bool, error) {
+	var composeMap map[string]interface{}
+	if err := yaml.Unmarshal([]byte(composeYml), &composeMap); err != nil {
+		return "", false, err
+	}
+	services, ok := composeMap["services"].(map[string]interface{})
+	if !ok || services == nil {
+		return composeYml, false, nil
+	}
+	before, err := yaml.Marshal(services)
+	if err != nil {
+		return "", false, err
+	}
+	applyComposeCommandCompat(services)
+	after, err := yaml.Marshal(services)
+	if err != nil {
+		return "", false, err
+	}
+	if string(before) == string(after) {
+		return composeYml, false, nil
+	}
+	composeMap["services"] = services
+	out, err := yaml.Marshal(composeMap)
+	if err != nil {
+		return "", false, err
+	}
+	return string(out), true, nil
+}
+
+func normalizeComposeCommandShellCompat(command interface{}) (interface{}, bool) {
+	commandStr, ok := command.(string)
+	if !ok {
+		return command, false
+	}
+	commandStr = strings.TrimSpace(commandStr)
+	if commandStr == "" || !composeShellConditionalExprPattern.MatchString(commandStr) {
+		return command, false
+	}
+	compact := strings.TrimSpace(strings.ToLower(commandStr))
+	if strings.HasPrefix(compact, "/bin/sh -c ") || strings.HasPrefix(compact, "sh -c ") {
+		return command, false
+	}
+	return []interface{}{"/bin/sh", "-c", "exec " + commandStr}, true
 }

@@ -14,8 +14,7 @@ func ContainerRouter(r fiber.Router) {
 	{
 
 		containerRouter.Get("/exec", websocket.New(api.ContainerWsSSH))
-		containerRouter.Get("/stats/:id", api.ContainerStats)
-
+		containerRouter.Get("/stats/:id", api.ContainerStatsID)
 		// 容器
 		containerRouter.Post("/create", api.ContainerCreate)
 		containerRouter.Post("/update", api.ContainerUpdate)
@@ -23,7 +22,7 @@ func ContainerRouter(r fiber.Router) {
 		containerRouter.Post("/info", api.ContainerInfo)
 		containerRouter.Post("/list", api.ContainerList)
 		containerRouter.Post("/all", api.ContainerAll)
-		containerRouter.Get("/list/stats", api.ContainerListStats)
+		containerRouter.Get("/stats", api.ContainerListStats)
 		containerRouter.Get("/logs", websocket.New(api.ContainerLogs))
 		containerRouter.Get("/limit", api.LoadResourceLimit)
 		containerRouter.Post("/clean/logs", api.ContainerCleanLogs)

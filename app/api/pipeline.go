@@ -167,6 +167,21 @@ func PipelineUpdate(c fiber.Ctx) error {
 	return c.JSON(e.Succ())
 }
 
+func PipelineDetectRunnerPreset(c fiber.Ctx) error {
+	if err := requirePipelineManagePermission(c); err != nil {
+		return c.JSON(e.Auth(err.Error()))
+	}
+	req, err := e.BodyToStruct[request.PipelineDetect](c.Body())
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	result, err := service.NewPipelineService(global.DB).DetectRunnerPreset(c.Context(), *req)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	return c.JSON(e.Succ(result))
+}
+
 func normalizePipelineKey(raw string) string {
 	key := strings.ToLower(strings.TrimSpace(raw))
 	if key == "" {

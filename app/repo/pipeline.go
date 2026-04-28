@@ -124,6 +124,31 @@ func (r *PipelineRecordRepo) LatestRunnerContainerID(pipelineId uint) (string, e
 	return rec.RunnerContainerID, nil
 }
 
+func (r *PipelineRecordRepo) LatestRunnerContainerIDs(pipelineIDs []uint) (map[uint]string, error) {
+	result := make(map[uint]string)
+	if len(pipelineIDs) == 0 {
+		return result, nil
+	}
+
+	subQuery := r.db.Model(&model.PipelineRecord{}).
+		Select("MAX(id) AS id").
+		Where("pipeline_id IN ? AND runner_container_id <> ''", pipelineIDs).
+		Group("pipeline_id")
+
+	var records []model.PipelineRecord
+	if err := r.db.Model(&model.PipelineRecord{}).
+		Where("id IN (?)", subQuery).
+		Find(&records).Error; err != nil {
+		return nil, err
+	}
+	for _, rec := range records {
+		if rec.PipelineID > 0 && rec.RunnerContainerID != "" {
+			result[rec.PipelineID] = rec.RunnerContainerID
+		}
+	}
+	return result, nil
+}
+
 func (r *PipelineRecordRepo) LatestByPipelineID(pipelineId uint) (*model.PipelineRecord, error) {
 	var rec model.PipelineRecord
 	err := r.db.Model(&model.PipelineRecord{}).

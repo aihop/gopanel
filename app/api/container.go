@@ -87,7 +87,7 @@ func LoadResourceLimit(c fiber.Ctx) error {
 // @Success 200 {array} dto.ContainerListStats
 // @Security ApiKeyAuth
 // @Security Timestamp
-// @Router /container/list/stats [get]
+// @Router /container/stats [get]
 func ContainerListStats(c fiber.Ctx) error {
 	data, err := service.NewIContainerService().ContainerListStats()
 	if err != nil {
@@ -261,14 +261,14 @@ func ContainerOperation(c fiber.Ctx) error {
 // @Security ApiKeyAuth
 // @Security Timestamp
 // @Router /container/stats/{id} [get]
-func ContainerStats(c fiber.Ctx) error {
+func ContainerStatsID(c fiber.Ctx) error {
 	containerID := c.Params("id")
 	fmt.Print(containerID)
 	if containerID == "" {
 		return c.JSON(e.Fail(buserr.Err(errors.New("error container id in path"))))
 	}
 
-	result, err := service.NewIContainerService().ContainerStats(containerID)
+	result, err := service.NewIContainerService().ContainerStatsByID(containerID)
 	if err != nil {
 		return c.JSON(e.Fail(buserr.Err(errors.New(constant.ErrTypeInternalServer))))
 	}

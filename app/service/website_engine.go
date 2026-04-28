@@ -11,11 +11,11 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/aihop/gopanel/app/dto/request"
 	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/utils/docker"
+	"github.com/aihop/gopanel/utils/random"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/mount"
@@ -104,7 +104,7 @@ func DeployWebsiteEngine(ctx context.Context, alias string, req *request.Website
 		}
 	}
 
-	containerName := fmt.Sprintf("gopanel-engine-%s-%d", alias, time.Now().Unix())
+	containerName := fmt.Sprintf("%s-%s", alias, random.RandString(4))
 
 	// 选择代码目录
 	codeDir := req.CodeDir
@@ -156,6 +156,7 @@ func DeployWebsiteEngine(ctx context.Context, alias string, req *request.Website
 			if selectedCodeDir == "" {
 				return 0, "", "", fmt.Errorf("runner 代码目录为空")
 			}
+			logEngineProgress(progress, "Runner 项目类型: %s", detectRunnerProjectKind(selectedCodeDir, rc))
 			hostConfig.Binds = append(hostConfig.Binds, fmt.Sprintf("%s:%s:ro", selectedCodeDir, runnerWorkspaceMountPath))
 			logEngineProgress(progress, "强制挂载 Runner 工作目录: %s -> %s (ro)", selectedCodeDir, runnerWorkspaceMountPath)
 			persistentBinds, err := buildRunnerPersistentBinds(req.PipelineKey, rc, workingDir)
@@ -166,10 +167,12 @@ func DeployWebsiteEngine(ctx context.Context, alias string, req *request.Website
 				hostConfig.Binds = append(hostConfig.Binds, persistentBinds...)
 				logEngineProgress(progress, "已追加 %d 个持久化目录映射", len(persistentBinds))
 			}
-			ephemeralMounts := buildRunnerEphemeralMounts(rc, workingDir)
+			ephemeralMounts := buildRunnerEphemeralMounts(rc, workingDir, selectedCodeDir)
 			if len(ephemeralMounts) > 0 {
 				hostConfig.Mounts = append(hostConfig.Mounts, ephemeralMounts...)
-				logEngineProgress(progress, "已显式隔离 Runner 依赖目录，避免复用工作区 node_modules")
+				logEngineProgress(progress, "Runner 依赖隔离: 已启用 node_modules 临时卷（Node 项目）")
+			} else {
+				logEngineProgress(progress, "Runner 依赖隔离: 未启用（非 Node 项目）")
 			}
 		} else {
 			runtimeTemplate := detectReusableRuntimeTemplate(ctx, cli, imageName, workingDir, req.PreviousContainerID)
@@ -686,8 +689,11 @@ func normalizeRunnerPersistentPath(workingDir string, raw string) (string, strin
 	return candidate, target, true
 }
 
-func buildRunnerEphemeralMounts(rc runnerConfig, workingDir string) []mount.Mount {
+func buildRunnerEphemeralMounts(rc runnerConfig, workingDir, sourceDir string) []mount.Mount {
 	if strings.ToLower(strings.TrimSpace(rc.Mode)) != "build_run" {
+		return nil
+	}
+	if !runnerNeedsNodeModulesIsolation(rc, sourceDir) {
 		return nil
 	}
 	wd := path.Clean(strings.TrimSpace(workingDir))
@@ -706,6 +712,67 @@ func buildRunnerEphemeralMounts(rc runnerConfig, workingDir string) []mount.Moun
 			Target: path.Join(wd, "node_modules"),
 		},
 	}
+}
+
+func runnerNeedsNodeModulesIsolation(rc runnerConfig, sourceDir string) bool {
+	baseImage := strings.ToLower(strings.TrimSpace(rc.BaseImage))
+	startCmd := strings.ToLower(strings.TrimSpace(rc.StartCommand))
+	buildCmd := strings.ToLower(strings.TrimSpace(rc.BuildCommand))
+
+	if strings.Contains(baseImage, "node") {
+		return true
+	}
+	for _, token := range []string{"npm", "pnpm", "yarn", ".output/server/index.mjs", "node "} {
+		if strings.Contains(startCmd, token) || strings.Contains(buildCmd, token) {
+			return true
+		}
+	}
+	if strings.TrimSpace(sourceDir) != "" {
+		if _, err := os.Stat(filepath.Join(sourceDir, "package.json")); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+func detectRunnerProjectKind(sourceDir string, rc runnerConfig) string {
+	if strings.TrimSpace(sourceDir) != "" {
+		switch {
+		case runnerDirHasAny(sourceDir, "go.mod", "main.go"):
+			return "Go"
+		case runnerDirHasAny(sourceDir, "requirements.txt", "pyproject.toml", "app.py", "manage.py"):
+			return "Python"
+		case runnerDirHasAny(sourceDir, "composer.json", "artisan", "public/index.php"):
+			return "PHP"
+		case runnerDirHasAny(sourceDir, ".output/server/index.mjs", ".next", "package.json", "server.js"):
+			return "Node"
+		case runnerDirHasAny(sourceDir, "dist/index.html", "index.html"):
+			return "Static"
+		}
+	}
+	baseImage := strings.ToLower(strings.TrimSpace(rc.BaseImage))
+	startCmd := strings.ToLower(strings.TrimSpace(rc.StartCommand))
+	buildCmd := strings.ToLower(strings.TrimSpace(rc.BuildCommand))
+	switch {
+	case strings.Contains(baseImage, "golang"), strings.Contains(buildCmd, "go build"), strings.Contains(startCmd, "./app"):
+		return "Go"
+	case strings.Contains(baseImage, "python"), strings.Contains(buildCmd, "pip "), strings.Contains(startCmd, "python "), strings.Contains(startCmd, "gunicorn"), strings.Contains(startCmd, "uvicorn"):
+		return "Python"
+	case strings.Contains(baseImage, "php"), strings.Contains(buildCmd, "composer "), strings.Contains(startCmd, "php "):
+		return "PHP"
+	case strings.Contains(baseImage, "node"), strings.Contains(buildCmd, "npm"), strings.Contains(buildCmd, "pnpm"), strings.Contains(buildCmd, "yarn"), strings.Contains(startCmd, "node "):
+		return "Node"
+	}
+	return "Custom"
+}
+
+func runnerDirHasAny(dir string, names ...string) bool {
+	for _, name := range names {
+		if _, err := os.Stat(filepath.Join(dir, name)); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizeRunnerExtraNetworks(items []string) []string {
@@ -755,12 +822,14 @@ func buildRunnerScript(rc runnerConfig, sourceDir string) string {
 	b.WriteString("  echo \"[RUNNER] syncing source into working dir\"\n")
 	b.WriteString("  if command -v tar >/dev/null 2>&1; then\n")
 	b.WriteString("    if tar --help 2>/dev/null | grep -q -- '--exclude'; then\n")
+	b.WriteString("      echo \"[RUNNER] sync strategy: tar --exclude (skip node_modules/.git/.gopanel_artifact)\"\n")
 	b.WriteString("      (cd \"")
 	b.WriteString(strings.ReplaceAll(srcDir, "\"", "\\\""))
 	b.WriteString("\" && tar --exclude='./node_modules' --exclude='./.git' --exclude='./.gopanel_artifact' --exclude='./__MACOSX' -cf - .) | (cd \"")
 	b.WriteString(strings.ReplaceAll(wd, "\"", "\\\""))
 	b.WriteString("\" && tar xpf -)\n")
 	b.WriteString("    else\n")
+	b.WriteString("      echo \"[RUNNER] sync strategy: tar fallback + cleanup transient dirs\"\n")
 	b.WriteString("      (cd \"")
 	b.WriteString(strings.ReplaceAll(srcDir, "\"", "\\\""))
 	b.WriteString("\" && tar cf - .) | (cd \"")
@@ -774,9 +843,10 @@ func buildRunnerScript(rc runnerConfig, sourceDir string) string {
 	b.WriteString(strings.ReplaceAll(wd, "\"", "\\\""))
 	b.WriteString("/.gopanel_artifact\" \"")
 	b.WriteString(strings.ReplaceAll(wd, "\"", "\\\""))
-	b.WriteString("/__MACOSX\"\n")
+	b.WriteString("/__MACOSX\" 2>/dev/null || true\n")
 	b.WriteString("    fi\n")
 	b.WriteString("  else\n")
+	b.WriteString("    echo \"[RUNNER] sync strategy: cp -a fallback + cleanup transient dirs\"\n")
 	b.WriteString("    cp -a \"")
 	b.WriteString(strings.ReplaceAll(srcDir, "\"", "\\\""))
 	b.WriteString("\"/. \"")
@@ -790,7 +860,7 @@ func buildRunnerScript(rc runnerConfig, sourceDir string) string {
 	b.WriteString(strings.ReplaceAll(wd, "\"", "\\\""))
 	b.WriteString("/.gopanel_artifact\" \"")
 	b.WriteString(strings.ReplaceAll(wd, "\"", "\\\""))
-	b.WriteString("/__MACOSX\"\n")
+	b.WriteString("/__MACOSX\" 2>/dev/null || true\n")
 	b.WriteString("  fi\n")
 	b.WriteString("fi\n")
 	b.WriteString("cd \"")
@@ -803,24 +873,24 @@ func buildRunnerScript(rc runnerConfig, sourceDir string) string {
 		}
 	}
 	if mode == "build_run" {
-		b.WriteString("if [ -f package.json ]; then\n")
-		b.WriteString("  echo \"[BUILD+RUN] package.json detected, rebuilding app\"\n")
 		if installCmd != "" {
-			b.WriteString("  ")
+			b.WriteString("echo \"[BUILD+RUN] executing custom build command\"\n")
 			b.WriteString(installCmd)
 			b.WriteString("\n")
 		} else {
+			b.WriteString("if [ -f package.json ]; then\n")
+			b.WriteString("  echo \"[BUILD+RUN] package.json detected, rebuilding app\"\n")
 			b.WriteString("  if [ -f pnpm-lock.yaml ]; then pnpm install --frozen-lockfile; ")
 			b.WriteString("elif [ -f yarn.lock ]; then yarn install --frozen-lockfile; ")
 			b.WriteString("elif [ -f package-lock.json ]; then npm ci; else npm install; fi\n")
+			b.WriteString("  npm run build\n")
+			b.WriteString("elif [ -f .output/server/index.mjs ]; then\n")
+			b.WriteString("  echo \"[RUN] detected standalone .output, start directly\"\n")
+			b.WriteString("else\n")
+			b.WriteString("  echo \"[BUILD+RUN] buildCommand 为空，且未识别到默认 Node 构建特征（package.json / .output）\" >&2\n")
+			b.WriteString("  exit 1\n")
+			b.WriteString("fi\n")
 		}
-		b.WriteString("  npm run build\n")
-		b.WriteString("elif [ -f .output/server/index.mjs ]; then\n")
-		b.WriteString("  echo \"[RUN] detected standalone .output, start directly\"\n")
-		b.WriteString("else\n")
-		b.WriteString("  echo \"[BUILD+RUN] no package.json or .output found\" >&2\n")
-		b.WriteString("  exit 1\n")
-		b.WriteString("fi\n")
 	}
 	if startCmd != "" {
 		b.WriteString("exec ")

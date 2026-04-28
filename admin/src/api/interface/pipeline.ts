@@ -64,4 +64,16 @@ export namespace Pipeline {
     runtimeMode?: string;
     runUser?: string;
   }
+
+  export interface ReqDetectRunnerPreset {
+    repoUrl: string;
+    branch: string;
+    authType?: string;
+    authData?: string;
+  }
+
+  export interface ResDetectRunnerPreset {
+    preset: string;
+    hits: string[];
+  }
 }

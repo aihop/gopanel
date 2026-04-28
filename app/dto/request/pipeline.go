@@ -41,3 +41,10 @@ type PipelineRun struct {
 	ID      uint   `json:"id" validate:"required"`
 	Version string `json:"version" validate:"required"` // 触发时必须指定本次执行的版本号
 }
+
+type PipelineDetect struct {
+	RepoUrl  string `json:"repoUrl" validate:"required"`
+	Branch   string `json:"branch" validate:"required"`
+	AuthType string `json:"authType"`
+	AuthData string `json:"authData"`
+}

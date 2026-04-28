@@ -43,11 +43,182 @@ type PipelineService struct {
 	recordRepo *repo.PipelineRecordRepo
 }
 
+type RunnerPresetDetectResult struct {
+	Preset string   `json:"preset"`
+	Hits   []string `json:"hits"`
+}
+
+type pipelinePackageJSON struct {
+	Dependencies    map[string]string `json:"dependencies"`
+	DevDependencies map[string]string `json:"devDependencies"`
+}
+
 func NewPipelineService(db *gorm.DB) *PipelineService {
 	return &PipelineService{
 		repo:       repo.NewPipeline(db),
 		recordRepo: repo.NewPipelineRecord(db),
 	}
+}
+
+func (s *PipelineService) DetectRunnerPreset(ctx context.Context, req request.PipelineDetect) (*RunnerPresetDetectResult, error) {
+	repoURL := strings.TrimSpace(req.RepoUrl)
+	branch := strings.TrimSpace(req.Branch)
+	if repoURL == "" {
+		return nil, fmt.Errorf("仓库地址不能为空")
+	}
+	if branch == "" {
+		branch = "main"
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 20*time.Second)
+		defer cancel()
+	}
+
+	tmpDir, err := os.MkdirTemp("", "pipeline_detect_*")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(tmpDir)
+
+	authURL := buildPipelineRepoURL(repoURL, req.AuthType, req.AuthData)
+	cloneCmd := exec.CommandContext(ctx, "git", "clone", "-b", branch, "--single-branch", "--depth", "1", authURL, tmpDir)
+	cloneCmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=accept-new")
+	var cloneErr bytes.Buffer
+	cloneCmd.Stdout = io.Discard
+	cloneCmd.Stderr = &cloneErr
+	if err := cloneCmd.Run(); err != nil {
+		msg := strings.TrimSpace(cloneErr.String())
+		if msg == "" {
+			msg = err.Error()
+		}
+		return nil, fmt.Errorf("仓库探测失败: %s", msg)
+	}
+
+	result := detectRunnerPresetFromDir(tmpDir)
+	if result.Preset == "" {
+		result.Preset = "custom"
+	}
+	if result.Hits == nil {
+		result.Hits = []string{}
+	}
+	return &result, nil
+}
+
+func detectRunnerPresetFromDir(dir string) RunnerPresetDetectResult {
+	hits := make([]string, 0, 6)
+	hasFile := func(rel string) bool {
+		_, err := os.Stat(filepath.Join(dir, rel))
+		return err == nil
+	}
+	appendHit := func(hit string) {
+		hits = append(hits, hit)
+	}
+
+	if hasFile("go.mod") {
+		appendHit("go.mod")
+	}
+	if hasFile("main.go") {
+		appendHit("main.go")
+	}
+	if hasFile("requirements.txt") {
+		appendHit("requirements.txt")
+	}
+	if hasFile("pyproject.toml") {
+		appendHit("pyproject.toml")
+	}
+	if hasFile("app.py") {
+		appendHit("app.py")
+	}
+	if hasFile("manage.py") {
+		appendHit("manage.py")
+	}
+	if hasFile("composer.json") {
+		appendHit("composer.json")
+	}
+	if hasFile("artisan") {
+		appendHit("artisan")
+	}
+	if hasFile("public/index.php") {
+		appendHit("public/index.php")
+	}
+	if hasFile("package.json") {
+		appendHit("package.json")
+	}
+
+	if hasFile("go.mod") || hasFile("main.go") || dirHasEntry(filepath.Join(dir, "cmd")) {
+		return RunnerPresetDetectResult{Preset: "go", Hits: hits}
+	}
+	if hasFile("requirements.txt") || hasFile("pyproject.toml") || hasFile("app.py") || hasFile("manage.py") {
+		return RunnerPresetDetectResult{Preset: "python", Hits: hits}
+	}
+	if hasFile("composer.json") || hasFile("artisan") || hasFile("public/index.php") {
+		return RunnerPresetDetectResult{Preset: "php", Hits: hits}
+	}
+
+	packageJSONPath := filepath.Join(dir, "package.json")
+	if data, err := os.ReadFile(packageJSONPath); err == nil {
+		var pkg pipelinePackageJSON
+		if json.Unmarshal(data, &pkg) == nil {
+			if hasPackageDep(pkg, "nuxt") {
+				appendHit("package.json:nuxt")
+				return RunnerPresetDetectResult{Preset: "nuxt", Hits: hits}
+			}
+			if hasPackageDep(pkg, "next") {
+				appendHit("package.json:next")
+				return RunnerPresetDetectResult{Preset: "next", Hits: hits}
+			}
+			return RunnerPresetDetectResult{Preset: "node", Hits: hits}
+		}
+	}
+	return RunnerPresetDetectResult{Preset: "custom", Hits: hits}
+}
+
+func hasPackageDep(pkg pipelinePackageJSON, name string) bool {
+	if _, ok := pkg.Dependencies[name]; ok {
+		return true
+	}
+	_, ok := pkg.DevDependencies[name]
+	return ok
+}
+
+func dirHasEntry(dir string) bool {
+	entries, err := os.ReadDir(dir)
+	return err == nil && len(entries) > 0
+}
+
+func buildPipelineRepoURL(repoURL, authType, authData string) string {
+	repoURL = strings.TrimSpace(repoURL)
+	if authType == "token" && authData != "" {
+		tokenEncoded := url.QueryEscape(authData)
+		if strings.HasPrefix(repoURL, "https://") {
+			repoURL = strings.Replace(repoURL, "https://", fmt.Sprintf("https://%s@", tokenEncoded), 1)
+		} else if strings.HasPrefix(repoURL, "http://") {
+			repoURL = strings.Replace(repoURL, "http://", fmt.Sprintf("http://%s@", tokenEncoded), 1)
+		}
+	} else if authType == "password" && authData != "" {
+		parts := strings.SplitN(authData, ":", 2)
+		if len(parts) == 2 {
+			username := url.QueryEscape(parts[0])
+			password := url.QueryEscape(parts[1])
+			authString := fmt.Sprintf("%s:%s", username, password)
+			if strings.HasPrefix(repoURL, "https://") {
+				repoURL = strings.Replace(repoURL, "https://", fmt.Sprintf("https://%s@", authString), 1)
+			} else if strings.HasPrefix(repoURL, "http://") {
+				repoURL = strings.Replace(repoURL, "http://", fmt.Sprintf("http://%s@", authString), 1)
+			}
+		} else {
+			if strings.HasPrefix(repoURL, "https://") {
+				repoURL = strings.Replace(repoURL, "https://", fmt.Sprintf("https://%s@", authData), 1)
+			} else if strings.HasPrefix(repoURL, "http://") {
+				repoURL = strings.Replace(repoURL, "http://", fmt.Sprintf("http://%s@", authData), 1)
+			}
+		}
+	}
+	return repoURL
 }
 
 func (s *PipelineService) RunPipeline(pipelineID uint, version string) (uint, error) {
@@ -250,7 +421,7 @@ func (s *PipelineService) stepRunner(ctx context.Context, logger *PipelineLogger
 	progress := func(format string, a ...interface{}) {
 		logger.Info("[Runner] "+format, a...)
 	}
-	alias := fmt.Sprintf("pipeline-%d", p.ID)
+	alias := fmt.Sprintf("pipeline-%s", p.PipelineKey)
 	hostPort, containerID, _, err := DeployWebsiteEngine(ctx, alias, req, progress)
 	if err != nil {
 		return 0, "", "", err
@@ -302,13 +473,16 @@ func validateRunnerModeSource(codeRoot string, runnerCfg map[string]interface{})
 	if mode != "build_run" {
 		return nil
 	}
+	if strings.TrimSpace(asString(runnerCfg["buildCommand"])) != "" {
+		return nil
+	}
 	if _, err := os.Stat(filepath.Join(codeRoot, ".output/server/index.mjs")); err == nil {
 		return nil
 	}
 	if _, err := os.Stat(filepath.Join(codeRoot, "package.json")); err == nil {
 		return nil
 	}
-	return fmt.Errorf("Runner 当前为 build_run 模式，但运行目录 %s 中既没有 package.json，也没有 .output/server/index.mjs；请改为 run 模式，或让 Runner 直接使用包含 package.json 的项目目录", codeRoot)
+	return fmt.Errorf("Runner 当前为 build_run 模式，但运行目录 %s 中既没有 package.json，也没有 .output/server/index.mjs，且未提供自定义 buildCommand；请改为 run 模式，或填写构建命令", codeRoot)
 }
 
 func ValidateRunnerPersistentPaths(runnerCfg map[string]interface{}) error {
@@ -414,6 +588,14 @@ func (s *PipelineService) logRunnerProjectProfile(logger *PipelineLogger, releas
 		{path: ".next/standalone/server.js", label: "Next.js standalone"},
 		{path: ".next", label: "Next.js"},
 		{path: "server.js", label: "Node server.js"},
+		{path: "go.mod", label: "Go module"},
+		{path: "main.go", label: "Go main"},
+		{path: "requirements.txt", label: "Python requirements"},
+		{path: "pyproject.toml", label: "Python pyproject"},
+		{path: "app.py", label: "Python app.py"},
+		{path: "composer.json", label: "PHP Composer"},
+		{path: "artisan", label: "Laravel artisan"},
+		{path: "public/index.php", label: "PHP public entry"},
 		{path: "dist/index.html", label: "静态站 dist"},
 		{path: "index.html", label: "静态站 root index"},
 		{path: "package.json", label: "Node package"},
@@ -428,6 +610,7 @@ func (s *PipelineService) logRunnerProjectProfile(logger *PipelineLogger, releas
 	if len(hits) > 0 {
 		logger.Info("Runner: 项目特征识别 => %s", strings.Join(hits, ", "))
 	}
+	logger.Info("Runner: 项目类型 => %s", detectRunnerProjectKind(releaseDir, parseRunnerConfig(runnerCfg)))
 
 	startCmd := strings.TrimSpace(asString(runnerCfg["startCommand"]))
 	mode := strings.TrimSpace(asString(runnerCfg["mode"]))
@@ -448,7 +631,7 @@ func (s *PipelineService) logRunnerProjectProfile(logger *PipelineLogger, releas
 		}
 	}
 	if staticOnly {
-		logger.Error("Runner 警告: 当前产物更像静态站点（存在 dist/index.html，缺少 .output/server/index.mjs / server.js），若继续使用 Node Runner 可能无法正常运行")
+		logger.Error("Runner 警告: 当前产物更像静态站点（存在 dist/index.html，缺少 .output/server/index.mjs / server.js），请确认预设和启动命令是否匹配")
 	}
 }
 
@@ -538,39 +721,7 @@ func (s *PipelineService) stepClone(ctx context.Context, logger *PipelineLogger,
 	logger.Info("准备代码拉取目录...")
 	_ = os.MkdirAll(workspace, 0755)
 
-	repoUrl := p.RepoUrl
-	// 处理认证
-	if p.AuthType == "token" && p.AuthData != "" {
-		// Token 方式通常 AuthData 就是 Token 字符串，有时可能包含特殊字符
-		tokenEncoded := url.QueryEscape(p.AuthData)
-		if strings.HasPrefix(repoUrl, "https://") {
-			repoUrl = strings.Replace(repoUrl, "https://", fmt.Sprintf("https://%s@", tokenEncoded), 1)
-		} else if strings.HasPrefix(repoUrl, "http://") {
-			repoUrl = strings.Replace(repoUrl, "http://", fmt.Sprintf("http://%s@", tokenEncoded), 1)
-		}
-	} else if p.AuthType == "password" && p.AuthData != "" {
-		// 支持账户密码方式
-		// p.AuthData 应该是 username:password 格式
-		parts := strings.SplitN(p.AuthData, ":", 2)
-		if len(parts) == 2 {
-			username := url.QueryEscape(parts[0])
-			password := url.QueryEscape(parts[1])
-			authString := fmt.Sprintf("%s:%s", username, password)
-
-			if strings.HasPrefix(repoUrl, "https://") {
-				repoUrl = strings.Replace(repoUrl, "https://", fmt.Sprintf("https://%s@", authString), 1)
-			} else if strings.HasPrefix(repoUrl, "http://") {
-				repoUrl = strings.Replace(repoUrl, "http://", fmt.Sprintf("http://%s@", authString), 1)
-			}
-		} else {
-			// 回退到直接拼接
-			if strings.HasPrefix(repoUrl, "https://") {
-				repoUrl = strings.Replace(repoUrl, "https://", fmt.Sprintf("https://%s@", p.AuthData), 1)
-			} else if strings.HasPrefix(repoUrl, "http://") {
-				repoUrl = strings.Replace(repoUrl, "http://", fmt.Sprintf("http://%s@", p.AuthData), 1)
-			}
-		}
-	}
+	repoUrl := buildPipelineRepoURL(p.RepoUrl, p.AuthType, p.AuthData)
 
 	runGitCommand := func(cmd *exec.Cmd, action string) error {
 		cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=accept-new")

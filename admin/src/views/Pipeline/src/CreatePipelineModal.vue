@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, reactive, watch, computed } from "vue"
 import { NForm, NFormItem, NInput, NSelect, NButton, NRadioGroup, NRadio, useMessage, NInputNumber, NSwitch, NSpace } from "naive-ui"
-import { createPipeline, updatePipeline } from "@/api/modules/pipeline"
+import { createPipeline, updatePipeline, detectPipelineRunnerPreset } from "@/api/modules/pipeline"
 import { Pipeline } from "@/api/interface/pipeline"
 import { containerValidateAPI } from "@/api/modules/container"
 import FullModal from "@/components/FullModal.vue"
@@ -21,6 +21,10 @@ const loading = ref(false)
 const pipelineKeyTouched = ref(false)
 const runtimeValidate = ref<any>(null)
 const runtimeValidateLoading = ref(false)
+const runnerPresetAutoLabel = ref("")
+const runnerPresetHits = ref<string[]>([])
+const runnerPresetManualTouched = ref(false)
+let runnerDetectTimer: number | null = null
 
 const isEdit = computed(() => !!props.editData)
 
@@ -113,7 +117,7 @@ const formModel = reactive({
   runnerContainerPort: "3000",
   runnerHostPort: "",
   runnerUser: "",
-  runnerInstallCommand: "",
+  runnerBuildCommand: "",
   runnerStartCommand: "node .output/server/index.mjs",
   runnerPreStart: "",
   runnerEnvText: "",
@@ -153,16 +157,89 @@ const runnerPresetOptions = [
   { label: "Nuxt (推荐)", value: "nuxt" },
   { label: "Next.js", value: "next" },
   { label: "Node 通用", value: "node" },
+  { label: "Go 通用", value: "go" },
+  { label: "Python 通用", value: "python" },
+  { label: "PHP 通用", value: "php" },
   { label: "自定义", value: "custom" }
 ]
 
 const runnerPreset = ref("nuxt")
-const installCommandOptions = [
-  { label: "自动检测 lockfile (推荐)", value: "" },
-  { label: "npm ci", value: "npm ci" },
-  { label: "pnpm install --frozen-lockfile", value: "pnpm install --frozen-lockfile" },
-  { label: "yarn install --frozen-lockfile", value: "yarn install --frozen-lockfile" }
-]
+const runnerPresetDefaults: Record<string, {
+  policy: "run" | "build_run",
+  baseImage: string,
+  containerPort: string,
+  startCommand: string,
+  buildCommand: string
+}> = {
+  nuxt: {
+    policy: "build_run",
+    baseImage: "node:20-alpine",
+    containerPort: "3000",
+    startCommand: "node .output/server/index.mjs",
+    buildCommand: ""
+  },
+  next: {
+    policy: "build_run",
+    baseImage: "node:20-alpine",
+    containerPort: "3000",
+    startCommand: "npm run start",
+    buildCommand: ""
+  },
+  node: {
+    policy: "build_run",
+    baseImage: "node:20-alpine",
+    containerPort: "3000",
+    startCommand: "node server.js",
+    buildCommand: ""
+  },
+  go: {
+    policy: "build_run",
+    baseImage: "golang:1.25.1-alpine",
+    containerPort: "8080",
+    startCommand: "./app",
+    buildCommand: "go mod download && (CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o app ./cmd/server 2>/dev/null || CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o app .)"
+  },
+  python: {
+    policy: "build_run",
+    baseImage: "python:3.11-slim",
+    containerPort: "8000",
+    startCommand: "python app.py",
+    buildCommand: "if [ -f requirements.txt ]; then pip install -r requirements.txt; elif [ -f pyproject.toml ]; then pip install .; else echo '未检测到 requirements.txt / pyproject.toml，跳过依赖安装'; fi"
+  },
+  php: {
+    policy: "build_run",
+    baseImage: "composer:2",
+    containerPort: "8000",
+    startCommand: "php -S 0.0.0.0:${PORT:-8000} -t public",
+    buildCommand: "if [ -f composer.json ]; then composer install --no-dev --optimize-autoloader; else echo '未检测到 composer.json，跳过 Composer 安装'; fi"
+  }
+}
+
+const runnerBuildCommandPlaceholder = computed(() => {
+  switch (runnerPreset.value) {
+    case "go":
+      return "例如：go mod download && go build -o app ."
+    case "python":
+      return "例如：pip install -r requirements.txt"
+    case "php":
+      return "例如：composer install --no-dev --optimize-autoloader"
+    default:
+      return "留空则按默认 Node 规则自动构建；也可填写自定义构建命令"
+  }
+})
+
+const runnerBuildCommandHint = computed(() => {
+  switch (runnerPreset.value) {
+    case "go":
+      return "Go 预设默认会先 `go mod download`，再尝试 `./cmd/server` 和项目根目录两种常见编译入口。"
+    case "python":
+      return "Python 预设默认优先安装 `requirements.txt`，若不存在则尝试按 `pyproject.toml` 安装。"
+    case "php":
+      return "PHP 预设默认在存在 `composer.json` 时执行 `composer install`，适合 Laravel / ThinkPHP 等常见项目。"
+    default:
+      return "留空时仍会按 Node 项目的 `package.json / .output` 规则自动构建；填写后将优先执行你写的命令。"
+  }
+})
 
 const parseEnvText = (text: string) => {
   const env: Record<string, string> = {}
@@ -260,32 +337,84 @@ const inferRunnerAdvanced = (runnerConfig: any) => {
 }
 
 const applyRunnerPreset = (preset: string) => {
+  runnerPresetManualTouched.value = true
   runnerPreset.value = preset
-  if (preset === "nuxt") {
-    formModel.runnerContainerPort = "3000"
-    formModel.runnerStartCommand = "node .output/server/index.mjs"
-    if (!formModel.runnerWorkingDir) formModel.runnerWorkingDir = "/var/www/app"
-  } else if (preset === "next") {
-    formModel.runnerContainerPort = "3000"
-    formModel.runnerStartCommand = "npm run start"
-    if (!formModel.runnerWorkingDir) formModel.runnerWorkingDir = "/var/www/app"
-  } else if (preset === "node") {
-    formModel.runnerContainerPort = "3000"
-    formModel.runnerStartCommand = "node server.js"
-    if (!formModel.runnerWorkingDir) formModel.runnerWorkingDir = "/var/www/app"
-  }
+  const presetConfig = runnerPresetDefaults[preset]
+  if (!presetConfig) return
+  formModel.runnerPolicy = presetConfig.policy
+  formModel.runnerBaseImage = presetConfig.baseImage
+  formModel.runnerContainerPort = presetConfig.containerPort
+  formModel.runnerBuildCommand = presetConfig.buildCommand
+  formModel.runnerStartCommand = presetConfig.startCommand
+  if (!formModel.runnerWorkingDir) formModel.runnerWorkingDir = "/var/www/app"
 }
 
-const detectRunnerPreset = (startCommand: string) => {
-  const cmd = String(startCommand || "").trim()
+const detectRunnerPreset = (runnerConfig: any) => {
+  const baseImage = String(runnerConfig?.baseImage || "").trim()
+  const cmd = String(runnerConfig?.startCommand || "").trim()
+  const buildCommand = String(runnerConfig?.buildCommand || "").trim()
+  for (const [preset, config] of Object.entries(runnerPresetDefaults)) {
+    if (config.baseImage === baseImage && config.startCommand === cmd && config.buildCommand === buildCommand) {
+      return preset
+    }
+  }
   if (!cmd || cmd === "node .output/server/index.mjs") return "nuxt"
   if (cmd === "npm run start") return "next"
   if (cmd === "node server.js") return "node"
+  if (cmd === "./app") return "go"
+  if (cmd === "python app.py") return "python"
+  if (cmd === "php -S 0.0.0.0:${PORT:-8000} -t public") return "php"
   return "custom"
 }
 
 const handleClose = () => {
   emit("update:show", false)
+}
+
+const applyRunnerPresetSilently = (preset: string) => {
+  runnerPreset.value = preset
+  const presetConfig = runnerPresetDefaults[preset]
+  if (!presetConfig) return
+  formModel.runnerPolicy = presetConfig.policy
+  formModel.runnerBaseImage = presetConfig.baseImage
+  formModel.runnerContainerPort = presetConfig.containerPort
+  formModel.runnerBuildCommand = presetConfig.buildCommand
+  formModel.runnerStartCommand = presetConfig.startCommand
+  if (!formModel.runnerWorkingDir) formModel.runnerWorkingDir = "/var/www/app"
+}
+
+const scheduleRunnerPresetDetect = () => {
+  if (runnerDetectTimer) {
+    window.clearTimeout(runnerDetectTimer)
+  }
+  runnerDetectTimer = window.setTimeout(async () => {
+    if (formModel.pipelineMode !== "runner") return
+    if (runnerPresetManualTouched.value) return
+    const repoUrl = String(formModel.repoUrl || "").trim()
+    const branch = String(formModel.branch || "").trim()
+    if (!repoUrl || !branch) return
+    try {
+      const res: any = await detectPipelineRunnerPreset({
+        repoUrl,
+        branch,
+        authType: formModel.authType,
+        authData: formModel.authData
+      })
+      const data = res?.data || res
+      const preset = String(data?.preset || "").trim()
+      if (!preset || preset === "custom") {
+        runnerPresetAutoLabel.value = ""
+        runnerPresetHits.value = Array.isArray(data?.hits) ? data.hits : []
+        return
+      }
+      applyRunnerPresetSilently(preset)
+      runnerPresetAutoLabel.value = preset
+      runnerPresetHits.value = Array.isArray(data?.hits) ? data.hits : []
+    } catch (error) {
+      runnerPresetAutoLabel.value = ""
+      runnerPresetHits.value = []
+    }
+  }, 500)
 }
 
 const handleSubmit = () => {
@@ -325,7 +454,7 @@ const handleSubmit = () => {
             containerPort: payload.runnerContainerPort || "3000",
             hostPort: payload.runnerHostPort || "",
             runnerUser: payload.runnerUser || "",
-            buildCommand: payload.runnerInstallCommand || "",
+            buildCommand: payload.runnerBuildCommand || "",
             startCommand: payload.runnerStartCommand || "node .output/server/index.mjs",
             preStart: payload.runnerPreStart || "",
             env: parseEnvText(payload.runnerEnvText || ""),
@@ -400,7 +529,7 @@ watch(() => props.show, (val) => {
         runnerContainerPort: String(runnerConfig.containerPort || "3000"),
         runnerHostPort: String(runnerConfig.hostPort || ""),
         runnerUser: runnerConfig.runnerUser || "",
-        runnerInstallCommand: runnerConfig.buildCommand || "",
+        runnerBuildCommand: runnerConfig.buildCommand || "",
         runnerStartCommand: runnerConfig.startCommand || "node .output/server/index.mjs",
         runnerPreStart: runnerConfig.preStart || "",
         runnerEnvText,
@@ -408,7 +537,10 @@ watch(() => props.show, (val) => {
         runnerExtraNetworksText
       })
       pipelineKeyTouched.value = !!props.editData.pipelineKey
-      runnerPreset.value = detectRunnerPreset(formModel.runnerStartCommand)
+      runnerPreset.value = detectRunnerPreset(runnerConfig)
+      runnerPresetManualTouched.value = true
+      runnerPresetAutoLabel.value = ""
+      runnerPresetHits.value = []
     } else if (props.initialTemplate) {
       Object.assign(formModel, {
         name: props.initialTemplate.name || "",
@@ -435,7 +567,7 @@ watch(() => props.show, (val) => {
         runnerContainerPort: "3000",
         runnerHostPort: "",
         runnerUser: "",
-        runnerInstallCommand: "",
+        runnerBuildCommand: "",
         runnerStartCommand: "node .output/server/index.mjs",
         runnerPreStart: "",
         runnerEnvText: "",
@@ -444,6 +576,9 @@ watch(() => props.show, (val) => {
       })
       pipelineKeyTouched.value = false
       runnerPreset.value = "custom"
+      runnerPresetManualTouched.value = false
+      runnerPresetAutoLabel.value = ""
+      runnerPresetHits.value = []
     } else {
       Object.assign(formModel, {
         name: "",
@@ -470,7 +605,7 @@ watch(() => props.show, (val) => {
         runnerContainerPort: "3000",
         runnerHostPort: "",
         runnerUser: "",
-        runnerInstallCommand: "",
+        runnerBuildCommand: "",
         runnerStartCommand: "node .output/server/index.mjs",
         runnerPreStart: "",
         runnerEnvText: "",
@@ -479,6 +614,9 @@ watch(() => props.show, (val) => {
       })
       pipelineKeyTouched.value = false
       runnerPreset.value = "nuxt"
+      runnerPresetManualTouched.value = false
+      runnerPresetAutoLabel.value = ""
+      runnerPresetHits.value = []
     }
   }
 })
@@ -493,6 +631,16 @@ watch(() => formModel.pipelineMode, (mode) => {
   if (mode === "runner" && !formModel.pipelineKey && formModel.name) {
     formModel.pipelineKey = normalizePipelineKey(formModel.name)
   }
+  if (mode !== "runner") {
+    runnerPresetAutoLabel.value = ""
+    runnerPresetHits.value = []
+  } else {
+    scheduleRunnerPresetDetect()
+  }
+})
+
+watch(() => [formModel.repoUrl, formModel.branch, formModel.authType, formModel.authData], () => {
+  scheduleRunnerPresetDetect()
 })
 </script>
 
@@ -611,7 +759,14 @@ watch(() => formModel.pipelineMode, (mode) => {
               @update:value="applyRunnerPreset"
             />
             <div class="mt-2 text-xs text-slate-500">
-              预设会自动填充常用启动命令与默认端口；选择“自定义”后可手动调整。这里的“版本”指产物版本与 Commit，不是应用镜像版本。
+              预设会自动填充常用基础镜像、构建命令、启动命令与默认端口；Go / Python / PHP 也可直接走简单模式。这里的“版本”指产物版本与 Commit，不是应用镜像版本。
+            </div>
+            <div
+              v-if="runnerPresetAutoLabel"
+              class="mt-2 text-xs text-emerald-600"
+            >
+              已根据仓库内容自动推荐为 `{{ runnerPresetAutoLabel }}` 预设
+              <span v-if="runnerPresetHits.length">，识别依据：{{ runnerPresetHits.join("、") }}</span>
             </div>
           </div>
         </n-form-item>
@@ -642,15 +797,16 @@ watch(() => formModel.pipelineMode, (mode) => {
 
         <n-form-item
           v-if="formModel.runnerPolicy === 'build_run'"
-          label="安装命令"
+          label="构建命令"
         >
           <div class="w-full">
-            <n-select
-              v-model:value="formModel.runnerInstallCommand"
-              :options="installCommandOptions"
+            <n-input
+              v-model:value="formModel.runnerBuildCommand"
+              :placeholder="runnerBuildCommandPlaceholder"
+              @update:value="runnerPreset = 'custom'"
             />
             <div class="mt-2 text-xs text-slate-500">
-              默认自动检测 `package-lock.json` / `pnpm-lock.yaml` / `yarn.lock`。如果你的项目固定使用某个包管理器，也可以在这里指定。
+              {{ runnerBuildCommandHint }}
             </div>
           </div>
         </n-form-item>
@@ -674,7 +830,7 @@ watch(() => formModel.pipelineMode, (mode) => {
             class="mr-3"
           />
 
-          <div class="text-xs text-slate-500">默认极简；开启后可自定义运行时基础镜像、工作目录、端口、启动命令、启动前脚本与环境变量。</div>
+          <div class="text-xs text-slate-500">默认极简；预设已经会自动填充常用值。开启后可继续细调基础镜像、端口、启动命令、启动前脚本与环境变量。</div>
         </n-form-item>
 
         <template v-if="formModel.runnerAdvanced">
@@ -682,7 +838,8 @@ watch(() => formModel.pipelineMode, (mode) => {
             <div class="w-full">
               <n-input
                 v-model:value="formModel.runnerBaseImage"
-                placeholder="默认：node:20-alpine（建议填写固定版本标签，避免环境漂移）"
+                placeholder="例如：node:20-alpine / golang:1.22-alpine / python:3.11-slim"
+                @update:value="runnerPreset = 'custom'"
               />
               <div class="mt-2 text-xs text-slate-500">
                 这里是运行时代码产物的基础镜像，不是你的应用版本镜像。生产环境建议使用固定版本标签，而不是长期依赖浮动 Tag。
@@ -703,7 +860,8 @@ watch(() => formModel.pipelineMode, (mode) => {
           >
             <n-input
               v-model:value="formModel.runnerContainerPort"
-              placeholder="默认：3000"
+              placeholder="例如：3000 / 8080 / 8000"
+              @update:value="runnerPreset = 'custom'"
             />
           </n-form-item>
 
@@ -737,7 +895,7 @@ watch(() => formModel.pipelineMode, (mode) => {
           <n-form-item label="启动命令">
             <n-input
               v-model:value="formModel.runnerStartCommand"
-              placeholder="默认：node .output/server/index.mjs"
+              placeholder="例如：node server.js / ./app / python app.py"
               @update:value="runnerPreset = 'custom'"
             />
           </n-form-item>

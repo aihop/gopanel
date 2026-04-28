@@ -34,10 +34,10 @@ export const containerCleanLogsAPI = (containerName: string) => {
 export const loadContainerLogs = (type: string, name: string) => {
 	return http.post<string>(`/container/load/logs`, { type: type, name: name })
 }
-export const containerListStats = () => {
-	return http.get<Array<Container.ContainerListStats>>(`/container/list/stats`)
+export const containerStatsAPI = () => {
+	return http.get<Array<Container.ContainerListStats>>(`/container/stats`)
 }
-export const containerStats = (id: string) => {
+export const containerStatsGetAPI = (id: string) => {
 	return http.get<Container.ContainerStats>(`/container/stats/${id}`)
 }
 export const containerRename = (params: Container.ContainerRename) => {

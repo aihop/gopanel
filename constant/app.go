@@ -58,8 +58,6 @@ const (
 	UpErr       = "UpErr"      // 更新错误
 	SyncFailed  = "SyncFailed" // 同步失败
 
-	ContainerPrefix = "GoPanel-"
-
 	AppNormal   = "Normal"
 	AppTakeDown = "TakeDown"
 

@@ -3,7 +3,7 @@ import { ResPage } from "@/api/interface/index";
 import { Pipeline } from "../interface/pipeline";
 
 export const getPipelinePage = (params: { page: number; limit: number }) => {
-  return http.get<ResPage<Pipeline.ResPipeline>>(`/pipeline`, params);
+  return http.get<ResPage<Pipeline.ResPipeline>>(`/pipeline/list`, params);
 };
 
 export const createPipeline = (params: Pipeline.ReqCreate) => {
@@ -32,4 +32,8 @@ export const getPipelineRecords = (params: { pipelineId: number; page: number; l
 
 export const deletePipelineRecord = (params: { id: number }) => {
   return http.delete(`/pipeline/record`, params);
+};
+
+export const detectPipelineRunnerPreset = (params: Pipeline.ReqDetectRunnerPreset) => {
+  return http.post<Pipeline.ResDetectRunnerPreset>(`/pipeline/detect`, params);
 };

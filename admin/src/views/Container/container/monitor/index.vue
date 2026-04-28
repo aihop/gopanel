@@ -88,7 +88,7 @@
 <script lang="ts" setup>
 import { computed, onBeforeUnmount, ref } from "vue"
 import { useI18n } from "vue-i18n"
-import { containerStats } from "@/api/modules/container"
+import { containerStatsGetAPI } from "@/api/modules/container"
 import SvgTrendChart from "@/components/monitor/SvgTrendChart.vue"
 import { dateFormatForSecond } from "@/utils/util"
 import DrawerHeader from "@/components/DrawerHeader.vue"
@@ -203,7 +203,7 @@ const changeTimer = () => {
 }
 
 const loadData = async () => {
-	const res = await containerStats(dialogData.value.containerID)
+	const res = await containerStatsGetAPI(dialogData.value.containerID)
 	if (!res.data) return
 	cpuDatas.value.push(Number(res.data.cpuPercent.toFixed(2)))
 	if (cpuDatas.value.length > 20) {

@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/aihop/gopanel/app/dto"
-	"github.com/aihop/gopanel/app/repo"
+	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/buserr"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
@@ -32,6 +32,35 @@ import (
 
 type ContainerService struct {
 }
+
+const (
+	containerListViewCacheTTL  = 3 * time.Second
+	containerListStatsCacheTTL = 2 * time.Second
+)
+
+type containerListViewCacheEntry struct {
+	expireAt time.Time
+	items    []types.Container
+	source   map[string]string
+}
+
+type containerListStatsCacheEntry struct {
+	expireAt time.Time
+	items    []dto.ContainerListStats
+}
+
+var (
+	containerListViewCache struct {
+		mu         sync.RWMutex
+		entry      containerListViewCacheEntry
+		refreshing bool
+		waitCh     chan struct{}
+	}
+	containerListStatsCache struct {
+		mu    sync.RWMutex
+		entry containerListStatsCacheEntry
+	}
+)
 
 type IContainerService interface {
 	Page(req *dto.PageContainer) (int64, interface{}, error)
@@ -55,7 +84,7 @@ type IContainerService interface {
 	ContainerOperation(req *dto.ContainerOperation) error
 	ContainerLogs(wsConn *websocket.Conn, containerType, container, since, tail, runtimeHost string, follow bool) error
 	DownloadContainerLogs(containerType, container, since, tail, runtimeHost string) (string, error)
-	ContainerStats(id string) (*dto.ContainerStats, error)
+	ContainerStatsByID(id string) (*dto.ContainerStats, error)
 	Inspect(req *dto.InspectReq) (string, error)
 	DeleteNetwork(req *dto.BatchDelete) error
 	CreateNetwork(req *dto.NetworkCreate) error
@@ -74,40 +103,15 @@ func NewIContainerService() IContainerService {
 
 func (u *ContainerService) Page(req *dto.PageContainer) (int64, interface{}, error) {
 	var (
-		records      []types.Container
-		list         []types.Container
-		dockerClient *client.Client
+		records []types.Container
+		list    []types.Container
 	)
 	ctx := context.Background()
 	resolved := docker.ResolveRuntime(ctx)
 	isPodman := docker.IsPodmanRuntime(ctx)
-	options := container.ListOptions{
-		All: true,
-	}
-	if len(req.Filters) != 0 && !isPodman {
-		options.Filters = filters.NewArgs()
-		options.Filters.Add("label", normalizeContainerLabelFilter(req.Filters, isPodman))
-	}
-	var containers []types.Container
-	var sourceByID map[string]string
-	if isPodman {
-		list2, source2, err := listContainersMergedByHostWithSource(ctx, options)
-		if err != nil {
-			return 0, nil, err
-		}
-		containers = list2
-		sourceByID = source2
-	} else {
-		client, err := docker.NewDockerClient()
-		if err != nil {
-			return 0, nil, err
-		}
-		defer client.Close()
-		dockerClient = client
-		containers, err = client.ContainerList(ctx, options)
-		if err != nil {
-			return 0, nil, err
-		}
+	containers, sourceByID, err := getContainerListView(ctx)
+	if err != nil {
+		return 0, nil, err
 	}
 	if req.ExcludeAppStore {
 		for _, item := range containers {
@@ -119,10 +123,10 @@ func (u *ContainerService) Page(req *dto.PageContainer) (int64, interface{}, err
 	} else {
 		list = containers
 	}
-	if isPodman && strings.TrimSpace(req.Filters) != "" {
+	if strings.TrimSpace(req.Filters) != "" {
 		k, v, ok := splitLabelFilter(req.Filters)
 		if ok {
-			k = normalizeContainerLabelFilter(k, true)
+			k = normalizeContainerLabelFilter(k, isPodman)
 			var filtered []types.Container
 			for _, item := range list {
 				if item.Labels == nil {
@@ -193,8 +197,10 @@ func (u *ContainerService) Page(req *dto.PageContainer) (int64, interface{}, err
 	}
 
 	backDatas := make([]dto.ContainerInfo, len(records))
-	appInstallRepo := repo.NewIAppInstallRepo()
-	websiteRepo := repo.NewWebsite()
+	relatedMeta, err := preloadContainerPageMeta(records)
+	if err != nil {
+		return 0, nil, err
+	}
 	for i := 0; i < len(records); i++ {
 		item := records[i]
 		IsFromCompose := false
@@ -234,17 +240,13 @@ func (u *ContainerService) Page(req *dto.PageContainer) (int64, interface{}, err
 			info.RuntimeHost = strings.TrimSpace(sourceByID[item.ID])
 		}
 		info.RuntimeMode = inferContainerRuntimeMode(info.RuntimeKind, info.RuntimeHost)
-		install, _ := appInstallRepo.GetFirst(appInstallRepo.WithContainerName(info.Name))
-		if install.ID > 0 {
+		if install, ok := relatedMeta.installByContainerName[info.Name]; ok && install.ID > 0 {
 			info.AppInstallName = install.Name
 			info.SourceType = "app"
-			websites, _ := websiteRepo.GetBy(websiteRepo.WithAppInstallId(install.ID))
-			for _, website := range websites {
-				info.Websites = append(info.Websites, website.PrimaryDomain)
-			}
+			info.Websites = append(info.Websites, relatedMeta.websiteDomainsByInstallID[install.ID]...)
 		}
 		if info.SourceType == "manual" {
-			if website, err := websiteRepo.GetFirst(websiteRepo.WithContainerID(item.ID)); err == nil && website.ID > 0 {
+			if website, ok := relatedMeta.websiteByContainerID[item.ID]; ok && website.ID > 0 {
 				if strings.TrimSpace(website.PrimaryDomain) != "" {
 					info.Websites = append(info.Websites, website.PrimaryDomain)
 				}
@@ -253,7 +255,7 @@ func (u *ContainerService) Page(req *dto.PageContainer) (int64, interface{}, err
 				} else {
 					info.SourceType = "website"
 				}
-			} else if strings.HasPrefix(strings.ToLower(info.Name), "gopanel-engine-pipeline-") {
+			} else if strings.HasPrefix(strings.ToLower(info.Name), "pipeline-") {
 				info.SourceType = "pipeline"
 			}
 		}
@@ -270,39 +272,125 @@ func (u *ContainerService) Page(req *dto.PageContainer) (int64, interface{}, err
 			}
 			backDatas[i].Network = normalizeContainerIPList(networks)
 		}
-		if len(backDatas[i].Network) == 0 {
-			runtimeHost := ""
-			if isPodman && sourceByID != nil {
-				runtimeHost = strings.TrimSpace(sourceByID[item.ID])
-			}
-			backDatas[i].Network = inspectContainerIPsForList(ctx, dockerClient, item.ID, runtimeHost)
-		}
-		backDatas[i].RunUser = inspectContainerRunUserForList(ctx, dockerClient, item.ID, backDatas[i].RuntimeHost)
 	}
 
 	return int64(total), backDatas, nil
 }
 
+type containerPageRelatedMeta struct {
+	installByContainerName    map[string]model.AppInstall
+	websiteDomainsByInstallID map[uint][]string
+	websiteByContainerID      map[string]model.Website
+}
+
+func preloadContainerPageMeta(records []types.Container) (*containerPageRelatedMeta, error) {
+	meta := &containerPageRelatedMeta{
+		installByContainerName:    make(map[string]model.AppInstall),
+		websiteDomainsByInstallID: make(map[uint][]string),
+		websiteByContainerID:      make(map[string]model.Website),
+	}
+	if len(records) == 0 {
+		return meta, nil
+	}
+
+	containerNames := make([]string, 0, len(records))
+	containerIDs := make([]string, 0, len(records))
+	seenNames := make(map[string]struct{}, len(records))
+	seenIDs := make(map[string]struct{}, len(records))
+	for _, item := range records {
+		name := normalizeContainerName(containerPrimaryName(item))
+		if name != "" {
+			if _, ok := seenNames[name]; !ok {
+				seenNames[name] = struct{}{}
+				containerNames = append(containerNames, name)
+			}
+		}
+		id := strings.TrimSpace(item.ID)
+		if id != "" {
+			if _, ok := seenIDs[id]; !ok {
+				seenIDs[id] = struct{}{}
+				containerIDs = append(containerIDs, id)
+			}
+		}
+	}
+
+	if len(containerNames) > 0 {
+		var installs []model.AppInstall
+		query := global.DB.Model(&model.AppInstall{}).Select("id", "name", "container_name").Where("1 = 0")
+		for _, name := range containerNames {
+			query = query.Or(
+				"container_name = ? OR container_name LIKE ? OR container_name LIKE ? OR container_name LIKE ?",
+				name,
+				name+",%",
+				"%,"+name+",%",
+				"%,"+name,
+			)
+		}
+		if err := query.Find(&installs).Error; err != nil {
+			return nil, err
+		}
+		for _, install := range installs {
+			for _, name := range splitContainerNames(install.ContainerName) {
+				if _, ok := meta.installByContainerName[name]; !ok {
+					meta.installByContainerName[name] = install
+				}
+			}
+		}
+	}
+
+	installIDs := make([]uint, 0, len(meta.installByContainerName))
+	seenInstallIDs := make(map[uint]struct{}, len(meta.installByContainerName))
+	for _, install := range meta.installByContainerName {
+		if install.ID == 0 {
+			continue
+		}
+		if _, ok := seenInstallIDs[install.ID]; ok {
+			continue
+		}
+		seenInstallIDs[install.ID] = struct{}{}
+		installIDs = append(installIDs, install.ID)
+	}
+
+	if len(installIDs) == 0 && len(containerIDs) == 0 {
+		return meta, nil
+	}
+
+	var websites []model.Website
+	query := global.DB.Model(&model.Website{}).
+		Select("id", "primary_domain", "app_install_id", "container_id", "pipeline_id").
+		Order("id asc").
+		Where("1 = 0")
+	if len(installIDs) > 0 {
+		query = query.Or("app_install_id IN ?", installIDs)
+	}
+	if len(containerIDs) > 0 {
+		query = query.Or("container_id IN ?", containerIDs)
+	}
+	if err := query.Find(&websites).Error; err != nil {
+		return nil, err
+	}
+	for _, website := range websites {
+		if website.AppInstallID > 0 {
+			domain := strings.TrimSpace(website.PrimaryDomain)
+			if domain != "" {
+				meta.websiteDomainsByInstallID[website.AppInstallID] = append(meta.websiteDomainsByInstallID[website.AppInstallID], domain)
+			}
+		}
+		containerID := strings.TrimSpace(website.ContainerID)
+		if containerID != "" {
+			if _, ok := meta.websiteByContainerID[containerID]; !ok {
+				meta.websiteByContainerID[containerID] = website
+			}
+		}
+	}
+	return meta, nil
+}
+
 func (u *ContainerService) List() ([]string, error) {
 	ctx := context.Background()
-	var containers []types.Container
-	if docker.IsPodmanRuntime(ctx) {
-		list2, err := listContainersMergedByHost(ctx, container.ListOptions{All: true})
-		if err != nil {
-			return nil, err
-		}
-		containers = list2
-	} else {
-		client, err := docker.NewDockerClient()
-		if err != nil {
-			return nil, err
-		}
-		defer client.Close()
-		list2, err := client.ContainerList(ctx, container.ListOptions{All: true})
-		if err != nil {
-			return nil, err
-		}
-		containers = list2
+	containers, _, err := getContainerListView(ctx)
+	if err != nil {
+		return nil, err
 	}
 	var datas []string
 	for _, container := range containers {
@@ -317,17 +405,29 @@ func (u *ContainerService) List() ([]string, error) {
 }
 
 func (u *ContainerService) ContainerListStats() ([]dto.ContainerListStats, error) {
+	if cached := getContainerListStatsCache(); len(cached) > 0 {
+		return cached, nil
+	}
 	ctx := context.Background()
-	if docker.IsPodmanRuntime(ctx) {
-		list, source, err := listContainersMergedByHostWithSource(ctx, container.ListOptions{All: true})
+	list, source, err := getContainerListView(ctx)
+	if err != nil {
+		return nil, err
+	}
+	datas := make([]dto.ContainerListStats, len(list))
+	var wg sync.WaitGroup
+	wg.Add(len(list))
+	isPodman := docker.IsPodmanRuntime(ctx)
+	var sharedClient *client.Client
+	if !isPodman {
+		sharedClient, err = docker.NewDockerClient()
 		if err != nil {
 			return nil, err
 		}
-		datas := make([]dto.ContainerListStats, len(list))
-		var wg sync.WaitGroup
-		wg.Add(len(list))
-		for i := 0; i < len(list); i++ {
-			go func(index int, item types.Container) {
+		defer sharedClient.Close()
+	}
+	for i := 0; i < len(list); i++ {
+		go func(index int, item types.Container) {
+			if isPodman {
 				host := strings.TrimSpace(source[item.ID])
 				if host == "" || host == "podman-cli" {
 					datas[index] = loadContainerListStatPodmanCLI(item.ID)
@@ -338,40 +438,172 @@ func (u *ContainerService) ContainerListStats() ([]dto.ContainerListStats, error
 					wg.Done()
 					return
 				}
-				cli, err := client.NewClientWithOpts(client.FromEnv, client.WithHost(host), client.WithAPIVersionNegotiation())
-				if err != nil {
+				cli, cliErr := client.NewClientWithOpts(client.FromEnv, client.WithHost(host), client.WithAPIVersionNegotiation())
+				if cliErr != nil {
 					wg.Done()
 					return
 				}
 				datas[index] = loadCpuAndMem(cli, item.ID)
 				_ = cli.Close()
 				wg.Done()
-			}(i, list[i])
-		}
-		wg.Wait()
-		return datas, nil
-	}
-
-	client, err := docker.NewDockerClient()
-	if err != nil {
-		return nil, err
-	}
-	defer client.Close()
-	list, err := client.ContainerList(ctx, container.ListOptions{All: true})
-	if err != nil {
-		return nil, err
-	}
-	datas := make([]dto.ContainerListStats, len(list))
-	var wg sync.WaitGroup
-	wg.Add(len(list))
-	for i := 0; i < len(list); i++ {
-		go func(index int, item types.Container) {
-			datas[index] = loadCpuAndMem(client, item.ID)
+				return
+			}
+			datas[index] = loadCpuAndMem(sharedClient, item.ID)
 			wg.Done()
 		}(i, list[i])
 	}
 	wg.Wait()
+	setContainerListStatsCache(datas)
 	return datas, nil
+}
+
+func getContainerListView(ctx context.Context) ([]types.Container, map[string]string, error) {
+	now := time.Now()
+	containerListViewCache.mu.RLock()
+	entry := containerListViewCache.entry
+	refreshing := containerListViewCache.refreshing
+	waitCh := containerListViewCache.waitCh
+	containerListViewCache.mu.RUnlock()
+	if len(entry.items) > 0 && now.Before(entry.expireAt) {
+		return cloneContainerList(entry.items), cloneContainerSourceMap(entry.source), nil
+	}
+
+	if len(entry.items) > 0 {
+		if !refreshing {
+			go refreshContainerListView(context.Background())
+		}
+		return cloneContainerList(entry.items), cloneContainerSourceMap(entry.source), nil
+	}
+
+	if refreshing && waitCh != nil {
+		select {
+		case <-waitCh:
+			containerListViewCache.mu.RLock()
+			entry = containerListViewCache.entry
+			containerListViewCache.mu.RUnlock()
+			if len(entry.items) > 0 {
+				return cloneContainerList(entry.items), cloneContainerSourceMap(entry.source), nil
+			}
+		case <-ctx.Done():
+			return nil, nil, ctx.Err()
+		}
+	}
+
+	entry, err := refreshContainerListView(ctx)
+	if err != nil {
+		if len(entry.items) > 0 {
+			return cloneContainerList(entry.items), cloneContainerSourceMap(entry.source), nil
+		}
+		return nil, nil, err
+	}
+	return cloneContainerList(entry.items), cloneContainerSourceMap(entry.source), nil
+}
+
+func refreshContainerListView(ctx context.Context) (containerListViewCacheEntry, error) {
+	containerListViewCache.mu.Lock()
+	if containerListViewCache.refreshing {
+		waitCh := containerListViewCache.waitCh
+		containerListViewCache.mu.Unlock()
+		if waitCh != nil {
+			select {
+			case <-waitCh:
+				containerListViewCache.mu.RLock()
+				entry := containerListViewCache.entry
+				containerListViewCache.mu.RUnlock()
+				return entry, nil
+			case <-ctx.Done():
+				return containerListViewCacheEntry{}, ctx.Err()
+			}
+		}
+		containerListViewCache.mu.RLock()
+		entry := containerListViewCache.entry
+		containerListViewCache.mu.RUnlock()
+		return entry, nil
+	}
+	waitCh := make(chan struct{})
+	containerListViewCache.refreshing = true
+	containerListViewCache.waitCh = waitCh
+	containerListViewCache.mu.Unlock()
+
+	entry, err := loadContainerListView(ctx)
+
+	containerListViewCache.mu.Lock()
+	if err == nil {
+		containerListViewCache.entry = entry
+	} else {
+		entry = containerListViewCache.entry
+	}
+	containerListViewCache.refreshing = false
+	containerListViewCache.waitCh = nil
+	close(waitCh)
+	containerListViewCache.mu.Unlock()
+
+	return entry, err
+}
+
+func loadContainerListView(ctx context.Context) (containerListViewCacheEntry, error) {
+	var (
+		items  []types.Container
+		source map[string]string
+		err    error
+	)
+	if docker.IsPodmanRuntime(ctx) {
+		items, source, err = listContainersMergedByHostWithSource(ctx, container.ListOptions{All: true})
+	} else {
+		var cli *client.Client
+		cli, err = docker.NewDockerClient()
+		if err == nil {
+			defer cli.Close()
+			items, err = cli.ContainerList(ctx, container.ListOptions{All: true})
+		}
+	}
+	if err != nil {
+		return containerListViewCacheEntry{}, err
+	}
+
+	return containerListViewCacheEntry{
+		expireAt: time.Now().Add(containerListViewCacheTTL),
+		items:    cloneContainerList(items),
+		source:   cloneContainerSourceMap(source),
+	}, nil
+}
+
+func getContainerListStatsCache() []dto.ContainerListStats {
+	now := time.Now()
+	containerListStatsCache.mu.RLock()
+	entry := containerListStatsCache.entry
+	containerListStatsCache.mu.RUnlock()
+	if len(entry.items) == 0 || !now.Before(entry.expireAt) {
+		return nil
+	}
+	return append([]dto.ContainerListStats(nil), entry.items...)
+}
+
+func setContainerListStatsCache(items []dto.ContainerListStats) {
+	containerListStatsCache.mu.Lock()
+	containerListStatsCache.entry = containerListStatsCacheEntry{
+		expireAt: time.Now().Add(containerListStatsCacheTTL),
+		items:    append([]dto.ContainerListStats(nil), items...),
+	}
+	containerListStatsCache.mu.Unlock()
+}
+
+func cloneContainerList(items []types.Container) []types.Container {
+	if len(items) == 0 {
+		return nil
+	}
+	return append([]types.Container(nil), items...)
+}
+
+func cloneContainerSourceMap(source map[string]string) map[string]string {
+	if len(source) == 0 {
+		return nil
+	}
+	cloned := make(map[string]string, len(source))
+	for k, v := range source {
+		cloned[k] = v
+	}
+	return cloned
 }
 
 func (u *ContainerService) Inspect(req *dto.InspectReq) (string, error) {
@@ -883,7 +1115,7 @@ func (u *ContainerService) ContainerOperation(req *dto.ContainerOperation) error
 	return nil
 }
 
-func (u *ContainerService) ContainerStats(id string) (*dto.ContainerStats, error) {
+func (u *ContainerService) ContainerStatsByID(id string) (*dto.ContainerStats, error) {
 	ctx := context.Background()
 	if docker.IsPodmanRuntime(ctx) {
 		host := ""

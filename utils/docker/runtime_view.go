@@ -5,6 +5,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/docker/docker/api/types"
@@ -12,6 +13,17 @@ import (
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
 )
+
+const runtimeViewHostPingTimeout = 120 * time.Millisecond
+
+var runtimeViewHostFailureCache struct {
+	mu       sync.RWMutex
+	expireAt map[string]time.Time
+}
+
+func init() {
+	runtimeViewHostFailureCache.expireAt = make(map[string]time.Time)
+}
 
 func ListContainersMergedWithSource(ctx context.Context, options container.ListOptions) ([]types.Container, map[string]string, error) {
 	baseCtx := ctx
@@ -36,8 +48,9 @@ func ListContainersMergedWithSource(ctx context.Context, options container.ListO
 		merged = append(merged, it)
 	}
 
+	hosts := runtimeViewAPIHosts(resolved)
 	var lastErr error
-	for _, host := range runtimeViewAPIHosts(resolved) {
+	for index, host := range hosts {
 		items, err := listContainersFromHost(baseCtx, host, options)
 		if err != nil {
 			lastErr = err
@@ -45,6 +58,9 @@ func ListContainersMergedWithSource(ctx context.Context, options container.ListO
 		}
 		for _, it := range items {
 			addContainer(it, host)
+		}
+		if index == 0 {
+			break
 		}
 	}
 
@@ -104,6 +120,7 @@ func ListImagesMergedWithSource(ctx context.Context) ([]image.Summary, map[strin
 		containers = append(containers, it)
 	}
 
+	hosts := runtimeViewAPIHosts(resolved)
 	var lastErr error
 	if resolved.Kind == RuntimePodman && !pinnedHost {
 		if rootlessImages, err := PodmanListImages(baseCtx); err == nil {
@@ -122,7 +139,7 @@ func ListImagesMergedWithSource(ctx context.Context) ([]image.Summary, map[strin
 		}
 	}
 
-	for _, host := range runtimeViewAPIHosts(resolved) {
+	for index, host := range hosts {
 		imgs, cons, err := listImagesAndContainersFromHost(baseCtx, host)
 		if err != nil {
 			lastErr = err
@@ -133,6 +150,9 @@ func ListImagesMergedWithSource(ctx context.Context) ([]image.Summary, map[strin
 		}
 		for _, it := range cons {
 			addContainer(it)
+		}
+		if index == 0 {
+			break
 		}
 	}
 
@@ -208,12 +228,49 @@ func runtimeViewClientForHost(ctx context.Context, host string) (*client.Client,
 	if baseCtx == nil {
 		baseCtx = context.Background()
 	}
-	pingCtx, cancel := context.WithTimeout(baseCtx, 800*time.Millisecond)
+	if runtimeViewHostRecentlyFailed(host) {
+		return nil, context.DeadlineExceeded
+	}
+	pingCtx, cancel := context.WithTimeout(baseCtx, runtimeViewHostPingTimeout)
 	defer cancel()
 	if err := PingHost(pingCtx, host); err != nil {
+		markRuntimeViewHostFailed(host)
 		return nil, err
 	}
+	clearRuntimeViewHostFailed(host)
 	return client.NewClientWithOpts(client.FromEnv, client.WithHost(host), client.WithAPIVersionNegotiation())
+}
+
+func runtimeViewHostRecentlyFailed(host string) bool {
+	host = strings.TrimSpace(host)
+	if host == "" {
+		return false
+	}
+	now := time.Now()
+	runtimeViewHostFailureCache.mu.RLock()
+	expireAt, ok := runtimeViewHostFailureCache.expireAt[host]
+	runtimeViewHostFailureCache.mu.RUnlock()
+	return ok && now.Before(expireAt)
+}
+
+func markRuntimeViewHostFailed(host string) {
+	host = strings.TrimSpace(host)
+	if host == "" {
+		return
+	}
+	runtimeViewHostFailureCache.mu.Lock()
+	runtimeViewHostFailureCache.expireAt[host] = time.Now().Add(3 * time.Second)
+	runtimeViewHostFailureCache.mu.Unlock()
+}
+
+func clearRuntimeViewHostFailed(host string) {
+	host = strings.TrimSpace(host)
+	if host == "" {
+		return
+	}
+	runtimeViewHostFailureCache.mu.Lock()
+	delete(runtimeViewHostFailureCache.expireAt, host)
+	runtimeViewHostFailureCache.mu.Unlock()
 }
 
 func podmanCLIContainerToDockerTypes(it PodmanContainer) types.Container {

@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -104,13 +105,17 @@ func startEngineContainerLogStreaming(ctx context.Context, cli *dockerclient.Cli
 	}
 	streamCtx, cancel := context.WithCancel(ctx)
 	go func() {
+		logEngineProgress(progress, "已桥接 Runner 容器日志（最近 50 行 + 实时跟随）")
 		reader, err := cli.ContainerLogs(streamCtx, containerID, container.LogsOptions{
 			ShowStdout: true,
 			ShowStderr: true,
 			Follow:     true,
-			Tail:       "0",
+			Tail:       "50",
 		})
 		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(streamCtx.Err(), context.Canceled) || strings.Contains(err.Error(), "context canceled") {
+				return
+			}
 			logEngineProgress(progress, "附加 Runner 容器日志失败: %v", err)
 			return
 		}
