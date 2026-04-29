@@ -16,12 +16,10 @@ import (
 	"time"
 
 	"github.com/aihop/gopanel/constant"
-	udocker "github.com/aihop/gopanel/utils/docker"
 	"github.com/aihop/gopanel/global"
+	udocker "github.com/aihop/gopanel/utils/docker"
 	"github.com/aihop/gopanel/utils/files"
 	"github.com/aihop/gopanel/utils/gpc"
-	"github.com/docker/docker/api/types/image"
-	"github.com/docker/docker/client"
 )
 
 type Remote struct {
@@ -258,12 +256,13 @@ func (r *Remote) Backup(info BackupInfo) error {
 		global.LOG.Warnf("ignoring invalid charset value: %s", info.Format)
 	}
 
-	if dumpCmd, err = ensureHostDumpCmd(dumpCmd); err != nil {
+	hostDumpCmd := dumpCmd
+	if hostDumpCmd, err = ensureHostDumpCmd(dumpCmd); err != nil {
 		return err
-	} else if dumpCmd != "" {
+	} else if hostDumpCmd != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(info.Timeout)*time.Second)
 		defer cancel()
-		if err := r.backupWithHostClient(ctx, info, dumpCmd, charset, outfile); err == nil {
+		if err := r.backupWithHostClient(ctx, info, hostDumpCmd, charset, outfile); err == nil {
 			return nil
 		}
 	}
@@ -355,12 +354,11 @@ func (r *Remote) Backup(info BackupInfo) error {
 }
 
 func (r *Remote) Recover(info RecoverInfo) error {
-	// 打开备份文件
-	fi, err := os.Open(info.SourceFile)
+	input, err := openRecoverStream(info.SourceFile)
 	if err != nil {
 		return err
 	}
-	defer fi.Close()
+	defer input.Close()
 
 	// 选择 image
 	image, err := loadImage(info.Type, info.Version)
@@ -382,12 +380,13 @@ func (r *Remote) Recover(info RecoverInfo) error {
 		clientCmd = "mariadb"
 	}
 
-	if clientCmd, err = ensureHostMysqlCmd(clientCmd); err != nil {
+	hostClientCmd := clientCmd
+	if hostClientCmd, err = ensureHostMysqlCmd(clientCmd); err != nil {
 		return err
-	} else if clientCmd != "" {
+	} else if hostClientCmd != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(info.Timeout)*time.Second)
 		defer cancel()
-		if err := r.recoverWithHostClient(ctx, info, clientCmd); err == nil {
+		if err := r.recoverWithHostClient(ctx, info, hostClientCmd); err == nil {
 			return nil
 		}
 	}
@@ -435,17 +434,7 @@ func (r *Remote) Recover(info RecoverInfo) error {
 		return err
 	}
 
-	// 若为 gzip 文件，解压后作为 stdin；否则直接把文件作为 stdin
-	if strings.HasSuffix(info.SourceFile, ".gz") {
-		gr, err := gzip.NewReader(fi)
-		if err != nil {
-			return err
-		}
-		defer gr.Close()
-		cmd.Stdin = gr
-	} else {
-		cmd.Stdin = fi
-	}
+	cmd.Stdin = input
 
 	// 捕获输出以便返回错误信息
 	out, err := cmd.CombinedOutput()
@@ -817,11 +806,10 @@ func (r *Remote) ExecSQLForHosts(timeout uint) ([]string, error) {
 }
 
 func loadImage(dbType, version string) (string, error) {
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
-	if err != nil {
-		return "", err
-	}
-	images, err := cli.ImageList(context.Background(), image.ListOptions{})
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	images, _, err := udocker.ListImagesMerged(ctx)
 	if err != nil {
 		return "", err
 	}

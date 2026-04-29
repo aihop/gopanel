@@ -2,7 +2,6 @@ package client
 
 import (
 	"bytes"
-	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
@@ -253,27 +252,16 @@ func (r *Local) Backup(info BackupInfo) error {
 }
 
 func (r *Local) Recover(info RecoverInfo) error {
-	fi, _ := os.Open(info.SourceFile)
-	defer fi.Close()
+	input, err := openRecoverStream(info.SourceFile)
+	if err != nil {
+		return err
+	}
+	defer input.Close()
 	cmd, err := runtimeCommandForDBTool(context.Background(), "exec", "-i", r.ContainerName, r.Type, "-uroot", "-p"+r.Password, "--default-character-set="+info.Format, info.Name)
 	if err != nil {
 		return err
 	}
-	if strings.HasSuffix(info.SourceFile, ".gz") {
-		gzipFile, err := os.Open(info.SourceFile)
-		if err != nil {
-			return err
-		}
-		defer gzipFile.Close()
-		gzipReader, err := gzip.NewReader(gzipFile)
-		if err != nil {
-			return err
-		}
-		defer gzipReader.Close()
-		cmd.Stdin = gzipReader
-	} else {
-		cmd.Stdin = fi
-	}
+	cmd.Stdin = input
 	stdout, err := cmd.CombinedOutput()
 	stdStr := strings.ReplaceAll(string(stdout), "mysql: [Warning] Using a password on the command line interface can be insecure.\n", "")
 	if err != nil || strings.HasPrefix(string(stdStr), "ERROR ") {

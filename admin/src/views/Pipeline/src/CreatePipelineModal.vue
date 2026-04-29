@@ -131,7 +131,6 @@ const rules = {
   version: { required: true, message: "请输入初始版本号", trigger: "blur" },
   pipelineKey: {
     validator: (_rule: any, value: string) => {
-      if (formModel.pipelineMode !== "runner") return true
       if (!String(value || "").trim()) return new Error("请输入流水线标识")
       return true
     },
@@ -423,7 +422,7 @@ const handleSubmit = () => {
       loading.value = true
       try {
         const payload: any = { ...formModel }
-        payload.pipelineKey = normalizePipelineKey(payload.pipelineKey || payload.name || "")
+        payload.pipelineKey = normalizePipelineKey(payload.pipelineKey || "")
         if (payload.pipelineMode === "runner") {
           payload.buildImage = ""
           payload.buildScript = ""
@@ -622,13 +621,12 @@ watch(() => props.show, (val) => {
 })
 
 watch(() => formModel.name, (val) => {
-  if (formModel.pipelineMode !== "runner") return
   if (pipelineKeyTouched.value) return
   formModel.pipelineKey = normalizePipelineKey(val)
 })
 
 watch(() => formModel.pipelineMode, (mode) => {
-  if (mode === "runner" && !formModel.pipelineKey && formModel.name) {
+  if (!pipelineKeyTouched.value && formModel.name) {
     formModel.pipelineKey = normalizePipelineKey(formModel.name)
   }
   if (mode !== "runner") {
@@ -645,7 +643,6 @@ watch(() => [formModel.repoUrl, formModel.branch, formModel.authType, formModel.
 </script>
 
 <template>
-  <!-- eslint-disable vue/no-v-model-argument -->
   <FullModal
     :show="show"
     :title="isEdit ? '编辑流水线' : '新增流水线'"
@@ -677,6 +674,21 @@ watch(() => [formModel.repoUrl, formModel.branch, formModel.authType, formModel.
           placeholder="用途说明..."
         />
       </n-form-item>
+       <n-form-item
+        label="流水线标识"
+        path="pipelineKey"
+      >
+        <div class="w-full">
+            <n-input
+              v-model:value="formModel.pipelineKey"
+              placeholder="例如：aipanel-site"
+              @update:value="pipelineKeyTouched = true"
+            />
+            <div class="mt-2 text-xs text-slate-500">
+              流水线标识用于文件目录生成：`安装目录/pipelines/流水线标识/`，相关逻辑使用该目录
+            </div>
+        </div>
+      </n-form-item>
       <n-form-item
         label="初始版本号"
         path="version"
@@ -692,7 +704,7 @@ watch(() => [formModel.repoUrl, formModel.branch, formModel.authType, formModel.
         <n-radio-group v-model:value="formModel.pipelineMode">
           <n-space vertical>
             <n-radio value="runner">简单模式 (代码产物部署，推荐)</n-radio>
-            <div class="ml-6 text-xs text-slate-500">适合大多数项目。流水线会把代码产物解压到版本目录，再交给运行时基础镜像执行；版本锚点来自产物与 Commit，而不是应用镜像 Tag。</div>
+            <div class="ml-6 text-xs text-slate-500">流水线会把代码产物解压到版本目录，再交给运行时基础镜像执行；</div>
             <n-radio value="script">高级模式 (纯脚本)</n-radio>
             <div class="ml-6 text-xs text-slate-500">适合熟练用户。你完全自行控制 BuildScript、镜像构建、产物归档与发布流程。</div>
           </n-space>
@@ -777,22 +789,6 @@ watch(() => [formModel.repoUrl, formModel.branch, formModel.authType, formModel.
               <n-radio value="build_run">打包后运行</n-radio>
             </n-space>
           </n-radio-group>
-        </n-form-item>
-
-        <n-form-item
-          label="流水线标识"
-          path="pipelineKey"
-        >
-          <div class="w-full">
-            <n-input
-              v-model:value="formModel.pipelineKey"
-              placeholder="例如：aipanel-site"
-              @update:value="pipelineKeyTouched = true"
-            />
-            <div class="mt-2 text-xs text-slate-500">
-              用于生成流水线固定目录：`安装目录/pipelines/流水线标识/`。创建或更新时会检查该目录是否已存在；若已被其他流水线占用，会提示你更换标识。
-            </div>
-          </div>
         </n-form-item>
 
         <n-form-item
