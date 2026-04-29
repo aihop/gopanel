@@ -354,7 +354,7 @@ func (r *Remote) Backup(info BackupInfo) error {
 }
 
 func (r *Remote) Recover(info RecoverInfo) error {
-	input, err := openRecoverStream(info.SourceFile)
+	input, err := openRecoverStream(info.SourceFile, info.Progress)
 	if err != nil {
 		return err
 	}

@@ -86,6 +86,7 @@ type RecoverInfo struct {
 	Version    string `json:"version"`
 	Format     string `json:"format"`
 	SourceFile string `json:"sourceFile"`
+	Progress   func(readBytes, totalBytes int64) `json:"-"`
 
 	Timeout uint `json:"timeout"` // second
 }

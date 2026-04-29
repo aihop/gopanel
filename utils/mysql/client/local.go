@@ -252,7 +252,7 @@ func (r *Local) Backup(info BackupInfo) error {
 }
 
 func (r *Local) Recover(info RecoverInfo) error {
-	input, err := openRecoverStream(info.SourceFile)
+	input, err := openRecoverStream(info.SourceFile, info.Progress)
 	if err != nil {
 		return err
 	}

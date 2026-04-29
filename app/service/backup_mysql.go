@@ -307,6 +307,7 @@ func handleMysqlRecover(req *dto.CommonRecover, isRollback bool, logger *BackupL
 					Version:    version,
 					Format:     "sql.gz",
 					SourceFile: rollbackFile,
+					Progress:   buildMysqlRecoverProgressLogger("回滚中", logger),
 
 					Timeout: 300,
 				}); err != nil {
@@ -335,6 +336,7 @@ func handleMysqlRecover(req *dto.CommonRecover, isRollback bool, logger *BackupL
 		Version:    version,
 		Format:     "sql.gz",
 		SourceFile: req.File,
+		Progress:   buildMysqlRecoverProgressLogger("恢复中", logger),
 
 		Timeout: 300,
 	}); err != nil {
@@ -346,4 +348,33 @@ func handleMysqlRecover(req *dto.CommonRecover, isRollback bool, logger *BackupL
 		logger.AppendLine("MySQL 恢复完成")
 	}
 	return nil
+}
+
+func buildMysqlRecoverProgressLogger(stage string, logger *BackupLogger) func(readBytes, totalBytes int64) {
+	if logger == nil {
+		return nil
+	}
+	startAt := time.Now()
+	lastBytes := int64(0)
+	lastAt := time.Now()
+	return func(readBytes, totalBytes int64) {
+		now := time.Now()
+		dt := now.Sub(lastAt).Seconds()
+		if dt <= 0 {
+			dt = 1
+		}
+		speed := int64(float64(readBytes-lastBytes) / dt)
+		elapsed := now.Sub(startAt).Round(time.Second)
+		if totalBytes > 0 {
+			percent := float64(readBytes) * 100 / float64(totalBytes)
+			if percent > 100 {
+				percent = 100
+			}
+			logger.Appendf("%s：耗时=%s，已读取=%s/%s，进度=%.1f%%，速度=%s/s", stage, elapsed, formatBytes(readBytes), formatBytes(totalBytes), percent, formatBytes(speed))
+		} else {
+			logger.Appendf("%s：耗时=%s，已读取=%s，速度=%s/s", stage, elapsed, formatBytes(readBytes), formatBytes(speed))
+		}
+		lastBytes = readBytes
+		lastAt = now
+	}
 }

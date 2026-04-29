@@ -6,28 +6,40 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
 )
 
 const recoverGTIDScanLines = 200
 
-func openRecoverStream(sourceFile string) (io.ReadCloser, error) {
+func openRecoverStream(sourceFile string, progress func(readBytes, totalBytes int64)) (io.ReadCloser, error) {
+	totalBytes := int64(0)
+	if info, err := os.Stat(sourceFile); err == nil {
+		totalBytes = info.Size()
+	}
 	file, err := os.Open(sourceFile)
 	if err != nil {
 		return nil, err
 	}
 
-	var src io.ReadCloser = file
+	var source io.ReadCloser = file
+	if progress != nil {
+		source = newProgressReadCloser(file, totalBytes, progress)
+	}
+
+	var src io.ReadCloser = source
 	if strings.HasSuffix(sourceFile, ".gz") {
-		gr, err := gzip.NewReader(file)
+		gr, err := gzip.NewReader(source)
 		if err != nil {
-			_ = file.Close()
+			_ = source.Close()
 			return nil, err
 		}
 		src = &multiReadCloser{
 			Reader: gr,
 			closers: []io.Closer{
 				gr,
-				file,
+				source,
 			},
 		}
 	}
@@ -97,4 +109,68 @@ func (m *multiReadCloser) Close() error {
 		}
 	}
 	return firstErr
+}
+
+type progressReadCloser struct {
+	reader io.ReadCloser
+	total  int64
+	fn     func(readBytes, totalBytes int64)
+
+	readBytes atomic.Int64
+	stopOnce  sync.Once
+	stopCh    chan struct{}
+}
+
+func newProgressReadCloser(reader io.ReadCloser, total int64, fn func(readBytes, totalBytes int64)) *progressReadCloser {
+	p := &progressReadCloser{
+		reader: reader,
+		total:  total,
+		fn:     fn,
+		stopCh: make(chan struct{}),
+	}
+	go p.reportLoop()
+	return p
+}
+
+func (p *progressReadCloser) Read(buf []byte) (int, error) {
+	n, err := p.reader.Read(buf)
+	if n > 0 {
+		p.readBytes.Add(int64(n))
+	}
+	if err == io.EOF {
+		p.stopReporting()
+	}
+	return n, err
+}
+
+func (p *progressReadCloser) Close() error {
+	p.stopReporting()
+	return p.reader.Close()
+}
+
+func (p *progressReadCloser) reportLoop() {
+	ticker := time.NewTicker(3 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			p.emit()
+		case <-p.stopCh:
+			p.emit()
+			return
+		}
+	}
+}
+
+func (p *progressReadCloser) emit() {
+	if p.fn == nil {
+		return
+	}
+	p.fn(p.readBytes.Load(), p.total)
+}
+
+func (p *progressReadCloser) stopReporting() {
+	p.stopOnce.Do(func() {
+		close(p.stopCh)
+	})
 }
