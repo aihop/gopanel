@@ -53,6 +53,8 @@ const tableListColumns = [
     key: 'name',
     minWidth: 180,
     ellipsis: { tooltip: true as const },
+    sorter: true,
+    sortOrder: () => tableSortState.value.columnKey === 'name' ? tableSortState.value.order : false,
     render(row: any) {
       return h(NButton, {
         text: true,
@@ -110,6 +112,8 @@ const tableListColumns = [
     title: '更新时间',
     key: 'updateTime',
     width: 180,
+    sorter: true,
+    sortOrder: () => tableSortState.value.columnKey === 'updateTime' ? tableSortState.value.order : false,
     render(row: any) {
       return formatDateTime(row.updateTime)
     }

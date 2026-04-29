@@ -312,24 +312,39 @@ func buildTableListSortSQL(dbType model.DatabaseType, sortField, sortOrder strin
 	switch dbType {
 	case model.DatabaseTypeMysql, model.DatabaseTypeMariaDB:
 		switch field {
+		case "name":
+			return fmt.Sprintf("ORDER BY TABLE_NAME %s", order)
 		case "rowCount":
 			return fmt.Sprintf("ORDER BY TABLE_ROWS %s, TABLE_NAME ASC", order)
 		case "sizeBytes":
 			return fmt.Sprintf("ORDER BY (COALESCE(DATA_LENGTH, 0) + COALESCE(INDEX_LENGTH, 0)) %s, TABLE_NAME ASC", order)
+		case "updateTime":
+			return fmt.Sprintf("ORDER BY UPDATE_TIME %s, TABLE_NAME ASC", order)
 		default:
 			return "ORDER BY TABLE_NAME ASC"
 		}
 	case model.DatabaseTypePostgresql:
 		switch field {
+		case "name":
+			return fmt.Sprintf("ORDER BY c.relname %s", order)
 		case "rowCount":
 			return fmt.Sprintf("ORDER BY COALESCE(s.n_live_tup::bigint, c.reltuples::bigint, 0) %s, c.relname ASC", order)
 		case "sizeBytes":
 			return fmt.Sprintf("ORDER BY pg_total_relation_size(c.oid) %s, c.relname ASC", order)
+		case "updateTime":
+			return "ORDER BY c.relname ASC"
 		default:
 			return "ORDER BY c.relname ASC"
 		}
 	case model.DatabaseSQLite:
-		return "ORDER BY name ASC"
+		switch field {
+		case "name":
+			return fmt.Sprintf("ORDER BY name %s", order)
+		case "updateTime":
+			return "ORDER BY name ASC"
+		default:
+			return "ORDER BY name ASC"
+		}
 	default:
 		return "ORDER BY 1 ASC"
 	}
