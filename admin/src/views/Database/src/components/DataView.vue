@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, h } from 'vue'
 import { useMessage, NEmpty, NIcon, NButton, NDataTable, NPagination, NPopconfirm, NInput, NSelect, NInputGroup } from 'naive-ui'
-import { getDBManagerTableDataAPI, deleteDBManagerRecordAPI } from '@/api/modules/database'
+import { getDBManagerTableListAPI, getDBManagerTableDataAPI, deleteDBManagerRecordAPI } from '@/api/modules/database'
 import { renderIcon } from '@/utils'
 
 const props = defineProps<{
@@ -14,9 +14,20 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'editRecord', row: any): void
   (e: 'copyRecord', row: any): void
+  (e: 'selectTable', tableName: string): void
 }>()
 
 const message = useMessage()
+const loadingTables = ref(false)
+const tableList = ref<any[]>([])
+const tableListPagination = ref({
+  page: 1,
+  limit: 20,
+  itemCount: 0
+})
+const tableSearchInput = ref('')
+const tableKeyword = ref('')
+
 const loadingData = ref(false)
 const tableData = ref<any[]>([])
 const tableColumns = ref<any[]>([])
@@ -31,6 +42,192 @@ const searchValue = ref('')
 const searchOptions = ref<{label: string, value: string}[]>([])
 
 const advancedSearch = ref<any[]>([])
+
+const tableListColumns = [
+  {
+    title: '表名',
+    key: 'name',
+    minWidth: 180,
+    ellipsis: { tooltip: true as const },
+    render(row: any) {
+      return h(NButton, {
+        text: true,
+        type: 'primary',
+        onClick: () => emit('selectTable', row.name)
+      }, { default: () => row.name || '-' })
+    }
+  },
+  {
+    title: '类型',
+    key: 'tableType',
+    width: 150,
+    render(row: any) {
+      return formatCell(row.tableType)
+    }
+  },
+  {
+    title: '引擎',
+    key: 'engine',
+    width: 110,
+    render(row: any) {
+      return formatCell(row.engine)
+    }
+  },
+  {
+    title: '行数',
+    key: 'rowCount',
+    width: 120,
+    render(row: any) {
+      return formatCount(row.rowCount)
+    }
+  },
+  {
+    title: '大小',
+    key: 'sizeBytes',
+    width: 120,
+    render(row: any) {
+      return formatBytes(row.sizeBytes)
+    }
+  },
+  {
+    title: '排序规则',
+    key: 'collation',
+    width: 160,
+    ellipsis: { tooltip: true as const },
+    render(row: any) {
+      return formatCell(row.collation)
+    }
+  },
+  {
+    title: '更新时间',
+    key: 'updateTime',
+    width: 180,
+    render(row: any) {
+      return formatDateTime(row.updateTime)
+    }
+  },
+  {
+    title: '备注',
+    key: 'comment',
+    minWidth: 180,
+    ellipsis: { tooltip: true as const },
+    render(row: any) {
+      return formatCell(row.comment)
+    }
+  }
+]
+
+const formatCell = (value: any) => {
+  if (value === null || value === undefined || value === '') return '-'
+  return String(value)
+}
+
+const formatCount = (value: any) => {
+  if (value === null || value === undefined || value === '') return '-'
+  const count = Number(value)
+  if (Number.isNaN(count)) return String(value)
+  return count.toLocaleString('zh-CN')
+}
+
+const formatBytes = (value: any) => {
+  if (value === null || value === undefined || value === '') return '-'
+  const size = Number(value)
+  if (Number.isNaN(size) || size < 0) return String(value)
+  if (size === 0) return '0 B'
+
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let current = size
+  let unitIndex = 0
+  while (current >= 1024 && unitIndex < units.length - 1) {
+    current /= 1024
+    unitIndex++
+  }
+  const digits = current >= 10 || unitIndex === 0 ? 0 : 1
+  return `${current.toFixed(digits)} ${units[unitIndex]}`
+}
+
+const formatDateTime = (value: any) => {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return String(value)
+  return date.toLocaleString('zh-CN', { hour12: false })
+}
+
+const resetTableListState = () => {
+  tableList.value = []
+  tableListPagination.value.itemCount = 0
+  tableListPagination.value.page = 1
+  tableSearchInput.value = ''
+  tableKeyword.value = ''
+}
+
+const resetTableDataState = () => {
+  tableData.value = []
+  tableColumns.value = []
+  searchOptions.value = []
+  pagination.value.itemCount = 0
+}
+
+const resetRecordSearch = () => {
+  pagination.value.page = 1
+  searchColumn.value = null
+  searchValue.value = ''
+  advancedSearch.value = []
+}
+
+const fetchTableList = async () => {
+  if (!props.selectedServerId || !props.selectedDatabase) return
+
+  loadingTables.value = true
+  try {
+    const res = await getDBManagerTableListAPI({
+      serverId: props.selectedServerId,
+      databaseName: props.selectedDatabase,
+      page: tableListPagination.value.page,
+      limit: tableListPagination.value.limit,
+      keyword: tableKeyword.value || undefined
+    })
+
+    if (res.code === 0 && res.data) {
+      tableList.value = res.data.items || []
+      tableListPagination.value.itemCount = res.data.total || 0
+    } else {
+      tableList.value = []
+      tableListPagination.value.itemCount = 0
+      message.error((res as any)?.message || (res as any)?.msg || '获取数据表列表失败')
+    }
+  } catch (error) {
+    tableList.value = []
+    tableListPagination.value.itemCount = 0
+    message.error((error as any)?.message || '获取数据表列表失败')
+  } finally {
+    loadingTables.value = false
+  }
+}
+
+const applyTableSearch = () => {
+  tableKeyword.value = tableSearchInput.value.trim()
+  tableListPagination.value.page = 1
+  fetchTableList()
+}
+
+const resetTableSearch = () => {
+  tableSearchInput.value = ''
+  tableKeyword.value = ''
+  tableListPagination.value.page = 1
+  fetchTableList()
+}
+
+const handleTableListPageChange = (page: number) => {
+  tableListPagination.value.page = page
+  fetchTableList()
+}
+
+const handleTableListPageSizeChange = (pageSize: number) => {
+  tableListPagination.value.limit = pageSize
+  tableListPagination.value.page = 1
+  fetchTableList()
+}
 
 const setAdvancedSearch = (conditions: any[]) => {
   advancedSearch.value = conditions
@@ -134,11 +331,27 @@ const deleteRecord = async (row: any) => {
 }
 
 watch(() => props.selectedTable, () => {
-  pagination.value.page = 1
-  searchColumn.value = null
-  searchValue.value = ''
-  advancedSearch.value = []
-  fetchTableData()
+  resetRecordSearch()
+  if (props.selectedTable) {
+    fetchTableData()
+    return
+  }
+  if (props.selectedDatabase) {
+    fetchTableList()
+  } else {
+    resetTableDataState()
+  }
+})
+
+watch(() => [props.selectedServerId, props.selectedDatabase], ([selectedServerId, selectedDatabase]) => {
+  resetTableListState()
+  resetRecordSearch()
+  resetTableDataState()
+
+  if (!selectedServerId || !selectedDatabase) return
+  if (!props.selectedTable) {
+    fetchTableList()
+  }
 }, { immediate: true })
 
 defineExpose({ fetchTableData, setAdvancedSearch })
@@ -147,11 +360,88 @@ defineExpose({ fetchTableData, setAdvancedSearch })
 <template>
   <div class="flex-1 flex flex-col relative overflow-hidden">
     <div
-      v-if="!selectedTable"
+      v-if="!selectedDatabase"
       class="flex-1 flex items-center justify-center text-slate-400"
     >
-      <n-empty :description="$t('database.selectTable')" />
+      <n-empty description="请选择数据库" />
     </div>
+    <template v-else-if="!selectedTable">
+      <div class="p-2 border-b border-slate-200 flex justify-between items-center bg-[#f8f9fa] text-xs">
+        <div class="text-slate-700 flex items-center gap-1">
+          <n-icon :component="renderIcon('mdi:server')" />
+          <span class="mr-2">{{ selectedServerId ? serverOptions.find(s => s.value === selectedServerId)?.label : '' }}</span>
+          <span>»</span>
+          <n-icon
+            :component="renderIcon('mdi:database')"
+            class="ml-2"
+          />
+          <span class="font-bold">{{ selectedDatabase }}</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <n-input-group>
+            <n-input
+              v-model:value="tableSearchInput"
+              placeholder="输入表名后回车搜索"
+              size="tiny"
+              style="width: 220px"
+              clearable
+              @keyup.enter="applyTableSearch"
+              @clear="resetTableSearch"
+            />
+            <n-button
+              size="tiny"
+              type="primary"
+              @click="applyTableSearch"
+            >
+              <template #icon>
+                <n-icon :component="renderIcon('mdi:magnify')" />
+              </template>
+            </n-button>
+            <n-button
+              size="tiny"
+              @click="resetTableSearch"
+            >
+              <template #icon>
+                <n-icon :component="renderIcon('mdi:refresh')" />
+              </template>
+            </n-button>
+          </n-input-group>
+          <n-button
+            size="tiny"
+            @click="fetchTableList"
+            :loading="loadingTables"
+          >刷新</n-button>
+        </div>
+      </div>
+      <div class="flex-1 overflow-auto p-2 bg-white">
+        <n-data-table
+          :columns="tableListColumns"
+          :data="tableList"
+          :loading="loadingTables"
+          :pagination="false"
+          :bordered="true"
+          size="small"
+          :scroll-x="1200"
+          class="h-full text-xs"
+          flex-height
+        />
+      </div>
+      <div class="p-2 border-t border-slate-200 flex justify-between items-center bg-[#f8f9fa] z-10">
+        <div class="text-xs text-slate-500">
+          共 {{ tableListPagination.itemCount }} 张表
+        </div>
+        <n-pagination
+          v-model:page="tableListPagination.page"
+          v-model:page-size="tableListPagination.limit"
+          :item-count="tableListPagination.itemCount"
+          show-size-picker
+          :page-sizes="[10, 20, 50, 100]"
+          @update:page="handleTableListPageChange"
+          @update:page-size="handleTableListPageSizeChange"
+          size="small"
+        />
+      </div>
+    </template>
     <template v-else>
       <div class="p-2 border-b border-slate-200 flex justify-between items-center bg-[#f8f9fa] text-xs">
         <div class="text-slate-700 flex items-center gap-1">

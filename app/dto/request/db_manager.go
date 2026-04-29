@@ -5,6 +5,14 @@ type GetTablesReq struct {
 	DatabaseName string `json:"databaseName" validate:"required"`
 }
 
+type GetTableListReq struct {
+	ServerID     uint   `json:"serverId" validate:"required"`
+	DatabaseName string `json:"databaseName" validate:"required"`
+	Page         int    `json:"page" validate:"required,min=1"`
+	Limit        int    `json:"limit" validate:"required,min=1,max=100"`
+	Keyword      string `json:"keyword"`
+}
+
 type SearchCondition struct {
 	Column   string `json:"column"`
 	Operator string `json:"operator"`

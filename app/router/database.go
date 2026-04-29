@@ -31,6 +31,7 @@ func DatabaseRouter(r fiber.Router) {
 		// 新增数据库管理器接口 (Manager)
 		managerGroup := databaseRouter.Group("/manager")
 		managerGroup.Post("/tables", api.GetDBManagerTables)
+		managerGroup.Post("/table-list", api.GetDBManagerTableList)
 		managerGroup.Post("/data", api.GetDBManagerTableData)
 		managerGroup.Post("/exec", api.ExecDBManagerSql)
 		managerGroup.Post("/insert", api.InsertDBManagerRecord)

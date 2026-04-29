@@ -20,6 +20,19 @@ func GetDBManagerTables(c fiber.Ctx) error {
 	return c.JSON(e.Succ(tables))
 }
 
+// 获取数据库表列表（带分页）
+func GetDBManagerTableList(c fiber.Ctx) error {
+	req, err := e.BodyToStruct[request.GetTableListReq](c.Body())
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	data, err := service.NewDBManagerService().GetTableList(*req)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	return c.JSON(e.Succ(data))
+}
+
 // 获取表的数据
 func GetDBManagerTableData(c fiber.Ctx) error {
 	req, err := e.BodyToStruct[request.GetTableDataReq](c.Body())

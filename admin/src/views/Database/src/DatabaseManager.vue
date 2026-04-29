@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
-import { useMessage, NSelect, NSpin, NEmpty, NMenu, NTabs, NTab, NIcon } from 'naive-ui'
+import { useMessage, NSelect, NInput, NSpin, NEmpty, NMenu, NTabs, NTab, NIcon } from 'naive-ui'
 import { databaseServerListAPI, databaseListAPI, getDBManagerTablesAPI, execDBManagerSqlAPI } from '@/api/modules/database'
 import { renderIcon } from '@/utils'
 
@@ -23,6 +23,8 @@ const selectedServerId = ref<number | null>(null)
 const selectedDatabase = ref<string | null>(null)
 const selectedTable = ref<string | null>(null)
 const activeTab = ref('data')
+const tableKeywordInput = ref('')
+const tableKeyword = ref('')
 
 const serverOptions = ref<{label: string, value: number, type: string}[]>([])
 const databaseOptions = ref<{label: string, value: string}[]>([])
@@ -39,13 +41,28 @@ const originalRecordData = ref<Record<string, any>>({})
 const dataViewRef = ref()
 
 // 菜单数据
+const filteredTables = computed(() => {
+  const keyword = tableKeyword.value.trim().toLowerCase()
+  if (!keyword) return tables.value
+  return tables.value.filter(t => t.toLowerCase().includes(keyword))
+})
+
 const menuOptions = computed(() => {
-  return tables.value.map(t => ({
+  return filteredTables.value.map(t => ({
     label: t,
     key: t,
     icon: renderIcon('mdi:table')
   }))
 })
+
+const applyTableSearch = () => {
+  tableKeyword.value = tableKeywordInput.value.trim()
+}
+
+const resetTableSearch = () => {
+  tableKeywordInput.value = ''
+  tableKeyword.value = ''
+}
 
 // 初始化
 onMounted(async () => {
@@ -91,8 +108,10 @@ const fetchServers = async () => {
 
 const onServerChange = async (val: number, skipClear = false) => {
   if (!skipClear) {
+    activeTab.value = 'data'
     selectedDatabase.value = null
     selectedTable.value = null
+    resetTableSearch()
     tables.value = []
   }
   databaseOptions.value = []
@@ -113,7 +132,9 @@ const onServerChange = async (val: number, skipClear = false) => {
 }
 
 const onDatabaseChange = async (val: string) => {
+  activeTab.value = 'data'
   selectedTable.value = null
+  resetTableSearch()
   if (!selectedServerId.value || !val) return
   
   loadingTables.value = true
@@ -266,6 +287,15 @@ const handleInsertSuccess = () => {
           :disabled="!selectedServerId"
           @update:value="onDatabaseChange"
         />
+        <n-input
+          v-model:value="tableKeywordInput"
+          size="small"
+          clearable
+          :disabled="!selectedDatabase || loadingTables || tables.length === 0"
+          placeholder="输入表名后回车搜索"
+          @keyup.enter="applyTableSearch"
+          @clear="resetTableSearch"
+        />
       </div>
       <div class="flex-1 overflow-y-auto p-1 bg-white">
         <div
@@ -277,6 +307,11 @@ const handleInsertSuccess = () => {
         <n-empty
           v-else-if="tables.length === 0"
           :description="$t('database.noTable')"
+          class="mt-10"
+        />
+        <n-empty
+          v-else-if="menuOptions.length === 0"
+          description="未找到匹配的数据表"
           class="mt-10"
         />
         <n-menu
@@ -343,6 +378,7 @@ const handleInsertSuccess = () => {
         :selectedDatabase="selectedDatabase"
         :selectedTable="selectedTable"
         :serverOptions="serverOptions"
+        @selectTable="onTableSelect"
         @editRecord="handleEditRecord"
         @copyRecord="handleCopyRecord"
       />

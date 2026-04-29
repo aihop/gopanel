@@ -114,6 +114,179 @@ func (s *DBManagerService) GetTables(req request.GetTablesReq) ([]string, error)
 	return tables, nil
 }
 
+// 获取数据库表列表（带分页和搜索）
+func (s *DBManagerService) GetTableList(req request.GetTableListReq) (map[string]interface{}, error) {
+	offset := (req.Page - 1) * req.Limit
+
+	server, err := s.serverRepo.Get(req.ServerID)
+	if err != nil {
+		return nil, err
+	}
+
+	db, err := s.getDBConn(req.ServerID, req.DatabaseName)
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	countSQL, countArgs, dataSQL, dataArgs, err := buildTableListQueries(server.Type, req.DatabaseName, req.Keyword, req.Limit, offset)
+	if err != nil {
+		return nil, err
+	}
+
+	var total int64
+	if err := db.QueryRow(countSQL, countArgs...).Scan(&total); err != nil {
+		return nil, err
+	}
+
+	rows, err := db.Query(dataSQL, dataArgs...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	columns, err := rows.Columns()
+	if err != nil {
+		return nil, err
+	}
+
+	values := make([]interface{}, len(columns))
+	valuePtrs := make([]interface{}, len(columns))
+	for i := range values {
+		valuePtrs[i] = &values[i]
+	}
+
+	items := make([]map[string]interface{}, 0)
+	for rows.Next() {
+		if err := rows.Scan(valuePtrs...); err != nil {
+			return nil, err
+		}
+		entry := make(map[string]interface{}, len(columns))
+		for i, col := range columns {
+			val := values[i]
+			if b, ok := val.([]byte); ok {
+				entry[col] = string(b)
+			} else {
+				entry[col] = val
+			}
+		}
+		items = append(items, entry)
+	}
+
+	return map[string]interface{}{
+		"items": items,
+		"total": total,
+		"page":  req.Page,
+		"limit": req.Limit,
+	}, nil
+}
+
+func buildTableListQueries(dbType model.DatabaseType, databaseName, keyword string, limit, offset int) (string, []interface{}, string, []interface{}, error) {
+	keyword = strings.TrimSpace(keyword)
+
+	switch dbType {
+	case model.DatabaseTypeMysql, model.DatabaseTypeMariaDB:
+		whereClauses := []string{"TABLE_SCHEMA = ?", "TABLE_TYPE = 'BASE TABLE'"}
+		countArgs := []interface{}{databaseName}
+		dataArgs := []interface{}{databaseName}
+		if keyword != "" {
+			whereClauses = append(whereClauses, "TABLE_NAME LIKE ?")
+			likeKeyword := "%" + keyword + "%"
+			countArgs = append(countArgs, likeKeyword)
+			dataArgs = append(dataArgs, likeKeyword)
+		}
+		whereSQL := strings.Join(whereClauses, " AND ")
+		countSQL := fmt.Sprintf("SELECT COUNT(*) FROM information_schema.TABLES WHERE %s", whereSQL)
+		dataSQL := fmt.Sprintf(`SELECT
+TABLE_NAME AS name,
+TABLE_TYPE AS tableType,
+ENGINE AS engine,
+TABLE_ROWS AS rowCount,
+COALESCE(DATA_LENGTH, 0) + COALESCE(INDEX_LENGTH, 0) AS sizeBytes,
+TABLE_COLLATION AS collation,
+CREATE_TIME AS createTime,
+UPDATE_TIME AS updateTime,
+TABLE_COMMENT AS comment
+FROM information_schema.TABLES
+WHERE %s
+ORDER BY TABLE_NAME
+LIMIT ? OFFSET ?`, whereSQL)
+		dataArgs = append(dataArgs, limit, offset)
+		return countSQL, countArgs, dataSQL, dataArgs, nil
+	case model.DatabaseTypePostgresql:
+		whereClauses := []string{
+			"n.nspname NOT IN ('pg_catalog', 'information_schema')",
+			"c.relkind IN ('r', 'p')",
+			"pg_catalog.pg_table_is_visible(c.oid)",
+		}
+		countArgs := make([]interface{}, 0)
+		paramIndex := 1
+		if keyword != "" {
+			whereClauses = append(whereClauses, fmt.Sprintf("c.relname ILIKE $%d", paramIndex))
+			countArgs = append(countArgs, "%"+keyword+"%")
+			paramIndex++
+		}
+		whereSQL := strings.Join(whereClauses, " AND ")
+		countSQL := fmt.Sprintf(`SELECT COUNT(*)
+FROM pg_class c
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE %s`, whereSQL)
+		dataArgs := append([]interface{}{}, countArgs...)
+		dataSQL := fmt.Sprintf(`SELECT
+c.relname AS name,
+CASE c.relkind
+	WHEN 'r' THEN 'TABLE'
+	WHEN 'p' THEN 'PARTITIONED TABLE'
+	ELSE c.relkind::text
+END AS "tableType",
+NULL::text AS engine,
+CASE WHEN c.relkind IN ('r', 'p') THEN COALESCE(s.n_live_tup::bigint, c.reltuples::bigint, 0) ELSE NULL END AS "rowCount",
+CASE WHEN c.relkind IN ('r', 'p', 'm') THEN pg_total_relation_size(c.oid) ELSE NULL END AS "sizeBytes",
+NULL::text AS collation,
+NULL::timestamp AS "createTime",
+NULL::timestamp AS "updateTime",
+pg_catalog.obj_description(c.oid, 'pg_class') AS comment
+FROM pg_class c
+JOIN pg_namespace n ON n.oid = c.relnamespace
+LEFT JOIN pg_stat_user_tables s ON s.relid = c.oid
+WHERE %s
+ORDER BY c.relname
+LIMIT $%d OFFSET $%d`, whereSQL, paramIndex, paramIndex+1)
+		dataArgs = append(dataArgs, limit, offset)
+		return countSQL, countArgs, dataSQL, dataArgs, nil
+	case model.DatabaseSQLite:
+		whereClauses := []string{"type = 'table'", "name NOT LIKE 'sqlite_%'"}
+		countArgs := make([]interface{}, 0)
+		dataArgs := make([]interface{}, 0)
+		if keyword != "" {
+			whereClauses = append(whereClauses, "name LIKE ?")
+			likeKeyword := "%" + keyword + "%"
+			countArgs = append(countArgs, likeKeyword)
+			dataArgs = append(dataArgs, likeKeyword)
+		}
+		whereSQL := strings.Join(whereClauses, " AND ")
+		countSQL := fmt.Sprintf("SELECT COUNT(*) FROM sqlite_master WHERE %s", whereSQL)
+		dataSQL := fmt.Sprintf(`SELECT
+name,
+'TABLE' AS tableType,
+NULL AS engine,
+NULL AS rowCount,
+NULL AS sizeBytes,
+NULL AS collation,
+NULL AS createTime,
+NULL AS updateTime,
+'' AS comment
+FROM sqlite_master
+WHERE %s
+ORDER BY name
+LIMIT ? OFFSET ?`, whereSQL)
+		dataArgs = append(dataArgs, limit, offset)
+		return countSQL, countArgs, dataSQL, dataArgs, nil
+	default:
+		return "", nil, "", nil, fmt.Errorf("unsupported database type for manager: %s", dbType)
+	}
+}
+
 // 通用执行 SQL 并返回动态结构
 func (s *DBManagerService) ExecSql(req request.ExecSqlReq) (map[string]interface{}, error) {
 	db, err := s.getDBConn(req.ServerID, req.DatabaseName)
