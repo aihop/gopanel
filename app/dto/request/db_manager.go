@@ -11,6 +11,8 @@ type GetTableListReq struct {
 	Page         int    `json:"page" validate:"required,min=1"`
 	Limit        int    `json:"limit" validate:"required,min=1,max=100"`
 	Keyword      string `json:"keyword"`
+	SortField    string `json:"sortField"`
+	SortOrder    string `json:"sortOrder"`
 }
 
 type SearchCondition struct {

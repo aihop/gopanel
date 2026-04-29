@@ -27,6 +27,10 @@ const tableListPagination = ref({
 })
 const tableSearchInput = ref('')
 const tableKeyword = ref('')
+const tableSortState = ref<{ columnKey: string | null; order: 'ascend' | 'descend' | false }>({
+  columnKey: null,
+  order: false
+})
 
 const loadingData = ref(false)
 const tableData = ref<any[]>([])
@@ -77,6 +81,8 @@ const tableListColumns = [
     title: '行数',
     key: 'rowCount',
     width: 120,
+    sorter: true,
+    sortOrder: () => tableSortState.value.columnKey === 'rowCount' ? tableSortState.value.order : false,
     render(row: any) {
       return formatCount(row.rowCount)
     }
@@ -85,6 +91,8 @@ const tableListColumns = [
     title: '大小',
     key: 'sizeBytes',
     width: 120,
+    sorter: true,
+    sortOrder: () => tableSortState.value.columnKey === 'sizeBytes' ? tableSortState.value.order : false,
     render(row: any) {
       return formatBytes(row.sizeBytes)
     }
@@ -159,6 +167,10 @@ const resetTableListState = () => {
   tableListPagination.value.page = 1
   tableSearchInput.value = ''
   tableKeyword.value = ''
+  tableSortState.value = {
+    columnKey: null,
+    order: false
+  }
 }
 
 const resetTableDataState = () => {
@@ -185,7 +197,9 @@ const fetchTableList = async () => {
       databaseName: props.selectedDatabase,
       page: tableListPagination.value.page,
       limit: tableListPagination.value.limit,
-      keyword: tableKeyword.value || undefined
+      keyword: tableKeyword.value || undefined,
+      sortField: tableSortState.value.columnKey || undefined,
+      sortOrder: tableSortState.value.order || undefined
     })
 
     if (res.code === 0 && res.data) {
@@ -225,6 +239,16 @@ const handleTableListPageChange = (page: number) => {
 
 const handleTableListPageSizeChange = (pageSize: number) => {
   tableListPagination.value.limit = pageSize
+  tableListPagination.value.page = 1
+  fetchTableList()
+}
+
+const handleTableListSorterChange = (sorter: { columnKey?: string; order?: 'ascend' | 'descend' | false } | { columnKey?: string; order?: 'ascend' | 'descend' | false }[] | null) => {
+  const currentSorter = Array.isArray(sorter) ? sorter[0] : sorter
+  tableSortState.value = {
+    columnKey: currentSorter?.order ? (currentSorter.columnKey || null) : null,
+    order: currentSorter?.order || false
+  }
   tableListPagination.value.page = 1
   fetchTableList()
 }
@@ -424,6 +448,7 @@ defineExpose({ fetchTableData, setAdvancedSearch })
           :scroll-x="1200"
           class="h-full text-xs"
           flex-height
+          @update:sorter="handleTableListSorterChange"
         />
       </div>
       <div class="p-2 border-t border-slate-200 flex justify-between items-center bg-[#f8f9fa] z-10">

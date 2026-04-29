@@ -129,7 +129,7 @@ func (s *DBManagerService) GetTableList(req request.GetTableListReq) (map[string
 	}
 	defer db.Close()
 
-	countSQL, countArgs, dataSQL, dataArgs, err := buildTableListQueries(server.Type, req.DatabaseName, req.Keyword, req.Limit, offset)
+	countSQL, countArgs, dataSQL, dataArgs, err := buildTableListQueries(server.Type, req.DatabaseName, req.Keyword, req.SortField, req.SortOrder, req.Limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -181,8 +181,9 @@ func (s *DBManagerService) GetTableList(req request.GetTableListReq) (map[string
 	}, nil
 }
 
-func buildTableListQueries(dbType model.DatabaseType, databaseName, keyword string, limit, offset int) (string, []interface{}, string, []interface{}, error) {
+func buildTableListQueries(dbType model.DatabaseType, databaseName, keyword, sortField, sortOrder string, limit, offset int) (string, []interface{}, string, []interface{}, error) {
 	keyword = strings.TrimSpace(keyword)
+	sortSQL := buildTableListSortSQL(dbType, sortField, sortOrder)
 
 	switch dbType {
 	case model.DatabaseTypeMysql, model.DatabaseTypeMariaDB:
@@ -197,7 +198,7 @@ func buildTableListQueries(dbType model.DatabaseType, databaseName, keyword stri
 		}
 		whereSQL := strings.Join(whereClauses, " AND ")
 		countSQL := fmt.Sprintf("SELECT COUNT(*) FROM information_schema.TABLES WHERE %s", whereSQL)
-		dataSQL := fmt.Sprintf(`SELECT
+		dataSQL := `SELECT
 TABLE_NAME AS name,
 TABLE_TYPE AS tableType,
 ENGINE AS engine,
@@ -209,10 +210,10 @@ UPDATE_TIME AS updateTime,
 TABLE_COMMENT AS comment
 FROM information_schema.TABLES
 WHERE %s
-ORDER BY TABLE_NAME
-LIMIT ? OFFSET ?`, whereSQL)
+%s
+LIMIT ? OFFSET ?`
 		dataArgs = append(dataArgs, limit, offset)
-		return countSQL, countArgs, dataSQL, dataArgs, nil
+		return countSQL, countArgs, fmt.Sprintf(dataSQL, whereSQL, sortSQL), dataArgs, nil
 	case model.DatabaseTypePostgresql:
 		whereClauses := []string{
 			"n.nspname NOT IN ('pg_catalog', 'information_schema')",
@@ -232,7 +233,7 @@ FROM pg_class c
 JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE %s`, whereSQL)
 		dataArgs := append([]interface{}{}, countArgs...)
-		dataSQL := fmt.Sprintf(`SELECT
+		dataSQL := `SELECT
 c.relname AS name,
 CASE c.relkind
 	WHEN 'r' THEN 'TABLE'
@@ -250,10 +251,10 @@ FROM pg_class c
 JOIN pg_namespace n ON n.oid = c.relnamespace
 LEFT JOIN pg_stat_user_tables s ON s.relid = c.oid
 WHERE %s
-ORDER BY c.relname
-LIMIT $%d OFFSET $%d`, whereSQL, paramIndex, paramIndex+1)
+%s
+LIMIT $%d OFFSET $%d`
 		dataArgs = append(dataArgs, limit, offset)
-		return countSQL, countArgs, dataSQL, dataArgs, nil
+		return countSQL, countArgs, fmt.Sprintf(dataSQL, whereSQL, sortSQL, paramIndex, paramIndex+1), dataArgs, nil
 	case model.DatabaseSQLite:
 		whereClauses := []string{"type = 'table'", "name NOT LIKE 'sqlite_%'"}
 		countArgs := make([]interface{}, 0)
@@ -266,7 +267,7 @@ LIMIT $%d OFFSET $%d`, whereSQL, paramIndex, paramIndex+1)
 		}
 		whereSQL := strings.Join(whereClauses, " AND ")
 		countSQL := fmt.Sprintf("SELECT COUNT(*) FROM sqlite_master WHERE %s", whereSQL)
-		dataSQL := fmt.Sprintf(`SELECT
+		dataSQL := `SELECT
 name,
 'TABLE' AS tableType,
 NULL AS engine,
@@ -278,12 +279,59 @@ NULL AS updateTime,
 '' AS comment
 FROM sqlite_master
 WHERE %s
-ORDER BY name
-LIMIT ? OFFSET ?`, whereSQL)
+%s
+LIMIT ? OFFSET ?`
 		dataArgs = append(dataArgs, limit, offset)
-		return countSQL, countArgs, dataSQL, dataArgs, nil
+		return countSQL, countArgs, fmt.Sprintf(dataSQL, whereSQL, sortSQL), dataArgs, nil
 	default:
 		return "", nil, "", nil, fmt.Errorf("unsupported database type for manager: %s", dbType)
+	}
+}
+
+func buildTableListSortSQL(dbType model.DatabaseType, sortField, sortOrder string) string {
+	order := "ASC"
+	switch strings.ToLower(strings.TrimSpace(sortOrder)) {
+	case "descend", "desc":
+		order = "DESC"
+	}
+
+	field := strings.TrimSpace(sortField)
+	if field == "" {
+		switch dbType {
+		case model.DatabaseTypeMysql, model.DatabaseTypeMariaDB:
+			return "ORDER BY TABLE_NAME ASC"
+		case model.DatabaseTypePostgresql:
+			return "ORDER BY c.relname ASC"
+		case model.DatabaseSQLite:
+			return "ORDER BY name ASC"
+		default:
+			return "ORDER BY 1 ASC"
+		}
+	}
+
+	switch dbType {
+	case model.DatabaseTypeMysql, model.DatabaseTypeMariaDB:
+		switch field {
+		case "rowCount":
+			return fmt.Sprintf("ORDER BY TABLE_ROWS %s, TABLE_NAME ASC", order)
+		case "sizeBytes":
+			return fmt.Sprintf("ORDER BY (COALESCE(DATA_LENGTH, 0) + COALESCE(INDEX_LENGTH, 0)) %s, TABLE_NAME ASC", order)
+		default:
+			return "ORDER BY TABLE_NAME ASC"
+		}
+	case model.DatabaseTypePostgresql:
+		switch field {
+		case "rowCount":
+			return fmt.Sprintf("ORDER BY COALESCE(s.n_live_tup::bigint, c.reltuples::bigint, 0) %s, c.relname ASC", order)
+		case "sizeBytes":
+			return fmt.Sprintf("ORDER BY pg_total_relation_size(c.oid) %s, c.relname ASC", order)
+		default:
+			return "ORDER BY c.relname ASC"
+		}
+	case model.DatabaseSQLite:
+		return "ORDER BY name ASC"
+	default:
+		return "ORDER BY 1 ASC"
 	}
 }
 
