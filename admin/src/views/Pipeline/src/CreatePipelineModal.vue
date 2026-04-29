@@ -467,7 +467,6 @@ const handleSubmit = () => {
           }
         } else {
           payload.runnerMode = ""
-          payload.pipelineKey = ""
           payload.runnerConfig = undefined
         }
         

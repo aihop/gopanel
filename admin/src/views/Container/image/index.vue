@@ -4,11 +4,10 @@
     <n-space class="mb-4">
       <n-button
         type="primary"
-        @click="openImageActionDrawer('pull')"
+        @click="openPullDrawer"
       >{{ $t('container.imagePull') }}</n-button>
-      <n-button @click="openImageActionDrawer('import')">{{ $t('container.imageImport') }}</n-button>
-      <!-- <n-button @click="openImageActionDrawer('build')">构建镜像</n-button>
-			<n-button @click="showClearBuildCacheConfirmation">清理构建缓存</n-button> -->
+      <n-button @click="openLoadDrawer">{{ $t('container.imageImport') }}</n-button>
+      <n-button @click="openBuildDrawer">{{ $t('container.imageBuild') }}</n-button>
       <n-button
         type="error"
         @click="showClearUnusedImagesConfirmation"
@@ -64,168 +63,28 @@
       />
     </n-card>
 
-    <!-- Unified Image Action Drawer -->
-    <n-drawer
-      v-model:show="showImageActionDrawer"
-      :width="500"
-      placement="right"
-    >
-      <n-drawer-content
-        :title="drawerTitle"
-        closable
-      >
-        <template #header>
-          <div class="flex items-center">
-            <div
-              class="flex cursor-pointer items-center gap-2 text-gray-500"
-              @click="showImageActionDrawer = false"
-            >
-              <Icon name="mdi:arrow-left" />
-              返回
-            </div>
-            <n-divider vertical />
-            {{ drawerTitle }}
-          </div>
-        </template>
-
-        <n-form
-          ref="imageActionFormRef"
-          :model="imageActionFormValue"
-          class="p-4"
-        >
-          <!-- Fields for Pull Image -->
-          <template v-if="drawerMode === 'pull'">
-            <n-form-item
-              label="来源"
-              path="fromRegistry"
-            >
-              <n-checkbox v-model:checked="imageActionFormValue.fromRegistry">镜像仓库</n-checkbox>
-            </n-form-item>
-            <n-form-item
-              label="仓库名"
-              path="registryName"
-              :rule="{ required: true, message: '请选择仓库名', trigger: ['blur', 'change'] }"
-            >
-              <n-select
-                v-model:value="imageActionFormValue.registryName"
-                placeholder="请选择仓库名"
-                :options="registryOptions"
-                filterable
-              />
-            </n-form-item>
-            <n-form-item
-              label="镜像名"
-              path="imageName"
-              :rule="{ required: true, message: '请输入镜像名', trigger: 'blur' }"
-            >
-              <n-input
-                v-model:value="imageActionFormValue.imageName"
-                placeholder="例如：nginx:latest 或 library/nginx:latest"
-              />
-            </n-form-item>
-          </template>
-
-          <!-- Fields for Import Image -->
-          <template v-if="drawerMode === 'import'">
-            <n-form-item
-              label="路径"
-              path="path"
-              :rule="{ required: true, message: '请输入镜像文件路径', trigger: 'blur' }"
-            >
-              <n-input
-                v-model:value="imageActionFormValue.path"
-                placeholder="请输入服务器上的镜像文件绝对路径 (.tar, .tar.gz, etc.)"
-              >
-                <template #prefix>
-                  <n-icon name="folder_open" />
-                </template>
-              </n-input>
-            </n-form-item>
-          </template>
-
-          <!-- Fields for Build Image -->
-          <template v-if="drawerMode === 'build'">
-            <n-form-item
-              label="名称"
-              path="imageNameAndTag"
-              :rule="{ required: true, message: '请输入镜像名称及Tag', trigger: 'blur' }"
-            >
-              <n-input
-                v-model:value="imageActionFormValue.imageNameAndTag"
-                placeholder="镜像名称及 Tag, 例: nginx:latest"
-              />
-            </n-form-item>
-
-            <n-form-item
-              label="Dockerfile"
-              path="dockerfileSourceType"
-              :rule="{ required: true, message: '请选择Dockerfile来源或内容' }"
-            >
-              <n-radio-group
-                v-model:value="imageActionFormValue.dockerfileSourceType"
-                name="dockerfileSource"
-              >
-                <n-radio value="edit">编辑</n-radio>
-                <n-radio
-                  class="ml-4"
-                  value="path"
-                >路径选择</n-radio>
-              </n-radio-group>
-            </n-form-item>
-
-            <n-form-item
-              :show-label="false"
-              v-if="imageActionFormValue.dockerfileSourceType === 'path'"
-              path="dockerfilePath"
-            >
-              <n-input
-                v-model:value="imageActionFormValue.dockerfilePath"
-                placeholder="请输入Dockerfile在服务器上的路径"
-              >
-                <template #prefix>
-                  <!-- Ensure Icon component is correctly set up -->
-                  <Icon name="mdi:folder-outline" />
-                </template>
-              </n-input>
-            </n-form-item>
-
-            <n-form-item
-              v-if="imageActionFormValue.dockerfileSourceType === 'edit'"
-              label=" "
-              path="dockerfileContent"
-            >
-              <FtEditor v-model:value="imageActionFormValue.dockerfileContent" />
-            </n-form-item>
-
-            <n-form-item
-              label="标签"
-              path="imageBuildLabels"
-            >
-              <n-input
-                v-model:value="imageActionFormValue.imageBuildLabels"
-                type="textarea"
-                placeholder="一行一个, 例:\nkey1=value1\nkey2=value2"
-                :autosize="{ minRows: 3, maxRows: 5 }"
-              />
-            </n-form-item>
-          </template>
-        </n-form>
-
-        <template #footer>
-          <n-space>
-            <n-button @click="showImageActionDrawer = false">取消</n-button>
-            <n-button
-              type="primary"
-              @click="handleImageAction"
-            >{{ primaryButtonText }}</n-button>
-          </n-space>
-        </template>
-      </n-drawer-content>
-    </n-drawer>
-
-    <!-- Pull Image Component -->
     <pull-image
       ref="pullImageRef"
+      @search="fetchImageData"
+    />
+
+    <load-image
+      ref="loadImageRef"
+      @search="fetchImageData"
+    />
+
+    <build-image
+      ref="buildImageRef"
+      @search="fetchImageData"
+    />
+
+    <push-image
+      ref="pushImageRef"
+      @search="fetchImageData"
+    />
+
+    <save-image
+      ref="saveImageRef"
       @search="fetchImageData"
     />
 
@@ -238,42 +97,36 @@
 </template>
 
 <script setup lang="ts">
-import { h, ref, onMounted, computed } from "vue"
+import { h, ref, onMounted } from "vue"
 import {
 	NButton,
 	NSpace,
 	NTag,
 	NText,
-	NSpin,
-	NDrawer,
-	NDrawerContent,
-	NForm,
-	NFormItem,
-	NCheckbox,
-	NSelect,
 	NInput,
 	NIcon,
 	NPopover,
-	NDivider,
-	NDynamicTags,
-	NRadio,
-	NRadioGroup,
-	NRadioButton,
 	useDialog,
 	useMessage
 } from "naive-ui"
-import type { DataTableColumns, FormInst } from "naive-ui"
-import { containerImageListAPI, imagePull, listImageRepo, imageRemove, containerPrune } from "@/api/modules/container"
+import type { DataTableColumns } from "naive-ui"
+import { containerImageListAPI, listImageRepo, imageRemove } from "@/api/modules/container"
 import type { Container } from "@/api/interface/container"
-import FtEditor from "@/components/FtEditor/index.vue"
 import dayjs from "@/utils/dayjs"
 import PullImage from "./pull/index.vue"
+import LoadImage from "./load/index.vue"
+import BuildImage from "./build/index.vue"
+import PushImage from "./push/index.vue"
+import SaveImage from "./save/index.vue"
 import PruneImage from "./prune/index.vue"
-import { computeSize } from "@/utils/util"
 
 const dialog = useDialog()
 const message = useMessage()
 const pullImageRef = ref()
+const loadImageRef = ref()
+const buildImageRef = ref()
+const pushImageRef = ref()
+const saveImageRef = ref()
 const pruneImageRef = ref()
 
 type ImageRow = {
@@ -288,138 +141,40 @@ const imageData = ref<ImageRow[]>([])
 const loading = ref(true)
 const repos = ref<Container.RepoOptions[]>([])
 
-// --- Unified Drawer State ---
-const showImageActionDrawer = ref(false)
-const drawerMode = ref<"pull" | "import" | "build" | null>(null)
-const imageActionFormRef = ref<FormInst | null>(null)
-const imageActionFormValue = ref({
-	// Pull specific
-	fromRegistry: false,
-	registryName: "",
-	imageName: "",
-	// Import specific
-	path: "",
-	// Build specific (revised based on new image)
-	imageNameAndTag: "", // Combined name and tag
-	dockerfileSourceType: "path", // 'path' or 'edit'
-	dockerfilePath: "", // Path if sourceType is 'path'
-	dockerfileContent: "", // Content if sourceType is 'edit'
-	imageBuildLabels: "" // For --label, multi-line string
-})
+const openPullDrawer = () => {
+	pullImageRef.value?.acceptParams({ repos: repos.value })
+}
 
-const drawerTitle = computed(() => {
-	if (drawerMode.value === "pull") return "拉取镜像"
-	if (drawerMode.value === "import") return "导入镜像"
-	if (drawerMode.value === "build") return "构建镜像"
-	return ""
-})
+const openLoadDrawer = () => {
+	loadImageRef.value?.acceptParams()
+}
 
-const primaryButtonText = computed(() => {
-	if (drawerMode.value === "pull") return "拉取"
-	if (drawerMode.value === "import") return "导入"
-	if (drawerMode.value === "build") return "构建"
-	return "确定"
-})
+const openBuildDrawer = () => {
+	buildImageRef.value?.acceptParams()
+}
 
-const registryOptions = ref([
-	{ label: "Docker Hub", value: "Docker Hub" }
-	// Add other registry options here
-])
+const getPushableTags = (row: ImageRow) => row.tags.filter(tag => tag && !tag.includes(":<none>"))
 
-const openImageActionDrawer = (mode: "pull" | "import" | "build") => {
-	if (mode === "pull") {
-		pullImageRef.value?.acceptParams({ repos: repos.value })
+const openPushDrawer = (row: ImageRow) => {
+	const tags = getPushableTags(row)
+	if (tags.length === 0) {
+		message.warning("当前镜像没有可推送的标签")
 		return
 	}
-
-	drawerMode.value = mode
-	// Reset form to defaults or mode-specific state
-	imageActionFormValue.value = {
-		fromRegistry: false,
-		registryName: "",
-		imageName: "",
-		path: "",
-
-		// Reset for build mode according to new image
-		imageNameAndTag: "",
-		dockerfileSourceType: "path",
-		dockerfilePath: mode === "build" ? "Dockerfile" : "",
-		dockerfileContent: "",
-		imageBuildLabels: ""
+	if (repos.value.length === 0) {
+		message.warning("请先在镜像仓库中添加并同步可用仓库")
+		return
 	}
-	imageActionFormRef.value?.restoreValidation()
-	showImageActionDrawer.value = true
+	pushImageRef.value?.acceptParams({ repos: repos.value, tags })
 }
 
-const handleImageAction = () => {
-	imageActionFormRef.value?.validate(async errors => {
-		if (!errors) {
-			try {
-				if (drawerMode.value === "pull") {
-					const params = {
-						fromRepo: imageActionFormValue.value.fromRegistry,
-						repoID: imageActionFormValue.value.registryName === "Docker Hub" ? 1 : 0, // 默认使用 Docker Hub
-						imageName: imageActionFormValue.value.imageName
-					}
-
-					const res = await imagePull(params)
-					message.success("镜像拉取任务已开始")
-					showImageActionDrawer.value = false
-					fetchImageData() // 刷新镜像列表
-				} else if (drawerMode.value === "import") {
-					console.log("Importing image from:", imageActionFormValue.value.path)
-					// Implement image import logic here
-				} else if (drawerMode.value === "build") {
-					console.log("Building image with config:", {
-						nameAndTag: imageActionFormValue.value.imageNameAndTag,
-						dockerfileSource: imageActionFormValue.value.dockerfileSourceType,
-						dockerfilePath:
-							imageActionFormValue.value.dockerfileSourceType === "path"
-								? imageActionFormValue.value.dockerfilePath
-								: undefined,
-						dockerfileContent:
-							imageActionFormValue.value.dockerfileSourceType === "edit"
-								? imageActionFormValue.value.dockerfileContent
-								: undefined,
-						labels: imageActionFormValue.value.imageBuildLabels
-					})
-					// Implement image build logic here
-				}
-			} catch (error) {
-				console.error("操作失败:", error)
-				message.error("操作失败")
-			}
-		} else {
-			console.log(`Validation errors for ${drawerMode.value} mode:`, errors)
-		}
-	})
-}
-
-const showClearBuildCacheConfirmation = () => {
-	dialog.warning({
-		title: "清理构建缓存",
-		content: "清理构建缓存将删除所有构建产生的缓存，该操作无法回滚，是否继续？",
-		positiveText: "确认",
-		negativeText: "取消",
-		onPositiveClick: async () => {
-			try {
-				const res = await containerPrune({
-					pruneType: "buildcache",
-					withTagAll: false
-				})
-				if (res.code === 0) {
-					message.success(
-						`清理成功，共删除 ${res.data.deletedNumber} 个构建缓存，释放空间 ${computeSize(res.data.spaceReclaimed)}`
-					)
-				} else {
-					message.error(res.msg || "清理构建缓存失败")
-				}
-			} catch (error: any) {
-				console.error("清理构建缓存失败:", error)
-				message.error(error.msg || "清理构建缓存时发生错误")
-			}
-		}
-	})
+const openSaveDrawer = (row: ImageRow) => {
+	const tags = getPushableTags(row)
+	if (tags.length === 0) {
+		message.warning("当前镜像没有可导出的标签")
+		return
+	}
+	saveImageRef.value?.acceptParams({ repos: repos.value, tags })
 }
 
 const showClearUnusedImagesConfirmation = () => {
@@ -475,6 +230,10 @@ onMounted(async () => {
 })
 
 const handleDeleteImage = (row: ImageRow, specificTag?: string) => {
+	if (row.isUsed) {
+		message.warning("已使用的镜像不允许删除")
+		return
+	}
 	const targetName = specificTag || row.id
 	const isTagDelete = !!specificTag
 	const contentMsg = isTagDelete
@@ -511,7 +270,7 @@ const createColumns = (): DataTableColumns<ImageRow> => [
 	{
 		title: "ID",
 		key: "id",
-		render(row) {
+		render(row: ImageRow) {
 			return h(
 				NText,
 				{
@@ -526,7 +285,7 @@ const createColumns = (): DataTableColumns<ImageRow> => [
 	{
 		title: "状态",
 		key: "isUsed",
-		render(row) {
+		render(row: ImageRow) {
 			const statusType = row.isUsed ? "success" : "warning"
 			const statusText = row.isUsed ? "已使用" : "未使用"
 			return h(NTag, { type: statusType, size: "small", bordered: false }, { default: () => statusText })
@@ -535,29 +294,37 @@ const createColumns = (): DataTableColumns<ImageRow> => [
 	{
 		title: "标签",
 		key: "tags",
-		render(row) {
+		render(row: ImageRow) {
+			const tags = getPushableTags(row)
+			if (tags.length === 0) {
+				return h(NText, null, { default: () => "-" })
+			}
 			return h(
 				NSpace,
 				{ vertical: true, size: "small" },
 				{
 					default: () =>
-						row.tags.map(tag =>
+						tags.map(tag =>
 							h(
 								NSpace,
 								{ align: "center", size: "small", style: "display: inline-flex; margin-right: 8px;" },
 								{
 									default: () => [
 										h(NTag, { bordered: false, size: "small" }, { default: () => tag }),
-										h(
-											NButton,
-											{
-												text: true,
-												type: "error",
-												size: "tiny",
-												onClick: () => handleDeleteImage(row, tag)
-											},
-											{ default: () => "删" }
-										)
+										...(!row.isUsed
+											? [
+													h(
+														NButton,
+														{
+															text: true,
+															type: "error",
+															size: "tiny",
+															onClick: () => handleDeleteImage(row, tag)
+														},
+														{ default: () => "删" }
+													)
+												]
+											: [])
 									]
 								}
 							)
@@ -569,28 +336,43 @@ const createColumns = (): DataTableColumns<ImageRow> => [
 	{
 		title: "大小",
 		key: "size",
-		render(row) {
+		render(row: ImageRow) {
 			return h(NText, null, { default: () => row.size || "-" })
 		}
 	},
 	{
 		title: "时间",
 		key: "createdAt",
-		render(row) {
+		render(row: ImageRow) {
 			return h(NText, null, { default: () => dayjs(row.createdAt).format("YYYY-MM-DD HH:mm") })
 		}
 	},
 	{
 		title: "操作",
 		key: "actions",
-		render(row) {
+		render(row: ImageRow) {
+			const hasPushableTags = getPushableTags(row).length > 0
 			return h(NSpace, null, {
 				default: () => [
 					h(
 						NButton,
-						{ text: true, type: "error", onClick: () => handleDeleteImage(row) },
-						{ default: () => "删除全部" }
-					)
+						{ text: true, type: "primary", disabled: !hasPushableTags || repos.value.length === 0, onClick: () => openPushDrawer(row) },
+						{ default: () => "推送" }
+					),
+					h(
+						NButton,
+						{ text: true, disabled: !hasPushableTags, onClick: () => openSaveDrawer(row) },
+						{ default: () => "导出" }
+					),
+					...(!row.isUsed
+						? [
+								h(
+									NButton,
+									{ text: true, type: "error", onClick: () => handleDeleteImage(row) },
+									{ default: () => "删除全部" }
+								)
+							]
+						: [])
 				]
 			})
 		}
@@ -607,10 +389,12 @@ const pagination = ref({
 	itemCount: 0,
 	onChange: (page: number) => {
 		pagination.value.page = page
+		fetchImageData()
 	},
 	onUpdatePageSize: (limit: number) => {
 		pagination.value.limit = limit
 		pagination.value.page = 1
+		fetchImageData()
 	}
 })
 

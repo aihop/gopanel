@@ -15,19 +15,22 @@
 				<n-col :span="22">
 					<n-form ref="formRef" label-position="top" :model="form" label-width="80px">
 						<n-form-item :label="$t('container.tag')" :rules="Rules.requiredSelect" prop="tagName">
-							<n-select @change="onEdit(true)" filterable v-model="form.tagName">
-								<n-option v-for="item in form.tags" :key="item" :value="item" :label="item" />
-							</n-select>
+							<n-select
+								@change="onEdit(true)"
+								filterable
+								v-model="form.tagName"
+								:options="form.tags.map(item => ({ label: item, value: item }))"
+							/>
 						</n-form-item>
 						<n-form-item :label="$t('container.repoName')" :rules="Rules.requiredSelect" prop="repoID">
-							<n-select @change="onEdit()" clearable style="width: 100%" filterable v-model="form.repoID">
-								<n-option
-									v-for="item in dialogData.repos"
-									:key="item.id"
-									:value="item.id"
-									:label="item.name"
-								/>
-							</n-select>
+							<n-select
+								@change="onEdit()"
+								clearable
+								style="width: 100%"
+								filterable
+								v-model="form.repoID"
+								:options="dialogData.repos.map(item => ({ label: item.name, value: item.id }))"
+							/>
 						</n-form-item>
 						<n-form-item :label="$t('container.image')" :rules="Rules.imageName" prop="name">
 							<n-input

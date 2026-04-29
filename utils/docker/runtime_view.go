@@ -99,14 +99,16 @@ func ListImagesMergedWithSource(ctx context.Context) ([]image.Summary, map[strin
 	var images []image.Summary
 	var containers []types.Container
 	addImage := func(it image.Summary, from string) {
-		if strings.TrimSpace(it.ID) == "" {
+		id := normalizeRuntimeImageID(it.ID)
+		if id == "" {
 			return
 		}
-		if _, ok := imgSeen[it.ID]; ok {
+		if _, ok := imgSeen[id]; ok {
 			return
 		}
-		imgSeen[it.ID] = struct{}{}
-		imgSource[it.ID] = from
+		it.ID = id
+		imgSeen[id] = struct{}{}
+		imgSource[id] = from
 		images = append(images, it)
 	}
 	addContainer := func(it types.Container) {
@@ -165,6 +167,11 @@ func ListImagesMergedWithSource(ctx context.Context) ([]image.Summary, map[strin
 func ListImagesMerged(ctx context.Context) ([]image.Summary, []types.Container, error) {
 	images, _, containers, err := ListImagesMergedWithSource(ctx)
 	return images, containers, err
+}
+
+func normalizeRuntimeImageID(id string) string {
+	id = strings.TrimSpace(id)
+	return strings.TrimPrefix(id, "sha256:")
 }
 
 func runtimeViewAPIHosts(resolved ResolvedRuntime) []string {

@@ -704,9 +704,15 @@ func formatFileSize(fileSize int64) (size string) {
 	}
 }
 
+func normalizeImageID(id string) string {
+	id = strings.TrimSpace(id)
+	return strings.TrimPrefix(id, "sha256:")
+}
+
 func checkUsed(imageID string, containers []types.Container) bool {
+	imageID = normalizeImageID(imageID)
 	for _, container := range containers {
-		if container.ImageID == imageID {
+		if normalizeImageID(container.ImageID) == imageID {
 			return true
 		}
 	}

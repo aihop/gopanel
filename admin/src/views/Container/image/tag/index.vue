@@ -40,14 +40,8 @@
                 filterable
                 v-model="form.repo"
                 @change="changeRepo"
-              >
-                <n-option
-                  v-for="item in repos"
-                  :key="item.id"
-                  :value="item.name"
-                  :label="item.name"
-                />
-              </n-select>
+                :options="(repos || []).map(item => ({ label: item.name, value: item.name }))"
+              />
             </n-form-item>
             <n-form-item
               :label="$t('container.imageTag')"

@@ -33,15 +33,8 @@
               <n-select
                 filterable
                 v-model="form.tagName"
-              >
-                <n-option
-                  :disabled="item.indexOf(':<none>') !== -1"
-                  v-for="item in form.tags"
-                  :key="item"
-                  :value="item"
-                  :label="item"
-                />
-              </n-select>
+                :options="form.tags.map(item => ({ label: item, value: item, disabled: item.indexOf(':<none>') !== -1 }))"
+              />
             </n-form-item>
             <n-form-item
               :label="$t('container.path')"

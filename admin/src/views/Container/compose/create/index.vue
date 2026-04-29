@@ -54,14 +54,8 @@
                 <n-select
                   v-model="form.template"
                   @change="onEdit('template')"
-                >
-                  <n-option
-                    v-for="item in templateOptions"
-                    :key="item.id"
-                    :value="item.id"
-                    :label="item.name"
-                  />
-                </n-select>
+                  :options="templateOptions.map(item => ({ label: item.name, value: item.id }))"
+                />
               </n-form-item>
               <n-form-item
                 v-if="form.from === 'edit' || form.from === 'template'"

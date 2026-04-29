@@ -21,8 +21,8 @@ func (u *ImageService) pagePodman(req dto.SearchWithPage) (int64, interface{}, e
 	containers, _ := docker.PodmanListContainers(ctx, true)
 	used := make(map[string]struct{}, len(containers))
 	for _, c := range containers {
-		if c.ImageID != "" {
-			used[c.ImageID] = struct{}{}
+		if id := normalizeImageID(c.ImageID); id != "" {
+			used[id] = struct{}{}
 		}
 	}
 
@@ -40,7 +40,7 @@ func (u *ImageService) pagePodman(req dto.SearchWithPage) (int64, interface{}, e
 				continue
 			}
 		}
-		_, isUsed := used[img.ID]
+		_, isUsed := used[normalizeImageID(img.ID)]
 		displaySize := strings.TrimSpace(img.Size)
 		if n, ok := docker.ParsePodmanImageSizeBytes(displaySize); ok {
 			displaySize = formatFileSize(n)

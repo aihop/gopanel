@@ -443,7 +443,7 @@ defineExpose({ fetchTableData, setAdvancedSearch })
       </div>
       <div class="flex-1 overflow-auto p-2 bg-white">
         <n-data-table
-          :columns="tableListColumns"
+          :columns="tableListColumns as any"
           :data="tableList"
           :loading="loadingTables"
           :pagination="false"

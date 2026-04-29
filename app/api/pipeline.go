@@ -79,10 +79,10 @@ func PipelineCreate(c fiber.Ctx) error {
 
 	pipelineRepo := repo.NewPipeline(global.DB)
 	pipelineKey := normalizePipelineKey(req.PipelineKey)
+	if err := validatePipelineKey(pipelineRepo, pipelineKey, 0, ""); err != nil {
+		return c.JSON(e.Fail(err))
+	}
 	if req.RunnerMode == "runner" {
-		if err := validatePipelineKey(pipelineRepo, pipelineKey, 0, ""); err != nil {
-			return c.JSON(e.Fail(err))
-		}
 		if err := service.ValidateRunnerPersistentPaths(req.RunnerConfig); err != nil {
 			return c.JSON(e.Fail(err))
 		}
@@ -130,10 +130,10 @@ func PipelineUpdate(c fiber.Ctx) error {
 		return c.JSON(e.Fail(err))
 	}
 	pipelineKey := normalizePipelineKey(req.PipelineKey)
+	if err := validatePipelineKey(pipelineRepo, pipelineKey, pipeline.ID, pipeline.PipelineKey); err != nil {
+		return c.JSON(e.Fail(err))
+	}
 	if req.RunnerMode == "runner" {
-		if err := validatePipelineKey(pipelineRepo, pipelineKey, pipeline.ID, pipeline.PipelineKey); err != nil {
-			return c.JSON(e.Fail(err))
-		}
 		if err := service.ValidateRunnerPersistentPaths(req.RunnerConfig); err != nil {
 			return c.JSON(e.Fail(err))
 		}
