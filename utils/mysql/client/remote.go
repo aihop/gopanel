@@ -248,21 +248,13 @@ func (r *Remote) Backup(info BackupInfo) error {
 		dumpCmd = "mariadb-dump"
 	}
 
-	// 如果 info.Format 看起来像文件名（包含点），不要把它当 charset 使用
-	charset := ""
-	if info.Format != "" && !strings.Contains(info.Format, ".") {
-		charset = info.Format
-	} else if info.Format != "" {
-		global.LOG.Warnf("ignoring invalid charset value: %s", info.Format)
-	}
-
 	hostDumpCmd := dumpCmd
 	if hostDumpCmd, err = ensureHostDumpCmd(dumpCmd); err != nil {
 		return err
 	} else if hostDumpCmd != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(info.Timeout)*time.Second)
 		defer cancel()
-		if err := r.backupWithHostClient(ctx, info, hostDumpCmd, charset, outfile); err == nil {
+		if err := r.backupWithHostClient(ctx, info, hostDumpCmd, outfile); err == nil {
 			return nil
 		}
 	}
@@ -300,9 +292,6 @@ func (r *Remote) Backup(info BackupInfo) error {
 	// ssl/compat 参数
 	if s := sslSkip(info.Version, r.Type); s != "" {
 		mysqldumpArgs = append(mysqldumpArgs, s)
-	}
-	if charset != "" {
-		mysqldumpArgs = append(mysqldumpArgs, "--default-character-set="+charset)
 	}
 	if info.Name != "" {
 		mysqldumpArgs = append(mysqldumpArgs, info.Name)
@@ -407,10 +396,6 @@ func (r *Remote) Recover(info RecoverInfo) error {
 		parts := strings.Fields(s)
 		dockerArgs = append(dockerArgs, parts...)
 	}
-	// 仅在 info.Format 看起来像 charset 时添加
-	if info.Format != "" && !strings.Contains(info.Format, ".") {
-		dockerArgs = append(dockerArgs, "--default-character-set="+info.Format)
-	}
 	// 指定数据库名（可为空，表示从 stdin 执行 SQL）
 	if info.Name != "" {
 		dockerArgs = append(dockerArgs, info.Name)
@@ -451,7 +436,7 @@ func (r *Remote) Recover(info RecoverInfo) error {
 	return nil
 }
 
-func (r *Remote) backupWithHostClient(ctx context.Context, info BackupInfo, dumpCmd, charset string, outfile *os.File) error {
+func (r *Remote) backupWithHostClient(ctx context.Context, info BackupInfo, dumpCmd string, outfile *os.File) error {
 	host := strings.TrimPrefix(r.Address, "[")
 	host = strings.TrimSuffix(host, "]")
 	args := []string{
@@ -465,9 +450,6 @@ func (r *Remote) backupWithHostClient(ctx context.Context, info BackupInfo, dump
 	if s := sslSkip(info.Version, r.Type); s != "" {
 		parts := strings.Fields(s)
 		args = append(args, parts...)
-	}
-	if charset != "" {
-		args = append(args, "--default-character-set="+charset)
 	}
 	if info.Name != "" {
 		args = append(args, info.Name)
@@ -516,9 +498,6 @@ func (r *Remote) recoverWithHostClient(ctx context.Context, info RecoverInfo, cl
 	if s := sslSkip(info.Version, r.Type); s != "" {
 		parts := strings.Fields(s)
 		args = append(args, parts...)
-	}
-	if info.Format != "" && !strings.Contains(info.Format, ".") {
-		args = append(args, "--default-character-set="+info.Format)
 	}
 	if info.Name != "" {
 		args = append(args, info.Name)

@@ -131,7 +131,12 @@ const rules = {
   version: { required: true, message: "请输入初始版本号", trigger: "blur" },
   pipelineKey: {
     validator: (_rule: any, value: string) => {
-      if (!String(value || "").trim()) return new Error("请输入流水线标识")
+      const raw = String(value || "").trim()
+      if (!raw) return new Error("请输入流水线标识")
+      const normalized = normalizePipelineKey(raw)
+      if (!normalized) {
+        return new Error("流水线标识仅支持字母、数字、中划线，且规范化后不能为空")
+      }
       return true
     },
     trigger: ["blur", "input"]
@@ -683,9 +688,10 @@ watch(() => [formModel.repoUrl, formModel.branch, formModel.authType, formModel.
               v-model:value="formModel.pipelineKey"
               placeholder="例如：aipanel-site"
               @update:value="pipelineKeyTouched = true"
+              @blur="formModel.pipelineKey = normalizePipelineKey(formModel.pipelineKey)"
             />
             <div class="mt-2 text-xs text-slate-500">
-              流水线标识用于文件目录生成：`安装目录/pipelines/流水线标识/`，相关逻辑使用该目录
+              用于生成流水线固定目录：`安装目录/pipelines/流水线标识/`。仅支持字母、数字和中划线；失焦时会自动规范化。创建或更新时会检查该目录是否已存在；若已被其他流水线占用，会提示你更换标识。
             </div>
         </div>
       </n-form-item>

@@ -56,6 +56,7 @@ func LoadMysqlClientByFrom(server *model.DatabaseServer) (mysql.MysqlClient, str
 	dbInfo.Timeout = 300
 	dbInfo.Address = server.Host
 	dbInfo.From = string(server.Mode)
+	dbInfo.Type = string(server.Type)
 
 	cli, err := mysql.NewMysqlClient(dbInfo)
 	if err != nil {

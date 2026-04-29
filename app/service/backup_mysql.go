@@ -82,22 +82,36 @@ func (u *BackupService) MysqlRecoverByUpload(req *dto.CommonRecover, logger *Bac
 		if logger != nil {
 			logger.Appendf("压缩包已解压到：%s", dstDir)
 		}
-		global.LOG.Infof("decompress file %s successful, now start to check test.sql is exist", req.File)
-		hasTestSql := false
+		global.LOG.Infof("decompress file %s successful, now start to check sql file", req.File)
+		foundSQL := false
+		var firstSQLPath string
 		_ = filepath.Walk(dstDir, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return nil
 			}
-			if !info.IsDir() && info.Name() == "test.sql" {
-				hasTestSql = true
+			if info.IsDir() {
+				return nil
+			}
+			name := strings.ToLower(info.Name())
+			if name == "test.sql" || name == "test.sql.gz" {
+				foundSQL = true
 				file = path
-				fileName = "test.sql"
+				fileName = info.Name()
+				return filepath.SkipAll
+			}
+			if firstSQLPath == "" && (strings.HasSuffix(name, ".sql") || strings.HasSuffix(name, ".sql.gz")) {
+				firstSQLPath = path
 			}
 			return nil
 		})
-		if !hasTestSql {
+		if !foundSQL && firstSQLPath != "" {
+			foundSQL = true
+			file = firstSQLPath
+			fileName = filepath.Base(firstSQLPath)
+		}
+		if !foundSQL {
 			_ = os.RemoveAll(dstDir)
-			return fmt.Errorf("压缩包中未找到 test.sql：%s", fileName)
+			return fmt.Errorf("压缩包中未找到可恢复的 SQL 文件（*.sql 或 *.sql.gz）：%s", fileName)
 		}
 		defer func() {
 			_ = os.RemoveAll(dstDir)
@@ -140,15 +154,16 @@ func handleMysqlBackup(serverId uint, dbName, targetDir, fileName string, logger
 
 	backupInfo := client.BackupInfo{
 		Name:      dbName,
-		Type:      "mysql",
+		Type:      resolveMysqlBackupType(dbInfo.Type, "mysql"),
 		Version:   version,
 		Format:    "sql.gz",
 		TargetDir: targetDir,
 		FileName:  fileName,
-		Timeout:   300,
+		Timeout:   calcMysqlBackupTimeout(estimatedBytes),
 	}
 	if logger != nil {
 		logger.AppendLine("开始执行 MySQL 备份")
+		logger.Appendf("备份超时阈值：%s", formatDurationSeconds(int64(backupInfo.Timeout)))
 	}
 
 	outputFile := path.Join(targetDir, fileName)
@@ -271,8 +286,11 @@ func handleMysqlRecover(req *dto.CommonRecover, isRollback bool, logger *BackupL
 	if err != nil {
 		return errors.New("加载 MySQL 客户端失败: " + err.Error())
 	}
+	dbType := resolveMysqlBackupType(dbInfo.Type, req.Type)
+	recoverTimeout := calcMysqlRecoverTimeout(readFileSize(req.File))
 	if logger != nil {
 		logger.Appendf("已连接 MySQL 服务：%s:%d，版本=%s", dbInfo.Host, dbInfo.Port, version)
+		logger.Appendf("恢复超时阈值：%s", formatDurationSeconds(int64(recoverTimeout)))
 	}
 
 	if !isRollback {
@@ -282,13 +300,13 @@ func handleMysqlRecover(req *dto.CommonRecover, isRollback bool, logger *BackupL
 		}
 		if err := cli.Backup(client.BackupInfo{
 			Name:      req.DetailName,
-			Type:      req.Type,
+			Type:      dbType,
 			Version:   version,
 			Format:    "sql.gz",
 			TargetDir: path.Dir(rollbackFile),
 			FileName:  path.Base(rollbackFile),
 
-			Timeout: 300,
+			Timeout: calcMysqlBackupTimeout(0),
 		}); err != nil {
 			return fmt.Errorf("backup mysql db %s for rollback before recover failed, err: %v", req.DetailName, err)
 		}
@@ -303,13 +321,13 @@ func handleMysqlRecover(req *dto.CommonRecover, isRollback bool, logger *BackupL
 				}
 				if err := cli.Recover(client.RecoverInfo{
 					Name:       req.DetailName,
-					Type:       req.Type,
+					Type:       dbType,
 					Version:    version,
 					Format:     "sql.gz",
 					SourceFile: rollbackFile,
 					Progress:   buildMysqlRecoverProgressLogger("回滚中", logger),
 
-					Timeout: 300,
+					Timeout: calcMysqlRecoverTimeout(readFileSize(rollbackFile)),
 				}); err != nil {
 					global.LOG.Errorf("rollback mysql db %s from %s failed, err: %v", req.DetailName, rollbackFile, err)
 					if logger != nil {
@@ -332,13 +350,13 @@ func handleMysqlRecover(req *dto.CommonRecover, isRollback bool, logger *BackupL
 	}
 	if err := cli.Recover(client.RecoverInfo{
 		Name:       req.DetailName,
-		Type:       req.Type,
+		Type:       dbType,
 		Version:    version,
 		Format:     "sql.gz",
 		SourceFile: req.File,
 		Progress:   buildMysqlRecoverProgressLogger("恢复中", logger),
 
-		Timeout: 300,
+		Timeout: recoverTimeout,
 	}); err != nil {
 		global.LOG.Errorf("recover mysql db %s from %s failed, err: %v", req.DetailName, req.File, err)
 		return err
@@ -350,6 +368,16 @@ func handleMysqlRecover(req *dto.CommonRecover, isRollback bool, logger *BackupL
 	return nil
 }
 
+func resolveMysqlBackupType(serverType model.DatabaseType, fallback string) string {
+	if serverType == model.DatabaseTypeMariaDB {
+		return string(model.DatabaseTypeMariaDB)
+	}
+	if strings.TrimSpace(fallback) != "" {
+		return strings.ToLower(strings.TrimSpace(fallback))
+	}
+	return string(model.DatabaseTypeMysql)
+}
+
 func buildMysqlRecoverProgressLogger(stage string, logger *BackupLogger) func(readBytes, totalBytes int64) {
 	if logger == nil {
 		return nil
@@ -357,6 +385,7 @@ func buildMysqlRecoverProgressLogger(stage string, logger *BackupLogger) func(re
 	startAt := time.Now()
 	lastBytes := int64(0)
 	lastAt := time.Now()
+	streamFinishedLogged := false
 	return func(readBytes, totalBytes int64) {
 		now := time.Now()
 		dt := now.Sub(lastAt).Seconds()
@@ -371,10 +400,48 @@ func buildMysqlRecoverProgressLogger(stage string, logger *BackupLogger) func(re
 				percent = 100
 			}
 			logger.Appendf("%s：耗时=%s，已读取=%s/%s，进度=%.1f%%，速度=%s/s", stage, elapsed, formatBytes(readBytes), formatBytes(totalBytes), percent, formatBytes(speed))
+			if !streamFinishedLogged && readBytes >= totalBytes {
+				streamFinishedLogged = true
+				logger.Appendf("%s：恢复文件已读取完成，正在等待数据库执行收尾", stage)
+			}
 		} else {
 			logger.Appendf("%s：耗时=%s，已读取=%s，速度=%s/s", stage, elapsed, formatBytes(readBytes), formatBytes(speed))
 		}
 		lastBytes = readBytes
 		lastAt = now
 	}
+}
+
+func calcMysqlBackupTimeout(estimatedBytes int64) uint {
+	return calcMysqlDataTaskTimeout(estimatedBytes, 256*1024*1024, 10*60)
+}
+
+func calcMysqlRecoverTimeout(sourceBytes int64) uint {
+	return calcMysqlDataTaskTimeout(sourceBytes, 128*1024*1024, 10*60)
+}
+
+func calcMysqlDataTaskTimeout(sizeBytes int64, chunkBytes int64, perChunkSeconds int64) uint {
+	const (
+		minSeconds = int64(30 * 60)
+		maxSeconds = int64(24 * 60 * 60)
+	)
+	timeout := minSeconds
+	if sizeBytes > 0 && chunkBytes > 0 && perChunkSeconds > 0 {
+		chunks := (sizeBytes + chunkBytes - 1) / chunkBytes
+		timeout += chunks * perChunkSeconds
+	}
+	if timeout < 300 {
+		timeout = 300
+	}
+	if timeout > maxSeconds {
+		timeout = maxSeconds
+	}
+	return uint(timeout)
+}
+
+func formatDurationSeconds(seconds int64) string {
+	if seconds <= 0 {
+		return "0s"
+	}
+	return (time.Duration(seconds) * time.Second).String()
 }

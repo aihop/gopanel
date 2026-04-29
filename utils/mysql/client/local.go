@@ -232,7 +232,7 @@ func (r *Local) Backup(info BackupInfo) error {
 		dumpCmd = "mariadb-dump"
 	}
 	global.LOG.Infof("start to %s | gzip > %s.gzip", dumpCmd, info.TargetDir+"/"+info.FileName)
-	cmd, err := runtimeCommandForDBTool(context.Background(), "exec", r.ContainerName, dumpCmd, "--routines", "-uroot", "-p"+r.Password, "--default-character-set="+info.Format, info.Name)
+	cmd, err := runtimeCommandForDBTool(context.Background(), "exec", r.ContainerName, dumpCmd, "--routines", "-uroot", "-p"+r.Password, info.Name)
 	if err != nil {
 		return err
 	}
@@ -257,7 +257,7 @@ func (r *Local) Recover(info RecoverInfo) error {
 		return err
 	}
 	defer input.Close()
-	cmd, err := runtimeCommandForDBTool(context.Background(), "exec", "-i", r.ContainerName, r.Type, "-uroot", "-p"+r.Password, "--default-character-set="+info.Format, info.Name)
+	cmd, err := runtimeCommandForDBTool(context.Background(), "exec", "-i", r.ContainerName, r.Type, "-uroot", "-p"+r.Password, info.Name)
 	if err != nil {
 		return err
 	}
