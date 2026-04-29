@@ -913,6 +913,11 @@ func addDockerComposeCommonParam(composeMap map[string]interface{}, serviceName 
 	_, portExist := serviceValue["ports"].([]interface{})
 	if portExist {
 		allowHost := "127.0.0.1"
+		// Podman on macOS runs inside a VM, and binding only to 127.0.0.1
+		// makes some forwarded app ports unreliable for host-side access.
+		if runtime.GOOS == "darwin" && docker.IsPodmanRuntime(context.Background()) {
+			allowHost = "0.0.0.0"
+		}
 		if req.Advanced && req.AllowPort {
 			allowHost = ""
 		}

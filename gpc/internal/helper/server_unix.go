@@ -163,6 +163,9 @@ func (s *Server) doAction(ctx context.Context, req proto.Request) (string, error
 	case "GOPANEL_INFO":
 		out, err := s.actionGoPanelInfo(ctx, req.Params)
 		return out, err
+	case "GOPANEL_UNINSTALL":
+		out, err := s.actionGoPanelUninstall(ctx, req.Params)
+		return out, err
 	case "GOPANEL_USER_INFO":
 		out, err := s.actionGoPanelUserInfo(ctx, req.Params)
 		return out, err
@@ -240,6 +243,8 @@ func lockKeyForAction(action string) string {
 		return "chown"
 	case "GOPANEL_SERVICE_ACTION":
 		return "gopanel_service"
+	case "GOPANEL_UNINSTALL":
+		return "gopanel_uninstall"
 	case "GOPANEL_AGENT_ENSURE", "GOPANEL_AGENT_INSTALL":
 		return "gp_agent_install"
 	case "GOPANEL_GPC_INSTALL":

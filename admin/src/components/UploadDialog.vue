@@ -19,6 +19,7 @@
             v-if="type === 'mysql' || type === 'mariadb'"
             type="error"
             :title="t('database.formatHelper', [remark])"
+			class="mb-3"
           />
           <n-alert
             v-if="type === 'website'"

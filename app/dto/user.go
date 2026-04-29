@@ -1,10 +1,3 @@
-/*
- * @Author: coller
- * @Date: 2024-03-16 13:19:06
- * @LastEditors: coller
- * @LastEditTime: 2024-04-11 11:20:40
- * @Desc: 用户
- */
 package dto
 
 import (

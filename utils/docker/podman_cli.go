@@ -91,7 +91,7 @@ func PodmanEnsureReady(ctx context.Context) error {
 	if runtime.GOOS != "darwin" {
 		return nil
 	}
-	if _, err := exec.LookPath("podman"); err != nil {
+	if _, err := runtimeBinaryPath("podman"); err != nil {
 		return err
 	}
 	base := ctx
@@ -126,7 +126,7 @@ func PodmanEnsureReady(ctx context.Context) error {
 }
 
 func PodmanListContainers(ctx context.Context, all bool) ([]PodmanContainer, error) {
-	if _, err := exec.LookPath("podman"); err != nil {
+	if _, err := runtimeBinaryPath("podman"); err != nil {
 		return nil, err
 	}
 	if runtime.GOOS == "darwin" {
@@ -163,7 +163,7 @@ func PodmanListContainers(ctx context.Context, all bool) ([]PodmanContainer, err
 }
 
 func PodmanListImages(ctx context.Context) ([]PodmanImage, error) {
-	if _, err := exec.LookPath("podman"); err != nil {
+	if _, err := runtimeBinaryPath("podman"); err != nil {
 		return nil, err
 	}
 	if runtime.GOOS == "darwin" {
@@ -300,7 +300,11 @@ func runPodman(ctx context.Context, args ...string) (string, error) {
 		base, cancel = context.WithTimeout(base, 45*time.Second)
 		defer cancel()
 	}
-	c := exec.CommandContext(base, "podman", args...)
+	podmanPath, err := runtimeBinaryPath("podman")
+	if err != nil {
+		return "", err
+	}
+	c := exec.CommandContext(base, podmanPath, args...)
 	out, err := c.CombinedOutput()
 	s := strings.TrimSpace(string(out))
 	if err != nil {

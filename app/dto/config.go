@@ -1,10 +1,3 @@
-/*
- * @Author: coller
- * @Date: 2024-04-01 16:12:23
- * @LastEditors: coller
- * @LastEditTime: 2024-04-17 23:21:11
- * @Desc: 配置
- */
 package dto
 
 type ConfigID struct {

@@ -24,6 +24,7 @@ func init() {
 	goPanelCmd.AddCommand(goPanelStopCmd)
 	goPanelCmd.AddCommand(goPanelRestartCmd)
 	goPanelCmd.AddCommand(goPanelInfoCmd)
+	goPanelCmd.AddCommand(goPanelUninstallCmd)
 	goPanelCmd.AddCommand(goPanelUserInfoCmd)
 }
 
@@ -172,6 +173,22 @@ var goPanelUserInfoCmd = &cobra.Command{
 			return nil
 		}
 		fmt.Fprintln(os.Stdout, resp.Output)
+		return nil
+	},
+}
+
+var goPanelUninstallCmd = &cobra.Command{
+	Use:          "uninstall",
+	Short:        "Uninstall gopanel and gp-agent artifacts",
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		resp, err := callHelper("GOPANEL_UNINSTALL", map[string]interface{}{})
+		if err := handleResponse(resp, err); err != nil {
+			return err
+		}
+		if resp.Output != "" {
+			fmt.Fprintln(os.Stdout, resp.Output)
+		}
 		return nil
 	},
 }

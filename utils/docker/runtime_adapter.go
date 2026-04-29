@@ -60,16 +60,16 @@ func (a *defaultRuntimeAdapter) CLI(ctx context.Context) (string, error) {
 		alt = "podman"
 	}
 
-	if _, err := exec.LookPath(preferred); err == nil {
+	if preferredPath, err := runtimeBinaryPath(preferred); err == nil {
 		if preferred == "docker" && !dockerDaemonHealthy(ctx) {
-			if _, aerr := exec.LookPath(alt); aerr == nil {
-				return alt, nil
+			if altPath, aerr := runtimeBinaryPath(alt); aerr == nil {
+				return altPath, nil
 			}
 		}
-		return preferred, nil
+		return preferredPath, nil
 	}
-	if _, err := exec.LookPath(alt); err == nil {
-		return alt, nil
+	if altPath, err := runtimeBinaryPath(alt); err == nil {
+		return altPath, nil
 	}
 	return "", errors.New("container runtime cli not found")
 }
@@ -140,20 +140,20 @@ func (a *defaultRuntimeAdapter) ResolveComposeCommand(ctx context.Context) (stri
 	}
 	resolved := a.Resolve(ctx)
 	tryDocker := func() (string, []string, bool) {
-		if _, err := exec.LookPath("docker"); err == nil && dockerComposeAvailable() {
-			return "docker", []string{"compose"}, true
+		if dockerPath, err := runtimeBinaryPath("docker"); err == nil && dockerComposeAvailable() {
+			return dockerPath, []string{"compose"}, true
 		}
 		return "", nil, false
 	}
 	tryPodman := func() (string, []string, bool) {
-		if _, err := exec.LookPath("podman"); err == nil && podmanComposeAvailable() {
-			return "podman", []string{"compose"}, true
+		if podmanPath, err := runtimeBinaryPath("podman"); err == nil && podmanComposeAvailable() {
+			return podmanPath, []string{"compose"}, true
 		}
 		return "", nil, false
 	}
 	tryPodmanCompose := func() (string, []string, bool) {
-		if _, err := exec.LookPath("podman-compose"); err == nil {
-			return "podman-compose", nil, true
+		if podmanComposePath, err := runtimeBinaryPath("podman-compose"); err == nil {
+			return podmanComposePath, nil, true
 		}
 		return "", nil, false
 	}
@@ -222,9 +222,9 @@ func (a *defaultRuntimeAdapter) ComposeCommand(ctx context.Context, args ...stri
 				"PODMAN_HOST="+host,
 			)
 		}
-		if _, err := exec.LookPath("podman-compose"); err == nil {
+		if _, err := runtimeBinaryPath("podman-compose"); err == nil {
 			extraEnv = append(extraEnv, "PODMAN_COMPOSE_PROVIDER=podman-compose")
-		} else if _, err := exec.LookPath("docker-compose"); err == nil {
+		} else if _, err := runtimeBinaryPath("docker-compose"); err == nil {
 			if runtime.GOOS == "darwin" {
 				if home, e := os.UserHomeDir(); e == nil && home != "" {
 					if _, se := os.Stat(filepath.Join(home, ".docker", "run", "docker.sock")); se != nil {
@@ -250,7 +250,11 @@ func (a *defaultRuntimeAdapter) ComposeCommand(ctx context.Context, args ...stri
 func podmanComposeAvailable() bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "podman", "compose", "version")
+	podmanPath, err := runtimeBinaryPath("podman")
+	if err != nil {
+		return false
+	}
+	cmd := exec.CommandContext(ctx, podmanPath, "compose", "version")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		msg := strings.ToLower(string(out))

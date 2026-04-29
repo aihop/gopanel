@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -313,7 +314,7 @@ func (r *Remote) Backup(info BackupInfo) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(info.Timeout)*time.Second)
 	defer cancel()
-	cmd, err := udocker.RuntimeCommand(ctx, cmdArgs...)
+	cmd, err := runtimeCommandForDBTool(ctx, cmdArgs...)
 	if err != nil {
 		return err
 	}
@@ -429,7 +430,7 @@ func (r *Remote) Recover(info RecoverInfo) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(info.Timeout)*time.Second)
 	defer cancel()
-	cmd, err := udocker.RuntimeCommand(ctx, dockerArgs...)
+	cmd, err := runtimeCommandForDBTool(ctx, dockerArgs...)
 	if err != nil {
 		return err
 	}
@@ -569,6 +570,9 @@ func ensureHostDumpCmd(preferred string) (string, error) {
 	if cmd := lookupMysqlCommand(preferred); cmd != "" {
 		return cmd, nil
 	}
+	if runtime.GOOS != "linux" {
+		return "", nil
+	}
 	if err := ensureMysqlClientInstalled(); err != nil {
 		return "", err
 	}
@@ -581,6 +585,9 @@ func ensureHostDumpCmd(preferred string) (string, error) {
 func ensureHostMysqlCmd(preferred string) (string, error) {
 	if cmd := lookupMysqlCommand(preferred); cmd != "" {
 		return cmd, nil
+	}
+	if runtime.GOOS != "linux" {
+		return "", nil
 	}
 	if err := ensureMysqlClientInstalled(); err != nil {
 		return "", err
@@ -647,7 +654,7 @@ func ensureDockerImage(image string, policy string, timeout uint) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
 	defer cancel()
-	cmd, err := udocker.RuntimeCommand(ctx, "pull", image)
+	cmd, err := runtimeCommandForDBTool(ctx, "pull", image)
 	if err != nil {
 		return err
 	}
@@ -664,7 +671,7 @@ func ensureDockerImage(image string, policy string, timeout uint) error {
 func dockerImageExists(image string) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	cmd, err := udocker.RuntimeCommand(ctx, "image", "inspect", image)
+	cmd, err := runtimeCommandForDBTool(ctx, "image", "inspect", image)
 	if err != nil {
 		return false
 	}
@@ -768,6 +775,23 @@ func (r *Remote) ExecSQL(command string, timeout uint) error {
 	}
 
 	return nil
+}
+
+func runtimeCommandForDBTool(ctx context.Context, args ...string) (*exec.Cmd, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if runtime.GOOS == "darwin" && !strings.EqualFold(strings.TrimSpace(global.CONF.System.ContainerRuntime), "docker") {
+		podmanPath, err := udocker.PodmanBinaryPath()
+		if err != nil {
+			return nil, errors.New("podman binary not found for mysql database tools on darwin")
+		}
+		if err := udocker.PodmanEnsureReady(ctx); err != nil {
+			return nil, err
+		}
+		return exec.CommandContext(ctx, podmanPath, args...), nil
+	}
+	return udocker.RuntimeCommand(ctx, args...)
 }
 
 func (r *Remote) ExecSQLForHosts(timeout uint) ([]string, error) {

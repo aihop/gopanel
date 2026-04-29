@@ -14,7 +14,6 @@ import (
 
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
-	"github.com/aihop/gopanel/utils/docker"
 	"github.com/aihop/gopanel/utils/files"
 )
 
@@ -234,7 +233,7 @@ func (r *Local) Backup(info BackupInfo) error {
 		dumpCmd = "mariadb-dump"
 	}
 	global.LOG.Infof("start to %s | gzip > %s.gzip", dumpCmd, info.TargetDir+"/"+info.FileName)
-	cmd, err := docker.RuntimeCommand(context.Background(), "exec", r.ContainerName, dumpCmd, "--routines", "-uroot", "-p"+r.Password, "--default-character-set="+info.Format, info.Name)
+	cmd, err := runtimeCommandForDBTool(context.Background(), "exec", r.ContainerName, dumpCmd, "--routines", "-uroot", "-p"+r.Password, "--default-character-set="+info.Format, info.Name)
 	if err != nil {
 		return err
 	}
@@ -256,7 +255,7 @@ func (r *Local) Backup(info BackupInfo) error {
 func (r *Local) Recover(info RecoverInfo) error {
 	fi, _ := os.Open(info.SourceFile)
 	defer fi.Close()
-	cmd, err := docker.RuntimeCommand(context.Background(), "exec", "-i", r.ContainerName, r.Type, "-uroot", "-p"+r.Password, "--default-character-set="+info.Format, info.Name)
+	cmd, err := runtimeCommandForDBTool(context.Background(), "exec", "-i", r.ContainerName, r.Type, "-uroot", "-p"+r.Password, "--default-character-set="+info.Format, info.Name)
 	if err != nil {
 		return err
 	}
@@ -357,7 +356,7 @@ func (r *Local) ExecSQL(command string, timeout uint) error {
 	itemCommand = append(itemCommand, command)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
 	defer cancel()
-	cmd, err := docker.RuntimeCommand(ctx, itemCommand...)
+	cmd, err := runtimeCommandForDBTool(ctx, itemCommand...)
 	if err != nil {
 		return err
 	}
@@ -377,7 +376,7 @@ func (r *Local) ExecSQLForRows(command string, timeout uint) ([]string, error) {
 	itemCommand = append(itemCommand, command)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
 	defer cancel()
-	cmd, err := docker.RuntimeCommand(ctx, itemCommand...)
+	cmd, err := runtimeCommandForDBTool(ctx, itemCommand...)
 	if err != nil {
 		return nil, err
 	}

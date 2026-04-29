@@ -488,7 +488,8 @@ func darwinPodmanMachineHost(ctx context.Context) string {
 	if runtime.GOOS != "darwin" {
 		return ""
 	}
-	if _, err := exec.LookPath("podman"); err != nil {
+	podmanPath, err := runtimeBinaryPath("podman")
+	if err != nil {
 		return ""
 	}
 	baseCtx := ctx
@@ -498,7 +499,7 @@ func darwinPodmanMachineHost(ctx context.Context) string {
 	ic, cancel := context.WithTimeout(baseCtx, 800*time.Millisecond)
 	defer cancel()
 
-	out, err := exec.CommandContext(ic, "podman", "machine", "inspect").CombinedOutput()
+	out, err := exec.CommandContext(ic, podmanPath, "machine", "inspect").CombinedOutput()
 	if err != nil {
 		return ""
 	}
@@ -729,17 +730,18 @@ func EnsureNetwork(name string) error {
 }
 
 func ensurePodmanNetwork(name string) error {
-	if _, err := exec.LookPath("podman"); err != nil {
+	podmanPath, err := runtimeBinaryPath("podman")
+	if err != nil {
 		return err
 	}
 	if err := PodmanEnsureReady(context.Background()); err != nil {
 		return err
 	}
-	existsCmd := exec.Command("podman", "network", "exists", name)
+	existsCmd := exec.Command(podmanPath, "network", "exists", name)
 	if err := existsCmd.Run(); err == nil {
 		return nil
 	}
-	createCmd := exec.Command("podman", "network", "create", name)
+	createCmd := exec.Command(podmanPath, "network", "create", name)
 	out, err := createCmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))
