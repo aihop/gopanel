@@ -106,7 +106,7 @@ const formModel = reactive({
   buildScript: "npm install && npm run build",
   outputImage: "",
   artifactPath: ".",
-  exposePort: 80, // 默认访问端口建议值（单个）
+  exposePort: null as number | null,
   pipelineKey: "",
 
   runnerEnabled: false,
@@ -469,6 +469,7 @@ const handleSubmit = () => {
           payload.runnerMode = ""
           payload.runnerConfig = undefined
         }
+        payload.exposePort = Number(payload.exposePort) || 0
         
         if (isEdit.value && props.editData) {
           await updatePipeline({ id: props.editData.id, ...payload })
@@ -521,7 +522,7 @@ watch(() => props.show, (val) => {
         buildScript: props.editData.buildScript || "",
         outputImage: props.editData.outputImage || "",
         artifactPath: props.editData.artifactPath || ".",
-        exposePort: props.editData.exposePort || 80,
+        exposePort: props.editData.exposePort || null,
         pipelineKey: props.editData.pipelineKey || "",
 
         runnerEnabled,
@@ -559,7 +560,7 @@ watch(() => props.show, (val) => {
         buildScript: props.initialTemplate.buildScript || "",
         outputImage: "",
         artifactPath: props.initialTemplate.artifactPath || ".",
-        exposePort: 80,
+        exposePort: null,
         pipelineKey: "",
 
         runnerEnabled: false,
@@ -597,7 +598,7 @@ watch(() => props.show, (val) => {
         buildScript: "npm install && npm run build",
         outputImage: "",
         artifactPath: ".",
-        exposePort: 80,
+        exposePort: null,
         pipelineKey: "",
 
         runnerEnabled: false,
@@ -997,16 +998,17 @@ watch(() => [formModel.repoUrl, formModel.branch, formModel.authType, formModel.
           />
         </n-form-item>
         <n-form-item
-          label="默认访问端口"
+          label="服务端口"
           path="exposePort"
         >
           <div class="w-full">
             <n-input-number
               v-model:value="formModel.exposePort"
-              placeholder="例如: 80"
+              placeholder="纯脚本自管运行时填写，例如: 3001"
+              clearable
             />
             <div class="mt-2 text-xs text-slate-500">
-              单个输入即可。该值用于访问端口建议，不会修改容器内部监听端口；容器内部端口会按镜像的 EXPOSE 或 PORT 自动识别。
+              仅纯脚本模式且由脚本自行 `podman run/start` 服务时填写宿主机访问端口。留空表示只构建产物、不由网站直接接管运行；该值不会修改容器内部监听端口。
             </div>
           </div>
         </n-form-item>

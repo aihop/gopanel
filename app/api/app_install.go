@@ -129,6 +129,8 @@ func GetAppInstalledConnInfo(c fiber.Ctx) error {
 	password := ""
 	if v, ok := envMap["PANEL_DB_ROOT_PASSWORD"].(string); ok {
 		password = v
+	} else if v, ok := envMap["PANEL_REDIS_ROOT_PASSWORD"].(string); ok {
+		password = v
 	} else if v, ok := envMap["PANEL_REDIS_PASSWORD"].(string); ok {
 		password = v
 	} else if v, ok := envMap["PASSWORD"].(string); ok {

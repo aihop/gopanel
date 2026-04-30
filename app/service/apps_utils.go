@@ -169,6 +169,7 @@ func upApp(appInstall *model.AppInstall, pullImages bool, logger *AppInstallLogg
 			_ = files.NewFileOp().WriteFile(appInstall.GetEnvPath(), strings.NewReader(fixedEnv), 0644)
 			logger.Info("Qualified image variables in .env")
 		}
+		envMap := parseDotEnv(string(envContent))
 		composeContent, err := files.NewFileOp().GetContent(appInstall.GetComposePath())
 		if err != nil {
 			logger.Error("Failed to read docker-compose.yml: %v", err)
@@ -192,6 +193,11 @@ func upApp(appInstall *model.AppInstall, pullImages bool, logger *AppInstallLogg
 			composeContent = []byte(fixed)
 			_ = files.NewFileOp().WriteFile(appInstall.GetComposePath(), strings.NewReader(fixed), 0644)
 			logger.Info("Applied compose command shell compatibility for 1Panel-style templates")
+		}
+		if fixed, changed, ferr := applyComposeCommandEnvCompatYAML(string(composeContent), envMap); ferr == nil && changed {
+			composeContent = []byte(fixed)
+			_ = files.NewFileOp().WriteFile(appInstall.GetComposePath(), strings.NewReader(fixed), 0644)
+			logger.Info("Applied compose command env compatibility for conditional variables")
 		}
 		if fixed, changed, ferr := applyComposeTimezoneCompatYAML(string(composeContent)); ferr == nil && changed {
 			composeContent = []byte(fixed)
@@ -625,6 +631,45 @@ func parseDotEnv(envText string) map[string]string {
 	return out
 }
 
+func normalizeRedisPasswordEnvAliases(envMap map[string]string) bool {
+	rootPassword := strings.TrimSpace(envMap["PANEL_REDIS_ROOT_PASSWORD"])
+	password := strings.TrimSpace(envMap["PANEL_REDIS_PASSWORD"])
+	changed := false
+	if rootPassword != "" && password == "" {
+		envMap["PANEL_REDIS_PASSWORD"] = rootPassword
+		changed = true
+	}
+	if password != "" && rootPassword == "" {
+		envMap["PANEL_REDIS_ROOT_PASSWORD"] = password
+		changed = true
+	}
+	return changed
+}
+
+func normalizeRedisPasswordParamAliases(params map[string]interface{}) bool {
+	if params == nil {
+		return false
+	}
+	rootPassword := strings.TrimSpace(fmt.Sprint(params["PANEL_REDIS_ROOT_PASSWORD"]))
+	if rootPassword == "<nil>" {
+		rootPassword = ""
+	}
+	password := strings.TrimSpace(fmt.Sprint(params["PANEL_REDIS_PASSWORD"]))
+	if password == "<nil>" {
+		password = ""
+	}
+	changed := false
+	if rootPassword != "" && password == "" {
+		params["PANEL_REDIS_PASSWORD"] = rootPassword
+		changed = true
+	}
+	if password != "" && rootPassword == "" {
+		params["PANEL_REDIS_ROOT_PASSWORD"] = password
+		changed = true
+	}
+	return changed
+}
+
 func extractRequiredVarsFromComposePortsVolumes(composeYml string) []string {
 	lines := strings.Split(strings.ReplaceAll(composeYml, "\r\n", "\n"), "\n")
 	var (
@@ -760,6 +805,7 @@ func copyData(app model.App, appDetail model.AppDetail, appInstall *model.AppIns
 
 	envParams := make(map[string]string, len(req.Params))
 	handleMap(req.Params, envParams)
+	normalizeRedisPasswordEnvAliases(envParams)
 	if err = env.Write(envParams, envPath); err != nil {
 		return
 	}
@@ -1041,6 +1087,57 @@ func applyComposeCommandCompatYAML(composeYml string) (string, bool, error) {
 	return string(out), true, nil
 }
 
+func applyComposeCommandEnvCompat(services map[string]interface{}, envMap map[string]string) {
+	for name, raw := range services {
+		serviceMap, ok := raw.(map[string]interface{})
+		if !ok || serviceMap == nil {
+			continue
+		}
+		command, exists := serviceMap["command"]
+		if !exists || command == nil {
+			continue
+		}
+		normalized, changed := normalizeComposeCommandEnvCompat(command, envMap)
+		if !changed {
+			continue
+		}
+		serviceMap["command"] = normalized
+		services[name] = serviceMap
+	}
+}
+
+func applyComposeCommandEnvCompatYAML(composeYml string, envMap map[string]string) (string, bool, error) {
+	if len(envMap) == 0 {
+		return composeYml, false, nil
+	}
+	var composeMap map[string]interface{}
+	if err := yaml.Unmarshal([]byte(composeYml), &composeMap); err != nil {
+		return "", false, err
+	}
+	services, ok := composeMap["services"].(map[string]interface{})
+	if !ok || services == nil {
+		return composeYml, false, nil
+	}
+	before, err := yaml.Marshal(services)
+	if err != nil {
+		return "", false, err
+	}
+	applyComposeCommandEnvCompat(services, envMap)
+	after, err := yaml.Marshal(services)
+	if err != nil {
+		return "", false, err
+	}
+	if string(before) == string(after) {
+		return composeYml, false, nil
+	}
+	composeMap["services"] = services
+	out, err := yaml.Marshal(composeMap)
+	if err != nil {
+		return "", false, err
+	}
+	return string(out), true, nil
+}
+
 func applyComposeTimezoneCompat(services map[string]interface{}) {
 	if runtime.GOOS != "darwin" || !docker.IsPodmanRuntime(context.Background()) {
 		return
@@ -1193,4 +1290,111 @@ func normalizeComposeCommandShellCompat(command interface{}) (interface{}, bool)
 		return command, false
 	}
 	return []interface{}{"/bin/sh", "-c", "exec " + commandStr}, true
+}
+
+func normalizeComposeCommandEnvCompat(command interface{}, envMap map[string]string) (interface{}, bool) {
+	switch v := command.(type) {
+	case string:
+		return expandComposeCommandVariables(v, envMap)
+	case []interface{}:
+		out := make([]interface{}, len(v))
+		changed := false
+		for i, item := range v {
+			strItem, ok := item.(string)
+			if !ok {
+				out[i] = item
+				continue
+			}
+			normalized, itemChanged := expandComposeCommandVariables(strItem, envMap)
+			out[i] = normalized
+			changed = changed || itemChanged
+		}
+		if !changed {
+			return command, false
+		}
+		return out, true
+	default:
+		return command, false
+	}
+}
+
+func expandComposeCommandVariables(command string, envMap map[string]string) (string, bool) {
+	expanded, changed := expandComposeConditionalExprs(command, envMap)
+	plainExpanded := expandComposePlainVars(expanded, envMap)
+	return plainExpanded, changed || plainExpanded != command
+}
+
+func expandComposeConditionalExprs(input string, envMap map[string]string) (string, bool) {
+	var out strings.Builder
+	changed := false
+	for i := 0; i < len(input); {
+		if !strings.HasPrefix(input[i:], "${") {
+			out.WriteByte(input[i])
+			i++
+			continue
+		}
+		varName, alt, next, ok := parseComposeConditionalExpr(input, i)
+		if !ok {
+			out.WriteByte(input[i])
+			i++
+			continue
+		}
+		if strings.TrimSpace(envMap[varName]) != "" {
+			nestedExpanded, _ := expandComposeConditionalExprs(alt, envMap)
+			out.WriteString(expandComposePlainVars(nestedExpanded, envMap))
+		}
+		changed = true
+		i = next
+	}
+	if !changed {
+		return input, false
+	}
+	return out.String(), true
+}
+
+func parseComposeConditionalExpr(input string, start int) (string, string, int, bool) {
+	if start < 0 || start+2 > len(input) || input[start:start+2] != "${" {
+		return "", "", 0, false
+	}
+	i := start + 2
+	nameStart := i
+	for i < len(input) {
+		ch := input[i]
+		if (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '_' {
+			i++
+			continue
+		}
+		break
+	}
+	if i == nameStart || i+2 > len(input) || input[i:i+2] != ":+" {
+		return "", "", 0, false
+	}
+	name := input[nameStart:i]
+	i += 2
+	altStart := i
+	nested := 0
+	for i < len(input) {
+		if i+2 <= len(input) && input[i:i+2] == "${" {
+			nested++
+			i += 2
+			continue
+		}
+		if input[i] == '}' {
+			if nested == 0 {
+				return name, input[altStart:i], i + 1, true
+			}
+			nested--
+		}
+		i++
+	}
+	return "", "", 0, false
+}
+
+func expandComposePlainVars(input string, envMap map[string]string) string {
+	if input == "" {
+		return input
+	}
+	return os.Expand(input, func(key string) string {
+		return envMap[key]
+	})
 }

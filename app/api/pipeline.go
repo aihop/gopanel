@@ -103,10 +103,12 @@ func PipelineCreate(c fiber.Ctx) error {
 		PipelineKey:  pipelineKey,
 		RunnerMode:   req.RunnerMode,
 	}
-	if len(req.RunnerConfig) > 0 {
+	if req.RunnerMode == "runner" && len(req.RunnerConfig) > 0 {
 		if b, e := json.Marshal(req.RunnerConfig); e == nil {
 			pipeline.RunnerConfig = string(b)
 		}
+	} else {
+		pipeline.RunnerConfig = ""
 	}
 
 	if err := pipelineRepo.Create(pipeline); err != nil {
@@ -153,7 +155,9 @@ func PipelineUpdate(c fiber.Ctx) error {
 	pipeline.ExposePort = req.ExposePort
 	pipeline.PipelineKey = pipelineKey
 	pipeline.RunnerMode = req.RunnerMode
-	if req.RunnerConfig != nil {
+	if req.RunnerMode != "runner" {
+		pipeline.RunnerConfig = ""
+	} else if req.RunnerConfig != nil {
 		if len(req.RunnerConfig) == 0 {
 			pipeline.RunnerConfig = ""
 		} else if b, e := json.Marshal(req.RunnerConfig); e == nil {

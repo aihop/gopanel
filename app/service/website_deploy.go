@@ -5,9 +5,11 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/aihop/gopanel/app/dto/request"
 	"github.com/aihop/gopanel/app/model"
@@ -187,6 +189,27 @@ func deployWebAppWebsite(website *model.Website, releaseDir, runtimeDir, imageTa
 			cleanupPreviousWebsiteContainer(oldContainerID, containerID, pipelineRecordID, website.Alias)
 			return hostPort, containerID, actualRuntimeDir, nil
 		}
+		if hostPort, ok, err := resolvePipelineScriptProxyTarget(website); err != nil {
+			return 0, "", "", err
+		} else if ok {
+			oldContainerID := strings.TrimSpace(website.ContainerID)
+			runtimeDir = strings.TrimSpace(runtimeDir)
+			if runtimeDir == "" {
+				runtimeDir = strings.TrimSpace(website.RuntimeDir)
+			}
+			if err := switchWebsiteRuntimeTarget(website, fmt.Sprintf("127.0.0.1:%d", hostPort), "", runtimeDir); err != nil {
+				return 0, "", "", err
+			}
+			if imageRef := strings.TrimSpace(imageTag); imageRef != "" {
+				website.EngineEnv = imageRef
+				if err := global.DB.Save(website).Error; err != nil {
+					return 0, "", "", err
+				}
+			}
+			appendPipelineDeployInfoLog(pipelineRecordID, website.Alias, fmt.Sprintf("检测到纯脚本自管运行，已切换代理到 127.0.0.1:%d", hostPort))
+			cleanupPreviousWebsiteContainer(oldContainerID, "", pipelineRecordID, website.Alias)
+			return hostPort, "", runtimeDir, nil
+		}
 	}
 
 	imageRef := strings.TrimSpace(imageTag)
@@ -329,6 +352,36 @@ func resolvePipelineRunnerBridge(website *model.Website, pipelineRecordID uint) 
 		return 0, "", "", false, nil
 	}
 	return record.RunnerHostPort, strings.TrimSpace(record.RunnerContainerID), strings.TrimSpace(record.RunnerReleaseDir), true, nil
+}
+
+func resolvePipelineScriptProxyTarget(website *model.Website) (int, bool, error) {
+	if website == nil || website.PipelineID == 0 {
+		return 0, false, nil
+	}
+	pipeline, err := repo.NewPipeline(global.DB).Get(website.PipelineID)
+	if err != nil {
+		return 0, false, fmt.Errorf("读取流水线配置失败: %w", err)
+	}
+	if strings.EqualFold(strings.TrimSpace(pipeline.RunnerMode), "runner") {
+		return 0, false, nil
+	}
+	if pipeline.ExposePort <= 0 {
+		return 0, false, fmt.Errorf("纯脚本流水线未配置服务端口，无法接管网站运行；请填写服务端口，或改用 Proxy 网站，或启用 Runner 模式")
+	}
+	if err := verifyLocalProxyPortReachable(pipeline.ExposePort); err != nil {
+		return 0, false, fmt.Errorf("纯脚本流水线配置的服务端口 %d 当前不可访问，请确认脚本已启动服务并监听在 127.0.0.1:%d: %w", pipeline.ExposePort, pipeline.ExposePort, err)
+	}
+	return pipeline.ExposePort, true, nil
+}
+
+func verifyLocalProxyPortReachable(port int) error {
+	target := fmt.Sprintf("127.0.0.1:%d", port)
+	conn, err := net.DialTimeout("tcp", target, 2*time.Second)
+	if err != nil {
+		return err
+	}
+	_ = conn.Close()
+	return nil
 }
 
 func cleanupPreviousContainer(containerID string) error {

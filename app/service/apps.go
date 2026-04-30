@@ -368,6 +368,7 @@ func (a AppService) Install(ctx context.Context, req request.AppInstallCreate) (
 		}
 	}()
 
+	normalizeRedisPasswordParamAliases(req.Params)
 	paramByte, err = json.Marshal(req.Params)
 	if err != nil {
 		return
