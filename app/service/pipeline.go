@@ -267,6 +267,10 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 	logger.Info("应用: %s | 分支: %s", p.Name, p.Branch)
 
 	workspaceDir := pipelineWorkspaceDir(p)
+	runtimeDir := pipelineRuntimeDir(p)
+	_ = os.MkdirAll(runtimeDir, 0755)
+	logger.Info("工作区目录: %s", workspaceDir)
+	logger.Info("运行时目录: %s", runtimeDir)
 
 	// 1. Clone
 	if p.RepoUrl != "" {
@@ -304,7 +308,7 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 	s.recordRepo.UpdateStatus(recordID, "building", "")
 	// 开始构建版本
 	logger.Info("开始构建版本...，版本号: %s", record.Version)
-	err := s.stepBuild(ctx, logger, p, workspaceDir, record.Version)
+	err := s.stepBuild(ctx, logger, p, workspaceDir, runtimeDir, record.Version)
 	if err != nil {
 		if ctx.Err() != nil {
 			s.recordRepo.UpdateStatus(recordID, "failed", "用户手动终止")
@@ -795,7 +799,7 @@ func (s *PipelineService) stepClone(ctx context.Context, logger *PipelineLogger,
 	return "", nil
 }
 
-func (s *PipelineService) stepBuild(ctx context.Context, logger *PipelineLogger, p *model.Pipeline, workspace string, version string) error {
+func (s *PipelineService) stepBuild(ctx context.Context, logger *PipelineLogger, p *model.Pipeline, workspace string, runtimeDir string, version string) error {
 	if p.BuildScript == "" {
 		logger.Info("未配置构建脚本，跳过容器构建阶段")
 		return nil
@@ -871,6 +875,10 @@ echo "--- 使用运行时: $RUNTIME (类型: $CONTAINER_RUNTIME_KIND, 兼容别�
 			fmt.Sprintf("PIPELINE_VERSION=%s", version),
 			fmt.Sprintf("VERSION=%s", version),
 			fmt.Sprintf("CONTAINER_CLI=%s", runtimeCLI),
+			fmt.Sprintf("PIPELINE_WORKSPACE_DIR=%s", workspace),
+			fmt.Sprintf("GOPANEL_WORKSPACE_DIR=%s", workspace),
+			fmt.Sprintf("PIPELINE_RUNTIME_DIR=%s", runtimeDir),
+			fmt.Sprintf("GOPANEL_RUNTIME_DIR=%s", runtimeDir),
 		)
 
 		var outBuf, errBuf bytes.Buffer
@@ -911,6 +919,7 @@ echo "--- 使用运行时: $RUNTIME (类型: $CONTAINER_RUNTIME_KIND, 兼容别�
 	cmdArgs := []string{
 		"run", "-i", "--rm",
 		"-v", fmt.Sprintf("%s:/workspace", workspace),
+		"-v", fmt.Sprintf("%s:/runtime", runtimeDir),
 	}
 	resolved := udocker.ResolveRuntime(ctx)
 	if strings.HasPrefix(resolved.Host, "unix://") {
@@ -933,6 +942,10 @@ echo "--- 使用运行时: $RUNTIME (类型: $CONTAINER_RUNTIME_KIND, 兼容别�
 		"-e", fmt.Sprintf("PIPELINE_VERSION=%s", version), // 兼容旧变量
 		"-e", fmt.Sprintf("VERSION=%s", version), // 给脚本使用的通用版本号
 		"-e", fmt.Sprintf("CONTAINER_CLI=%s", runtimeCLI),
+		"-e", "PIPELINE_WORKSPACE_DIR=/workspace",
+		"-e", "GOPANEL_WORKSPACE_DIR=/workspace",
+		"-e", "PIPELINE_RUNTIME_DIR=/runtime",
+		"-e", "GOPANEL_RUNTIME_DIR=/runtime",
 		"-e", "DOCKER_HOST=unix:///var/run/docker.sock",
 		"-w", "/workspace",
 		p.BuildImage,
@@ -1051,6 +1064,10 @@ func pipelineBaseDir(p *model.Pipeline) string {
 
 func pipelineWorkspaceDir(p *model.Pipeline) string {
 	return filepath.Join(pipelineBaseDir(p), "workspace")
+}
+
+func pipelineRuntimeDir(p *model.Pipeline) string {
+	return filepath.Join(pipelineBaseDir(p), "runtime")
 }
 
 func pipelineArchiveDir(p *model.Pipeline) string {
