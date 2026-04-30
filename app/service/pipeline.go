@@ -267,10 +267,9 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 	logger.Info("应用: %s | 分支: %s", p.Name, p.Branch)
 
 	workspaceDir := pipelineWorkspaceDir(p)
-	runtimeDir := pipelineRuntimeDir(p)
-	_ = os.MkdirAll(runtimeDir, 0755)
+	releaseDir := pipelineReleaseDir(p)
 	logger.Info("工作区目录: %s", workspaceDir)
-	logger.Info("运行时目录: %s", runtimeDir)
+	logger.Info("发布目录: %s", releaseDir)
 
 	// 1. Clone
 	if p.RepoUrl != "" {
@@ -304,11 +303,17 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 		logger.Info("工作区目录检查 (%s): [%s]", workspaceDir, strings.Join(fileNames, ", "))
 	}
 
+	if err := preparePipelineReleaseDir(logger, workspaceDir, releaseDir); err != nil {
+		s.recordRepo.UpdateStatus(recordID, "failed", fmt.Sprintf("Prepare release failed: %v", err))
+		logger.Error("准备发布目录失败: %v", err)
+		return
+	}
+
 	// 2. Build
 	s.recordRepo.UpdateStatus(recordID, "building", "")
 	// 开始构建版本
 	logger.Info("开始构建版本...，版本号: %s", record.Version)
-	err := s.stepBuild(ctx, logger, p, workspaceDir, runtimeDir, record.Version)
+	err := s.stepBuild(ctx, logger, p, workspaceDir, releaseDir, record.Version)
 	if err != nil {
 		if ctx.Err() != nil {
 			s.recordRepo.UpdateStatus(recordID, "failed", "用户手动终止")
@@ -320,7 +325,7 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 	}
 
 	// 3. Archive (留档)
-	archivePath, err := s.stepArchive(ctx, logger, p, workspaceDir, recordID)
+	archivePath, err := s.stepArchive(ctx, logger, p, releaseDir, recordID)
 	if err != nil {
 		if ctx.Err() != nil {
 			s.recordRepo.UpdateStatus(recordID, "failed", "用户手动终止")
@@ -335,7 +340,7 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 	// 4. Runner Step (可选)
 	s.recordRepo.UpdateStatus(recordID, "deploying", "准备执行 Runner 步骤...")
 	if strings.EqualFold(strings.TrimSpace(p.RunnerMode), "runner") {
-		hostPort, containerID, releaseDir, err := s.stepRunner(ctx, logger, p, workspaceDir)
+		runnerHostPort, runnerContainerID, runnerReleaseDir, err := s.stepRunner(ctx, logger, p, releaseDir)
 		if err != nil {
 			if ctx.Err() != nil {
 				s.recordRepo.UpdateStatus(recordID, "failed", "用户手动终止")
@@ -346,9 +351,9 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 			}
 			return
 		}
-		if containerID != "" {
-			_ = s.recordRepo.UpdateRunnerResult(recordID, releaseDir, containerID, hostPort)
-			logger.Info("Runner 容器已启动：containerId=%s, hostPort=%d", containerID, hostPort)
+		if runnerContainerID != "" {
+			_ = s.recordRepo.UpdateRunnerResult(recordID, runnerReleaseDir, runnerContainerID, runnerHostPort)
+			logger.Info("Runner 容器已启动：containerId=%s, hostPort=%d", runnerContainerID, runnerHostPort)
 		}
 	} else {
 		logger.Info("未启用 Runner 步骤，跳过...")
@@ -799,7 +804,7 @@ func (s *PipelineService) stepClone(ctx context.Context, logger *PipelineLogger,
 	return "", nil
 }
 
-func (s *PipelineService) stepBuild(ctx context.Context, logger *PipelineLogger, p *model.Pipeline, workspace string, runtimeDir string, version string) error {
+func (s *PipelineService) stepBuild(ctx context.Context, logger *PipelineLogger, p *model.Pipeline, workspace string, releaseDir string, version string) error {
 	if p.BuildScript == "" {
 		logger.Info("未配置构建脚本，跳过容器构建阶段")
 		return nil
@@ -809,7 +814,7 @@ func (s *PipelineService) stepBuild(ctx context.Context, logger *PipelineLogger,
 	if p.BuildImage == "host" || p.BuildImage == "" {
 		logger.Info("选择宿主机本地环境构建 (版本: v%s)", version)
 
-		scriptPath := filepath.Join(workspace, ".gopanel_build.sh")
+		scriptPath := filepath.Join(releaseDir, ".gopanel_build.sh")
 		runtimeCLI, rerr := udocker.RuntimeCLI(ctx)
 		if rerr != nil {
 			logger.Error("未找到可用容器运行时命令: %v", rerr)
@@ -861,13 +866,13 @@ fi
 echo "--- 使用运行时: $RUNTIME (类型: $CONTAINER_RUNTIME_KIND, 兼容别名: $CONTAINER_CLI) ---"
 `, runtimeCLI, resolvedRuntime.Kind, runtimeCLI)
 		// 注入 runtime 兼容层：历史脚本里写 docker ... 也可在 podman 环境运行
-		fullScript := fmt.Sprintf("#!/bin/sh\nset -e\ncd \"%s\"\necho \"Current PWD: $(pwd)\"\n%s\n%s", workspace, compatHeader, p.BuildScript)
+		fullScript := fmt.Sprintf("#!/bin/sh\nset -e\ncd \"%s\"\necho \"Current PWD: $(pwd)\"\n%s\n%s", releaseDir, compatHeader, p.BuildScript)
 		_ = os.WriteFile(scriptPath, []byte(fullScript), 0755)
 		defer os.Remove(scriptPath)
 
 		cmd := exec.CommandContext(ctx, "sh", scriptPath)
 		// 显式指定命令的工作目录
-		cmd.Dir = workspace
+		cmd.Dir = releaseDir
 		// 为了让 docker build 等命令能正确找到执行目录，并继承系统环境变量
 		cmd.Env = os.Environ()
 		// 覆盖或追加版本变量
@@ -877,8 +882,8 @@ echo "--- 使用运行时: $RUNTIME (类型: $CONTAINER_RUNTIME_KIND, 兼容别�
 			fmt.Sprintf("CONTAINER_CLI=%s", runtimeCLI),
 			fmt.Sprintf("PIPELINE_WORKSPACE_DIR=%s", workspace),
 			fmt.Sprintf("GOPANEL_WORKSPACE_DIR=%s", workspace),
-			fmt.Sprintf("PIPELINE_RUNTIME_DIR=%s", runtimeDir),
-			fmt.Sprintf("GOPANEL_RUNTIME_DIR=%s", runtimeDir),
+			fmt.Sprintf("PIPELINE_RELEASE_DIR=%s", releaseDir),
+			fmt.Sprintf("GOPANEL_RELEASE_DIR=%s", releaseDir),
 		)
 
 		var outBuf, errBuf bytes.Buffer
@@ -918,8 +923,8 @@ echo "--- 使用运行时: $RUNTIME (类型: $CONTAINER_RUNTIME_KIND, 兼容别�
 	// docker run -i --rm -v workspace:/workspace -e PIPELINE_VERSION=xxx -w /workspace node:18 sh
 	cmdArgs := []string{
 		"run", "-i", "--rm",
-		"-v", fmt.Sprintf("%s:/workspace", workspace),
-		"-v", fmt.Sprintf("%s:/runtime", runtimeDir),
+		"-v", fmt.Sprintf("%s:/workspace", releaseDir),
+		"-v", fmt.Sprintf("%s:/source:ro", workspace),
 	}
 	resolved := udocker.ResolveRuntime(ctx)
 	if strings.HasPrefix(resolved.Host, "unix://") {
@@ -942,10 +947,10 @@ echo "--- 使用运行时: $RUNTIME (类型: $CONTAINER_RUNTIME_KIND, 兼容别�
 		"-e", fmt.Sprintf("PIPELINE_VERSION=%s", version), // 兼容旧变量
 		"-e", fmt.Sprintf("VERSION=%s", version), // 给脚本使用的通用版本号
 		"-e", fmt.Sprintf("CONTAINER_CLI=%s", runtimeCLI),
-		"-e", "PIPELINE_WORKSPACE_DIR=/workspace",
-		"-e", "GOPANEL_WORKSPACE_DIR=/workspace",
-		"-e", "PIPELINE_RUNTIME_DIR=/runtime",
-		"-e", "GOPANEL_RUNTIME_DIR=/runtime",
+		"-e", "PIPELINE_WORKSPACE_DIR=/source",
+		"-e", "GOPANEL_WORKSPACE_DIR=/source",
+		"-e", "PIPELINE_RELEASE_DIR=/workspace",
+		"-e", "GOPANEL_RELEASE_DIR=/workspace",
 		"-e", "DOCKER_HOST=unix:///var/run/docker.sock",
 		"-w", "/workspace",
 		p.BuildImage,
@@ -1045,6 +1050,14 @@ var archiveExcludedNames = map[string]struct{}{
 	"__MACOSX":          {},
 }
 
+var releaseExcludedNames = map[string]struct{}{
+	".git":              {},
+	".gopanel_artifact": {},
+	".gopanel_shims":    {},
+	"node_modules":      {},
+	"__MACOSX":          {},
+}
+
 func pipelineDirName(p *model.Pipeline) string {
 	if p == nil {
 		return "project"
@@ -1066,12 +1079,104 @@ func pipelineWorkspaceDir(p *model.Pipeline) string {
 	return filepath.Join(pipelineBaseDir(p), "workspace")
 }
 
-func pipelineRuntimeDir(p *model.Pipeline) string {
-	return filepath.Join(pipelineBaseDir(p), "runtime")
+func pipelineReleaseDir(p *model.Pipeline) string {
+	return filepath.Join(pipelineBaseDir(p), "release")
 }
 
 func pipelineArchiveDir(p *model.Pipeline) string {
 	return filepath.Join(pipelineBaseDir(p), "archive")
+}
+
+func preparePipelineReleaseDir(logger *PipelineLogger, workspaceDir, releaseDir string) error {
+	workspaceDir = strings.TrimSpace(workspaceDir)
+	releaseDir = strings.TrimSpace(releaseDir)
+	if workspaceDir == "" || releaseDir == "" {
+		return fmt.Errorf("工作区目录或发布目录为空")
+	}
+	if err := os.RemoveAll(releaseDir); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(releaseDir, 0755); err != nil {
+		return err
+	}
+	logger.Info("正在同步工作区到发布目录...")
+	if err := copyPipelineTree(workspaceDir, releaseDir, releaseExcludedNames); err != nil {
+		return err
+	}
+	logger.Info("发布目录同步完成: %s", releaseDir)
+	return nil
+}
+
+func copyPipelineTree(srcDir, dstDir string, excluded map[string]struct{}) error {
+	return filepath.Walk(srcDir, func(current string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		rel, err := filepath.Rel(srcDir, current)
+		if err != nil {
+			return err
+		}
+		if rel == "." {
+			return nil
+		}
+		if shouldSkipPipelineReleaseEntry(rel, info, excluded) {
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		target := filepath.Join(dstDir, rel)
+		if info.Mode()&os.ModeSymlink != 0 {
+			linkTarget, err := os.Readlink(current)
+			if err != nil {
+				return err
+			}
+			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+				return err
+			}
+			return os.Symlink(linkTarget, target)
+		}
+		if info.IsDir() {
+			return os.MkdirAll(target, info.Mode())
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+			return err
+		}
+		return copyPipelineFile(current, target, info.Mode())
+	})
+}
+
+func shouldSkipPipelineReleaseEntry(rel string, info os.FileInfo, excluded map[string]struct{}) bool {
+	name := info.Name()
+	if name == ".DS_Store" || strings.HasPrefix(name, "._") {
+		return true
+	}
+	if _, ok := excluded[name]; ok {
+		return true
+	}
+	for _, part := range strings.Split(filepath.ToSlash(rel), "/") {
+		if _, ok := excluded[part]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func copyPipelineFile(srcPath, dstPath string, mode os.FileMode) error {
+	src, err := os.Open(srcPath)
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+
+	dst, err := os.OpenFile(dstPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)
+	if err != nil {
+		return err
+	}
+	defer dst.Close()
+
+	_, err = io.Copy(dst, src)
+	return err
 }
 
 func createFilteredZipArchive(srcPath, archivePath string) error {
