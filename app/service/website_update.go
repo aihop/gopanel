@@ -19,13 +19,18 @@ func (s WebsiteService) Update(ctx context.Context, req *request.WebsiteUpdate) 
 	if err != nil {
 		return errors.New("网站不存在")
 	}
+	if err := ensurePipelineExists(req.PipelineId); err != nil {
+		return err
+	}
 	oldProxy := website.Proxy
 	originalDomains := website.Domains
 	if normalizedPrimaryDomain := sanitizeWebsitePrimaryDomain(req.PrimaryDomain); normalizedPrimaryDomain != "" {
 		website.PrimaryDomain = normalizedPrimaryDomain
 	}
 	if strings.TrimSpace(req.Protocol) != "" {
-		website.Protocol = strings.TrimSpace(req.Protocol)
+		if normalizedProtocol := normalizeWebsiteProtocol(req.Protocol); normalizedProtocol != "" {
+			website.Protocol = normalizedProtocol
+		}
 	}
 	website.Remark = req.Remark
 	website.IPV6 = req.IPV6

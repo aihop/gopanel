@@ -4,8 +4,10 @@ trap 'echo "错误：安装脚本在第 ${LINENO} 行中断，命令: ${BASH_COM
 
 # ---- 基础变量 ----
 APP_BRAND="${1:-GoPanel}"
-API_UPGRADE_URL="${API_UPGRADE_URL:-https://gopanel.cn/api/panel/upgrade}"
-API_TRACK_URL="${API_TRACK_URL:-https://gopanel.cn/api/panel/installs/track}"
+API_BASE_URL="${API_BASE_URL:-https://gopanel.cn}"
+API_BASE_URL="${API_BASE_URL%/}"
+API_UPGRADE_URL="${API_UPGRADE_URL:-${API_BASE_URL}/api/panel/upgrade}"
+API_TRACK_URL="${API_TRACK_URL:-${API_BASE_URL}/api/panel/installs/track}"
 CONFIG_INSTALL_DIR="${CONFIG_INSTALL_DIR:-}"
 CONFIG_PORT="${CONFIG_PORT:-5470}"
 CONFIG_INSTALL_GPAGENT="${CONFIG_INSTALL_GPAGENT:-true}"
@@ -96,6 +98,14 @@ bool_is_true() {
       return 1
       ;;
   esac
+}
+
+gpagent_service_name() {
+  if [ "${os_name:-}" = "darwin" ]; then
+    echo "io.aihop.gp-agent"
+    return 0
+  fi
+  echo "gp-agent.service"
 }
 
 json_get() {
@@ -653,9 +663,12 @@ stop_existing_services() {
 stop_gpagent_service() {
   if [ "$os_name" = "linux" ]; then
     if command -v systemctl >/dev/null 2>&1; then
-      run_privileged systemctl stop gp-agent.service >/dev/null 2>&1 || true
+      run_privileged systemctl stop "$(gpagent_service_name)" >/dev/null 2>&1 || true
     fi
+    return 0
   fi
+  local plist="/Library/LaunchDaemons/$(gpagent_service_name).plist"
+  run_privileged launchctl bootout system "${plist}" >/dev/null 2>&1 || true
 }
 
 extract_and_find_binaries() {
@@ -1153,6 +1166,56 @@ EOF
   run_privileged launchctl bootstrap system "${plist}"
 }
 
+install_service_gpagent_macos() {
+  if ! bool_is_true "${CONFIG_INSTALL_GPAGENT}"; then
+    log "已跳过 gp-agent 自启动配置。"
+    return 0
+  fi
+  if [ ! -x "${CONFIG_INSTALL_DIR}/gp-agent" ]; then
+    warn "未检测到 gp-agent 二进制，跳过 gp-agent launchd 配置"
+    return 0
+  fi
+  local service_name plist tmp_plist
+  service_name="$(gpagent_service_name)"
+  plist="/Library/LaunchDaemons/${service_name}.plist"
+  tmp_plist="$(mktemp -t ${service_name}.XXXXXX)"
+  cat >"${tmp_plist}" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>${service_name}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>${CONFIG_INSTALL_DIR}/gp-agent</string>
+    <string>service</string>
+    <string>--base-dir</string>
+    <string>${CONFIG_INSTALL_DIR}</string>
+  </array>
+  <key>UserName</key>
+  <string>${RUNTIME_USER}</string>
+  <key>WorkingDirectory</key>
+  <string>${CONFIG_INSTALL_DIR}</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/tmp/gp-agent.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/gp-agent.err.log</string>
+</dict>
+</plist>
+EOF
+  run_privileged cp "${tmp_plist}" "${plist}"
+  rm -f "${tmp_plist}"
+  run_privileged chmod 644 "${plist}"
+  run_privileged chown root:wheel "${plist}"
+  run_privileged launchctl bootout system "${plist}" >/dev/null 2>&1 || true
+  run_privileged launchctl bootstrap system "${plist}"
+}
+
 install_autostart_services() {
   log "写入 gpc/gopanel 开机自启动配置..."
   if [ "$os_name" = "linux" ]; then
@@ -1165,6 +1228,7 @@ install_autostart_services() {
   else
     install_service_gpc_macos
     install_service_gopanel_macos
+    install_service_gpagent_macos
   fi
 }
 

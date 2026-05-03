@@ -11,10 +11,10 @@ type WebsiteCreate struct {
 	Protocol      string        `json:"protocol"`
 	AppInstall    NewAppInstall `json:"appInstall"`
 	AppID         uint          `json:"appID"`
-	AppInstallID  uint          `json:"appInstallID"`
+	AppInstallID  uint          `json:"appInstallId"`
 
-	CodeSource          string                 `json:"codeSource"` // upload, git, pipeline, app_store
-	GitRepo             string                 `json:"gitRepo"`    // Git URL or Docker Image Name
+	CodeSource          string                 `json:"codeSource"` // upload, git(legacy image source), pipeline, app_store
+	GitRepo             string                 `json:"gitRepo"`    // legacy field name, currently used as Docker image reference
 	PipelineId          uint                   `json:"pipelineId"`
 	CodeDir             string                 `json:"codeDir"`
 	CodeDirFallback     string                 `json:"-"`

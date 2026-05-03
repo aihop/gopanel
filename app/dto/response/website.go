@@ -11,7 +11,8 @@ type WebsiteRes struct {
 	OtherDomains  string    `json:"otherDomains"`
 	DefaultServer bool      `json:"defaultServer"`
 	Proxy         string    `json:"proxy"`
-	IPV6          bool      `json:"ipv6"`
+	IPV6          bool      `json:"IPV6"`
+	Ipv6          bool      `json:"ipv6"`
 	Type          string    `json:"type"`
 	Alias         string    `json:"alias"`
 	Remark        string    `json:"remark"`

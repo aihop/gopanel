@@ -82,19 +82,30 @@ func AgentEnsure(c fiber.Ctx) error {
 			return
 		}
 
-		updateInfo, err := appVersionService.GetUpdateInfo(constant.UpgradeUrl, &dto.SettingUpgradeVersion{
+		baseUpgradeReq := dto.SettingUpgradeVersion{
 			VersionName: currentVersionInfo.VersionName,
 			VersionCode: currentVersionInfo.VersionCode,
 			OS:          runtime.GOOS,
 			Arch:        runtime.GOARCH,
 			Lang:        "zh",
 			AppBrand:    constant.AppBrand,
-			Package:     "gp-agent",
-		})
-		if err != nil {
-			writeLog("fetch upgrade info error", err)
-			logger.SetStatus("failed")
-			return
+		}
+		var updateInfo *dto.AppUpdateData
+		for _, pkg := range []string{"gp-agent", ""} {
+			req := baseUpgradeReq
+			req.Package = pkg
+			updateInfo, err = appVersionService.GetUpdateInfo(constant.UpgradeUrl, &req)
+			if err != nil {
+				writeLog("fetch upgrade info error", err)
+				logger.SetStatus("failed")
+				return
+			}
+			if updateInfo != nil && strings.TrimSpace(updateInfo.DownloadUrl) != "" {
+				if pkg == "" {
+					writeLog("gp-agent package fallback", "reuse main package")
+				}
+				break
+			}
 		}
 		if updateInfo == nil || strings.TrimSpace(updateInfo.DownloadUrl) == "" {
 			writeLog("invalid upgrade info", updateInfo)
@@ -106,7 +117,7 @@ func AgentEnsure(c fiber.Ctx) error {
 		out, err := gpc.Do(ctx, "GOPANEL_AGENT_ENSURE", map[string]interface{}{
 			"download_url": updateInfo.DownloadUrl,
 			"base_dir":     global.CONF.System.BaseDir,
-			"service_name": "gp-agent.service",
+			"service_name": gpAgentServiceName(),
 		})
 		if err != nil {
 			writeLog("download url", updateInfo.DownloadUrl)

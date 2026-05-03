@@ -155,10 +155,53 @@ func validateDownloadURL(raw string) error {
 	if host == "" {
 		return errors.New("download_url host is empty")
 	}
-	if host != "aihop.io" && !strings.HasSuffix(host, ".aihop.io") {
+	if !isAllowedDownloadHost(host) {
 		return errors.New("download_url host not allowed")
 	}
 	return nil
+}
+
+func isAllowedDownloadHost(host string) bool {
+	for _, pattern := range allowedDownloadHostPatterns() {
+		if matchesDownloadHostPattern(host, pattern) {
+			return true
+		}
+	}
+	return false
+}
+
+func allowedDownloadHostPatterns() []string {
+	patterns := []string{
+		"gopanel.cn",
+		".gopanel.cn",
+		"aihop.io",
+		".aihop.io",
+		"github.com",
+		"github-releases.githubusercontent.com",
+		"objects.githubusercontent.com",
+		"githubusercontent.com",
+		".githubusercontent.com",
+		".aliyuncs.com",
+	}
+	if extra := strings.TrimSpace(os.Getenv("GPAGENT_ALLOWED_DOWNLOAD_HOSTS")); extra != "" {
+		for _, item := range strings.Split(extra, ",") {
+			if value := strings.ToLower(strings.TrimSpace(item)); value != "" {
+				patterns = append(patterns, value)
+			}
+		}
+	}
+	return patterns
+}
+
+func matchesDownloadHostPattern(host, pattern string) bool {
+	pattern = strings.ToLower(strings.TrimSpace(pattern))
+	if pattern == "" {
+		return false
+	}
+	if strings.HasPrefix(pattern, ".") {
+		return strings.HasSuffix(host, pattern)
+	}
+	return host == pattern
 }
 
 func downloadToFile(ctx context.Context, rawURL, dst string) error {

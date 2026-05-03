@@ -44,3 +44,7 @@ type Website struct {
 	Group   string           `gorm:"type:varchar;" json:"group"`
 	Domains []*WebsiteDomain `json:"domains" gorm:"-:migration"`
 }
+
+func (Website) TableName() string {
+	return "website"
+}

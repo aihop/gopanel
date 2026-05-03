@@ -8,6 +8,14 @@ VERSION="${1:-1.0.0}"
 VERSION_CODE="${2:-100000}"
 APP_BRAND="${3:-GoPanel}"
 APP_NAME="gopanel"
+BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+GIT_COMMIT="$(git rev-parse --short HEAD 2>/dev/null || true)"
+GIT_DIRTY="false"
+if [ -n "${GIT_COMMIT}" ]; then
+  if [ -n "$(git status --porcelain 2>/dev/null || true)" ]; then
+    GIT_DIRTY="true"
+  fi
+fi
 
 # 必须根据实际传入的参数个数来进行 shift
 # 如果传入了参数，最多 shift 3，否则如果没传满 3 个，就会导致把默认没传的空位留给后续的 TARGETS
@@ -41,8 +49,11 @@ fi
 MAIN_PKG="./main.go"
 GPC_ROOT="${PROJECT_ROOT}/gpc"
 GPC_MAIN_PKG="./main.go"
-LDFLAGS="-s -w -X github.com/aihop/gopanel/constant.AppVersion=${VERSION} -X github.com/aihop/gopanel/constant.BuildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ) -X github.com/aihop/gopanel/constant.BuildVersionCode=${VERSION_CODE} -X github.com/aihop/gopanel/constant.AppBrand=${APP_BRAND}"
+GPAGENT_ROOT="${PROJECT_ROOT}/gp-agent"
+GPAGENT_MAIN_PKG="./main.go"
+LDFLAGS="-s -w -X github.com/aihop/gopanel/constant.AppVersion=${VERSION} -X github.com/aihop/gopanel/constant.BuildTime=${BUILD_TIME} -X github.com/aihop/gopanel/constant.BuildVersionCode=${VERSION_CODE} -X github.com/aihop/gopanel/constant.AppBrand=${APP_BRAND}"
 GPC_LDFLAGS="-s -w"
+GPAGENT_LDFLAGS="-s -w -X github.com/aihop/gopanel/gp-agent/app/service.Version=${VERSION} -X github.com/aihop/gopanel/gp-agent/app/service.VersionCode=${VERSION_CODE} -X github.com/aihop/gopanel/gp-agent/app/service.BuildTime=${BUILD_TIME} -X github.com/aihop/gopanel/gp-agent/app/service.GitCommit=${GIT_COMMIT} -X github.com/aihop/gopanel/gp-agent/app/service.GitDirty=${GIT_DIRTY}"
 
 echo "==========================================="
 echo "Building Project: ${APP_BRAND}"
@@ -107,6 +118,27 @@ build_gpc_local() {
   fi
 }
 
+build_gpagent_local() {
+  local goos="$1" goarch="$2" outdir="$3"
+  echo ">>> [Build] gp-agent ${goos}/${goarch} (CGO_ENABLED=0)"
+
+  mkdir -p "${outdir}"
+  local output_path="${outdir}/gp-agent"
+  if [ "${goos}" = "windows" ]; then output_path="${output_path}.exe"; fi
+
+  (
+    cd "${GPAGENT_ROOT}"
+    GOOS="${goos}" GOARCH="${goarch}" CGO_ENABLED=0 \
+    go build -trimpath -ldflags "${GPAGENT_LDFLAGS}" -o "${output_path}" "${GPAGENT_MAIN_PKG}"
+  )
+
+  if [ "${goos}" != "windows" ]; then chmod +x "${output_path}"; fi
+
+  if command -v file >/dev/null; then
+    echo "    Verify gp-agent: $(file "${output_path}" | cut -d: -f2-)"
+  fi
+}
+
 # Docker 构建逻辑保持不变，但增加平台参数确保架构正确
 build_docker_linux() {
   local goarch="$1" outdir="$2" exe_name="$3"
@@ -142,6 +174,7 @@ for t in "${TARGETS[@]}"; do
       fi
       build_local "${GOOS}" "${GOARCH}" "${dist_dir}" "${APP_NAME}" "${CGO}"
       build_gpc_local "${GOOS}" "${GOARCH}" "${dist_dir}"
+      build_gpagent_local "${GOOS}" "${GOARCH}" "${dist_dir}"
       ;;
     linux)
       if [ "${CGO}" = "0" ]; then
@@ -151,10 +184,12 @@ for t in "${TARGETS[@]}"; do
         build_docker_linux "${GOARCH}" "${dist_dir}" "${APP_NAME}"
       fi
       build_gpc_local "linux" "${GOARCH}" "${dist_dir}"
+      build_gpagent_local "linux" "${GOARCH}" "${dist_dir}"
       ;;
     windows)
       build_local "windows" "${GOARCH}" "${dist_dir}" "${APP_NAME}" "0"
       build_gpc_local "windows" "${GOARCH}" "${dist_dir}"
+      build_gpagent_local "windows" "${GOARCH}" "${dist_dir}"
       ;;
   esac
 

@@ -1,8 +1,9 @@
 package model
 
-type WebsiteDeploy struct {
+type LegacyWebsiteDeploy struct {
 	BaseModel
 	WebsiteID        uint   `gorm:"type:integer;not null;index" json:"websiteId"`
+	ReleaseID        uint   `gorm:"type:integer;index" json:"releaseId"`
 	PipelineRecordID uint   `gorm:"type:integer;index" json:"pipelineRecordId"`
 	Version          string `gorm:"type:varchar;not null" json:"version"`
 	SourceType       string `gorm:"type:varchar;not null" json:"sourceType"`
@@ -19,4 +20,8 @@ type WebsiteDeploy struct {
 	DockerCompose    string `json:"dockerCompose" gorm:"type:longtext"`
 	Env              string `json:"env" gorm:"type:longtext"`
 	AppInstallID     uint   `json:"appInstallId"`
+}
+
+func (LegacyWebsiteDeploy) TableName() string {
+	return "website_deploys"
 }

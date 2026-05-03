@@ -3,20 +3,15 @@ package api
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/aihop/gopanel/app/dto/request"
 	"github.com/aihop/gopanel/app/e"
 	"github.com/aihop/gopanel/app/middleware"
 	"github.com/aihop/gopanel/app/model"
-	"github.com/aihop/gopanel/app/repo"
 	"github.com/aihop/gopanel/app/service"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
@@ -38,12 +33,11 @@ func PipelinePage(c fiber.Ctx) error {
 	page, _ := strconv.Atoi(c.Query("page", "1"))
 	limit, _ := strconv.Atoi(c.Query("limit", "10"))
 
-	pipelineRepo := repo.NewPipeline(global.DB)
-	total, list, err := pipelineRepo.Page(page, limit)
+	appSvc := service.NewPipelineApplication(global.DB)
+	total, list, err := appSvc.Page(context.Background(), page, limit)
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	service.FillPipelineRuntimeMeta(context.Background(), list)
 	if claims, err := middleware.JwtClaims(c); err == nil && claims.Role == constant.UserRoleSubAdmin {
 		list = sanitizePipelineListForSubAdmin(list)
 	}
@@ -77,41 +71,8 @@ func PipelineCreate(c fiber.Ctx) error {
 		return c.JSON(e.Fail(err))
 	}
 
-	pipelineRepo := repo.NewPipeline(global.DB)
-	pipelineKey := normalizePipelineKey(req.PipelineKey)
-	if err := validatePipelineKey(pipelineRepo, pipelineKey, 0, ""); err != nil {
-		return c.JSON(e.Fail(err))
-	}
-	if req.RunnerMode == "runner" {
-		if err := service.ValidateRunnerPersistentPaths(req.RunnerConfig); err != nil {
-			return c.JSON(e.Fail(err))
-		}
-	}
-	pipeline := &model.Pipeline{
-		Name:         req.Name,
-		Description:  req.Description,
-		RepoUrl:      req.RepoUrl,
-		Branch:       req.Branch,
-		Version:      req.Version,
-		AuthType:     req.AuthType,
-		AuthData:     req.AuthData,
-		BuildImage:   req.BuildImage,
-		BuildScript:  req.BuildScript,
-		OutputImage:  req.OutputImage,
-		ArtifactPath: req.ArtifactPath,
-		ExposePort:   req.ExposePort,
-		PipelineKey:  pipelineKey,
-		RunnerMode:   req.RunnerMode,
-	}
-	if req.RunnerMode == "runner" && len(req.RunnerConfig) > 0 {
-		if b, e := json.Marshal(req.RunnerConfig); e == nil {
-			pipeline.RunnerConfig = string(b)
-		}
-	} else {
-		pipeline.RunnerConfig = ""
-	}
-
-	if err := pipelineRepo.Create(pipeline); err != nil {
+	appSvc := service.NewPipelineApplication(global.DB)
+	if err := appSvc.Create(*req); err != nil {
 		return c.JSON(e.Fail(err))
 	}
 	return c.JSON(e.Succ())
@@ -126,46 +87,8 @@ func PipelineUpdate(c fiber.Ctx) error {
 		return c.JSON(e.Fail(err))
 	}
 
-	pipelineRepo := repo.NewPipeline(global.DB)
-	pipeline, err := pipelineRepo.Get(req.ID)
-	if err != nil {
-		return c.JSON(e.Fail(err))
-	}
-	pipelineKey := normalizePipelineKey(req.PipelineKey)
-	if err := validatePipelineKey(pipelineRepo, pipelineKey, pipeline.ID, pipeline.PipelineKey); err != nil {
-		return c.JSON(e.Fail(err))
-	}
-	if req.RunnerMode == "runner" {
-		if err := service.ValidateRunnerPersistentPaths(req.RunnerConfig); err != nil {
-			return c.JSON(e.Fail(err))
-		}
-	}
-
-	pipeline.Name = req.Name
-	pipeline.Description = req.Description
-	pipeline.RepoUrl = req.RepoUrl
-	pipeline.Branch = req.Branch
-	pipeline.Version = req.Version
-	pipeline.AuthType = req.AuthType
-	pipeline.AuthData = req.AuthData
-	pipeline.BuildImage = req.BuildImage
-	pipeline.BuildScript = req.BuildScript
-	pipeline.OutputImage = req.OutputImage
-	pipeline.ArtifactPath = req.ArtifactPath
-	pipeline.ExposePort = req.ExposePort
-	pipeline.PipelineKey = pipelineKey
-	pipeline.RunnerMode = req.RunnerMode
-	if req.RunnerMode != "runner" {
-		pipeline.RunnerConfig = ""
-	} else if req.RunnerConfig != nil {
-		if len(req.RunnerConfig) == 0 {
-			pipeline.RunnerConfig = ""
-		} else if b, e := json.Marshal(req.RunnerConfig); e == nil {
-			pipeline.RunnerConfig = string(b)
-		}
-	}
-
-	if err := pipelineRepo.Update(pipeline); err != nil {
+	appSvc := service.NewPipelineApplication(global.DB)
+	if err := appSvc.Update(*req); err != nil {
 		return c.JSON(e.Fail(err))
 	}
 	return c.JSON(e.Succ())
@@ -186,55 +109,6 @@ func PipelineDetectRunnerPreset(c fiber.Ctx) error {
 	return c.JSON(e.Succ(result))
 }
 
-func normalizePipelineKey(raw string) string {
-	key := strings.ToLower(strings.TrimSpace(raw))
-	if key == "" {
-		return ""
-	}
-	var b strings.Builder
-	lastDash := false
-	for _, r := range key {
-		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
-			b.WriteRune(r)
-			lastDash = false
-		case r == '-' || r == '_' || r == ' ':
-			if b.Len() > 0 && !lastDash {
-				b.WriteByte('-')
-				lastDash = true
-			}
-		}
-	}
-	out := strings.Trim(b.String(), "-")
-	return out
-}
-
-func validatePipelineKey(pipelineRepo *repo.PipelineRepo, pipelineKey string, excludeID uint, currentPipelineKey string) error {
-	if pipelineKey == "" {
-		return errors.New("流水线标识不能为空")
-	}
-	exists, err := pipelineRepo.ExistsPipelineKey(pipelineKey, excludeID)
-	if err != nil {
-		return err
-	}
-	if exists {
-		return fmt.Errorf("流水线标识 `%s` 已存在，请换一个", pipelineKey)
-	}
-	pipelineDir := filepath.Join(global.CONF.System.BaseDir, "pipelines", pipelineKey)
-	if _, err := os.Stat(pipelineDir); err == nil && strings.TrimSpace(currentPipelineKey) != pipelineKey {
-		return fmt.Errorf("流水线目录 `%s` 已存在，流水线标识重复了，请换其他的", pipelineDir)
-	} else if err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	appDir := filepath.Join(global.CONF.System.BaseDir, "apps", pipelineKey)
-	if _, err := os.Stat(appDir); err == nil && strings.TrimSpace(currentPipelineKey) != pipelineKey {
-		return fmt.Errorf("安装目录 `%s` 已存在，流水线标识重复了，请换其他的", appDir)
-	} else if err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	return nil
-}
-
 func PipelineDelete(c fiber.Ctx) error {
 	if err := requirePipelineManagePermission(c); err != nil {
 		return c.JSON(e.Auth(err.Error()))
@@ -244,8 +118,8 @@ func PipelineDelete(c fiber.Ctx) error {
 		return c.JSON(e.Fail(err))
 	}
 
-	pipelineRepo := repo.NewPipeline(global.DB)
-	if err := pipelineRepo.Delete(uint(id)); err != nil {
+	appSvc := service.NewPipelineApplication(global.DB)
+	if err := appSvc.Delete(uint(id)); err != nil {
 		return c.JSON(e.Fail(err))
 	}
 	return c.JSON(e.Succ())
@@ -257,8 +131,8 @@ func PipelineRun(c fiber.Ctx) error {
 		return c.JSON(e.Fail(err))
 	}
 
-	pipelineSvc := service.NewPipelineService(global.DB)
-	recordID, err := pipelineSvc.RunPipeline(req.ID, req.Version)
+	appSvc := service.NewPipelineApplication(global.DB)
+	recordID, err := appSvc.Run(req.ID, req.Version)
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
@@ -273,7 +147,7 @@ func PipelineStop(c fiber.Ctx) error {
 		return c.JSON(e.Fail(err))
 	}
 
-	service.StopPipeline(req.ID)
+	service.NewPipelineApplication(global.DB).Stop(req.ID)
 	return c.JSON(e.Succ())
 }
 
@@ -282,16 +156,62 @@ func PipelineRecordPage(c fiber.Ctx) error {
 	page, _ := strconv.Atoi(c.Query("page", "1"))
 	limit, _ := strconv.Atoi(c.Query("limit", "10"))
 
-	recordRepo := repo.NewPipelineRecord(global.DB)
-	total, list, err := recordRepo.PageByPipeline(uint(pipelineId), page, limit)
+	appSvc := service.NewPipelineApplication(global.DB)
+	total, list, err := appSvc.RecordPage(context.Background(), uint(pipelineId), page, limit)
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	service.FillPipelineRecordRuntimeMeta(context.Background(), list)
 	return c.JSON(e.Succ(fiber.Map{
 		"total": total,
 		"items": list,
 	}))
+}
+
+func PipelineReleasePage(c fiber.Ctx) error {
+	pipelineId, _ := strconv.Atoi(c.Query("pipelineId"))
+	page, _ := strconv.Atoi(c.Query("page", "1"))
+	limit, _ := strconv.Atoi(c.Query("limit", "10"))
+
+	appSvc := service.NewPipelineApplication(global.DB)
+	total, list, err := appSvc.ReleasePage(uint(pipelineId), page, limit)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	return c.JSON(e.Succ(fiber.Map{
+		"total": total,
+		"items": list,
+	}))
+}
+
+func PipelineReleaseGet(c fiber.Ctx) error {
+	id, _ := strconv.Atoi(c.Query("id"))
+	if id <= 0 {
+		return c.JSON(e.Fail(fmt.Errorf("无效的 release id")))
+	}
+
+	appSvc := service.NewPipelineApplication(global.DB)
+	item, err := appSvc.ReleaseGet(uint(id))
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	return c.JSON(e.Succ(item))
+}
+
+func PipelineReleasePublish(c fiber.Ctx) error {
+	if err := requirePipelineManagePermission(c); err != nil {
+		return c.JSON(e.Auth(err.Error()))
+	}
+	req, err := e.BodyToStruct[request.CommonID](c.Body())
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+
+	appSvc := service.NewPipelineApplication(global.DB)
+	item, err := appSvc.PublishRecord(req.ID)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	return c.JSON(e.Succ(item))
 }
 
 func PipelineRecordDelete(c fiber.Ctx) error {
@@ -303,17 +223,8 @@ func PipelineRecordDelete(c fiber.Ctx) error {
 		return c.JSON(e.Fail(err))
 	}
 
-	recordRepo := repo.NewPipelineRecord(global.DB)
-	record, err := recordRepo.Get(uint(recordId))
-	if err != nil {
-		return c.JSON(e.Fail(err))
-	}
-
-	if record.Status == "pending" || record.Status == "cloning" || record.Status == "building" || record.Status == "deploying" {
-		return c.JSON(e.Fail(fmt.Errorf("执行中的记录不允许删除")))
-	}
-
-	if err := recordRepo.Delete(uint(recordId)); err != nil {
+	appSvc := service.NewPipelineApplication(global.DB)
+	if err := appSvc.DeleteRecord(uint(recordId)); err != nil {
 		return c.JSON(e.Fail(err))
 	}
 	return c.JSON(e.Succ())

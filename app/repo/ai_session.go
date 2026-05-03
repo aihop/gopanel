@@ -1,0 +1,116 @@
+package repo
+
+import (
+	"github.com/aihop/gopanel/app/model"
+	"github.com/aihop/gopanel/global"
+)
+
+type IAIDevSessionRepo interface {
+	CreateSession(session *model.AIDevSession) error
+	GetSessionByID(id uint) (*model.AIDevSession, error)
+	GetSessionsByUserID(userID, projectID uint, page, limit int) ([]*model.AIDevSession, int64, error)
+	UpdateSession(session *model.AIDevSession) error
+
+	CreateInstruction(instruction *model.AIInstruction) error
+	GetInstructionsBySessionID(sessionID uint, page, limit int) ([]*model.AIInstruction, int64, error)
+	GetLatestInstructionBySessionID(sessionID uint) (*model.AIInstruction, error)
+	GetPendingInstructionsBySessionID(sessionID uint) ([]*model.AIInstruction, error)
+	UpdateInstruction(instruction *model.AIInstruction) error
+
+	CreatePreview(preview *model.AIPreview) error
+	GetPreviewsBySessionID(sessionID uint, limit int) ([]*model.AIPreview, error)
+	FindPreviewByURL(sessionID uint, previewURL string) (*model.AIPreview, error)
+	UpdatePreview(preview *model.AIPreview) error
+}
+
+type aiDevSessionRepo struct{}
+
+func NewAIDevSessionRepo() IAIDevSessionRepo {
+	_ = global.DB.AutoMigrate(&model.AIDevSession{}, &model.AIInstruction{}, &model.AIPreview{})
+	return &aiDevSessionRepo{}
+}
+
+func (r *aiDevSessionRepo) CreateSession(session *model.AIDevSession) error {
+	return global.DB.Create(session).Error
+}
+
+func (r *aiDevSessionRepo) GetSessionByID(id uint) (*model.AIDevSession, error) {
+	var session model.AIDevSession
+	err := global.DB.Where("id = ?", id).First(&session).Error
+	return &session, err
+}
+
+func (r *aiDevSessionRepo) GetSessionsByUserID(userID, projectID uint, page, limit int) ([]*model.AIDevSession, int64, error) {
+	var sessions []*model.AIDevSession
+	var total int64
+
+	db := global.DB.Model(&model.AIDevSession{}).Where("user_id = ?", userID)
+	if projectID > 0 {
+		db = db.Where("project_id = ?", projectID)
+	}
+
+	db.Count(&total)
+	err := db.Order("updated_at desc").Offset((page - 1) * limit).Limit(limit).Find(&sessions).Error
+	return sessions, total, err
+}
+
+func (r *aiDevSessionRepo) UpdateSession(session *model.AIDevSession) error {
+	return global.DB.Save(session).Error
+}
+
+func (r *aiDevSessionRepo) CreateInstruction(instruction *model.AIInstruction) error {
+	return global.DB.Create(instruction).Error
+}
+
+func (r *aiDevSessionRepo) GetInstructionsBySessionID(sessionID uint, page, limit int) ([]*model.AIInstruction, int64, error) {
+	var instructions []*model.AIInstruction
+	var total int64
+
+	db := global.DB.Model(&model.AIInstruction{}).Where("session_id = ?", sessionID)
+	db.Count(&total)
+	err := db.Order("created_at desc").Offset((page - 1) * limit).Limit(limit).Find(&instructions).Error
+	return instructions, total, err
+}
+
+func (r *aiDevSessionRepo) GetLatestInstructionBySessionID(sessionID uint) (*model.AIInstruction, error) {
+	var instruction model.AIInstruction
+	err := global.DB.Where("session_id = ?", sessionID).Order("created_at desc").First(&instruction).Error
+	return &instruction, err
+}
+
+func (r *aiDevSessionRepo) GetPendingInstructionsBySessionID(sessionID uint) ([]*model.AIInstruction, error) {
+	var instructions []*model.AIInstruction
+	err := global.DB.
+		Where("session_id = ? AND status IN ?", sessionID, []string{"queued", "running"}).
+		Order("created_at asc").
+		Find(&instructions).Error
+	return instructions, err
+}
+
+func (r *aiDevSessionRepo) UpdateInstruction(instruction *model.AIInstruction) error {
+	return global.DB.Save(instruction).Error
+}
+
+func (r *aiDevSessionRepo) CreatePreview(preview *model.AIPreview) error {
+	return global.DB.Create(preview).Error
+}
+
+func (r *aiDevSessionRepo) GetPreviewsBySessionID(sessionID uint, limit int) ([]*model.AIPreview, error) {
+	var previews []*model.AIPreview
+	db := global.DB.Where("session_id = ?", sessionID).Order("updated_at desc")
+	if limit > 0 {
+		db = db.Limit(limit)
+	}
+	err := db.Find(&previews).Error
+	return previews, err
+}
+
+func (r *aiDevSessionRepo) FindPreviewByURL(sessionID uint, previewURL string) (*model.AIPreview, error) {
+	var preview model.AIPreview
+	err := global.DB.Where("session_id = ? AND url = ?", sessionID, previewURL).First(&preview).Error
+	return &preview, err
+}
+
+func (r *aiDevSessionRepo) UpdatePreview(preview *model.AIPreview) error {
+	return global.DB.Save(preview).Error
+}

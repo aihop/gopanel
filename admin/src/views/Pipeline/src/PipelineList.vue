@@ -6,6 +6,7 @@ import { getPipelinePage, deletePipeline, runPipeline } from "@/api/modules/pipe
 import { Pipeline } from "@/api/interface/pipeline"
 import PipelineRecordsModal from "./PipelineRecordsModal.vue"
 import PipelineLogsModal from "./PipelineLogsModal.vue"
+import PipelineReleasesModal from "./PipelineReleasesModal.vue"
 import { useAuthStore } from "@/store/auth"
 import { t } from "@/i18n"
 import { buildRuntimeDetailText, getRuntimeKindLabel, getRuntimeModeLabel, getRunUserLabel } from "@/utils/runtime"
@@ -31,6 +32,7 @@ const pagination = ref({
 })
 
 const recordsModalShow = ref(false)
+const releasesModalShow = ref(false)
 const currentPipelineId = ref<number | null>(null)
 
 // 执行版本号弹窗
@@ -111,7 +113,7 @@ const columns: DataTableColumns<Pipeline.ResPipeline> = [
   {
     title: t("pipeline.actions"),
     key: "actions",
-    width: 150,
+    width: 240,
     fixed: "right",
     render(row: Pipeline.ResPipeline) {
       return h(NSpace, {}, {
@@ -126,6 +128,10 @@ const columns: DataTableColumns<Pipeline.ResPipeline> = [
               size: "small",
               onClick: () => handleViewRecords(row)
             }, { default: () => t("pipeline.records") }),
+            h(NButton, {
+              size: "small",
+              onClick: () => handleViewReleases(row)
+            }, { default: () => "正式版本" }),
           ]
           
           if (isSuperAdmin.value) {
@@ -238,6 +244,11 @@ const handleViewRecords = (row: Pipeline.ResPipeline) => {
   recordsModalShow.value = true
 }
 
+const handleViewReleases = (row: Pipeline.ResPipeline) => {
+  currentPipelineId.value = row.id
+  releasesModalShow.value = true
+}
+
 
 const handleDelete = async (row: Pipeline.ResPipeline) => {
   await dialog.warning({
@@ -280,6 +291,11 @@ defineExpose({
     <PipelineRecordsModal
       v-if="currentPipelineId"
       v-model:show="recordsModalShow"
+      :pipeline-id="currentPipelineId"
+    />
+    <PipelineReleasesModal
+      v-if="currentPipelineId"
+      v-model:show="releasesModalShow"
       :pipeline-id="currentPipelineId"
     />
 

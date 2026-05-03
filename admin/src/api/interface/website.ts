@@ -19,6 +19,7 @@ export namespace Website {
         user: string;
         group: string;
         IPV6: boolean;
+        ipv6?: boolean;
         accessLog?: boolean;
         errorLog?: boolean;
         containerId?: string;
@@ -65,6 +66,7 @@ export namespace Website {
         codeSource?: string;
         proxy?: string;
         IPV6?: boolean;
+        ipv6?: boolean;
         engineEnv?: string;
         engineMode?: string;
         engineConfig?: any;
@@ -73,6 +75,34 @@ export namespace Website {
         runtimeMode?: string;
         runUser?: string;
         sslExpireDate: Date;
+    }
+
+    export interface AppDeployRecord extends CommonModel {
+        websiteId: number;
+        releaseId: number;
+        pipelineRecordId: number;
+        version: string;
+        sourceType: string;
+        sourceUrl: string;
+        archiveFile: string;
+        releaseDir: string;
+        runtimeDir: string;
+        imageTag: string;
+        status: string;
+        logText: string;
+        containerId: string;
+        port: number;
+        isActive: boolean;
+        dockerCompose: string;
+        env: string;
+        appInstallId: number;
+    }
+
+    export interface AppDeployTriggerReq {
+        websiteId: number;
+        zipPath?: string;
+        imageTag?: string;
+        releaseId?: number;
     }
 
     export interface NewAppInstall {
@@ -102,10 +132,11 @@ export namespace Website {
         remark: string;
         appInstallId?: number;
         otherDomains: string;
-        proxy: string;
+        proxy?: string;
         IPV6?: boolean;
+        protocol?: string;
         codeSource?: string;
-        gitRepo?: string;
+        gitRepo?: string; // legacy API field, currently used as Docker image reference
         codeDir?: string;
         pipelineId?: number;
         engineMode?: string;
@@ -128,6 +159,7 @@ export namespace Website {
         remark: string;
         otherDomains: string;
         IPV6: boolean;
+        ipv6?: boolean;
         proxy?: string;
         pipelineId?: number;
         codeSource?: string;

@@ -1,21 +1,22 @@
 import http from "@/api"
 import type { Website } from "../interface/website"
-import type { ResPage } from "../interface"
+import type { ResPage, Result } from "../interface"
+import type { Pipeline } from "../interface/pipeline"
  
 export const websiteListAPI = () => {
 	return http.post<ResPage<Website.WebsiteDTO>>(`/website/list`)
 }
 
 export const websiteCreateAPI = (req: Website.WebSiteCreateReq) => {
-	return http.post<any>(`/website/create`, req)
+	return http.post<void>(`/website/create`, req)
 }
  
 export const websiteUpdateAPI = (req: Website.WebSiteUpdateReq) => {
-	return http.put<any>(`/website/${req.id}`, req)
+	return http.put<void>(`/website/${req.id}`, req)
 }
 
 export const websiteDeleteAPI = (params: Website.WebSiteDel) => {
-	return http.delete<any>(`/website/${params.id}`,params)
+	return http.delete<void>(`/website/${params.id}`,params)
 }
 
 export const WebsiteLogAPI = (req: Website.WebSiteLogReadReq) => {
@@ -27,24 +28,28 @@ export const WebsiteTodayIPStatsAPI = (req: Website.WebSiteTodayIPStatsReq) => {
 }
 
 
-export const WebsiteDeployListAPI = (req: { websiteId: number }) => {
-	return http.post<any[]>(`/website/deploy/list`, req)
+export const AppDeployListAPI = (req: { websiteId: number }) => {
+	return http.post<Website.AppDeployRecord[]>(`/website/app-deploy/list`, req)
 }
 
-export const WebsiteDeploySwitchAPI = (req: { deployId: number }) => {
-	return http.post<any>(`/website/deploy/switch`, req)
+export const WebsiteReleasePageAPI = (params: { websiteId: number; page: number; limit: number }) => {
+	return http.get<ResPage<Pipeline.ResRelease>>(`/website/releases`, params)
 }
 
-export const WebsiteDeployDeleteAPI = (req: { deployId: number }) => {
-	return http.post<any>(`/website/deploy/delete`, req)
+export const AppDeploySwitchAPI = (req: { deployId: number }) => {
+	return http.post<void>(`/website/app-deploy/switch`, req)
 }
 
-export const WebsiteDeployTriggerAPI = (req: { websiteId: number; zipPath: string }) => {
-	return http.post<any>(`/website/deploy/trigger`, req)
+export const AppDeployDeleteAPI = (req: { deployId: number }) => {
+	return http.post<void>(`/website/app-deploy/delete`, req)
 }
 
-export const WebsiteDeploySnapshotAPI = (req: { websiteId: number }) => {
-	return http.post<any>(`/website/deploy/snapshot`, req)
+export const AppDeployTriggerAPI = (req: Website.AppDeployTriggerReq) => {
+	return http.post<void>(`/website/app-deploy/trigger`, req)
+}
+
+export const AppDeploySnapshotAPI = (req: { websiteId: number }) => {
+	return http.post<void>(`/website/app-deploy/snapshot`, req)
 }
 
  

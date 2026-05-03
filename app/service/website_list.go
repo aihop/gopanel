@@ -81,6 +81,7 @@ func (s *WebsiteService) List(ctx *gormx.Contextx) (websiteDTOs []*response.Webs
 			DefaultServer:  web.DefaultServer,
 			Proxy:          web.Proxy,
 			IPV6:           web.IPV6,
+			Ipv6:           web.IPV6,
 			AntiCrawler:    web.AntiCrawler,
 			AntiLeech:      web.AntiLeech,
 			RateLimitMode:  web.RateLimitMode,
@@ -125,7 +126,7 @@ func (s *WebsiteService) DeployFromPipeline(ctx context.Context, pipelineID uint
 		}
 		global.LOG.Infof("Triggering deployment for website %s (ID: %d) from pipeline %d", w.Alias, w.ID, pipelineID)
 		releaseDir := filepath.Join(global.CONF.System.BaseDir, "www", w.Alias, "releases", version)
-		if _, err := ProcessWebsiteDeployment(w, pipelineRecordID, version, artifactPath, releaseDir, "", imageTag); err != nil {
+		if _, err := ProcessAppDeployment(w, pipelineRecordID, version, artifactPath, releaseDir, "", imageTag); err != nil {
 			summary.Failed++
 			failed = append(failed, fmt.Sprintf("%s: %v", w.Alias, err))
 			continue

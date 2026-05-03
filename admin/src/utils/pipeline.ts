@@ -7,7 +7,7 @@ export async function listAllPipelines(limit = 200): Promise<Pipeline.ResPipelin
 	let total = 0
 
 	do {
-		const res: any = await getPipelinePage({ page, limit })
+		const res = await getPipelinePage({ page, limit })
 		const pageItems = Array.isArray(res?.data?.items) ? res.data.items : []
 		total = Number(res?.data?.total || 0)
 		items.push(...pageItems)

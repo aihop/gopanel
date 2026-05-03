@@ -158,8 +158,8 @@
       @confirm="postConfirm"
     />
 
-    <DeployHistory
-      ref="deployHistoryRef"
+    <AppDeployHistory
+      ref="appDeployHistoryRef"
       @confirm="postConfirm"
     />
 
@@ -179,6 +179,8 @@
 
 <script setup lang="ts">
 import type { Website } from "@/api/interface/website"
+import type { Pipeline } from "@/api/interface/pipeline"
+import type { App } from "@/api/interface/apps"
 import type { DataTableColumns } from "naive-ui"
 import { httpDefaultReloadAPI, httpDefaultStatusAPI, httpDefaultStopAPI } from "@/api/modules/http"
 import { AgentEnsureAPI, AgentStatusAPI } from "@/api/modules/agent"
@@ -188,7 +190,7 @@ import { NButton, NSpace, NTag, useDialog, useMessage, NAlert } from "naive-ui"
 import { h, onMounted, ref, watch } from "vue"
 import HttpConfigFile from "./components/HttpConfigFile.vue"
 import Create from "./components/Create.vue"
-import DeployHistory from "./components/DeployHistory.vue"
+import AppDeployHistory from "./components/AppDeployHistory.vue"
 import AccessLogDrawer from "./components/AccessLogDrawer.vue"
 import SecurityDrawer from "./components/SecurityDrawer.vue"
 import { formatTime } from "@/utils/date"
@@ -197,13 +199,27 @@ import { useAuthStore } from "@/store/auth"
 import OpDialog from "@/components/OpDialog.vue"
 import { buildRuntimeDetailText } from "@/utils/runtime"
 import { listAllPipelines } from "@/utils/pipeline"
-import { needsWebsiteBindingLookup, resolveWebsiteBindingMeta } from "@/utils/websiteRuntime"
+import { getWebsiteSourceLabel, isHttpsWebsiteProtocol, needsWebsiteBindingLookup, normalizeWebsiteProtocol, resolveWebsiteBindingMeta } from "@/utils/websiteRuntime"
 
- 
+type WebsiteTableRow = Website.WebsiteDTO & {
+	domains?: Array<string | { domain?: string }>
+	status?: string | boolean
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+	if (error && typeof error === "object") {
+		const maybe = error as { message?: string }
+		if (typeof maybe.message === "string" && maybe.message.trim()) {
+			return maybe.message
+		}
+	}
+	return fallback
+}
+
 const message = useMessage()
 const dialog = useDialog()
 const createRef = ref<InstanceType<typeof Create> | null>(null)
-const deployHistoryRef = ref<any>(null)
+const appDeployHistoryRef = ref<InstanceType<typeof AppDeployHistory> | null>(null)
 const accessLogDrawerRef = ref<InstanceType<typeof AccessLogDrawer> | null>(null)
 const securityDrawerRef = ref<InstanceType<typeof SecurityDrawer> | null>(null)
 
@@ -221,8 +237,8 @@ const fetchAgentStatus = async () => {
 			online: !!res?.data?.online,
 			error: res?.data?.error
 		}
-	} catch (e: any) {
-		agentStatus.value = { online: false, error: e?.message || "获取 Agent 状态失败" }
+	} catch (error) {
+		agentStatus.value = { online: false, error: getErrorMessage(error, "获取 Agent 状态失败") }
 	}
 }
 
@@ -263,16 +279,17 @@ const handleEnsureFinished = () => {
 }
 
 const loading = ref(false)
-const tableData = ref<Website.WebsiteDTO[]>([])
+const tableData = ref<WebsiteTableRow[]>([])
 const total = ref(0)
-const appInstallMap = ref<Record<number, any>>({})
-const pipelineMap = ref<Record<number, any>>({})
+const appInstallMap = ref<Record<number, App.AppInstalledInfo>>({})
+const pipelineMap = ref<Record<number, Pipeline.ResPipeline>>({})
 
 const activeTab = ref("list")
 
-function normalizeDomainList(row: Website.WebsiteDTO) {
+function normalizeDomainList(row: WebsiteTableRow) {
 	if (Array.isArray(row.domains)) {
-		return row.domains.map((item: any) => (typeof item === "string" ? item : item?.domain)).filter(Boolean)
+		const domains = row.domains as Array<string | { domain?: string }>
+		return domains.map((item) => (typeof item === "string" ? item : item?.domain)).filter(Boolean) as string[]
 	}
 	if (typeof row.otherDomains === "string") {
 		return row.otherDomains
@@ -323,7 +340,7 @@ function getStatusTagType(status: unknown): "success" | "warning" | "default" {
 	return "default"
 }
 
-function getSecuritySummary(row: Website.WebsiteDTO) {
+function getSecuritySummary(row: WebsiteTableRow) {
 	const tags: string[] = []
 	if (row.antiCrawler) tags.push("防爬虫")
 	if (row.antiLeech) tags.push("防盗链")
@@ -334,7 +351,7 @@ function getSecuritySummary(row: Website.WebsiteDTO) {
 	return tags
 }
 
-function getWebsiteBindingMeta(row: Website.WebsiteDTO) {
+function getWebsiteBindingMeta(row: WebsiteTableRow) {
 	return resolveWebsiteBindingMeta(row, {
 		appInstallMap: appInstallMap.value,
 		pipelineMap: pipelineMap.value
@@ -347,13 +364,14 @@ function getWebsiteBindingMeta(row: Website.WebsiteDTO) {
 	})
 }
 
-const columns: DataTableColumns<any> = [
+const columns: DataTableColumns<WebsiteTableRow> = [
 	{
 		title: t("website.primaryDomain"),
 		key: "primaryDomain",
 		render(row) {
+			const protocol = normalizeWebsiteProtocol(row.protocol) || "HTTP"
 			return h("div", { class: "flex flex-col space-y-1" }, [
-				h("a", { href: row.protocol === "HTTP" ? `http://${row.primaryDomain}` : `https://${row.primaryDomain}`, target: "_blank", class: "text-base font-semibold fg-base-100" }, row.primaryDomain),
+				h("a", { href: protocol === "HTTP" ? `http://${row.primaryDomain}` : `https://${row.primaryDomain}`, target: "_blank", class: "text-base font-semibold fg-base-100" }, row.primaryDomain),
 				h(
 					"div",
 					{ class: "flex flex-wrap gap-2 pt-1" },
@@ -364,9 +382,9 @@ const columns: DataTableColumns<any> = [
 								size: "small",
 								round: true,
 								bordered: false,
-								type: row.protocol === "https" ? "success" : "default"
+								type: isHttpsWebsiteProtocol(row) ? "success" : "default"
 							},
-							{ default: () => (row.protocol || "http").toUpperCase() }
+							{ default: () => protocol }
 						),
 						row.defaultServer
 							? h(
@@ -428,13 +446,7 @@ const columns: DataTableColumns<any> = [
 			]
 
 			if (row.type === "web_app" && row.codeSource) {
-				const sourceMap: Record<string, string> = {
-					'git': '自定义镜像',
-					'pipeline': '流水线',
-					'app_store': '应用商店',
-					'upload': '代码上传'
-				}
-				const sourceText = sourceMap[row.codeSource] || row.codeSource
+				const sourceText = getWebsiteSourceLabel(row.codeSource)
 				tags.push(
 					h(
 						NTag,
@@ -586,7 +598,7 @@ async function fetchData() {
 			appInstallMap.value = {}
 			pipelineMap.value = {}
 		}
-	} catch (error: any) {
+	} catch (error) {
 	} finally {
 		loading.value = false
 	}
@@ -598,13 +610,13 @@ async function fetchBindingMeta() {
 			ListAppInstalled(),
 			listAllPipelines()
 		])
-		const apps = Array.isArray(appsRes.data) ? appsRes.data : []
-		const nextAppMap: Record<number, any> = {}
+		const apps: App.AppInstalledInfo[] = Array.isArray(appsRes.data) ? appsRes.data : []
+		const nextAppMap: Record<number, App.AppInstalledInfo> = {}
 		for (const item of apps) {
 			nextAppMap[item.id] = item
 		}
 		appInstallMap.value = nextAppMap
-		const nextPipelineMap: Record<number, any> = {}
+		const nextPipelineMap: Record<number, Pipeline.ResPipeline> = {}
 		for (const item of pipelines) {
 			nextPipelineMap[item.id] = item
 		}
@@ -615,7 +627,7 @@ async function fetchBindingMeta() {
 	}
 }
 
-async function handleDelete(row: any) {
+async function handleDelete(row: WebsiteTableRow) {
 	dialog.info({
 		title: "提示",
 		content: `确定要删除 ${row.primaryDomain} 吗？`,
@@ -637,7 +649,7 @@ function handleAdd() {
 	createRef.value?.open()
 }
 
-function handleUpdate(row: any) {
+function handleUpdate(row: WebsiteTableRow) {
 	const bindingMeta = getWebsiteBindingMeta(row)
 	createRef.value?.open({
 		...row,
@@ -645,8 +657,8 @@ function handleUpdate(row: any) {
 	}, "update")
 }
 
-function handleDeploy(row: any) {
-	deployHistoryRef.value?.open(row)
+function handleDeploy(row: WebsiteTableRow) {
+	appDeployHistoryRef.value?.open(row)
 }
 
 function handleSecurity(row: Website.WebsiteDTO) {

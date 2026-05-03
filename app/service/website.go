@@ -27,6 +27,27 @@ type WebsiteService struct {
 	repo *repo.WebsiteRepo
 }
 
+func ensurePipelineExists(pipelineID uint) error {
+	if pipelineID == 0 {
+		return nil
+	}
+	if _, err := repo.NewPipeline(global.DB).Get(pipelineID); err != nil {
+		return fmt.Errorf("关联流水线不存在")
+	}
+	return nil
+}
+
+func normalizeWebsiteProtocol(protocol string) string {
+	switch strings.ToUpper(strings.TrimSpace(protocol)) {
+	case constant.ProtocolHTTP, constant.Http:
+		return constant.ProtocolHTTP
+	case constant.ProtocolHTTPS:
+		return constant.ProtocolHTTPS
+	default:
+		return ""
+	}
+}
+
 func (s WebsiteService) Create(ctx context.Context, req *request.WebsiteCreate, mode model.DatabaseMode) (err error) {
 	alias := req.Alias
 	if alias == "default" {
@@ -42,11 +63,15 @@ func (s WebsiteService) Create(ctx context.Context, req *request.WebsiteCreate, 
 	if exist, _ := websiteRepo.GetBy(websiteRepo.WithAlias(alias)); len(exist) > 0 {
 		return errors.New("网站目录、别名已存在")
 	}
+	if err := ensurePipelineExists(req.PipelineId); err != nil {
+		return err
+	}
 	defaultHttpPort := 80
 	var (
 		otherDomains []model.WebsiteDomain
 		domains      []model.WebsiteDomain
 	)
+	req.Protocol = normalizeWebsiteProtocol(req.Protocol)
 	if strings.HasPrefix(req.PrimaryDomain, "http://") {
 		req.Protocol = constant.ProtocolHTTP
 	}
@@ -202,7 +227,7 @@ func (s WebsiteService) Create(ctx context.Context, req *request.WebsiteCreate, 
 	// 如果是 git (自定义镜像部署)，初始部署成功后，生成一条发布记录
 	if req.CodeSource == "git" && website.Type == constant.WebApp && website.ContainerID != "" {
 		version := fmt.Sprintf("v%d", time.Now().Unix())
-		deploy := model.WebsiteDeploy{
+		deploy := model.AppDeploy{
 			WebsiteID:   website.ID,
 			Version:     version,
 			SourceType:  "git",

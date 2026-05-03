@@ -20,6 +20,14 @@ func AIAgentRouter(r fiber.Router) {
 		group.Get("/groups", api.GetAIGroups)
 		group.Post("/groups", api.CreateAIGroup)
 
+		// Dev Sessions APIs
+		group.Get("/sessions", api.GetAISessions)
+		group.Get("/sessions/:id", api.GetAISession)
+		group.Get("/sessions/:id/previews", api.GetAISessionPreviews)
+		group.Post("/sessions", api.CreateAISession)
+		group.Post("/sessions/:id/instructions", api.CreateAISessionInstruction)
+		group.Get("/sessions/:id/state", api.GetAISessionState)
+
 		// Tasks APIs
 		group.Get("/tasks", api.GetAITasks)
 		group.Get("/tasks/:id/messages", api.GetAITaskMessages)

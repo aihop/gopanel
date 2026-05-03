@@ -106,11 +106,11 @@
 
           <n-form-item
             label="容器镜像地址"
-            path="gitRepo"
+          path="dockerImage"
             v-if="form.codeSource === 'git' || form.codeSource === 'docker'"
           >
             <n-auto-complete
-              v-model:value="form.gitRepo"
+            v-model:value="form.dockerImage"
               :options="localImageOptions"
               placeholder="例：nginx:latest 或 my-harbor/app:v1"
               :get-show="() => true"
@@ -152,7 +152,7 @@
               v-if="form.codeSource === 'pipeline'"
               class="mt-2 text-xs text-slate-500"
             >
-              这里仅作为待部署前的占位代理地址。流水线成功部署后，系统会自动写入真实的本机随机端口代理地址。
+              这里可留空。流水线成功后会自动部署最新构建并写入真实代理地址；正式版本仍需在执行记录中手动发布。
             </div>
           </div>
         </n-form-item>
@@ -284,9 +284,11 @@
   </n-drawer>
 </template>
 <script setup lang="ts">
-// @ts-nocheck
 import type { FormInst } from "naive-ui"
 import type { Website } from "@/api/interface/website"
+import type { App } from "@/api/interface/apps"
+import type { Pipeline } from "@/api/interface/pipeline"
+import type { Container } from "@/api/interface/container"
 import { computed, ref, watch, onMounted } from "vue"
 import { websiteCreateAPI, websiteUpdateAPI } from "@/api/modules/website"
 import { ListAppInstalled } from "@/api/modules/apps"
@@ -294,6 +296,7 @@ import { listAllImage } from "@/api/modules/container"
 import { useMessage } from "naive-ui"
 import { buildRuntimeBadgeText, buildRuntimeDetailText as formatRuntimeDetailText, getRunUserLabel } from "@/utils/runtime"
 import { listAllPipelines } from "@/utils/pipeline"
+import { getWebsiteIpv6Value, normalizeWebsiteProtocol as normalizeWebsiteProtocolValue } from "@/utils/websiteRuntime"
 
 const visible = ref(false)
 const loading = ref(false)
@@ -302,20 +305,91 @@ const formRef = ref<FormInst | null>(null)
 const message = useMessage()
 const actionType = ref("add")
 
+type RuntimeOption = { label: string; value: number }
+type ImageOption = { label: string; value: string }
+type WebsiteDomainValue = string | { domain?: string }
+type SecurityPreset = "off" | "recommended" | "strict"
+type WebsiteFormState = {
+	id?: number
+	type: string
+	primaryDomain: string
+	protocol: string
+	alias: string
+	otherDomains: string
+	proxy: string
+	IPV6: boolean
+	appInstallId?: number
+	remark: string
+	codeSource: string
+	dockerImage: string
+	codeDir: string
+	pipelineId?: number
+	antiCrawler: boolean
+	antiLeech: boolean
+	rateLimitMode: string
+	wafEnable: boolean
+	blockSensitive: boolean
+	ipAllowlist: string
+	ipBlocklist: string
+	securityHeader: boolean
+	hstsEnabled: boolean
+}
+type WebsiteFormRecord = Website.WebsiteDTO & {
+	domains?: WebsiteDomainValue[]
+	runtimeBindingSummary?: string
+	engineEnv?: string
+	status?: string | boolean
+	rateLimitMode?: string
+	wafEnable?: boolean
+	blockSensitive?: boolean
+	ipAllowlist?: string
+	ipBlocklist?: string
+	securityHeader?: boolean
+	hstsEnabled?: boolean
+}
+
+function createDefaultForm(): WebsiteFormState {
+	return {
+		id: undefined,
+		type: "static",
+		primaryDomain: "",
+		protocol: "HTTPS",
+		alias: "",
+		otherDomains: "",
+		proxy: "",
+		IPV6: false,
+		appInstallId: undefined,
+		remark: "",
+		codeSource: "upload",
+		dockerImage: "",
+		codeDir: "",
+		pipelineId: undefined,
+		antiCrawler: false,
+		antiLeech: false,
+		rateLimitMode: "none",
+		wafEnable: false,
+		blockSensitive: false,
+		ipAllowlist: "",
+		ipBlocklist: "",
+		securityHeader: false,
+		hstsEnabled: false,
+	}
+}
+
 const title = ref("添加域名")
-const securityPreset = ref<"off" | "recommended" | "strict">("recommended")
+const securityPreset = ref<SecurityPreset>("recommended")
 const bindingRuntimeSummary = ref("")
 
-const appInstallOptions = ref<{ label: string; value: number }[]>([])
-const rawAppList = ref<any[]>([])
+const appInstallOptions = ref<RuntimeOption[]>([])
+const rawAppList = ref<App.AppInstalledInfo[]>([])
 
-const pipelineOptions = ref<any[]>([])
-const rawPipelineList = ref<any[]>([])
+const pipelineOptions = ref<RuntimeOption[]>([])
+const rawPipelineList = ref<Pipeline.ResPipeline[]>([])
 
-const localImageOptions = ref<{ label: string; value: string }[]>([])
+const localImageOptions = ref<ImageOption[]>([])
 
 const selectedAppRuntimeText = computed(() => {
-	const item = rawAppList.value.find((app: any) => app.id === form.value.appInstallId)
+	const item = rawAppList.value.find(app => app.id === form.value.appInstallId)
 	if (!item) return ""
 	return formatRuntimeDetailText(item, {
 		prefix: item.containerName ? `容器：${item.containerName}` : "",
@@ -327,7 +401,7 @@ const selectedAppRuntimeText = computed(() => {
 })
 
 const selectedPipelineRuntimeText = computed(() => {
-	const item = rawPipelineList.value.find((pipeline: any) => pipeline.id === form.value.pipelineId)
+	const item = rawPipelineList.value.find(pipeline => pipeline.id === form.value.pipelineId)
 	if (!item) return ""
 	return formatRuntimeDetailText(item, {
 		prefix: item.pipelineKey ? `标识：${item.pipelineKey}` : `流水线 #${item.id}`,
@@ -369,7 +443,7 @@ function applySecurityPreset(preset: "off" | "recommended" | "strict") {
 		form.value.wafEnable = true
 		form.value.blockSensitive = true
 		form.value.securityHeader = true
-		form.value.hstsEnabled = form.value.protocol === "https"
+		form.value.hstsEnabled = normalizeWebsiteProtocolValue(form.value.protocol) === "HTTPS"
 		return
 	}
 	form.value.antiCrawler = true
@@ -378,7 +452,7 @@ function applySecurityPreset(preset: "off" | "recommended" | "strict") {
 	form.value.wafEnable = true
 	form.value.blockSensitive = true
 	form.value.securityHeader = true
-	form.value.hstsEnabled = form.value.protocol === "https"
+	form.value.hstsEnabled = normalizeWebsiteProtocolValue(form.value.protocol) === "HTTPS"
 }
 
 function syncSecurityPreset() {
@@ -398,12 +472,79 @@ function handleSecurityPresetChange(value: "off" | "recommended" | "strict") {
 	applySecurityPreset(value)
 }
 
+function syncSourceSpecificFields(source: string) {
+	if (source !== "app_store") {
+		form.value.appInstallId = undefined
+	}
+	if (source !== "pipeline") {
+		form.value.pipelineId = undefined
+	}
+	if (source !== "git") {
+		form.value.dockerImage = ""
+	}
+	if (source !== "upload") {
+		form.value.codeDir = ""
+	}
+}
+
+function buildCreatePayload(): Website.WebSiteCreateReq {
+	const source = form.value.codeSource
+	return {
+		type: form.value.type,
+		primaryDomain: form.value.primaryDomain,
+		protocol: normalizeWebsiteProtocolValue(form.value.protocol) || "HTTPS",
+		alias: form.value.alias,
+		otherDomains: form.value.otherDomains,
+		proxy: form.value.proxy,
+		IPV6: form.value.IPV6,
+		appInstallId: source === "app_store" ? form.value.appInstallId : undefined,
+		remark: form.value.remark,
+		codeSource: source,
+		gitRepo: source === "git" ? form.value.dockerImage : "",
+		codeDir: source === "upload" ? form.value.codeDir : "",
+		pipelineId: source === "pipeline" ? form.value.pipelineId : undefined,
+		antiCrawler: form.value.antiCrawler,
+		antiLeech: form.value.antiLeech,
+		rateLimitMode: form.value.rateLimitMode,
+		wafEnable: form.value.wafEnable,
+		blockSensitive: form.value.blockSensitive,
+		ipAllowlist: form.value.ipAllowlist,
+		ipBlocklist: form.value.ipBlocklist,
+		securityHeader: form.value.securityHeader,
+		hstsEnabled: form.value.hstsEnabled,
+	}
+}
+
+function buildUpdatePayload(): Website.WebSiteUpdateReq {
+	const source = form.value.codeSource
+	return {
+		id: form.value.id || 0,
+		primaryDomain: form.value.primaryDomain,
+		protocol: normalizeWebsiteProtocolValue(form.value.protocol),
+		otherDomains: form.value.otherDomains,
+		proxy: form.value.proxy,
+		pipelineId: source === "pipeline" ? form.value.pipelineId : undefined,
+		codeSource: source,
+		IPV6: form.value.IPV6,
+		remark: form.value.remark,
+		antiCrawler: form.value.antiCrawler,
+		antiLeech: form.value.antiLeech,
+		rateLimitMode: form.value.rateLimitMode,
+		wafEnable: form.value.wafEnable,
+		blockSensitive: form.value.blockSensitive,
+		ipAllowlist: form.value.ipAllowlist,
+		ipBlocklist: form.value.ipBlocklist,
+		securityHeader: form.value.securityHeader,
+		hstsEnabled: form.value.hstsEnabled
+	}
+}
+
 const fetchApps = async () => {
 	try {
 		const res = await ListAppInstalled()
 		if (res.data) {
-			rawAppList.value = res.data
-			appInstallOptions.value = res.data.map((app: any) => ({
+			rawAppList.value = res.data as App.AppInstalledInfo[]
+			appInstallOptions.value = rawAppList.value.map((app) => ({
 				label: buildAppOptionLabel(app),
 				value: app.id
 			}))
@@ -417,7 +558,7 @@ const fetchLocalImages = async () => {
 	try {
 		const res = await listAllImage()
 		if (res.data) {
-			localImageOptions.value = res.data.map((item: any) => ({
+			localImageOptions.value = (res.data as Container.ImageInfo[]).map((item) => ({
 				label: item.tags && item.tags.length > 0 ? item.tags[0] : item.name,
 				value: item.tags && item.tags.length > 0 ? item.tags[0] : item.name
 			}))
@@ -431,7 +572,7 @@ const getPipelineList = async () => {
 	try {
 		const items = await listAllPipelines()
 		rawPipelineList.value = items
-		pipelineOptions.value = items.map((item: any) => {
+		pipelineOptions.value = items.map((item) => {
 			return {
 				label: buildPipelineOptionLabel(item),
 				value: item.id
@@ -444,7 +585,7 @@ const getPipelineList = async () => {
 
 const handleAppSelect = (val: number) => {
 	if (!val) return
-	const app = rawAppList.value.find((a: any) => a.id === val)
+	const app = rawAppList.value.find((a) => a.id === val)
 	if (app && app.httpPort) {
 		form.value.proxy = `http://127.0.0.1:${app.httpPort}`
 	} else if (app && app.httpsPort) {
@@ -456,19 +597,15 @@ const handleAppSelect = (val: number) => {
 
 const handlePipelineSelect = (val: number) => {
 	if (!val) return
-	// 流水线里的 exposePort 只作为访问建议值，不应再自动回填为容器代理地址，
-	// 否则容易把“外部访问端口”误解成“容器内部监听端口”。
-	if (!form.value.proxy) {
-		form.value.proxy = "http://127.0.0.1:80"
-	}
+	// pipeline 站点允许不填占位代理地址，等待首次成功部署后自动回填真实地址。
 }
 
-function buildAppOptionLabel(app: any) {
+function buildAppOptionLabel(app: App.AppInstalledInfo) {
 	const port = app.httpPort ? `端口:${app.httpPort}` : app.httpsPort ? `HTTPS:${app.httpsPort}` : "无端口"
 	return `${app.name} · ${port} · ${buildRuntimeBadgeText(app, { kindFallback: "Runtime" })} · 用户:${getRunUserLabel(app, { userFallback: "镜像默认" })}`
 }
 
-function buildPipelineOptionLabel(item: any) {
+function buildPipelineOptionLabel(item: Pipeline.ResPipeline) {
 	return `${item.name} (#${item.id}) · ${buildRuntimeBadgeText(item, { kindFallback: "Runtime" })} · 用户:${getRunUserLabel(item, { userFallback: "镜像默认" })}`
 }
 
@@ -478,31 +615,7 @@ onMounted(() => {
 	fetchLocalImages()
 })
 
-const form = ref({
-	id: undefined as number | undefined,
-	type: "static",
-	primaryDomain: "",
-	protocol: "http",
-	alias: "",
-	otherDomains: "",
-	proxy: "",
-	IPV6: false,
-	appInstallId: undefined as number | undefined,
-	remark: "",
-	codeSource: "upload",
-	gitRepo: "",
-	codeDir: "",
-	pipelineId: undefined as number | undefined,
-	antiCrawler: false,
-	antiLeech: false,
-	rateLimitMode: "none",
-	wafEnable: false,
-	blockSensitive: false,
-	ipAllowlist: "",
-	ipBlocklist: "",
-	securityHeader: false,
-	hstsEnabled: false
-})
+const form = ref<WebsiteFormState>(createDefaultForm())
 
 const rules = {
 	type: {
@@ -522,7 +635,10 @@ const rules = {
 	},
 	proxy: {
 		required: true,
-		validator(rule: any, value: string) {
+		validator(_rule: unknown, value: string) {
+			if (form.value.codeSource === "pipeline") {
+				return true
+			}
 			if ((form.value.type === "proxy" || form.value.type === "web_app") && !value) {
 				return new Error("请输入代理地址或容器内部端口 (如: 8080)")
 			}
@@ -532,9 +648,29 @@ const rules = {
 	},
 	appInstallId: {
 		required: true,
-		validator(rule: any, value: number) {
+		validator(_rule: unknown, value: number) {
 			if (form.value.codeSource === "app_store" && !value) {
 				return new Error("请选择已安装的容器应用")
+			}
+			return true
+		},
+		trigger: "blur"
+	},
+	pipelineId: {
+		required: true,
+		validator(_rule: unknown, value: number) {
+			if (form.value.codeSource === "pipeline" && !value) {
+				return new Error("请选择关联流水线")
+			}
+			return true
+		},
+		trigger: "blur"
+	},
+	dockerImage: {
+		required: true,
+		validator(_rule: unknown, value: string) {
+			if (form.value.codeSource === "git" && !String(value || "").trim()) {
+				return new Error("请输入容器镜像地址")
 			}
 			return true
 		},
@@ -550,49 +686,8 @@ const onConfirm = async () => {
 	}
 	try {
 		loading.value = true
-		const createPayload: Website.WebSiteCreateReq = {
-			type: form.value.type,
-			primaryDomain: form.value.primaryDomain,
-			alias: form.value.alias,
-			otherDomains: form.value.otherDomains,
-			proxy: form.value.proxy,
-			IPV6: form.value.IPV6,
-			appInstallId: form.value.appInstallId,
-			remark: form.value.remark,
-			codeSource: form.value.codeSource,
-			gitRepo: form.value.gitRepo,
-			codeDir: form.value.codeDir,
-			pipelineId: form.value.pipelineId,
-			antiCrawler: form.value.antiCrawler,
-			antiLeech: form.value.antiLeech,
-			rateLimitMode: form.value.rateLimitMode,
-			wafEnable: form.value.wafEnable,
-			blockSensitive: form.value.blockSensitive,
-			ipAllowlist: form.value.ipAllowlist,
-			ipBlocklist: form.value.ipBlocklist,
-			securityHeader: form.value.securityHeader,
-			hstsEnabled: form.value.hstsEnabled,
-		}
-		const updatePayload: Website.WebSiteUpdateReq = {
-			id: form.value.id || 0,
-			primaryDomain: form.value.primaryDomain,
-			protocol: form.value.protocol,
-			otherDomains: form.value.otherDomains,
-			proxy: form.value.proxy,
-			pipelineId: form.value.pipelineId,
-			codeSource: form.value.codeSource,
-			IPV6: form.value.IPV6,
-			remark: form.value.remark,
-			antiCrawler: form.value.antiCrawler,
-			antiLeech: form.value.antiLeech,
-			rateLimitMode: form.value.rateLimitMode,
-			wafEnable: form.value.wafEnable,
-			blockSensitive: form.value.blockSensitive,
-			ipAllowlist: form.value.ipAllowlist,
-			ipBlocklist: form.value.ipBlocklist,
-			securityHeader: form.value.securityHeader,
-			hstsEnabled: form.value.hstsEnabled
-		}
+		const createPayload = buildCreatePayload()
+		const updatePayload = buildUpdatePayload()
 		let res = await (actionType.value === "add" ? websiteCreateAPI(createPayload) : websiteUpdateAPI(updatePayload))
 		emit("confirm", res, loading)
 	} catch (error) {
@@ -602,67 +697,60 @@ const onConfirm = async () => {
 	}
 }
 
-const open = (record?: any, action: string = "add") => {
+const open = (record?: WebsiteFormRecord, action: "add" | "update" = "add") => {
 	visible.value = true
 	if (action === "add") {
 		actionType.value = "add"
 		title.value = "添加网站"
 		bindingRuntimeSummary.value = ""
 		form.value = {
-			id: undefined,
-			type: "static",
-			primaryDomain: "",
-			protocol: "http",
-			alias: "",
-			otherDomains: "",
-			proxy: "",
-			IPV6: false,
-			appInstallId: undefined,
-			remark: "",
-			codeSource: "upload",
-			gitRepo: "",
-			codeDir: "",
-			pipelineId: undefined,
+			...createDefaultForm(),
 			antiCrawler: true,
 			antiLeech: true,
 			rateLimitMode: "normal",
 			wafEnable: true,
 			blockSensitive: true,
-			ipAllowlist: "",
-			ipBlocklist: "",
 			securityHeader: true,
-			hstsEnabled: false
 		}
 		securityPreset.value = "recommended"
 	} else {
+		if (!record) return
 		actionType.value = "update"
 		title.value = "更新网站"
 		bindingRuntimeSummary.value = record.runtimeBindingSummary || ""
-		if (record.domains && record.domains.length > 0) {
+		const editableRecord: WebsiteFormRecord = { ...record }
+		if (editableRecord.domains && editableRecord.domains.length > 0) {
+			const domains = editableRecord.domains as WebsiteDomainValue[]
 			let otherDomain = ""
-			for (let i = 0; i < record.domains.length; i++) {
-				if (record.domains[i].domain === record.primaryDomain) {
+			for (let i = 0; i < domains.length; i++) {
+				const domainValue = domains[i]
+				const domain = typeof domainValue === "string" ? domainValue : domainValue?.domain || ""
+				if (!domain || domain === editableRecord.primaryDomain) {
 					continue
 				}
 				if (i == 0) {
-					otherDomain += record.domains[i].domain
+					otherDomain += domain
 				} else {
-					otherDomain += "\n" + record.domains[i].domain
+					otherDomain += "\n" + domain
 				}
 			}
-			record.otherDomains = otherDomain
+			editableRecord.otherDomains = otherDomain
 		} else {
-			record.otherDomains = ""
+			editableRecord.otherDomains = ""
 		}
 		form.value = {
-			...record,
-			rateLimitMode: record.rateLimitMode || "none",
-			wafEnable: record.wafEnable || false,
-			blockSensitive: record.blockSensitive || false,
-			ipAllowlist: record.ipAllowlist || "",
-			ipBlocklist: record.ipBlocklist || "",
-			securityHeader: !!record.securityHeader,
-			hstsEnabled: !!record.hstsEnabled
+			...createDefaultForm(),
+			...editableRecord,
+			protocol: normalizeWebsiteProtocolValue(editableRecord.protocol) || "HTTPS",
+			IPV6: getWebsiteIpv6Value(editableRecord),
+			dockerImage: editableRecord.engineEnv || "",
+			rateLimitMode: editableRecord.rateLimitMode || "none",
+			wafEnable: editableRecord.wafEnable || false,
+			blockSensitive: editableRecord.blockSensitive || false,
+			ipAllowlist: editableRecord.ipAllowlist || "",
+			ipBlocklist: editableRecord.ipBlocklist || "",
+			securityHeader: !!editableRecord.securityHeader,
+			hstsEnabled: !!editableRecord.hstsEnabled
 		}
 		syncSecurityPreset()
 	}
@@ -679,6 +767,12 @@ watch(
 		if (val.startsWith("http://") || val.startsWith("https://")) {
 			form.value.alias = val.replace("http://", "").replace("https://", "")
 		}
+	}
+)
+watch(
+	() => form.value.codeSource,
+	val => {
+		syncSourceSpecificFields(val)
 	}
 )
 watch(

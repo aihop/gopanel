@@ -1,59 +1,15 @@
 <template>
   <div class="py-4">
-    <!-- Header with Action Buttons -->
-    <n-space class="mb-4">
-      <n-button
-        type="primary"
-        @click="openPullDrawer"
-      >{{ $t('container.imagePull') }}</n-button>
-      <n-button @click="openLoadDrawer">{{ $t('container.imageImport') }}</n-button>
-      <n-button @click="openBuildDrawer">{{ $t('container.imageBuild') }}</n-button>
-      <n-button
-        type="error"
-        @click="showClearUnusedImagesConfirmation"
-      >{{ $t('container.imageDelete') }}</n-button>
-    </n-space>
-
-    <!-- Image List Section -->
     <n-card>
-      <div class="mb-4 flex items-center justify-between">
-        <h2 class="text-lg font-semibold">{{ $t('container.image') }}</h2>
-        <n-space>
-          <n-popover
-            trigger="click"
-            placement="bottom-start"
-            :width="300"
-          >
-            <template #trigger>
-              <div class="rounded-full border border-gray-200 bg-base-100 p-2 px-5 text-sm">列表设置</div>
-            </template>
-            <div class="flex items-center gap-4 text-nowrap bg-base-100">
-              刷新频率
-              <n-select :options="[
-									{ label: '不刷新', value: 0 },
-									{ label: '5秒/次', value: 5 },
-									{ label: '10秒/次', value: 10 },
-									{ label: '30秒/次', value: 30 },
-									{ label: '60秒/次', value: 60 },
-									{ label: '120秒/次', value: 120 },
-									{ label: '300秒/次', value: 300 }
-								]" />
-            </div>
-          </n-popover>
-          <n-input
-            v-model:value="searchForm.info"
-            placeholder="搜索"
-            clearable
-            @keyup.enter="handleSearch"
-          >
-            <template #suffix>
-              <n-icon name="search" />
-            </template>
-          </n-input>
-        </n-space>
-      </div>
-
-      <!-- Images Table -->
+      <ImageListToolbar
+        :search-value="searchForm.info"
+        @update:search-value="searchForm.info = $event"
+        @search="handleSearch"
+        @pull="openPullDrawer"
+        @load="openLoadDrawer"
+        @build="openBuildDrawer"
+        @prune="showClearUnusedImagesConfirmation"
+      />
       <n-data-table
         :columns="columns"
         :data="imageData"
@@ -103,9 +59,6 @@ import {
 	NSpace,
 	NTag,
 	NText,
-	NInput,
-	NIcon,
-	NPopover,
 	useDialog,
 	useMessage
 } from "naive-ui"
@@ -119,6 +72,7 @@ import BuildImage from "./build/index.vue"
 import PushImage from "./push/index.vue"
 import SaveImage from "./save/index.vue"
 import PruneImage from "./prune/index.vue"
+import ImageListToolbar from "./ImageListToolbar.vue"
 
 const dialog = useDialog()
 const message = useMessage()
@@ -398,12 +352,10 @@ const pagination = ref({
 	}
 })
 
-// 添加搜索表单
 const searchForm = ref({
 	info: ""
 })
 
-// 添加搜索处理函数
 const handleSearch = () => {
 	pagination.value.page = 1
 	fetchImageData()

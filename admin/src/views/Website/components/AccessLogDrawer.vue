@@ -414,6 +414,8 @@
 
 <script setup lang="ts">
 import type { Website } from "@/api/interface/website"
+import type { App } from "@/api/interface/apps"
+import type { Pipeline } from "@/api/interface/pipeline"
 import { WebsiteLogAPI, WebsiteTodayIPStatsAPI } from "@/api/modules/website"
 import { ListAppInstalled } from "@/api/modules/apps"
 import { buildRuntimeDetailText } from "@/utils/runtime"
@@ -425,6 +427,16 @@ import { computed, ref } from "vue"
 
 type WebsiteLogType = "access" | "error"
 type StatusFilter = "all" | "2xx" | "3xx" | "4xx" | "5xx"
+
+function getErrorMessage(error: unknown, fallback: string) {
+	if (error && typeof error === "object") {
+		const maybe = error as { message?: string }
+		if (typeof maybe.message === "string" && maybe.message.trim()) {
+			return maybe.message
+		}
+	}
+	return fallback
+}
 
 const visible = ref(false)
 const loading = ref(false)
@@ -446,8 +458,8 @@ const logContent = ref("")
 const logLines = ref<string[]>([])
 const logPath = ref("")
 const todayStats = ref<Website.WebSiteTodayIPStats | null>(null)
-const appInstallMap = ref<Record<number, any>>({})
-const pipelineMap = ref<Record<number, any>>({})
+const appInstallMap = ref<Record<number, App.AppInstalledInfo>>({})
+const pipelineMap = ref<Record<number, Pipeline.ResPipeline>>({})
 
 const message = useMessage()
 
@@ -492,8 +504,8 @@ async function loadLogs(latest = false) {
 		total.value = res.data?.total || 1
 		end.value = !!res.data?.end
 		page.value = latest ? Math.max(total.value, 1) : targetPage
-	} catch (error: any) {
-		message.error(error?.message || `读取${drawerTitle.value}失败`)
+	} catch (error) {
+		message.error(getErrorMessage(error, `读取${drawerTitle.value}失败`))
 	} finally {
 		loading.value = false
 	}
@@ -522,8 +534,8 @@ async function openTodayIPStats() {
 			websiteId: website.value.id,
 		})
 		todayStats.value = res.data || null
-	} catch (error: any) {
-		message.error(error?.message || "读取今日 IP 统计失败")
+	} catch (error) {
+		message.error(getErrorMessage(error, "读取今日 IP 统计失败"))
 	} finally {
 		todayStatsLoading.value = false
 	}
@@ -597,14 +609,14 @@ async function loadBindingMeta() {
 	try {
 		if (website.value.appInstallId) {
 			const res = await ListAppInstalled()
-			const list = Array.isArray(res.data) ? res.data : []
-			const nextMap: Record<number, any> = {}
+			const list: App.AppInstalledInfo[] = Array.isArray(res.data) ? res.data : []
+			const nextMap: Record<number, App.AppInstalledInfo> = {}
 			for (const item of list) nextMap[item.id] = item
 			appInstallMap.value = nextMap
 		}
 		if (website.value.pipelineId) {
 			const list = await listAllPipelines()
-			const nextMap: Record<number, any> = {}
+			const nextMap: Record<number, Pipeline.ResPipeline> = {}
 			for (const item of list) nextMap[item.id] = item
 			pipelineMap.value = nextMap
 		}

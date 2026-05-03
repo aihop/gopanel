@@ -11,54 +11,16 @@
         name="process"
         tab="进程"
       >
-        <div
-          class="search-inputs flex items-center"
-          style="gap: 16px; margin-bottom: 16px"
-        >
-          <n-input
-            v-model:value="processSearch.pid"
-            style="width: 150px"
-            placeholder="进程ID"
-            class="search-input"
-          />
-          <n-input
-            v-model:value="processSearch.name"
-            style="width: 150px"
-            placeholder="名称"
-            class="search-input"
-          />
-          <n-input
-            v-model:value="processSearch.username"
-            style="width: 150px"
-            placeholder="用户"
-            class="search-input"
-          />
-          <n-button
-            type="primary"
-            class="search-button"
-            @click="handleSearch"
-          >
-            <template #icon>
-              <Icon
-                name="ion:search-outline"
-                :size="18"
-              />
-            </template>
-            搜索
-          </n-button>
-          <n-button
-            class="arrange-button"
-            @click="handleProcessReset"
-          >
-            <template #icon>
-              <Icon
-                name="ion:settings-outline"
-                :size="18"
-              />
-            </template>
-            重置
-          </n-button>
-        </div>
+        <ProcessSearchToolbar
+          mode="process"
+          :process-search="processSearch"
+          :network-search="networkSearch"
+          @update:process-pid="processSearch.pid = $event"
+          @update:process-name="processSearch.name = $event"
+          @update:process-username="processSearch.username = $event"
+          @search="handleSearch"
+          @reset="handleProcessReset"
+        />
         <n-data-table
           :columns="processColumns"
           :data="processData"
@@ -72,54 +34,16 @@
         name="network"
         tab="网络"
       >
-        <div
-          class="search-inputs flex items-center"
-          style="gap: 16px; margin-bottom: 16px"
-        >
-          <n-input
-            v-model:value="networkSearch.processID"
-            style="width: 150px"
-            placeholder="进程ID"
-            class="search-input"
-          />
-          <n-input
-            v-model:value="networkSearch.processName"
-            style="width: 150px"
-            placeholder="进程名称"
-            class="search-input"
-          />
-          <n-input
-            v-model:value="networkSearch.port"
-            style="width: 150px"
-            placeholder="端口"
-            class="search-input"
-          />
-          <n-button
-            type="primary"
-            class="search-button"
-            @click="handleNetworkSearch"
-          >
-            <template #icon>
-              <Icon
-                name="ion:search-outline"
-                :size="18"
-              />
-            </template>
-            搜索
-          </n-button>
-          <n-button
-            class="arrange-button"
-            @click="handleNetworkReset"
-          >
-            <template #icon>
-              <Icon
-                name="ion:settings-outline"
-                :size="18"
-              />
-            </template>
-            重置
-          </n-button>
-        </div>
+        <ProcessSearchToolbar
+          mode="network"
+          :process-search="processSearch"
+          :network-search="networkSearch"
+          @update:network-process-id="networkSearch.processID = $event"
+          @update:network-process-name="networkSearch.processName = $event"
+          @update:network-port="networkSearch.port = $event"
+          @search="handleNetworkSearch"
+          @reset="handleNetworkReset"
+        />
         <n-data-table
           :columns="networkColumns"
           :data="networkData"
@@ -129,155 +53,37 @@
       </n-tab-pane>
     </n-tabs>
 
-    <n-drawer
-      v-model:show="showDetailDrawer"
-      :width="500"
-      placement="right"
-    >
-      <n-drawer-content
-        :title="detailDrawerTitle"
-        closable
-      >
-        <n-tabs
-          type="line"
-          animated
-        >
-          <n-tab-pane
-            name="basicInfo"
-            tab="基本信息"
-          >
-            <n-descriptions
-              label-placement="left"
-              bordered
-              :column="1"
-              size="small"
-            >
-              <n-descriptions-item label="名称">{{ selectedProcess?.name }}</n-descriptions-item>
-              <n-descriptions-item label="状态">
-                <n-tag
-                  :type="getStatusType(selectedProcess?.status)"
-                  size="small"
-                >
-                  {{ selectedProcess?.status }}
-                </n-tag>
-              </n-descriptions-item>
-              <n-descriptions-item label="进程ID">{{ selectedProcess?.PID }}</n-descriptions-item>
-              <n-descriptions-item label="父进程ID">{{ selectedProcess?.PPID }}</n-descriptions-item>
-              <n-descriptions-item label="线程">{{ selectedProcess?.numThreads }}</n-descriptions-item>
-              <n-descriptions-item label="连接">
-                {{ selectedProcess?.numConnections ?? "N/A" }}
-              </n-descriptions-item>
-              <n-descriptions-item label="磁盘读">
-                {{ selectedProcess?.diskRead ?? "N/A" }}
-              </n-descriptions-item>
-              <n-descriptions-item label="磁盘写">
-                {{ selectedProcess?.diskWrite ?? "N/A" }}
-              </n-descriptions-item>
-              <n-descriptions-item label="用户">{{ selectedProcess?.username }}</n-descriptions-item>
-              <n-descriptions-item label="启动时间">{{ selectedProcess?.startTime }}</n-descriptions-item>
-              <n-descriptions-item label="启动命令">
-                {{ selectedProcess?.cmdLine ?? "N/A" }}
-              </n-descriptions-item>
-            </n-descriptions>
-          </n-tab-pane>
-          <n-tab-pane
-            name="memoryInfo"
-            tab="内存信息"
-          >
-            <n-descriptions
-              v-if="selectedProcess?.memoryInfo"
-              label-placement="left"
-              bordered
-              :columns="2"
-              size="small"
-            >
-              <n-descriptions-item label="rss">{{ selectedProcess.memoryInfo.rss }}</n-descriptions-item>
-              <n-descriptions-item label="swap">
-                {{ selectedProcess.memoryInfo.swap }}
-              </n-descriptions-item>
-              <n-descriptions-item label="vms">{{ selectedProcess.memoryInfo.vms }}</n-descriptions-item>
-              <n-descriptions-item label="hwm">{{ selectedProcess.memoryInfo.hwm }}</n-descriptions-item>
-              <n-descriptions-item label="data">
-                {{ selectedProcess.memoryInfo.data }}
-              </n-descriptions-item>
-              <n-descriptions-item label="stack">
-                {{ selectedProcess.memoryInfo.stack }}
-              </n-descriptions-item>
-              <n-descriptions-item label="locked">
-                {{ selectedProcess.memoryInfo.locked }}
-              </n-descriptions-item>
-            </n-descriptions>
-            <p v-else>暂无内存信息</p>
-          </n-tab-pane>
-          <n-tab-pane
-            name="fileOpen"
-            tab="文件打开"
-          >
-            <n-data-table
-              v-if="selectedProcess?.openFiles?.length"
-              :columns="openFilesColumns"
-              :data="selectedProcess.openFiles"
-              :pagination="false"
-              :bordered="true"
-              size="small"
-            />
-            <p v-else>暂无打开文件信息</p>
-          </n-tab-pane>
-          <n-tab-pane
-            name="envVar"
-            tab="环境变量"
-          >
-            <n-code
-              v-if="selectedProcess?.environmentVariables"
-              language="js"
-              :code="selectedProcess.environmentVariables"
-              show-line-numbers
-            />
-            <p v-else>暂无环境变量信息</p>
-          </n-tab-pane>
-          <n-tab-pane
-            name="networkLink"
-            tab="网络连接"
-          >
-            <n-data-table
-              v-if="selectedProcess?.connects?.length"
-              :columns="drawerNetworkConnectionsColumns"
-              :data="selectedProcess.connects"
-              :pagination="false"
-              :bordered="true"
-              size="small"
-            />
-            <p v-else>暂无网络连接信息</p>
-          </n-tab-pane>
-        </n-tabs>
-      </n-drawer-content>
-    </n-drawer>
+    <ProcessDetailDrawer
+      :show="showDetailDrawer"
+      :detail-drawer-title="detailDrawerTitle"
+      :selected-process="selectedProcess"
+      :get-status-type="getStatusType"
+      :open-files-columns="openFilesColumns"
+      :drawer-network-connections-columns="drawerNetworkConnectionsColumns"
+      @update:show="showDetailDrawer = $event"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import type { DataTableColumns, PaginationProps } from "naive-ui"
+import type { PaginationProps } from "naive-ui"
 import { ProcessList, StopProcess } from "@/api/modules/process"
 import { useAuthStore } from "@/store/auth"
 import { MsgSuccess } from "@/utils/message"
 import { t } from "@/i18n"
+import { useDialog } from "naive-ui"
+import { computed, onMounted, onUnmounted, reactive, ref } from "vue"
+import ProcessSearchToolbar from "./components/ProcessSearchToolbar.vue"
+import ProcessDetailDrawer from "./components/ProcessDetailDrawer.vue"
 import {
-	NButton,
-	NCard,
-	NCode,
-	NDataTable,
-	NDescriptions,
-	NDescriptionsItem,
-	NDrawer,
-	NDrawerContent,
-	NInput,
-	NSpace,
-	NTabPane,
-	NTabs,
-	NTag,
-	useDialog
-} from "naive-ui"
-import { computed, h, onMounted, onUnmounted, reactive, ref } from "vue"
+	createDrawerNetworkConnectionsColumns,
+	createNetworkColumns,
+	createProcessColumns,
+	normalizeProcessRows,
+	openFilesColumns,
+	type ProcessData,
+	type ProcessStatusTagType
+} from "./components/processColumns"
 
 const showDetailDrawer = ref(false)
 const selectedProcess = ref<any>(null)
@@ -309,22 +115,6 @@ function buildProcessSearchData() {
 	}
 }
 
-function normalizeProcessRows(items: ProcessData[]) {
-	return items.map((item: ProcessData) => ({
-		...item,
-		memoryInfo: {
-			rss: item.rss,
-			swap: item.swap,
-			vms: item.vms,
-			hwm: item.hwm,
-			data: item.data,
-			stack: item.stack,
-			locked: item.locked
-		},
-		environmentVariables: item.envs?.join("\n") || ""
-	}))
-}
-
 async function loadInitialProcessList() {
 	loading.value = true
 	processWsReady.value = false
@@ -344,7 +134,7 @@ function openDetailDrawer(row: any) {
 	showDetailDrawer.value = true
 }
 
-function getStatusType(status: string | undefined) {
+function getStatusType(status: string | undefined): ProcessStatusTagType {
 	if (status === "睡眠" || status === "ESTABLISHED" || status === "info") return "info"
 	if (status === "空闲" || status === "LISTEN" || status === "success") return "success"
 	if (status === "NONE" || status === "warning" || status === "CLOSE_WAIT") return "warning"
@@ -352,136 +142,7 @@ function getStatusType(status: string | undefined) {
 	return "info"
 }
 
-interface ProcessMemoryInfo {
-	rss: string
-	swap: string
-	vms: string
-	hwm: string
-	data: string
-	stack: string
-	locked: string
-}
-
-interface ProcessOpenFile {
-	path: string
-	fd: number
-}
-
-interface ProcessConnection {
-	type: string
-	status: string
-	localaddr: {
-		ip: string
-		port: number
-	}
-	remoteaddr: {
-		ip: string
-		port: number
-	}
-	PID: number
-	name: string
-}
-
-interface ProcessData {
-	PID: number
-	name: string
-	PPID: number
-	username: string
-	status: string
-	startTime: string
-	numThreads: number
-	numConnections: number
-	cpuPercent: string
-	diskRead: string
-	diskWrite: string
-	cmdLine: string
-	rss: string
-	vms: string
-	hwm: string
-	data: string
-	stack: string
-	locked: string
-	swap: string
-	cpuValue: number
-	rssValue: number
-	envs: string[]
-	openFiles: ProcessOpenFile[]
-	connects: ProcessConnection[]
-	memoryInfo?: ProcessMemoryInfo
-}
-
-// 修复表格列类型
-const processColumns: DataTableColumns<ProcessData> = [
-	{ title: "PID", key: "PID", sorter: true },
-	{ title: "名称", key: "name", sorter: true },
-	{ title: "父进程ID", key: "PPID", sorter: true },
-	{ title: "线程", key: "numThreads" },
-	{ title: "用户", key: "username" },
-	{
-		title: "CPU",
-		key: "cpuPercent",
-		sorter: (row1, row2) => row1.cpuValue - row2.cpuValue
-	},
-	{
-		title: "内存",
-		key: "rss",
-		sorter: (row1, row2) => row1.rssValue - row2.rssValue
-	},
-	{ title: "连接", key: "numConnections" },
-	{
-		title: "状态",
-		key: "status",
-		render(row) {
-			return h(NTag, { type: getStatusType(row.status) }, { default: () => row.status })
-		},
-		filter: true,
-		filterOptions: [
-			{ label: "运行中", value: "running" },
-			{ label: "睡眠", value: "sleep" },
-			{ label: "停止", value: "stop" },
-			{ label: "空闲", value: "idle" },
-			{ label: "等待", value: "wait" },
-			{ label: "锁定", value: "lock" },
-			{ label: "僵尸", value: "zombie" }
-		]
-	},
-	{ title: "启动时间", key: "startTime" },
-	{
-		title: "操作",
-		key: "actions",
-		fixed: "right",
-		width: 150,
-		render(row) {
-			return h(NSpace, null, {
-				default: () => [
-					h(
-						NButton,
-						{
-							strong: true,
-							tertiary: true,
-							type: "primary",
-							ghost: true,
-							size: "small",
-							onClick: () => openDetailDrawer(row)
-						},
-						{ default: () => "详情" }
-					),
-					h(
-						NButton,
-						{
-							strong: true,
-							tertiary: true,
-							type: "error",
-							size: "small",
-							onClick: () => handleStopProcess(row)
-						},
-						{ default: () => "结束" }
-					)
-				]
-			})
-		}
-	}
-]
+const processColumns = createProcessColumns(getStatusType, openDetailDrawer, handleStopProcess)
 
 // WebSocket相关逻辑
 function isWsOpen(ws: WebSocket | null) {
@@ -584,78 +245,8 @@ onUnmounted(() => {
 
 const processData = ref<ProcessData[]>([])
 
-// Network table columns definition
-const networkColumns = [
-	{ title: "类型", key: "type", sorter: true },
-	{ title: "PID", key: "PID", sorter: true },
-	{ title: "进程名称", key: "name", sorter: true },
-	{
-		title: "本地地址/端口",
-		key: "localaddr",
-		render(row: any) {
-			if (row.localaddr && row.localaddr.port) {
-				return `${row.localaddr.ip}:${row.localaddr.port}`
-			}
-			return row.localaddr?.ip || ""
-		}
-	},
-	{
-		title: "远程地址/端口",
-		key: "remoteaddr",
-		render(row: any) {
-			if (row.remoteaddr && row.remoteaddr.port) {
-				return `${row.remoteaddr.ip}:${row.remoteaddr.port}`
-			}
-			return row.remoteaddr?.ip || ""
-		}
-	},
-	{
-		title: "状态",
-		key: "status",
-		sorter: true,
-		render(row: any) {
-			return h(NTag, { type: getStatusType(row.status) }, { default: () => row.status })
-		}
-	}
-]
-
-// Columns for Open Files in Drawer
-const openFilesColumns = [
-	{ title: "文件", key: "path" },
-	{ title: "fd", key: "fd", width: 60 }
-]
-
-// Columns for Network Connections in Drawer
-const drawerNetworkConnectionsColumns = [
-	{
-		title: "本地地址/端口",
-		key: "localaddr",
-		render(row: any) {
-			if (row.localaddr.port) {
-				return `${row.localaddr.ip}:${row.localaddr.port}`
-			}
-			return row.localaddr.ip
-		}
-	},
-	{
-		title: "远程地址/端口",
-		key: "remoteaddr",
-		render(row: any) {
-			if (row.remoteaddr.port) {
-				return `${row.remoteaddr.ip}:${row.remoteaddr.port}`
-			}
-			return row.remoteaddr.ip
-		}
-	},
-	{
-		title: "状态",
-		key: "status",
-		width: 100,
-		render(row: any) {
-			return h(NTag, { type: getStatusType(row.status), size: "small" }, { default: () => row.status })
-		}
-	}
-]
+const networkColumns = createNetworkColumns(getStatusType)
+const drawerNetworkConnectionsColumns = createDrawerNetworkConnectionsColumns(getStatusType)
 
 const networkData = ref<any[]>([])
 
@@ -787,10 +378,3 @@ function handleTabChange(tabName: string) {
 	}
 }
 </script>
-
-<style scoped>
-/* 如果需要，可以在这里添加 Tailwind CSS 类或自定义样式 */
-.n-descriptions-item-label {
-	width: 80px; /* Adjust as needed */
-}
-</style>

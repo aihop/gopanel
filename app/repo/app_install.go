@@ -122,7 +122,7 @@ func (a *AppInstallRepo) WithPort(port int) DBOption {
 
 func (a *AppInstallRepo) WithIdNotInWebsite() DBOption {
 	return func(db *gorm.DB) *gorm.DB {
-		return db.Where("id not in (select app_install_id from websites)")
+		return db.Where("id not in (select app_install_id from website)")
 	}
 }
 

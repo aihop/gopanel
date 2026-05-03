@@ -18,10 +18,11 @@ func WebsiteRouter(r fiber.Router) {
 		websiteGroup.Post("/log", api.WebsiteLog)
 		websiteGroup.Post("/log/today-ip", api.WebsiteLogTodayIPStats)
 
-		websiteGroup.Post("/deploy/list", api.WebsiteDeployList)
-		websiteGroup.Post("/deploy/switch", api.WebsiteDeploySwitch)
-		websiteGroup.Post("/deploy/delete", api.WebsiteDeployDelete)
-		websiteGroup.Post("/deploy/trigger", api.WebsiteDeployTrigger)
-		websiteGroup.Post("/deploy/snapshot", api.WebsiteDeploySnapshot)
+		websiteGroup.Get("/releases", api.WebsiteReleasePage)
+		websiteGroup.Post("/app-deploy/list", api.AppDeployList)
+		websiteGroup.Post("/app-deploy/switch", api.AppDeploySwitch)
+		websiteGroup.Post("/app-deploy/delete", api.AppDeployDelete)
+		websiteGroup.Post("/app-deploy/trigger", api.AppDeployTrigger)
+		websiteGroup.Post("/app-deploy/snapshot", api.AppDeploySnapshot)
 	}
 }

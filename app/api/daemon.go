@@ -39,7 +39,7 @@ func gpagentDoWithAutoRestart(ctx context.Context, action string, params map[str
 	if err == nil {
 		return resp, nil
 	}
-	if runtime.GOOS != "linux" {
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
 		return resp, err
 	}
 	msg := strings.ToLower(err.Error())
@@ -48,7 +48,7 @@ func gpagentDoWithAutoRestart(ctx context.Context, action string, params map[str
 	}
 	_, _ = gpc.Do(ctx, "GOPANEL_SERVICE_ACTION", map[string]interface{}{
 		"op":   "restart",
-		"name": "gp-agent.service",
+		"name": gpAgentServiceName(),
 	})
 	time.Sleep(300 * time.Millisecond)
 	return gpagent.Do(ctx, action, params)

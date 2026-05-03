@@ -140,3 +140,9 @@ func (w *WebsiteRepo) WithPipelineID(pipelineID uint) DBOption {
 		return db.Where("pipeline_id = ?", pipelineID)
 	}
 }
+
+func (w *WebsiteRepo) CountByPipelineID(pipelineID uint) (int64, error) {
+	var count int64
+	err := w.db.Model(&model.Website{}).Where("pipeline_id = ?", pipelineID).Count(&count).Error
+	return count, err
+}

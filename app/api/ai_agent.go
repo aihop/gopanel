@@ -4,13 +4,17 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/aihop/gopanel/app/model"
@@ -21,6 +25,7 @@ import (
 	"github.com/aihop/gopanel/utils/docker"
 	"github.com/aihop/gopanel/utils/token"
 	"github.com/creack/pty"
+	"gorm.io/gorm"
 )
 
 // WsMsg is the terminal message format
@@ -63,14 +68,145 @@ func normalizeAIAgentWorkDir(workDir string, userID uint) string {
 	return workDir
 }
 
+var previewURLPattern = regexp.MustCompile(`https?://[^\s"'<>]+|(?:localhost|127\.0\.0\.1|0\.0\.0\.0):\d+[^\s"'<>]*`)
+
+func extractPreviewURLs(text string) []string {
+	matches := previewURLPattern.FindAllString(text, -1)
+	if len(matches) == 0 {
+		return nil
+	}
+
+	seen := make(map[string]struct{})
+	results := make([]string, 0, len(matches))
+	for _, raw := range matches {
+		candidate := strings.TrimSpace(raw)
+		candidate = strings.TrimRight(candidate, ".,;)]}")
+		if candidate == "" {
+			continue
+		}
+		if !strings.HasPrefix(candidate, "http://") && !strings.HasPrefix(candidate, "https://") {
+			candidate = "http://" + candidate
+		}
+		if _, err := url.ParseRequestURI(candidate); err != nil {
+			continue
+		}
+		if _, ok := seen[candidate]; ok {
+			continue
+		}
+		seen[candidate] = struct{}{}
+		results = append(results, candidate)
+	}
+	return results
+}
+
+func previewStatusForURL(previewURL string) string {
+	u, err := url.Parse(previewURL)
+	if err != nil {
+		return "unknown"
+	}
+
+	host := strings.ToLower(u.Hostname())
+	switch host {
+	case "localhost", "127.0.0.1", "0.0.0.0":
+		return "local"
+	default:
+		return "ready"
+	}
+}
+
+func previewTitleForURL(previewURL string) string {
+	u, err := url.Parse(previewURL)
+	if err != nil {
+		return "开发预览"
+	}
+	title := u.Host
+	if strings.TrimSpace(u.Path) != "" && u.Path != "/" {
+		title += u.Path
+	}
+	if strings.TrimSpace(title) == "" {
+		return "开发预览"
+	}
+	return title
+}
+
+func upsertAIPreviews(
+	sessionRepo repo.IAIDevSessionRepo,
+	session *model.AIDevSession,
+	task *model.AITask,
+	instruction *model.AIInstruction,
+	output string,
+) ([]*model.AIPreview, error) {
+	if session == nil {
+		return nil, nil
+	}
+	if instruction != nil && !instruction.AutoPreview {
+		return nil, nil
+	}
+
+	urls := extractPreviewURLs(output)
+	if len(urls) == 0 {
+		return nil, nil
+	}
+
+	now := time.Now()
+	previews := make([]*model.AIPreview, 0, len(urls))
+	for _, previewURL := range urls {
+		existing, err := sessionRepo.FindPreviewByURL(session.ID, previewURL)
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			preview := &model.AIPreview{
+				SessionID:     session.ID,
+				PreviewType:   "web",
+				Source:        "agent_output",
+				Title:         previewTitleForURL(previewURL),
+				URL:           previewURL,
+				Status:        previewStatusForURL(previewURL),
+				LastCheckedAt: &now,
+			}
+			if task != nil {
+				preview.TaskID = task.ID
+			}
+			if instruction != nil {
+				preview.InstructionID = instruction.ID
+			}
+			if createErr := sessionRepo.CreatePreview(preview); createErr != nil {
+				return nil, createErr
+			}
+			previews = append(previews, preview)
+			continue
+		}
+
+		existing.Title = previewTitleForURL(previewURL)
+		existing.Status = previewStatusForURL(previewURL)
+		existing.Source = "agent_output"
+		existing.LastCheckedAt = &now
+		if task != nil {
+			existing.TaskID = task.ID
+		}
+		if instruction != nil {
+			existing.InstructionID = instruction.ID
+		}
+		if updateErr := sessionRepo.UpdatePreview(existing); updateErr != nil {
+			return nil, updateErr
+		}
+		previews = append(previews, existing)
+	}
+	return previews, nil
+}
+
 func AIAgentWsSSH(wsConn *websocket.Conn) {
 	defer wsConn.Close()
 
 	// 1. 权限与沙箱控制
 	workDir := ""
 	var userID uint
+	var authClaims *token.CustomClaims
 
 	if claims, ok := wsConn.Locals(constant.AppAuthName).(*token.CustomClaims); ok {
+		authClaims = claims
 		userID = claims.UserId
 		if claims.Role == constant.UserRoleSubAdmin {
 			// 普通管理员沙箱限制：只能在 FileBaseDir 及其子目录下活动
@@ -88,9 +224,27 @@ func AIAgentWsSSH(wsConn *websocket.Conn) {
 
 	// 检查是否是通过 task_id 恢复历史任务
 	reqTaskID, _ := strconv.Atoi(wsConn.Query("task_id", "0"))
+	reqSessionID, _ := strconv.Atoi(wsConn.Query("session_id", "0"))
 	reqProjectID, _ := strconv.Atoi(wsConn.Query("project_id", "0"))
 	var currentTask *model.AITask
+	var currentSession *model.AIDevSession
 	aiRepo := repo.NewAITaskRepo()
+	sessionRepo := repo.NewAIDevSessionRepo()
+
+	if reqSessionID > 0 {
+		if session, err := sessionRepo.GetSessionByID(uint(reqSessionID)); err == nil {
+			currentSession = session
+			workDir = session.WorkDir
+			if reqProjectID == 0 {
+				reqProjectID = int(session.ProjectID)
+			}
+			if session.LastTaskID > 0 {
+				if task, taskErr := aiRepo.GetTaskByID(session.LastTaskID); taskErr == nil {
+					currentTask = task
+				}
+			}
+		}
+	}
 
 	if reqTaskID > 0 {
 		if task, err := aiRepo.GetTaskByID(uint(reqTaskID)); err == nil {
@@ -252,6 +406,8 @@ TRAE_EOF
 
 	if currentTask != nil && currentTask.AgentName != "" {
 		agentName = currentTask.AgentName
+	} else if currentSession != nil && currentSession.AgentName != "" {
+		agentName = currentSession.AgentName
 	}
 
 	autoStartAI := agentName != ""
@@ -298,6 +454,157 @@ TRAE_EOF
 	// 在函数开始附近定义状态机变量，以便在读写 goroutine 中共享
 	inAIChatMode := false
 	var aiInputBuffer strings.Builder
+	pendingInstructionsLoaded := false
+
+	type aiExecRequest struct {
+		input       string
+		task        *model.AITask
+		instruction *model.AIInstruction
+	}
+
+	var wsWriteMu sync.Mutex
+	sendWsMsg := func(data string) {
+		responseMsg := WsMsg{
+			Type: "cmd",
+			Data: data,
+		}
+		jsonMsg, _ := json.Marshal(responseMsg)
+		wsWriteMu.Lock()
+		defer wsWriteMu.Unlock()
+		_ = wsConn.WriteMessage(websocket.TextMessage, jsonMsg)
+	}
+	sendWsRaw := func(data string) {
+		wsWriteMu.Lock()
+		defer wsWriteMu.Unlock()
+		_ = wsConn.WriteMessage(websocket.TextMessage, []byte(data))
+	}
+
+	aiExecQueue := make(chan aiExecRequest, 16)
+	done := make(chan struct{})
+	defer close(done)
+
+	enqueueAIExecution := func(req aiExecRequest) {
+		select {
+		case <-done:
+			return
+		case aiExecQueue <- req:
+		default:
+			sendWsMsg("\r\n\033[33m[系统] 当前 AI 执行队列繁忙，请稍后再试。\033[0m\r\n")
+		}
+	}
+
+	go func() {
+		for {
+			select {
+			case <-done:
+				return
+			case req, ok := <-aiExecQueue:
+				if !ok {
+					return
+				}
+				if strings.TrimSpace(req.input) == "" {
+					continue
+				}
+
+				if req.task != nil {
+					req.task.Status = "running"
+					_ = aiRepo.UpdateTask(req.task)
+				}
+				if req.instruction != nil {
+					req.instruction.Status = "running"
+					_ = sessionRepo.UpdateInstruction(req.instruction)
+				}
+				if currentSession != nil {
+					now := time.Now()
+					currentSession.Status = "active"
+					currentSession.CurrentStage = "executing"
+					currentSession.LastInstructionAt = &now
+					if req.task != nil {
+						currentSession.LastTaskID = req.task.ID
+					}
+					_ = sessionRepo.UpdateSession(currentSession)
+				}
+
+				sendWsMsg("\033[36m[AI Agent] 正在思考并执行...\033[0m\r\n")
+
+				cmdArgs := []string{"exec", "-i", containerName, "sh", "-c"}
+				shellCmd := fmt.Sprintf(`
+								if command -v trae >/dev/null 2>&1; then
+									trae --message "%s"
+								elif command -v aider >/dev/null 2>&1; then
+									aider --message "%s"
+								else
+									echo -e "\033[33m[系统提示] 当前沙箱环境尚未安装 trae 或 aider 工具。\033[0m"
+									echo -e "您可以先输入 'exit' 退回普通终端，然后执行 \033[32mnpm install -g trae\033[0m 进行安装。"
+								fi
+								`, strings.ReplaceAll(req.input, `"`, `\"`), strings.ReplaceAll(req.input, `"`, `\"`))
+				cmdArgs = append(cmdArgs, shellCmd)
+
+				execCmd, err := docker.RuntimeCommand(context.Background(), cmdArgs...)
+				out := []byte{}
+				if err != nil {
+					out = []byte(fmt.Sprintf("执行错误: %v", err))
+				} else {
+					out, err = execCmd.CombinedOutput()
+					if err != nil {
+						global.LOG.Errorf("AI execution error: %v, out: %s", err, string(out))
+						if len(out) == 0 {
+							out = []byte(fmt.Sprintf("执行错误: %v", err))
+						}
+					}
+				}
+
+				if req.task != nil {
+					_ = aiRepo.CreateMessage(&model.AIMessage{
+						TaskID:  req.task.ID,
+						Role:    "agent",
+						Content: string(out),
+					})
+				}
+
+				previews, previewErr := upsertAIPreviews(sessionRepo, currentSession, req.task, req.instruction, string(out))
+				if previewErr != nil {
+					global.LOG.Errorf("Failed to upsert AI previews: %v", previewErr)
+				}
+
+				execFailed := err != nil
+				if req.task != nil {
+					if execFailed {
+						req.task.Status = "failed"
+					} else {
+						req.task.Status = "completed"
+					}
+					_ = aiRepo.UpdateTask(req.task)
+				}
+				if req.instruction != nil {
+					if execFailed {
+						req.instruction.Status = "failed"
+					} else {
+						req.instruction.Status = "completed"
+					}
+					_ = sessionRepo.UpdateInstruction(req.instruction)
+				}
+				if currentSession != nil {
+					if execFailed {
+						currentSession.CurrentStage = "failed"
+					} else if len(previews) > 0 {
+						currentSession.CurrentStage = "preview_ready"
+					} else {
+						currentSession.CurrentStage = "completed"
+					}
+					_ = sessionRepo.UpdateSession(currentSession)
+				}
+
+				formattedOut := strings.ReplaceAll(string(out), "\n", "\r\n")
+				if !strings.HasSuffix(formattedOut, "\r\n") {
+					formattedOut += "\r\n"
+				}
+
+				sendWsMsg(formattedOut)
+				sendWsMsg("\033[32m[AI Agent] > \033[0m")
+			}
+		}
+	}()
 
 	// 4. 读取 PTY 输出，推送到前端 WebSocket
 	go func() {
@@ -329,6 +636,43 @@ TRAE_EOF
 				// 去除信标本身的输出，替换为欢迎信息
 				outputStr = strings.ReplaceAll(outputStr, "\033[36m[CX-AI-HOOK:START-INTERACTIVE]\033[0m", welcomeMsg)
 				outputStr = strings.ReplaceAll(outputStr, "[CX-AI-HOOK:START-INTERACTIVE]", "")
+
+				if currentSession != nil && !pendingInstructionsLoaded {
+					pendingInstructionsLoaded = true
+					go func(session *model.AIDevSession) {
+						instructions, err := sessionRepo.GetPendingInstructionsBySessionID(session.ID)
+						if err != nil {
+							sendWsMsg(fmt.Sprintf("\r\n\033[33m[系统] 读取待执行指令失败: %s\033[0m\r\n", err.Error()))
+							return
+						}
+						if len(instructions) == 0 {
+							return
+						}
+
+						if currentTask == nil {
+							claims := authClaims
+							if claims == nil {
+								claims = &token.CustomClaims{UserId: userID}
+							}
+							if task, taskErr := ensureSessionTask(session, claims, instructions[0].Content); taskErr == nil {
+								currentTask = task
+							}
+						}
+						if currentTask == nil {
+							sendWsMsg("\r\n\033[33m[系统] 当前会话未能恢复任务，暂时无法自动执行待处理指令。\033[0m\r\n")
+							return
+						}
+
+						sendWsMsg(fmt.Sprintf("\r\n\033[36m[系统] 检测到 %d 条待执行开发指令，开始自动执行。\033[0m\r\n", len(instructions)))
+						for _, instruction := range instructions {
+							enqueueAIExecution(aiExecRequest{
+								input:       instruction.Content,
+								task:        currentTask,
+								instruction: instruction,
+							})
+						}
+					}(currentSession)
+				}
 			}
 
 			// 处理单次指令的信标 (暂不处理复杂的单次交互拦截，直接打印即可)
@@ -365,14 +709,7 @@ TRAE_EOF
 				continue
 			}
 
-			msg := WsMsg{
-				Type: "cmd",
-				Data: outputStr,
-			}
-			jsonMsg, _ := json.Marshal(msg)
-			if err := wsConn.WriteMessage(websocket.TextMessage, jsonMsg); err != nil {
-				break
-			}
+			sendWsMsg(outputStr)
 		}
 	}()
 
@@ -388,16 +725,6 @@ TRAE_EOF
 			var msg WsMsg
 			if err := json.Unmarshal(p, &msg); err != nil {
 				continue
-			}
-
-			// 辅助函数：安全地将字符串打包为 WebSocket JSON 发送
-			sendWsMsg := func(data string) {
-				responseMsg := WsMsg{
-					Type: "cmd",
-					Data: data,
-				}
-				jsonMsg, _ := json.Marshal(responseMsg)
-				_ = wsConn.WriteMessage(websocket.TextMessage, jsonMsg)
 			}
 
 			switch msg.Type {
@@ -457,8 +784,13 @@ TRAE_EOF
 								}
 								if err := aiRepo.CreateTask(newTask); err == nil {
 									currentTask = newTask
+									if currentSession != nil {
+										currentSession.LastTaskID = currentTask.ID
+										currentSession.CurrentStage = "interactive"
+										_ = sessionRepo.UpdateSession(currentSession)
+									}
 									// 可以通过 WebSocket 发送特殊事件，通知前端更新 URL (加上 ?task_id=)
-									_ = wsConn.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf(`{"type":"meta","task_id":%d}`, currentTask.ID)))
+									sendWsRaw(fmt.Sprintf(`{"type":"meta","task_id":%d}`, currentTask.ID))
 								}
 							}
 
@@ -473,72 +805,10 @@ TRAE_EOF
 
 							// 调用真实的容器内部智能体 (例如 trae)
 							// 这里通过 docker exec 在当前容器中单次执行命令，并捕获输出
-							sendWsMsg("\033[36m[AI Agent] 正在思考并执行...\033[0m\r\n")
-
-							go func(input string, task *model.AITask) {
-								// 使用 docker exec -i (不带 -t，因为这里只是捕获纯文本输出)
-								cmdArgs := []string{"exec", "-i", containerName, "sh", "-c"}
-
-								// 构造执行逻辑：先检查工具是否存在，存在则执行，不存在则友好提示
-								// 注意：这里使用的是单次运行模式 (One-shot)
-								shellCmd := fmt.Sprintf(`
-								if command -v trae >/dev/null 2>&1; then
-									trae --message "%s"
-								elif command -v aider >/dev/null 2>&1; then
-									aider --message "%s"
-								else
-									echo -e "\033[33m[系统提示] 当前沙箱环境尚未安装 trae 或 aider 工具。\033[0m"
-									echo -e "您可以先输入 'exit' 退回普通终端，然后执行 \033[32mnpm install -g trae\033[0m 进行安装。"
-								fi
-								`, strings.ReplaceAll(input, `"`, `\"`), strings.ReplaceAll(input, `"`, `\"`))
-
-								cmdArgs = append(cmdArgs, shellCmd)
-
-								execCmd, err := docker.RuntimeCommand(context.Background(), cmdArgs...)
-								if err != nil {
-									out := []byte(fmt.Sprintf("执行错误: %v", err))
-									if task != nil {
-										_ = aiRepo.CreateMessage(&model.AIMessage{
-											TaskID:  task.ID,
-											Role:    "agent",
-											Content: string(out),
-										})
-									}
-									sendWsMsg(string(out) + "\r\n\033[32m[AI Agent] > \033[0m")
-									return
-								}
-								out, err := execCmd.CombinedOutput()
-
-								// 将输出流式（或一次性）推回给前端终端
-								if err != nil {
-									global.LOG.Errorf("AI execution error: %v, out: %s", err, string(out))
-									if len(out) == 0 {
-										out = []byte(fmt.Sprintf("执行错误: %v", err))
-									}
-								}
-
-								// 持久化 AI 的回复
-								if task != nil {
-									_ = aiRepo.CreateMessage(&model.AIMessage{
-										TaskID:  task.ID,
-										Role:    "agent",
-										Content: string(out),
-									})
-								}
-
-								// 处理输出的换行符，适应 xterm.js (\n 替换为 \r\n)
-								formattedOut := strings.ReplaceAll(string(out), "\n", "\r\n")
-								if !strings.HasSuffix(formattedOut, "\r\n") {
-									formattedOut += "\r\n"
-								}
-
-								sendWsMsg(formattedOut)
-
-								// 重新打印提示符
-								sendWsMsg("\033[32m[AI Agent] > \033[0m")
-							}(userInput, currentTask)
-
-							// 这里的 return/continue 是在主循环里，所以不能阻塞，上面的逻辑已经用 go func 包装
+							enqueueAIExecution(aiExecRequest{
+								input: userInput,
+								task:  currentTask,
+							})
 							continue
 						}
 

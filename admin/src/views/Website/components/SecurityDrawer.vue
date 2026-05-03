@@ -333,6 +333,8 @@
 
 <script setup lang="ts">
 import type { Website } from "@/api/interface/website"
+import type { App } from "@/api/interface/apps"
+import type { Pipeline } from "@/api/interface/pipeline"
 import { computed, ref } from "vue"
 import { useDialog, useMessage } from "naive-ui"
 import { websiteUpdateAPI } from "@/api/modules/website"
@@ -340,7 +342,7 @@ import { ListAppInstalled } from "@/api/modules/apps"
 import { getSSHLoginLogs } from "@/api/modules/log"
 import { buildRuntimeDetailText } from "@/utils/runtime"
 import { listAllPipelines } from "@/utils/pipeline"
-import { hasWebsiteRuntimeMeta, resolveWebsiteBindingMeta } from "@/utils/websiteRuntime"
+import { getWebsiteIpv6Value, hasWebsiteRuntimeMeta, isHttpsWebsiteProtocol, resolveWebsiteBindingMeta } from "@/utils/websiteRuntime"
 import http from "@/api"
 import { formatTime } from "@/utils/date"
 import { Log } from "@/api/interface/log"
@@ -348,6 +350,16 @@ import { operateIPRule, searchFirewallRules } from "@/api/modules/host"
 import type { Host } from "@/api/interface/host"
 
 type SecurityPreset = "off" | "recommended" | "strict"
+type SecurityScanResult = {
+  ssh?: {
+    port?: string | number
+    permitRootLogin?: string
+    passwordAuthentication?: string
+  }
+  port?: {
+    exposed?: string[]
+  }
+}
 
 const emit = defineEmits(["confirm"])
 const message = useMessage()
@@ -370,14 +382,14 @@ const form = ref({
 })
 
 const securityLoading = ref(false)
-const sshInfo = ref<Record<string, any>>({})
+const sshInfo = ref<NonNullable<SecurityScanResult["ssh"]>>({})
 const exposedPorts = ref<string[]>([])
 const sshAlerts = ref<Log.SSHLoginLog[]>([])
 const operatingIP = ref("")
 const blockedIPs = ref<string[]>([])
 const blockedRuleItems = ref<Host.RuleInfo[]>([])
-const appInstallMap = ref<Record<number, any>>({})
-const pipelineMap = ref<Record<number, any>>({})
+const appInstallMap = ref<Record<number, App.AppInstalledInfo>>({})
+const pipelineMap = ref<Record<number, Pipeline.ResPipeline>>({})
 
 const rateLimitOptions = [
   { label: "关闭", value: "none" },
@@ -409,7 +421,7 @@ const enabledSummary = computed(() => {
 })
 
 const isHttpsWebsite = computed(() => {
-  return String(website.value.protocol || "").toLowerCase() === "https"
+  return isHttpsWebsiteProtocol(website.value)
 })
 
 const hostRiskCount = computed(() => {
@@ -525,7 +537,7 @@ async function loadSecuritySignals() {
   try {
     securityLoading.value = true
     const [scanRes, sshRes, firewallRes] = await Promise.all([
-      http.get<any>("/security/scan"),
+      http.get<SecurityScanResult>("/security/scan"),
       getSSHLoginLogs({ page: 1, limit: 5, ip: "", status: "Failed", username: "" }),
       searchFirewallRules({ page: 1, limit: 500, info: "", status: "all", strategy: "drop", type: "ip" }),
     ])
@@ -547,14 +559,14 @@ async function loadBindingMeta() {
   try {
     if (website.value.appInstallId) {
       const res = await ListAppInstalled()
-      const list = Array.isArray(res.data) ? res.data : []
-      const nextMap: Record<number, any> = {}
+      const list: App.AppInstalledInfo[] = Array.isArray(res.data) ? res.data : []
+      const nextMap: Record<number, App.AppInstalledInfo> = {}
       for (const item of list) nextMap[item.id] = item
       appInstallMap.value = nextMap
     }
     if (website.value.pipelineId) {
       const list = await listAllPipelines()
-      const nextMap: Record<number, any> = {}
+      const nextMap: Record<number, Pipeline.ResPipeline> = {}
       for (const item of list) nextMap[item.id] = item
       pipelineMap.value = nextMap
     }
@@ -642,8 +654,9 @@ function handleUnblockIP(ip: string) {
 
 function buildOtherDomains(row: Website.WebsiteDTO) {
   if (Array.isArray(row.domains)) {
-    return row.domains
-      .map((item: any) => (typeof item === "string" ? item : item?.domain))
+    const domains = row.domains as Array<string | { domain?: string }>
+    return domains
+      .map((item) => (typeof item === "string" ? item : item?.domain))
       .filter((item: string) => item && item !== row.primaryDomain)
       .join("\n")
   }
@@ -661,7 +674,7 @@ async function handleSave() {
       proxy: website.value.proxy || "",
       pipelineId: website.value.pipelineId,
       codeSource: website.value.codeSource,
-      IPV6: !!website.value.IPV6,
+      IPV6: getWebsiteIpv6Value(website.value),
       remark: website.value.remark || "",
       antiCrawler: form.value.antiCrawler,
       antiLeech: form.value.antiLeech,

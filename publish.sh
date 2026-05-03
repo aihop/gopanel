@@ -24,6 +24,12 @@ fi
 
 VERSION=$1
 TARGET_DIR="${LOCAL_DIST_DIR}/${VERSION}"
+if [ ! -d "$TARGET_DIR" ] && [[ "${VERSION}" != v* ]]; then
+  ALT_TARGET_DIR="${LOCAL_DIST_DIR}/v${VERSION}"
+  if [ -d "${ALT_TARGET_DIR}" ]; then
+    TARGET_DIR="${ALT_TARGET_DIR}"
+  fi
+fi
 
 echo "========================================"
 echo "🚀 开始发布 GoPanel 版本: ${VERSION}"

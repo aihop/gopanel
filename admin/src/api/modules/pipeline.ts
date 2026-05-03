@@ -30,6 +30,18 @@ export const getPipelineRecords = (params: { pipelineId: number; page: number; l
   return http.get<ResPage<Pipeline.ResRecord>>(`/pipeline/records`, params);
 };
 
+export const getPipelineReleases = (params: { pipelineId: number; page: number; limit: number }) => {
+  return http.get<ResPage<Pipeline.ResRelease>>(`/pipeline/releases`, params);
+};
+
+export const getPipelineRelease = (params: { id: number }) => {
+  return http.get<Pipeline.ResRelease>(`/pipeline/release`, params);
+};
+
+export const publishPipelineRelease = (params: { id: number }) => {
+  return http.post<Pipeline.ResRelease>(`/pipeline/release/publish`, params);
+};
+
 export const deletePipelineRecord = (params: { id: number }) => {
   return http.delete(`/pipeline/record`, params);
 };

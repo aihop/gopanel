@@ -16,12 +16,15 @@ func PipelineRouter(r fiber.Router) {
 		group.Post("/run", api.PipelineRun)
 		group.Post("/stop", api.PipelineStop)
 		group.Get("/records", api.PipelineRecordPage)
+		group.Get("/releases", api.PipelineReleasePage)
+		group.Get("/release", api.PipelineReleaseGet)
 		group.Get("/logs", api.PipelineLogs)
 
 		// 严格限制给 ADMIN（超级管理员），才能配流水线（搭架子）
 		adminOnlyGroup := group.Group("", middleware.JWT(constant.UserRoleAdmin))
 		adminOnlyGroup.Post("/", api.PipelineCreate)
 		adminOnlyGroup.Post("/detect", api.PipelineDetectRunnerPreset)
+		adminOnlyGroup.Post("/release/publish", api.PipelineReleasePublish)
 		adminOnlyGroup.Put("/", api.PipelineUpdate)
 		adminOnlyGroup.Delete("/", api.PipelineDelete)
 		adminOnlyGroup.Delete("/record", api.PipelineRecordDelete)

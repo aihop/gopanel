@@ -90,9 +90,32 @@ func Init() {
 		return
 	}
 
-	if err := global.DB.AutoMigrate(&model.Firewall{}, &model.Forward{}, &model.AITask{}, &model.AIMessage{}, &model.OperationLog{}, &model.LoginLog{}, &model.WebsiteDeploy{}); err != nil {
+	if err := repo.NewRelease(global.DB).MigrateTable(); err != nil {
+		sysLog.Println("Release table error", err)
+		return
+	}
+
+	if err := repo.NewAppDeploy(global.DB).MigrateTable(); err != nil {
+		sysLog.Println("AppDeploy table error", err)
+		return
+	}
+
+	if err := global.DB.AutoMigrate(&model.Firewall{}, &model.Forward{}, &model.AITask{}, &model.AIMessage{}, &model.OperationLog{}, &model.LoginLog{}, &model.LegacyWebsiteDeploy{}); err != nil {
 		sysLog.Println("AutoMigrate additional tables error", err)
 		return
+	}
+
+	if err := repo.NewAppDeploy(global.DB).SyncFromLegacy(); err != nil {
+		sysLog.Println("AppDeploy sync legacy data error", err)
+		return
+	}
+
+	if err := repo.NewRelease(global.DB).FixSharedReleaseDirs(); err != nil {
+		sysLog.Println("Release shared dir repair warning", err)
+	}
+
+	if err := repo.NewRelease(global.DB).EnsureUniquePipelineRecordIndex(); err != nil {
+		sysLog.Println("Release unique index repair warning", err)
 	}
 
 	if global.MonitorDB != nil {

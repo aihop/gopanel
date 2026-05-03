@@ -56,6 +56,7 @@ export namespace Pipeline {
     commitHash?: string;
     errorMessage: string;
     archiveFile: string;
+    imageTag?: string;
     runnerReleaseDir?: string;
     runnerContainerId?: string;
     runnerHostPort?: number;
@@ -63,6 +64,28 @@ export namespace Pipeline {
     runtimeKind?: string;
     runtimeMode?: string;
     runUser?: string;
+    released?: boolean;
+    activeWebsiteCount?: number;
+    activeWebsiteNames?: string[];
+  }
+
+  export interface ResRelease {
+    id: number;
+    createdAt: string;
+    updatedAt: string;
+    pipelineId: number;
+    pipelineRecordId: number;
+    version: string;
+    commitHash?: string;
+    sourceType: string;
+    imageTag?: string;
+    archiveFile?: string;
+    releaseDir?: string;
+    artifactMeta?: string;
+    status: string;
+    remark?: string;
+    activeWebsiteCount?: number;
+    activeWebsiteNames?: string[];
   }
 
   export interface ReqDetectRunnerPreset {
