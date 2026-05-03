@@ -15,4 +15,3 @@ func podmanMachineRegistriesGet(ctx context.Context) ([]string, error) {
 func podmanMachineRegistriesSet(ctx context.Context, mirrors []string) error {
 	return fmt.Errorf("unsupported platform")
 }
-

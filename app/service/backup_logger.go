@@ -197,4 +197,3 @@ func ReadBackupLogFromFile(key string) ([]string, error) {
 	}
 	return lines, nil
 }
-

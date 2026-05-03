@@ -3,61 +3,49 @@ package service
 import (
 	"bufio"
 	"fmt"
+	"github.com/aihop/gopanel/global"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
-
-	"github.com/aihop/gopanel/global"
 )
 
 type ProcCfg struct {
-	// 基本配置
-	Name        string `json:"name" validate:"required"`     // 程序名称 (对应 [program:xxx] 中的 xxx)
-	Command     string `json:"command"  validate:"required"` // 要执行的命令
-	Directory   string `json:"directory"`                    // 运行前切换到的目录
-	ProcessName string `json:"process_name"`                 // 进程名称 (默认为 %(program_name)s)
-	NumProcs    int    `json:"numprocs"`                     // 进程数量 (默认为1)
-	Priority    int    `json:"priority"`                     // 启动优先级 (数字越小优先级越高)
+	Name         string `json:"name" validate:"required"`
+	Command      string `json:"command"  validate:"required"`
+	Directory    string `json:"directory"`
+	ProcessName  string `json:"process_name"`
+	NumProcs     int    `json:"numprocs"`
+	Priority     int    `json:"priority"`
+	AutoStart    bool   `json:"autostart"`
+	AutoRestart  string `json:"autorestart"`
+	StartSecs    int    `json:"startsecs"`
+	StartRetries int    `json:"startretries"`
+	ExitCodes    []int  `json:"exitcodes"` // 基本配置
+	// 启动失败重试次数 (默认为3)
 
-	// 启动控制
-	AutoStart    bool   `json:"autostart"`    // 是否自动启动 (默认为true)
-	AutoRestart  string `json:"autorestart"`  // 自动重启策略 (false/true/unexpected)
-	StartSecs    int    `json:"startsecs"`    // 启动后多少秒认为启动成功 (默认为1)
-	StartRetries int    `json:"startretries"` // 启动失败重试次数 (默认为3)
-	ExitCodes    []int  `json:"exitcodes"`    // 被认为是正常退出的退出码 (默认为0,2)
-
-	// 停止控制
-	StopWaitSecs int    `json:"stopwaitsecs"` // 发送停止信号后等待的时间(秒)
-	StopAsGroup  bool   `json:"stopasgroup"`  // 是否停止整个进程组
-	KillAsGroup  bool   `json:"killasgroup"`  // 是否杀死整个进程组
-	StopSignal   string `json:"stopsignal"`   // 停止信号 (TERM, HUP, INT等)
-
-	// 日志配置
-	StdoutLogfile     string `json:"stdout_logfile"`          // stdout日志文件路径
-	StderrLogfile     string `json:"stderr_logfile"`          // stderr日志文件路径
-	StdoutLogMaxBytes string `json:"stdout_logfile_maxbytes"` // 日志文件最大大小 (如50MB)
-	StdoutLogBackups  int    `json:"stdout_logfile_backups"`  // 保留的日志备份数量
-	RedirectStderr    bool   `json:"redirect_stderr"`         // 是否将stderr重定向到stdout
-
+	StopWaitSecs      int    `json:"stopwaitsecs"`
+	StopAsGroup       bool   `json:"stopasgroup"`
+	KillAsGroup       bool   `json:"killasgroup"`
+	StopSignal        string `json:"stopsignal"`
+	StdoutLogfile     string `json:"stdout_logfile"`
+	StderrLogfile     string `json:"stderr_logfile"`
+	StdoutLogMaxBytes string `json:"stdout_logfile_maxbytes"`
+	StdoutLogBackups  int    `json:"stdout_logfile_backups"`
+	RedirectStderr    bool   `json:"redirect_stderr"`
+	Environment       map[   // 被认为是正常退出的退出码 (默认为0,2)
 	// 环境和工作目录
-	Environment map[string]string `json:"environment"` // 环境变量
-	User        string            `json:"user"`        // 运行用户
-	Umask       string            `json:"umask"`       // umask值 (如022)
-
-	// 高级选项
-	ServerURL     string `json:"serverurl"`     // 覆盖默认的server URL
-	Eventlistener bool   `json:"eventlistener"` // 是否为事件监听器
+	string]string `json:"environment"`
+	User          string `json:"user"`
+	Umask         string `json:"umask"`
+	ServerURL     string `json:"serverurl"`
+	Eventlistener bool   `json:"eventlistener"`
 }
 
-// ToConfigString 将 ProcCfg 转换为配置文件字符串
 func (p *ProcCfg) ToConfigString() string {
 	var builder strings.Builder
-
 	builder.WriteString(fmt.Sprintf("[program:%s]", p.Name))
 	builder.WriteString("\n")
-
-	// 基本配置
 	if p.Command != "" {
 		builder.WriteString(fmt.Sprintf("command=%s\n", p.Command))
 	}
@@ -73,8 +61,6 @@ func (p *ProcCfg) ToConfigString() string {
 	if p.Priority != 0 {
 		builder.WriteString(fmt.Sprintf("priority=%d\n", p.Priority))
 	}
-
-	// 启动控制
 	builder.WriteString(fmt.Sprintf("autostart=%v\n", p.AutoStart))
 	if p.AutoRestart != "" {
 		builder.WriteString(fmt.Sprintf("autorestart=%s\n", p.AutoRestart))
@@ -86,18 +72,17 @@ func (p *ProcCfg) ToConfigString() string {
 		builder.WriteString(fmt.Sprintf("startretries=%d\n", p.StartRetries))
 	}
 	if len(p.ExitCodes) > 0 {
-		codes := make([]string, len(p.ExitCodes))
+		codes := make([]string, // 环境变量
+			// 是否为事件监听器
+			len(p.ExitCodes))
 		for i, code := range p.ExitCodes {
 			codes[i] = fmt.Sprintf("%d", code)
 		}
 		builder.WriteString(fmt.Sprintf("exitcodes=%s\n", strings.Join(codes, ",")))
 	}
-
-	// 停止控制
 	if p.StopWaitSecs != 0 {
 		builder.WriteString(fmt.Sprintf("stopwaitsecs=%d\n", p.StopWaitSecs))
 	}
-	// 默认为false，不需要设置
 	if p.StopAsGroup {
 		builder.WriteString("stopasgroup=true\n")
 	}
@@ -107,8 +92,6 @@ func (p *ProcCfg) ToConfigString() string {
 	if p.StopSignal != "" {
 		builder.WriteString(fmt.Sprintf("stopsignal=%s\n", p.StopSignal))
 	}
-
-	// 日志配置
 	if p.StdoutLogfile != "" {
 		builder.WriteString(fmt.Sprintf("stdout_logfile=%s\n", p.StdoutLogfile))
 	}
@@ -124,8 +107,6 @@ func (p *ProcCfg) ToConfigString() string {
 	if p.RedirectStderr {
 		builder.WriteString("redirect_stderr=true\n")
 	}
-
-	// 环境和工作目录
 	if len(p.Environment) > 0 {
 		envVars := make([]string, 0, len(p.Environment))
 		for k, v := range p.Environment {
@@ -139,64 +120,43 @@ func (p *ProcCfg) ToConfigString() string {
 	if p.Umask != "" {
 		builder.WriteString(fmt.Sprintf("umask=%s\n", p.Umask))
 	}
-
-	// 高级选项
 	if p.ServerURL != "" {
 		builder.WriteString(fmt.Sprintf("serverurl=%s\n", p.ServerURL))
 	}
 	if p.Eventlistener {
 		builder.WriteString("eventlistener=true\n")
 	}
-
 	return builder.String()
 }
 
-type DaemonConfigManager struct {
-	FilePath string
-}
+type DaemonConfigManager struct{ FilePath string }
 
 func NewDaemonConfigManager() *DaemonConfigManager {
-	return &DaemonConfigManager{
-		FilePath: filepath.Join(global.CONF.System.BaseDir, "supervisord.ini"),
-	}
+	return &DaemonConfigManager{FilePath: filepath.Join(global.CONF.System.BaseDir, "supervisord.ini")}
 }
-
-// 从配置文件中读取并解析
 func (m *DaemonConfigManager) GetConfig() ([]*ProcCfg, error) {
 	file, err := os.Open(m.FilePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open config file: %v", err)
 	}
 	defer file.Close()
-
 	var configs []*ProcCfg
 	var currentCfg *ProcCfg
-
 	scanner := bufio.NewScanner(file)
 	sectionRegex := regexp.MustCompile(`^\[program:([^\]]+)\]$`)
 	keyValueRegex := regexp.MustCompile(`^([^=]+)\s*=\s*(.*)$`)
-
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
-
-		// 跳过空行和注释
 		if line == "" || strings.HasPrefix(line, ";") || strings.HasPrefix(line, "#") {
 			continue
 		}
-
-		// 检查是否是新的 [program:xxx] 部分
 		if matches := sectionRegex.FindStringSubmatch(line); matches != nil {
 			if currentCfg != nil {
 				configs = append(configs, currentCfg)
 			}
-			currentCfg = &ProcCfg{
-				Name:      matches[1],
-				AutoStart: true, // 默认值
-			}
+			currentCfg = &ProcCfg{Name: matches[1], AutoStart: true}
 			continue
 		}
-
-		// 解析键值对
 		if currentCfg != nil {
 			if matches := keyValueRegex.FindStringSubmatch(line); matches != nil {
 				key := strings.TrimSpace(matches[1])
@@ -205,34 +165,24 @@ func (m *DaemonConfigManager) GetConfig() ([]*ProcCfg, error) {
 			}
 		}
 	}
-
-	// 添加最后一个配置
 	if currentCfg != nil {
 		configs = append(configs, currentCfg)
 	}
-
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("error reading config file: %v", err)
 	}
-
 	return configs, nil
 }
-
-// 添加到配置文件
 func (m *DaemonConfigManager) AddConfig(cfg *ProcCfg) error {
 	configs, err := m.GetConfig()
 	if err != nil {
 		return err
 	}
-
-	// 检查是否已存在同名配置
 	for _, c := range configs {
 		if c.Name == cfg.Name {
 			return fmt.Errorf("program %s already exists", cfg.Name)
 		}
 	}
-
-	// 检查一下日志配置,是否设置，如果没设置，默认添加日志配置
 	if cfg.StdoutLogfile == "" {
 		cfg.StdoutLogfile = filepath.Join(global.CONF.System.LogPath, fmt.Sprintf("stdout_%s.log", cfg.Name))
 		cfg.StdoutLogMaxBytes = "50MB"
@@ -240,18 +190,14 @@ func (m *DaemonConfigManager) AddConfig(cfg *ProcCfg) error {
 	if cfg.StderrLogfile == "" {
 		cfg.RedirectStderr = true
 	}
-
 	configs = append(configs, cfg)
 	return m.saveConfigs(configs)
 }
-
-// UpdateConfig 更新现有配置
 func (m *DaemonConfigManager) UpdateConfig(cfg *ProcCfg) error {
 	configs, err := m.GetConfig()
 	if err != nil {
 		return err
 	}
-
 	found := false
 	for i, c := range configs {
 		if c.Name == cfg.Name {
@@ -260,21 +206,16 @@ func (m *DaemonConfigManager) UpdateConfig(cfg *ProcCfg) error {
 			break
 		}
 	}
-
 	if !found {
 		return fmt.Errorf("program %s not found", cfg.Name)
 	}
-
 	return m.saveConfigs(configs)
 }
-
-// DeleteConfig 删除配置
 func (m *DaemonConfigManager) DeleteConfig(name string) error {
 	configs, err := m.GetConfig()
 	if err != nil {
 		return err
 	}
-
 	newConfigs := make([]*ProcCfg, 0, len(configs))
 	found := false
 	for _, c := range configs {
@@ -284,35 +225,26 @@ func (m *DaemonConfigManager) DeleteConfig(name string) error {
 			newConfigs = append(newConfigs, c)
 		}
 	}
-
 	if !found {
 		return fmt.Errorf("program %s not found", name)
 	}
-
 	return m.saveConfigs(newConfigs)
 }
-
-// saveConfigs 保存所有配置到文件
 func (m *DaemonConfigManager) saveConfigs(configs []*ProcCfg) error {
 	file, err := os.Create(m.FilePath)
 	if err != nil {
 		return fmt.Errorf("failed to create config file: %v", err)
 	}
 	defer file.Close()
-
 	writer := bufio.NewWriter(file)
-
 	for _, cfg := range configs {
 		_, err := writer.WriteString(cfg.ToConfigString() + "\n\n")
 		if err != nil {
 			return fmt.Errorf("failed to write config: %v", err)
 		}
 	}
-
 	return writer.Flush()
 }
-
-// parseConfigKeyValue 解析单个键值对并设置到配置结构体中
 func (m *DaemonConfigManager) parseConfigKeyValue(cfg *ProcCfg, key, value string) {
 	switch key {
 	case "command":
@@ -364,48 +296,4 @@ func (m *DaemonConfigManager) parseConfigKeyValue(cfg *ProcCfg, key, value strin
 	case "eventlistener":
 		cfg.Eventlistener = parseBool(value, false)
 	}
-}
-
-// 辅助函数
-func parseInt(s string, defaultValue int) int {
-	var result int
-	_, err := fmt.Sscanf(s, "%d", &result)
-	if err != nil {
-		return defaultValue
-	}
-	return result
-}
-
-func parseBool(s string, defaultValue bool) bool {
-	switch strings.ToLower(s) {
-	case "true", "yes", "on", "1":
-		return true
-	case "false", "no", "off", "0":
-		return false
-	default:
-		return defaultValue
-	}
-}
-
-func parseIntSlice(s string) []int {
-	parts := strings.Split(s, ",")
-	var result []int
-	for _, part := range parts {
-		if num := parseInt(strings.TrimSpace(part), -999); num != -999 {
-			result = append(result, num)
-		}
-	}
-	return result
-}
-
-func parseEnvironment(s string) map[string]string {
-	env := make(map[string]string)
-	pairs := strings.Split(s, ",")
-	for _, pair := range pairs {
-		kv := strings.SplitN(pair, "=", 2)
-		if len(kv) == 2 {
-			env[strings.TrimSpace(kv[0])] = strings.TrimSpace(kv[1])
-		}
-	}
-	return env
 }

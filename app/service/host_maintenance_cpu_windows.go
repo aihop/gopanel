@@ -13,4 +13,3 @@ func (s *HostMaintenanceService) RelieveCPU(level int) (int, error) {
 	}
 	return level, nil
 }
-

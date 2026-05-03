@@ -21,12 +21,21 @@ type IAIDevSessionRepo interface {
 	GetPreviewsBySessionID(sessionID uint, limit int) ([]*model.AIPreview, error)
 	FindPreviewByURL(sessionID uint, previewURL string) (*model.AIPreview, error)
 	UpdatePreview(preview *model.AIPreview) error
+
+	CreateTimelineEvent(event *model.AITimelineEvent) error
+	GetTimelineEventsBySessionID(sessionID uint, limit int) ([]*model.AITimelineEvent, error)
+
+	CreateApproval(approval *model.AIApproval) error
+	GetApprovalByID(id uint) (*model.AIApproval, error)
+	GetApprovalsByUserID(userID uint, status string, limit int) ([]*model.AIApproval, error)
+	GetPendingApprovalBySessionID(sessionID uint) (*model.AIApproval, error)
+	UpdateApproval(approval *model.AIApproval) error
 }
 
 type aiDevSessionRepo struct{}
 
 func NewAIDevSessionRepo() IAIDevSessionRepo {
-	_ = global.DB.AutoMigrate(&model.AIDevSession{}, &model.AIInstruction{}, &model.AIPreview{})
+	_ = global.DB.AutoMigrate(&model.AIDevSession{}, &model.AIInstruction{}, &model.AIPreview{}, &model.AITimelineEvent{}, &model.AIApproval{})
 	return &aiDevSessionRepo{}
 }
 
@@ -113,4 +122,54 @@ func (r *aiDevSessionRepo) FindPreviewByURL(sessionID uint, previewURL string) (
 
 func (r *aiDevSessionRepo) UpdatePreview(preview *model.AIPreview) error {
 	return global.DB.Save(preview).Error
+}
+
+func (r *aiDevSessionRepo) CreateTimelineEvent(event *model.AITimelineEvent) error {
+	return global.DB.Create(event).Error
+}
+
+func (r *aiDevSessionRepo) GetTimelineEventsBySessionID(sessionID uint, limit int) ([]*model.AITimelineEvent, error) {
+	var events []*model.AITimelineEvent
+	db := global.DB.Where("session_id = ?", sessionID).Order("created_at desc")
+	if limit > 0 {
+		db = db.Limit(limit)
+	}
+	err := db.Find(&events).Error
+	return events, err
+}
+
+func (r *aiDevSessionRepo) CreateApproval(approval *model.AIApproval) error {
+	return global.DB.Create(approval).Error
+}
+
+func (r *aiDevSessionRepo) GetApprovalByID(id uint) (*model.AIApproval, error) {
+	var approval model.AIApproval
+	err := global.DB.Where("id = ?", id).First(&approval).Error
+	return &approval, err
+}
+
+func (r *aiDevSessionRepo) GetApprovalsByUserID(userID uint, status string, limit int) ([]*model.AIApproval, error) {
+	var approvals []*model.AIApproval
+	db := global.DB.Where("request_user_id = ?", userID).Order("updated_at desc")
+	if status != "" {
+		db = db.Where("status = ?", status)
+	}
+	if limit > 0 {
+		db = db.Limit(limit)
+	}
+	err := db.Find(&approvals).Error
+	return approvals, err
+}
+
+func (r *aiDevSessionRepo) GetPendingApprovalBySessionID(sessionID uint) (*model.AIApproval, error) {
+	var approval model.AIApproval
+	err := global.DB.
+		Where("session_id = ? AND status = ?", sessionID, "pending").
+		Order("created_at desc").
+		First(&approval).Error
+	return &approval, err
+}
+
+func (r *aiDevSessionRepo) UpdateApproval(approval *model.AIApproval) error {
+	return global.DB.Save(approval).Error
 }

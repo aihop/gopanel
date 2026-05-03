@@ -202,12 +202,55 @@
   - `views/Host/files.vue` 适合拆为工具栏、筛选区、表格列工厂、路径导航 composable、文件动作 composable
   - `views/Host/firewall.vue` 适合拆为概览区、规则工作台、列工厂、规则服务函数
   - `views/Host/process.vue` 适合拆为搜索工具栏、详情抽屉、进程/网络列配置，主页面保留 WebSocket 与分页状态调度
+  - `views/Host/Toolbox/Daemon.vue` 适合拆为顶部概览区、表格列工厂、Agent 状态 composable、守护进程动作 composable，主页面保留 useTable、tab 状态和弹窗引用
   - `views/Container/image/index.vue` 适合先抽顶部工具栏，再继续拆表格逻辑
+  - `views/Container/container/index.vue` 适合拆为列表工具栏、表格列工厂、列表数据 composable，主页面保留弹窗引用与批量操作编排
+  - `views/Container/container/operate/index.vue` 适合拆为基础信息、端口网络、挂载、进阶参数等表单区块，并把端口列配置与表单转换/校验 helper 抽离
+  - `views/Container/compose/index.vue` 适合拆为列表工具栏、创建抽屉、删除确认弹窗、表格列工厂和创建流程 composable，主页面保留列表查询、分页和编辑入口
+  - `views/Container/setting/index.vue` 适合拆为运行时状态头部、基础配置区块、全部配置编辑区、修复弹窗，并把运行时状态/保存/修复逻辑拆到页面级 composable
   - `views/Apps/components/AppsAll.vue` 适合拆为卡片列表、安装弹窗、详情抽屉、日志弹窗和安装流程 composable
   - `views/Apps/components/AppsInstalled.vue` 适合拆为已安装应用卡片列表、详情抽屉、卸载确认弹窗、运行/安装日志弹窗，以及独立的日志修复流 composable
   - `views/Dashboard/components/StatusCard.vue` 适合拆为基础信息概览条、CPU/内存/负载资源卡片、磁盘与 GPU/XPU 面板，并把数值格式化函数抽到共享 helper
   - `views/Website/SSL.vue` 适合拆为页面头部、证书相关弹层、表格列工厂，以及按“推送规则/日志流/页面状态”分层的 composable
 - 这类重构完成后，至少要检查改动文件诊断，确保结构调整没有引入模板或类型错误
+
+## 后端大文件重构约定
+
+- `app` 目录下的 Go 文件，`400` 行默认视为强提醒阈值；`600+` 基本都应优先拆分
+- `400` 不是死线；如果文件仍是单一主流程，可以暂时保留，但应先把 helper、校验、适配层、日志/预览等侧向逻辑抽走
+- 后端拆分优先使用“同 package 新文件 + 迁移整组函数”的方式，避免改动对外符号、路由注册和 service/repo 调用链
+- 拆分顺序优先：
+  1. handler 与 helper 分离
+  2. 主流程与日志/预览/状态探测分离
+  3. CRUD 与 repair/compat/utils 分离
+  4. runtime/provider 特化逻辑分离
+- 当前已验证可行的后端拆分模式：
+  - `app/repo/pipeline.go` 适合拆为 `pipeline_repo`、`pipeline_record_repo`、`release_repo`、`release_repo_repair`
+  - `app/api/ai_agent_rest.go` 适合拆为 group、task、session、preview 四组
+  - `app/api/container.go` 适合拆为 container 主体、network、volume、compose
+  - `app/api/app_install.go` 适合拆为 install 主入口、installed、本地安装、日志流
+  - `app/api/file.go` 适合拆为 manage、content、transfer 三层
+  - `app/service/pipeline.go` 适合把 step 函数抽到独立文件，主文件保留编排入口
+  - `app/service/pipeline_utils.go` 适合拆为 detect、execute、runner、image_detect、artifact 五层
+  - `app/service/db_manager.go` 适合拆为表结构查询、记录操作、核心 service
+  - `app/service/pipeline_application.go` 适合拆为发布记录流、元信息 helper、主 service
+  - `app/service/app_deploy.go` 适合拆为 website 发布动作、runtime 探测/切换、部署元信息 helper
+  - `app/service/apps_utils.go` 适合拆为 runtime 状态、compose env 校验、安装文件流程、compose compat、命令展开 helper
+  - `app/service/container.go` 适合先拆为 container 壳文件、列表链路、运行时管理，再把列表管理二次细分
+  - `app/service/container_utils.go` 适合拆为 stats、config、inspect 三组 helper
+  - `app/service/container_logs.go` 适合拆为主日志流、GPC 直连、journald/podman 日志兜底
+  - `app/service/container_docker.go` 适合拆为 runtime 状态读取、daemon 配置写入、运行时控制
+  - `app/service/container_network.go` 适合拆为主接口、podman 适配、static IP 兜底逻辑
+  - `app/service/website_engine.go` 适合拆为部署主流程、镜像/入口探测、runner 配置 helper
+  - `app/service/firewall.go` 适合拆为 service 主入口、rule loader、rule filter/normalize
+  - `app/service/caddy_utils.go` 适合拆为基础读写、server block 修改、查询/解析 helper
+  - `app/service/file.go` 适合拆为 tree、content、gpc 适配、主 service
+  - `app/service/ssl.go` 适合拆为主 service、ACME 签发流程、证书文件/域名 helper
+  - `app/api/ai_agent.go` 适合拆为主 WebSocket handler、preview/workdir helper、workspace/runtime helper、PTY 输出转发 helper
+- 后端拆分后至少做一项真实验证，优先顺序：
+  1. `gofmt`
+  2. 目标 package `go test`
+  3. 关键改动文件诊断为空或仅剩低价值 hint
 
 ## API 设计原则
 

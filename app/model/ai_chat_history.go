@@ -110,3 +110,47 @@ type AIPreview struct {
 func (AIPreview) TableName() string {
 	return "ai_previews"
 }
+
+// AITimelineEvent 记录开发会话中的结构化过程事件，供手机端按时间线展示。
+type AITimelineEvent struct {
+	ID            uint      `gorm:"primaryKey" json:"id"`
+	CreatedAt     time.Time `json:"createdAt"`
+	UpdatedAt     time.Time `json:"updatedAt"`
+	SessionID     uint      `gorm:"column:session_id;type:integer;not null;index" json:"sessionId"`
+	TaskID        uint      `gorm:"column:task_id;type:integer;index" json:"taskId"`
+	InstructionID uint      `gorm:"column:instruction_id;type:integer;index" json:"instructionId"`
+	EventType     string    `gorm:"column:event_type;type:varchar(64);not null;index" json:"eventType"`
+	Stage         string    `gorm:"column:stage;type:varchar(64)" json:"stage"`
+	Title         string    `gorm:"column:title;type:varchar(255);not null" json:"title"`
+	Content       string    `gorm:"column:content;type:text" json:"content"`
+	Status        string    `gorm:"column:status;type:varchar(32);default:'info'" json:"status"`
+	Meta          string    `gorm:"column:meta;type:text" json:"meta"`
+}
+
+func (AITimelineEvent) TableName() string {
+	return "ai_timeline_events"
+}
+
+// AIApproval 记录 AI 开发过程中的人工审批节点。
+// 第一阶段仅覆盖“危险开发指令”的允许/拒绝，后续再补更多动作类型与审计细节。
+type AIApproval struct {
+	ID             uint       `gorm:"primaryKey" json:"id"`
+	CreatedAt      time.Time  `json:"createdAt"`
+	UpdatedAt      time.Time  `json:"updatedAt"`
+	SessionID      uint       `gorm:"column:session_id;type:integer;not null;index" json:"sessionId"`
+	TaskID         uint       `gorm:"column:task_id;type:integer;index" json:"taskId"`
+	InstructionID  uint       `gorm:"column:instruction_id;type:integer;not null;index" json:"instructionId"`
+	RequestUserID  uint       `gorm:"column:request_user_id;type:integer;not null;index" json:"requestUserId"`
+	ApproveUserID  uint       `gorm:"column:approve_user_id;type:integer;index" json:"approveUserId"`
+	Title          string     `gorm:"column:title;type:varchar(255);not null" json:"title"`
+	Content        string     `gorm:"column:content;type:text;not null" json:"content"`
+	RiskLevel      string     `gorm:"column:risk_level;type:varchar(32);default:'medium'" json:"riskLevel"`
+	Status         string     `gorm:"column:status;type:varchar(32);default:'pending'" json:"status"`
+	Decision       string     `gorm:"column:decision;type:varchar(32)" json:"decision"`
+	DecisionReason string     `gorm:"column:decision_reason;type:text" json:"decisionReason"`
+	DecisionAt     *time.Time `gorm:"column:decision_at" json:"decisionAt,omitempty"`
+}
+
+func (AIApproval) TableName() string {
+	return "ai_approvals"
+}

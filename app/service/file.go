@@ -1,24 +1,8 @@
 package service
 
 import (
-	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"io/fs"
-	"os"
-	"os/exec"
-	"path"
-	"path/filepath"
-	"strings"
-	"time"
-	"unicode/utf8"
-
-	"golang.org/x/net/html/charset"
-	"golang.org/x/text/encoding/simplifiedchinese"
-	"golang.org/x/text/transform"
-
 	"github.com/aihop/gopanel/app/dto/request"
 	"github.com/aihop/gopanel/app/dto/response"
 	"github.com/aihop/gopanel/buserr"
@@ -26,14 +10,18 @@ import (
 	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/utils/common"
 	"github.com/aihop/gopanel/utils/files"
-	"github.com/aihop/gopanel/utils/gpc"
 	"github.com/aihop/gopanel/utils/token"
 	"github.com/gofiber/fiber/v3"
+	"io/fs"
+	"os"
+	"os/exec"
+	"path"
+	"path/filepath"
+	"strings"
+	"time"
 )
 
-type FileService struct {
-	c fiber.Ctx
-}
+type FileService struct{ c fiber.Ctx }
 
 func checkFilePermission(ctx fiber.Ctx, reqPaths ...string) error {
 	if ctx == nil {
@@ -43,13 +31,11 @@ func checkFilePermission(ctx fiber.Ctx, reqPaths ...string) error {
 	if !ok || claims == nil {
 		return errors.New("unauthorized")
 	}
-
 	if claims.Role == constant.UserRoleSubAdmin {
 		baseDir := filepath.Clean(claims.FileBaseDir)
 		if baseDir == "" || baseDir == "/" || baseDir == "." {
 			return errors.New("sub_admin account is not configured with a valid base directory")
 		}
-
 		for _, p := range reqPaths {
 			cleanPath := filepath.Clean(p)
 			if !strings.HasPrefix(cleanPath, baseDir) {
@@ -84,14 +70,11 @@ type IFileService interface {
 	BatchCheckFiles(req request.FilePathsCheck) []response.ExistFileInfo
 }
 
-var filteredPaths = []string{
-	"/.gopanel_clash",
-}
+var filteredPaths = []string{"/.gopanel_clash"}
 
 func NewIFileService() *FileService {
 	return &FileService{}
 }
-
 func (f *FileService) GetFileList(op request.FileOption) (response.FileInfo, error) {
 	var fileInfo response.FileInfo
 	data, err := os.Stat(op.Path)
@@ -111,7 +94,6 @@ func (f *FileService) GetFileList(op request.FileOption) (response.FileInfo, err
 	fileInfo.FileInfo = *info
 	return fileInfo, nil
 }
-
 func (f *FileService) SearchUploadWithPage(req *request.SearchUploadWithPage) (int64, interface{}, error) {
 	var (
 		files    []response.UploadInfo
@@ -122,11 +104,7 @@ func (f *FileService) SearchUploadWithPage(req *request.SearchUploadWithPage) (i
 			return nil
 		}
 		if !info.IsDir() {
-			files = append(files, response.UploadInfo{
-				CreatedAt: info.ModTime().Format(constant.DateTimeLayout),
-				Size:      int(info.Size()),
-				Name:      info.Name(),
-			})
+			files = append(files, response.UploadInfo{CreatedAt: info.ModTime().Format(constant.DateTimeLayout), Size: int(info.Size()), Name: info.Name()})
 		}
 		return nil
 	})
@@ -141,82 +119,6 @@ func (f *FileService) SearchUploadWithPage(req *request.SearchUploadWithPage) (i
 	}
 	return int64(total), backData, nil
 }
-
-func (f *FileService) GetFileTree(op request.FileOption) ([]response.FileTree, error) {
-	var treeArray []response.FileTree
-	if _, err := os.Stat(op.Path); err != nil && os.IsNotExist(err) {
-		return treeArray, nil
-	}
-	info, err := files.NewFileInfo(op.FileOption)
-	if err != nil {
-		return nil, err
-	}
-	node := response.FileTree{
-		ID:        common.GetUuid(),
-		Name:      info.Name,
-		Path:      info.Path,
-		IsDir:     info.IsDir,
-		Extension: info.Extension,
-	}
-	err = f.buildFileTree(&node, info.Items, op, 2)
-	if err != nil {
-		return nil, err
-	}
-	return append(treeArray, node), nil
-}
-
-func shouldFilterPath(path string) bool {
-	cleanedPath := filepath.Clean(path)
-	for _, filteredPath := range filteredPaths {
-		cleanedFilteredPath := filepath.Clean(filteredPath)
-		if cleanedFilteredPath == cleanedPath || strings.HasPrefix(cleanedPath, cleanedFilteredPath+"/") {
-			return true
-		}
-	}
-	return false
-}
-
-// 递归构建文件树(只取当前目录以及当前目录下的第一层子节点)
-func (f *FileService) buildFileTree(node *response.FileTree, items []*files.FileInfo, op request.FileOption, level int) error {
-	for _, v := range items {
-		if shouldFilterPath(v.Path) {
-			global.LOG.Infof("File Tree: Skipping %s due to filter\n", v.Path)
-			continue
-		}
-		childNode := response.FileTree{
-			ID:        common.GetUuid(),
-			Name:      v.Name,
-			Path:      v.Path,
-			IsDir:     v.IsDir,
-			Extension: v.Extension,
-		}
-		if level > 1 && v.IsDir {
-			if err := f.buildChildNode(&childNode, v, op, level); err != nil {
-				return err
-			}
-		}
-
-		node.Children = append(node.Children, childNode)
-	}
-	return nil
-}
-
-func (f *FileService) buildChildNode(childNode *response.FileTree, fileInfo *files.FileInfo, op request.FileOption, level int) error {
-	op.Path = fileInfo.Path
-	subInfo, err := files.NewFileInfo(op.FileOption)
-	if err != nil {
-		// 使用跨平台的权限判断，避免直接依赖 golang.org/x/sys/unix 常量
-		if os.IsPermission(err) || errors.Is(err, os.ErrPermission) {
-			global.LOG.Infof("File Tree: Skipping %s due to permission denied\n", fileInfo.Path)
-			return nil
-		}
-		global.LOG.Errorf("File Tree: Skipping %s due to error: %s\n", fileInfo.Path, err.Error())
-		return nil
-	}
-
-	return f.buildFileTree(childNode, subInfo.Items, op, level-1)
-}
-
 func (f *FileService) Create(op request.FileCreate) error {
 	if files.IsInvalidChar(op.Path) {
 		return buserr.New("ErrInvalidChar")
@@ -257,7 +159,6 @@ func (f *FileService) Create(op request.FileCreate) error {
 	}
 	return nil
 }
-
 func (f *FileService) Delete(op request.FileDelete) error {
 	if op.IsDir {
 		excludeDir := global.CONF.System.BaseDir
@@ -266,10 +167,6 @@ func (f *FileService) Delete(op request.FileDelete) error {
 		}
 	}
 	fo := files.NewFileOp()
-	// recycleBinStatus, _ := settingRepo.Get(settingRepo.WithByKey("FileRecycleBin"))
-	// if recycleBinStatus.Value == "disable" {
-	// 	op.ForceDelete = true
-	// }
 	if op.ForceDelete {
 		if op.IsDir {
 			if err := fo.DeleteDir(op.Path); err != nil {
@@ -289,14 +186,8 @@ func (f *FileService) Delete(op request.FileDelete) error {
 			return nil
 		}
 	}
-	// 暂时忽略回收站
 	return nil
-	// if err := NewIRecycleBinService().Create(request.RecycleBinCreate{SourcePath: op.Path}); err != nil {
-	// 	return err
-	// }
-	// return favoriteRepo.Delete(favoriteRepo.WithByPath(op.Path))
 }
-
 func (f *FileService) BatchDelete(op request.FileBatchDelete) error {
 	fo := files.NewFileOp()
 	if op.IsDir {
@@ -326,7 +217,6 @@ func (f *FileService) BatchDelete(op request.FileBatchDelete) error {
 	}
 	return nil
 }
-
 func (f *FileService) ChangeMode(op request.FileCreate) error {
 	fo := files.NewFileOp()
 	if err := fo.ChmodR(op.Path, op.Mode, op.Sub); err != nil {
@@ -337,7 +227,6 @@ func (f *FileService) ChangeMode(op request.FileCreate) error {
 	}
 	return nil
 }
-
 func (f *FileService) BatchChangeModeAndOwner(op request.FileRoleReq) error {
 	fo := files.NewFileOp()
 	for _, path := range op.Paths {
@@ -352,9 +241,7 @@ func (f *FileService) BatchChangeModeAndOwner(op request.FileRoleReq) error {
 		}
 	}
 	return nil
-
 }
-
 func (f *FileService) ChangeOwner(req request.FileRoleUpdate) error {
 	fo := files.NewFileOp()
 	if err := fo.ChownR(req.Path, req.User, req.Group, req.Sub); err != nil {
@@ -365,7 +252,6 @@ func (f *FileService) ChangeOwner(req request.FileRoleUpdate) error {
 	}
 	return nil
 }
-
 func (f *FileService) Compress(c request.FileCompress) error {
 	fo := files.NewFileOp()
 	if !c.Replace && fo.Stat(filepath.Join(c.Dst, c.Name)) {
@@ -373,7 +259,6 @@ func (f *FileService) Compress(c request.FileCompress) error {
 	}
 	return fo.Compress(c.Files, c.Dst, c.Name, files.CompressType(c.Type), c.Secret)
 }
-
 func (f *FileService) DeCompress(c request.FileDeCompress) error {
 	fo := files.NewFileOp()
 	if c.Type == "tar" && len(c.Secret) != 0 {
@@ -381,188 +266,6 @@ func (f *FileService) DeCompress(c request.FileDeCompress) error {
 	}
 	return fo.Decompress(c.Path, c.Dst, files.CompressType(c.Type), c.Secret)
 }
-
-func (f *FileService) GetContent(op request.FileContentReq) (response.FileInfo, error) {
-	info, err := files.NewFileInfo(files.FileOption{
-		Path:     op.Path,
-		Expand:   true,
-		IsDetail: op.IsDetail,
-	})
-	if err != nil {
-		if isPermissionErr(err) {
-			return f.getContentViaGpc(op)
-		}
-		return response.FileInfo{}, err
-	}
-
-	content := []byte(info.Content)
-	if len(content) > 1024 {
-		content = content[:1024]
-	}
-	if !utf8.Valid(content) {
-		_, decodeName, _ := charset.DetermineEncoding(content, "")
-		if decodeName == "windows-1252" {
-			reader := strings.NewReader(info.Content)
-			item := transform.NewReader(reader, simplifiedchinese.GBK.NewDecoder())
-			contents, err := io.ReadAll(item)
-			if err != nil {
-				return response.FileInfo{}, err
-			}
-			info.Content = string(contents)
-		}
-	}
-	return response.FileInfo{FileInfo: *info}, nil
-}
-
-func (f *FileService) SaveContent(edit request.FileEdit) error {
-	info, err := files.NewFileInfo(files.FileOption{
-		Path:   edit.Path,
-		Expand: false,
-	})
-	if err != nil {
-		if isPermissionErr(err) {
-			return f.writeContentViaGpc(edit.Path, edit.Content, 0)
-		}
-		return err
-	}
-
-	fo := files.NewFileOp()
-	if err := fo.WriteFile(edit.Path, strings.NewReader(edit.Content), info.FileMode); err != nil {
-		if isPermissionErr(err) {
-			return f.writeContentViaGpc(edit.Path, edit.Content, int(info.FileMode.Perm()))
-		}
-		return err
-	}
-	return nil
-}
-
-func isPermissionErr(err error) bool {
-	return err != nil && (os.IsPermission(err) || errors.Is(err, os.ErrPermission))
-}
-
-func (f *FileService) getFileListViaGpc(op request.FileOption) (response.FileInfo, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	resp, err := gpc.Do(ctx, "FILE_LIST", map[string]interface{}{
-		"path":       op.Path,
-		"page":       op.Page,
-		"limit":      op.Limit,
-		"sortBy":     op.SortBy,
-		"sortOrder":  op.SortOrder,
-		"showHidden": op.ShowHidden,
-	})
-	if err != nil {
-		return response.FileInfo{}, err
-	}
-	var out files.FileInfo
-	if err := json.Unmarshal([]byte(resp.Output), &out); err != nil {
-		return response.FileInfo{}, err
-	}
-	return response.FileInfo{FileInfo: out}, nil
-}
-
-func (f *FileService) getContentViaGpc(op request.FileContentReq) (response.FileInfo, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	resp, err := gpc.Do(ctx, "FILE_READ", map[string]interface{}{
-		"path": op.Path,
-	})
-	if err != nil {
-		return response.FileInfo{}, err
-	}
-	var out files.FileInfo
-	if err := json.Unmarshal([]byte(resp.Output), &out); err != nil {
-		return response.FileInfo{}, err
-	}
-
-	content := []byte(out.Content)
-	if len(content) > 1024 {
-		content = content[:1024]
-	}
-	if !utf8.Valid(content) {
-		_, decodeName, _ := charset.DetermineEncoding(content, "")
-		if decodeName == "windows-1252" {
-			reader := strings.NewReader(out.Content)
-			item := transform.NewReader(reader, simplifiedchinese.GBK.NewDecoder())
-			contents, err := io.ReadAll(item)
-			if err != nil {
-				return response.FileInfo{}, err
-			}
-			out.Content = string(contents)
-		}
-	}
-	return response.FileInfo{FileInfo: out}, nil
-}
-
-func (f *FileService) writeContentViaGpc(path string, content string, mode int) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	params := map[string]interface{}{
-		"path":    path,
-		"content": content,
-	}
-	if mode > 0 {
-		params["mode"] = mode
-	}
-	_, err := gpc.Do(ctx, "FILE_WRITE", params)
-	return err
-}
-
-func (f *FileService) mkdirViaGpc(path string, mode int) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	params := map[string]interface{}{
-		"path": path,
-	}
-	if mode > 0 {
-		params["mode"] = mode
-	}
-	_, err := gpc.Do(ctx, "FILE_MKDIR", params)
-	return err
-}
-
-func (f *FileService) createFileViaGpc(path string, content string, mode int) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	params := map[string]interface{}{
-		"path":    path,
-		"content": content,
-	}
-	if mode > 0 {
-		params["mode"] = mode
-	}
-	_, err := gpc.Do(ctx, "FILE_CREATE", params)
-	return err
-}
-
-func (f *FileService) removeViaGpc(path string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	_, err := gpc.Do(ctx, "FILE_REMOVE", map[string]interface{}{"path": path})
-	return err
-}
-
-func (f *FileService) chmodViaGpc(path string, mode int) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	_, err := gpc.Do(ctx, "FILE_CHMOD", map[string]interface{}{
-		"path": path,
-		"mode": mode,
-	})
-	return err
-}
-
-func (f *FileService) chownViaGpc(path string, user string, group string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	_, err := gpc.Do(ctx, "FILE_CHOWN", map[string]interface{}{
-		"path":  path,
-		"user":  user,
-		"group": group,
-	})
-	return err
-}
-
 func (f *FileService) ChangeName(req request.FileRename) error {
 	if files.IsInvalidChar(req.NewName) {
 		return buserr.New("ErrInvalidChar")
@@ -570,13 +273,11 @@ func (f *FileService) ChangeName(req request.FileRename) error {
 	fo := files.NewFileOp()
 	return fo.Rename(req.OldName, req.NewName)
 }
-
 func (f *FileService) Wget(w request.FileWget) (string, error) {
 	fo := files.NewFileOp()
 	key := "file-wget-" + common.GetUuid()
 	return key, fo.DownloadFileWithProcess(w.Url, filepath.Join(w.Path, w.Name), key, w.IgnoreCertificate)
 }
-
 func (f *FileService) MvFile(m request.FileMove) error {
 	fo := files.NewFileOp()
 	if !fo.Stat(m.NewPath) {
@@ -602,7 +303,6 @@ func (f *FileService) MvFile(m request.FileMove) error {
 			}
 		}
 	}
-
 	var errString string
 	for _, err := range errs {
 		errString += err.Error() + "\n"
@@ -612,7 +312,6 @@ func (f *FileService) MvFile(m request.FileMove) error {
 	}
 	return nil
 }
-
 func (f *FileService) FileDownload(d request.FileDownload) (string, error) {
 	filePath := d.Paths[0]
 	if d.Compress {
@@ -628,7 +327,6 @@ func (f *FileService) FileDownload(d request.FileDownload) (string, error) {
 	}
 	return filePath, nil
 }
-
 func (f *FileService) DirSize(req request.DirSizeReq) (response.DirSizeRes, error) {
 	var (
 		res response.DirSizeRes
@@ -657,7 +355,6 @@ func (f *FileService) DirSize(req request.DirSizeReq) (response.DirSizeRes, erro
 	res.Size = size
 	return res, nil
 }
-
 func (f *FileService) ReadLogByLine(req request.FileReadByLineReq) (*response.FileLineContent, error) {
 	logFilePath := ""
 	switch req.Type {
@@ -673,7 +370,6 @@ func (f *FileService) ReadLogByLine(req request.FileReadByLineReq) (*response.Fi
 	case "mariadb-slow-logs":
 		logFilePath = path.Join(global.CONF.System.BaseDir, fmt.Sprintf("apps/mariadb/%s/db/data/GoPanel-slow.log", req.Name))
 	}
-
 	lines, isEndOfFile, total, err := files.ReadFileByLine(logFilePath, req.Page, req.Limit, req.Latest)
 	if err != nil {
 		return nil, err
@@ -685,27 +381,14 @@ func (f *FileService) ReadLogByLine(req request.FileReadByLineReq) (*response.Fi
 		}
 		lines = append(preLines, lines...)
 	}
-
-	res := &response.FileLineContent{
-		Content: strings.Join(lines, "\n"),
-		End:     isEndOfFile,
-		Path:    logFilePath,
-		Total:   total,
-		Lines:   lines,
-	}
+	res := &response.FileLineContent{Content: strings.Join(lines, "\n"), End: isEndOfFile, Path: logFilePath, Total: total, Lines: lines}
 	return res, nil
 }
-
 func (f *FileService) BatchCheckFiles(req request.FilePathsCheck) []response.ExistFileInfo {
 	fileList := make([]response.ExistFileInfo, 0, len(req.Paths))
 	for _, filePath := range req.Paths {
 		if info, err := os.Stat(filePath); err == nil {
-			fileList = append(fileList, response.ExistFileInfo{
-				Size:    float64(info.Size()),
-				Name:    info.Name(),
-				Path:    filePath,
-				ModTime: info.ModTime(),
-			})
+			fileList = append(fileList, response.ExistFileInfo{Size: float64(info.Size()), Name: info.Name(), Path: filePath, ModTime: info.ModTime()})
 		}
 	}
 	return fileList

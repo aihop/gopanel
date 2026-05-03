@@ -20,99 +20,21 @@
       :class="{ mask: dockerStatus !== 'Running' }"
     >
       <template #rightButton>
-        <n-space class="flex flex-col justify-end sm:flex-row">
-          <div class="w-[200px]">
-            <n-select
-              v-model:value="searchState"
-              @update:value="search"
-              clearable
-              :options="stateOptions"
-            >
-              <template #header>{{ $t("commons.table.status") }}</template>
-            </n-select>
-          </div>
-          <TableColumnSelect
-            :columns="columnSettings"
-            storage-key="containerColumn"
-            size="medium"
-            button-label="列设置"
-            @update:columns="handleColumnSettingsChange"
-          />
-        </n-space>
-      </template>
-      <template #toolbar>
-        <div class="flex w-full flex-col gap-4 md:flex-row md:justify-between py-3">
-          <div class="flex flex-wrap gap-4">
-            <n-button
-              type="primary"
-              @click="onOpenDialog('create')"
-            >
-              {{ $t("container.create") }}
-            </n-button>
-            <n-button
-              type="primary"
-              ghost
-              @click="onClean()"
-            >
-              {{ $t("container.containerPrune") }}
-            </n-button>
-
-            <n-button-group>
-              <n-button
-                :disabled="checkStatus('start', null)"
-                @click="onOperate('start', null)"
-              >
-                {{ $t("container.start") }}
-              </n-button>
-              <n-button
-                :disabled="checkStatus('stop', null)"
-                @click="onOperate('stop', null)"
-              >
-                {{ $t("container.stop") }}
-              </n-button>
-              <n-button
-                :disabled="checkStatus('restart', null)"
-                @click="onOperate('restart', null)"
-              >
-                {{ $t("container.restart") }}
-              </n-button>
-              <n-button
-                :disabled="checkStatus('kill', null)"
-                @click="onOperate('kill', null)"
-              >
-                {{ $t("container.kill") }}
-              </n-button>
-              <n-button
-                :disabled="checkStatus('pause', null)"
-                @click="onOperate('pause', null)"
-              >
-                {{ $t("container.pause") }}
-              </n-button>
-              <n-button
-                :disabled="checkStatus('unpause', null)"
-                @click="onOperate('unpause', null)"
-              >
-                {{ $t("container.unpause") }}
-              </n-button>
-              <n-button
-                :disabled="checkStatus('remove', null)"
-                @click="onOperate('remove', null)"
-              >
-                {{ $t("container.remove") }}
-              </n-button>
-            </n-button-group>
-          </div>
-          <div class="flex flex-row gap-2 md:flex-col lg:flex-row">
-            <TableSetting
-              title="container-refresh"
-              @search="refresh()"
-            />
-            <TableSearch
-              @search="search()"
-              v-model:searchName="searchName"
-            />
-          </div>
-        </div>
+        <ContainerListToolbar
+          :search-state="searchState"
+          :search-name="searchName"
+          :state-options="stateOptions"
+          :column-settings="columnSettings"
+          :bulk-actions="bulkActions"
+          @update:search-state="handleSearchStateChange"
+          @update:search-name="searchName = $event"
+          @update:columns="handleColumnSettingsChange"
+          @search="search"
+          @refresh="refresh"
+          @create="onOpenDialog('create')"
+          @prune="onClean"
+          @bulk-operate="onOperate($event, null)"
+        />
       </template>
       <template #main>
         <ComplexTable
@@ -196,29 +118,23 @@ import ContainerLogDialog from "@/views/Container/container/log/index.vue"
 import TerminalDialog from "@/views/Container/container/terminal/index.vue"
 import CodeDialog from "@/components/CodeDialog.vue"
 import OpDialog from "@/components/OpDialog.vue"
+import ContainerListToolbar from "@/views/Container/container/ContainerListToolbar.vue"
 import LayoutContent from "@/components/LayoutContent.vue"
 import ComplexTable from "@/components/ComplexTable.vue"
-import TableSearch from "@/components/TableSearch.vue"
-import TableSetting from "@/components/TableSetting.vue"
 
-import { reactive, onMounted, ref, computed, h } from "vue"
+import { onMounted, ref, computed } from "vue"
 import {
-	containerStatsAPI,
 	containerOperator,
 	inspect,
-	loadContainerInfo,
-	loadInstanceStatus,
-	containerListAPI
+	loadContainerInfo
 } from "@/api/modules/container"
 import { type Container } from "@/api/interface/container"
 import { t } from "@/i18n"
 import { useRouter } from "vue-router"
-import { NButton, NSpace, NDropdown, NTag } from "naive-ui"
-import TableColumnSelect from "@/components/TableColumnSelect.vue"
-import { buildRuntimeSummaryText, getRuntimeKindLabel, getRuntimeModeLabel, getRunUserLabel } from "@/utils/runtime"
+import { buildContainerRuntimeSummary, createColumnSettings, createContainerColumns, type ColumnSetting } from "@/views/Container/container/containerTableColumns"
+import { useContainerListData } from "@/views/Container/container/useContainerListData"
 
 const router = useRouter()
-
 const stateOptions = computed(() => [
 	{ label: t("commons.table.all"), value: "all" },
 	{ label: t("commons.status.created"), value: "created" },
@@ -230,304 +146,88 @@ const stateOptions = computed(() => [
 	{ label: t("commons.status.dead"), value: "dead" }
 ])
 
-const getContainerSourceLabel = (row: Container.ContainerInfo) => {
-	switch (row.sourceType) {
-		case "app":
-			return t("container.typeApp")
-		case "pipeline":
-			return t("container.typePipeline")
-		case "compose":
-			return t("container.typeCompose")
-		case "website":
-			return t("container.typeWebsite")
-		default:
-			return t("container.typeManual")
-	}
-}
-
-const getContainerSourceTagType = (row: Container.ContainerInfo) => {
-	switch (row.sourceType) {
-		case "app":
-			return "success"
-		case "pipeline":
-			return "warning"
-		case "compose":
-			return "info"
-		case "website":
-			return "primary"
-		default:
-			return "default"
-	}
-}
-
-const loading = ref(false)
-const data = ref()
-const selects = ref<any>([])
-type ColumnSetting = {
-	key: string
-	title: string
-	visible: boolean
-	fixed?: boolean
-	original?: any
-}
-
-const paginationConfig = reactive({
-	cacheSizeKey: "container-page-size",
-	currentPage: 1,
-	limit: 10,
-	total: 0,
-	orderBy: "created_at",
-	order: "null"
-})
-const searchName = ref()
-const searchState = ref("all")
 const dialogUpgradeRef = ref()
 const dialogCommitRef = ref()
 const opRef = ref()
-const includeAppStore = ref()
-const columns = ref([
+const getRowActions = (row: Container.ContainerInfo) => [
 	{
-		key: "__selection",
-		type: "selection",
-		width: 50,
-		options: ["all", "none"]
+		label: t("commons.button.edit"),
+		click: () => onEdit(row)
 	},
 	{
-		title: t("commons.table.name"),
-		key: "name",
-		width: 200,
-		// 1. 关闭默认的省略号/单行限制
-		ellipsis: false,
-		render(row: Container.ContainerInfo) {
-			return h(
-				NButton,
-				{
-					text: true,
-					type: "primary",
-					// 2. 这里的样式非常关键
-					style: {
-						padding: 0,
-						textAlign: "left",
-						height: "auto", // 允许按钮高度随内容撑开
-						whiteSpace: "normal", // 覆盖按钮默认的 nowrap
-						wordBreak: "break-all" // 确保长字符串（如无空格的名字）能强制换行
-					},
-					onClick: () => onInspect(row)
-				},
-				{ default: () => row.name }
-			)
+		label: t("commons.button.upgrade"),
+		click: () => {
+			dialogUpgradeRef.value!.acceptParams({ container: row.name, image: row.imageName, fromApp: row.isFromApp })
 		}
 	},
 	{
-		title: t("container.image"),
-		key: "imageName",
-		width: 100
+		label: t("container.monitor"),
+		disabled: row.state !== "running",
+		click: () => onMonitor(row)
 	},
 	{
-		title: t("commons.table.status"),
-		key: "state",
-		width: 100,
-		render(row: Container.ContainerInfo) {
-			const opt = stateOptions.value.find((o: any) => o.value === row.state)
-			const label = opt ? opt.label : (row.state ?? "--")
-			return h(
-				NTag,
-				{
-					size: "small",
-					type: row.state === "running" ? "success" : row.state === "dead" ? "error" : "default",
-					bordered: false
-				},
-				{ default: () => label }
-			)
+		label: t("container.rename"),
+		disabled: row.isFromCompose,
+		click: () => {
+			dialogRenameRef.value!.acceptParams({ container: row.name })
 		}
 	},
 	{
-		title: t("container.ip"),
-		key: "network",
-		width: 140,
-		render(row: Container.ContainerInfo) {
-			const ips = Array.isArray(row.network) ? row.network.filter(Boolean) : []
-			if (!ips.length) {
-				return "--"
-			}
-			return h(
-				"div",
-				{ class: "text-xs leading-5" },
-				ips.map((ip: string) => h("div", { key: ip }, ip))
-			)
+		label: t("container.makeImage"),
+		disabled: checkStatus("commit", row),
+		click: () => {
+			dialogCommitRef.value!.acceptParams({ containerID: row.containerID, containerName: row.name })
 		}
 	},
 	{
-		title: t("container.runtimeType"),
-		key: "source",
-		width: 210,
-		render(row: Container.ContainerInfo) {
-			const tags = [
-				h(
-					NTag,
-					{
-						size: "small",
-						bordered: false,
-						type: row.runtimeKind === "docker" ? "success" : row.runtimeKind === "podman" ? "warning" : "default"
-					},
-					{ default: () => getRuntimeKindLabel(row, { kindFallback: "-" }) }
-				),
-				h(
-					NTag,
-					{
-						size: "small",
-						bordered: false,
-						type: row.runtimeMode === "rootless" ? "warning" : "default"
-					},
-					{
-						default: () => getRuntimeModeLabel(row, {
-							rootlessLabel: t("container.rootless"),
-							rootfulLabel: t("container.rootful"),
-							defaultModeLabel: t("container.defaultMode")
-						})
-					}
-				),
-				h(
-					NTag,
-					{
-						size: "small",
-						bordered: false,
-						type: getContainerSourceTagType(row) as any
-					},
-					{ default: () => getContainerSourceLabel(row) }
-				)
-			]
-			return h("div", { class: "space-y-1" }, [
-				h(NSpace, { size: "small", wrap: true }, { default: () => tags }),
-				h(
-					"div",
-					{ class: "text-xs text-gray-500 leading-5" },
-					`${t("container.runUser")}: ${getRunUserLabel(row, { userFallback: t("container.userDefault") })}`
-				),
-				row.appInstallName
-					? h("div", { class: "text-xs text-gray-500 leading-5" }, row.appInstallName)
-					: row.websites?.length
-						? h("div", { class: "text-xs text-gray-500 leading-5" }, row.websites[0])
-						: null
-			])
-		}
+		label: t("container.start"),
+		disabled: checkStatus("start", row),
+		click: () => onOperate("start", row)
 	},
 	{
-		title: t("commons.table.port"),
-		key: "ports",
-		width: 130,
-		render(row: Container.ContainerInfo) {
-			return h(
-				NSpace,
-				{ vertical: true, size: "small" },
-				{
-					default: () =>
-						(row.ports || []).map((port: string) =>
-							h(
-								NTag,
-								{
-									bordered: false,
-									size: "small",
-									type: "info"
-								},
-								{ default: () => port }
-							)
-						)
-				}
-			)
-		}
+		label: t("container.stop"),
+		disabled: checkStatus("stop", row),
+		click: () => onOperate("stop", row)
 	},
 	{
-		title: t("container.upTime"),
-		key: "runTime",
-		width: 150
+		label: t("container.restart"),
+		disabled: checkStatus("restart", row),
+		click: () => onOperate("restart", row)
 	},
 	{
-		title: t("commons.table.operate"),
-		key: "operate",
-		width: 120,
-		fixed: "right",
-		render(row: Container.ContainerInfo) {
-			return h(NSpace, null, {
-				default: () => [
-					h(
-						NButton,
-						{
-							text: true,
-							type: "primary",
-							disabled: row.state !== "running",
-							onClick: () => onTerminal(row)
-						},
-						{ default: () => t("container.containerTerminal") }
-					),
-					h(
-						NButton,
-						{
-							text: true,
-							type: "primary",
-							onClick: () =>
-								dialogContainerLogRef.value!.acceptParams({
-									containerID: row.containerID,
-									container: row.name,
-									runtimeHost: row.runtimeHost || "",
-									runtimeSummary: buildRuntimeSummaryText(row, {
-										kindFallback: t("container.runtimeType"),
-										rootlessLabel: t("container.rootless"),
-										rootfulLabel: t("container.rootful"),
-										defaultModeLabel: t("container.defaultMode"),
-										userFallback: t("container.userDefault"),
-										runUserPrefix: `${t("container.runUser")}: `
-									})
-								})
-						},
-						{ default: () => t("commons.button.log") }
-					),
-					h(
-						NDropdown,
-						{
-							trigger: "hover",
-							options: buttons.map(btn => ({
-								label: btn.label,
-								key: btn.label,
-								disabled: btn.disabled ? btn.disabled(row) : false
-							})),
-							onSelect: (key: string) => {
-								const btn = buttons.find(b => b.label === key)
-								if (btn) btn.click(row)
-							}
-						},
-						{
-							default: () =>
-								h(
-									NButton,
-									{
-										text: true,
-										type: "primary"
-									},
-									{ default: () => t("tabs.more") }
-								)
-						}
-					)
-				]
-			})
-		}
+		label: t("container.kill"),
+		disabled: checkStatus("kill", row),
+		click: () => onOperate("kill", row)
+	},
+	{
+		label: t("container.pause"),
+		disabled: checkStatus("pause", row),
+		click: () => onOperate("pause", row)
+	},
+	{
+		label: t("container.unpause"),
+		disabled: checkStatus("unpause", row),
+		click: () => onOperate("unpause", row)
+	},
+	{
+		label: t("container.remove"),
+		disabled: checkStatus("remove", row),
+		click: () => onOperate("remove", row)
 	}
-])
+]
 
-const columnSettings = ref<ColumnSetting[]>(
-	columns.value.map((column: any) => ({
-		key: String(column.key || column.type),
-		title:
-			typeof column.title === "string"
-				? column.title
-				: column.type === "selection"
-					? "选择"
-					: String(column.key || ""),
-		visible: true,
-		fixed: column.type === "selection" || column.fixed === "right" || column.fixed === "left",
-		original: column
-	}))
-)
+const openLog = (row: Container.ContainerInfo) => {
+	dialogContainerLogRef.value!.acceptParams({
+		containerID: row.containerID,
+		container: row.name,
+		runtimeHost: row.runtimeHost || "",
+		runtimeSummary: buildContainerRuntimeSummary(row)
+	})
+}
+
+const columns = ref<any[]>([])
+
+const columnSettings = ref<ColumnSetting[]>([])
 
 const visibleColumns = computed(() => {
 	const visibleKeys = new Set(columnSettings.value.filter(item => item.visible || item.fixed).map(item => item.key))
@@ -541,26 +241,22 @@ function handleColumnSettingsChange(nextColumns: ColumnSetting[]) {
 	}))
 }
 
-const dockerStatus = ref("Running")
-const loadStatus = async () => {
-	loading.value = true
-	await loadInstanceStatus()
-		.then(res => {
-			loading.value = false
-			dockerStatus.value = res.data
-			if (dockerStatus.value === "Running") {
-				search()
-			}
-		})
-		.catch(() => {
-			dockerStatus.value = "Failed"
-			loading.value = false
-		})
+function handleSearchStateChange(value: string) {
+	searchState.value = value
+	search()
 }
 
-const goSetting = async () => {
-	router.push("/container/setting")
-}
+const bulkActions = computed(() => [
+	{ key: "start", label: t("container.start"), disabled: checkStatus("start", null) },
+	{ key: "stop", label: t("container.stop"), disabled: checkStatus("stop", null) },
+	{ key: "restart", label: t("container.restart"), disabled: checkStatus("restart", null) },
+	{ key: "kill", label: t("container.kill"), disabled: checkStatus("kill", null) },
+	{ key: "pause", label: t("container.pause"), disabled: checkStatus("pause", null) },
+	{ key: "unpause", label: t("container.unpause"), disabled: checkStatus("unpause", null) },
+	{ key: "remove", label: t("container.remove"), disabled: checkStatus("remove", null) }
+])
+
+const goSetting = async () => router.push("/container/setting")
 
 interface Filters {
 	filters?: string
@@ -569,102 +265,27 @@ const props = withDefaults(defineProps<Filters>(), {
 	filters: ""
 })
 
+const {
+	loading,
+	data,
+	selects,
+	searchName,
+	searchState,
+	dockerStatus,
+	paginationConfig,
+	search,
+	refresh,
+	handlePageSizeChange,
+	loadStatus,
+	checkStatus,
+	initIncludeAppStore
+} = useContainerListData({ filters: props.filters })
+
 const myDetail = ref()
 
 const dialogContainerLogRef = ref()
 const dialogRenameRef = ref()
 const dialogPruneRef = ref()
-
-const search = async (column?: any) => {
-	localStorage.setItem("includeAppStore", includeAppStore.value ? "true" : "false")
-	let filterItem = props.filters ? props.filters : ""
-	paginationConfig.orderBy = column?.order ? column.prop : paginationConfig.orderBy
-	paginationConfig.order = column?.order ? column.order : paginationConfig.order
-	let params = {
-		name: searchName.value,
-		state: searchState.value || "all",
-		page: paginationConfig.currentPage,
-		limit: paginationConfig.limit,
-		filters: filterItem,
-		orderBy: 'created_at',
-		order: paginationConfig.order,
-		excludeAppStore: !includeAppStore.value
-	}
-	loading.value = true
-	loadStats()
-	await containerListAPI(params)
-		.then(res => {
-			loading.value = false
-			data.value = Array.isArray(res.data.items) ? res.data.items : []
-			paginationConfig.total = res.data.total
-			selects.value = []
-		})
-		.catch(() => {
-			loading.value = false
-		})
-}
-
-const refresh = async () => {
-	let filterItem = props.filters ? props.filters : ""
-	let params = {
-		name: searchName.value,
-		state: searchState.value || "all",
-		page: paginationConfig.currentPage,
-		limit: paginationConfig.limit,
-		filters: filterItem,
-		orderBy: paginationConfig.orderBy,
-		order: paginationConfig.order
-	}
-	loadStats()
-	const res = await containerListAPI(params)
-	let containers = res.data.items || []
-	for (const container of containers) {
-		for (const c of data.value) {
-			c.hasLoad = true
-			if (container.containerID == c.containerID) {
-				const containerData = container as Record<string, any>
-				for (let key in containerData) {
-					if (key !== "cpuPercent" && key !== "memoryPercent") {
-						;(c as Record<string, any>)[key] = containerData[key]
-					}
-				}
-			}
-		}
-	}
-}
-
-const handlePageSizeChange = (size: number) => {
-	paginationConfig.limit = size
-	paginationConfig.currentPage = 1
-	if (paginationConfig.cacheSizeKey) {
-		localStorage.setItem(paginationConfig.cacheSizeKey, String(size))
-	}
-	search()
-}
-
-const loadStats = async () => {
-	const res = await containerStatsAPI()
-	let stats = res.data || []
-	if (stats.length === 0) {
-		return
-	}
-	for (const container of data.value) {
-		for (const item of stats) {
-			if (container.containerID === item.containerID) {
-				container.hasLoad = true
-				container.cpuTotalUsage = item.cpuTotalUsage
-				container.systemUsage = item.systemUsage
-				container.cpuPercent = item.cpuPercent
-				container.percpuUsage = item.percpuUsage
-				container.memoryCache = item.memoryCache
-				container.memoryUsage = item.memoryUsage
-				container.memoryLimit = item.memoryLimit
-				container.memoryPercent = item.memoryPercent
-				break
-			}
-		}
-	}
-}
 
 const dialogOperateRef = ref()
 const onEdit = async (row: Container.ContainerInfo) => {
@@ -702,14 +323,7 @@ const onMonitor = (row: any) => {
 	dialogMonitorRef.value!.acceptParams({
 		containerID: row.containerID,
 		container: row.name,
-		runtimeSummary: buildRuntimeSummaryText(row, {
-			kindFallback: t("container.runtimeType"),
-			rootlessLabel: t("container.rootless"),
-			rootfulLabel: t("container.rootful"),
-			defaultModeLabel: t("container.defaultMode"),
-			userFallback: t("container.userDefault"),
-			runUserPrefix: `${t("container.runUser")}: `
-		})
+		runtimeSummary: buildContainerRuntimeSummary(row)
 	})
 }
 
@@ -719,89 +333,33 @@ const onTerminal = (row: any) => {
 		containerID: row.containerID,
 		container: row.name,
 		runtimeHost: row.runtimeHost || "",
-		runtimeSummary: buildRuntimeSummaryText(row, {
-			kindFallback: t("container.runtimeType"),
-			rootlessLabel: t("container.rootless"),
-			rootfulLabel: t("container.rootful"),
-			defaultModeLabel: t("container.defaultMode"),
-			userFallback: t("container.userDefault"),
-			runUserPrefix: `${t("container.runUser")}: `
-		})
+		runtimeSummary: buildContainerRuntimeSummary(row)
 	})
 }
 
 const onInspect = async (row: Container.ContainerInfo) => {
 	const res = await inspect({ id: row.containerID, type: "container", runtimeHost: row.runtimeHost || "" })
-	console.log("inspect result", res)
 	let detailInfo = JSON.stringify(JSON.parse(res.data), null, 2)
 	let param = {
 		header: t("commons.button.view"),
 		detailInfo: detailInfo,
-		summary: buildRuntimeSummaryText(row, {
-			kindFallback: t("container.runtimeType"),
-			rootlessLabel: t("container.rootless"),
-			rootfulLabel: t("container.rootful"),
-			defaultModeLabel: t("container.defaultMode"),
-			userFallback: t("container.userDefault"),
-			runUserPrefix: `${t("container.runUser")}: `
-		})
+		summary: buildContainerRuntimeSummary(row)
 	}
-	console.log("myDetail", myDetail.value)
 	myDetail.value?.acceptParams(param)
 }
 
-const onClean = () => {
-	dialogPruneRef.value!.acceptParams()
+const initColumns = () => {
+	columns.value = createContainerColumns({
+		stateOptions: stateOptions.value,
+		onInspect,
+		onTerminal,
+		onLog: openLog,
+		getRowActions
+	})
+	columnSettings.value = createColumnSettings(columns.value)
 }
 
-const checkStatus = (operation: string, row: Container.ContainerInfo | null) => {
-	let opList: Container.ContainerInfo[] = []
-	if (row) {
-		opList = [row]
-	} else {
-		if (selects.value && selects.value.length > 0) {
-			const selectedIds = new Set(
-				selects.value.map((item: any) => (typeof item === "object" ? item.containerID : item))
-			)
-			opList = data.value.filter((item: Container.ContainerInfo) => selectedIds.has(item.containerID))
-		}
-	}
-
-	if (opList.length < 1) {
-		return true
-	}
-	switch (operation) {
-		case "start":
-			for (const item of opList) {
-				if (!item) continue
-				if (item.state === "running") {
-					return true
-				}
-			}
-			return false
-		case "stop":
-			for (const item of opList) {
-				if (item.state === "stopped" || item.state === "exited") {
-					return true
-				}
-			}
-			return false
-		case "pause":
-			for (const item of opList) {
-				if (item.state === "paused" || item.state === "exited") {
-					return true
-				}
-			}
-			return false
-		case "unpause":
-			for (const item of opList) {
-				if (item.state !== "paused") {
-					return true
-				}
-			}
-			return false
-	}
-}
+const onClean = () => dialogPruneRef.value!.acceptParams()
 
 const onOperate = async (op: string, row: Container.ContainerInfo | null) => {
 	let opList: Container.ContainerInfo[] = []
@@ -834,150 +392,5 @@ const onOperate = async (op: string, row: Container.ContainerInfo | null) => {
 	})
 }
 
-const buttons = [
-	// {
-	// 	label: t("container.containerTerminal"),
-	// 	disabled: (row: Container.ContainerInfo) => {
-	// 		return row.state !== "running"
-	// 	},
-	// 	click: (row: Container.ContainerInfo) => {
-	// 		onTerminal(row)
-	// 	}
-	// },
-	// {
-	// 	label: t("commons.button.log"),
-	// 	click: (row: Container.ContainerInfo) => {
-	// 		dialogContainerLogRef.value!.acceptParams({ containerID: row.containerID, container: row.name })
-	// 	}
-	// },
-	{
-		label: t("commons.button.edit"),
-		click: (row: Container.ContainerInfo) => {
-			onEdit(row)
-		}
-	},
-	{
-		label: t("commons.button.upgrade"),
-		click: (row: Container.ContainerInfo) => {
-			dialogUpgradeRef.value!.acceptParams({ container: row.name, image: row.imageName, fromApp: row.isFromApp })
-		}
-	},
-	{
-		label: t("container.monitor"),
-		disabled: (row: Container.ContainerInfo) => {
-			return row.state !== "running"
-		},
-		click: (row: Container.ContainerInfo) => {
-			onMonitor(row)
-		}
-	},
-	{
-		label: t("container.rename"),
-		click: (row: Container.ContainerInfo) => {
-			dialogRenameRef.value!.acceptParams({ container: row.name })
-		},
-		disabled: (row: any) => {
-			return row.isFromCompose
-		}
-	},
-	{
-		label: t("container.makeImage"),
-		click: (row: Container.ContainerInfo) => {
-			dialogCommitRef.value!.acceptParams({ containerID: row.containerID, containerName: row.name })
-		},
-		disabled: (row: any) => {
-			return checkStatus("commit", row)
-		}
-	},
-	{
-		label: t("container.start"),
-		click: (row: Container.ContainerInfo) => {
-			onOperate("start", row)
-		},
-		disabled: (row: any) => {
-			return checkStatus("start", row)
-		}
-	},
-	{
-		label: t("container.stop"),
-		click: (row: Container.ContainerInfo) => {
-			onOperate("stop", row)
-		},
-		disabled: (row: any) => {
-			return checkStatus("stop", row)
-		}
-	},
-	{
-		label: t("container.restart"),
-		click: (row: Container.ContainerInfo) => {
-			onOperate("restart", row)
-		},
-		disabled: (row: any) => {
-			return checkStatus("restart", row)
-		}
-	},
-	{
-		label: t("container.kill"),
-		click: (row: Container.ContainerInfo) => {
-			onOperate("kill", row)
-		},
-		disabled: (row: any) => {
-			return checkStatus("kill", row)
-		}
-	},
-	{
-		label: t("container.pause"),
-		click: (row: Container.ContainerInfo) => {
-			onOperate("pause", row)
-		},
-		disabled: (row: any) => {
-			return checkStatus("pause", row)
-		}
-	},
-	{
-		label: t("container.unpause"),
-		click: (row: Container.ContainerInfo) => {
-			onOperate("unpause", row)
-		},
-		disabled: (row: any) => {
-			return checkStatus("unpause", row)
-		}
-	},
-	{
-		label: t("container.remove"),
-		click: (row: Container.ContainerInfo) => {
-			onOperate("remove", row)
-		},
-		disabled: (row: any) => {
-			return checkStatus("remove", row)
-		}
-	}
-]
-
-onMounted(() => {
-	let includeItem = localStorage.getItem("includeAppStore")
-	includeAppStore.value = !includeItem || includeItem === "true"
-	loadStatus()
-})
+onMounted(() => { initIncludeAppStore(); initColumns(); loadStatus() })
 </script>
-
-<style scoped lang="scss">
-.tagMargin {
-	margin-top: 2px;
-}
-.source-font {
-	font-size: 12px;
-}
-.svg-icon {
-	margin-top: -3px;
-	font-size: 6px;
-	cursor: pointer;
-}
-.cell-button-class {
-	button,
-	:deep(span) {
-		max-width: 100%;
-		overflow: hidden;
-	}
-}
-</style>

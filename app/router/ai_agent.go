@@ -27,6 +27,9 @@ func AIAgentRouter(r fiber.Router) {
 		group.Post("/sessions", api.CreateAISession)
 		group.Post("/sessions/:id/instructions", api.CreateAISessionInstruction)
 		group.Get("/sessions/:id/state", api.GetAISessionState)
+		group.Get("/approvals", api.GetAIApprovals)
+		group.Post("/approvals/:id/approve", api.ApproveAIApproval)
+		group.Post("/approvals/:id/reject", api.RejectAIApproval)
 
 		// Tasks APIs
 		group.Get("/tasks", api.GetAITasks)

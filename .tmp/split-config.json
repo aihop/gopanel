@@ -1,0 +1,70 @@
+[
+  {
+    "path": "/Users/hugh/code/aihop/gopanel_v2/app/service/apps_utils.go",
+    "moves": [
+      {
+        "new_file": "/Users/hugh/code/aihop/gopanel_v2/app/service/apps_runtime_utils.go",
+        "funcs": [
+          "ensureInstalledDatabaseServer",
+          "installedDatabaseServerType",
+          "installedDatabaseServerUsername",
+          "installedDatabaseServerPassword",
+          "firstEnvString",
+          "waitForInstalledContainers"
+        ]
+      },
+      {
+        "new_file": "/Users/hugh/code/aihop/gopanel_v2/app/service/apps_compose_env.go",
+        "funcs": [
+          "ensureExternalNetworks",
+          "validateComposeEnvForPortsVolumes",
+          "parseDotEnv",
+          "normalizeRedisPasswordEnvAliases",
+          "normalizeRedisPasswordParamAliases",
+          "extractRequiredVarsFromComposePortsVolumes",
+          "parseComposeVarExpr"
+        ]
+      },
+      {
+        "new_file": "/Users/hugh/code/aihop/gopanel_v2/app/service/apps_install_files.go",
+        "funcs": [
+          "RequestDownloadCallBack",
+          "copyData",
+          "runScript",
+          "updateToolApp"
+        ]
+      },
+      {
+        "new_file": "/Users/hugh/code/aihop/gopanel_v2/app/service/apps_compose_compat.go",
+        "funcs": [
+          "addDockerComposeCommonParam",
+          "applyComposeLogCompat",
+          "applyComposeLogCompatYAML",
+          "applyComposeCommandCompat",
+          "applyComposeCommandCompatYAML",
+          "applyComposeCommandEnvCompat",
+          "applyComposeCommandEnvCompatYAML",
+          "applyComposeTimezoneCompat",
+          "applyComposeTimezoneCompatYAML"
+        ]
+      },
+      {
+        "new_file": "/Users/hugh/code/aihop/gopanel_v2/app/service/apps_compose_command_expand.go",
+        "funcs": [
+          "normalizeComposeTimezoneVolumes",
+          "shouldRemoveComposeTimezoneVolume",
+          "ensureComposeTimezoneEnv",
+          "hasComposeTimezoneEnvMap",
+          "hasComposeTimezoneEnvList",
+          "resolveComposeTimezoneCompatValue",
+          "normalizeComposeCommandShellCompat",
+          "normalizeComposeCommandEnvCompat",
+          "expandComposeCommandVariables",
+          "expandComposeConditionalExprs",
+          "parseComposeConditionalExpr",
+          "expandComposePlainVars"
+        ]
+      }
+    ]
+  }
+]

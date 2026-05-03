@@ -1,23 +1,9 @@
 package service
 
 import (
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/json"
-	"encoding/pem"
 	"errors"
-	"fmt"
-	"net"
-	"os"
-	"path"
-	"strconv"
-	"strings"
-	"time"
-
 	"github.com/aihop/gopanel/app/dto"
-	"github.com/aihop/gopanel/app/repo"
 	"github.com/aihop/gopanel/buserr"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
@@ -25,6 +11,9 @@ import (
 	"github.com/aihop/gopanel/utils/common"
 	"github.com/aihop/gopanel/utils/encrypt"
 	"github.com/robfig/cron/v3"
+	"net"
+	"strconv"
+	"time"
 )
 
 type SettingService struct{}
@@ -49,7 +38,6 @@ type ISettingService interface {
 func NewISettingService() ISettingService {
 	return &SettingService{}
 }
-
 func (u *SettingService) GetInfo() (*dto.SettingInfo, error) {
 	setting, err := settingRepo.GetList()
 	if err != nil {
@@ -72,11 +60,9 @@ func (u *SettingService) GetInfo() (*dto.SettingInfo, error) {
 	} else {
 		info.ProxyPasswd, _ = encrypt.StringDecrypt(info.ProxyPasswd)
 	}
-
 	info.LocalTime = time.Now().Format("2006-01-02 15:04:05 MST -0700")
 	return &info, err
 }
-
 func (u *SettingService) Update(key, value string) error {
 	switch key {
 	case "MonitorStatus":
@@ -111,11 +97,9 @@ func (u *SettingService) Update(key, value string) error {
 			return nil
 		}
 	}
-
 	if err := settingRepo.Update(key, value); err != nil {
 		return err
 	}
-
 	switch key {
 	case "ExpirationDays":
 		timeout, err := strconv.Atoi(value)
@@ -131,12 +115,9 @@ func (u *SettingService) Update(key, value string) error {
 		}
 	case "UserName", "Password":
 		_ = global.SESSION.Clean()
-
 	}
-
 	return nil
 }
-
 func (u *SettingService) LoadInterfaceAddr() ([]string, error) {
 	addrMap := make(map[string]struct{})
 	addrs, err := net.InterfaceAddrs()
@@ -155,7 +136,6 @@ func (u *SettingService) LoadInterfaceAddr() ([]string, error) {
 	}
 	return data, nil
 }
-
 func (u *SettingService) UpdateBindInfo(req dto.BindInfo) error {
 	if err := settingRepo.Update("Ipv6", req.Ipv6); err != nil {
 		return err
@@ -171,7 +151,6 @@ func (u *SettingService) UpdateBindInfo(req dto.BindInfo) error {
 	}()
 	return nil
 }
-
 func (u *SettingService) UpdateProxy(req dto.ProxyUpdate) error {
 	if err := settingRepo.Update("ProxyUrl", req.ProxyUrl); err != nil {
 		return err
@@ -194,7 +173,6 @@ func (u *SettingService) UpdateProxy(req dto.ProxyUpdate) error {
 	}
 	return nil
 }
-
 func (u *SettingService) UpdatePort(port uint) error {
 	if common.ScanPort(int(port)) {
 		return buserr.WithDetail(constant.ErrPortInUsed, port, nil)
@@ -216,187 +194,5 @@ func (u *SettingService) UpdatePort(port uint) error {
 			global.LOG.Errorf("restart system port failed, err: %v", err)
 		}
 	}()
-	return nil
-}
-
-func (u *SettingService) LoadFromCert() (*dto.SSLInfo, error) {
-	ssl, err := settingRepo.Get(settingRepo.WithByKey("SSL"))
-	if err != nil {
-		return nil, err
-	}
-	if ssl.Value == "disable" {
-		return &dto.SSLInfo{}, nil
-	}
-	sslType, err := settingRepo.Get(settingRepo.WithByKey("SSLType"))
-	if err != nil {
-		return nil, err
-	}
-	var data dto.SSLInfo
-	switch sslType.Value {
-	case "self":
-		data, err = loadInfoFromCert()
-		if err != nil {
-			return nil, err
-		}
-	case "import-paste", "import-local":
-		data, err = loadInfoFromCert()
-		if err != nil {
-			return nil, err
-		}
-		if _, err := os.Stat(path.Join(global.CONF.System.BaseDir, "gopanel/secret/server.crt")); err != nil {
-			return nil, fmt.Errorf("load server.crt file failed, err: %v", err)
-		}
-		certFile, _ := os.ReadFile(path.Join(global.CONF.System.BaseDir, "gopanel/secret/server.crt"))
-		data.Cert = string(certFile)
-
-		if _, err := os.Stat(path.Join(global.CONF.System.BaseDir, "gopanel/secret/server.key")); err != nil {
-			return nil, fmt.Errorf("load server.key file failed, err: %v", err)
-		}
-		keyFile, _ := os.ReadFile(path.Join(global.CONF.System.BaseDir, "gopanel/secret/server.key"))
-		data.Key = string(keyFile)
-	case "select":
-		sslID, err := settingRepo.Get(settingRepo.WithByKey("SSLID"))
-		if err != nil {
-			return nil, err
-		}
-		id, _ := strconv.Atoi((sslID.Value))
-		ssl, err := repo.NewSSL().GetFirst(commonRepo.WithByID(uint(id)))
-		if err != nil {
-			return nil, err
-		}
-		data.Domain = ssl.PrimaryDomain
-		data.SSLID = uint(id)
-		data.Timeout = ssl.ExpireDate.Format(constant.DateTimeLayout)
-	}
-	return &data, nil
-}
-
-func loadInfoFromCert() (dto.SSLInfo, error) {
-	var info dto.SSLInfo
-	certFile := path.Join(global.CONF.System.BaseDir, "gopanel/secret/server.crt")
-	if _, err := os.Stat(certFile); err != nil {
-		return info, err
-	}
-	certData, err := os.ReadFile(certFile)
-	if err != nil {
-		return info, err
-	}
-	certBlock, _ := pem.Decode(certData)
-	if certBlock == nil {
-		return info, err
-	}
-	certObj, err := x509.ParseCertificate(certBlock.Bytes)
-	if err != nil {
-		return info, err
-	}
-	var domains []string
-	if len(certObj.IPAddresses) != 0 {
-		for _, ip := range certObj.IPAddresses {
-			domains = append(domains, ip.String())
-		}
-	}
-	if len(certObj.DNSNames) != 0 {
-		domains = append(domains, certObj.DNSNames...)
-	}
-	return dto.SSLInfo{
-		Domain:   strings.Join(domains, ","),
-		Timeout:  certObj.NotAfter.Format(constant.DateTimeLayout),
-		RootPath: path.Join(global.CONF.System.BaseDir, "console/secret/server.crt"),
-	}, nil
-}
-
-func checkCertValid() error {
-	certificate, err := os.ReadFile(path.Join(global.CONF.System.BaseDir, "gopanel/secret/server.crt.tmp"))
-	if err != nil {
-		return err
-	}
-	key, err := os.ReadFile(path.Join(global.CONF.System.BaseDir, "gopanel/secret/server.key.tmp"))
-	if err != nil {
-		return err
-	}
-	if _, err = tls.X509KeyPair(certificate, key); err != nil {
-		return err
-	}
-	certBlock, _ := pem.Decode(certificate)
-	if certBlock == nil {
-		return err
-	}
-	if _, err := x509.ParseCertificate(certBlock.Bytes); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (u *SettingService) GenerateApiKey() (string, error) {
-	apiKey := common.RandStr(32)
-	if err := settingRepo.Update("ApiKey", apiKey); err != nil {
-		return global.CONF.System.ApiKey, err
-	}
-	global.CONF.System.ApiKey = apiKey
-	return apiKey, nil
-}
-
-func (u *SettingService) UpdateApiConfig(req dto.ApiInterfaceConfig) error {
-	if err := settingRepo.Update("ApiInterfaceStatus", req.ApiInterfaceStatus); err != nil {
-		return err
-	}
-	global.CONF.System.ApiInterfaceStatus = req.ApiInterfaceStatus
-	if err := settingRepo.Update("ApiKey", req.ApiKey); err != nil {
-		return err
-	}
-	global.CONF.System.ApiKey = req.ApiKey
-	if err := settingRepo.Update("IpWhiteList", req.IpWhiteList); err != nil {
-		return err
-	}
-	global.CONF.System.IpWhiteList = req.IpWhiteList
-	if err := settingRepo.Update("ApiKeyValidityTime", req.ApiKeyValidityTime); err != nil {
-		return err
-	}
-	global.CONF.System.ApiKeyValidityTime = req.ApiKeyValidityTime
-	return nil
-}
-
-func exportPrivateKeyToPEM(privateKey *rsa.PrivateKey) string {
-	privateKeyBytes := x509.MarshalPKCS1PrivateKey(privateKey)
-	privateKeyPEM := pem.EncodeToMemory(&pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: privateKeyBytes,
-	})
-	return string(privateKeyPEM)
-}
-
-func exportPublicKeyToPEM(publicKey *rsa.PublicKey) (string, error) {
-	publicKeyBytes, err := x509.MarshalPKIXPublicKey(publicKey)
-	if err != nil {
-		return "", err
-	}
-	publicKeyPEM := pem.EncodeToMemory(&pem.Block{
-		Type:  "PUBLIC KEY",
-		Bytes: publicKeyBytes,
-	})
-	return string(publicKeyPEM), nil
-}
-
-func (u *SettingService) GenerateRSAKey() error {
-	priKey, _ := settingRepo.Get(settingRepo.WithByKey("PASSWORD_PRIVATE_KEY"))
-	pubKey, _ := settingRepo.Get(settingRepo.WithByKey("PASSWORD_PUBLIC_KEY"))
-	if priKey.Value != "" && pubKey.Value != "" {
-		return nil
-	}
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		return err
-	}
-	privateKeyPEM := exportPrivateKeyToPEM(privateKey)
-	publicKeyPEM, err := exportPublicKeyToPEM(&privateKey.PublicKey)
-	err = settingRepo.UpdateOrCreate("PASSWORD_PRIVATE_KEY", privateKeyPEM)
-	if err != nil {
-		return err
-	}
-	err = settingRepo.UpdateOrCreate("PASSWORD_PUBLIC_KEY", publicKeyPEM)
-	if err != nil {
-		return err
-	}
 	return nil
 }

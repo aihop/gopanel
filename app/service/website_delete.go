@@ -34,7 +34,7 @@ func (s WebsiteService) Delete(ctx context.Context, id uint) error {
 			targetDomain = "https://" + website.PrimaryDomain
 		}
 
-		_, err := CaddyRemoveServerBlock(ctx,targetDomain, strings.Join(otherDomains, "\n"))
+		_, err := CaddyRemoveServerBlock(ctx, targetDomain, strings.Join(otherDomains, "\n"))
 		if err != nil {
 			return err
 		}

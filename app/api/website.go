@@ -69,7 +69,7 @@ func WebsiteDelete(c fiber.Ctx) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := service.NewWebsite().Delete(ctx,convertor.ToUint(id)); err != nil {
+	if err := service.NewWebsite().Delete(ctx, convertor.ToUint(id)); err != nil {
 		return c.JSON(e.Fail(buserr.Err(err)))
 	}
 	return c.JSON(e.Succ())
