@@ -211,6 +211,7 @@
   - `views/Apps/components/AppsAll.vue` 适合拆为卡片列表、安装弹窗、详情抽屉、日志弹窗和安装流程 composable
   - `views/Apps/components/AppsInstalled.vue` 适合拆为已安装应用卡片列表、详情抽屉、卸载确认弹窗、运行/安装日志弹窗，以及独立的日志修复流 composable
   - `views/Dashboard/components/StatusCard.vue` 适合拆为基础信息概览条、CPU/内存/负载资源卡片、磁盘与 GPU/XPU 面板，并把数值格式化函数抽到共享 helper
+  - `views/Website/components/AccessLogDrawer.vue` 适合拆为抽屉壳、日志面板、详情弹窗、IP 统计弹窗，并把日志解析与绑定元信息读取抽到 helper/composable
   - `views/Website/SSL.vue` 适合拆为页面头部、证书相关弹层、表格列工厂，以及按“推送规则/日志流/页面状态”分层的 composable
 - 这类重构完成后，至少要检查改动文件诊断，确保结构调整没有引入模板或类型错误
 
