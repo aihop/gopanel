@@ -18,6 +18,65 @@
             <div class="font-medium text-slate-800">当前绑定目标</div>
             <div class="mt-1">{{ bindingRuntimeText }}</div>
           </div>
+          <div class="grid gap-3 md:grid-cols-2">
+            <div class="rounded-xl border border-slate-200 bg-white px-4 py-3">
+              <div class="text-xs font-medium uppercase tracking-wide text-slate-400">当前线上正式版本</div>
+              <div class="mt-2 text-sm text-slate-700">
+                <template v-if="activeReleaseDeploy">
+                  <div class="flex items-center gap-2">
+                    <span class="font-mono">v{{ activeReleaseDeploy.version }}</span>
+                    <n-tag
+                      type="success"
+                      size="small"
+                      round
+                    >
+                      当前线上
+                    </n-tag>
+                  </div>
+                  <div
+                    v-if="activeReleaseDeploy.imageTag"
+                    class="mt-1 break-all font-mono text-xs text-slate-500"
+                  >
+                    {{ activeReleaseDeploy.imageTag }}
+                  </div>
+                </template>
+                <template v-else>
+                  <div>当前线上暂无正式版本</div>
+                  <div class="mt-1 text-xs text-slate-400">请在正式版本列表中选择可上线版本。</div>
+                </template>
+              </div>
+            </div>
+            <div class="rounded-xl border border-slate-200 bg-white px-4 py-3">
+              <div class="text-xs font-medium uppercase tracking-wide text-slate-400">最近构建同步</div>
+              <div class="mt-2 text-sm text-slate-700">
+                <template v-if="latestPipelineSyncDeploy">
+                  <div class="flex items-center gap-2">
+                    <span class="font-mono">{{ latestPipelineSyncDeploy.version }}</span>
+                    <n-tag
+                      :type="latestPipelineSyncDeploy.isActive ? 'warning' : 'default'"
+                      size="small"
+                      round
+                    >
+                      {{ latestPipelineSyncDeploy.isActive ? "当前生效" : "最近同步" }}
+                    </n-tag>
+                  </div>
+                  <div
+                    v-if="latestPipelineSyncDeploy.pipelineRecordId"
+                    class="mt-1 text-xs text-slate-400"
+                  >
+                    来源构建 #{{ latestPipelineSyncDeploy.pipelineRecordId }}
+                  </div>
+                  <div class="mt-1 text-xs text-slate-400">
+                    {{ formatTime(latestPipelineSyncDeploy.createdAt || "") }}
+                  </div>
+                </template>
+                <template v-else>
+                  <div>暂未同步构建结果</div>
+                  <div class="mt-1 text-xs text-slate-400">流水线成功后如果命中了关联网站，会在这里显示最近一次同步记录。</div>
+                </template>
+              </div>
+            </div>
+          </div>
           <div class="flex justify-between items-center mb-6">
             <div class="text-sm text-slate-500">
               <span v-if="website?.type === 'proxy' && website?.appInstallId">
@@ -27,7 +86,7 @@
                 正式版本用于稳定发布，部署记录用于回滚与审计；也可直接指定镜像标签发起部署。
               </span>
               <span v-else>
-                正式版本用于稳定发布，部署记录用于回滚、审计与最新构建部署记录。
+                正式版本用于稳定发布，部署记录用于回滚、审计与构建结果同步记录。
               </span>
             </div>
             <div class="flex space-x-2">
@@ -64,15 +123,7 @@
           >
             <div class="flex items-center justify-between">
               <div class="text-sm font-medium text-slate-800">正式版本</div>
-              <div class="text-xs text-slate-400">
-                {{
-                  activeReleaseId
-                    ? `当前线上运行正式版本 #${activeReleaseId}`
-                    : activePipelineRecordId
-                      ? `当前线上来自构建记录 #${activePipelineRecordId}`
-                      : "用于选择可上线的正式版本"
-                }}
-              </div>
+              <div class="text-xs text-slate-400">用于选择可上线的正式版本</div>
             </div>
             <n-data-table
               :loading="releaseLoading"
@@ -243,12 +294,22 @@ const activeDeploy = computed(() => {
 	return deployments.value.find((item) => item.isActive) || null
 })
 
-const activeReleaseId = computed(() => {
-	return activeDeploy.value?.releaseId || 0
+const activeReleaseDeploy = computed(() => {
+	return deployments.value.find((item) => item.isActive && item.releaseId) || null
 })
 
-const activePipelineRecordId = computed(() => {
-	return activeDeploy.value?.pipelineRecordId || 0
+const activeReleaseId = computed(() => {
+	return activeReleaseDeploy.value?.releaseId || 0
+})
+
+const latestPipelineSyncDeploy = computed(() => {
+	return deployments.value
+		.filter((item) => ["pipeline_sync", "pipeline"].includes(String(item.sourceType || "").trim()))
+		.sort((a, b) => {
+			const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0
+			const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0
+			return bTime - aTime
+		})[0] || null
 })
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -259,6 +320,41 @@ function getErrorMessage(error: unknown, fallback: string) {
 		}
 	}
 	return fallback
+}
+
+function getDeploySourceLabel(row: AppDeployRow) {
+	switch (String(row.sourceType || "").trim()) {
+		case "release":
+			return "正式版本"
+		case "pipeline_sync":
+		case "pipeline":
+			return "构建同步"
+		case "image":
+			return "手动镜像"
+		case "upload":
+			return "手动归档"
+		case "compose":
+			return "配置快照"
+		default:
+			return row.pipelineRecordId ? "构建结果" : "部署记录"
+	}
+}
+
+function getDeploySourceTagType(row: AppDeployRow): "success" | "info" | "warning" | "default" {
+	switch (String(row.sourceType || "").trim()) {
+		case "release":
+			return "info"
+		case "pipeline_sync":
+		case "pipeline":
+			return "warning"
+		case "image":
+		case "upload":
+			return "default"
+		case "compose":
+			return "success"
+		default:
+			return "default"
+	}
 }
 
 const bindingRuntimeText = computed(() => {
@@ -503,8 +599,7 @@ const columns: DataTableColumns<AppDeployRow> = [
 				h("div", { class: "flex items-center space-x-2" }, [
 					h("span", { class: "font-mono" }, row.version),
 					row.isActive ? h(NTag, { type: "success", size: "small", round: true }, { default: () => "线上运行中" }) : null,
-					row.releaseId ? h(NTag, { type: "info", size: "small", round: true }, { default: () => "正式版本" }) : null,
-					!row.releaseId && row.pipelineRecordId ? h(NTag, { type: "warning", size: "small", round: true }, { default: () => "最新构建" }) : null
+					h(NTag, { type: getDeploySourceTagType(row), size: "small", round: true }, { default: () => getDeploySourceLabel(row) })
 				]),
 				row.imageTag ? h("div", { class: "font-mono text-xs text-gray-500" }, row.imageTag) : null,
 					row.pipelineRecordId ? h("div", { class: "text-xs text-slate-400" }, `来源构建 #${row.pipelineRecordId}`) : null
@@ -588,9 +683,6 @@ const releaseColumns: DataTableColumns<ReleaseRow> = [
 					h(NTag, { type: row.status === "ready" ? "success" : "warning", size: "small", round: true }, { default: () => row.status || "-" }),
 					activeReleaseId.value === row.id
 						? h(NTag, { type: "success", size: "small", round: true }, { default: () => "当前线上" })
-						: null,
-					!activeReleaseId.value && activePipelineRecordId.value === row.pipelineRecordId
-						? h(NTag, { type: "warning", size: "small", round: true }, { default: () => "线上同构建" })
 						: null
 				]),
 				row.imageTag ? h("div", { class: "font-mono text-xs text-slate-500" }, row.imageTag) : null,

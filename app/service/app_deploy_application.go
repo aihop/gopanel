@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/aihop/gopanel/app/dto/request"
@@ -145,7 +146,14 @@ func (s *AppDeployApplicationService) Trigger(opts AppDeployTriggerOptions) erro
 
 	version := fmt.Sprintf("v%d", time.Now().Unix())
 	releaseDir := filepath.Join(global.CONF.System.BaseDir, "www", website.Alias, "releases", version)
-	go ProcessAppDeployment(website, 0, version, opts.ZipPath, releaseDir, "", opts.ImageTag)
+	sourceType := "manual"
+	switch {
+	case strings.TrimSpace(opts.ImageTag) != "":
+		sourceType = "image"
+	case strings.TrimSpace(opts.ZipPath) != "":
+		sourceType = "upload"
+	}
+	go ProcessAppDeployment(website, 0, version, opts.ZipPath, releaseDir, "", opts.ImageTag, sourceType)
 	return nil
 }
 

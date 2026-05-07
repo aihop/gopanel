@@ -2,6 +2,18 @@ package response
 
 import "time"
 
+type WebsiteDeploySummary struct {
+	ID               uint      `json:"id"`
+	Version          string    `json:"version"`
+	ReleaseID        uint      `json:"releaseId"`
+	PipelineRecordID uint      `json:"pipelineRecordId"`
+	SourceType       string    `json:"sourceType"`
+	ImageTag         string    `json:"imageTag"`
+	Status           string    `json:"status"`
+	IsActive         bool      `json:"isActive"`
+	CreatedAt        time.Time `json:"createdAt"`
+}
+
 type WebsiteRes struct {
 	ID            uint      `json:"id"`
 	CreatedAt     time.Time `json:"createdAt"`
@@ -42,6 +54,9 @@ type WebsiteRes struct {
 	IPBlocklist    string `json:"ipBlocklist"`
 	SecurityHeader bool   `json:"securityHeader"`
 	HstsEnabled    bool   `json:"hstsEnabled"`
+
+	ActiveRelease      *WebsiteDeploySummary `json:"activeRelease,omitempty"`
+	LatestPipelineSync *WebsiteDeploySummary `json:"latestPipelineSync,omitempty"`
 }
 
 type WebsiteLogTopIP struct {

@@ -10,11 +10,45 @@ import (
 	"strings"
 )
 
-func ProcessAppDeployment(website model.Website, pipelineRecordID uint, version, zipPath, releaseDir, runtimeDir, imageTag string) (*model.AppDeploy, error) {
+func appDeployStartMessage(sourceType, version string) string {
+	switch strings.TrimSpace(sourceType) {
+	case "pipeline_sync":
+		return "开始同步构建结果 " + version + "\n"
+	case "image":
+		return "开始部署镜像版本 " + version + "\n"
+	case "upload":
+		return "开始部署归档版本 " + version + "\n"
+	default:
+		return "开始部署版本 " + version + "\n"
+	}
+}
+
+func appDeploySuccessMessage(sourceType string) string {
+	switch strings.TrimSpace(sourceType) {
+	case "pipeline_sync":
+		return "🎉 构建结果已同步并生效！"
+	default:
+		return "🎉 部署成功并已生效！"
+	}
+}
+
+func ProcessAppDeployment(website model.Website, pipelineRecordID uint, version, zipPath, releaseDir, runtimeDir, imageTag, sourceType string) (*model.AppDeploy, error) {
 	if err := global.DB.Preload("Domains").First(&website, website.ID).Error; err != nil {
 		return nil, fmt.Errorf("加载网站信息失败: %w", err)
 	}
-	deploy := model.AppDeploy{WebsiteID: website.ID, PipelineRecordID: pipelineRecordID, Version: version, SourceType: "pipeline", SourceUrl: zipPath, ArchiveFile: zipPath, ReleaseDir: releaseDir, RuntimeDir: runtimeDir, ImageTag: imageTag, Status: "Building", LogText: "开始部署版本 " + version + "\n"}
+	deploy := model.AppDeploy{
+		WebsiteID:        website.ID,
+		PipelineRecordID: pipelineRecordID,
+		Version:          version,
+		SourceType:       strings.TrimSpace(sourceType),
+		SourceUrl:        zipPath,
+		ArchiveFile:      zipPath,
+		ReleaseDir:       releaseDir,
+		RuntimeDir:       runtimeDir,
+		ImageTag:         imageTag,
+		Status:           "Building",
+		LogText:          appDeployStartMessage(sourceType, version),
+	}
 	if err := global.DB.Create(&deploy).Error; err != nil {
 		return nil, err
 	}
@@ -111,6 +145,6 @@ func runAppDeployment(website *model.Website, deploy *model.AppDeploy) (*model.A
 	global.DB.Model(&model.AppDeploy{}).Where("website_id = ? AND id <> ?", website.ID, deploy.ID).Update("is_active", false)
 	deploy.Status = "Running"
 	deploy.IsActive = true
-	appendLog("🎉 部署成功并已生效！")
+	appendLog(appDeploySuccessMessage(deploy.SourceType))
 	return deploy, nil
 }

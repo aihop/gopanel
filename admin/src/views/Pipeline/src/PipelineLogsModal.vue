@@ -72,7 +72,7 @@ const copyRunnerAddress = async () => {
   if (!runnerResult.value) return
   try {
     await navigator.clipboard.writeText(`127.0.0.1:${runnerResult.value.hostPort}`)
-    message.success("Runner 地址已复制")
+    message.success("运行地址已复制")
   } catch (error: any) {
     message.error(error?.message || "复制失败")
   }
@@ -245,11 +245,11 @@ watch(
     <n-alert
       v-if="runnerResult"
       type="success"
-      title="Runner 已启动"
+      title="运行实例已启动"
       class="mb-4"
     >
       <div class="text-sm">
-        当前流水线已产出 Runner 容器，访问桥接目标：
+        当前流水线已产出代码运行实例，桥接地址：
         <span class="font-mono text-emerald-700">127.0.0.1:{{ runnerResult.hostPort }}</span>
         <span class="ml-2 text-slate-500">容器 ID：{{ runnerResult.containerId.slice(0, 12) }}</span>
         <span

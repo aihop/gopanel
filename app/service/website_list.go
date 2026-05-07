@@ -8,10 +8,29 @@ import (
 	"strings"
 
 	"github.com/aihop/gopanel/app/dto/response"
+	"github.com/aihop/gopanel/app/model"
+	"github.com/aihop/gopanel/app/repo"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/pkg/gormx"
 )
+
+func buildWebsiteDeploySummary(item model.AppDeploy) *response.WebsiteDeploySummary {
+	if item.ID == 0 {
+		return nil
+	}
+	return &response.WebsiteDeploySummary{
+		ID:               item.ID,
+		Version:          item.Version,
+		ReleaseID:        item.ReleaseID,
+		PipelineRecordID: item.PipelineRecordID,
+		SourceType:       item.SourceType,
+		ImageTag:         item.ImageTag,
+		Status:           item.Status,
+		IsActive:         item.IsActive,
+		CreatedAt:        item.CreatedAt,
+	}
+}
 
 func (s *WebsiteService) List(ctx *gormx.Contextx) (websiteDTOs []*response.WebsiteRes, err error) {
 	_ = s.SyncFromCaddyfile()
@@ -22,6 +41,15 @@ func (s *WebsiteService) List(ctx *gormx.Contextx) (websiteDTOs []*response.Webs
 	if len(res) == 0 {
 		return []*response.WebsiteRes{}, nil
 	}
+	websiteIDs := make([]uint, 0, len(res))
+	for _, web := range res {
+		if web != nil && web.ID > 0 {
+			websiteIDs = append(websiteIDs, web.ID)
+		}
+	}
+	appDeployRepo := repo.NewAppDeploy(global.DB)
+	activeDeployMap, _ := appDeployRepo.ActiveDeploysByWebsiteIDs(websiteIDs)
+	latestPipelineSyncMap, _ := appDeployRepo.LatestPipelineSyncByWebsiteIDs(websiteIDs)
 	for _, web := range res {
 		var (
 			appName      string
@@ -57,40 +85,42 @@ func (s *WebsiteService) List(ctx *gormx.Contextx) (websiteDTOs []*response.Webs
 		}
 
 		websiteDTOs = append(websiteDTOs, &response.WebsiteRes{
-			ID:             web.ID,
-			CreatedAt:      web.CreatedAt,
-			UpdatedAt:      web.UpdatedAt,
-			Protocol:       web.Protocol,
-			PrimaryDomain:  web.PrimaryDomain,
-			Type:           web.Type,
-			Remark:         web.Remark,
-			Status:         web.Status,
-			CodeSource:     web.CodeSource,
-			Alias:          web.Alias,
-			AppName:        appName,
-			ExpireDate:     web.ExpireDate,
-			RuntimeName:    runtimeName,
-			RuntimeDir:     web.RuntimeDir,
-			SitePath:       sitePath,
-			AccessLogPath:  accessLogPath,
-			ErrorLogPath:   errorLogPath,
-			AppInstallID:   appInstallID,
-			PipelineID:     web.PipelineID,
-			RuntimeType:    runtimeType,
-			OtherDomains:   otherDomains,
-			DefaultServer:  web.DefaultServer,
-			Proxy:          web.Proxy,
-			IPV6:           web.IPV6,
-			Ipv6:           web.IPV6,
-			AntiCrawler:    web.AntiCrawler,
-			AntiLeech:      web.AntiLeech,
-			RateLimitMode:  web.RateLimitMode,
-			WafEnable:      web.WafEnable,
-			BlockSensitive: web.BlockSensitive,
-			IPAllowlist:    web.IPAllowlist,
-			IPBlocklist:    web.IPBlocklist,
-			SecurityHeader: web.SecurityHeader,
-			HstsEnabled:    web.HstsEnabled,
+			ID:                 web.ID,
+			CreatedAt:          web.CreatedAt,
+			UpdatedAt:          web.UpdatedAt,
+			Protocol:           web.Protocol,
+			PrimaryDomain:      web.PrimaryDomain,
+			Type:               web.Type,
+			Remark:             web.Remark,
+			Status:             web.Status,
+			CodeSource:         web.CodeSource,
+			Alias:              web.Alias,
+			AppName:            appName,
+			ExpireDate:         web.ExpireDate,
+			RuntimeName:        runtimeName,
+			RuntimeDir:         web.RuntimeDir,
+			SitePath:           sitePath,
+			AccessLogPath:      accessLogPath,
+			ErrorLogPath:       errorLogPath,
+			AppInstallID:       appInstallID,
+			PipelineID:         web.PipelineID,
+			RuntimeType:        runtimeType,
+			OtherDomains:       otherDomains,
+			DefaultServer:      web.DefaultServer,
+			Proxy:              web.Proxy,
+			IPV6:               web.IPV6,
+			Ipv6:               web.IPV6,
+			AntiCrawler:        web.AntiCrawler,
+			AntiLeech:          web.AntiLeech,
+			RateLimitMode:      web.RateLimitMode,
+			WafEnable:          web.WafEnable,
+			BlockSensitive:     web.BlockSensitive,
+			IPAllowlist:        web.IPAllowlist,
+			IPBlocklist:        web.IPBlocklist,
+			SecurityHeader:     web.SecurityHeader,
+			HstsEnabled:        web.HstsEnabled,
+			ActiveRelease:      buildWebsiteDeploySummary(activeDeployMap[web.ID]),
+			LatestPipelineSync: buildWebsiteDeploySummary(latestPipelineSyncMap[web.ID]),
 		})
 	}
 	FillWebsiteRuntimeMeta(context.Background(), websiteDTOs)
@@ -124,9 +154,9 @@ func (s *WebsiteService) DeployFromPipeline(ctx context.Context, pipelineID uint
 		if ctx.Err() != nil {
 			return summary, ctx.Err()
 		}
-		global.LOG.Infof("Triggering deployment for website %s (ID: %d) from pipeline %d", w.Alias, w.ID, pipelineID)
+		global.LOG.Infof("Triggering pipeline result sync for website %s (ID: %d) from pipeline %d", w.Alias, w.ID, pipelineID)
 		releaseDir := filepath.Join(global.CONF.System.BaseDir, "www", w.Alias, "releases", version)
-		if _, err := ProcessAppDeployment(w, pipelineRecordID, version, artifactPath, releaseDir, "", imageTag); err != nil {
+		if _, err := ProcessAppDeployment(w, pipelineRecordID, version, artifactPath, releaseDir, "", imageTag, "pipeline_sync"); err != nil {
 			summary.Failed++
 			failed = append(failed, fmt.Sprintf("%s: %v", w.Alias, err))
 			continue
@@ -135,7 +165,7 @@ func (s *WebsiteService) DeployFromPipeline(ctx context.Context, pipelineID uint
 	}
 
 	if len(failed) > 0 {
-		return summary, fmt.Errorf("网站发布失败: %s", strings.Join(failed, " | "))
+		return summary, fmt.Errorf("网站构建结果同步失败: %s", strings.Join(failed, " | "))
 	}
 	return summary, nil
 }

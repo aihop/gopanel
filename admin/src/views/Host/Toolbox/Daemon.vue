@@ -64,6 +64,21 @@
           :bordered="false"
           :scroll-x="900"
         />
+        <div class="mt-5 flex justify-end">
+          <n-pagination
+            v-model:page="curPage"
+            v-model:page-size="pageSize"
+            :page-count="pages"
+            :item-count="list.length < pageSize && curPage === 1 ? list.length : undefined"
+            :page-sizes="pageSizeOptions"
+            show-size-picker
+            show-quick-jumper
+            @update:page="onPageChange"
+            @update:page-size="onPageSizeChange"
+          >
+            <template #prefix>共 {{ pages }} 页</template>
+          </n-pagination>
+        </div>
       </div>
 
       <div

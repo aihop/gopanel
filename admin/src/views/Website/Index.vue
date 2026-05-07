@@ -364,6 +364,19 @@ function getWebsiteBindingMeta(row: WebsiteTableRow) {
 	})
 }
 
+function getWebsiteDeploySummary(row: WebsiteTableRow) {
+	const lines: string[] = []
+	if (row.activeRelease?.releaseId) {
+		lines.push(`正式版本 v${row.activeRelease.version}`)
+	} else {
+		lines.push("正式版本 未上线")
+	}
+	if (row.latestPipelineSync?.pipelineRecordId) {
+		lines.push(`构建同步 #${row.latestPipelineSync.pipelineRecordId}`)
+	}
+	return lines
+}
+
 const columns: DataTableColumns<WebsiteTableRow> = [
 	{
 		title: t("website.primaryDomain"),
@@ -457,11 +470,17 @@ const columns: DataTableColumns<WebsiteTableRow> = [
 			}
 
 			const bindingMeta = getWebsiteBindingMeta(row)
+			const deploySummary = getWebsiteDeploySummary(row)
 			return h("div", { class: "flex flex-col gap-2" }, [
 				h('div', { class: 'flex items-center flex-wrap gap-1' }, tags),
 				bindingMeta
 					? h("div", { class: "text-xs text-slate-500" }, `${bindingMeta.source} · ${bindingMeta.detail}`)
-					: null
+					: null,
+				h(
+					"div",
+					{ class: "flex flex-wrap gap-2 text-xs text-slate-400" },
+					deploySummary.map((item) => h("span", item))
+				)
 			])
 		}
 	},

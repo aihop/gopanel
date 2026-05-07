@@ -64,7 +64,7 @@ defineProps<{
   validate: any
   statusLoading: boolean
   reloadLoading: boolean
-  repairHintType: string
+  repairHintType: "default" | "primary" | "info" | "success" | "warning" | "error"
 }>()
 
 const emit = defineEmits<{

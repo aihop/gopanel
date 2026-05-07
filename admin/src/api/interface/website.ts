@@ -1,6 +1,18 @@
 import type { CommonModel, ReqPage } from '.'
 
 export namespace Website {
+    export interface WebsiteDeploySummary {
+        id: number;
+        version: string;
+        releaseId: number;
+        pipelineRecordId: number;
+        sourceType: string;
+        imageTag: string;
+        status: string;
+        isActive: boolean;
+        createdAt: string;
+    }
+
     export interface Website extends CommonModel {
         primaryDomain: string;
         type: string;
@@ -49,6 +61,8 @@ export namespace Website {
         runtimeKind?: string;
         runtimeMode?: string;
         runUser?: string;
+        activeRelease?: WebsiteDeploySummary;
+        latestPipelineSync?: WebsiteDeploySummary;
     }
     export interface WebsiteRes extends CommonModel {
         protocol: string;
@@ -75,6 +89,8 @@ export namespace Website {
         runtimeMode?: string;
         runUser?: string;
         sslExpireDate: Date;
+        activeRelease?: WebsiteDeploySummary;
+        latestPipelineSync?: WebsiteDeploySummary;
     }
 
     export interface AppDeployRecord extends CommonModel {

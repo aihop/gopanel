@@ -37,9 +37,43 @@ const handleCopy = async (text: string, successText: string) => {
 }
 
 const sourceTypeLabelMap: Record<string, string> = {
-  image: "镜像",
-  archive: "归档",
-  release_dir: "目录"
+  image: "镜像引用",
+  archive: "归档包",
+  release_dir: "发布目录"
+}
+
+const parseArtifactMeta = (row: Pipeline.ResRelease) => {
+  if (!row.artifactMeta) return {}
+  try {
+    const parsed = JSON.parse(row.artifactMeta)
+    return parsed && typeof parsed === "object" ? parsed : {}
+  } catch (_error) {
+    return {}
+  }
+}
+
+const getArtifactSummary = (row: Pipeline.ResRelease) => {
+  const artifactMeta = parseArtifactMeta(row) as { runnerMode?: string }
+  const isRunnerMode = (artifactMeta.runnerMode || "").toLowerCase() === "runner"
+
+  if (row.sourceType === "image") {
+    return {
+      label: isRunnerMode ? "镜像引用" : "脚本识别镜像",
+      value: row.imageTag || "-"
+    }
+  }
+
+  if (row.sourceType === "archive") {
+    return {
+      label: isRunnerMode ? "代码归档包" : "脚本归档包",
+      value: row.archiveFile || "-"
+    }
+  }
+
+  return {
+    label: isRunnerMode ? "发布目录" : "脚本发布目录",
+    value: row.releaseDir || "-"
+  }
 }
 
 const renderActiveWebsiteTag = (count?: number, names?: string[]) => {
@@ -107,7 +141,7 @@ const columns: DataTableColumns<Pipeline.ResRelease> = [
     }
   },
   {
-    title: "来源",
+    title: "结果来源",
     key: "sourceType",
     width: 100,
     render: (row: Pipeline.ResRelease) => h(NTag, { size: "small", type: "info" }, {
@@ -115,12 +149,19 @@ const columns: DataTableColumns<Pipeline.ResRelease> = [
     })
   },
   {
-    title: "交付物",
+    title: "交付结果",
     key: "artifact",
     minWidth: 320,
     render(row: Pipeline.ResRelease) {
-      const artifact = row.imageTag || row.archiveFile || row.releaseDir || "-"
-      return h("div", { class: "break-all text-xs text-slate-500" }, artifact)
+      const artifact = getArtifactSummary(row)
+      return h("div", { class: "flex flex-col gap-1 min-w-0" }, [
+        h(
+          NTag,
+          { size: "small", type: row.sourceType === "image" ? "warning" : "default" },
+          { default: () => artifact.label }
+        ),
+        h("div", { class: "break-all text-xs text-slate-500" }, artifact.value)
+      ])
     }
   },
   {
@@ -178,7 +219,7 @@ watch(
     @update:show="(val) => emit('update:show', val)"
   >
     <div class="mb-4 text-sm text-slate-500">
-      正式版本用于稳定发布与回滚；执行记录仅表示最新构建与自动部署状态，请先手动发布成功构建。
+      正式版本承接稳定上线、网站切换与回滚；这里展示每个版本的交付结果，以及当前有哪些站点正在使用它。
     </div>
     <div class="h-[520px] overflow-auto">
       <n-data-table

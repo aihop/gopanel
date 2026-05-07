@@ -152,7 +152,7 @@
               v-if="form.codeSource === 'pipeline'"
               class="mt-2 text-xs text-slate-500"
             >
-              这里可留空。流水线成功后会自动部署最新构建并写入真实代理地址；正式版本仍需在执行记录中手动发布。
+              这里可留空。流水线成功后只会同步临时运行结果并回填真实代理地址；稳定上线、网站切换与回滚请在正式版本中操作。
             </div>
           </div>
         </n-form-item>
@@ -293,7 +293,6 @@ import { computed, ref, watch, onMounted } from "vue"
 import { websiteCreateAPI, websiteUpdateAPI } from "@/api/modules/website"
 import { ListAppInstalled } from "@/api/modules/apps"
 import { listAllImage } from "@/api/modules/container"
-import { useMessage } from "naive-ui"
 import { buildRuntimeBadgeText, buildRuntimeDetailText as formatRuntimeDetailText, getRunUserLabel } from "@/utils/runtime"
 import { listAllPipelines } from "@/utils/pipeline"
 import { getWebsiteIpv6Value, normalizeWebsiteProtocol as normalizeWebsiteProtocolValue } from "@/utils/websiteRuntime"
@@ -302,7 +301,6 @@ const visible = ref(false)
 const loading = ref(false)
 const emit = defineEmits(["confirm"])
 const formRef = ref<FormInst | null>(null)
-const message = useMessage()
 const actionType = ref("add")
 
 type RuntimeOption = { label: string; value: number }

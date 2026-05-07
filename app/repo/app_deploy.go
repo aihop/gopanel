@@ -161,3 +161,51 @@ func (r *AppDeployRepo) activeWebsiteNamesByTarget(column string, ids []uint) (m
 	}
 	return result, nil
 }
+
+func (r *AppDeployRepo) ActiveDeploysByWebsiteIDs(websiteIDs []uint) (map[uint]model.AppDeploy, error) {
+	result := make(map[uint]model.AppDeploy)
+	if len(websiteIDs) == 0 {
+		return result, nil
+	}
+	var rows []model.AppDeploy
+	if err := r.db.
+		Where("website_id IN ? AND is_active = ?", websiteIDs, true).
+		Order("id desc").
+		Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, item := range rows {
+		if item.WebsiteID == 0 {
+			continue
+		}
+		if _, exists := result[item.WebsiteID]; exists {
+			continue
+		}
+		result[item.WebsiteID] = item
+	}
+	return result, nil
+}
+
+func (r *AppDeployRepo) LatestPipelineSyncByWebsiteIDs(websiteIDs []uint) (map[uint]model.AppDeploy, error) {
+	result := make(map[uint]model.AppDeploy)
+	if len(websiteIDs) == 0 {
+		return result, nil
+	}
+	var rows []model.AppDeploy
+	if err := r.db.
+		Where("website_id IN ? AND source_type IN ?", websiteIDs, []string{"pipeline_sync", "pipeline"}).
+		Order("id desc").
+		Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, item := range rows {
+		if item.WebsiteID == 0 {
+			continue
+		}
+		if _, exists := result[item.WebsiteID]; exists {
+			continue
+		}
+		result[item.WebsiteID] = item
+	}
+	return result, nil
+}

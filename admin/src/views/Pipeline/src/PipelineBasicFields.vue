@@ -66,9 +66,9 @@ const handlePipelineKeyInput = () => {
     <n-radio-group v-model:value="formModel.pipelineMode">
       <n-space vertical>
         <n-radio value="runner">简单模式 (代码产物部署，推荐)</n-radio>
-        <div class="ml-6 text-xs text-slate-500">流水线会把代码产物解压到版本目录，再交给运行时基础镜像执行；</div>
+        <div class="ml-6 text-xs text-slate-500">流水线会把代码产物解压到版本目录，再交给运行时基础镜像执行；正式版本通常展示为归档包或发布目录。</div>
         <n-radio value="script">高级模式 (纯脚本)</n-radio>
-        <div class="ml-6 text-xs text-slate-500">适合熟练用户。你完全自行控制 BuildScript、镜像构建、产物归档与发布流程。</div>
+        <div class="ml-6 text-xs text-slate-500">适合熟练用户。BuildScript 完全自管，交付结果可能是归档、目录或运行中的服务；只有脚本显式构建镜像时，才会额外记录镜像引用。</div>
       </n-space>
     </n-radio-group>
   </n-form-item>

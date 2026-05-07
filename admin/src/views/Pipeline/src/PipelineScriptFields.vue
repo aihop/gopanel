@@ -40,13 +40,18 @@ defineProps<{
     />
   </n-form-item>
   <n-form-item
-    label="产出镜像名"
+    label="脚本产出镜像名"
     path="outputImage"
   >
-    <n-input
-      v-model:value="formModel.outputImage"
-      placeholder="例如: shoply。系统会自动拼成 shoply:<版本号>"
-    />
+    <div class="w-full">
+      <n-input
+        v-model:value="formModel.outputImage"
+        placeholder="选填，例如: shoply。系统会自动拼成 shoply:<版本号>"
+      />
+      <div class="mt-2 text-xs text-slate-500">
+        仅当 BuildScript 显式构建并打标签时填写，用于记录脚本识别到的镜像引用；纯脚本模式默认仍以归档、目录或运行结果作为主要交付结果。
+      </div>
+    </div>
   </n-form-item>
   <n-form-item
     label="产物路径"

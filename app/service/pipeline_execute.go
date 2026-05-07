@@ -121,8 +121,8 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 	} else {
 		logger.Info("未启用 Runner 步骤，跳过...")
 	}
-	s.recordRepo.UpdateStatus(recordID, "deploying", "通知关联网站进行部署...")
-	logger.Info("正在通知所有关联此流水线的网站进行部署...")
+	s.recordRepo.UpdateStatus(recordID, "deploying", "同步关联网站的临时运行结果...")
+	logger.Info("正在同步所有关联此流水线的网站临时运行结果...")
 	finalImage := detectBuiltImageRef(p, record.Version, logger.GetLogs())
 	if finalImage != "" {
 		logger.Info("检测到本次真实构建镜像: %s", finalImage)
@@ -132,7 +132,7 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 	summary, err := NewWebsite().DeployFromPipeline(ctx, p.ID, recordID, record.Version, archivePath, finalImage)
 	if err != nil {
 		s.recordRepo.UpdateStatus(recordID, "failed", err.Error())
-		logger.Error("触发网站部署失败: %v", err)
+		logger.Error("同步网站临时运行结果失败: %v", err)
 		return
 	}
 	if summary != nil && summary.Matched == 0 {
@@ -142,7 +142,7 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 	}
 	msg := ""
 	if summary != nil {
-		msg = fmt.Sprintf("已完成 %d/%d 个网站发布", summary.Success, summary.Matched)
+		msg = fmt.Sprintf("已完成 %d/%d 个网站临时结果同步", summary.Success, summary.Matched)
 		logger.Info("%s", msg)
 	}
 	s.recordRepo.UpdateStatus(recordID, "success", msg)

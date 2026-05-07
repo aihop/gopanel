@@ -20,6 +20,15 @@
               @update:value="emit('update-mirror-urls', $event, 'registryMirrors')"
             />
             <n-button
+              :disabled="mirrorsDisabled || mirrorSaveLoading"
+              :loading="mirrorSaveLoading"
+              type="primary"
+              ghost
+              @click="emit('save-mirror-urls')"
+            >
+              保存
+            </n-button>
+            <n-button
               :disabled="mirrorsDisabled"
               @click="emit('open-drawer', 'registryMirrors')"
             >
@@ -100,10 +109,12 @@ const props = defineProps<{
   daemonLoading: boolean
   logPruneLoading: boolean
   logSwitchValue: boolean
+  mirrorSaveLoading: boolean
 }>()
 
 const emit = defineEmits<{
   (e: "update-mirror-urls", value: string, key: string): void
+  (e: "save-mirror-urls"): void
   (e: "open-drawer", key: string): void
   (e: "log-switch-change", value: boolean): void
   (e: "iptables-change", value: boolean): void

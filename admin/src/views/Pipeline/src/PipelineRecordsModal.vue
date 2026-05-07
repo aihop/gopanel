@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { h, ref, watch } from "vue"
-import { NModal, NDataTable, NButton, NTag, NSpace, NPopconfirm, NPopover, useMessage, type DataTableColumns } from "naive-ui"
+import { NModal, NDataTable, NButton, NTag, NSpace, NPopconfirm, useMessage, type DataTableColumns } from "naive-ui"
 import { getPipelineRecords, runPipeline, stopPipeline, deletePipelineRecord, publishPipelineRelease } from "@/api/modules/pipeline"
 import { Pipeline } from "@/api/interface/pipeline"
 import PipelineLogsModal from "./PipelineLogsModal.vue"
@@ -114,36 +114,31 @@ const handleDelete = async (row: Pipeline.ResRecord) => {
 const handlePublishRelease = async (row: Pipeline.ResRecord) => {
   try {
     await publishPipelineRelease({ id: row.id })
-    message.success(row.released ? "该记录已存在正式版本" : "已发布为正式版本")
+    message.success(row.released ? "该记录已存在正式版本" : "已生成正式版本")
     fetchData()
   } catch (error: any) {
-    message.error(error.message || "发布正式版本失败")
+    message.error(error.message || "生成正式版本失败")
   }
 }
 
-const renderActiveWebsiteTag = (count?: number, names?: string[]) => {
-  if (!count) return null
-  const websiteNames = Array.isArray(names) ? names.filter(Boolean) : []
-  return h(
-    NPopover,
-    { trigger: "hover" },
-    {
-      trigger: () =>
-        h(
-          NTag,
-          { size: "small", type: "warning", style: "cursor:pointer;" },
-          { default: () => `线上 ${count} 站点` }
-        ),
-      default: () =>
-        h(
-          "div",
-          { class: "max-w-[260px] space-y-1 text-xs text-slate-600" },
-          websiteNames.length
-            ? websiteNames.map((name) => h("div", { class: "break-all" }, name))
-            : [h("div", "暂无站点信息")]
-        )
-    }
-  )
+const getRecordResultTags = (row: Pipeline.ResRecord) => {
+  const tags: Array<{ label: string; type: "success" | "warning" | "info" | "default" }> = []
+
+  if (row.runnerHostPort) {
+    tags.push({ label: "运行实例", type: "success" })
+  }
+  if (row.archiveFile) {
+    tags.push({ label: "归档包", type: "info" })
+  }
+  if (row.imageTag) {
+    tags.push({ label: row.runnerHostPort ? "镜像引用" : "脚本识别镜像", type: "warning" })
+  }
+
+  if (tags.length === 0) {
+    tags.push({ label: "脚本结果", type: "default" })
+  }
+
+  return tags
 }
 
 const columns: DataTableColumns<Pipeline.ResRecord> = [
@@ -197,9 +192,27 @@ const columns: DataTableColumns<Pipeline.ResRecord> = [
           NTag,
           { size: "small", type: row.released ? "success" : "default" },
           { default: () => (row.released ? "已发布" : "未发布") }
-        ),
-        renderActiveWebsiteTag(row.activeWebsiteCount, row.activeWebsiteNames)
+        )
       ])
+    }
+  },
+  {
+    title: "结果类型",
+    key: "resultType",
+    width: 220,
+    render(row: Pipeline.ResRecord) {
+      const tags = getRecordResultTags(row)
+      return h(
+        "div",
+        { class: "flex flex-wrap gap-1" },
+        tags.map((item) =>
+          h(
+            NTag,
+            { size: "small", type: item.type },
+            { default: () => item.label }
+          )
+        )
+      )
     }
   },
   {
@@ -308,7 +321,7 @@ const columns: DataTableColumns<Pipeline.ResRecord> = [
             ghost: !row.released,
             disabled: !!row.released,
             onClick: () => handlePublishRelease(row)
-          }, { default: () => (row.released ? "已发布" : "发布为正式版本") })
+          }, { default: () => (row.released ? "已生成" : "生成正式版本") })
         )
       }
 
@@ -372,7 +385,7 @@ watch(
     @update:show="(val) => emit('update:show', val)"
   >
     <div class="mb-4 text-sm text-slate-500">
-      执行记录反映每次构建与自动部署结果；如需稳定发布与回滚，请手动发布为正式版本。
+      执行记录只承接每次构建与临时运行结果；需要稳定上线、网站切换与回滚时，请先在这里生成正式版本，再到正式版本页查看网站使用情况。
     </div>
     <div class="h-[500px] overflow-auto">
       <n-data-table

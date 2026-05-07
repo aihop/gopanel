@@ -34,7 +34,9 @@
             :daemon-loading="daemonLoading"
             :log-prune-loading="logPruneLoading"
             :log-switch-value="logSwitchValue"
+            :mirror-save-loading="mirrorSaveLoading"
             @update-mirror-urls="updateMirrorUrls"
+            @save-mirror-urls="saveMirrorUrls"
             @open-drawer="handleOpenDrawer"
             @log-switch-change="handleLogSwitchChange"
             @iptables-change="handleIptablesToggle"
@@ -86,6 +88,7 @@
       :show="showConfirmationModal"
       preset="dialog"
       title="配置修改"
+      :loading="mirrorSaveLoading"
       positive-text="确认"
       negative-text="取消"
       @update:show="showConfirmationModal = $event"
@@ -165,9 +168,11 @@ const {
   repairLinger,
   getDaemon,
   updateMirrorUrls,
+  saveMirrorUrls,
   openDrawer,
   showConfirmationModal,
   confirmationInput,
+  mirrorSaveLoading,
   handleConfirmSaveChanges,
   dockerConf,
   handleTabChange,

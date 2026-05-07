@@ -22,6 +22,7 @@ export const useContainerSetting = (message: any) => {
   const editingMirrorUrls = ref("")
   const showConfirmationModal = ref(false)
   const confirmationInput = ref("")
+  const mirrorSaveLoading = ref(false)
   const dockerConf = ref("")
   const showRestartConfirm = ref(false)
   const saveLoading = ref(false)
@@ -121,10 +122,19 @@ export const useContainerSetting = (message: any) => {
   }
 
   function updateMirrorUrls(value: string, key: string) {
+    if (key === "registryMirrors") {
+      editingMirrorUrls.value = value
+    }
     daemon.value[key] = value
       .split("\n")
       .map((url: string) => url.trim())
       .filter((url: string) => url)
+  }
+
+  function saveMirrorUrls() {
+    editingMirrorUrls.value = Array.isArray(daemon.value?.registryMirrors) ? daemon.value.registryMirrors.join("\n") : ""
+    confirmationInput.value = ""
+    showConfirmationModal.value = true
   }
 
   function openDrawer(drawerRef: any, key: string) {
@@ -133,16 +143,29 @@ export const useContainerSetting = (message: any) => {
   }
 
   async function handleConfirmSaveChanges() {
-    if (confirmationInput.value === "立即重启") {
-      daemon.value.registryMirrors = editingMirrorUrls.value
+    if (confirmationInput.value !== "立即重启") {
+      message.error('输入错误，请输入 "立即重启"')
+      return
+    }
+    mirrorSaveLoading.value = true
+    try {
+      const value = editingMirrorUrls.value
         .split("\n")
         .map(url => url.trim())
         .filter(url => url)
-      showConfirmationModal.value = false
-      message.success("镜像加速配置已更新，正在重启Docker以使配置生效...")
-      updateDockerStatus("restart")
-    } else {
-      message.error('输入错误，请输入 "立即重启"')
+      const res = await updateDaemonUpdate("Mirrors", value.join(","))
+      if (res && res.code === 0) {
+        daemon.value.registryMirrors = value
+        showConfirmationModal.value = false
+        message.success("镜像加速配置已保存")
+        getDaemon(true)
+      } else {
+        message.error(res?.msg || "保存失败")
+      }
+    } catch (error: any) {
+      message.error(error?.message || "保存异常")
+    } finally {
+      mirrorSaveLoading.value = false
     }
   }
 
@@ -314,10 +337,12 @@ export const useContainerSetting = (message: any) => {
     repairLinger,
     getDaemon,
     updateMirrorUrls,
+    saveMirrorUrls,
     openDrawer,
     editingMirrorUrls,
     showConfirmationModal,
     confirmationInput,
+    mirrorSaveLoading,
     handleConfirmSaveChanges,
     dockerConf,
     fetchDaemonJsonFile,

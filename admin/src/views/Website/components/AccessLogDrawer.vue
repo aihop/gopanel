@@ -134,7 +134,7 @@ import { WebsiteLogAPI, WebsiteTodayIPStatsAPI } from "@/api/modules/website"
 import { hasWebsiteRuntimeMeta } from "@/utils/websiteRuntime"
 import { copyText } from "@/utils/util"
 import { NButton, NDrawer, NDrawerContent, NTag, useMessage } from "naive-ui"
-import { computed, ref } from "vue"
+import { computed, ref, watch } from "vue"
 import WebsiteLogDetailModal from "./WebsiteLogDetailModal.vue"
 import WebsiteLogPanel from "./WebsiteLogPanel.vue"
 import WebsiteTodayIPStatsModal from "./WebsiteTodayIPStatsModal.vue"
@@ -191,6 +191,17 @@ const canToggleView = computed(() => logLines.value.length > 0)
 const showStructuredList = computed(() => logLines.value.length > 0 && !rawMode.value)
 const isErrorView = computed(() => logType.value === "error")
 const detailTitle = computed(() => (!activeEntry.value ? "日志详情" : `${activeEntry.value.method} ${activeEntry.value.path}`))
+
+function closeDetail() {
+  detailVisible.value = false
+  selectedLogRaw.value = ""
+}
+
+watch(activeEntry, entry => {
+  if (!entry && detailVisible.value) {
+    closeDetail()
+  }
+})
 
 async function loadLogs(latest = false) {
   if (!website.value) return
@@ -272,6 +283,7 @@ function open(row: Website.WebsiteDTO, type: WebsiteLogType = "access") {
 }
 
 function changePage(nextPage: number) {
+  closeDetail()
   page.value = nextPage
   loadLogs(false)
 }
