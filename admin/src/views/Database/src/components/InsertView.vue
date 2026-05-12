@@ -58,11 +58,9 @@ const submitRecord = async () => {
     if (res.code === 0) {
       message.success(props.isEditing ? '更新成功' : '插入成功')
       emit('success')
-    } else {
-      message.error(res.message || '保存失败')
-    }
+    } 
   } catch (error) {
-    message.error('保存请求失败')
+    // message.error('保存请求失败')
   } finally {
     savingRecord.value = false
   }
