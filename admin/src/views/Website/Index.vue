@@ -372,7 +372,7 @@ function getWebsiteDeploySummary(row: WebsiteTableRow) {
 		lines.push("正式版本 未上线")
 	}
 	if (row.latestPipelineSync?.pipelineRecordId) {
-		lines.push(`构建同步 #${row.latestPipelineSync.pipelineRecordId}`)
+		lines.push(`${row.latestPipelineSync.isActive ? "构建同步 当前生效" : "构建同步"} #${row.latestPipelineSync.pipelineRecordId}`)
 	}
 	return lines
 }

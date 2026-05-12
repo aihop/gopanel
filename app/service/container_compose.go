@@ -18,9 +18,11 @@ import (
 const composeProjectLabel = "com.docker.compose.project"
 const composeConfigLabel = "com.docker.compose.project.config_files"
 const composeWorkdirLabel = "com.docker.compose.project.working_dir"
+const composeServiceLabel = "com.docker.compose.service"
 const podmanComposeProjectLabel = "io.podman.compose.project"
 const podmanComposeConfigLabel = "io.podman.compose.project.config_files"
 const podmanComposeWorkdirLabel = "io.podman.compose.project.working_dir"
+const podmanComposeServiceLabel = "io.podman.compose.service"
 const composeCreatedBy = "createdBy"
 
 type DockerCompose struct {

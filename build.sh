@@ -49,11 +49,8 @@ fi
 MAIN_PKG="./main.go"
 GPC_ROOT="${PROJECT_ROOT}/gpc"
 GPC_MAIN_PKG="./main.go"
-GPAGENT_ROOT="${PROJECT_ROOT}/gp-agent"
-GPAGENT_MAIN_PKG="./main.go"
 LDFLAGS="-s -w -X github.com/aihop/gopanel/constant.AppVersion=${VERSION} -X github.com/aihop/gopanel/constant.BuildTime=${BUILD_TIME} -X github.com/aihop/gopanel/constant.BuildVersionCode=${VERSION_CODE} -X github.com/aihop/gopanel/constant.AppBrand=${APP_BRAND}"
 GPC_LDFLAGS="-s -w"
-GPAGENT_LDFLAGS="-s -w -X github.com/aihop/gopanel/gp-agent/app/service.Version=${VERSION} -X github.com/aihop/gopanel/gp-agent/app/service.VersionCode=${VERSION_CODE} -X github.com/aihop/gopanel/gp-agent/app/service.BuildTime=${BUILD_TIME} -X github.com/aihop/gopanel/gp-agent/app/service.GitCommit=${GIT_COMMIT} -X github.com/aihop/gopanel/gp-agent/app/service.GitDirty=${GIT_DIRTY}"
 
 echo "==========================================="
 echo "Building Project: ${APP_BRAND}"
@@ -118,27 +115,6 @@ build_gpc_local() {
   fi
 }
 
-build_gpagent_local() {
-  local goos="$1" goarch="$2" outdir="$3"
-  echo ">>> [Build] gp-agent ${goos}/${goarch} (CGO_ENABLED=0)"
-
-  mkdir -p "${outdir}"
-  local output_path="${outdir}/gp-agent"
-  if [ "${goos}" = "windows" ]; then output_path="${output_path}.exe"; fi
-
-  (
-    cd "${GPAGENT_ROOT}"
-    GOOS="${goos}" GOARCH="${goarch}" CGO_ENABLED=0 \
-    go build -trimpath -ldflags "${GPAGENT_LDFLAGS}" -o "${output_path}" "${GPAGENT_MAIN_PKG}"
-  )
-
-  if [ "${goos}" != "windows" ]; then chmod +x "${output_path}"; fi
-
-  if command -v file >/dev/null; then
-    echo "    Verify gp-agent: $(file "${output_path}" | cut -d: -f2-)"
-  fi
-}
-
 # Docker 构建逻辑保持不变，但增加平台参数确保架构正确
 build_docker_linux() {
   local goarch="$1" outdir="$2" exe_name="$3"
@@ -174,7 +150,6 @@ for t in "${TARGETS[@]}"; do
       fi
       build_local "${GOOS}" "${GOARCH}" "${dist_dir}" "${APP_NAME}" "${CGO}"
       build_gpc_local "${GOOS}" "${GOARCH}" "${dist_dir}"
-      build_gpagent_local "${GOOS}" "${GOARCH}" "${dist_dir}"
       ;;
     linux)
       if [ "${CGO}" = "0" ]; then
@@ -184,12 +159,10 @@ for t in "${TARGETS[@]}"; do
         build_docker_linux "${GOARCH}" "${dist_dir}" "${APP_NAME}"
       fi
       build_gpc_local "linux" "${GOARCH}" "${dist_dir}"
-      build_gpagent_local "linux" "${GOARCH}" "${dist_dir}"
       ;;
     windows)
       build_local "windows" "${GOARCH}" "${dist_dir}" "${APP_NAME}" "0"
       build_gpc_local "windows" "${GOARCH}" "${dist_dir}"
-      build_gpagent_local "windows" "${GOARCH}" "${dist_dir}"
       ;;
   esac
 

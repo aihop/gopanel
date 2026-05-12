@@ -16,6 +16,8 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/subosito/gotenv"
 	"path"
+	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -136,6 +138,9 @@ func ensureComposeRecord(name string, composePath string) {
 	_ = composeRepo.CreateRecord(&model.Compose{Name: name, Path: composePath})
 }
 func getContainerNames(install model.AppInstall) ([]string, error) {
+	if actualNames, err := getRuntimeContainerNamesForInstall(&install); err == nil && len(actualNames) > 0 {
+		return actualNames, nil
+	}
 	envStr, err := coverEnvJsonToStr(install.Env)
 	if err != nil {
 		return nil, err
@@ -145,19 +150,83 @@ func getContainerNames(install model.AppInstall) ([]string, error) {
 		return nil, err
 	}
 	containerMap := make(map[string]struct{})
+	projectName := normalizeComposeProjectName(project.Name)
 	for _, service := range project.AllServices() {
-		if service.ContainerName == "${CONTAINER_NAME}" || service.ContainerName == "" {
-			continue
+		containerName := normalizeContainerName(service.ContainerName)
+		if containerName != "" && containerName != "${CONTAINER_NAME}" {
+			containerMap[containerName] = struct{}{}
 		}
-		containerMap[service.ContainerName] = struct{}{}
+		serviceName := normalizeContainerName(service.Name)
+		if projectName != "" && serviceName != "" {
+			containerMap[projectName+"-"+serviceName+"-1"] = struct{}{}
+			containerMap[projectName+"_"+serviceName+"_1"] = struct{}{}
+		}
 	}
 	var containerNames []string
 	for k := range containerMap {
 		containerNames = append(containerNames, k)
 	}
 	if len(containerNames) == 0 {
-		containerNames = append(containerNames, install.ContainerName)
+		containerNames = splitContainerNames(install.ContainerName)
 	}
+	if len(containerNames) == 0 {
+		containerName := normalizeContainerName(install.ContainerName)
+		if containerName != "" {
+			containerNames = append(containerNames, containerName)
+		}
+	}
+	sort.Strings(containerNames)
+	return containerNames, nil
+}
+
+var composeProjectNameSanitizer = regexp.MustCompile(`[^a-z0-9_-]+`)
+
+func normalizeComposeProjectName(name string) string {
+	name = strings.ToLower(strings.TrimSpace(name))
+	if name == "" {
+		return ""
+	}
+	return composeProjectNameSanitizer.ReplaceAllString(name, "")
+}
+
+func installComposeProjectAliases(install *model.AppInstall) []string {
+	if install == nil {
+		return nil
+	}
+	projectName := normalizeComposeProjectName(install.Name)
+	if projectName == "" {
+		return nil
+	}
+	return []string{projectName}
+}
+
+func getRuntimeContainerNamesForInstall(install *model.AppInstall) ([]string, error) {
+	if install == nil {
+		return nil, nil
+	}
+	containersMap, err := loadInstallMatchedContainers(install)
+	if err != nil {
+		return nil, err
+	}
+	if len(containersMap) == 0 {
+		return nil, nil
+	}
+	nameSet := make(map[string]struct{}, len(containersMap))
+	for rawName := range containersMap {
+		name := normalizeContainerName(rawName)
+		if name == "" {
+			continue
+		}
+		nameSet[name] = struct{}{}
+	}
+	containerNames := make([]string, 0, len(nameSet))
+	for name := range nameSet {
+		containerNames = append(containerNames, name)
+	}
+	if len(containerNames) == 0 {
+		return nil, nil
+	}
+	sort.Strings(containerNames)
 	return containerNames, nil
 }
 func coverEnvJsonToStr(envJson string) (string, error) {

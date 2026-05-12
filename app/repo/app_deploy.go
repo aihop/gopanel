@@ -162,14 +162,14 @@ func (r *AppDeployRepo) activeWebsiteNamesByTarget(column string, ids []uint) (m
 	return result, nil
 }
 
-func (r *AppDeployRepo) ActiveDeploysByWebsiteIDs(websiteIDs []uint) (map[uint]model.AppDeploy, error) {
+func (r *AppDeployRepo) ActiveReleaseByWebsiteIDs(websiteIDs []uint) (map[uint]model.AppDeploy, error) {
 	result := make(map[uint]model.AppDeploy)
 	if len(websiteIDs) == 0 {
 		return result, nil
 	}
 	var rows []model.AppDeploy
 	if err := r.db.
-		Where("website_id IN ? AND is_active = ?", websiteIDs, true).
+		Where("website_id IN ? AND is_active = ? AND release_id > 0", websiteIDs, true).
 		Order("id desc").
 		Find(&rows).Error; err != nil {
 		return nil, err

@@ -775,8 +775,27 @@ install_gpagent_binary() {
 }
 
 write_init_yaml() {
+  local should_write_podman_socket="false"
+  if [ "${os_name}" = "linux" ] && [ "${RUNTIME_USER}" != "root" ] && command -v podman >/dev/null 2>&1; then
+    should_write_podman_socket="true"
+  fi
+
   if [ "${UPDATE_MODE}" = "true" ] && [ -f "${CONFIG_INSTALL_DIR}/conf.yaml" ]; then
-    log "升级模式：保留现有 conf.yaml/init.yaml，不重写初始化配置。"
+    if [ "${should_write_podman_socket}" != "true" ]; then
+      log "升级模式：保留现有 conf.yaml/init.yaml，不重写初始化配置。"
+      return 0
+    fi
+    local tmp_file podman_socket
+    tmp_file="$(mktemp -t gopanel_init.XXXXXX)"
+    podman_socket="$(runtime_user_podman_socket "${RUNTIME_USER}")"
+    cat >"${tmp_file}" <<EOF
+base_dir: "${CONFIG_INSTALL_DIR}"
+container_runtime: "podman"
+docker_sock_path: "${podman_socket}"
+EOF
+    run_privileged cp "${tmp_file}" "${CONFIG_INSTALL_DIR}/init.yaml"
+    rm -f "${tmp_file}"
+    log "升级模式：已写入 rootless Podman 初始化配置，用于同步 DockerSockPath。"
     return 0
   fi
 
@@ -790,7 +809,7 @@ password: "${CONFIG_PASSWORD}"
 safe_enter: "${CONFIG_SAFE_ENTER}"
 install_id: "${CONFIG_INSTALL_ID}"
 EOF
-  if [ "${os_name}" = "linux" ] && [ "${RUN_AS_NORMAL_USER}" = "true" ] && command -v podman >/dev/null 2>&1; then
+  if [ "${should_write_podman_socket}" = "true" ]; then
     local podman_socket
     podman_socket="$(runtime_user_podman_socket "${RUNTIME_USER}")"
     cat >>"${tmp_file}" <<EOF
@@ -1237,6 +1256,7 @@ install_podman() {
     log "Podman 已安装，跳过。"
     ensure_podman_compose || true
     ensure_podman_machine_macos || true
+    ensure_podman_socket_access || true
     return 0
   fi
 
@@ -1597,6 +1617,11 @@ main() {
         RUNTIME_USER="$(stat -c '%U' "${CONFIG_INSTALL_DIR}" 2>/dev/null || echo root)"
       fi
     fi
+    if [ "${RUNTIME_USER}" != "root" ]; then
+      RUN_AS_NORMAL_USER="true"
+    else
+      RUN_AS_NORMAL_USER="false"
+    fi
   fi
 
   ensure_install_id
@@ -1607,10 +1632,12 @@ main() {
   install_gpc_binary
   install_gopanel_binary
   install_gpagent_binary
+  # 先检查/安装容器运行时，再写 init.yaml，避免普通用户场景下
+  # 因 Podman 尚未安装导致 docker_sock_path 未写入 rootless 路径。
+  check_container_runtime
   write_init_yaml
   ensure_install_dir_owner
   install_autostart_services
-  check_container_runtime
   show_result
   if [ "${PREEXISTING_INSTALL}" = "true" ]; then
     track_install_event "upgrade_success" "${version}"

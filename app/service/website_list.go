@@ -48,7 +48,7 @@ func (s *WebsiteService) List(ctx *gormx.Contextx) (websiteDTOs []*response.Webs
 		}
 	}
 	appDeployRepo := repo.NewAppDeploy(global.DB)
-	activeDeployMap, _ := appDeployRepo.ActiveDeploysByWebsiteIDs(websiteIDs)
+	activeReleaseMap, _ := appDeployRepo.ActiveReleaseByWebsiteIDs(websiteIDs)
 	latestPipelineSyncMap, _ := appDeployRepo.LatestPipelineSyncByWebsiteIDs(websiteIDs)
 	for _, web := range res {
 		var (
@@ -119,7 +119,7 @@ func (s *WebsiteService) List(ctx *gormx.Contextx) (websiteDTOs []*response.Webs
 			IPBlocklist:        web.IPBlocklist,
 			SecurityHeader:     web.SecurityHeader,
 			HstsEnabled:        web.HstsEnabled,
-			ActiveRelease:      buildWebsiteDeploySummary(activeDeployMap[web.ID]),
+			ActiveRelease:      buildWebsiteDeploySummary(activeReleaseMap[web.ID]),
 			LatestPipelineSync: buildWebsiteDeploySummary(latestPipelineSyncMap[web.ID]),
 		})
 	}

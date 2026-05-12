@@ -56,20 +56,20 @@ func (u *DockerService) LoadDockerStatus() string {
 			}
 			return constant.StatusRunning
 		}
-		socketExists := false
-		if strings.HasPrefix(resolved.Host, "unix://") {
-			if _, err := os.Stat(strings.TrimPrefix(resolved.Host, "unix://")); err == nil {
-				socketExists = true
-			}
-		}
-		serviceActive := podmanSocketServiceActive(ctx) || socketExists
+		serviceActive := podmanServiceActiveForHost(ctx, resolved.Host)
 		pingCtx, cancel := context.WithTimeout(ctx, 800*time.Millisecond)
 		defer cancel()
 		if docker.CanPingHost(pingCtx, resolved.Host) {
 			return constant.StatusRunning
 		}
 		if serviceActive {
-			return constant.StatusRunning
+			// service active 仅表示 socket/unit 存在，不代表当前 runtime host API 已可用。
+			// 这里做一次更长超时的复检，避免出现“显示 Running 但实际 API 不通”。
+			retryCtx, retryCancel := context.WithTimeout(ctx, 1800*time.Millisecond)
+			defer retryCancel()
+			if docker.CanPingHost(retryCtx, resolved.Host) {
+				return constant.StatusRunning
+			}
 		}
 		return constant.Stopped
 	}
@@ -117,16 +117,17 @@ func (u *DockerService) LoadDockerConf() *dto.DaemonJsonConf {
 			}
 			data.ApiReady = false
 		} else {
-			socketExists := false
-			if strings.HasPrefix(resolved.Host, "unix://") {
-				if _, err := os.Stat(strings.TrimPrefix(resolved.Host, "unix://")); err == nil {
-					socketExists = true
-				}
-			}
-			data.ServiceActive = podmanSocketServiceActive(ctx) || socketExists
+			data.RootlessHost = podmanRootlessExpected(resolved.Host)
+			data.ServiceActive = podmanServiceActiveForHost(ctx, resolved.Host)
 			pingCtx, cancel := context.WithTimeout(ctx, 800*time.Millisecond)
 			defer cancel()
 			data.ApiReady = docker.CanPingHost(pingCtx, resolved.Host)
+			if !data.ApiReady && data.ServiceActive {
+				// socket/unit active 但 API 可能需要按需激活，给一次更长的复检窗口。
+				retryCtx, retryCancel := context.WithTimeout(ctx, 1800*time.Millisecond)
+				data.ApiReady = docker.CanPingHost(retryCtx, resolved.Host)
+				retryCancel()
+			}
 			if data.ApiReady {
 				client, err := docker.NewRuntimeAPIClient()
 				if err == nil {
@@ -138,7 +139,7 @@ func (u *DockerService) LoadDockerConf() *dto.DaemonJsonConf {
 					}
 				}
 			}
-			if data.Status != constant.StatusRunning && data.ServiceActive {
+			if data.Status != constant.StatusRunning && data.ServiceActive && data.ApiReady {
 				data.Status = constant.StatusRunning
 			}
 			if runtime.GOOS == "linux" {

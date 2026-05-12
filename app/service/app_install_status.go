@@ -292,6 +292,17 @@ func containerBelongsToInstall(con types.Container, appInstall *model.AppInstall
 			}
 		}
 	}
+	if serviceName := strings.TrimSpace(appInstall.ServiceName); serviceName != "" {
+		serviceLabel, serviceOK := firstLabel(labels, composeServiceLabel, podmanComposeServiceLabel)
+		projectLabel, projectOK := firstLabel(labels, composeProjectLabel, podmanComposeProjectLabel)
+		if serviceOK && projectOK && strings.EqualFold(strings.TrimSpace(serviceLabel), serviceName) {
+			for _, alias := range installComposeProjectAliases(appInstall) {
+				if strings.EqualFold(strings.TrimSpace(projectLabel), alias) {
+					return true
+				}
+			}
+		}
+	}
 	return false
 }
 func sameInstallPath(left, right string) bool {

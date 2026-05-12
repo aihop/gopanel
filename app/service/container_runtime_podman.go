@@ -51,6 +51,7 @@ func (u *DockerService) operatePodman(operation string) error {
 		}
 		if _, err := exec.LookPath("systemctl"); err == nil {
 			if os.Geteuid() != 0 {
+				syncPreferredUserPodmanHost()
 				var userErr error
 				if systemdUserBusAvailable() {
 					out, err := cmd.Exec("systemctl --user " + strings.Join(args, " ") + " " + unit)
@@ -100,6 +101,41 @@ func (u *DockerService) operatePodman(operation string) error {
 	}
 }
 
+func podmanRootlessExpected(host string) bool {
+	if runtime.GOOS != "linux" {
+		return false
+	}
+	if docker.IsRootlessPodmanHost(host) {
+		return true
+	}
+	if os.Geteuid() != 0 {
+		return true
+	}
+	return false
+}
+
+func podmanServiceActiveForHost(ctx context.Context, host string) bool {
+	if podmanRootlessExpected(host) {
+		return podmanSocketUserServiceActive(ctx)
+	}
+	return podmanSocketServiceActive(ctx)
+}
+
+func syncPreferredUserPodmanHost() {
+	if runtime.GOOS != "linux" || os.Geteuid() == 0 {
+		return
+	}
+	candidates := docker.PodmanLinuxUserCandidateHosts()
+	if len(candidates) == 0 {
+		return
+	}
+	preferred := strings.TrimSpace(candidates[0])
+	if preferred == "" {
+		return
+	}
+	_ = repo.NewISettingRepo().UpdateOrCreate("DockerSockPath", preferred)
+}
+
 func ensurePodmanAPIReady() error {
 	baseCtx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
@@ -118,16 +154,8 @@ func ensurePodmanAPIReady() error {
 	lastErrs := make(map[string]string)
 
 	for {
-		okHost := ""
 		attemptCtx, cancel := context.WithTimeout(baseCtx, 600*time.Millisecond)
-		for _, host := range candidates {
-			if err := docker.PingHost(attemptCtx, host); err == nil {
-				okHost = host
-				break
-			} else {
-				lastErrs[host] = err.Error()
-			}
-		}
+		okHost := firstReachablePodmanHost(attemptCtx, candidates, lastErrs)
 		cancel()
 
 		if okHost != "" {
@@ -161,6 +189,33 @@ func ensurePodmanAPIReady() error {
 		case <-ticker.C:
 		}
 	}
+}
+
+func firstReachablePodmanHost(ctx context.Context, candidates []string, lastErrs map[string]string) string {
+	if len(candidates) == 0 {
+		return ""
+	}
+	// 普通用户场景显式优先 rootless candidate，避免 system socket 仍可用时持续保留 rootful 配置。
+	if os.Geteuid() != 0 {
+		for _, host := range candidates {
+			if !docker.IsRootlessPodmanHost(host) {
+				continue
+			}
+			if err := docker.PingHost(ctx, host); err == nil {
+				return host
+			} else if lastErrs != nil {
+				lastErrs[host] = err.Error()
+			}
+		}
+	}
+	for _, host := range candidates {
+		if err := docker.PingHost(ctx, host); err == nil {
+			return host
+		} else if lastErrs != nil {
+			lastErrs[host] = err.Error()
+		}
+	}
+	return ""
 }
 
 func podmanSocketServiceActive(ctx context.Context) bool {
@@ -223,6 +278,14 @@ func shouldUpdateDockerSockPath(cur string) bool {
 		return true
 	}
 	if strings.Contains(cur, "/var/run/docker.sock") {
+		return true
+	}
+	// 普通用户场景下，如果当前仍落在系统级 podman.sock，允许切回 rootless。
+	// 否则“修复 rootless socket 成功”后，Setting 可能仍然停留在 /run/podman/podman.sock。
+	if runtime.GOOS == "linux" && os.Geteuid() != 0 && strings.Contains(cur, "/run/podman/podman.sock") {
+		return true
+	}
+	if docker.StrictCurrentUserRootlessPodman() && !docker.IsRootlessPodmanHost(cur) {
 		return true
 	}
 	return false

@@ -39,6 +39,9 @@ func ContainerRepairPodmanSocket(c fiber.Ctx) error {
 
 	resolved := udocker.ResolveRuntime(context.Background())
 	rootless := udocker.IsRootlessPodmanHost(resolved.Host)
+	if !rootless && resolved.Kind == udocker.RuntimePodman && os.Geteuid() != 0 {
+		rootless = true
+	}
 	payload := map[string]interface{}{
 		"group": group,
 	}

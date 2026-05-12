@@ -5,6 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
+	"runtime"
+	"strings"
+	"time"
+
 	"github.com/aihop/gopanel/app/dto"
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/constant"
@@ -13,12 +20,6 @@ import (
 	"github.com/aihop/gopanel/utils/compose"
 	"github.com/aihop/gopanel/utils/docker"
 	"github.com/aihop/gopanel/utils/files"
-	"os"
-	"path/filepath"
-	"regexp"
-	"runtime"
-	"strings"
-	"time"
 )
 
 func getAppFromRepo(downloadPath string) error {
@@ -98,6 +99,52 @@ func getAppList() (*dto.AppList, error) {
 		return nil, err
 	}
 	return list, nil
+}
+
+func sanitizeComposeProviderWarnings(out string) string {
+	if strings.TrimSpace(out) == "" {
+		return out
+	}
+	lines := strings.Split(out, "\n")
+	filtered := make([]string, 0, len(lines))
+	for _, line := range lines {
+		plain := strings.TrimSpace(stripANSIEscapeCodes(line))
+		if plain == "" {
+			continue
+		}
+		if strings.Contains(plain, `Executing external compose provider "`) &&
+			strings.Contains(plain, "Please see podman-compose(1) for how to disable this message.") {
+			continue
+		}
+		filtered = append(filtered, line)
+	}
+	return strings.TrimSpace(strings.Join(filtered, "\n"))
+}
+
+func stripANSIEscapeCodes(text string) string {
+	var b strings.Builder
+	b.Grow(len(text))
+	for i := 0; i < len(text); i++ {
+		if text[i] != 0x1b {
+			b.WriteByte(text[i])
+			continue
+		}
+		i++
+		if i >= len(text) {
+			break
+		}
+		if text[i] != '[' {
+			continue
+		}
+		for i+1 < len(text) {
+			i++
+			ch := text[i]
+			if ch >= '@' && ch <= '~' {
+				break
+			}
+		}
+	}
+	return b.String()
 }
 
 var InitTypes = map[string]struct{}{"runtime": {}, "php": {}, "node": {}}
@@ -253,6 +300,7 @@ location = "docker.io"
 			logger.Error("docker-compose up failed: %v, out: %s", err, out)
 			return err
 		}
+		out = sanitizeComposeProviderWarnings(out)
 		logger.Info("Container(s) started successfully. Output: %s", out)
 		return
 	}
