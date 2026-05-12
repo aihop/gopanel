@@ -1,12 +1,15 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
 	"github.com/aihop/gopanel/constant"
+	"github.com/aihop/gopanel/utils/compose"
+	"github.com/aihop/gopanel/utils/docker"
 	"strconv"
 	"strings"
 	"time"
@@ -105,6 +108,7 @@ func firstEnvString(envMap map[string]interface{}, keys ...string) string {
 func waitForInstalledContainers(appInstall *model.AppInstall, logger *AppInstallLogger) error {
 	deadline := time.Now().Add(15 * time.Second)
 	var lastErr error
+	runtimeDesc := installComposeRuntimeSummary()
 	for attempt := 1; ; attempt++ {
 		containerNames, err := getContainerNames(*appInstall)
 		if err != nil {
@@ -157,6 +161,9 @@ func waitForInstalledContainers(appInstall *model.AppInstall, logger *AppInstall
 		}
 		if logger != nil && (attempt == 1 || attempt%3 == 0) {
 			logger.Info("Waiting for container(s) to enter running state...")
+			if runtimeDesc != "" {
+				logger.Info("%s", runtimeDesc)
+			}
 			if stateDesc, err := describeInstallContainerState(appInstall); err == nil && strings.TrimSpace(stateDesc) != "" {
 				logger.Info("%s", stateDesc)
 			}
@@ -167,10 +174,38 @@ func waitForInstalledContainers(appInstall *model.AppInstall, logger *AppInstall
 		time.Sleep(time.Second)
 	}
 	if lastErr != nil {
+		if runtimeDesc != "" {
+			return fmt.Errorf("%w; %s", lastErr, runtimeDesc)
+		}
 		return lastErr
 	}
 	if strings.TrimSpace(appInstall.Message) != "" {
+		if runtimeDesc != "" {
+			return fmt.Errorf("%s; %s", appInstall.Message, runtimeDesc)
+		}
 		return errors.New(appInstall.Message)
 	}
+	if runtimeDesc != "" {
+		return errors.New("container did not enter running state after compose up; " + runtimeDesc)
+	}
 	return errors.New("container did not enter running state after compose up")
+}
+
+func installComposeRuntimeSummary() string {
+	resolved := docker.ResolveRuntime(context.Background())
+	parts := []string{
+		fmt.Sprintf("compose runtime -> kind=%s", resolved.Kind),
+		fmt.Sprintf("host=%s", strings.TrimSpace(resolved.Host)),
+		fmt.Sprintf("configuredHost=%s", docker.ConfiguredDockerSockPath()),
+		fmt.Sprintf("hostPinned=%t", docker.RuntimeHostPinned()),
+	}
+	if bin, prefix, err := compose.ResolveCommand(); err == nil {
+		cmd := strings.TrimSpace(strings.Join(append([]string{bin}, prefix...), " "))
+		if cmd != "" {
+			parts = append(parts, "command="+cmd)
+		}
+	} else if msg := strings.TrimSpace(err.Error()); msg != "" {
+		parts = append(parts, "commandErr="+msg)
+	}
+	return strings.Join(parts, ", ")
 }

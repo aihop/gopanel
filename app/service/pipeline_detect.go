@@ -86,7 +86,7 @@ func dirHasEntry(dir string) bool {
 	return err == nil && len(entries) > 0
 }
 func buildPipelineRepoURL(repoURL, authType, authData string) string {
-	repoURL = strings.TrimSpace(repoURL)
+	repoURL = normalizePipelineRepoURL(repoURL)
 	if authType == "token" && authData != "" {
 		tokenEncoded := url.QueryEscape(authData)
 		if strings.HasPrefix(repoURL, "https://") {
@@ -112,6 +112,24 @@ func buildPipelineRepoURL(repoURL, authType, authData string) string {
 				repoURL = strings.Replace(repoURL, "http://", fmt.Sprintf("http://%s@", authData), 1)
 			}
 		}
+	}
+	return repoURL
+}
+
+func normalizePipelineRepoURL(repoURL string) string {
+	repoURL = strings.TrimSpace(repoURL)
+	for {
+		trimmed := strings.Trim(repoURL, "`\"' ")
+		if trimmed == repoURL {
+			break
+		}
+		repoURL = trimmed
+	}
+	if repoURL == "" {
+		return repoURL
+	}
+	if strings.HasSuffix(repoURL, "/") {
+		repoURL = strings.TrimRight(repoURL, "/")
 	}
 	return repoURL
 }

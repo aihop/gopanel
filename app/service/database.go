@@ -46,6 +46,9 @@ func (s DatabaseService) Create(req *request.DatabaseCreate) error {
 				Username: req.Username,
 				Password: req.Password,
 				Host:     req.Host,
+				Privileges: []string{
+					req.Name,
+				},
 			}); err != nil {
 				return errors.New("创建用户失败: " + err.Error())
 			}
@@ -53,7 +56,7 @@ func (s DatabaseService) Create(req *request.DatabaseCreate) error {
 		if err = mysql.DatabaseCreate(req.Name); err != nil {
 			return errors.New("创建数据库失败: " + err.Error())
 		}
-		if req.Username != "" {
+		if req.Username != "" && !req.CreateUser {
 			if err = mysql.PrivilegesGrant(req.Username, req.Name, req.Host); err != nil {
 				return errors.New("授权用户失败: " + err.Error())
 			}
@@ -72,6 +75,9 @@ func (s DatabaseService) Create(req *request.DatabaseCreate) error {
 				Username: req.Username,
 				Password: req.Password,
 				Host:     req.Host,
+				Privileges: []string{
+					req.Name,
+				},
 			}); err != nil {
 				return errors.New("创建用户失败: " + err.Error())
 			}

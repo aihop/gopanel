@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -304,7 +306,17 @@ func runPodman(ctx context.Context, args ...string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	resolved := ResolveRuntime(base)
+	if resolved.Kind == RuntimePodman {
+		host := strings.TrimSpace(resolved.Host)
+		if host != "" && host != "podman-cli" && host != "podman://local" {
+			args = append([]string{"--url", host}, args...)
+		}
+	}
 	c := exec.CommandContext(base, podmanPath, args...)
+	if extraEnv := podmanCommandEnv(resolved); len(extraEnv) > 0 {
+		c.Env = append(os.Environ(), extraEnv...)
+	}
 	out, err := c.CombinedOutput()
 	s := strings.TrimSpace(string(out))
 	if err != nil {
@@ -314,6 +326,45 @@ func runPodman(ctx context.Context, args ...string) (string, error) {
 		return "", err
 	}
 	return s, nil
+}
+
+func podmanCommandEnv(resolved ResolvedRuntime) []string {
+	if resolved.Kind != RuntimePodman {
+		return nil
+	}
+	host := strings.TrimSpace(resolved.Host)
+	if host == "" || host == "podman-cli" || host == "podman://local" {
+		return nil
+	}
+	extraEnv := []string{
+		"CONTAINER_HOST=" + host,
+		"DOCKER_HOST=" + host,
+		"PODMAN_HOST=" + host,
+	}
+	if runtime.GOOS != "linux" || !IsRootlessPodmanHost(host) {
+		return extraEnv
+	}
+	runtimeDir := podmanRuntimeDirFromHost(host)
+	if runtimeDir == "" {
+		return extraEnv
+	}
+	extraEnv = append(extraEnv, "XDG_RUNTIME_DIR="+runtimeDir)
+	if busPath := filepath.Join(runtimeDir, "bus"); busPath != "" {
+		extraEnv = append(extraEnv, "DBUS_SESSION_BUS_ADDRESS=unix:path="+busPath)
+	}
+	return extraEnv
+}
+
+func podmanRuntimeDirFromHost(host string) string {
+	host = strings.TrimSpace(host)
+	if !strings.HasPrefix(host, "unix://") {
+		return ""
+	}
+	sockPath := strings.TrimPrefix(host, "unix://")
+	if !strings.HasSuffix(sockPath, "/podman/podman.sock") {
+		return ""
+	}
+	return filepath.Dir(filepath.Dir(sockPath))
 }
 
 func getAnyString(m map[string]interface{}, keys ...string) string {

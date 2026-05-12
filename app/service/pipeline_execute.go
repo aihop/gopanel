@@ -2,10 +2,13 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"github.com/aihop/gopanel/app/model"
 	"os"
+	"os/exec"
 	"strings"
+
+	"github.com/aihop/gopanel/app/model"
 )
 
 func (s *PipelineService) RunPipeline(pipelineID uint, version string) (uint, error) {
@@ -42,6 +45,11 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 	logger.Info("工作区目录: %s", workspaceDir)
 	logger.Info("发布目录: %s", releaseDir)
 	if p.RepoUrl != "" {
+		if err := ensurePipelineClonePrerequisites(p.RepoUrl); err != nil {
+			s.recordRepo.UpdateStatus(recordID, "failed", err.Error())
+			logger.Error("%v", err)
+			return
+		}
 		s.recordRepo.UpdateStatus(recordID, "cloning", "")
 		commitHash, err := s.stepClone(ctx, logger, p, workspaceDir)
 		if err != nil {
@@ -147,4 +155,37 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 	}
 	s.recordRepo.UpdateStatus(recordID, "success", msg)
 	logger.Info("====== Pipeline #%d 执行成功！======", recordID)
+}
+
+func ensurePipelineClonePrerequisites(repoURL string) error {
+	repoURL = normalizePipelineRepoURL(repoURL)
+	if repoURL == "" {
+		return nil
+	}
+	if _, err := exec.LookPath("git"); err != nil {
+		return errors.New("宿主机未安装 git，无法拉取仓库，请先安装 git")
+	}
+	if pipelineRepoUsesSSH(repoURL) {
+		if _, err := exec.LookPath("ssh"); err != nil {
+			return errors.New("当前仓库使用 SSH 地址，但宿主机未安装 ssh，无法拉取仓库，请先安装 openssh-client")
+		}
+	}
+	return nil
+}
+
+func pipelineRepoUsesSSH(repoURL string) bool {
+	repoURL = normalizePipelineRepoURL(repoURL)
+	if repoURL == "" {
+		return false
+	}
+	if strings.HasPrefix(repoURL, "ssh://") || strings.HasPrefix(repoURL, "git@") {
+		return true
+	}
+	if strings.Contains(repoURL, "://") {
+		return false
+	}
+	at := strings.Index(repoURL, "@")
+	colon := strings.Index(repoURL, ":")
+	slash := strings.Index(repoURL, "/")
+	return at > 0 && colon > at && (slash == -1 || colon < slash)
 }

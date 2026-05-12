@@ -291,6 +291,9 @@ location = "docker.io"
 			}
 			logger.Info("Compose pull completed.")
 		}
+		if runtimeDesc := installComposeRuntimeSummary(); runtimeDesc != "" {
+			logger.Info("%s", runtimeDesc)
+		}
 		logger.Info("Executing docker-compose up -d...")
 		out, err = compose.Up(appInstall.GetComposePath())
 		if err != nil {

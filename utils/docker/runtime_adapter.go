@@ -159,10 +159,10 @@ func (a *defaultRuntimeAdapter) ResolveComposeCommand(ctx context.Context) (stri
 	}
 
 	if resolved.Kind == RuntimePodman {
-		if bin, prefix, ok := tryPodman(); ok {
+		if bin, prefix, ok := tryPodmanCompose(); ok {
 			return bin, prefix, nil
 		}
-		if bin, prefix, ok := tryPodmanCompose(); ok {
+		if bin, prefix, ok := tryPodman(); ok {
 			return bin, prefix, nil
 		}
 		if bin, prefix, ok := tryDocker(); ok {

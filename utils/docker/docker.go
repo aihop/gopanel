@@ -730,21 +730,23 @@ func EnsureNetwork(name string) error {
 }
 
 func ensurePodmanNetwork(name string) error {
-	podmanPath, err := runtimeBinaryPath("podman")
-	if err != nil {
-		return err
-	}
-	if err := PodmanEnsureReady(context.Background()); err != nil {
-		return err
-	}
-	existsCmd := exec.Command(podmanPath, "network", "exists", name)
-	if err := existsCmd.Run(); err == nil {
+	name = strings.TrimSpace(name)
+	if name == "" {
 		return nil
 	}
-	createCmd := exec.Command(podmanPath, "network", "create", name)
-	out, err := createCmd.CombinedOutput()
+	ctx := context.Background()
+	if err := PodmanEnsureReady(ctx); err != nil {
+		return err
+	}
+	if _, err := runPodman(ctx, "network", "inspect", name); err == nil {
+		return nil
+	}
+	out, err := runPodman(ctx, "network", "create", name)
 	if err != nil {
-		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))
+		if strings.TrimSpace(out) != "" {
+			return fmt.Errorf("%w: %s", err, strings.TrimSpace(out))
+		}
+		return err
 	}
 	return nil
 }

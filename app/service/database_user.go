@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/aihop/gopanel/app/dto/request"
 	"github.com/aihop/gopanel/app/model"
@@ -27,6 +28,7 @@ func (s *DatabaseUserService) Create(req *request.DatabaseUserCreate) error {
 	if err != nil {
 		return err
 	}
+	normalizedHost := normalizeDatabaseUserHost(server.Type, req.Host)
 
 	user := new(model.DatabaseUser)
 	switch server.Type {
@@ -38,21 +40,21 @@ func (s *DatabaseUserService) Create(req *request.DatabaseUserCreate) error {
 		defer func(mysql *db.MySQL) {
 			_ = mysql.Close()
 		}(mysql)
-		if err = mysql.UserCreate(req.Username, req.Password, req.Host); err != nil {
+		if err = mysql.UserCreate(req.Username, req.Password, normalizedHost); err != nil {
 			return err
 		}
 		for name := range slices.Values(req.Privileges) {
 			if err = mysql.DatabaseCreate(name); err != nil {
 				return err
 			}
-			if err = mysql.PrivilegesGrant(req.Username, name, req.Host); err != nil {
+			if err = mysql.PrivilegesGrant(req.Username, name, normalizedHost); err != nil {
 				return err
 			}
 		}
 		user = &model.DatabaseUser{
 			ServerID: req.ServerID,
 			Username: req.Username,
-			Host:     req.Host,
+			Host:     normalizedHost,
 		}
 	case model.DatabaseTypePostgresql:
 		postgres, err := db.NewPostgres(server.Username, server.Password, server.Host, server.Port)
@@ -76,6 +78,7 @@ func (s *DatabaseUserService) Create(req *request.DatabaseUserCreate) error {
 		user = &model.DatabaseUser{
 			ServerID: req.ServerID,
 			Username: req.Username,
+			Host:     normalizedHost,
 		}
 	}
 
@@ -85,6 +88,17 @@ func (s *DatabaseUserService) Create(req *request.DatabaseUserCreate) error {
 	user.Password = req.Password
 	user.Remark = req.Remark
 	return s.repo.Save(user)
+}
+
+func normalizeDatabaseUserHost(serverType model.DatabaseType, host string) string {
+	host = strings.TrimSpace(host)
+	if serverType == model.DatabaseTypeMysql {
+		if host == "" {
+			return "localhost"
+		}
+		return host
+	}
+	return ""
 }
 
 func (s *DatabaseUserService) Update(req *request.DatabaseUserUpdate) error {

@@ -56,6 +56,9 @@ func (s *PipelineService) DetectRunnerPreset(ctx context.Context, req request.Pi
 	if branch == "" {
 		branch = "main"
 	}
+	if err := ensurePipelineClonePrerequisites(repoURL); err != nil {
+		return nil, err
+	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
