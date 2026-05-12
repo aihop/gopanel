@@ -78,12 +78,12 @@ func (r *Postgres) DatabaseCreate(name string) error {
 	if exist {
 		return nil
 	}
-	_, err = r.Exec(fmt.Sprintf("CREATE DATABASE %s", name))
+	_, err = r.Exec(fmt.Sprintf("CREATE DATABASE %s", postgresQuotedIdentifier(name)))
 	return err
 }
 
 func (r *Postgres) DatabaseDrop(name string) error {
-	_, err := r.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s", name))
+	_, err := r.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s", postgresQuotedIdentifier(name)))
 	return err
 }
 
@@ -96,7 +96,7 @@ func (r *Postgres) DatabaseExist(name string) (bool, error) {
 }
 
 func (r *Postgres) DatabaseSize(name string) (int64, error) {
-	query := fmt.Sprintf("SELECT pg_database_size('%s')", name)
+	query := fmt.Sprintf("SELECT pg_database_size(%s)", postgresLiteral(name))
 	var size int64
 	if err := r.QueryRow(query).Scan(&size); err != nil {
 		return 0, err
@@ -105,12 +105,12 @@ func (r *Postgres) DatabaseSize(name string) (int64, error) {
 }
 
 func (r *Postgres) DatabaseComment(name, comment string) error {
-	_, err := r.Exec(fmt.Sprintf("COMMENT ON DATABASE %s IS '%s'", name, comment))
+	_, err := r.Exec(fmt.Sprintf("COMMENT ON DATABASE %s IS %s", postgresQuotedIdentifier(name), postgresLiteral(comment)))
 	return err
 }
 
 func (r *Postgres) UserCreate(user, password string) error {
-	_, err := r.Exec(fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s'", user, password))
+	_, err := r.Exec(fmt.Sprintf("CREATE USER %s WITH PASSWORD %s", postgresQuotedIdentifier(user), postgresLiteral(password)))
 	if err != nil {
 		return err
 	}
@@ -119,7 +119,7 @@ func (r *Postgres) UserCreate(user, password string) error {
 }
 
 func (r *Postgres) UserDrop(user string) error {
-	_, err := r.Exec(fmt.Sprintf("DROP USER IF EXISTS %s", user))
+	_, err := r.Exec(fmt.Sprintf("DROP USER IF EXISTS %s", postgresQuotedIdentifier(user)))
 	if err != nil {
 		return err
 	}
@@ -128,7 +128,7 @@ func (r *Postgres) UserDrop(user string) error {
 }
 
 func (r *Postgres) UserPassword(user, password string) error {
-	_, err := r.Exec(fmt.Sprintf("ALTER USER %s WITH PASSWORD '%s'", user, password))
+	_, err := r.Exec(fmt.Sprintf("ALTER USER %s WITH PASSWORD %s", postgresQuotedIdentifier(user), postgresLiteral(password)))
 	return err
 }
 
@@ -169,10 +169,10 @@ func (r *Postgres) UserPrivileges(user string) ([]string, error) {
 }
 
 func (r *Postgres) PrivilegesGrant(user, database string) error {
-	if _, err := r.Exec(fmt.Sprintf("ALTER DATABASE %s OWNER TO %s", database, user)); err != nil {
+	if _, err := r.Exec(fmt.Sprintf("ALTER DATABASE %s OWNER TO %s", postgresQuotedIdentifier(database), postgresQuotedIdentifier(user))); err != nil {
 		return err
 	}
-	if _, err := r.Exec(fmt.Sprintf("GRANT ALL PRIVILEGES ON DATABASE %s TO %s", database, user)); err != nil {
+	if _, err := r.Exec(fmt.Sprintf("GRANT ALL PRIVILEGES ON DATABASE %s TO %s", postgresQuotedIdentifier(database), postgresQuotedIdentifier(user))); err != nil {
 		return err
 	}
 	dbConn, err := r.openDatabase(database)
@@ -183,13 +183,13 @@ func (r *Postgres) PrivilegesGrant(user, database string) error {
 		_ = dbConn.Close()
 	}()
 	grantQueries := []string{
-		fmt.Sprintf("GRANT ALL PRIVILEGES ON SCHEMA public TO %s", user),
-		fmt.Sprintf("GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO %s", user),
-		fmt.Sprintf("GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO %s", user),
-		fmt.Sprintf("GRANT ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public TO %s", user),
-		fmt.Sprintf("ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL PRIVILEGES ON TABLES TO %s", user),
-		fmt.Sprintf("ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL PRIVILEGES ON SEQUENCES TO %s", user),
-		fmt.Sprintf("ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL PRIVILEGES ON FUNCTIONS TO %s", user),
+		fmt.Sprintf("GRANT ALL PRIVILEGES ON SCHEMA public TO %s", postgresQuotedIdentifier(user)),
+		fmt.Sprintf("GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO %s", postgresQuotedIdentifier(user)),
+		fmt.Sprintf("GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO %s", postgresQuotedIdentifier(user)),
+		fmt.Sprintf("GRANT ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public TO %s", postgresQuotedIdentifier(user)),
+		fmt.Sprintf("ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL PRIVILEGES ON TABLES TO %s", postgresQuotedIdentifier(user)),
+		fmt.Sprintf("ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL PRIVILEGES ON SEQUENCES TO %s", postgresQuotedIdentifier(user)),
+		fmt.Sprintf("ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL PRIVILEGES ON FUNCTIONS TO %s", postgresQuotedIdentifier(user)),
 	}
 	for _, query := range grantQueries {
 		if _, err := dbConn.Exec(query); err != nil {
@@ -225,7 +225,7 @@ func (r *Postgres) openDatabase(database string) (*sql.DB, error) {
 }
 
 func (r *Postgres) PrivilegesRevoke(user, database string) error {
-	_, err := r.Exec(fmt.Sprintf("REVOKE ALL PRIVILEGES ON DATABASE %s FROM %s", database, user))
+	_, err := r.Exec(fmt.Sprintf("REVOKE ALL PRIVILEGES ON DATABASE %s FROM %s", postgresQuotedIdentifier(database), postgresQuotedIdentifier(user)))
 	return err
 }
 

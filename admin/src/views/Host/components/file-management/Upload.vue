@@ -62,6 +62,7 @@
         :webkitdirectory="false"
         style="display: none"
         @change="fileOnChange"
+		class="mb-3"
       />
 
       <!-- 进度条 -->

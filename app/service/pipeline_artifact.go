@@ -41,6 +41,9 @@ func preparePipelineReleaseDir(logger *PipelineLogger, workspaceDir, releaseDir 
 	if workspaceDir == "" || releaseDir == "" {
 		return fmt.Errorf("工作区目录或发布目录为空")
 	}
+	if err := ensurePipelineSyncPathsSafe(workspaceDir, releaseDir); err != nil {
+		return err
+	}
 	if err := os.RemoveAll(releaseDir); err != nil {
 		return err
 	}
@@ -53,6 +56,37 @@ func preparePipelineReleaseDir(logger *PipelineLogger, workspaceDir, releaseDir 
 	}
 	logger.Info("发布目录同步完成: %s", releaseDir)
 	return nil
+}
+
+func ensurePipelineSyncPathsSafe(workspaceDir, releaseDir string) error {
+	absWorkspace, err := filepath.Abs(filepath.Clean(workspaceDir))
+	if err != nil {
+		return fmt.Errorf("解析工作区目录失败: %w", err)
+	}
+	absRelease, err := filepath.Abs(filepath.Clean(releaseDir))
+	if err != nil {
+		return fmt.Errorf("解析发布目录失败: %w", err)
+	}
+	baseDir := filepath.Dir(absWorkspace)
+	if absWorkspace == string(filepath.Separator) || absRelease == string(filepath.Separator) {
+		return fmt.Errorf("工作区目录或发布目录非法")
+	}
+	if !pathWithinBaseDir(absWorkspace, baseDir) || !pathWithinBaseDir(absRelease, baseDir) {
+		return fmt.Errorf("工作区目录或发布目录超出流水线工作目录范围")
+	}
+	if absRelease == baseDir || absRelease == absWorkspace {
+		return fmt.Errorf("发布目录非法: %s", absRelease)
+	}
+	return nil
+}
+
+func pathWithinBaseDir(target, base string) bool {
+	target = filepath.Clean(target)
+	base = filepath.Clean(base)
+	if target == base {
+		return true
+	}
+	return strings.HasPrefix(target, base+string(filepath.Separator))
 }
 func copyPipelineTree(srcDir, dstDir string, excluded map[string]struct{}) error {
 	return filepath.Walk(srcDir, func(current string, info os.FileInfo, walkErr error) error {

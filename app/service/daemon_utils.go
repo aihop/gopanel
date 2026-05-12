@@ -3,11 +3,12 @@ package service
 import (
 	"bufio"
 	"fmt"
-	"github.com/aihop/gopanel/global"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/aihop/gopanel/global"
 )
 
 type ProcCfg struct {
@@ -184,7 +185,11 @@ func (m *DaemonConfigManager) AddConfig(cfg *ProcCfg) error {
 		}
 	}
 	if cfg.StdoutLogfile == "" {
-		cfg.StdoutLogfile = filepath.Join(global.CONF.System.LogPath, fmt.Sprintf("stdout_%s.log", cfg.Name))
+		daemonLogDir := filepath.Join(global.CONF.System.LogPath, "daemon")
+		if err = os.MkdirAll(daemonLogDir, 0755); err != nil {
+			return fmt.Errorf("failed to create daemon log dir: %v", err)
+		}
+		cfg.StdoutLogfile = filepath.Join(daemonLogDir, fmt.Sprintf("stdout_%s.log", cfg.Name))
 		cfg.StdoutLogMaxBytes = "50MB"
 	}
 	if cfg.StderrLogfile == "" {

@@ -61,13 +61,13 @@ func (r *MySQL) Prepare(query string) (*sql.Stmt, error) {
 }
 
 func (r *MySQL) DatabaseCreate(name string) error {
-	_, err := r.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", name))
+	_, err := r.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", mysqlQuotedIdentifier(name)))
 	r.flushPrivileges()
 	return err
 }
 
 func (r *MySQL) DatabaseDrop(name string) error {
-	_, err := r.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s", name))
+	_, err := r.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s", mysqlQuotedIdentifier(name)))
 	r.flushPrivileges()
 	return err
 }
@@ -95,42 +95,42 @@ func (r *MySQL) DatabaseExists(name string) (bool, error) {
 
 func (r *MySQL) DatabaseSize(name string) (int64, error) {
 	var size int64
-	err := r.QueryRow(fmt.Sprintf("SELECT COALESCE(SUM(data_length) + SUM(index_length), 0) FROM information_schema.tables WHERE table_schema = '%s'", name)).Scan(&size)
+	err := r.QueryRow(fmt.Sprintf("SELECT COALESCE(SUM(data_length) + SUM(index_length), 0) FROM information_schema.tables WHERE table_schema = %s", mysqlLiteral(name))).Scan(&size)
 	return size, err
 }
 
 func (r *MySQL) UserCreate(user, password, host string) error {
-	_, err := r.Exec(fmt.Sprintf("CREATE USER IF NOT EXISTS '%s'@'%s' IDENTIFIED BY '%s'", user, host, password))
+	_, err := r.Exec(fmt.Sprintf("CREATE USER IF NOT EXISTS %s@%s IDENTIFIED BY %s", mysqlLiteral(user), mysqlLiteral(host), mysqlLiteral(password)))
 	r.flushPrivileges()
 	return err
 }
 
 func (r *MySQL) UserDrop(user, host string) error {
-	_, err := r.Exec(fmt.Sprintf("DROP USER IF EXISTS '%s'@'%s'", user, host))
+	_, err := r.Exec(fmt.Sprintf("DROP USER IF EXISTS %s@%s", mysqlLiteral(user), mysqlLiteral(host)))
 	r.flushPrivileges()
 	return err
 }
 
 func (r *MySQL) UserPassword(user, password, host string) error {
-	_, err := r.Exec(fmt.Sprintf("ALTER USER '%s'@'%s' IDENTIFIED BY '%s'", user, host, password))
+	_, err := r.Exec(fmt.Sprintf("ALTER USER %s@%s IDENTIFIED BY %s", mysqlLiteral(user), mysqlLiteral(host), mysqlLiteral(password)))
 	r.flushPrivileges()
 	return err
 }
 
 func (r *MySQL) PrivilegesGrant(user, database, host string) error {
-	_, err := r.Exec(fmt.Sprintf("GRANT ALL PRIVILEGES ON %s.* TO '%s'@'%s'", database, user, host))
+	_, err := r.Exec(fmt.Sprintf("GRANT ALL PRIVILEGES ON %s.* TO %s@%s", mysqlQuotedIdentifier(database), mysqlLiteral(user), mysqlLiteral(host)))
 	r.flushPrivileges()
 	return err
 }
 
 func (r *MySQL) PrivilegesRevoke(user, database, host string) error {
-	_, err := r.Exec(fmt.Sprintf("REVOKE ALL PRIVILEGES ON %s.* FROM '%s'@'%s'", database, user, host))
+	_, err := r.Exec(fmt.Sprintf("REVOKE ALL PRIVILEGES ON %s.* FROM %s@%s", mysqlQuotedIdentifier(database), mysqlLiteral(user), mysqlLiteral(host)))
 	r.flushPrivileges()
 	return err
 }
 
 func (r *MySQL) UserPrivileges(user, host string) ([]string, error) {
-	rows, err := r.Query(fmt.Sprintf("SHOW GRANTS FOR '%s'@'%s'", user, host))
+	rows, err := r.Query(fmt.Sprintf("SHOW GRANTS FOR %s@%s", mysqlLiteral(user), mysqlLiteral(host)))
 	if err != nil {
 		return nil, err
 	}
@@ -229,7 +229,7 @@ func (r *MySQL) Databases() ([]MySQLDatabase, error) {
 }
 
 func (r *MySQL) userGrants(user, host string) ([]string, error) {
-	rows, err := r.Query(fmt.Sprintf("SHOW GRANTS FOR '%s'@'%s'", user, host))
+	rows, err := r.Query(fmt.Sprintf("SHOW GRANTS FOR %s@%s", mysqlLiteral(user), mysqlLiteral(host)))
 	if err != nil {
 		return nil, err
 	}

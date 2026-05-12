@@ -109,6 +109,26 @@ export REAL_PODMAN_BIN
 export REAL_DOCKER_BIN
 export REAL_PODMAN_COMPOSE_BIN
 
+gopanel_validate_release_paths() {
+	if [ -z "$PIPELINE_BASE_DIR" ] || [ -z "$PIPELINE_WORKSPACE_DIR" ] || [ -z "$PIPELINE_RELEASE_DIR" ]; then
+		echo "[GOPANEL] missing pipeline sync paths" >&2
+		return 1
+	fi
+	case "$PIPELINE_WORKSPACE_DIR" in
+		"$PIPELINE_BASE_DIR"/*) ;;
+		*) echo "[GOPANEL] workspace path escaped base dir: $PIPELINE_WORKSPACE_DIR" >&2; return 1 ;;
+	esac
+	case "$PIPELINE_RELEASE_DIR" in
+		"$PIPELINE_BASE_DIR"/*) ;;
+		*) echo "[GOPANEL] release path escaped base dir: $PIPELINE_RELEASE_DIR" >&2; return 1 ;;
+	esac
+	if [ "$PIPELINE_RELEASE_DIR" = "$PIPELINE_BASE_DIR" ] || [ "$PIPELINE_RELEASE_DIR" = "/" ]; then
+		echo "[GOPANEL] invalid release path: $PIPELINE_RELEASE_DIR" >&2
+		return 1
+	fi
+	return 0
+}
+
 cleanup_gopanel_shims() {
 	rm -rf "$GOPANEL_SHIM_DIR"
 }
@@ -122,6 +142,7 @@ gopanel_sync_release() {
 	if [ -z "$PIPELINE_WORKSPACE_DIR" ] || [ -z "$PIPELINE_RELEASE_DIR" ]; then
 		return 0
 	fi
+	gopanel_validate_release_paths || return 1
 	echo "[GOPANEL] syncing workspace to release: $PIPELINE_WORKSPACE_DIR -> $PIPELINE_RELEASE_DIR"
 	rm -rf "$PIPELINE_RELEASE_DIR"
 	mkdir -p "$PIPELINE_RELEASE_DIR"
@@ -195,6 +216,22 @@ cat > "$GOPANEL_SHIM_DIR/gopanel-sync-release" <<'EOF'
 #!/bin/sh
 if [ -z "$PIPELINE_WORKSPACE_DIR" ] || [ -z "$PIPELINE_RELEASE_DIR" ]; then
 	exit 0
+fi
+if [ -z "$PIPELINE_BASE_DIR" ]; then
+	echo "[GOPANEL] missing pipeline base dir" >&2
+	exit 1
+fi
+case "$PIPELINE_WORKSPACE_DIR" in
+	"$PIPELINE_BASE_DIR"/*) ;;
+	*) echo "[GOPANEL] workspace path escaped base dir: $PIPELINE_WORKSPACE_DIR" >&2; exit 1 ;;
+esac
+case "$PIPELINE_RELEASE_DIR" in
+	"$PIPELINE_BASE_DIR"/*) ;;
+	*) echo "[GOPANEL] release path escaped base dir: $PIPELINE_RELEASE_DIR" >&2; exit 1 ;;
+esac
+if [ "$PIPELINE_RELEASE_DIR" = "$PIPELINE_BASE_DIR" ] || [ "$PIPELINE_RELEASE_DIR" = "/" ]; then
+	echo "[GOPANEL] invalid release path: $PIPELINE_RELEASE_DIR" >&2
+	exit 1
 fi
 rm -rf "$PIPELINE_RELEASE_DIR"
 mkdir -p "$PIPELINE_RELEASE_DIR"
@@ -279,7 +316,7 @@ echo "--- 使用运行时: $RUNTIME (类型: $CONTAINER_RUNTIME_KIND, 兼容别�
 		cmd := exec.CommandContext(ctx, "sh", scriptPath)
 		cmd.Dir = workspace
 		cmd.Env = os.Environ()
-		cmd.Env = append(cmd.Env, fmt.Sprintf("PIPELINE_VERSION=%s", version), fmt.Sprintf("VERSION=%s", version), fmt.Sprintf("CONTAINER_CLI=%s", runtimeCLI), fmt.Sprintf("PIPELINE_WORKSPACE_DIR=%s", workspace), fmt.Sprintf("GOPANEL_WORKSPACE_DIR=%s", workspace), fmt.Sprintf("PIPELINE_RELEASE_DIR=%s", releaseDir), fmt.Sprintf("GOPANEL_RELEASE_DIR=%s", releaseDir))
+		cmd.Env = append(cmd.Env, fmt.Sprintf("PIPELINE_VERSION=%s", version), fmt.Sprintf("VERSION=%s", version), fmt.Sprintf("CONTAINER_CLI=%s", runtimeCLI), fmt.Sprintf("PIPELINE_BASE_DIR=%s", filepath.Dir(workspace)), fmt.Sprintf("GOPANEL_BASE_DIR=%s", filepath.Dir(workspace)), fmt.Sprintf("PIPELINE_WORKSPACE_DIR=%s", workspace), fmt.Sprintf("GOPANEL_WORKSPACE_DIR=%s", workspace), fmt.Sprintf("PIPELINE_RELEASE_DIR=%s", releaseDir), fmt.Sprintf("GOPANEL_RELEASE_DIR=%s", releaseDir))
 		var outBuf, errBuf bytes.Buffer
 		cmd.Stdout = io.MultiWriter(&outBuf, newLogWriter(logger, false))
 		cmd.Stderr = io.MultiWriter(&errBuf, newLogWriter(logger, true))
