@@ -2,13 +2,14 @@ package service
 
 import (
 	"fmt"
-	"github.com/aihop/gopanel/global"
-	"github.com/docker/docker/api/types/mount"
 	"os"
 	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/aihop/gopanel/global"
+	"github.com/docker/docker/api/types/mount"
 )
 
 func parseRunnerConfig(raw map[string]interface{}) runnerConfig {
@@ -24,6 +25,7 @@ func parseRunnerConfig(raw map[string]interface{}) runnerConfig {
 	}
 	if v := strings.TrimSpace(asString(raw["workingDir"])); v != "" {
 		rc.WorkingDir = v
+		rc.HasCustomWorkingDir = true
 	}
 	if v := strings.TrimSpace(asNumberString(raw["containerPort"])); v != "" {
 		rc.ContainerPort = v
@@ -80,6 +82,16 @@ func parseRunnerConfig(raw map[string]interface{}) runnerConfig {
 	}
 	rc.ExtraNetworks = normalizeRunnerExtraNetworks(rc.ExtraNetworks)
 	return rc
+}
+func resolveRunnerSourceMountDir(rc runnerConfig, workingDir string) string {
+	wd := strings.TrimSpace(workingDir)
+	if wd == "" {
+		wd = "/var/www/app"
+	}
+	if rc.HasCustomWorkingDir {
+		return wd
+	}
+	return runnerWorkspaceMountPath
 }
 func resolveRunnerPublishedHostPort(rc runnerConfig) string {
 	if v := strings.TrimSpace(rc.HostPort); v != "" {
@@ -196,6 +208,47 @@ func normalizeRunnerPersistentPath(workingDir string, raw string) (string, strin
 	target := path.Join(wd, candidate)
 	return candidate, target, true
 }
+func collectRunnerPersistentSubpaths(rc runnerConfig, workingDir string) map[string]struct{} {
+	if len(rc.PersistentPaths) == 0 {
+		return nil
+	}
+	subpaths := make(map[string]struct{}, len(rc.PersistentPaths))
+	for _, raw := range rc.PersistentPaths {
+		subPath, _, ok := normalizeRunnerPersistentPath(workingDir, raw)
+		if !ok {
+			continue
+		}
+		subpaths[subPath] = struct{}{}
+	}
+	if len(subpaths) == 0 {
+		return nil
+	}
+	return subpaths
+}
+func appendRunnerCleanupScript(b *strings.Builder, workingDir string, persistentSubpaths map[string]struct{}, candidates ...string) {
+	toRemove := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		cleaned := strings.TrimPrefix(path.Clean("/"+strings.TrimSpace(candidate)), "/")
+		if cleaned == "" || cleaned == "." {
+			continue
+		}
+		if _, ok := persistentSubpaths[cleaned]; ok {
+			continue
+		}
+		toRemove = append(toRemove, path.Join(workingDir, cleaned))
+	}
+	if len(toRemove) == 0 {
+		b.WriteString("      echo \"[RUNNER] cleanup skipped: all transient dirs are persistent\"\n")
+		return
+	}
+	b.WriteString("      rm -rf")
+	for _, target := range toRemove {
+		b.WriteString(" \"")
+		b.WriteString(strings.ReplaceAll(target, "\"", "\\\""))
+		b.WriteString("\"")
+	}
+	b.WriteString(" 2>/dev/null || true\n")
+}
 func buildRunnerEphemeralMounts(rc runnerConfig, workingDir, sourceDir string) []mount.Mount {
 	if strings.ToLower(strings.TrimSpace(rc.Mode)) != "build_run" {
 		return nil
@@ -300,6 +353,7 @@ func buildRunnerScript(rc runnerConfig, sourceDir string) string {
 	if wd == "" {
 		wd = "/var/www/app"
 	}
+	persistentSubpaths := collectRunnerPersistentSubpaths(rc, wd)
 	srcDir := strings.TrimSpace(sourceDir)
 	if srcDir == "" {
 		srcDir = runnerWorkspaceMountPath
@@ -311,53 +365,41 @@ func buildRunnerScript(rc runnerConfig, sourceDir string) string {
 	b.WriteString("mkdir -p \"")
 	b.WriteString(strings.ReplaceAll(wd, "\"", "\\\""))
 	b.WriteString("\"\n")
-	b.WriteString("if [ -d \"")
-	b.WriteString(strings.ReplaceAll(srcDir, "\"", "\\\""))
-	b.WriteString("\" ]; then\n")
-	b.WriteString("  echo \"[RUNNER] syncing source into working dir\"\n")
-	b.WriteString("  if command -v tar >/dev/null 2>&1; then\n")
-	b.WriteString("    if tar --help 2>/dev/null | grep -q -- '--exclude'; then\n")
-	b.WriteString("      echo \"[RUNNER] sync strategy: tar --exclude (skip node_modules/.git/.gopanel_artifact)\"\n")
-	b.WriteString("      (cd \"")
-	b.WriteString(strings.ReplaceAll(srcDir, "\"", "\\\""))
-	b.WriteString("\" && tar --exclude='./node_modules' --exclude='./.git' --exclude='./.gopanel_artifact' --exclude='./__MACOSX' -cf - .) | (cd \"")
-	b.WriteString(strings.ReplaceAll(wd, "\"", "\\\""))
-	b.WriteString("\" && tar xpf -)\n")
-	b.WriteString("    else\n")
-	b.WriteString("      echo \"[RUNNER] sync strategy: tar fallback + cleanup transient dirs\"\n")
-	b.WriteString("      (cd \"")
-	b.WriteString(strings.ReplaceAll(srcDir, "\"", "\\\""))
-	b.WriteString("\" && tar cf - .) | (cd \"")
-	b.WriteString(strings.ReplaceAll(wd, "\"", "\\\""))
-	b.WriteString("\" && tar xpf -)\n")
-	b.WriteString("      rm -rf \"")
-	b.WriteString(strings.ReplaceAll(wd, "\"", "\\\""))
-	b.WriteString("/node_modules\" \"")
-	b.WriteString(strings.ReplaceAll(wd, "\"", "\\\""))
-	b.WriteString("/.git\" \"")
-	b.WriteString(strings.ReplaceAll(wd, "\"", "\\\""))
-	b.WriteString("/.gopanel_artifact\" \"")
-	b.WriteString(strings.ReplaceAll(wd, "\"", "\\\""))
-	b.WriteString("/__MACOSX\" 2>/dev/null || true\n")
-	b.WriteString("    fi\n")
-	b.WriteString("  else\n")
-	b.WriteString("    echo \"[RUNNER] sync strategy: cp -a fallback + cleanup transient dirs\"\n")
-	b.WriteString("    cp -a \"")
-	b.WriteString(strings.ReplaceAll(srcDir, "\"", "\\\""))
-	b.WriteString("\"/. \"")
-	b.WriteString(strings.ReplaceAll(wd, "\"", "\\\""))
-	b.WriteString("\"/\n")
-	b.WriteString("    rm -rf \"")
-	b.WriteString(strings.ReplaceAll(wd, "\"", "\\\""))
-	b.WriteString("/node_modules\" \"")
-	b.WriteString(strings.ReplaceAll(wd, "\"", "\\\""))
-	b.WriteString("/.git\" \"")
-	b.WriteString(strings.ReplaceAll(wd, "\"", "\\\""))
-	b.WriteString("/.gopanel_artifact\" \"")
-	b.WriteString(strings.ReplaceAll(wd, "\"", "\\\""))
-	b.WriteString("/__MACOSX\" 2>/dev/null || true\n")
-	b.WriteString("  fi\n")
-	b.WriteString("fi\n")
+	if path.Clean(srcDir) == path.Clean(wd) {
+		b.WriteString("echo \"[RUNNER] source mount already targets working dir, skip sync\"\n")
+	} else {
+		b.WriteString("if [ -d \"")
+		b.WriteString(strings.ReplaceAll(srcDir, "\"", "\\\""))
+		b.WriteString("\" ]; then\n")
+		b.WriteString("  echo \"[RUNNER] syncing source into working dir\"\n")
+		b.WriteString("  if command -v tar >/dev/null 2>&1; then\n")
+		b.WriteString("    if tar --help 2>/dev/null | grep -q -- '--exclude'; then\n")
+		b.WriteString("      echo \"[RUNNER] sync strategy: tar --exclude (skip node_modules/.git/.gopanel_artifact)\"\n")
+		b.WriteString("      (cd \"")
+		b.WriteString(strings.ReplaceAll(srcDir, "\"", "\\\""))
+		b.WriteString("\" && tar --exclude='./node_modules' --exclude='./.git' --exclude='./.data' --exclude='./.gopanel_artifact' --exclude='./__MACOSX' -cf - .) | (cd \"")
+		b.WriteString(strings.ReplaceAll(wd, "\"", "\\\""))
+		b.WriteString("\" && tar xpf -)\n")
+		b.WriteString("    else\n")
+		b.WriteString("      echo \"[RUNNER] sync strategy: tar fallback + cleanup transient dirs\"\n")
+		b.WriteString("      (cd \"")
+		b.WriteString(strings.ReplaceAll(srcDir, "\"", "\\\""))
+		b.WriteString("\" && tar cf - .) | (cd \"")
+		b.WriteString(strings.ReplaceAll(wd, "\"", "\\\""))
+		b.WriteString("\" && tar xpf -)\n")
+		appendRunnerCleanupScript(&b, wd, persistentSubpaths, "node_modules", ".git", ".data", ".gopanel_artifact", "__MACOSX")
+		b.WriteString("    fi\n")
+		b.WriteString("  else\n")
+		b.WriteString("    echo \"[RUNNER] sync strategy: cp -a fallback + cleanup transient dirs\"\n")
+		b.WriteString("    cp -a \"")
+		b.WriteString(strings.ReplaceAll(srcDir, "\"", "\\\""))
+		b.WriteString("\"/. \"")
+		b.WriteString(strings.ReplaceAll(wd, "\"", "\\\""))
+		b.WriteString("\"/\n")
+		appendRunnerCleanupScript(&b, wd, persistentSubpaths, "node_modules", ".git", ".data", ".gopanel_artifact", "__MACOSX")
+		b.WriteString("  fi\n")
+		b.WriteString("fi\n")
+	}
 	b.WriteString("cd \"")
 	b.WriteString(strings.ReplaceAll(wd, "\"", "\\\""))
 	b.WriteString("\"\n")

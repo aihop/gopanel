@@ -94,7 +94,8 @@ func DeployWebsiteEngine(ctx context.Context, alias string, req *request.Website
 	selectedCodeDir := ""
 	if req.CodeSource == "pipeline" {
 		envs = mergeRunnerEnvs(envs, rc, containerPort)
-		cmd = []string{"sh", "-lc", buildRunnerScript(rc, runnerWorkspaceMountPath)}
+		runnerSourceMountDir := resolveRunnerSourceMountDir(rc, workingDir)
+		cmd = []string{"sh", "-lc", buildRunnerScript(rc, runnerSourceMountDir)}
 		logEngineProgress(progress, "Runner 配置: baseImage=%s, mode=%s", imageName, strings.TrimSpace(rc.Mode))
 		logEngineProgress(progress, "Runner 启动脚本已生成")
 		if isRunnerPipeline {
@@ -124,8 +125,13 @@ func DeployWebsiteEngine(ctx context.Context, alias string, req *request.Website
 				return 0, "", "", fmt.Errorf("runner 代码目录为空")
 			}
 			logEngineProgress(progress, "Runner 项目类型: %s", detectRunnerProjectKind(selectedCodeDir, rc))
-			hostConfig.Binds = append(hostConfig.Binds, fmt.Sprintf("%s:%s:ro", selectedCodeDir, runnerWorkspaceMountPath))
-			logEngineProgress(progress, "强制挂载 Runner 工作目录: %s -> %s (ro)", selectedCodeDir, runnerWorkspaceMountPath)
+			if rc.HasCustomWorkingDir {
+				hostConfig.Binds = append(hostConfig.Binds, fmt.Sprintf("%s:%s", selectedCodeDir, runnerSourceMountDir))
+				logEngineProgress(progress, "Runner 使用自定义 workingDir，直接挂载运行目录: %s -> %s", selectedCodeDir, runnerSourceMountDir)
+			} else {
+				hostConfig.Binds = append(hostConfig.Binds, fmt.Sprintf("%s:%s:ro", selectedCodeDir, runnerSourceMountDir))
+				logEngineProgress(progress, "Runner 未自定义 workingDir，使用默认只读源目录挂载: %s -> %s (ro)", selectedCodeDir, runnerSourceMountDir)
+			}
 			persistentBinds, err := buildRunnerPersistentBinds(req.PipelineKey, rc, workingDir)
 			if err != nil {
 				return 0, "", "", fmt.Errorf("failed to prepare runner persistent dirs: %w", err)
@@ -278,16 +284,17 @@ func DeployWebsiteEngine(ctx context.Context, alias string, req *request.Website
 }
 
 type runnerConfig struct {
-	Mode            string
-	BaseImage       string
-	WorkingDir      string
-	ContainerPort   string
-	HostPort        string
-	RunnerUser      string
-	StartCommand    string
-	BuildCommand    string
-	PreStart        string
-	Env             map[string]string
-	PersistentPaths []string
-	ExtraNetworks   []string
+	Mode                string
+	BaseImage           string
+	WorkingDir          string
+	HasCustomWorkingDir bool
+	ContainerPort       string
+	HostPort            string
+	RunnerUser          string
+	StartCommand        string
+	BuildCommand        string
+	PreStart            string
+	Env                 map[string]string
+	PersistentPaths     []string
+	ExtraNetworks       []string
 }

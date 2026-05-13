@@ -127,14 +127,18 @@ func copyPipelineTree(srcDir, dstDir string, excluded map[string]struct{}) error
 	})
 }
 func shouldSkipPipelineReleaseEntry(rel string, info os.FileInfo, excluded map[string]struct{}) bool {
+	cleanRel := filepath.ToSlash(rel)
 	name := info.Name()
 	if name == ".DS_Store" || strings.HasPrefix(name, "._") {
+		return true
+	}
+	if cleanRel == "node_modules" {
 		return true
 	}
 	if _, ok := excluded[name]; ok {
 		return true
 	}
-	for _, part := range strings.Split(filepath.ToSlash(rel), "/") {
+	for _, part := range strings.Split(cleanRel, "/") {
 		if _, ok := excluded[part]; ok {
 			return true
 		}
