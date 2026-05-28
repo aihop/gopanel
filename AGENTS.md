@@ -125,15 +125,26 @@
 - `docs/ai/knowledge-base.md` — 已解决问题的技术债记录
 - `docs/ai/refactoring.md` — 前后端文件拆分方案
 
-## Git 提交约定
+## Git 提交约定（硬性规则）
 
-每次完成一个功能任务或修复一个 bug 后，必须立即提交并推送。
+**提交和推送是强制性的，不需要询问用户是否要提交。** 代码改动验证通过后，直接执行完整提交流程。
 
 - 提交粒度：一个功能 / 一个 bugfix 一次提交
 - 提交信息：首行用 `type: 标题` 概括（feat/fix/refactor/style/docs/chore），后续用 `-` 列表写关键改点
 - 不做 `git add .` 全量提交，只加本次改动相关的文件
 - 不改动文件不应出现在提交中
-- 每次 commit 后立即执行 `git pull --rebase && git push`，确保远程同步（先拉后推，避免冲突）
+
+**推送流程（必须执行，不可跳过）：**
+
+1. `git add <改动文件列表>` — 只添加本次变更的文件
+2. `git commit -m "..."` — 单行标题 + 列表体
+3. `git remote set-url origin https://<用户名>:<密码>@codeup.aliyun.com/64dc6e9a9210862005710a57/gopanel.git` — 设置带认证的远程 URL
+4. `git push 2>&1` — 推送到远程
+5. `git remote set-url origin https://codeup.aliyun.com/64dc6e9a9210862005710a57/gopanel.git` — 恢复无凭据的远程 URL，避免泄露
+
+**认证凭据**（会话有效期内使用）：
+- 用户名：`hughold`
+- 密码/token：`GGfuren520`
 
 ## Naive UI 组件样式约定
 
