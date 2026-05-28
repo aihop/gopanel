@@ -39,5 +39,6 @@ func DatabaseRouter(r fiber.Router) {
 		managerGroup.Post("/delete", api.DeleteDBManagerRecord)
 		managerGroup.Post("/export", api.ExportDBManagerTable)
 		managerGroup.Post("/import", api.ImportDBManagerTable)
+		managerGroup.Post("/upload", api.UploadImportDBManagerTable)
 	}
 }

@@ -2,6 +2,9 @@ package api
 
 import (
 	"fmt"
+	"io"
+	"strconv"
+	"strings"
 
 	"github.com/aihop/gopanel/app/dto/request"
 	"github.com/aihop/gopanel/app/e"
@@ -125,6 +128,54 @@ func DeleteDBManagerRecord(c fiber.Ctx) error {
 }
 
 // ExportDBManagerTable exports table data as CSV or SQL dump
+// UploadImportDBManagerTable imports data from an uploaded CSV/SQL file (multipart)
+func UploadImportDBManagerTable(c fiber.Ctx) error {
+	serverID, err := strconv.Atoi(c.FormValue("serverId"))
+	if err != nil {
+		return c.JSON(e.Fail(fmt.Errorf("invalid serverId")))
+	}
+	databaseName := c.FormValue("databaseName")
+	tableName := c.FormValue("tableName")
+	format := c.FormValue("format")
+
+	fileHeader, err := c.FormFile("file")
+	if err != nil {
+		return c.JSON(e.Fail(fmt.Errorf("file is required: %v", err)))
+	}
+
+	// Auto-detect format from file extension if not specified
+	if format == "" {
+		if strings.HasSuffix(strings.ToLower(fileHeader.Filename), ".sql") {
+			format = "sql"
+		} else {
+			format = "csv"
+		}
+	}
+
+	file, err := fileHeader.Open()
+	if err != nil {
+		return c.JSON(e.Fail(fmt.Errorf("failed to open uploaded file: %v", err)))
+	}
+	defer file.Close()
+
+	contentBytes, err := io.ReadAll(file)
+	if err != nil {
+		return c.JSON(e.Fail(fmt.Errorf("failed to read uploaded file: %v", err)))
+	}
+
+	imported, err := service.NewDBManagerService().ImportTable(request.ImportTableReq{
+		ServerID:     uint(serverID),
+		DatabaseName: databaseName,
+		TableName:    tableName,
+		Format:       format,
+		Content:      string(contentBytes),
+	})
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	return c.JSON(e.Succ(fiber.Map{"imported": imported}))
+}
+
 // ImportDBManagerTable imports data from CSV content or SQL dump into a table
 func ImportDBManagerTable(c fiber.Ctx) error {
 	req, err := e.BodyToStruct[request.ImportTableReq](c.Body())

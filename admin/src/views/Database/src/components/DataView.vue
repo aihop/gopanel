@@ -25,48 +25,75 @@ const importFormat = ref('csv')
 const importContent = ref('')
 const importing = ref(false)
 const importFilename = ref('')
+const selectedFile = ref<File | null>(null)
+
+const formatFileSize = (bytes: number) => {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
 
 const handleFileSelected = (e: Event) => {
   const target = e.target as HTMLInputElement
   if (!target.files || target.files.length === 0) return
   const file = target.files[0]
   importFilename.value = file.name
-  const reader = new FileReader()
-  reader.onload = () => {
-    importContent.value = reader.result as string
-    // Auto-detect format from extension
-    if (file.name.endsWith('.sql')) {
-      importFormat.value = 'sql'
-    } else {
-      importFormat.value = 'csv'
-    }
+  selectedFile.value = file
+  // Auto-detect format from extension
+  if (file.name.endsWith('.sql')) {
+    importFormat.value = 'sql'
+  } else {
+    importFormat.value = 'csv'
   }
-  reader.readAsText(file)
+  // Clear pasted content when a file is selected
+  importContent.value = ''
+}
+
+const clearFileSelection = () => {
+  selectedFile.value = null
+  importFilename.value = ''
 }
 
 const handleImport = async () => {
   if (!props.selectedServerId || !props.selectedDatabase || !props.selectedTable) return
-  if (!importContent.value.trim()) {
+  if (!importContent.value.trim() && !selectedFile.value) {
     message.warning('请选择文件或粘贴内容')
     return
   }
 
   importing.value = true
   try {
-    const { importDBManagerTableAPI } = await import('@/api/modules/database')
-    const res = await importDBManagerTableAPI({
-      serverId: props.selectedServerId,
-      databaseName: props.selectedDatabase,
-      tableName: props.selectedTable,
-      format: importFormat.value,
-      content: importContent.value
-    })
+    let res: any
+
+    if (selectedFile.value) {
+      // File upload path: multipart upload
+      const { uploadDBManagerImportAPI } = await import('@/api/modules/database')
+      res = await uploadDBManagerImportAPI({
+        serverId: props.selectedServerId,
+        databaseName: props.selectedDatabase,
+        tableName: props.selectedTable,
+        format: importFormat.value,
+        file: selectedFile.value
+      })
+    } else {
+      // Paste path: JSON with content string
+      const { importDBManagerTableAPI } = await import('@/api/modules/database')
+      res = await importDBManagerTableAPI({
+        serverId: props.selectedServerId,
+        databaseName: props.selectedDatabase,
+        tableName: props.selectedTable,
+        format: importFormat.value,
+        content: importContent.value
+      })
+    }
+
     if (res.code === 0) {
       const imported = (res.data as any)?.imported || 0
       message.success(`导入成功，共 ${imported} 条记录`)
       showImportModal.value = false
       importContent.value = ''
       importFilename.value = ''
+      selectedFile.value = null
       fetchTableData()
     } else {
       message.error(res.message || '导入失败')
@@ -381,10 +408,16 @@ defineExpose({ fetchTableData, setAdvancedSearch, handleCellEditCancel })
               @change="handleFileSelected"
             />
           </label>
-          <span class="text-slate-400 text-xs">{{ importFilename || '未选择文件' }}</span>
+          <span v-if="selectedFile" class="text-slate-600 text-xs flex items-center gap-2">
+            <n-icon :component="renderIcon('mdi:file-outline')" />
+            {{ importFilename }}
+            <span class="text-slate-400">({{ formatFileSize(selectedFile.size) }})</span>
+            <n-button size="tiny" text type="error" @click="clearFileSelection">清除</n-button>
+          </span>
+          <span v-else class="text-slate-400 text-xs">未选择文件</span>
         </div>
 
-        <div>
+        <div v-if="!selectedFile">
           <div class="text-slate-500 text-xs mb-1">或直接粘贴 {{ importFormat === 'csv' ? 'CSV' : 'SQL' }} 内容:</div>
           <n-input
             v-model:value="importContent"
@@ -394,6 +427,10 @@ defineExpose({ fetchTableData, setAdvancedSearch, handleCellEditCancel })
             class="w-full"
           />
         </div>
+        <div v-else class="rounded bg-blue-50 border border-blue-200 p-3 text-xs text-blue-700">
+          <n-icon :component="renderIcon('mdi:cloud-upload-outline')" class="mr-1" />
+          文件已选择，点击「开始导入」将直接上传。大文件不会加载到页面中。
+        </div>
 
         <div class="flex justify-end gap-2 mt-2">
           <n-button size="small" @click="showImportModal = false">取消</n-button>
@@ -402,7 +439,7 @@ defineExpose({ fetchTableData, setAdvancedSearch, handleCellEditCancel })
             type="primary"
             :loading="importing"
             @click="handleImport"
-          >开始导入</n-button>
+          >{{ selectedFile ? '上传并导入' : '开始导入' }}</n-button>
         </div>
       </div>
     </n-modal>

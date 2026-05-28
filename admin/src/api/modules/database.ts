@@ -105,6 +105,19 @@ export const importDBManagerTableAPI = (data: { serverId: number; databaseName: 
 	return http.post(`/database/manager/import`, data)
 }
 
+export const uploadDBManagerImportAPI = (data: { serverId: number; databaseName: string; tableName: string; format: string; file: File }) => {
+	const formData = new FormData()
+	formData.append('serverId', String(data.serverId))
+	formData.append('databaseName', data.databaseName)
+	formData.append('tableName', data.tableName)
+	formData.append('format', data.format)
+	formData.append('file', data.file)
+	return http.post(`/database/manager/upload`, formData, {
+		headers: { 'Content-Type': 'multipart/form-data' },
+		timeout: 300000 // 5 min for large files
+	})
+}
+
 export const databaseUserGetAPI = (params: any) => {
 	return http.post(`/database/user/get`, params)
 }
