@@ -382,7 +382,10 @@ func (s *DBManagerService) ImportTable(req request.ImportTableReq) (int, error) 
 	case "sql":
 		return execSQLImport(db, req.Content)
 	case "csv":
-		rows := strings.Split(strings.TrimSpace(req.Content), "\n")
+		// Normalize line endings (support Windows \r\n)
+		normalized := strings.ReplaceAll(req.Content, "\r\n", "\n")
+		normalized = strings.ReplaceAll(normalized, "\r", "")
+		rows := strings.Split(strings.TrimSpace(normalized), "\n")
 		if len(rows) < 2 {
 			return 0, fmt.Errorf("csv must have at least a header row and one data row")
 		}
@@ -460,16 +463,12 @@ func execSQLImport(db *sql.DB, content string) (int, error) {
 	statements := strings.Split(content, ";")
 	executed := 0
 	for _, stmt := range statements {
-		stmt = strings.TrimSpace(stmt)
-		if stmt == "" || strings.HasPrefix(stmt, "--") {
-			continue
-		}
-		// Remove comment lines
+		// Remove comment lines and trim
 		lines := strings.Split(stmt, "\n")
 		var cleanLines []string
 		for _, line := range lines {
 			trimmed := strings.TrimSpace(line)
-			if strings.HasPrefix(trimmed, "--") {
+			if trimmed == "" || strings.HasPrefix(trimmed, "--") {
 				continue
 			}
 			cleanLines = append(cleanLines, line)
