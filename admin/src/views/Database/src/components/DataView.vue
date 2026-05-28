@@ -358,7 +358,7 @@ defineExpose({ fetchTableData, setAdvancedSearch, handleCellEditCancel })
     <n-modal
       v-model:show="showImportModal"
       preset="card"
-      class="w-[560px]"
+      style="width: 560px"
       title="导入数据"
     >
       <div class="flex flex-col gap-4 text-sm">

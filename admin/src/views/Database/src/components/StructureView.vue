@@ -146,7 +146,7 @@ const handleRefresh = () => {
     <n-modal
       v-model:show="showColumnModal"
       preset="card"
-      class="w-[480px]"
+      style="width: 480px"
       :title="isEditColumn ? '修改字段' : '添加字段'"
     >
       <div class="flex flex-col gap-4 text-sm">
