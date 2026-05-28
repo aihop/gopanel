@@ -170,6 +170,107 @@ const handleCopy = async () => {
     loadingCopy.value = false
   }
 }
+
+// 表维护操作（OPTIMIZE / CHECK / ANALYZE / REPAIR）
+const maintainResults = ref<{ operation: string; type: string; text: string }[]>([])
+const loadingOptimize = ref(false)
+const loadingCheck = ref(false)
+const loadingAnalyze = ref(false)
+const loadingRepair = ref(false)
+
+const maintainOps = computed(() => {
+  const t = serverType.value
+  const ops: { key: string; label: string; icon: string; desc: string }[] = []
+  ops.push({ key: 'optimize', label: 'OPTIMIZE', icon: 'mdi:database-cog-outline', desc: '整理表空间碎片，回收未使用空间' })
+  ops.push({ key: 'check', label: 'CHECK', icon: 'mdi:shield-check-outline', desc: '检查表结构完整性' })
+  ops.push({ key: 'analyze', label: 'ANALYZE', icon: 'mdi:chart-line', desc: '更新表统计信息，优化查询计划' })
+  if (t === 'mysql' || t === 'mariadb') {
+    ops.push({ key: 'repair', label: 'REPAIR', icon: 'mdi:wrench', desc: '修复损坏的表（仅 MySQL/MariaDB）' })
+  }
+  return ops
+})
+
+const getMaintainSql = (operation: string): string | null => {
+  const q = getQuote()
+  const table = `${q}${props.selectedTable}${q}`
+  const t = serverType.value
+  switch (operation) {
+    case 'optimize':
+      if (t === 'mysql' || t === 'mariadb') return `OPTIMIZE TABLE ${table}`
+      if (t === 'postgresql') return `VACUUM ANALYZE ${table}`
+      if (t === 'sqlite') return `PRAGMA optimize`
+      return null
+    case 'check':
+      if (t === 'mysql' || t === 'mariadb') return `CHECK TABLE ${table}`
+      if (t === 'sqlite') return `PRAGMA integrity_check`
+      return null
+    case 'analyze':
+      if (t === 'mysql' || t === 'mariadb') return `ANALYZE TABLE ${table}`
+      if (t === 'postgresql') return `ANALYZE ${table}`
+      if (t === 'sqlite') return `ANALYZE`
+      return null
+    case 'repair':
+      if (t === 'mysql' || t === 'mariadb') return `REPAIR TABLE ${table}`
+      return null
+    default:
+      return null
+  }
+}
+
+const handleMaintain = async (operation: string) => {
+  if (!props.selectedTable) {
+    message.warning('请先选择表')
+    return
+  }
+  const sql = getMaintainSql(operation)
+  if (!sql) {
+    message.warning(`当前数据库类型不支持 ${operation.toUpperCase()} 操作`)
+    return
+  }
+  const loadingMap: Record<string, any> = {
+    optimize: loadingOptimize,
+    check: loadingCheck,
+    analyze: loadingAnalyze,
+    repair: loadingRepair
+  }
+  loadingMap[operation].value = true
+  try {
+    const res = await execSql(sql)
+    if (res.code === 0) {
+      const result = res.data || {}
+      if (result.type === 'query' && Array.isArray(result.rows)) {
+        maintainResults.value = result.rows.map((row: any) => ({
+          operation: operation.toUpperCase(),
+          type: row.Msg_type || row.type || '-',
+          text: row.Msg_text || row.text || JSON.stringify(row)
+        }))
+      } else {
+        maintainResults.value = [{
+          operation: operation.toUpperCase(),
+          type: 'OK',
+          text: `${operation.toUpperCase()} 执行成功`
+        }]
+      }
+      message.success(`${operation.toUpperCase()} 执行成功`)
+    } else {
+      maintainResults.value = [{
+        operation: operation.toUpperCase(),
+        type: 'ERROR',
+        text: res.message || '操作失败'
+      }]
+      message.error(res.message || `${operation.toUpperCase()} 执行失败`)
+    }
+  } catch (err: any) {
+    maintainResults.value = [{
+      operation: operation.toUpperCase(),
+      type: 'ERROR',
+      text: err?.message || '请求失败'
+    }]
+    message.error(err?.message || '请求失败')
+  } finally {
+    loadingMap[operation].value = false
+  }
+}
 </script>
 
 <template>
@@ -271,6 +372,49 @@ const handleCopy = async () => {
               <template #icon><n-icon :component="renderIcon('mdi:content-copy')" /></template>
               复制表
             </n-button>
+          </n-card>
+
+          <n-card title="维护工具" size="small" class="shadow-sm">
+            <div class="text-xs text-slate-500 mb-3">
+              执行表级维护操作：优化表空间、检查完整性、更新统计信息或修复损坏表。
+            </div>
+            <div class="grid grid-cols-2 xl:grid-cols-4 gap-3">
+              <div
+                v-for="op in maintainOps"
+                :key="op.key"
+                class="rounded border border-slate-200 p-3 hover:border-sky-300 hover:bg-sky-50 transition-colors"
+              >
+                <div class="font-semibold text-slate-700 mb-1 text-xs">{{ op.label }}</div>
+                <div class="text-[11px] text-slate-400 mb-3 leading-tight">{{ op.desc }}</div>
+                <n-button
+                  size="tiny"
+                  :type="op.key === 'check' ? 'info' : 'default'"
+                  ghost
+                  :loading="({ optimize: loadingOptimize, check: loadingCheck, analyze: loadingAnalyze, repair: loadingRepair } as any)[op.key]"
+                  @click="handleMaintain(op.key)"
+                >
+                  <template #icon><n-icon :component="renderIcon(op.icon)" /></template>
+                  执行
+                </n-button>
+              </div>
+            </div>
+
+            <div v-if="maintainResults.length > 0" class="mt-4">
+              <div class="border-t border-slate-200 pt-3">
+                <div class="text-xs font-semibold text-slate-600 mb-2">执行结果</div>
+                <div class="flex flex-col gap-1">
+                  <div
+                    v-for="(r, idx) in maintainResults"
+                    :key="idx"
+                    class="flex items-start gap-2 text-xs px-3 py-1.5 rounded"
+                    :class="r.type === 'ERROR' ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'"
+                  >
+                    <span class="font-mono font-semibold whitespace-nowrap">[{{ r.operation }}]</span>
+                    <span class="font-mono text-[11px]">{{ r.text }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </n-card>
 
         </div>
