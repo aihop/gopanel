@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { useMessage, NEmpty, NButton, NInput, NInputGroup, NCard, NPopconfirm, NIcon } from 'naive-ui'
+import { useMessage, NEmpty, NButton, NInput, NInputGroup, NCard, NPopconfirm, NIcon, NModal, NCheckbox } from 'naive-ui'
 import { renderIcon } from '@/utils'
-import { execDBManagerSqlAPI } from '@/api/modules/database'
+import { execDBManagerSqlAPI, copyDBManagerTableAPI } from '@/api/modules/database'
 import DatabaseWorkspaceHeader from './DatabaseWorkspaceHeader.vue'
 
 const props = defineProps<{
@@ -23,6 +23,12 @@ const newTableName = ref('')
 const loadingTruncate = ref(false)
 const loadingDrop = ref(false)
 const loadingRename = ref(false)
+
+// Copy table state
+const showCopyModal = ref(false)
+const copyTargetName = ref('')
+const copyWithData = ref(true)
+const loadingCopy = ref(false)
 
 const selectedServerLabel = computed(() => {
   if (!props.selectedServerId) return ''
@@ -125,6 +131,45 @@ const handleRename = async () => {
     loadingRename.value = false
   }
 }
+
+const handleCopy = async () => {
+  if (!props.selectedTable || !copyTargetName.value.trim()) {
+    message.warning('请输入目标表名')
+    return
+  }
+  const name = copyTargetName.value.trim()
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) {
+    message.warning('表名格式不正确，请使用字母、数字或下划线')
+    return
+  }
+  if (name === props.selectedTable) {
+    message.warning('目标表名不能与原表名相同')
+    return
+  }
+
+  loadingCopy.value = true
+  try {
+    const res = await copyDBManagerTableAPI({
+      serverId: props.selectedServerId!,
+      databaseName: props.selectedDatabase!,
+      sourceTable: props.selectedTable,
+      targetTable: name,
+      copyData: copyWithData.value
+    })
+    if (res.code === 0) {
+      message.success(`表已复制到 ${name}`)
+      showCopyModal.value = false
+      copyTargetName.value = ''
+      emit('tableRenamed', name)
+    } else {
+      message.error(res.message || '复制失败')
+    }
+  } catch (err: any) {
+    message.error(err?.message || '复制请求失败')
+  } finally {
+    loadingCopy.value = false
+  }
+}
 </script>
 
 <template>
@@ -218,8 +263,63 @@ const handleRename = async () => {
             </div>
           </n-card>
 
+          <n-card title="复制表" size="small" class="shadow-sm">
+            <div class="text-xs text-slate-500 mb-3">
+              复制当前表的结构和数据到一张新表。新表将与原表结构一致。
+            </div>
+            <n-button type="primary" ghost @click="showCopyModal = true">
+              <template #icon><n-icon :component="renderIcon('mdi:content-copy')" /></template>
+              复制表
+            </n-button>
+          </n-card>
+
         </div>
       </div>
     </template>
   </div>
+
+  <!-- Copy Table Modal -->
+  <n-modal
+    v-model:show="showCopyModal"
+    preset="card"
+    style="width: 460px"
+    title="复制表"
+  >
+    <div class="flex flex-col gap-4 text-sm">
+      <div class="flex items-center gap-2">
+        <span class="w-24 text-right text-slate-600">源表名:</span>
+        <span class="font-semibold text-slate-800">{{ selectedTable }}</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="w-24 text-right text-slate-600">目标表名:</span>
+        <n-input
+          v-model:value="copyTargetName"
+          placeholder="输入新表名..."
+          size="small"
+          class="flex-1"
+          clearable
+        />
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="w-24 text-right text-slate-600">&nbsp;</span>
+        <n-checkbox v-model:checked="copyWithData">
+          复制数据（含所有记录）
+        </n-checkbox>
+      </div>
+      <div class="text-xs text-slate-400 mt-1">
+        若不勾选"复制数据"，则仅复制表结构（字段、索引、约束），不复制记录。
+      </div>
+    </div>
+    <template #footer>
+      <div class="flex justify-end gap-2">
+        <n-button size="small" @click="showCopyModal = false">取消</n-button>
+        <n-button
+          size="small"
+          type="primary"
+          :loading="loadingCopy"
+          @click="handleCopy"
+        >开始复制</n-button>
+      </div>
+    </template>
+  </n-modal>
 </template>

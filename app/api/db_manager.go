@@ -259,6 +259,20 @@ func GetDBManagerDatabaseInfo(c fiber.Ctx) error {
 	return c.JSON(e.Succ(data))
 }
 
+// CopyDBManagerTable 复制表
+// @Router /database/manager/copy-table [post]
+func CopyDBManagerTable(c fiber.Ctx) error {
+	req, err := e.BodyToStruct[request.CopyTableReq](c.Body())
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	err = service.NewDBManagerService().CopyTable(*req)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	return c.JSON(e.Succ("复制成功"))
+}
+
 // CreateDBManagerTable 创建表
 // @Router /database/manager/create-table [post]
 func CreateDBManagerTable(c fiber.Ctx) error {

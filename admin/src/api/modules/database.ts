@@ -159,6 +159,16 @@ export const getDBManagerDatabaseInfoAPI = (data: {
 	return http.post<any>(`/database/manager/database-info`, data)
 }
 
+export const copyDBManagerTableAPI = (data: {
+	serverId: number
+	databaseName: string
+	sourceTable: string
+	targetTable: string
+	copyData: boolean
+}) => {
+	return http.post(`/database/manager/copy-table`, data)
+}
+
 export const createDBManagerTableAPI = (data: {
 	serverId: number
 	databaseName: string

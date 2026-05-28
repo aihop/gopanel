@@ -114,6 +114,15 @@ type ColumnDef struct {
 	IsPrimary     bool   `json:"isPrimary"`
 }
 
+// CopyTableReq 复制表
+type CopyTableReq struct {
+	ServerID       uint   `json:"serverId" validate:"required"`
+	DatabaseName   string `json:"databaseName" validate:"required"`
+	SourceTable    string `json:"sourceTable" validate:"required"`
+	TargetTable    string `json:"targetTable" validate:"required"`
+	CopyData       bool   `json:"copyData"`
+}
+
 // CreateTableReq 创建表
 type CreateTableReq struct {
 	ServerID     uint        `json:"serverId" validate:"required"`

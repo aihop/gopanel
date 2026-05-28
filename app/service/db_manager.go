@@ -975,3 +975,60 @@ func (s *DBManagerService) CreateTable(req request.CreateTableReq) error {
 	_, err = db.Exec(b.String())
 	return err
 }
+
+// CopyTable 复制表（结构 + 可选数据）
+func (s *DBManagerService) CopyTable(req request.CopyTableReq) error {
+	db, err := s.getDBConn(req.ServerID, req.DatabaseName)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	server, _ := s.serverRepo.Get(req.ServerID)
+	dbType := server.Type
+	src := sanitizeIdent(req.SourceTable)
+	dst := sanitizeIdent(req.TargetTable)
+	q := string(quoteChar(dbType))
+	quote := func(name string) string { return q + name + q }
+
+	switch dbType {
+	case model.DatabaseTypeMysql, model.DatabaseTypeMariaDB:
+		// MySQL: CREATE TABLE ... LIKE （复制结构、索引、约束）
+		_, err = db.Exec(fmt.Sprintf("CREATE TABLE %s LIKE %s", quote(dst), quote(src)))
+	case model.DatabaseTypePostgresql:
+		// PostgreSQL: CREATE TABLE ... (LIKE ... INCLUDING ALL)
+		_, err = db.Exec(fmt.Sprintf("CREATE TABLE %s (LIKE %s INCLUDING ALL)", quote(dst), quote(src)))
+	case model.DatabaseSQLite:
+		// SQLite: 从 sqlite_master 获取 CREATE TABLE SQL 并替换表名
+		var createSQL sql.NullString
+		if err := db.QueryRow("SELECT sql FROM sqlite_master WHERE type='table' AND name=?", src).Scan(&createSQL); err != nil {
+			return fmt.Errorf("source table not found: %v", err)
+		}
+		if !createSQL.Valid {
+			return fmt.Errorf("source table %s has no CREATE definition", req.SourceTable)
+		}
+		modified := strings.Replace(createSQL.String, fmt.Sprintf("%q", src), fmt.Sprintf("%q", dst), 1)
+		if modified == createSQL.String {
+			modified = strings.Replace(createSQL.String, fmt.Sprintf("`%s`", src), fmt.Sprintf("`%s`", dst), 1)
+		}
+		if modified == createSQL.String {
+			modified = strings.Replace(createSQL.String, src, dst, 1)
+		}
+		_, err = db.Exec(modified)
+	default:
+		return fmt.Errorf("unsupported database type: %s", dbType)
+	}
+	if err != nil {
+		return fmt.Errorf("create table structure failed: %v", err)
+	}
+
+	// 复制数据
+	if req.CopyData {
+		_, err = db.Exec(fmt.Sprintf("INSERT INTO %s SELECT * FROM %s", quote(dst), quote(src)))
+		if err != nil {
+			return fmt.Errorf("copy data failed: %v", err)
+		}
+	}
+
+	return nil
+}
