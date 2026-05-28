@@ -621,11 +621,251 @@ export const useStructureView = (
     ]
   })
 
+  // ═══════════════════════════ 外键管理 ═══════════════════════════
+
+  const fkData = ref<any[]>([])
+  const loadingFk = ref(false)
+
+  const fkSummary = computed(() => ({
+    total: fkData.value.length,
+    cascadeDelete: fkData.value.filter((r: any) => r.DELETE_RULE === 'CASCADE').length
+  }))
+
+  const showFkModal = ref(false)
+  const submittingFk = ref(false)
+  const fkForm = ref({
+    name: '',
+    column: '',
+    refTable: '',
+    refColumn: '',
+    onDelete: 'NO ACTION',
+    onUpdate: 'NO ACTION'
+  })
+
+  const refTables = ref<{ label: string; value: string }[]>([])
+  const refColumns = ref<{ label: string; value: string }[]>([])
+  const loadingRefTables = ref(false)
+  const loadingRefColumns = ref(false)
+
+  const fkRuleOptions = [
+    { label: 'NO ACTION', value: 'NO ACTION' },
+    { label: 'RESTRICT', value: 'RESTRICT' },
+    { label: 'CASCADE', value: 'CASCADE' },
+    { label: 'SET NULL', value: 'SET NULL' },
+    { label: 'SET DEFAULT', value: 'SET DEFAULT' }
+  ]
+
+  const fetchTableForeignKeys = async () => {
+    if (!props.selectedServerId || !props.selectedDatabase || !props.selectedTable) return
+    const server = selectedServer.value
+    if (!server) return
+
+    loadingFk.value = true
+    let sql = ''
+    const t = props.selectedTable
+    const db = props.selectedDatabase
+
+    if (server.type === 'mysql' || server.type === 'mariadb') {
+      sql = `SELECT kcu.CONSTRAINT_NAME, kcu.COLUMN_NAME, kcu.REFERENCED_TABLE_NAME, kcu.REFERENCED_COLUMN_NAME, rc.UPDATE_RULE, rc.DELETE_RULE FROM information_schema.KEY_COLUMN_USAGE kcu JOIN information_schema.REFERENTIAL_CONSTRAINTS rc ON kcu.CONSTRAINT_NAME = rc.CONSTRAINT_NAME AND kcu.CONSTRAINT_SCHEMA = rc.CONSTRAINT_SCHEMA WHERE kcu.TABLE_SCHEMA = '${db.replace(/'/g, "''")}' AND kcu.TABLE_NAME = '${t.replace(/'/g, "''")}' AND kcu.REFERENCED_TABLE_NAME IS NOT NULL`
+    } else if (server.type === 'postgresql') {
+      sql = `SELECT tc.constraint_name, kcu.column_name, ccu.table_name AS referenced_table_name, ccu.column_name AS referenced_column_name, rc.update_rule, rc.delete_rule FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema JOIN information_schema.constraint_column_usage ccu ON tc.constraint_name = ccu.constraint_name AND tc.table_schema = ccu.table_schema JOIN information_schema.referential_constraints rc ON tc.constraint_name = rc.constraint_name AND tc.table_schema = rc.constraint_schema WHERE tc.constraint_type = 'FOREIGN KEY' AND tc.table_schema = 'public' AND tc.table_name = '${t.replace(/'/g, "''")}'`
+    } else if (server.type === 'sqlite') {
+      sql = `PRAGMA foreign_key_list('${t.replace(/'/g, "''")}')`
+    }
+
+    if (!sql) { loadingFk.value = false; return }
+
+    try {
+      const res = await execDBManagerSqlAPI({ serverId: props.selectedServerId, databaseName: props.selectedDatabase, sql })
+      if (res.code === 0 && res.data && res.data.type === 'query') {
+        if (server.type === 'sqlite') {
+          fkData.value = (res.data.rows || []).map((row: any) => ({
+            CONSTRAINT_NAME: row.id ? `fk_${row.seq}` : '-',
+            COLUMN_NAME: row.from || row.col || row.column || `col_${row.seq}`,
+            REFERENCED_TABLE_NAME: row.table,
+            REFERENCED_COLUMN_NAME: row.to || row.foreign_col || row.ref_col || '',
+            UPDATE_RULE: row.on_update || 'NO ACTION',
+            DELETE_RULE: row.on_delete || 'NO ACTION'
+          }))
+        } else {
+          fkData.value = res.data.rows || []
+        }
+      } else {
+        fkData.value = []
+      }
+    } catch {
+      fkData.value = []
+    } finally {
+      loadingFk.value = false
+    }
+  }
+
+  const openAddFkModal = async () => {
+    if (!props.selectedServerId || !props.selectedDatabase || !props.selectedTable) return
+    showFkModal.value = true
+    fkForm.value = { name: '', column: '', refTable: '', refColumn: '', onDelete: 'NO ACTION', onUpdate: 'NO ACTION' }
+    refTables.value = []
+    refColumns.value = []
+
+    const server = selectedServer.value
+    if (!server) return
+
+    loadingRefTables.value = true
+    let sql = ''
+    if (server.type === 'mysql' || server.type === 'mariadb') {
+      sql = 'SHOW TABLES'
+    } else if (server.type === 'postgresql') {
+      sql = "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'"
+    } else if (server.type === 'sqlite') {
+      sql = "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+    }
+    try {
+      const res = await execDBManagerSqlAPI({ serverId: props.selectedServerId, databaseName: props.selectedDatabase, sql })
+      if (res.code === 0 && res.data && res.data.type === 'query') {
+        const rows = res.data.rows || []
+        const key = Object.keys(rows[0] || {})[0]
+        refTables.value = rows.map((r: any) => ({ label: r[key] || Object.values(r)[0], value: r[key] || Object.values(r)[0] }))
+      }
+    } catch {
+      // silently fail
+    } finally {
+      loadingRefTables.value = false
+    }
+  }
+
+  const onRefTableChange = async (tableName: string) => {
+    if (!tableName || !props.selectedServerId || !props.selectedDatabase) return
+    const server = selectedServer.value
+    if (!server) return
+
+    fkForm.value.refColumn = ''
+    loadingRefColumns.value = true
+    let sql = ''
+    if (server.type === 'mysql' || server.type === 'mariadb') {
+      sql = `SHOW COLUMNS FROM \`${tableName.replace(/`/g, '')}\``
+    } else if (server.type === 'postgresql') {
+      sql = `SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = '${tableName.replace(/'/g, "''")}'`
+    } else if (server.type === 'sqlite') {
+      sql = `PRAGMA table_info('${tableName.replace(/'/g, "''")}')`
+    }
+    try {
+      const res = await execDBManagerSqlAPI({ serverId: props.selectedServerId, databaseName: props.selectedDatabase, sql })
+      if (res.code === 0 && res.data && res.data.type === 'query') {
+        const rows = res.data.rows || []
+        if (server.type === 'mysql') {
+          refColumns.value = rows.map((r: any) => ({ label: r.Field, value: r.Field }))
+        } else if (server.type === 'postgresql') {
+          refColumns.value = rows.map((r: any) => ({ label: r.column_name, value: r.column_name }))
+        } else {
+          const key = Object.keys(rows[0] || {})[0]
+          refColumns.value = rows.map((r: any) => ({ label: r[key] || r.name, value: r[key] || r.name }))
+        }
+      }
+    } catch {
+      refColumns.value = []
+    } finally {
+      loadingRefColumns.value = false
+    }
+  }
+
+  const dropForeignKey = async (row: any) => {
+    if (!props.selectedServerId || !props.selectedDatabase || !props.selectedTable) return
+    const server = selectedServer.value
+    if (!server) return
+    const table = props.selectedTable
+    const cname = row.CONSTRAINT_NAME
+
+    let sql = ''
+    if (server.type === 'mysql' || server.type === 'mariadb') {
+      sql = `ALTER TABLE \`${table}\` DROP FOREIGN KEY \`${cname}\``
+    } else if (server.type === 'postgresql') {
+      sql = `ALTER TABLE "${table}" DROP CONSTRAINT "${cname}"`
+    } else {
+      message.warning('SQLite 不支持直接删除外键约束')
+      return
+    }
+
+    try {
+      const res = await execDBManagerSqlAPI({ serverId: props.selectedServerId, databaseName: props.selectedDatabase, sql })
+      if (res.code === 0) {
+        message.success('删除外键成功')
+        fetchTableForeignKeys()
+      } else {
+        message.error(res.message || '删除外键失败')
+      }
+    } catch {
+      message.error('执行删除请求失败')
+    }
+  }
+
+  const submitForeignKey = async () => {
+    if (!fkForm.value.column || !fkForm.value.refTable || !fkForm.value.refColumn) {
+      message.warning('请选择字段、引用表和引用列')
+      return
+    }
+    const server = selectedServer.value
+    if (!server) return
+    const isPg = server.type === 'postgresql'
+    const q = isPg ? '"' : '`'
+    const table = props.selectedTable
+    const col = fkForm.value.column
+    const rt = fkForm.value.refTable
+    const rc = fkForm.value.refColumn
+    const cname = fkForm.value.name || `fk_${table}_${col}`
+    const onDel = fkForm.value.onDelete
+    const onUpd = fkForm.value.onUpdate
+
+    if (server.type === 'sqlite') {
+      message.warning('SQLite 无法通过 ALTER TABLE 新增外键约束')
+      return
+    }
+
+    const sql = `ALTER TABLE ${q}${table}${q} ADD CONSTRAINT ${q}${cname}${q} FOREIGN KEY (${q}${col}${q}) REFERENCES ${q}${rt}${q}(${q}${rc}${q}) ON DELETE ${onDel} ON UPDATE ${onUpd}`
+
+    submittingFk.value = true
+    try {
+      const res = await execDBManagerSqlAPI({ serverId: props.selectedServerId, databaseName: props.selectedDatabase, sql })
+      if (res.code === 0) {
+        message.success('添加外键成功')
+        showFkModal.value = false
+        fetchTableForeignKeys()
+      } else {
+        message.error(res.message || '添加外键失败')
+      }
+    } catch {
+      message.error('执行失败')
+    } finally {
+      submittingFk.value = false
+    }
+  }
+
+  const fkColumns = [
+    {
+      title: '操作',
+      key: 'actions',
+      width: 100,
+      render(row: any) {
+        return h(NPopconfirm, { onPositiveClick: () => dropForeignKey(row) }, {
+          trigger: () => h(NButton, { size: 'tiny', type: 'error', ghost: true }, { default: () => '删除' }),
+          default: () => `确定要删除外键 ${row.CONSTRAINT_NAME} 吗？`
+        })
+      }
+    },
+    { title: '约束名', key: 'CONSTRAINT_NAME', width: 160, ellipsis: { tooltip: true } as const },
+    { title: '字段', key: 'COLUMN_NAME', width: 120 },
+    { title: '引用表', key: 'REFERENCED_TABLE_NAME', width: 140 },
+    { title: '引用列', key: 'REFERENCED_COLUMN_NAME', width: 120 },
+    { title: '更新规则', key: 'UPDATE_RULE', width: 110 },
+    { title: '删除规则', key: 'DELETE_RULE', width: 110 }
+  ]
+
   watch(() => props.selectedTable, () => {
     if (props.selectedTable) {
       fetchTableIndexes()
+      fetchTableForeignKeys()
     } else {
       indexData.value = []
+      fkData.value = []
     }
   }, { immediate: true })
 
@@ -639,8 +879,15 @@ export const useStructureView = (
     afterColumnOptions,
     columnForm,
     dropColumn,
+    dropForeignKey,
+    fetchTableForeignKeys,
     fetchTableIndexes,
     fieldSummary,
+    fkColumns,
+    fkData,
+    fkForm,
+    fkRuleOptions,
+    fkSummary,
     indexColumns,
     indexColumnsOptions,
     indexData,
@@ -649,18 +896,28 @@ export const useStructureView = (
     indexTypeOptions,
     isEditColumn,
     isEditIndex,
+    loadingFk,
     loadingIndex,
+    loadingRefColumns,
+    loadingRefTables,
+    onRefTableChange,
     openAddColumnModal,
+    openAddFkModal,
     openAddIndexModal,
     openEditColumnModal,
     openEditIndexModal,
+    refColumns,
+    refTables,
     selectedServerLabel,
     showColumnModal,
+    showFkModal,
     showIndexModal,
     structureColumns,
     submitColumn,
+    submitForeignKey,
     submitIndex,
     submittingColumn,
+    submittingFk,
     submittingIndex
   }
 }
