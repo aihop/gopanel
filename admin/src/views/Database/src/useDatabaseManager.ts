@@ -195,7 +195,7 @@ export const useDatabaseManager = (
     databaseOptions.value = []
 
     try {
-      const res = await databaseListAPI({ page: 1, limit: 100, server_id: val })
+      const res = await databaseListAPI({ page: 1, limit: 100, wheres: [{ field: 'server_id', rule: 'eq', val: String(val) }] })
       const data = res.data as any
       if (data) {
         const items = Array.isArray(data) ? data : (data.items || [])
