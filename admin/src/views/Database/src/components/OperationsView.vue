@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { useMessage, NEmpty, NButton, NInput, NInputGroup, NCard, NPopconfirm } from 'naive-ui'
+import { useMessage, NEmpty, NButton, NInput, NInputGroup, NCard, NPopconfirm, NIcon } from 'naive-ui'
+import { renderIcon } from '@/utils'
 import { execDBManagerSqlAPI } from '@/api/modules/database'
 import DatabaseWorkspaceHeader from './DatabaseWorkspaceHeader.vue'
 
