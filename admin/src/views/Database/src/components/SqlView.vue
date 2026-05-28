@@ -3,6 +3,7 @@ import { ref, computed, watch } from 'vue'
 import { useMessage, NEmpty, NIcon, NButton, NDataTable, NInput, NAlert } from 'naive-ui'
 import { execDBManagerSqlAPI } from '@/api/modules/database'
 import { renderIcon } from '@/utils'
+import DatabaseWorkspaceHeader from './DatabaseWorkspaceHeader.vue'
 
 const props = defineProps<{
   selectedServerId: number | null
@@ -15,6 +16,7 @@ const message = useMessage()
 const sqlQuery = ref('')
 const executingSql = ref(false)
 const sqlResult = ref<any>(null)
+const sqlHistory = ref<Array<{ title: string; sql: string }>>([])
 
 const selectedServerLabel = computed(() => {
   return props.selectedServerId
@@ -65,15 +67,41 @@ const sqlResultColumns = computed(() => {
   return []
 })
 
+const sqlResultSummary = computed(() => {
+  if (!sqlResult.value) return []
+  if (sqlResult.value.type === 'query') {
+    return [
+      `${sqlResult.value.rows?.length || 0} 行`,
+      `${sqlResult.value.columns?.length || 0} 列`,
+      '查询结果'
+    ]
+  }
+  return [
+    `${sqlResult.value.affected || 0} 行受影响`,
+    '执行语句'
+  ]
+})
+
 watch(
   () => [props.selectedServerId, props.selectedDatabase, props.selectedTable],
   () => {
     sqlResult.value = null
+    sqlHistory.value = []
   }
 )
 
 const applyQuickSql = (sql: string) => {
   sqlQuery.value = sql
+}
+
+const pushSqlHistory = (sql: string) => {
+  const normalized = sql.trim()
+  if (!normalized) return
+  const nextTitle = normalized.split('\n')[0].slice(0, 48)
+  sqlHistory.value = [
+    { title: nextTitle, sql: normalized },
+    ...sqlHistory.value.filter(item => item.sql !== normalized)
+  ].slice(0, 6)
 }
 
 const executeSql = async () => {
@@ -95,8 +123,11 @@ const executeSql = async () => {
     
     if (res.code === 0) {
       sqlResult.value = res.data
+      pushSqlHistory(sqlQuery.value)
       if (res.data.type === 'query') {
         message.success(`查询成功，共 ${res.data.rows?.length || 0} 条记录`)
+      } else {
+        message.success(`执行成功，影响 ${res.data.affected || 0} 行`)
       }
     } 
   } catch (error: any) {
@@ -109,24 +140,23 @@ const executeSql = async () => {
 
 <template>
   <div class="flex-1 flex flex-col overflow-hidden">
-    <div class="p-2 border-b border-slate-200 bg-[#f8f9fa] text-xs text-slate-700 flex items-center gap-1">
-      <n-icon :component="renderIcon('mdi:server')" />
-      <span class="mr-2">{{ selectedServerLabel }}</span>
-      <span>»</span>
-      <n-icon
-        :component="renderIcon('mdi:database')"
-        class="ml-2"
-      />
-      <span class="font-bold">{{ selectedDatabase }}</span>
-      <template v-if="selectedTable">
-        <span>»</span>
-        <n-icon
-          :component="renderIcon('mdi:table')"
-          class="ml-2"
-        />
-        <span class="font-bold">{{ selectedTable }}</span>
+    <DatabaseWorkspaceHeader
+      :server-label="selectedServerLabel"
+      :database-name="selectedDatabase"
+      :table-name="selectedTable"
+      :title="selectedTable ? `${selectedTable} (SQL)` : 'SQL 工作台'"
+      icon="mdi:console"
+    >
+      <template #summary>
+        <div class="hidden xl:flex items-center gap-2 text-[11px] text-slate-500">
+          <span class="px-2 py-1 rounded bg-slate-100">{{ quickSqlTemplates.length }} 个快捷模板</span>
+          <span
+            v-if="sqlResultSummary.length > 0"
+            class="px-2 py-1 rounded bg-blue-50 text-blue-600"
+          >{{ sqlResultSummary.join(' · ') }}</span>
+        </div>
       </template>
-    </div>
+    </DatabaseWorkspaceHeader>
     <div
       v-if="quickSqlTemplates.length > 0"
       class="px-2 py-2 border-b border-slate-200 bg-white flex flex-wrap gap-2"
@@ -169,6 +199,25 @@ const executeSql = async () => {
       </div>
     </div>
     <div class="flex-1 overflow-auto p-2 bg-[#f0f0f0]">
+      <div
+        v-if="sqlHistory.length > 0"
+        class="mb-2 border border-slate-200 bg-white"
+      >
+        <div class="px-3 py-2 border-b border-slate-200 text-xs font-semibold text-slate-700">
+          最近执行
+        </div>
+        <div class="p-2 flex flex-wrap gap-2">
+          <n-button
+            v-for="item in sqlHistory"
+            :key="item.sql"
+            size="tiny"
+            quaternary
+            @click="applyQuickSql(item.sql)"
+          >
+            {{ item.title }}
+          </n-button>
+        </div>
+      </div>
       <n-empty
         v-if="!sqlResult"
         description="执行结果将显示在这里"

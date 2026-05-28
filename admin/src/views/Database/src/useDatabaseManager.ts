@@ -1,5 +1,5 @@
 import { ref, onMounted, computed, watch, type Ref } from 'vue'
-import { databaseServerListAPI, databaseListAPI, getDBManagerTablesAPI, execDBManagerSqlAPI } from '@/api/modules/database'
+import { databaseServerListAPI, databaseListAPI, getDBManagerTableListAPI, execDBManagerSqlAPI } from '@/api/modules/database'
 import { renderIcon } from '@/utils'
 
 type MessageLike = {
@@ -34,10 +34,19 @@ export const useDatabaseManager = (
   const activeTab = ref('data')
   const tableKeywordInput = ref('')
   const tableKeyword = ref('')
+  const tableListRows = ref<any[]>([])
+  const tableListPagination = ref({
+    page: 1,
+    limit: 20,
+    itemCount: 0
+  })
+  const tableListSortState = ref<{ columnKey: string | null; order: 'ascend' | 'descend' | false }>({
+    columnKey: null,
+    order: false
+  })
 
   const serverOptions = ref<ServerOption[]>([])
   const databaseOptions = ref<DatabaseOption[]>([])
-  const tables = ref<string[]>([])
   const loadingTables = ref(false)
 
   const structureData = ref<any[]>([])
@@ -63,14 +72,38 @@ export const useDatabaseManager = (
     return databaseManagerTabLabels[activeTab.value] || activeTab.value
   })
 
+  const tables = computed(() => {
+    return tableListRows.value.map((item: any) => item?.name).filter(Boolean)
+  })
+
   const filteredTables = computed(() => {
-    const keyword = tableKeyword.value.trim().toLowerCase()
-    if (!keyword) return tables.value
+    if (!tableKeywordInput.value.trim()) return tables.value
+    const keyword = tableKeywordInput.value.toLowerCase()
     return tables.value.filter(t => t.toLowerCase().includes(keyword))
   })
 
+  const sidebarTablePage = computed({
+    get: () => tableListPagination.value.page,
+    set: (val) => { tableListPagination.value.page = val }
+  })
+
+  const sidebarTablePageSize = computed({
+    get: () => tableListPagination.value.limit,
+    set: (val) => { tableListPagination.value.limit = val }
+  })
+
+  const handleSidebarTablePageChange = (page: number) => {
+    handleTableListPageChange(page)
+  }
+
+  const handleSidebarTablePageSizeChange = (pageSize: number) => {
+    handleTableListPageSizeChange(pageSize)
+  }
+
+  const sidebarTableTotal = computed(() => tableListPagination.value.itemCount)
+
   const menuOptions = computed(() => {
-    return filteredTables.value.map(t => ({
+    return tables.value.map(t => ({
       label: t,
       key: t,
       icon: renderIcon('mdi:table')
@@ -86,10 +119,48 @@ export const useDatabaseManager = (
   const resetTableSearch = () => {
     tableKeywordInput.value = ''
     tableKeyword.value = ''
+    tableListPagination.value.page = 1
   }
 
-  const applyTableSearch = () => {
+  const fetchTableList = async () => {
+    if (!selectedServerId.value || !selectedDatabase.value) {
+      tableListRows.value = []
+      tableListPagination.value.itemCount = 0
+      return
+    }
+
+    loadingTables.value = true
+    try {
+      const res = await getDBManagerTableListAPI({
+        serverId: selectedServerId.value,
+        databaseName: selectedDatabase.value,
+        page: tableListPagination.value.page,
+        limit: tableListPagination.value.limit,
+        keyword: tableKeyword.value || undefined,
+        sortField: tableListSortState.value.columnKey || undefined,
+        sortOrder: tableListSortState.value.order || undefined
+      })
+
+      if (res.code === 0 && res.data) {
+        const items = Array.isArray(res.data.items) ? res.data.items : []
+        tableListRows.value = items
+        tableListPagination.value.itemCount = Number(res.data.total || 0)
+      } else {
+        tableListRows.value = []
+        tableListPagination.value.itemCount = 0
+      }
+    } catch (error) {
+      tableListRows.value = []
+      tableListPagination.value.itemCount = 0
+    } finally {
+      loadingTables.value = false
+    }
+  }
+
+  const applyTableSearch = async () => {
     tableKeyword.value = tableKeywordInput.value.trim()
+    tableListPagination.value.page = 1
+    await fetchTableList()
   }
 
   const fetchServers = async () => {
@@ -115,7 +186,9 @@ export const useDatabaseManager = (
       selectedDatabase.value = null
       selectedTable.value = null
       resetTableSearch()
-      tables.value = []
+      tableListRows.value = []
+      tableListPagination.value.itemCount = 0
+      tableListPagination.value.page = 1
       structureData.value = []
       resetRecordEditorState()
     }
@@ -140,26 +213,13 @@ export const useDatabaseManager = (
     activeTab.value = 'data'
     selectedTable.value = null
     resetTableSearch()
+    tableListPagination.value.page = 1
+    tableListPagination.value.itemCount = 0
     structureData.value = []
     resetRecordEditorState()
     if (!selectedServerId.value || !val) return
 
-    loadingTables.value = true
-    try {
-      const res = await getDBManagerTablesAPI({
-        serverId: selectedServerId.value,
-        databaseName: val
-      })
-      if (res.code === 0) {
-        tables.value = res.data || []
-      } else {
-        tables.value = []
-      }
-    } catch (error) {
-      tables.value = []
-    } finally {
-      loadingTables.value = false
-    }
+    await fetchTableList()
   }
 
   const fetchTableStructure = async () => {
@@ -205,6 +265,27 @@ export const useDatabaseManager = (
     if (['structure', 'search', 'insert'].includes(activeTab.value)) {
       fetchTableStructure()
     }
+  }
+
+  const handleTableListPageChange = (page: number) => {
+    tableListPagination.value.page = page
+    void fetchTableList()
+  }
+
+  const handleTableListPageSizeChange = (pageSize: number) => {
+    tableListPagination.value.limit = pageSize
+    tableListPagination.value.page = 1
+    void fetchTableList()
+  }
+
+  const handleTableListSorterChange = (sorter: { columnKey?: string; order?: 'ascend' | 'descend' | false } | { columnKey?: string; order?: 'ascend' | 'descend' | false }[] | null) => {
+    const currentSorter = Array.isArray(sorter) ? sorter[0] : sorter
+    tableListSortState.value = {
+      columnKey: currentSorter?.order ? (currentSorter.columnKey || null) : null,
+      order: currentSorter?.order || false
+    }
+    tableListPagination.value.page = 1
+    void fetchTableList()
   }
 
   const onTabChange = (tab: string) => {
@@ -317,15 +398,21 @@ export const useDatabaseManager = (
     handleCopyRecord,
     handleEditRecord,
     handleInsertSuccess,
+    fetchTableList,
     handleTableDropped,
     handleTableRenamed,
     handleTableTruncated,
+    handleSidebarTablePageChange,
+    handleSidebarTablePageSizeChange,
     isEditing,
     loadingStructure,
     loadingTables,
     menuOptions,
     onDatabaseChange,
     onServerChange,
+    handleTableListPageChange,
+    handleTableListPageSizeChange,
+    handleTableListSorterChange,
     onTableSelect,
     onTabChange,
     originalRecordData,
@@ -337,6 +424,9 @@ export const useDatabaseManager = (
     selectedServerLabel,
     selectedTable,
     serverOptions,
+    sidebarTablePage,
+    sidebarTablePageSize,
+    sidebarTableTotal,
     structureData,
     tableKeywordInput,
     tables,

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { NSelect, NInput, NSpin, NEmpty, NMenu, NIcon } from 'naive-ui'
+import { NSelect, NInput, NSpin, NEmpty, NMenu, NIcon, NPagination } from 'naive-ui'
 import { renderIcon } from '@/utils'
 
 const props = defineProps<{
@@ -12,6 +12,8 @@ const props = defineProps<{
   loadingTables: boolean
   tables: string[]
   filteredTableCount: number
+  sidebarTablePage: number
+  sidebarTablePageSize: number
   menuOptions: any[]
 }>()
 
@@ -19,6 +21,8 @@ const emit = defineEmits<{
   (e: 'update:selectedServerId', value: number | null): void
   (e: 'update:selectedDatabase', value: string | null): void
   (e: 'update:tableKeywordInput', value: string): void
+  (e: 'update:sidebarTablePage', value: number): void
+  (e: 'update:sidebarTablePageSize', value: number): void
   (e: 'selectTable', tableName: string): void
   (e: 'searchTables'): void
   (e: 'resetTableSearch'): void
@@ -68,9 +72,9 @@ const emit = defineEmits<{
     <div class="px-3 py-2 text-xs text-slate-500 border-b border-slate-200 bg-white">
       <span>表</span>
       <span class="mx-1">·</span>
-      <span>{{ filteredTableCount }}</span>
-      <span>/</span>
       <span>{{ tables.length }}</span>
+      <span>/</span>
+      <span>{{ filteredTableCount }}</span>
     </div>
 
     <div class="flex-1 overflow-y-auto p-1 bg-white">
@@ -98,6 +102,21 @@ const emit = defineEmits<{
         :root-indent="12"
         :indent="12"
         class="text-xs"
+      />
+    </div>
+    <div
+      v-if="filteredTableCount > 0"
+      class="px-2 py-2 border-t border-slate-200 bg-white"
+    >
+      <n-pagination
+        :page="sidebarTablePage"
+        :page-size="sidebarTablePageSize"
+        :item-count="filteredTableCount"
+        :page-sizes="[20, 30, 50, 100]"
+        size="small"
+        show-size-picker
+        @update:page="emit('update:sidebarTablePage', $event)"
+        @update:page-size="emit('update:sidebarTablePageSize', $event)"
       />
     </div>
   </div>

@@ -27,11 +27,12 @@ const {
   clearSelectedTable,
   databaseOptions,
   fetchTableStructure,
-  filteredTables,
   handleAdvancedSearch,
   handleCopyRecord,
   handleEditRecord,
   handleInsertSuccess,
+  handleSidebarTablePageChange,
+  handleSidebarTablePageSizeChange,
   handleTableDropped,
   handleTableRenamed,
   handleTableTruncated,
@@ -51,6 +52,9 @@ const {
   selectedServerId,
   selectedTable,
   serverOptions,
+  sidebarTablePage,
+  sidebarTablePageSize,
+  sidebarTableTotal,
   structureData,
   tableKeywordInput,
   tables,
@@ -87,11 +91,15 @@ const handleTableKeywordUpdate = (value: string) => {
       :table-keyword-input="tableKeywordInput"
       :loading-tables="loadingTables"
       :tables="tables"
-      :filtered-table-count="filteredTables.length"
+      :filtered-table-count="sidebarTableTotal"
+      :sidebar-table-page="sidebarTablePage"
+      :sidebar-table-page-size="sidebarTablePageSize"
       :menu-options="menuOptions"
       @update:selected-server-id="handleServerModelUpdate"
       @update:selected-database="handleDatabaseModelUpdate"
       @update:table-keyword-input="handleTableKeywordUpdate"
+      @update:sidebar-table-page="handleSidebarTablePageChange"
+      @update:sidebar-table-page-size="handleSidebarTablePageSizeChange"
       @select-table="onTableSelect"
       @search-tables="applyTableSearch"
       @reset-table-search="resetTableSearch"
@@ -103,7 +111,7 @@ const handleTableKeywordUpdate = (value: string) => {
         :selected-database="selectedDatabase"
         :selected-table="selectedTable"
         :active-tab-label="activeTabLabel"
-        :table-count="tables.length"
+        :table-count="sidebarTableTotal"
         @back-to-tables="clearSelectedTable"
       />
 

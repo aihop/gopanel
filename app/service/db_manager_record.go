@@ -26,6 +26,9 @@ func (s *DBManagerService) InsertRecord(req request.InsertRecordReq) error {
 		if col == "" {
 			continue
 		}
+		if v == "" {
+			v = nil
+		}
 		cols = append(cols, quoteIdent(dbType, col))
 		if dbType == model.DatabaseTypePostgresql {
 			placeholders = append(placeholders, fmt.Sprintf("$%d", paramOffset))
@@ -80,6 +83,9 @@ func (s *DBManagerService) UpdateRecord(req request.UpdateRecordReq) error {
 		col := sanitizeIdent(k)
 		if col == "" {
 			continue
+		}
+		if v == "" {
+			v = nil
 		}
 		if dbType == model.DatabaseTypePostgresql {
 			setCols = append(setCols, fmt.Sprintf("%s = $%d", quoteIdent(dbType, col), paramOffset))

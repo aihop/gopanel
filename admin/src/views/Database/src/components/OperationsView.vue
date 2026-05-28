@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { useMessage, NEmpty, NIcon, NButton, NInput, NInputGroup, NCard, NPopconfirm } from 'naive-ui'
+import { useMessage, NEmpty, NButton, NInput, NInputGroup, NCard, NPopconfirm } from 'naive-ui'
 import { execDBManagerSqlAPI } from '@/api/modules/database'
-import { renderIcon } from '@/utils'
+import DatabaseWorkspaceHeader from './DatabaseWorkspaceHeader.vue'
 
 const props = defineProps<{
   selectedServerId: number | null
@@ -132,18 +132,20 @@ const handleRename = async () => {
       <n-empty :description="$t('database.selectTable')" />
     </div>
     <template v-else>
-      <div class="p-2 border-b border-slate-200 flex justify-between items-center bg-[#f8f9fa] text-xs">
-        <div class="text-slate-700 flex items-center gap-1">
-          <n-icon :component="renderIcon('mdi:server')" />
-          <span class="mr-2">{{ selectedServerLabel }}</span>
-          <span>»</span>
-          <n-icon :component="renderIcon('mdi:database')" class="ml-2" />
-          <span class="mr-2">{{ selectedDatabase }}</span>
-          <span>»</span>
-          <n-icon :component="renderIcon('mdi:table')" class="ml-2" />
-          <span class="font-bold">{{ selectedTable }} (表操作)</span>
-        </div>
-      </div>
+      <DatabaseWorkspaceHeader
+        :server-label="selectedServerLabel"
+        :database-name="selectedDatabase"
+        :table-name="selectedTable"
+        :title="`${selectedTable} (表操作)`"
+        icon="mdi:cog-outline"
+      >
+        <template #summary>
+          <div class="hidden xl:flex items-center gap-2 text-[11px] text-slate-500">
+            <span class="px-2 py-1 rounded bg-slate-100 uppercase">{{ tableSummary.engine }}</span>
+            <span class="px-2 py-1 rounded bg-slate-100">{{ tableSummary.quotedName }}</span>
+          </div>
+        </template>
+      </DatabaseWorkspaceHeader>
       <div class="flex-1 overflow-auto p-4 bg-white">
         <div class="max-w-3xl mx-auto flex flex-col gap-4">
           <n-card title="表摘要" size="small" class="shadow-sm">

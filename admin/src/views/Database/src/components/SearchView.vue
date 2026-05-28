@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { NInput, NSelect, NButton, NIcon, NEmpty, NSpin } from 'naive-ui'
+import { NInput, NSelect, NButton, NEmpty, NSpin } from 'naive-ui'
 import { renderIcon } from '@/utils'
+import DatabaseWorkspaceHeader from './DatabaseWorkspaceHeader.vue'
 
 const props = defineProps<{
   selectedServerId: number | null
@@ -101,27 +102,25 @@ const handleClear = () => {
       <n-spin size="medium" />
     </div>
     <template v-else>
-      <div class="p-2 border-b border-slate-200 flex justify-between items-center bg-[#f8f9fa] text-xs">
-        <div class="text-slate-700 flex items-center gap-1">
-          <n-icon :component="renderIcon('mdi:server')" />
-          <span class="mr-2">{{ selectedServerLabel }}</span>
-          <span>»</span>
-          <n-icon :component="renderIcon('mdi:database')" class="ml-2" />
-          <span class="mr-2">{{ selectedDatabase }}</span>
-          <span>»</span>
-          <n-icon :component="renderIcon('mdi:table')" class="ml-2" />
-          <span class="font-bold">{{ selectedTable }} (多字段搜索)</span>
-        </div>
-        <div class="flex gap-2">
+      <DatabaseWorkspaceHeader
+        :server-label="selectedServerLabel"
+        :database-name="selectedDatabase"
+        :table-name="selectedTable"
+        :title="`${selectedTable} (多字段搜索)`"
+        icon="mdi:magnify"
+      >
+        <template #summary>
           <div class="hidden xl:flex items-center gap-2 text-[11px] text-slate-500 mr-2">
             <span class="px-2 py-1 rounded bg-slate-100">{{ searchSummary.total }} 个字段</span>
             <span class="px-2 py-1 rounded bg-slate-100">{{ searchSummary.primaryCount }} 个主键列</span>
             <span class="px-2 py-1 rounded bg-blue-50 text-blue-600">{{ activeConditionCount }} 个生效条件</span>
           </div>
+        </template>
+        <template #actions>
           <n-button size="tiny" @click="handleClear">清空条件</n-button>
           <n-button size="tiny" type="primary" @click="handleSearch">执行搜索</n-button>
-        </div>
-      </div>
+        </template>
+      </DatabaseWorkspaceHeader>
       <div class="flex-1 overflow-auto p-4 bg-white">
         <div class="max-w-4xl mx-auto border border-slate-200">
           <div class="border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-500 flex items-center gap-2">

@@ -44,6 +44,7 @@ const fieldRows = computed(() => {
       isPrimary: col.Key === 'PRI',
       isAutoIncrement: extra.includes('auto_increment'),
       isTextLike: type.includes('text') || type.includes('char') || type.includes('json'),
+      isJsonType: type.includes('json'),
       typeLabel: col.Type || '-'
     }
   })
@@ -87,11 +88,20 @@ const submitRecord = async () => {
   
   savingRecord.value = true
   try {
-    const submitData = { ...localRecordData.value }
-    props.structureData.forEach(col => {
-      if (submitData[col.Field] === '' && !props.isEditing && col.Key === 'PRI') {
-        delete submitData[col.Field]
+    const submitData: Record<string, any> = {}
+    props.structureData.forEach((col: any) => {
+      const field = col.Field
+      let value = localRecordData.value[field]
+
+      if (submitData[field] === '' && !props.isEditing && col.Key === 'PRI') {
+        return
       }
+
+      if (col.isJsonType && value === '') {
+        value = null
+      }
+
+      submitData[field] = value
     })
 
     let res;

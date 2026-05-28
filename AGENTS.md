@@ -217,6 +217,7 @@
   - `views/Database/src/components/DataView.vue` 适合把表列表、记录分页、筛选、删除等状态抽到 `useDataView` composable，主文件保留浏览态工具栏与数据表格渲染
   - `views/Database/src/components/StructureView.vue` 适合把字段和索引操作、结构摘要抽到 `useStructureView` composable，主文件保留结构表格、索引区块和弹层编排
   - `views/Database/src/components/OperationsView.vue`、`views/Database/src/components/SearchView.vue` 适合补表摘要、危险操作分区、搜索状态提示等轻量工作台信息，优先增强交互反馈，再决定是否继续拆 composable
+  - `views/Database/src/components/DatabaseWorkspaceHeader.vue` 适合承接各数据库子页共享的服务器/数据库/表上下文头部，统一摘要徽标和右侧动作区域
 - 这类重构完成后，至少要检查改动文件诊断，确保结构调整没有引入模板或类型错误
 
 ## 后端大文件重构约定
