@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { useMessage, NEmpty, NIcon, NButton, NSpin, NInput } from 'naive-ui'
 import { insertDBManagerRecordAPI, updateDBManagerRecordAPI } from '@/api/modules/database'
 import { renderIcon } from '@/utils'
@@ -23,7 +23,30 @@ const emit = defineEmits<{
 
 const message = useMessage()
 const savingRecord = ref(false)
-const localRecordData = ref({ ...props.recordData })
+const localRecordData = ref<Record<string, any>>({})
+
+const rebuildLocalRecordData = () => {
+  const nextRecord: Record<string, any> = {}
+  const columns = Array.isArray(props.structureData) ? props.structureData : []
+
+  if (columns.length > 0) {
+    columns.forEach((col: any) => {
+      const field = col?.Field
+      if (!field) return
+      nextRecord[field] = props.recordData?.[field] ?? ''
+    })
+  } else {
+    Object.assign(nextRecord, props.recordData || {})
+  }
+
+  localRecordData.value = nextRecord
+}
+
+watch(
+  () => [props.recordData, props.structureData, props.selectedTable, props.isEditing],
+  rebuildLocalRecordData,
+  { deep: true, immediate: true }
+)
 
 const submitRecord = async () => {
   if (!props.selectedServerId || !props.selectedDatabase || !props.selectedTable) return
@@ -121,7 +144,7 @@ const submitRecord = async () => {
           </div>
           <div
             v-for="(col, index) in structureData"
-            :key="index"
+            :key="`${selectedTable || 'table'}-${col.Field || index}`"
             class="flex border-b border-slate-100 p-2 items-center text-xs hover:bg-slate-50"
           >
             <div class="w-1/4 font-semibold text-slate-700 break-all pr-2">

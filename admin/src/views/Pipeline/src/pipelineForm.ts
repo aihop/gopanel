@@ -32,6 +32,8 @@ export interface PipelineFormModel {
   runnerExtraNetworksText: string
 }
 
+export const defaultRunnerWorkingDir = "/var/www/app"
+
 type RunnerPresetConfig = {
   policy: "run" | "build_run"
   baseImage: string
@@ -121,7 +123,7 @@ export const createDefaultPipelineFormModel = (): PipelineFormModel => ({
   runnerPolicy: "build_run",
   runnerAdvanced: false,
   runnerBaseImage: "node:20-alpine",
-  runnerWorkingDir: "/var/www/app",
+  runnerWorkingDir: defaultRunnerWorkingDir,
   runnerContainerPort: "3000",
   runnerHostPort: "",
   runnerUser: "",
@@ -232,7 +234,7 @@ export const inferRunnerAdvanced = (runnerConfig: any) => {
     || persistentPaths.length > 0
     || extraNetworks.length > 0
     || (baseImage && baseImage !== "node:20-alpine")
-    || (workingDir && workingDir !== "/var/www/app")
+    || (workingDir && workingDir !== defaultRunnerWorkingDir)
     || (containerPort && containerPort !== "3000")
     || !!hostPort
     || !!runnerUser
@@ -273,7 +275,7 @@ export const detectRunnerPresetFromConfig = (runnerConfig: any) => {
   return "custom"
 }
 
-const parseRunnerConfig = (runnerConfig: any) => {
+export const parseRunnerConfig = (runnerConfig: any) => {
   if (typeof runnerConfig === "string") {
     try {
       return JSON.parse(runnerConfig)
@@ -285,6 +287,21 @@ const parseRunnerConfig = (runnerConfig: any) => {
     return runnerConfig
   }
   return {}
+}
+
+export const buildRunnerDirectorySummary = (runnerConfig: any) => {
+  const config = parseRunnerConfig(runnerConfig)
+  const workingDir = String(config.workingDir || "").trim() || defaultRunnerWorkingDir
+  const persistentPaths = Array.isArray(config.persistentPaths)
+    ? config.persistentPaths.map((item: unknown) => String(item || "").trim()).filter(Boolean)
+    : []
+  const mountSummary = workingDir === defaultRunnerWorkingDir
+    ? `目录策略：使用默认工作目录 ${defaultRunnerWorkingDir}，代码源先挂到兼容只读中间目录，再同步到运行目录。`
+    : `目录策略：使用自定义工作目录 ${workingDir}，代码源直接挂到该目录。`
+  if (persistentPaths.length === 0) {
+    return `${mountSummary} 当前未配置持久化目录。`
+  }
+  return `${mountSummary} 当前持久化目录 ${persistentPaths.length} 个：${persistentPaths.join("、")}`
 }
 
 export const createPipelineFormFromEdit = (editData: Pipeline.ResPipeline) => {
@@ -314,7 +331,7 @@ export const createPipelineFormFromEdit = (editData: Pipeline.ResPipeline) => {
       runnerPolicy: runnerConfig.mode || "build_run",
       runnerAdvanced: inferRunnerAdvanced(runnerConfig),
       runnerBaseImage: runnerConfig.baseImage || "node:20-alpine",
-      runnerWorkingDir: runnerConfig.workingDir || "/var/www/app",
+      runnerWorkingDir: runnerConfig.workingDir || defaultRunnerWorkingDir,
       runnerContainerPort: String(runnerConfig.containerPort || "3000"),
       runnerHostPort: String(runnerConfig.hostPort || ""),
       runnerUser: runnerConfig.runnerUser || "",

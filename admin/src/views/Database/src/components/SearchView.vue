@@ -94,7 +94,11 @@ const handleClear = () => {
             <div class="w-1/4">操作符 (Operator)</div>
             <div class="w-1/4">值 (Value)</div>
           </div>
-          <div v-for="(col, index) in structureData" :key="index" class="flex border-b border-slate-100 p-2 items-center text-xs hover:bg-slate-50">
+          <div
+            v-for="(col, index) in structureData"
+            :key="`${selectedTable || 'table'}-${col.Field || index}`"
+            class="flex border-b border-slate-100 p-2 items-center text-xs hover:bg-slate-50"
+          >
             <div class="w-1/4 font-semibold text-slate-700 break-all pr-2">{{ col.Field }}</div>
             <div class="w-1/4 text-slate-500 break-all pr-2">{{ col.Type }}</div>
             <div class="w-1/4 pr-2">

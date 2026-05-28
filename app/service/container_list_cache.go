@@ -176,6 +176,15 @@ func setContainerListStatsCache(items []dto.ContainerListStats) {
 	containerListStatsCache.entry = containerListStatsCacheEntry{expireAt: time.Now().Add(containerListStatsCacheTTL), items: append([]dto.ContainerListStats(nil), items...)}
 	containerListStatsCache.mu.Unlock()
 }
+func invalidateContainerListCaches() {
+	containerListViewCache.mu.Lock()
+	containerListViewCache.entry = containerListViewCacheEntry{}
+	containerListViewCache.mu.Unlock()
+
+	containerListStatsCache.mu.Lock()
+	containerListStatsCache.entry = containerListStatsCacheEntry{}
+	containerListStatsCache.mu.Unlock()
+}
 func cloneContainerList(items []types.Container) []types.Container {
 	if len(items) == 0 {
 		return nil

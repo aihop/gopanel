@@ -70,6 +70,7 @@ func (u *ContainerService) ContainerCreate(req *dto.ContainerOperate) error {
 		_ = client.ContainerRemove(ctx, req.Name, container.RemoveOptions{RemoveVolumes: true, Force: true})
 		return fmt.Errorf("create successful but start failed, err: %v", err)
 	}
+	invalidateContainerListCaches()
 	return nil
 }
 func (u *ContainerService) ContainerInfo(req *dto.OperationWithName) (*dto.ContainerOperate, error) {
@@ -202,6 +203,7 @@ func (u *ContainerService) ContainerUpdate(req *dto.ContainerOperate) error {
 		}
 		return fmt.Errorf("update successful but start failed, err: %v", err)
 	}
+	invalidateContainerListCaches()
 	return nil
 }
 func (u *ContainerService) ContainerUpgrade(req *dto.ContainerUpgrade) error {
@@ -246,6 +248,7 @@ func (u *ContainerService) ContainerUpgrade(req *dto.ContainerUpgrade) error {
 	if err := client.ContainerStart(ctx, con.ID, container.StartOptions{}); err != nil {
 		return fmt.Errorf("upgrade successful but start failed, err: %v", err)
 	}
+	invalidateContainerListCaches()
 	return nil
 }
 func (u *ContainerService) ContainerRename(req *dto.ContainerRename) error {
@@ -259,7 +262,11 @@ func (u *ContainerService) ContainerRename(req *dto.ContainerRename) error {
 	if newContainer.ContainerJSONBase != nil {
 		return buserr.New(constant.ErrContainerName)
 	}
-	return client.ContainerRename(ctx, req.Name, req.NewName)
+	if err := client.ContainerRename(ctx, req.Name, req.NewName); err != nil {
+		return err
+	}
+	invalidateContainerListCaches()
+	return nil
 }
 func (u *ContainerService) ContainerCommit(req *dto.ContainerCommit) error {
 	ctx := context.Background()
@@ -341,5 +348,6 @@ func (u *ContainerService) ContainerOperation(req *dto.ContainerOperation) error
 			return err
 		}
 	}
+	invalidateContainerListCaches()
 	return nil
 }

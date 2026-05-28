@@ -213,6 +213,8 @@
   - `views/Dashboard/components/StatusCard.vue` 适合拆为基础信息概览条、CPU/内存/负载资源卡片、磁盘与 GPU/XPU 面板，并把数值格式化函数抽到共享 helper
   - `views/Website/components/AccessLogDrawer.vue` 适合拆为抽屉壳、日志面板、详情弹窗、IP 统计弹窗，并把日志解析与绑定元信息读取抽到 helper/composable
   - `views/Website/SSL.vue` 适合拆为页面头部、证书相关弹层、表格列工厂，以及按“推送规则/日志流/页面状态”分层的 composable
+  - `views/Database/src/DatabaseManager.vue` 适合拆为左侧导航、顶部上下文条、页面级 `useDatabaseManager` composable，主页面保留标签页编排与子视图挂载
+  - `views/Database/src/components/DataView.vue` 适合把表列表、记录分页、筛选、删除等状态抽到 `useDataView` composable，主文件保留浏览态工具栏与数据表格渲染
 - 这类重构完成后，至少要检查改动文件诊断，确保结构调整没有引入模板或类型错误
 
 ## 后端大文件重构约定
@@ -261,6 +263,14 @@
 - 查询类接口优先返回结构化摘要
 - 详情类接口再返回原始日志、消息、事件
 - 新接口命名优先围绕 `session`、`instruction`、`timeline`、`preview`、`approval`
+
+## Runner 目录约定
+
+- Pipeline Runner 目录语义要明确区分 `sourceMountDir` 与 `workingDir`，不要再让 `workingDir` 同时承担“代码源挂载点”和“最终运行目录”两种含义
+- 当用户显式填写 `workingDir` 时，默认直接把 `release`/代码源挂到该目录；不要再额外强制经由固定中间目录
+- 当用户未填写 `workingDir` 时，才保留当前默认的只读中间目录挂载 + 同步到最终运行目录的兼容链路
+- `persistentPaths` 一律视为高优先级持久化目录；同步/清理脚本不得删除已声明的持久化路径
+- 调整 Runner 行为时，日志中必须明确打印代码源挂载点、最终运行目录以及是否启用中间同步，方便排障
 
 ## 预览能力原则
 

@@ -140,6 +140,7 @@ func (u *ContainerService) Prune(req *dto.ContainerPrune) (dto.ContainerPruneRep
 		report.DeletedNumber = len(rep.CachesDeleted)
 		report.SpaceReclaimed = int(rep.SpaceReclaimed)
 	}
+	invalidateContainerListCaches()
 	return report, nil
 }
 func (u *ContainerService) LoadResourceLimit() (*dto.ResourceLimit, error) {

@@ -11,10 +11,12 @@ import PipelineRunnerFields from "./PipelineRunnerFields.vue"
 import PipelineScriptFields from "./PipelineScriptFields.vue"
 import {
   applyRunnerPresetToForm,
+  buildRunnerDirectorySummary,
   authOptions,
   createDefaultPipelineFormModel,
   createPipelineFormFromEdit,
   createPipelineFormFromTemplate,
+  defaultRunnerWorkingDir,
   getRunnerBuildCommandHint,
   getRunnerBuildCommandPlaceholder,
   hasForbiddenRunnerPersistentPath,
@@ -85,6 +87,11 @@ const existingRuntimeHint = computed(() => {
     runtimePrefix: "运行时：",
     runUserPrefix: "用户："
   })
+})
+
+const existingRunnerDirectoryHint = computed(() => {
+  if (!props.editData?.runnerMode) return ""
+  return buildRunnerDirectorySummary(props.editData.runnerConfig)
 })
 
 const runnerBuildCommandPlaceholder = computed(() => getRunnerBuildCommandPlaceholder(runnerPreset.value))
@@ -251,6 +258,7 @@ const handleSubmit = () => {
           message.error("持久化目录不要填写 `node_modules`，依赖目录会由 Runner 自动隔离并在容器内重装。")
           return
         }
+        const runnerWorkingDir = String(payload.runnerWorkingDir || "").trim()
         payload.runnerContainerPort = String(payload.runnerContainerPort || "").trim()
         payload.runnerHostPort = String(payload.runnerHostPort || "").trim()
         payload.runnerMode = "runner"
@@ -258,7 +266,6 @@ const handleSubmit = () => {
           advanced: !!payload.runnerAdvanced,
           mode: payload.runnerPolicy || "build_run",
           baseImage: payload.runnerBaseImage || "node:20-alpine",
-          workingDir: payload.runnerWorkingDir || "/var/www/app",
           containerPort: payload.runnerContainerPort || "3000",
           hostPort: payload.runnerHostPort || "",
           runnerUser: payload.runnerUser || "",
@@ -268,6 +275,9 @@ const handleSubmit = () => {
           env: parseEnvText(payload.runnerEnvText || ""),
           persistentPaths: runnerPersistentPaths,
           extraNetworks: parseExtraNetworksText(payload.runnerExtraNetworksText || "")
+        }
+        if (runnerWorkingDir && runnerWorkingDir !== defaultRunnerWorkingDir) {
+          payload.runnerConfig.workingDir = runnerWorkingDir
         }
       } else {
         payload.runnerMode = ""
@@ -359,6 +369,7 @@ watch(() => [formModel.repoUrl, formModel.branch, formModel.authType, formModel.
         :form-model="formModel"
         :is-edit="isEdit"
         :existing-runtime-hint="existingRuntimeHint"
+        :existing-runner-directory-hint="existingRunnerDirectoryHint"
         :runner-runtime-hint="runnerRuntimeHint"
         :runner-preset="runnerPreset"
         :runner-preset-options="runnerPresetOptions"

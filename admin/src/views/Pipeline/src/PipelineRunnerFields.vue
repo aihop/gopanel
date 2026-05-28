@@ -5,6 +5,7 @@ defineProps<{
   formModel: PipelineFormModel
   isEdit: boolean
   existingRuntimeHint: string
+  existingRunnerDirectoryHint: string
   runnerRuntimeHint: string
   runnerPreset: string
   runnerPresetOptions: Array<{ label: string; value: string }>
@@ -35,6 +36,12 @@ const markCustomPreset = () => {
     class="mb-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-4 text-sm text-slate-700"
   >
     {{ existingRuntimeHint }}
+  </div>
+  <div
+    v-if="isEdit && existingRunnerDirectoryHint"
+    class="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm text-slate-700"
+  >
+    {{ existingRunnerDirectoryHint }}
   </div>
   <div class="mb-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
     {{ runnerRuntimeHint }}
@@ -118,10 +125,15 @@ const markCustomPreset = () => {
     </n-form-item>
 
     <n-form-item label="工作目录">
-      <n-input
-        v-model:value="formModel.runnerWorkingDir"
-        placeholder="默认：/var/www/app"
-      />
+      <div class="w-full">
+        <n-input
+          v-model:value="formModel.runnerWorkingDir"
+          placeholder="默认：/var/www/app"
+        />
+        <div class="mt-2 text-xs text-slate-500">
+          保持默认值时，Runner 会沿用兼容链路：代码源先挂到只读中间目录，再同步到运行目录。填写其他目录时，代码源会直接挂到你指定的工作目录。
+        </div>
+      </div>
     </n-form-item>
 
     <n-form-item

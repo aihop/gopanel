@@ -97,6 +97,7 @@ func DeployWebsiteEngine(ctx context.Context, alias string, req *request.Website
 		runnerSourceMountDir := resolveRunnerSourceMountDir(rc, workingDir)
 		cmd = []string{"sh", "-lc", buildRunnerScript(rc, runnerSourceMountDir)}
 		logEngineProgress(progress, "Runner 配置: baseImage=%s, mode=%s", imageName, strings.TrimSpace(rc.Mode))
+		logEngineProgress(progress, "Runner 目录语义: sourceMountDir=%s, workingDir=%s", runnerSourceMountDir, workingDir)
 		logEngineProgress(progress, "Runner 启动脚本已生成")
 		if isRunnerPipeline {
 			const runnerNetworkName = "gopanel-network"
@@ -127,10 +128,10 @@ func DeployWebsiteEngine(ctx context.Context, alias string, req *request.Website
 			logEngineProgress(progress, "Runner 项目类型: %s", detectRunnerProjectKind(selectedCodeDir, rc))
 			if rc.HasCustomWorkingDir {
 				hostConfig.Binds = append(hostConfig.Binds, fmt.Sprintf("%s:%s", selectedCodeDir, runnerSourceMountDir))
-				logEngineProgress(progress, "Runner 使用自定义 workingDir，直接挂载运行目录: %s -> %s", selectedCodeDir, runnerSourceMountDir)
+				logEngineProgress(progress, "Runner 使用自定义 workingDir，代码源直接挂载到最终运行目录: %s -> %s", selectedCodeDir, runnerSourceMountDir)
 			} else {
 				hostConfig.Binds = append(hostConfig.Binds, fmt.Sprintf("%s:%s:ro", selectedCodeDir, runnerSourceMountDir))
-				logEngineProgress(progress, "Runner 未自定义 workingDir，使用默认只读源目录挂载: %s -> %s (ro)", selectedCodeDir, runnerSourceMountDir)
+				logEngineProgress(progress, "Runner 未自定义 workingDir，代码源先挂到只读中间目录: %s -> %s (ro)", selectedCodeDir, runnerSourceMountDir)
 			}
 			persistentBinds, err := buildRunnerPersistentBinds(req.PipelineKey, rc, workingDir)
 			if err != nil {

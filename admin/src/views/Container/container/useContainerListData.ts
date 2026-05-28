@@ -48,36 +48,7 @@ export const useContainerListData = (options: UseContainerListDataOptions) => {
     }
   }
 
-  const search = async (column?: any) => {
-    localStorage.setItem("includeAppStore", includeAppStore.value ? "true" : "false")
-    const filterItem = options.filters || ""
-    paginationConfig.orderBy = column?.order ? column.prop : paginationConfig.orderBy
-    paginationConfig.order = column?.order ? column.order : paginationConfig.order
-    const params = {
-      name: searchName.value,
-      state: searchState.value || "all",
-      page: paginationConfig.currentPage,
-      limit: paginationConfig.limit,
-      filters: filterItem,
-      orderBy: "created_at",
-      order: paginationConfig.order,
-      excludeAppStore: !includeAppStore.value
-    }
-    loading.value = true
-    loadStats()
-    await containerListAPI(params)
-      .then(res => {
-        loading.value = false
-        data.value = Array.isArray(res.data.items) ? res.data.items : []
-        paginationConfig.total = res.data.total
-        selects.value = []
-      })
-      .catch(() => {
-        loading.value = false
-      })
-  }
-
-  const refresh = async () => {
+  const loadList = async () => {
     const filterItem = options.filters || ""
     const params = {
       name: searchName.value,
@@ -86,23 +57,35 @@ export const useContainerListData = (options: UseContainerListDataOptions) => {
       limit: paginationConfig.limit,
       filters: filterItem,
       orderBy: paginationConfig.orderBy,
-      order: paginationConfig.order
+      order: paginationConfig.order,
+      excludeAppStore: !includeAppStore.value
     }
-    loadStats()
     const res = await containerListAPI(params)
-    const containers = res.data.items || []
-    for (const container of containers) {
-      for (const current of data.value) {
-        current.hasLoad = true
-        if (container.containerID === current.containerID) {
-          const containerData = container as Record<string, any>
-          for (const key in containerData) {
-            if (key !== "cpuPercent" && key !== "memoryPercent") {
-              ;(current as Record<string, any>)[key] = containerData[key]
-            }
-          }
-        }
-      }
+    data.value = Array.isArray(res.data.items) ? res.data.items : []
+    paginationConfig.total = res.data.total
+    selects.value = []
+  }
+
+  const search = async (column?: any) => {
+    localStorage.setItem("includeAppStore", includeAppStore.value ? "true" : "false")
+    paginationConfig.order = column?.order ? column.order : paginationConfig.order
+    paginationConfig.orderBy = column?.order ? column.prop : "created_at"
+    loading.value = true
+    try {
+      await loadList()
+      await loadStats()
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const refresh = async () => {
+    loading.value = true
+    try {
+      await loadList()
+      await loadStats()
+    } finally {
+      loading.value = false
     }
   }
 
