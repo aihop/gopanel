@@ -70,6 +70,38 @@
 
 - 新增功能前，先读同类模块的实现方式，保持一致风格。
 - 不要在同一个项目里引入两套不同的写法。
+- 项目已有工具函数不要重新实现；改代码前先确认用的是什么工具链（axios、useTable、renderIcon 等）。
+
+### 国际化
+
+- 前端模板中所有面向用户显示的文本必须使用 `$t()` 或 `t()` 翻译 key，**不能硬编码中文或英文**。
+- 新增翻译 key 时留意 `admin/src/locale/` 下的中英文文件，两边都要加。
+- 后端提示信息可以通过 `i18n` 中间件或直接在响应中返回中文，前端统一用 key 做多语言。
+
+### 错误处理
+
+- 前端 API 调用必须覆盖 loading / error / empty 三种状态，不能只写成功路径。
+- `try/catch` 后要在 UI 给用户反馈（`message.error`），不能静默吞掉异常。
+- 后端错误统一通过 `e.Succ()` / `e.Fail()` 包装返回，不直接 `return c.SendString()` 或 `c.JSON(err)`。
+- 不要用 `panic` 替代错误返回。
+
+### 不越界
+
+- 不要改任务不相关的模块。比如修数据库时不要顺手改容器代码，即使你觉得逻辑相似。
+- 不要加当前不需要的抽象层、接口、配置项。解决现存问题，不为可能的需求提前设计。
+- 不要引入新的第三方依赖，除非现有工具链确实无法满足需求。
+
+### 样式一致
+
+- 前端样式优先使用 TailwindCSS，不要混入手写 CSS 和 Tailwind 两种方式。
+- hand-written CSS 只在 `&lt;style scoped&gt;` 中处理 Tailwind 难以覆盖的极少数场景（如 `:deep()` 穿透）。
+- Naive UI 组件的尺寸控制用 `style` prop，不要用 Tailwind 的 `w-` / `h-` 类（原因见本文 Naive UI 约定段）。
+
+### 数据流确认
+
+- 改任何组件前先搞清楚数据从哪里来：props / API 响应 / composable / store / localStorage。
+- 不要假设一个响应式变量在父组件中存在——先查父组件的 template 和 script 确认。
+- 新增接口字段时确保后端 handler、service、前端 API 定义、组件 props 四层同步更新。
 
 ## 已解决问题（详细记录见 `docs/ai/knowledge-base.md`）
 
