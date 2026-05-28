@@ -106,13 +106,20 @@ func refreshContainerListView(ctx context.Context) (containerListViewCacheEntry,
 	containerListViewCache.mu.Lock()
 	if containerListViewCache.refreshing {
 		waitCh := containerListViewCache.waitCh
+		version := containerListViewCache.version
 		containerListViewCache.mu.Unlock()
 		if waitCh != nil {
 			select {
 			case <-waitCh:
 				containerListViewCache.mu.RLock()
 				entry := containerListViewCache.entry
+				ver := containerListViewCache.version
 				containerListViewCache.mu.RUnlock()
+				// If version changed during our wait, the cache was invalidated
+				// and another refresh will or has provided fresh data
+				if ver != version {
+					return containerListViewCacheEntry{}, nil
+				}
 				return entry, nil
 			case <-ctx.Done():
 				return containerListViewCacheEntry{}, ctx.Err()
@@ -123,12 +130,22 @@ func refreshContainerListView(ctx context.Context) (containerListViewCacheEntry,
 		containerListViewCache.mu.RUnlock()
 		return entry, nil
 	}
+	version := containerListViewCache.version
 	waitCh := make(chan struct{})
 	containerListViewCache.refreshing = true
 	containerListViewCache.waitCh = waitCh
 	containerListViewCache.mu.Unlock()
 	entry, err := loadContainerListView(ctx)
 	containerListViewCache.mu.Lock()
+	// If version changed during our work, the cache was invalidated
+	// by a container operation. Our data is stale, don't cache it.
+	if containerListViewCache.version != version {
+		containerListViewCache.refreshing = false
+		containerListViewCache.waitCh = nil
+		close(waitCh)
+		containerListViewCache.mu.Unlock()
+		return containerListViewCacheEntry{}, nil
+	}
 	if err == nil {
 		containerListViewCache.entry = entry
 	} else {
@@ -179,6 +196,12 @@ func setContainerListStatsCache(items []dto.ContainerListStats) {
 func invalidateContainerListCaches() {
 	containerListViewCache.mu.Lock()
 	containerListViewCache.entry = containerListViewCacheEntry{}
+	containerListViewCache.version++
+	if containerListViewCache.waitCh != nil {
+		close(containerListViewCache.waitCh)
+	}
+	containerListViewCache.waitCh = nil
+	containerListViewCache.refreshing = false
 	containerListViewCache.mu.Unlock()
 
 	containerListStatsCache.mu.Lock()

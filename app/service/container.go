@@ -32,6 +32,7 @@ var (
 		entry      containerListViewCacheEntry
 		refreshing bool
 		waitCh     chan struct{}
+		version    uint64
 	}
 	containerListStatsCache struct {
 		mu    sync.RWMutex
