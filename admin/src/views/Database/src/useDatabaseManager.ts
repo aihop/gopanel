@@ -1,4 +1,4 @@
-import { ref, onMounted, computed, watch, type Ref } from 'vue'
+import { ref, onMounted, computed, watch, nextTick, type Ref } from 'vue'
 import { databaseServerListAPI, databaseListAPI, getDBManagerTableListAPI, execDBManagerSqlAPI } from '@/api/modules/database'
 import { renderIcon } from '@/utils'
 
@@ -303,9 +303,11 @@ export const useDatabaseManager = (
 
   const handleAdvancedSearch = (conditions: any[]) => {
     activeTab.value = 'data'
-    if (dataViewRef.value) {
-      dataViewRef.value.setAdvancedSearch(conditions)
-    }
+    nextTick(() => {
+      if (dataViewRef.value) {
+        dataViewRef.value.setAdvancedSearch(conditions)
+      }
+    })
   }
 
   const handleTableDropped = () => {
@@ -324,9 +326,11 @@ export const useDatabaseManager = (
   }
 
   const handleTableTruncated = () => {
-    if (dataViewRef.value) {
-      dataViewRef.value.fetchTableData()
-    }
+    nextTick(() => {
+      if (dataViewRef.value) {
+        dataViewRef.value.fetchTableData()
+      }
+    })
   }
 
   const handleEditRecord = async (row: any) => {
@@ -348,9 +352,11 @@ export const useDatabaseManager = (
 
   const handleInsertSuccess = () => {
     activeTab.value = 'data'
-    if (dataViewRef.value) {
-      dataViewRef.value.fetchTableData()
-    }
+    nextTick(() => {
+      if (dataViewRef.value) {
+        dataViewRef.value.fetchTableData()
+      }
+    })
   }
 
   const clearSelectedTable = () => {

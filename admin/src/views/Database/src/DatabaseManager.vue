@@ -159,7 +159,7 @@ const handleTableKeywordUpdate = (value: string) => {
       <!-- 子视图组件 -->
       <DataView
         :key="`data:${viewContextKey}`"
-        v-show="activeTab === 'data'"
+        v-if="activeTab === 'data'"
         ref="dataViewRef"
         :selectedServerId="selectedServerId"
         :selectedDatabase="selectedDatabase"
