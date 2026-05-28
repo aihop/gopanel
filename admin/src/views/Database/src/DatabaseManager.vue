@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useMessage, NTabs, NTab, NIcon } from 'naive-ui'
 import { renderIcon } from '@/utils'
 
@@ -11,6 +11,8 @@ import InsertView from './components/InsertView.vue'
 import SqlView from './components/SqlView.vue'
 import SearchView from './components/SearchView.vue'
 import OperationsView from './components/OperationsView.vue'
+import CreateDatabaseModal from './components/CreateDatabaseModal.vue'
+import CreateTableModal from './components/CreateTableModal.vue'
 import { useDatabaseManager } from './useDatabaseManager'
 
 const props = defineProps<{
@@ -26,6 +28,7 @@ const {
   applyTableSearch,
   clearSelectedTable,
   databaseOptions,
+  fetchTableList,
   fetchTableStructure,
   handleAdvancedSearch,
   handleCopyRecord,
@@ -78,6 +81,54 @@ const handleDatabaseModelUpdate = (value: string | null) => {
 const handleTableKeywordUpdate = (value: string) => {
   tableKeywordInput.value = value
 }
+
+// 创建数据库/表模态框状态
+const showCreateDatabaseModal = ref(false)
+const showCreateTableModal = ref(false)
+
+const selectedServerType = computed(() => {
+  const server = serverOptions.value.find(s => s.value === selectedServerId.value)
+  return server?.type || ''
+})
+
+const handleCreateDatabaseSuccess = async () => {
+  // 刷新数据库列表
+  if (selectedServerId.value) {
+    await onServerChange(selectedServerId.value, true)
+  }
+}
+
+const handleCreateTableSuccess = async () => {
+  showCreateTableModal.value = false
+  // 刷新表列表
+  await fetchTableList()
+}
+
+const handleDropDatabase = async () => {
+  if (!selectedDatabase.value) return
+  const name = selectedDatabase.value
+  const confirmed = window.confirm(`确定要删除数据库「${name}」吗？\n此操作不可恢复，数据库中的所有表和数据将被永久删除！`)
+  if (!confirmed) return
+
+  try {
+    const { dropDBManagerDatabaseAPI } = await import('@/api/modules/database')
+    const res = await dropDBManagerDatabaseAPI({
+      serverId: selectedServerId.value!,
+      databaseName: name,
+    })
+    if (res.code === 0) {
+      message.success(`数据库 ${name} 已删除`)
+      selectedDatabase.value = null
+      if (selectedServerId.value) {
+        await onServerChange(selectedServerId.value, true)
+      }
+    } else {
+      message.error(res.message || '删除失败')
+    }
+  } catch (error: any) {
+    message.error(error?.message || '删除请求失败')
+  }
+}
 </script>
 
 <template>
@@ -103,6 +154,9 @@ const handleTableKeywordUpdate = (value: string) => {
       @select-table="onTableSelect"
       @search-tables="applyTableSearch"
       @reset-table-search="resetTableSearch"
+      @create-database="showCreateDatabaseModal = true"
+      @create-table="showCreateTableModal = true"
+      @drop-database="handleDropDatabase"
     />
 
     <div class="flex-1 border border-slate-200 bg-white flex flex-col overflow-hidden shadow-sm text-sm rounded-md">
@@ -227,6 +281,21 @@ const handleTableKeywordUpdate = (value: string) => {
         @tableTruncated="handleTableTruncated"
       />
     </div>
+
+    <!-- 创建数据库/表模态框 -->
+    <CreateDatabaseModal
+      v-model:show="showCreateDatabaseModal"
+      :server-id="selectedServerId"
+      :server-type="selectedServerType"
+      @success="handleCreateDatabaseSuccess"
+    />
+    <CreateTableModal
+      v-model:show="showCreateTableModal"
+      :server-id="selectedServerId"
+      :server-type="selectedServerType"
+      :database-name="selectedDatabase"
+      @success="handleCreateTableSuccess"
+    />
   </div>
 </template>
 

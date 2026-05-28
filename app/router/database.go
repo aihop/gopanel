@@ -40,5 +40,12 @@ func DatabaseRouter(r fiber.Router) {
 		managerGroup.Post("/export", api.ExportDBManagerTable)
 		managerGroup.Post("/import", api.ImportDBManagerTable)
 		managerGroup.Post("/upload", api.UploadImportDBManagerTable)
+
+		// 新增 API
+		managerGroup.Post("/create-database", api.CreateDBManagerDatabase)
+		managerGroup.Post("/drop-database", api.DropDBManagerDatabase)
+		managerGroup.Post("/table-info", api.GetDBManagerTableInfo)
+		managerGroup.Post("/database-info", api.GetDBManagerDatabaseInfo)
+		managerGroup.Post("/create-table", api.CreateDBManagerTable)
 	}
 }

@@ -125,3 +125,58 @@ export const databaseUserGetAPI = (params: any) => {
 export const databaseUserRemarkAPI = (params: any) => {
 	return http.post(`/database/user/remark`, params)
 }
+
+// === 新增 DB Manager API (P0) ===
+
+export const createDBManagerDatabaseAPI = (data: {
+	serverId: number
+	databaseName: string
+	charset?: string
+	collation?: string
+}) => {
+	return http.post(`/database/manager/create-database`, data)
+}
+
+export const dropDBManagerDatabaseAPI = (data: {
+	serverId: number
+	databaseName: string
+}) => {
+	return http.post(`/database/manager/drop-database`, data)
+}
+
+export const getDBManagerTableInfoAPI = (data: {
+	serverId: number
+	databaseName: string
+	tableName: string
+}) => {
+	return http.post<any>(`/database/manager/table-info`, data)
+}
+
+export const getDBManagerDatabaseInfoAPI = (data: {
+	serverId: number
+	databaseName: string
+}) => {
+	return http.post<any>(`/database/manager/database-info`, data)
+}
+
+export const createDBManagerTableAPI = (data: {
+	serverId: number
+	databaseName: string
+	tableName: string
+	engine?: string
+	charset?: string
+	collation?: string
+	comment?: string
+	columns: Array<{
+		name: string
+		type: string
+		length?: string
+		nullable: boolean
+		defaultValue?: string
+		autoIncrement: boolean
+		comment?: string
+		isPrimary: boolean
+	}>
+}) => {
+	return http.post(`/database/manager/create-table`, data)
+}

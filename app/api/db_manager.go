@@ -202,3 +202,73 @@ func ExportDBManagerTable(c fiber.Ctx) error {
 	c.Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
 	return c.SendString(content)
 }
+
+// CreateDBManagerDatabase 创建数据库
+// @Router /database/manager/create-database [post]
+func CreateDBManagerDatabase(c fiber.Ctx) error {
+	req, err := e.BodyToStruct[request.CreateDatabaseReq](c.Body())
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	err = service.NewDBManagerService().CreateDatabase(*req)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	return c.JSON(e.Succ("创建成功"))
+}
+
+// DropDBManagerDatabase 删除数据库
+// @Router /database/manager/drop-database [post]
+func DropDBManagerDatabase(c fiber.Ctx) error {
+	req, err := e.BodyToStruct[request.DropDatabaseReq](c.Body())
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	err = service.NewDBManagerService().DropDatabase(*req)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	return c.JSON(e.Succ("删除成功"))
+}
+
+// GetDBManagerTableInfo 获取表结构信息（SHOW CREATE TABLE）
+// @Router /database/manager/table-info [post]
+func GetDBManagerTableInfo(c fiber.Ctx) error {
+	req, err := e.BodyToStruct[request.GetTableInfoReq](c.Body())
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	data, err := service.NewDBManagerService().GetTableInfo(*req)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	return c.JSON(e.Succ(data))
+}
+
+// GetDBManagerDatabaseInfo 获取数据库统计信息
+// @Router /database/manager/database-info [post]
+func GetDBManagerDatabaseInfo(c fiber.Ctx) error {
+	req, err := e.BodyToStruct[request.GetDatabaseInfoReq](c.Body())
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	data, err := service.NewDBManagerService().GetDatabaseInfo(*req)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	return c.JSON(e.Succ(data))
+}
+
+// CreateDBManagerTable 创建表
+// @Router /database/manager/create-table [post]
+func CreateDBManagerTable(c fiber.Ctx) error {
+	req, err := e.BodyToStruct[request.CreateTableReq](c.Body())
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	err = service.NewDBManagerService().CreateTable(*req)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	return c.JSON(e.Succ("创建成功"))
+}

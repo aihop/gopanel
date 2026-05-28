@@ -26,6 +26,9 @@ const emit = defineEmits<{
   (e: 'selectTable', tableName: string): void
   (e: 'searchTables'): void
   (e: 'resetTableSearch'): void
+  (e: 'createDatabase'): void
+  (e: 'createTable'): void
+  (e: 'dropDatabase'): void
 }>()
 </script>
 
@@ -47,6 +50,18 @@ const emit = defineEmits<{
       <div class="flex items-center gap-1 font-semibold text-slate-700">
         <n-icon :component="renderIcon('mdi:database')" />
         <span>{{ $t('database.database') }}</span>
+        <span class="flex-1"></span>
+        <n-button
+          v-if="selectedDatabase"
+          size="tiny"
+          quaternary
+          type="error"
+          style="font-size: 11px; padding: 0 4px;"
+          @click.stop="emit('dropDatabase')"
+        >
+          <template #icon><n-icon :component="renderIcon('mdi:database-remove-outline')" :size="14" /></template>
+          删除
+        </n-button>
       </div>
       <n-select
         :value="selectedDatabase"
@@ -56,6 +71,29 @@ const emit = defineEmits<{
         :disabled="!selectedServerId"
         @update:value="emit('update:selectedDatabase', $event)"
       />
+
+      <div class="flex gap-2 mt-1">
+        <n-button
+          size="tiny"
+          secondary
+          :disabled="!selectedServerId"
+          style="flex: 1; font-size: 11px;"
+          @click="emit('createDatabase')"
+        >
+          <template #icon><n-icon :component="renderIcon('mdi:database-plus-outline')" /></template>
+          创建库
+        </n-button>
+        <n-button
+          size="tiny"
+          secondary
+          :disabled="!selectedDatabase"
+          style="flex: 1; font-size: 11px;"
+          @click="emit('createTable')"
+        >
+          <template #icon><n-icon :component="renderIcon('mdi:table-plus')" /></template>
+          创建表
+        </n-button>
+      </div>
 
       <n-input
         :value="tableKeywordInput"

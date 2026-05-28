@@ -74,3 +74,54 @@ type ImportTableReq struct {
 	Format       string `json:"format" validate:"required"` // csv or sql
 	Content      string `json:"content" validate:"required"`
 }
+
+// CreateDatabaseReq 创建数据库
+type CreateDatabaseReq struct {
+	ServerID     uint   `json:"serverId" validate:"required"`
+	DatabaseName string `json:"databaseName" validate:"required"`
+	Charset      string `json:"charset"`
+	Collation    string `json:"collation"`
+}
+
+// DropDatabaseReq 删除数据库
+type DropDatabaseReq struct {
+	ServerID     uint   `json:"serverId" validate:"required"`
+	DatabaseName string `json:"databaseName" validate:"required"`
+}
+
+// GetTableInfoReq 获取表结构信息（SHOW CREATE TABLE / 建表语句）
+type GetTableInfoReq struct {
+	ServerID     uint   `json:"serverId" validate:"required"`
+	DatabaseName string `json:"databaseName" validate:"required"`
+	TableName    string `json:"tableName" validate:"required"`
+}
+
+// GetDatabaseInfoReq 获取数据库级信息
+type GetDatabaseInfoReq struct {
+	ServerID     uint   `json:"serverId" validate:"required"`
+	DatabaseName string `json:"databaseName" validate:"required"`
+}
+
+// ColumnDef 建表字段定义
+type ColumnDef struct {
+	Name          string `json:"name"`
+	Type          string `json:"type"`
+	Length        string `json:"length"`
+	Nullable      bool   `json:"nullable"`
+	DefaultValue  string `json:"defaultValue"`
+	AutoIncrement bool   `json:"autoIncrement"`
+	Comment       string `json:"comment"`
+	IsPrimary     bool   `json:"isPrimary"`
+}
+
+// CreateTableReq 创建表
+type CreateTableReq struct {
+	ServerID     uint        `json:"serverId" validate:"required"`
+	DatabaseName string      `json:"databaseName" validate:"required"`
+	TableName    string      `json:"tableName" validate:"required"`
+	Engine       string      `json:"engine"`
+	Charset      string      `json:"charset"`
+	Collation    string      `json:"collation"`
+	Comment      string      `json:"comment"`
+	Columns      []ColumnDef `json:"columns" validate:"required,min=1"`
+}
