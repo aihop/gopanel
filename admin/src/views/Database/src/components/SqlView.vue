@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
-import { useMessage, NEmpty, NIcon, NButton, NDataTable, NInput, NAlert } from 'naive-ui'
+import { ref, computed, watch, onMounted } from 'vue'
+import { useMessage, NEmpty, NIcon, NButton, NDataTable, NInput, NAlert, NPopconfirm } from 'naive-ui'
 import { execDBManagerSqlAPI } from '@/api/modules/database'
 import { renderIcon } from '@/utils'
 import DatabaseWorkspaceHeader from './DatabaseWorkspaceHeader.vue'
@@ -17,6 +17,39 @@ const sqlQuery = ref('')
 const executingSql = ref(false)
 const sqlResult = ref<any>(null)
 const sqlHistory = ref<Array<{ title: string; sql: string }>>([])
+
+const historyStorageKey = computed(() => {
+  return props.selectedServerId && props.selectedDatabase
+    ? `sql_history_${props.selectedServerId}_${props.selectedDatabase}`
+    : null
+})
+
+const loadHistory = () => {
+  const key = historyStorageKey.value
+  if (!key) { sqlHistory.value = []; return }
+  try {
+    const raw = localStorage.getItem(key)
+    sqlHistory.value = raw ? JSON.parse(raw) : []
+  } catch {
+    sqlHistory.value = []
+  }
+}
+
+const saveHistory = () => {
+  const key = historyStorageKey.value
+  if (!key) return
+  try {
+    localStorage.setItem(key, JSON.stringify(sqlHistory.value))
+  } catch { /* quota exceeded - ignore */ }
+}
+
+const clearHistory = () => {
+  const key = historyStorageKey.value
+  sqlHistory.value = []
+  if (key) localStorage.removeItem(key)
+}
+
+onMounted(loadHistory)
 
 const selectedServerLabel = computed(() => {
   return props.selectedServerId
@@ -83,11 +116,12 @@ const sqlResultSummary = computed(() => {
 })
 
 watch(
-  () => [props.selectedServerId, props.selectedDatabase, props.selectedTable],
+  () => [props.selectedServerId, props.selectedDatabase],
   () => {
     sqlResult.value = null
-    sqlHistory.value = []
-  }
+    loadHistory()
+  },
+  { immediate: true }
 )
 
 const applyQuickSql = (sql: string) => {
@@ -102,6 +136,7 @@ const pushSqlHistory = (sql: string) => {
     { title: nextTitle, sql: normalized },
     ...sqlHistory.value.filter(item => item.sql !== normalized)
   ].slice(0, 6)
+  saveHistory()
 }
 
 const executeSql = async () => {
@@ -203,8 +238,14 @@ const executeSql = async () => {
         v-if="sqlHistory.length > 0"
         class="mb-2 border border-slate-200 bg-white"
       >
-        <div class="px-3 py-2 border-b border-slate-200 text-xs font-semibold text-slate-700">
-          最近执行
+        <div class="px-3 py-2 border-b border-slate-200 text-xs font-semibold text-slate-700 flex justify-between items-center">
+          <span>最近执行</span>
+          <n-popconfirm @positive-click="clearHistory">
+            <template #trigger>
+              <n-button size="tiny" text type="error">清空</n-button>
+            </template>
+            确定要清空当前数据库的历史记录吗？
+          </n-popconfirm>
         </div>
         <div class="p-2 flex flex-wrap gap-2">
           <n-button
