@@ -1,0 +1,567 @@
+import { computed, h, onMounted, ref, watch } from 'vue'
+import { NButton, NPopconfirm } from 'naive-ui'
+import { execDBManagerSqlAPI } from '@/api/modules/database'
+
+type MessageLike = {
+  success: (content: string) => void
+  error: (content: string) => void
+  warning: (content: string) => void
+}
+
+type StructureProps = {
+  selectedServerId: number | null
+  selectedDatabase: string | null
+  selectedTable: string | null
+  serverOptions: any[]
+  structureData: any[]
+  loadingStructure: boolean
+}
+
+type EmitLike = {
+  refresh: () => void
+}
+
+export const useStructureView = (
+  props: StructureProps,
+  emit: EmitLike,
+  message: MessageLike
+) => {
+  const showColumnModal = ref(false)
+  const isEditColumn = ref(false)
+  const submittingColumn = ref(false)
+  const columnForm = ref({
+    oldName: '',
+    name: '',
+    type: ''
+  })
+
+  const indexData = ref<any[]>([])
+  const loadingIndex = ref(false)
+  const showIndexModal = ref(false)
+  const isEditIndex = ref(false)
+  const submittingIndex = ref(false)
+  const indexForm = ref({
+    oldName: '',
+    oldType: 'INDEX',
+    oldColumns: [] as string[],
+    name: '',
+    type: 'INDEX',
+    columns: [] as string[]
+  })
+
+  const indexTypeOptions = [
+    { label: 'PRIMARY', value: 'PRIMARY' },
+    { label: 'UNIQUE', value: 'UNIQUE' },
+    { label: 'INDEX', value: 'INDEX' }
+  ]
+
+  const selectedServer = computed(() => {
+    return props.serverOptions.find(s => s.value === props.selectedServerId) || null
+  })
+
+  const selectedServerLabel = computed(() => {
+    return selectedServer.value?.label || ''
+  })
+
+  const fieldSummary = computed(() => {
+    const rows = Array.isArray(props.structureData) ? props.structureData : []
+    const primaryCount = rows.filter((row: any) => row.Key === 'PRI').length
+    const nullableCount = rows.filter((row: any) => row.Null === 'YES' || row.Null === 1 || row.Null === true).length
+    return {
+      total: rows.length,
+      primaryCount,
+      nullableCount,
+      autoIncrementCount: rows.filter((row: any) => String(row.Extra || '').toLowerCase().includes('auto_increment')).length
+    }
+  })
+
+  const indexSummary = computed(() => {
+    const rows = indexData.value || []
+    return {
+      total: rows.length,
+      uniqueCount: rows.filter((row: any) => row.Non_unique === 0).length,
+      primaryCount: rows.filter((row: any) => row.Key_name === 'PRIMARY' || String(row.Key_name || '').endsWith('_pkey')).length
+    }
+  })
+
+  const indexColumnsOptions = computed(() => {
+    return props.structureData.map((col: any) => ({
+      label: col.Field,
+      value: col.Field
+    }))
+  })
+
+  const normalizeIndexType = (row: any) => {
+    const keyName = String(row.Key_name || '')
+    const rawType = String(row.Index_type || '').toUpperCase()
+    if (keyName === 'PRIMARY' || keyName.endsWith('_pkey') || rawType === 'PRIMARY') {
+      return 'PRIMARY'
+    }
+    if (row.Non_unique === 0) {
+      return 'UNIQUE'
+    }
+    return 'INDEX'
+  }
+
+  const normalizeIndexRows = (rows: any[]) => {
+    const grouped = new Map<string, any>()
+    rows.forEach((row: any, idx: number) => {
+      const keyName = String(row.Key_name || '')
+      if (!keyName) return
+      const current = grouped.get(keyName)
+      const columnName = String(row.Column_name || '').trim()
+      const columnSeq = Number(row.Seq_in_index ?? row.seqno ?? idx)
+      if (!current) {
+        grouped.set(keyName, {
+          Key_name: keyName,
+          Non_unique: row.Non_unique,
+          Index_type: normalizeIndexType(row),
+          columns: columnName ? [{ name: columnName, seq: columnSeq }] : []
+        })
+        return
+      }
+      if (columnName && !current.columns.some((item: any) => item.name === columnName)) {
+        current.columns.push({ name: columnName, seq: columnSeq })
+      }
+      if (current.Non_unique !== 0 && row.Non_unique === 0) {
+        current.Non_unique = 0
+      }
+    })
+
+    return Array.from(grouped.values()).map((row: any) => {
+      const orderedColumns = row.columns
+        .sort((a: any, b: any) => a.seq - b.seq)
+        .map((item: any) => item.name)
+
+      return {
+        Key_name: row.Key_name,
+        Non_unique: row.Non_unique,
+        Index_type: row.Index_type,
+        Column_name: orderedColumns.join(', '),
+        columns: orderedColumns
+      }
+    })
+  }
+
+  const openAddColumnModal = () => {
+    isEditColumn.value = false
+    columnForm.value = { oldName: '', name: '', type: 'VARCHAR(255)' }
+    showColumnModal.value = true
+  }
+
+  const openEditColumnModal = (row: any) => {
+    isEditColumn.value = true
+    columnForm.value = {
+      oldName: row.Field,
+      name: row.Field,
+      type: row.Type
+    }
+    showColumnModal.value = true
+  }
+
+  const dropColumn = async (row: any) => {
+    if (!props.selectedServerId || !props.selectedDatabase || !props.selectedTable) return
+    const server = selectedServer.value
+    const isPg = server?.type === 'postgresql'
+
+    const sql = isPg
+      ? `ALTER TABLE "${props.selectedTable}" DROP COLUMN "${row.Field}"`
+      : `ALTER TABLE \`${props.selectedTable}\` DROP COLUMN \`${row.Field}\``
+
+    try {
+      const res = await execDBManagerSqlAPI({
+        serverId: props.selectedServerId,
+        databaseName: props.selectedDatabase,
+        sql
+      })
+      if (res.code === 0) {
+        message.success('删除字段成功')
+        emit.refresh()
+        fetchTableIndexes()
+      } else {
+        message.error(res.message || '删除字段失败')
+      }
+    } catch {
+      message.error('执行删除请求失败')
+    }
+  }
+
+  const submitColumn = async () => {
+    if (!columnForm.value.name || !columnForm.value.type) {
+      message.warning('字段名和类型不能为空')
+      return
+    }
+
+    const server = selectedServer.value
+    const isPg = server?.type === 'postgresql'
+    const table = props.selectedTable
+    let sql = ''
+
+    if (isEditColumn.value) {
+      if (isPg) {
+        const queries = []
+        if (columnForm.value.oldName !== columnForm.value.name) {
+          queries.push(`ALTER TABLE "${table}" RENAME COLUMN "${columnForm.value.oldName}" TO "${columnForm.value.name}"`)
+        }
+        if (columnForm.value.type) {
+          queries.push(`ALTER TABLE "${table}" ALTER COLUMN "${columnForm.value.name}" TYPE ${columnForm.value.type} USING "${columnForm.value.name}"::${columnForm.value.type}`)
+        }
+        sql = queries.join('; ')
+      } else {
+        sql = `ALTER TABLE \`${table}\` CHANGE COLUMN \`${columnForm.value.oldName}\` \`${columnForm.value.name}\` ${columnForm.value.type}`
+      }
+    } else {
+      sql = isPg
+        ? `ALTER TABLE "${table}" ADD COLUMN "${columnForm.value.name}" ${columnForm.value.type}`
+        : `ALTER TABLE \`${table}\` ADD COLUMN \`${columnForm.value.name}\` ${columnForm.value.type}`
+    }
+
+    submittingColumn.value = true
+    try {
+      const res = await execDBManagerSqlAPI({
+        serverId: props.selectedServerId!,
+        databaseName: props.selectedDatabase!,
+        sql
+      })
+      if (res.code === 0) {
+        message.success('操作成功')
+        showColumnModal.value = false
+        emit.refresh()
+        fetchTableIndexes()
+      } else {
+        message.error(res.message || '操作失败')
+      }
+    } catch {
+      message.error('执行失败')
+    } finally {
+      submittingColumn.value = false
+    }
+  }
+
+  const fetchTableIndexes = async () => {
+    if (!props.selectedServerId || !props.selectedDatabase || !props.selectedTable) return
+    const server = selectedServer.value
+    if (!server) return
+
+    loadingIndex.value = true
+    let sql = ''
+    if (server.type === 'mysql' || server.type === 'mariadb') {
+      sql = `SHOW INDEX FROM \`${props.selectedTable}\``
+    } else if (server.type === 'sqlite') {
+      sql = `
+        SELECT
+          il.name AS "Key_name",
+          CASE WHEN il.[unique] = 1 THEN 0 ELSE 1 END AS "Non_unique",
+          ii.name AS "Column_name",
+          il.origin AS "Index_type"
+        FROM pragma_index_list('${props.selectedTable}') il
+        LEFT JOIN pragma_index_info(il.name) ii
+        ORDER BY il.seq, ii.seqno
+      `
+    } else {
+      sql = `
+        SELECT
+          i.relname as "Key_name",
+          ix.indisunique as "Non_unique",
+          a.attname as "Column_name",
+          am.amname as "Index_type"
+        FROM
+          pg_class t,
+          pg_class i,
+          pg_index ix,
+          pg_attribute a,
+          pg_am am
+        WHERE
+          t.oid = ix.indrelid
+          and i.oid = ix.indexrelid
+          and a.attrelid = t.oid
+          and a.attnum = ANY(ix.indkey)
+          and i.relam = am.oid
+          and t.relkind = 'r'
+          and t.relname = '${props.selectedTable}'
+      `
+    }
+
+    try {
+      const res = await execDBManagerSqlAPI({
+        serverId: props.selectedServerId,
+        databaseName: props.selectedDatabase,
+        sql
+      })
+
+      if (res.code === 0 && res.data && res.data.type === 'query') {
+        if (server.type === 'postgresql') {
+          indexData.value = normalizeIndexRows(res.data.rows.map((row: any) => ({
+            Key_name: row.Key_name,
+            Non_unique: row.Non_unique ? 0 : 1,
+            Column_name: row.Column_name,
+            Index_type: row.Key_name?.endsWith('_pkey') ? 'PRIMARY' : row.Index_type
+          })) || [])
+        } else {
+          indexData.value = normalizeIndexRows(res.data.rows || [])
+        }
+      } else {
+        indexData.value = []
+      }
+    } catch {
+      indexData.value = []
+      message.error('获取索引数据失败')
+    } finally {
+      loadingIndex.value = false
+    }
+  }
+
+  const openAddIndexModal = () => {
+    isEditIndex.value = false
+    indexForm.value = { oldName: '', oldType: 'INDEX', oldColumns: [], name: '', type: 'INDEX', columns: [] }
+    showIndexModal.value = true
+  }
+
+  const openEditIndexModal = (row: any) => {
+    isEditIndex.value = true
+    const normalizedType = normalizeIndexType(row)
+    const columns = Array.isArray(row.columns)
+      ? row.columns
+      : String(row.Column_name || '')
+          .split(',')
+          .map((item: string) => item.trim())
+          .filter(Boolean)
+
+    indexForm.value = {
+      oldName: row.Key_name,
+      oldType: normalizedType,
+      oldColumns: [...columns],
+      name: normalizedType === 'PRIMARY' ? row.Key_name : row.Key_name,
+      type: normalizedType,
+      columns: [...columns]
+    }
+    showIndexModal.value = true
+  }
+
+  const dropIndex = async (row: any) => {
+    if (!props.selectedServerId || !props.selectedDatabase || !props.selectedTable) return
+    const server = selectedServer.value
+    const isPg = server?.type === 'postgresql'
+    const isSqlite = server?.type === 'sqlite'
+    const table = props.selectedTable
+    const indexName = row.Key_name
+
+    let sql = ''
+    if (isPg) {
+      sql = indexName.endsWith('_pkey')
+        ? `ALTER TABLE "${table}" DROP CONSTRAINT "${indexName}"`
+        : `DROP INDEX "${indexName}"`
+    } else if (isSqlite) {
+      sql = `DROP INDEX "${indexName}"`
+    } else {
+      sql = indexName === 'PRIMARY'
+        ? `ALTER TABLE \`${table}\` DROP PRIMARY KEY`
+        : `ALTER TABLE \`${table}\` DROP INDEX \`${indexName}\``
+    }
+
+    try {
+      const res = await execDBManagerSqlAPI({
+        serverId: props.selectedServerId,
+        databaseName: props.selectedDatabase,
+        sql
+      })
+      if (res.code === 0) {
+        message.success('删除索引成功')
+        fetchTableIndexes()
+      } else {
+        message.error(res.message || '删除索引失败')
+      }
+    } catch {
+      message.error('执行删除请求失败')
+    }
+  }
+
+  const submitIndex = async () => {
+    if (!indexForm.value.type || indexForm.value.columns.length === 0) {
+      message.warning('请选择索引类型和相关字段')
+      return
+    }
+
+    const server = selectedServer.value
+    const isPg = server?.type === 'postgresql'
+    const isSqlite = server?.type === 'sqlite'
+    const table = props.selectedTable
+    const colStr = indexForm.value.columns.map(c => isPg ? `"${c}"` : `\`${c}\``).join(', ')
+    const indexName = indexForm.value.name || `${table}_${indexForm.value.columns.join('_')}_idx`
+    const statements: string[] = []
+
+    if (isEditIndex.value) {
+      const oldName = indexForm.value.oldName
+      const oldType = indexForm.value.oldType
+      if (oldType === 'PRIMARY' && isSqlite) {
+        message.warning('SQLite 暂不支持修改主键索引')
+        return
+      }
+      if (isPg) {
+        statements.push(
+          oldType === 'PRIMARY' || oldName.endsWith('_pkey')
+            ? `ALTER TABLE "${table}" DROP CONSTRAINT "${oldName}"`
+            : `DROP INDEX "${oldName}"`
+        )
+      } else if (isSqlite) {
+        statements.push(`DROP INDEX "${oldName}"`)
+      } else {
+        statements.push(
+          oldType === 'PRIMARY' || oldName === 'PRIMARY'
+            ? `ALTER TABLE \`${table}\` DROP PRIMARY KEY`
+            : `ALTER TABLE \`${table}\` DROP INDEX \`${oldName}\``
+        )
+      }
+    }
+
+    if (isPg) {
+      if (indexForm.value.type === 'PRIMARY') {
+        statements.push(`ALTER TABLE "${table}" ADD PRIMARY KEY (${colStr})`)
+      } else if (indexForm.value.type === 'UNIQUE') {
+        statements.push(`CREATE UNIQUE INDEX "${indexName}" ON "${table}" (${colStr})`)
+      } else {
+        statements.push(`CREATE INDEX "${indexName}" ON "${table}" (${colStr})`)
+      }
+    } else if (isSqlite) {
+      if (indexForm.value.type === 'PRIMARY') {
+        message.warning('SQLite 暂不支持直接新增主键索引')
+        return
+      }
+      if (indexForm.value.type === 'UNIQUE') {
+        statements.push(`CREATE UNIQUE INDEX "${indexName}" ON "${table}" (${indexForm.value.columns.map(c => `"${c}"`).join(', ')})`)
+      } else {
+        statements.push(`CREATE INDEX "${indexName}" ON "${table}" (${indexForm.value.columns.map(c => `"${c}"`).join(', ')})`)
+      }
+    } else {
+      if (indexForm.value.type === 'PRIMARY') {
+        statements.push(`ALTER TABLE \`${table}\` ADD PRIMARY KEY (${colStr})`)
+      } else if (indexForm.value.type === 'UNIQUE') {
+        statements.push(`ALTER TABLE \`${table}\` ADD UNIQUE INDEX \`${indexName}\` (${colStr})`)
+      } else {
+        statements.push(`ALTER TABLE \`${table}\` ADD INDEX \`${indexName}\` (${colStr})`)
+      }
+    }
+
+    const sql = statements.join('; ')
+
+    submittingIndex.value = true
+    try {
+      const res = await execDBManagerSqlAPI({
+        serverId: props.selectedServerId!,
+        databaseName: props.selectedDatabase!,
+        sql
+      })
+      if (res.code === 0) {
+        message.success(isEditIndex.value ? '修改索引成功' : '创建索引成功')
+        showIndexModal.value = false
+        fetchTableIndexes()
+      } else {
+        message.error(res.message || (isEditIndex.value ? '修改索引失败' : '创建索引失败'))
+      }
+    } catch {
+      message.error('执行失败')
+    } finally {
+      submittingIndex.value = false
+    }
+  }
+
+  const indexColumns = [
+    {
+      title: '操作',
+      key: 'actions',
+      width: 140,
+      render(row: any) {
+        return h('div', { class: 'flex gap-2' }, [
+          h(NButton, { size: 'tiny', type: 'primary', ghost: true, onClick: () => openEditIndexModal(row) }, { default: () => '修改' }),
+          h(NPopconfirm, { onPositiveClick: () => dropIndex(row) }, {
+            trigger: () => h(NButton, { size: 'tiny', type: 'error', ghost: true }, { default: () => '删除' }),
+            default: () => `确定要删除索引 ${row.Key_name} 吗？`
+          })
+        ])
+      }
+    },
+    { title: '键名', key: 'Key_name', width: 150 },
+    { title: '类型', key: 'Index_type', width: 100 },
+    {
+      title: '唯一',
+      key: 'Non_unique',
+      width: 100,
+      render: (row: any) => row.Non_unique === 0 ? '是' : '否'
+    },
+    { title: '字段', key: 'Column_name', width: 150 }
+  ]
+
+  const structureColumns = computed(() => {
+    if (!props.structureData || props.structureData.length === 0) return []
+    const firstRow = props.structureData[0]
+    const keys = Object.keys(firstRow)
+
+    const actionCol = {
+      title: '操作',
+      key: 'actions',
+      fixed: 'left' as const,
+      width: 120,
+      render(row: any) {
+        return h('div', { class: 'flex gap-2' }, [
+          h(NButton, { size: 'tiny', type: 'primary', ghost: true, onClick: () => openEditColumnModal(row) }, { default: () => '修改' }),
+          h(NPopconfirm, { onPositiveClick: () => dropColumn(row) }, {
+            trigger: () => h(NButton, { size: 'tiny', type: 'error', ghost: true }, { default: () => '删除' }),
+            default: () => `确定要删除字段 ${row.Field} 吗？`
+          })
+        ])
+      }
+    }
+
+    return [
+      actionCol,
+      ...keys.map((col, index) => ({
+        title: col,
+        key: col,
+        ellipsis: { tooltip: true as const },
+        className: index === 0 ? 'db-structure-primary-col' : undefined
+      }))
+    ]
+  })
+
+  watch(() => props.selectedTable, () => {
+    if (props.selectedTable) {
+      fetchTableIndexes()
+    } else {
+      indexData.value = []
+    }
+  }, { immediate: true })
+
+  onMounted(() => {
+    if (props.selectedTable) {
+      fetchTableIndexes()
+    }
+  })
+
+  return {
+    columnForm,
+    dropColumn,
+    fetchTableIndexes,
+    fieldSummary,
+    indexColumns,
+    indexColumnsOptions,
+    indexData,
+    indexForm,
+    indexSummary,
+    indexTypeOptions,
+    isEditColumn,
+    isEditIndex,
+    loadingIndex,
+    openAddColumnModal,
+    openAddIndexModal,
+    openEditColumnModal,
+    openEditIndexModal,
+    selectedServerLabel,
+    showColumnModal,
+    showIndexModal,
+    structureColumns,
+    submitColumn,
+    submitIndex,
+    submittingColumn,
+    submittingIndex
+  }
+}

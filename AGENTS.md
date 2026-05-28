@@ -215,6 +215,8 @@
   - `views/Website/SSL.vue` 适合拆为页面头部、证书相关弹层、表格列工厂，以及按“推送规则/日志流/页面状态”分层的 composable
   - `views/Database/src/DatabaseManager.vue` 适合拆为左侧导航、顶部上下文条、页面级 `useDatabaseManager` composable，主页面保留标签页编排与子视图挂载
   - `views/Database/src/components/DataView.vue` 适合把表列表、记录分页、筛选、删除等状态抽到 `useDataView` composable，主文件保留浏览态工具栏与数据表格渲染
+  - `views/Database/src/components/StructureView.vue` 适合把字段和索引操作、结构摘要抽到 `useStructureView` composable，主文件保留结构表格、索引区块和弹层编排
+  - `views/Database/src/components/OperationsView.vue`、`views/Database/src/components/SearchView.vue` 适合补表摘要、危险操作分区、搜索状态提示等轻量工作台信息，优先增强交互反馈，再决定是否继续拆 composable
 - 这类重构完成后，至少要检查改动文件诊断，确保结构调整没有引入模板或类型错误
 
 ## 后端大文件重构约定

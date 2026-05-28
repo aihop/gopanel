@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useMessage, NEmpty, NIcon, NButton, NInput, NInputGroup, NCard, NPopconfirm } from 'naive-ui'
 import { execDBManagerSqlAPI } from '@/api/modules/database'
 import { renderIcon } from '@/utils'
@@ -23,6 +23,11 @@ const loadingTruncate = ref(false)
 const loadingDrop = ref(false)
 const loadingRename = ref(false)
 
+const selectedServerLabel = computed(() => {
+  if (!props.selectedServerId) return ''
+  return props.serverOptions.find(s => s.value === props.selectedServerId)?.label || ''
+})
+
 const serverType = computed(() => {
   if (!props.selectedServerId) return ''
   const s = props.serverOptions.find(s => s.value === props.selectedServerId)
@@ -32,6 +37,19 @@ const serverType = computed(() => {
 const getQuote = () => {
   return serverType.value === 'mysql' ? '`' : '"'
 }
+
+const tableSummary = computed(() => {
+  const quote = getQuote()
+  return {
+    engine: serverType.value || '-',
+    quotedName: props.selectedTable ? `${quote}${props.selectedTable}${quote}` : '-',
+    databaseName: props.selectedDatabase || '-'
+  }
+})
+
+watch(() => props.selectedTable, (tableName) => {
+  newTableName.value = tableName || ''
+}, { immediate: true })
 
 const execSql = async (sql: string) => {
   if (!props.selectedServerId || !props.selectedDatabase) throw new Error('Missing server or database')
@@ -117,7 +135,7 @@ const handleRename = async () => {
       <div class="p-2 border-b border-slate-200 flex justify-between items-center bg-[#f8f9fa] text-xs">
         <div class="text-slate-700 flex items-center gap-1">
           <n-icon :component="renderIcon('mdi:server')" />
-          <span class="mr-2">{{ selectedServerId ? serverOptions.find(s => s.value === selectedServerId)?.label : '' }}</span>
+          <span class="mr-2">{{ selectedServerLabel }}</span>
           <span>»</span>
           <n-icon :component="renderIcon('mdi:database')" class="ml-2" />
           <span class="mr-2">{{ selectedDatabase }}</span>
@@ -128,32 +146,66 @@ const handleRename = async () => {
       </div>
       <div class="flex-1 overflow-auto p-4 bg-white">
         <div class="max-w-3xl mx-auto flex flex-col gap-4">
-          
-          <n-card title="表维护" size="small" class="shadow-sm">
-            <div class="flex gap-4">
-              <n-popconfirm @positive-click="handleTruncate">
-                <template #trigger>
-                  <n-button type="warning" ghost :loading="loadingTruncate">
-                    <template #icon><n-icon :component="renderIcon('mdi:delete-sweep-outline')" /></template>
-                    清空数据 (TRUNCATE)
-                  </n-button>
-                </template>
-                确定要清空表中的所有数据吗？此操作不可恢复！
-              </n-popconfirm>
+          <n-card title="表摘要" size="small" class="shadow-sm">
+            <div class="grid grid-cols-3 gap-3 text-xs">
+              <div class="rounded border border-slate-200 bg-slate-50 px-3 py-2">
+                <div class="text-slate-400">数据库</div>
+                <div class="mt-1 font-semibold text-slate-700 break-all">{{ tableSummary.databaseName }}</div>
+              </div>
+              <div class="rounded border border-slate-200 bg-slate-50 px-3 py-2">
+                <div class="text-slate-400">表标识</div>
+                <div class="mt-1 font-semibold text-slate-700 break-all">{{ tableSummary.quotedName }}</div>
+              </div>
+              <div class="rounded border border-slate-200 bg-slate-50 px-3 py-2">
+                <div class="text-slate-400">数据库类型</div>
+                <div class="mt-1 font-semibold text-slate-700 uppercase">{{ tableSummary.engine }}</div>
+              </div>
+            </div>
+          </n-card>
 
-              <n-popconfirm @positive-click="handleDrop">
-                <template #trigger>
-                  <n-button type="error" ghost :loading="loadingDrop">
-                    <template #icon><n-icon :component="renderIcon('mdi:table-remove')" /></template>
-                    删除表 (DROP)
-                  </n-button>
-                </template>
-                确定要删除整个表吗？此操作不可恢复！
-              </n-popconfirm>
+          <n-card title="表维护" size="small" class="shadow-sm">
+            <div class="text-xs text-slate-500 mb-3">
+              用于执行表级维护动作。`TRUNCATE` 会清空记录但保留表结构，`DROP` 会直接删除整张表。
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+              <div class="rounded border border-amber-200 bg-amber-50 p-3">
+                <div class="font-semibold text-amber-700 mb-2">清空数据</div>
+                <div class="text-xs text-amber-700/80 mb-3">
+                  保留字段和索引，仅删除当前表中的所有记录。
+                </div>
+                <n-popconfirm @positive-click="handleTruncate">
+                  <template #trigger>
+                    <n-button type="warning" ghost :loading="loadingTruncate">
+                      <template #icon><n-icon :component="renderIcon('mdi:delete-sweep-outline')" /></template>
+                      清空数据 (TRUNCATE)
+                    </n-button>
+                  </template>
+                  确定要清空表中的所有数据吗？此操作不可恢复！
+                </n-popconfirm>
+              </div>
+
+              <div class="rounded border border-red-200 bg-red-50 p-3">
+                <div class="font-semibold text-red-700 mb-2">删除整表</div>
+                <div class="text-xs text-red-700/80 mb-3">
+                  删除表结构、记录和相关对象，执行后将从当前数据库移除该表。
+                </div>
+                <n-popconfirm @positive-click="handleDrop">
+                  <template #trigger>
+                    <n-button type="error" ghost :loading="loadingDrop">
+                      <template #icon><n-icon :component="renderIcon('mdi:table-remove')" /></template>
+                      删除表 (DROP)
+                    </n-button>
+                  </template>
+                  确定要删除整个表吗？此操作不可恢复！
+                </n-popconfirm>
+              </div>
             </div>
           </n-card>
 
           <n-card title="表选项" size="small" class="shadow-sm">
+            <div class="text-xs text-slate-500 mb-3">
+              重命名只会修改表名，不会改变字段和记录。建议仅使用字母、数字和下划线。
+            </div>
             <div class="flex items-center gap-4">
               <div class="w-24 text-slate-600 font-medium">重命名表到：</div>
               <n-input-group>

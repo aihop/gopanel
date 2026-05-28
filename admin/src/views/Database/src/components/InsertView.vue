@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useMessage, NEmpty, NIcon, NButton, NSpin, NInput } from 'naive-ui'
 import { insertDBManagerRecordAPI, updateDBManagerRecordAPI } from '@/api/modules/database'
 import { renderIcon } from '@/utils'
@@ -24,6 +24,40 @@ const emit = defineEmits<{
 const message = useMessage()
 const savingRecord = ref(false)
 const localRecordData = ref<Record<string, any>>({})
+
+const selectedServerLabel = computed(() => {
+  return props.selectedServerId
+    ? props.serverOptions.find(s => s.value === props.selectedServerId)?.label || ''
+    : ''
+})
+
+const fieldRows = computed(() => {
+  return (props.structureData || []).map((col: any) => {
+    const type = String(col.Type || '').toLowerCase()
+    const extra = String(col.Extra || '').toLowerCase()
+    const nullable = col.Null === 'YES' || col.Null === 1 || col.Null === true
+    const defaultValue = col.Default
+    return {
+      ...col,
+      nullable,
+      defaultValue,
+      isPrimary: col.Key === 'PRI',
+      isAutoIncrement: extra.includes('auto_increment'),
+      isTextLike: type.includes('text') || type.includes('char') || type.includes('json'),
+      typeLabel: col.Type || '-'
+    }
+  })
+})
+
+const formSummary = computed(() => {
+  const rows = fieldRows.value
+  return {
+    total: rows.length,
+    primaryCount: rows.filter(row => row.isPrimary).length,
+    autoIncrementCount: rows.filter(row => row.isAutoIncrement).length,
+    nullableCount: rows.filter(row => row.nullable).length
+  }
+})
 
 const rebuildLocalRecordData = () => {
   const nextRecord: Record<string, any> = {}
@@ -88,6 +122,14 @@ const submitRecord = async () => {
     savingRecord.value = false
   }
 }
+
+const applyFieldDefault = (field: string, value: any) => {
+  localRecordData.value[field] = value ?? ''
+}
+
+const applyFieldNull = (field: string) => {
+  localRecordData.value[field] = null
+}
 </script>
 
 <template>
@@ -108,7 +150,7 @@ const submitRecord = async () => {
       <div class="p-2 border-b border-slate-200 flex justify-between items-center bg-[#f8f9fa] text-xs">
         <div class="text-slate-700 flex items-center gap-1">
           <n-icon :component="renderIcon('mdi:server')" />
-          <span class="mr-2">{{ selectedServerId ? serverOptions.find(s => s.value === selectedServerId)?.label : '' }}</span>
+          <span class="mr-2">{{ selectedServerLabel }}</span>
           <span>»</span>
           <n-icon
             :component="renderIcon('mdi:database')"
@@ -123,6 +165,11 @@ const submitRecord = async () => {
           <span class="font-bold">{{ selectedTable }} ({{ isEditing ? '编辑记录' : '插入记录' }})</span>
         </div>
         <div class="flex gap-2">
+          <div class="hidden xl:flex items-center gap-2 text-[11px] text-slate-500 mr-2">
+            <span class="px-2 py-1 rounded bg-slate-100">{{ formSummary.total }} 个字段</span>
+            <span class="px-2 py-1 rounded bg-slate-100">{{ formSummary.primaryCount }} 个主键列</span>
+            <span class="px-2 py-1 rounded bg-slate-100">{{ formSummary.autoIncrementCount }} 个自增列</span>
+          </div>
           <n-button
             size="tiny"
             @click="emit('cancel')"
@@ -138,27 +185,44 @@ const submitRecord = async () => {
       <div class="flex-1 overflow-auto p-4 bg-white">
         <div class="max-w-4xl mx-auto border border-slate-200">
           <div class="bg-[#e9ecef] border-b border-slate-200 p-2 font-bold text-xs flex">
-            <div class="w-1/4">字段 (Field)</div>
-            <div class="w-1/4">类型 (Type)</div>
-            <div class="w-1/2">值 (Value)</div>
+            <div class="w-[22%]">字段 (Field)</div>
+            <div class="w-[24%]">类型 / 约束</div>
+            <div class="w-[54%]">值 (Value)</div>
           </div>
           <div
-            v-for="(col, index) in structureData"
+            v-for="(col, index) in fieldRows"
             :key="`${selectedTable || 'table'}-${col.Field || index}`"
             class="flex border-b border-slate-100 p-2 items-center text-xs hover:bg-slate-50"
           >
-            <div class="w-1/4 font-semibold text-slate-700 break-all pr-2">
+            <div class="w-[22%] font-semibold text-slate-700 break-all pr-2">
               {{ col.Field }}
-              <span
-                v-if="col.Key === 'PRI'"
-                class="text-amber-500 ml-1"
-                title="Primary Key"
-              >🔑</span>
+              <div class="mt-1 flex flex-wrap gap-1">
+                <span
+                  v-if="col.isPrimary"
+                  class="px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 text-[10px]"
+                >主键</span>
+                <span
+                  v-if="col.isAutoIncrement"
+                  class="px-1.5 py-0.5 rounded bg-sky-50 text-sky-600 text-[10px]"
+                >自增</span>
+                <span
+                  v-if="col.nullable"
+                  class="px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px]"
+                >可空</span>
+              </div>
             </div>
-            <div class="w-1/4 text-slate-500 break-all pr-2">{{ col.Type }}</div>
-            <div class="w-1/2">
+            <div class="w-[24%] text-slate-500 break-all pr-2">
+              <div>{{ col.typeLabel }}</div>
+              <div
+                v-if="col.defaultValue !== undefined && col.defaultValue !== null && col.defaultValue !== ''"
+                class="mt-1 text-[10px] text-slate-400"
+              >
+                默认值: {{ col.defaultValue }}
+              </div>
+            </div>
+            <div class="w-[54%]">
               <n-input
-                v-if="col.Type && (col.Type.includes('text') || col.Type.includes('char') || col.Type.includes('json'))"
+                v-if="col.isTextLike"
                 v-model:value="localRecordData[col.Field]"
                 type="textarea"
                 :autosize="{ minRows: 1, maxRows: 5 }"
@@ -170,6 +234,24 @@ const submitRecord = async () => {
                 type="text"
                 size="small"
               />
+              <div class="mt-1 flex flex-wrap gap-2 text-[10px]">
+                <button
+                  v-if="col.defaultValue !== undefined && col.defaultValue !== null && col.defaultValue !== ''"
+                  type="button"
+                  class="text-blue-600 hover:text-blue-700"
+                  @click="applyFieldDefault(col.Field, col.defaultValue)"
+                >
+                  填入默认值
+                </button>
+                <button
+                  v-if="col.nullable"
+                  type="button"
+                  class="text-slate-500 hover:text-slate-700"
+                  @click="applyFieldNull(col.Field)"
+                >
+                  设为 NULL
+                </button>
+              </div>
             </div>
           </div>
         </div>
