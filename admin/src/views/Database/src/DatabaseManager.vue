@@ -6,6 +6,7 @@ import { renderIcon } from '@/utils'
 import DataView from './components/DataView.vue'
 import DatabaseManagerContextBar from './components/DatabaseManagerContextBar.vue'
 import DatabaseManagerSidebar from './components/DatabaseManagerSidebar.vue'
+import DatabaseTablesView from './components/DatabaseTablesView.vue'
 import StructureView from './components/StructureView.vue'
 import InsertView from './components/InsertView.vue'
 import SqlView from './components/SqlView.vue'
@@ -210,10 +211,19 @@ const handleDropDatabase = async () => {
         </n-tabs>
       </div>
 
-      <!-- 子视图组件 -->
+      <!-- 未选择表时显示表概览（数据库级别） -->
+      <DatabaseTablesView
+        v-if="selectedDatabase && !selectedTable"
+        :selectedServerId="selectedServerId"
+        :selectedDatabase="selectedDatabase"
+        :serverOptions="serverOptions"
+        @select-table="onTableSelect"
+      />
+
+      <!-- 选择表后显示子视图组件 -->
       <DataView
         :key="`data:${viewContextKey}`"
-        v-if="activeTab === 'data'"
+        v-if="selectedTable && activeTab === 'data'"
         ref="dataViewRef"
         :selectedServerId="selectedServerId"
         :selectedDatabase="selectedDatabase"
@@ -225,7 +235,7 @@ const handleDropDatabase = async () => {
       />
       <StructureView
         :key="`structure:${viewContextKey}`"
-        v-if="activeTab === 'structure'"
+        v-if="selectedTable && activeTab === 'structure'"
         :selectedServerId="selectedServerId"
         :selectedDatabase="selectedDatabase"
         :selectedTable="selectedTable"
@@ -236,7 +246,7 @@ const handleDropDatabase = async () => {
       />
       <InsertView
         :key="`insert:${viewContextKey}:${isEditing ? 'edit' : 'create'}`"
-        v-if="activeTab === 'insert'"
+        v-if="selectedTable && activeTab === 'insert'"
         :selectedServerId="selectedServerId"
         :selectedDatabase="selectedDatabase"
         :selectedTable="selectedTable"
@@ -251,7 +261,7 @@ const handleDropDatabase = async () => {
       />
       <SqlView
         :key="`sql:${viewContextKey}`"
-        v-if="activeTab === 'sql'"
+        v-if="selectedTable && activeTab === 'sql'"
         :selectedServerId="selectedServerId"
         :selectedDatabase="selectedDatabase"
         :selectedTable="selectedTable"
@@ -259,7 +269,7 @@ const handleDropDatabase = async () => {
       />
       <SearchView
         :key="`search:${viewContextKey}`"
-        v-if="activeTab === 'search'"
+        v-if="selectedTable && activeTab === 'search'"
         :selectedServerId="selectedServerId"
         :selectedDatabase="selectedDatabase"
         :selectedTable="selectedTable"
@@ -271,7 +281,7 @@ const handleDropDatabase = async () => {
       />
       <OperationsView
         :key="`operations:${viewContextKey}`"
-        v-if="activeTab === 'operations'"
+        v-if="selectedTable && activeTab === 'operations'"
         :selectedServerId="selectedServerId"
         :selectedDatabase="selectedDatabase"
         :selectedTable="selectedTable"
