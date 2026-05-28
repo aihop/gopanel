@@ -59,3 +59,18 @@ type DeleteRecordReq struct {
 	TableName    string                 `json:"tableName" validate:"required"`
 	Conditions   map[string]interface{} `json:"conditions" validate:"required"`
 }
+
+type ExportTableReq struct {
+	ServerID     uint   `json:"serverId" validate:"required"`
+	DatabaseName string `json:"databaseName" validate:"required"`
+	TableName    string `json:"tableName" validate:"required"`
+	Format       string `json:"format" validate:"required"` // csv or sql
+}
+
+type ImportTableReq struct {
+	ServerID     uint   `json:"serverId" validate:"required"`
+	DatabaseName string `json:"databaseName" validate:"required"`
+	TableName    string `json:"tableName" validate:"required"`
+	Format       string `json:"format" validate:"required"` // csv or sql
+	Content      string `json:"content" validate:"required"`
+}

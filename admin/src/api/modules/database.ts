@@ -97,6 +97,14 @@ export const deleteDBManagerRecordAPI = (data: any) => {
 	return http.post(`/database/manager/delete`, data)
 }
 
+export const exportDBManagerTableAPI = (data: { serverId: number; databaseName: string; tableName: string; format: string }) => {
+	return http.post(`/database/manager/export`, data, { responseType: 'text' })
+}
+
+export const importDBManagerTableAPI = (data: { serverId: number; databaseName: string; tableName: string; format: string; content: string }) => {
+	return http.post(`/database/manager/import`, data)
+}
+
 export const databaseUserGetAPI = (params: any) => {
 	return http.post(`/database/user/get`, params)
 }

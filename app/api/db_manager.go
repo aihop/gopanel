@@ -1,6 +1,8 @@
 package api
 
 import (
+	"fmt"
+
 	"github.com/aihop/gopanel/app/dto/request"
 	"github.com/aihop/gopanel/app/e"
 	"github.com/aihop/gopanel/app/service"
@@ -120,4 +122,32 @@ func DeleteDBManagerRecord(c fiber.Ctx) error {
 		return c.JSON(e.Fail(err))
 	}
 	return c.JSON(e.Succ("删除成功"))
+}
+
+// ExportDBManagerTable exports table data as CSV or SQL dump
+// ImportDBManagerTable imports data from CSV content or SQL dump into a table
+func ImportDBManagerTable(c fiber.Ctx) error {
+	req, err := e.BodyToStruct[request.ImportTableReq](c.Body())
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	imported, err := service.NewDBManagerService().ImportTable(*req)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	return c.JSON(e.Succ(fiber.Map{"imported": imported}))
+}
+
+func ExportDBManagerTable(c fiber.Ctx) error {
+	req, err := e.BodyToStruct[request.ExportTableReq](c.Body())
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	content, filename, err := service.NewDBManagerService().ExportTable(*req)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	c.Set("Content-Type", "text/plain; charset=utf-8")
+	c.Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	return c.SendString(content)
 }

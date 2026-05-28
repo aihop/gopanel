@@ -18,6 +18,7 @@ const emit = defineEmits<{
 
 const message = useMessage()
 const {
+  afterColumnOptions,
   columnForm,
   fieldSummary,
   fetchTableIndexes,
@@ -145,7 +146,7 @@ const handleRefresh = () => {
     <n-modal
       v-model:show="showColumnModal"
       preset="card"
-      class="w-[400px]"
+      class="w-[480px]"
       :title="isEditColumn ? '修改字段' : '添加字段'"
     >
       <div class="flex flex-col gap-4 text-sm">
@@ -165,6 +166,47 @@ const handleRefresh = () => {
             placeholder="例如: INT, VARCHAR(255)"
             class="flex-1"
             size="small"
+          />
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="w-16 text-right">可空:</span>
+          <n-switch v-model:value="columnForm.nullable" size="small" />
+          <span class="text-slate-500 text-xs ml-1">{{ columnForm.nullable ? 'NULL' : 'NOT NULL' }}</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="w-16 text-right">默认值:</span>
+          <n-input
+            v-model:value="columnForm.defaultValue"
+            placeholder="留空则不设默认值"
+            class="flex-1"
+            size="small"
+            clearable
+          />
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="w-16 text-right">备注:</span>
+          <n-input
+            v-model:value="columnForm.comment"
+            placeholder="字段备注说明"
+            class="flex-1"
+            size="small"
+            clearable
+          />
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="w-16 text-right">自增:</span>
+          <n-switch v-model:value="columnForm.autoIncrement" size="small" />
+          <span class="text-slate-500 text-xs ml-1">AUTO_INCREMENT</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="w-16 text-right">位置:</span>
+          <n-select
+            v-model:value="columnForm.afterColumn"
+            :options="afterColumnOptions"
+            placeholder="默认追加到最后"
+            class="flex-1"
+            size="small"
+            clearable
           />
         </div>
         <div class="flex justify-end gap-2 mt-2">

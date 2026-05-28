@@ -32,7 +32,12 @@ export const useStructureView = (
   const columnForm = ref({
     oldName: '',
     name: '',
-    type: ''
+    type: '',
+    nullable: true,
+    defaultValue: '',
+    comment: '',
+    autoIncrement: false,
+    afterColumn: ''
   })
 
   const indexData = ref<any[]>([])
@@ -91,6 +96,17 @@ export const useStructureView = (
     }))
   })
 
+  const afterColumnOptions = computed(() => {
+    const rows = Array.isArray(props.structureData) ? props.structureData : []
+    const options = rows.map((col: any) => ({
+      label: col.Field,
+      value: col.Field
+    }))
+    // Allow placing at the first position
+    options.unshift({ label: '(第一列)', value: '__FIRST__' })
+    return options
+  })
+
   const normalizeIndexType = (row: any) => {
     const keyName = String(row.Key_name || '')
     const rawType = String(row.Index_type || '').toUpperCase()
@@ -145,16 +161,24 @@ export const useStructureView = (
 
   const openAddColumnModal = () => {
     isEditColumn.value = false
-    columnForm.value = { oldName: '', name: '', type: 'VARCHAR(255)' }
+    columnForm.value = { oldName: '', name: '', type: 'VARCHAR(255)', nullable: true, defaultValue: '', comment: '', autoIncrement: false, afterColumn: '' }
     showColumnModal.value = true
   }
 
   const openEditColumnModal = (row: any) => {
     isEditColumn.value = true
+    const extra = String(row.Extra || '').toLowerCase()
+    const isNullable = row.Null === 'YES' || row.Null === true || row.Null === 1
+    const hasDefault = row.Default !== null && row.Default !== undefined
     columnForm.value = {
       oldName: row.Field,
       name: row.Field,
-      type: row.Type
+      type: row.Type,
+      nullable: isNullable,
+      defaultValue: hasDefault ? String(row.Default) : '',
+      comment: String(row.Comment || ''),
+      autoIncrement: extra.includes('auto_increment'),
+      afterColumn: ''
     }
     showColumnModal.value = true
   }
@@ -186,6 +210,47 @@ export const useStructureView = (
     }
   }
 
+  const buildColumnDef = (type: string, nullable: boolean, defaultValue: string, autoIncrement: boolean, comment: string, isPg: boolean): string => {
+    let def = type
+    if (isPg) {
+      // PostgreSQL handles nullable and default separately via ALTER COLUMN SET
+      return def
+    }
+    if (!nullable) {
+      def += ' NOT NULL'
+    } else {
+      def += ' NULL'
+    }
+    if (autoIncrement && !isPg) {
+      def += ' AUTO_INCREMENT'
+    }
+    if (defaultValue !== '' && defaultValue !== null && defaultValue !== undefined) {
+      // Quote string defaults, leave numeric/expression defaults unquoted
+      const numVal = Number(defaultValue)
+      const isNumeric = !Number.isNaN(numVal) && String(numVal) === defaultValue.trim()
+      if (isNumeric) {
+        def += ` DEFAULT ${numVal}`
+      } else if (defaultValue.toUpperCase() === 'CURRENT_TIMESTAMP' || defaultValue.toUpperCase() === 'NOW()') {
+        def += ` DEFAULT ${defaultValue}`
+      } else {
+        const escaped = defaultValue.replace(/'/g, "''")
+        def += ` DEFAULT '${escaped}'`
+      }
+    }
+    if (comment) {
+      const escaped = comment.replace(/'/g, "''")
+      def += ` COMMENT '${escaped}'`
+    }
+    return def
+  }
+
+  const buildAfterClause = (afterColumn: string, isPg: boolean): string => {
+    if (isPg) return ''
+    if (!afterColumn) return ''
+    if (afterColumn === '__FIRST__') return ' FIRST'
+    return ` AFTER \`${afterColumn}\``
+  }
+
   const submitColumn = async () => {
     if (!columnForm.value.name || !columnForm.value.type) {
       message.warning('字段名和类型不能为空')
@@ -199,21 +264,54 @@ export const useStructureView = (
 
     if (isEditColumn.value) {
       if (isPg) {
-        const queries = []
+        const queries: string[] = []
         if (columnForm.value.oldName !== columnForm.value.name) {
           queries.push(`ALTER TABLE "${table}" RENAME COLUMN "${columnForm.value.oldName}" TO "${columnForm.value.name}"`)
         }
         if (columnForm.value.type) {
           queries.push(`ALTER TABLE "${table}" ALTER COLUMN "${columnForm.value.name}" TYPE ${columnForm.value.type} USING "${columnForm.value.name}"::${columnForm.value.type}`)
         }
+        // Nullable
+        if (columnForm.value.nullable) {
+          queries.push(`ALTER TABLE "${table}" ALTER COLUMN "${columnForm.value.name}" DROP NOT NULL`)
+        } else {
+          queries.push(`ALTER TABLE "${table}" ALTER COLUMN "${columnForm.value.name}" SET NOT NULL`)
+        }
+        // Default
+        if (columnForm.value.defaultValue !== '' && columnForm.value.defaultValue !== null && columnForm.value.defaultValue !== undefined) {
+          queries.push(`ALTER TABLE "${table}" ALTER COLUMN "${columnForm.value.name}" SET DEFAULT '${columnForm.value.defaultValue.replace(/'/g, "''")}'`)
+        } else if (columnForm.value.defaultValue === '') {
+          // Only drop default if the original had one and user cleared it
+          // We'll always set a default; empty means drop default via a separate query
+        }
+        // Comment
+        if (columnForm.value.comment) {
+          queries.push(`COMMENT ON COLUMN "${table}"."${columnForm.value.name}" IS '${columnForm.value.comment.replace(/'/g, "''")}'`)
+        }
         sql = queries.join('; ')
       } else {
-        sql = `ALTER TABLE \`${table}\` CHANGE COLUMN \`${columnForm.value.oldName}\` \`${columnForm.value.name}\` ${columnForm.value.type}`
+        const colDef = buildColumnDef(columnForm.value.type, columnForm.value.nullable, columnForm.value.defaultValue, columnForm.value.autoIncrement, columnForm.value.comment, false)
+        const after = buildAfterClause(columnForm.value.afterColumn, false)
+        sql = `ALTER TABLE \`${table}\` CHANGE COLUMN \`${columnForm.value.oldName}\` \`${columnForm.value.name}\` ${colDef}${after}`
       }
     } else {
-      sql = isPg
-        ? `ALTER TABLE "${table}" ADD COLUMN "${columnForm.value.name}" ${columnForm.value.type}`
-        : `ALTER TABLE \`${table}\` ADD COLUMN \`${columnForm.value.name}\` ${columnForm.value.type}`
+      if (isPg) {
+        let def = columnForm.value.type
+        if (!columnForm.value.nullable) {
+          def += ' NOT NULL'
+        }
+        if (columnForm.value.defaultValue !== '' && columnForm.value.defaultValue !== null && columnForm.value.defaultValue !== undefined) {
+          def += ` DEFAULT '${columnForm.value.defaultValue.replace(/'/g, "''")}'`
+        }
+        sql = `ALTER TABLE "${table}" ADD COLUMN "${columnForm.value.name}" ${def}`
+        if (columnForm.value.comment) {
+          sql += `; COMMENT ON COLUMN "${table}"."${columnForm.value.name}" IS '${columnForm.value.comment.replace(/'/g, "''")}'`
+        }
+      } else {
+        const colDef = buildColumnDef(columnForm.value.type, columnForm.value.nullable, columnForm.value.defaultValue, columnForm.value.autoIncrement, columnForm.value.comment, false)
+        const after = buildAfterClause(columnForm.value.afterColumn, false)
+        sql = `ALTER TABLE \`${table}\` ADD COLUMN \`${columnForm.value.name}\` ${colDef}${after}`
+      }
     }
 
     submittingColumn.value = true
@@ -538,6 +636,7 @@ export const useStructureView = (
   })
 
   return {
+    afterColumnOptions,
     columnForm,
     dropColumn,
     fetchTableIndexes,

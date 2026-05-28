@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type DBManagerService struct{ serverRepo *repo.DatabaseServerRepo }
@@ -316,5 +317,322 @@ func stripComplexConditions(conditions map[string]interface{}) {
 		case map[string]interface{}, []interface{}:
 			delete(conditions, k)
 		}
+	}
+}
+
+func quoteSQLString(val string) string {
+	escaped := strings.ReplaceAll(val, "'", "''")
+	escaped = strings.ReplaceAll(escaped, "\\", "\\\\")
+	return "'" + escaped + "'"
+}
+
+func formatExportValue(val interface{}) string {
+	if val == nil {
+		return "NULL"
+	}
+	switch v := val.(type) {
+	case int64, int, float64, float32:
+		return fmt.Sprint(v)
+	case bool:
+		if v {
+			return "1"
+		}
+		return "0"
+	case string:
+		return quoteSQLString(v)
+	default:
+		return quoteSQLString(fmt.Sprint(val))
+	}
+}
+
+// parseCSVFields splits a CSV line into fields, handling quoted fields
+func parseCSVFields(line string) []string {
+	var fields []string
+	var current strings.Builder
+	inQuotes := false
+	for _, ch := range line {
+		if ch == '"' {
+			inQuotes = !inQuotes
+		} else if ch == ',' && !inQuotes {
+			fields = append(fields, current.String())
+			current.Reset()
+		} else {
+			current.WriteRune(ch)
+		}
+	}
+	fields = append(fields, current.String())
+	return fields
+}
+
+func (s *DBManagerService) ImportTable(req request.ImportTableReq) (int, error) {
+	db, err := s.getDBConn(req.ServerID, req.DatabaseName)
+	if err != nil {
+		return 0, err
+	}
+	defer db.Close()
+
+	server, _ := s.serverRepo.Get(req.ServerID)
+	tableName := sanitizeIdent(req.TableName)
+	q := string(quoteChar(server.Type))
+	quote := func(name string) string {
+		return q + name + q
+	}
+
+	switch req.Format {
+	case "sql":
+		return execSQLImport(db, req.Content)
+	case "csv":
+		rows := strings.Split(strings.TrimSpace(req.Content), "\n")
+		if len(rows) < 2 {
+			return 0, fmt.Errorf("csv must have at least a header row and one data row")
+		}
+
+		// Parse header
+		headers := parseCSVFields(strings.TrimSpace(rows[0]))
+		if len(headers) == 0 {
+			return 0, fmt.Errorf("no columns found in CSV header")
+		}
+
+		imported := 0
+		for _, line := range rows[1:] {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+			values := parseCSVFields(line)
+			if len(values) != len(headers) {
+				continue
+			}
+
+			// Build INSERT
+			var cols, placeholders []string
+			var args []interface{}
+			for i, header := range headers {
+				col := sanitizeIdent(header)
+				if col == "" {
+					continue
+				}
+				cols = append(cols, quote(col))
+				placeholders = append(placeholders, "?")
+				if values[i] == "" && isNumericTypeGuess(server.Type, col) {
+					args = append(args, nil)
+				} else {
+					args = append(args, values[i])
+				}
+			}
+
+			if len(cols) == 0 {
+				continue
+			}
+
+			sqlStr := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)",
+				quote(tableName),
+				strings.Join(cols, ", "),
+				strings.Join(placeholders, ", "))
+
+			_, err := db.Exec(sqlStr, args...)
+			if err != nil {
+				continue
+			}
+			imported++
+		}
+
+		return imported, nil
+	default:
+		return 0, fmt.Errorf("unsupported import format: %s", req.Format)
+	}
+}
+
+func isNumericTypeGuess(dbType model.DatabaseType, colName string) bool {
+	// Simple heuristic: columns named "id" or ending with "_id" might be numeric
+	lower := strings.ToLower(colName)
+	if lower == "id" {
+		return true
+	}
+	if strings.HasSuffix(lower, "_id") {
+		return true
+	}
+	return false
+}
+
+func execSQLImport(db *sql.DB, content string) (int, error) {
+	// Split by semicolons and execute each statement
+	statements := strings.Split(content, ";")
+	executed := 0
+	for _, stmt := range statements {
+		stmt = strings.TrimSpace(stmt)
+		if stmt == "" || strings.HasPrefix(stmt, "--") {
+			continue
+		}
+		// Remove comment lines
+		lines := strings.Split(stmt, "\n")
+		var cleanLines []string
+		for _, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "--") {
+				continue
+			}
+			cleanLines = append(cleanLines, line)
+		}
+		cleanStmt := strings.TrimSpace(strings.Join(cleanLines, "\n"))
+		if cleanStmt == "" {
+			continue
+		}
+
+		_, err := db.Exec(cleanStmt)
+		if err != nil {
+			return executed, fmt.Errorf("statement %d failed: %v", executed+1, err)
+		}
+		executed++
+	}
+	return executed, nil
+}
+
+func (s *DBManagerService) ExportTable(req request.ExportTableReq) (string, string, error) {
+	db, err := s.getDBConn(req.ServerID, req.DatabaseName)
+	if err != nil {
+		return "", "", err
+	}
+	defer db.Close()
+
+	server, _ := s.serverRepo.Get(req.ServerID)
+	tableName := sanitizeIdent(req.TableName)
+	q := string(quoteChar(server.Type))
+	quote := func(name string) string {
+		return q + name + q
+	}
+
+	// Get columns info
+	colSQL := fmt.Sprintf("SELECT %s FROM %s LIMIT 0", "*", quote(tableName))
+	colRows, err := db.Query(colSQL)
+	if err != nil {
+		return "", "", err
+	}
+	columns, err := colRows.Columns()
+	colRows.Close()
+	if err != nil {
+		return "", "", err
+	}
+
+	// Get all data
+	dataSQL := fmt.Sprintf("SELECT %s FROM %s", "*", quote(tableName))
+	rows, err := db.Query(dataSQL)
+	if err != nil {
+		return "", "", err
+	}
+	defer rows.Close()
+
+	if req.Format == "sql" {
+		dump := generateSQLDump(server.Type, tableName, columns, rows, quote)
+		filename := fmt.Sprintf("%s_%s.sql", req.DatabaseName, tableName)
+		return dump, filename, nil
+	}
+
+	// CSV format
+	csv := generateCSV(columns, rows)
+	filename := fmt.Sprintf("%s_%s.csv", req.DatabaseName, tableName)
+	return csv, filename, nil
+}
+
+func quoteChar(dbType model.DatabaseType) string {
+	if dbType == model.DatabaseTypeMysql || dbType == model.DatabaseTypeMariaDB {
+		return "`"
+	}
+	return `"`
+}
+
+func generateSQLDump(dbType model.DatabaseType, tableName string, columns []string, rows *sql.Rows, quote func(string) string) string {
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("-- GoPanel Export: %s\n", tableName))
+	b.WriteString(fmt.Sprintf("-- Date: %s\n\n", time.Now().Format("2006-01-02 15:04:05")))
+
+	// INSERT header
+	b.WriteString(fmt.Sprintf("INSERT INTO %s (", quote(tableName)))
+	colParts := make([]string, len(columns))
+	for i, col := range columns {
+		colParts[i] = quote(col)
+	}
+	b.WriteString(strings.Join(colParts, ", "))
+	b.WriteString(") VALUES\n")
+
+	// Values
+	values := make([]interface{}, len(columns))
+	valuePtrs := make([]interface{}, len(columns))
+	for i := range values {
+		valuePtrs[i] = &values[i]
+	}
+
+	var rowValues []string
+	for rows.Next() {
+		if err := rows.Scan(valuePtrs...); err != nil {
+			continue
+		}
+		rowParts := make([]string, len(columns))
+		for i := range columns {
+			rowParts[i] = formatExportValue(values[i])
+		}
+		rowValues = append(rowValues, "("+strings.Join(rowParts, ", ")+")")
+	}
+
+	b.WriteString(strings.Join(rowValues, ",\n"))
+	b.WriteString(";\n")
+	return b.String()
+}
+
+func generateCSV(columns []string, rows *sql.Rows) string {
+	var b strings.Builder
+
+	// BOM for Excel to recognize UTF-8
+	b.WriteString("\xef\xbb\xbf")
+
+	// Header
+	csvCols := make([]string, len(columns))
+	for i, col := range columns {
+		csvCols[i] = escapeCSVField(col)
+	}
+	b.WriteString(strings.Join(csvCols, ","))
+	b.WriteString("\n")
+
+	// Data rows
+	values := make([]interface{}, len(columns))
+	valuePtrs := make([]interface{}, len(columns))
+	for i := range values {
+		valuePtrs[i] = &values[i]
+	}
+
+	for rows.Next() {
+		if err := rows.Scan(valuePtrs...); err != nil {
+			continue
+		}
+		rowParts := make([]string, len(columns))
+		for i := range columns {
+			rowParts[i] = formatCSVValue(values[i])
+		}
+		b.WriteString(strings.Join(rowParts, ","))
+		b.WriteString("\n")
+	}
+
+	return b.String()
+}
+
+func escapeCSVField(field string) string {
+	if strings.ContainsAny(field, "\",\n\r") {
+		escaped := strings.ReplaceAll(field, `"`, `""`)
+		return `"` + escaped + `"`
+	}
+	return field
+}
+
+func formatCSVValue(val interface{}) string {
+	if val == nil {
+		return ""
+	}
+	switch v := val.(type) {
+	case string:
+		return escapeCSVField(v)
+	case []byte:
+		return escapeCSVField(string(v))
+	default:
+		return escapeCSVField(fmt.Sprint(val))
 	}
 }

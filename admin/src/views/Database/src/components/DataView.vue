@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { useMessage, NEmpty, NIcon, NButton, NDataTable, NPagination, NInput, NSelect, NInputGroup } from 'naive-ui'
+import { ref } from 'vue'
+import { useMessage, NEmpty, NIcon, NButton, NDataTable, NPagination, NInput, NSelect, NInputGroup, NDropdown, NModal, NSwitch, NRadio, NRadioGroup } from 'naive-ui'
 import { renderIcon } from '@/utils'
 import { useDataView } from './useDataView'
 
@@ -18,10 +19,78 @@ const emit = defineEmits<{
 
 const message = useMessage()
 
+// Import state
+const showImportModal = ref(false)
+const importFormat = ref('csv')
+const importContent = ref('')
+const importing = ref(false)
+const importFilename = ref('')
+
+const handleFileSelected = (e: Event) => {
+  const target = e.target as HTMLInputElement
+  if (!target.files || target.files.length === 0) return
+  const file = target.files[0]
+  importFilename.value = file.name
+  const reader = new FileReader()
+  reader.onload = () => {
+    importContent.value = reader.result as string
+    // Auto-detect format from extension
+    if (file.name.endsWith('.sql')) {
+      importFormat.value = 'sql'
+    } else {
+      importFormat.value = 'csv'
+    }
+  }
+  reader.readAsText(file)
+}
+
+const handleImport = async () => {
+  if (!props.selectedServerId || !props.selectedDatabase || !props.selectedTable) return
+  if (!importContent.value.trim()) {
+    message.warning('请选择文件或粘贴内容')
+    return
+  }
+
+  importing.value = true
+  try {
+    const { importDBManagerTableAPI } = await import('@/api/modules/database')
+    const res = await importDBManagerTableAPI({
+      serverId: props.selectedServerId,
+      databaseName: props.selectedDatabase,
+      tableName: props.selectedTable,
+      format: importFormat.value,
+      content: importContent.value
+    })
+    if (res.code === 0) {
+      const imported = (res.data as any)?.imported || 0
+      message.success(`导入成功，共 ${imported} 条记录`)
+      showImportModal.value = false
+      importContent.value = ''
+      importFilename.value = ''
+      fetchTableData()
+    } else {
+      message.error(res.message || '导入失败')
+    }
+  } catch (error: any) {
+    message.error(error?.message || '导入请求失败')
+  } finally {
+    importing.value = false
+  }
+}
+
 const {
   applyTableSearch,
+  checkedRowKeys,
+  editingCell,
+  editingValue,
   fetchTableData,
   fetchTableList,
+  handleBatchDelete,
+  handleCellDblClick,
+  handleCellEditSave,
+  handleCellEditCancel,
+  handleExportCSV,
+  handleExportSQL,
   handleReset,
   handleSearch,
   handleTableListPageChange,
@@ -51,7 +120,7 @@ const {
   selectTable: (tableName: string) => emit('selectTable', tableName)
 }, message)
 
-defineExpose({ fetchTableData, setAdvancedSearch })
+defineExpose({ fetchTableData, setAdvancedSearch, handleCellEditCancel })
 </script>
 
 <template>
@@ -174,6 +243,19 @@ defineExpose({ fetchTableData, setAdvancedSearch })
               class="px-2 py-1 rounded bg-blue-50 text-blue-600"
             >已启用筛选</span>
           </div>
+          <template v-if="checkedRowKeys.length > 0">
+            <span class="text-[11px] text-blue-600 whitespace-nowrap">已选 {{ checkedRowKeys.length }} 项</span>
+            <n-button
+              size="tiny"
+              type="error"
+              @click="handleBatchDelete"
+            >
+              <template #icon>
+                <n-icon :component="renderIcon('mdi:delete')" />
+              </template>
+              批量删除
+            </n-button>
+          </template>
           <n-input-group>
             <n-select
               v-model:value="searchColumn"
@@ -209,6 +291,34 @@ defineExpose({ fetchTableData, setAdvancedSearch })
               </template>
             </n-button>
           </n-input-group>
+          <n-dropdown
+            trigger="click"
+            :options="[
+              { key: 'csv', label: '导出 CSV' },
+              { key: 'sql', label: '导出 SQL' }
+            ]"
+            @select="(key: string) => key === 'csv' ? handleExportCSV() : handleExportSQL()"
+          >
+            <n-button
+              size="tiny"
+              :disabled="!selectedTable"
+            >
+              <template #icon>
+                <n-icon :component="renderIcon('mdi:file-download-outline')" />
+              </template>
+              导出
+            </n-button>
+          </n-dropdown>
+          <n-button
+            size="tiny"
+            :disabled="!selectedTable"
+            @click="showImportModal = true"
+          >
+            <template #icon>
+              <n-icon :component="renderIcon('mdi:file-upload-outline')" />
+            </template>
+            导入
+          </n-button>
           <n-button
             size="tiny"
             @click="fetchTableData"
@@ -243,11 +353,78 @@ defineExpose({ fetchTableData, setAdvancedSearch })
       </div>
     </template>
   </div>
+
+    <!-- Import Modal -->
+    <n-modal
+      v-model:show="showImportModal"
+      preset="card"
+      class="w-[560px]"
+      title="导入数据"
+    >
+      <div class="flex flex-col gap-4 text-sm">
+        <div class="flex items-center gap-3">
+          <span class="text-slate-700 w-16">格式:</span>
+          <n-radio-group v-model:value="importFormat">
+            <n-radio value="csv">CSV</n-radio>
+            <n-radio value="sql">SQL</n-radio>
+          </n-radio-group>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <span class="text-slate-700 w-16">文件:</span>
+          <label class="cursor-pointer px-3 py-1.5 rounded bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 text-xs">
+            选择文件
+            <input
+              type="file"
+              accept=".csv,.sql,.txt"
+              class="hidden"
+              @change="handleFileSelected"
+            />
+          </label>
+          <span class="text-slate-400 text-xs">{{ importFilename || '未选择文件' }}</span>
+        </div>
+
+        <div>
+          <div class="text-slate-500 text-xs mb-1">或直接粘贴 {{ importFormat === 'csv' ? 'CSV' : 'SQL' }} 内容:</div>
+          <n-input
+            v-model:value="importContent"
+            type="textarea"
+            :rows="10"
+            placeholder="在此粘贴内容..."
+            class="w-full"
+          />
+        </div>
+
+        <div class="flex justify-end gap-2 mt-2">
+          <n-button size="small" @click="showImportModal = false">取消</n-button>
+          <n-button
+            size="small"
+            type="primary"
+            :loading="importing"
+            @click="handleImport"
+          >开始导入</n-button>
+        </div>
+      </div>
+    </n-modal>
+  </div>
 </template>
 
 <style scoped>
 :deep(.db-primary-col) {
   background: #f8fafc;
   font-weight: 600;
+}
+
+:deep(.db-inline-edit-cell) {
+  margin: -4px 0;
+}
+
+:deep(.db-inline-edit-cell .n-input) {
+  min-height: 28px;
+}
+
+:deep(.db-cell-inline):hover {
+  background: #f0f5ff;
+  border-radius: 3px;
 }
 </style>

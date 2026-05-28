@@ -1,6 +1,6 @@
 import { computed, h, onMounted, ref, watch } from 'vue'
-import { NButton, NPopconfirm } from 'naive-ui'
-import { getDBManagerTableListAPI, getDBManagerTableDataAPI, deleteDBManagerRecordAPI } from '@/api/modules/database'
+import { NButton, NPopconfirm, NInput } from 'naive-ui'
+import { getDBManagerTableListAPI, getDBManagerTableDataAPI, deleteDBManagerRecordAPI, updateDBManagerRecordAPI, exportDBManagerTableAPI } from '@/api/modules/database'
 
 type MessageLike = {
   error: (content: string) => void
@@ -26,6 +26,61 @@ export const useDataView = (
   message: MessageLike
 ) => {
   const loadingTables = ref(false)
+
+  // Inline editing state
+  const editingCell = ref<{ rowIndex: number; columnKey: string } | null>(null)
+  const editingValue = ref('')
+  const editingConditions = ref<Record<string, any>>({})
+  const editingOriginalValue = ref<any>(null)
+
+  const handleCellDblClick = (row: any, rowIndex: number, columnKey: string) => {
+    editingConditions.value = { ...row }
+    editingOriginalValue.value = row[columnKey]
+    editingValue.value = String(row[columnKey] ?? '')
+    editingCell.value = { rowIndex, columnKey }
+  }
+
+  const handleCellEditSave = async () => {
+    if (!editingCell.value) return
+    const { rowIndex, columnKey } = editingCell.value
+
+    try {
+      const res = await updateDBManagerRecordAPI({
+        serverId: props.selectedServerId,
+        databaseName: props.selectedDatabase,
+        tableName: props.selectedTable,
+        data: { [columnKey]: editingValue.value },
+        conditions: { ...editingConditions.value }
+      })
+      if (res.code === 0) {
+        message.success('保存成功')
+        if (tableData.value[rowIndex]) {
+          tableData.value[rowIndex][columnKey] = editingValue.value
+        }
+        editingCell.value = null
+      } else {
+        message.error(res.message || '保存失败')
+        revertCellEdit(rowIndex, columnKey)
+      }
+    } catch (error) {
+      message.error('保存失败')
+      revertCellEdit(rowIndex, columnKey)
+    }
+  }
+
+  const revertCellEdit = (rowIndex: number, columnKey: string) => {
+    if (tableData.value[rowIndex]) {
+      tableData.value[rowIndex][columnKey] = editingOriginalValue.value
+    }
+    editingCell.value = null
+  }
+
+  const handleCellEditCancel = () => {
+    if (editingCell.value) {
+      revertCellEdit(editingCell.value.rowIndex, editingCell.value.columnKey)
+    }
+  }
+
   const tableList = ref<any[]>([])
   const tableListPagination = ref({
     page: 1,
@@ -40,6 +95,91 @@ export const useDataView = (
   })
 
   const loadingData = ref(false)
+
+  // Batch selection state
+  const checkedRowKeys = ref<number[]>([])
+  const rowKey = (row: any, index: number) => index
+
+  const downloadFile = (content: string, filename: string) => {
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const handleExportCSV = async () => {
+    if (!props.selectedServerId || !props.selectedDatabase || !props.selectedTable) return
+    try {
+      const res = await exportDBManagerTableAPI({
+        serverId: props.selectedServerId,
+        databaseName: props.selectedDatabase,
+        tableName: props.selectedTable,
+        format: 'csv'
+      })
+      const data = (res as any).data || res
+      downloadFile(data, `${props.selectedDatabase}_${props.selectedTable}.csv`)
+      message.success('CSV 已导出')
+    } catch (error) {
+      message.error('导出 CSV 失败')
+    }
+  }
+
+  const handleExportSQL = async () => {
+    if (!props.selectedServerId || !props.selectedDatabase || !props.selectedTable) return
+    try {
+      const res = await exportDBManagerTableAPI({
+        serverId: props.selectedServerId,
+        databaseName: props.selectedDatabase,
+        tableName: props.selectedTable,
+        format: 'sql'
+      })
+      const data = (res as any).data || res
+      downloadFile(data, `${props.selectedDatabase}_${props.selectedTable}.sql`)
+      message.success('SQL 已导出')
+    } catch (error) {
+      message.error('导出 SQL 失败')
+    }
+  }
+
+  const handleBatchDelete = async () => {
+    if (checkedRowKeys.value.length === 0) return
+    if (!confirm(`确定要删除选中的 ${checkedRowKeys.value.length} 条记录吗？`)) return
+
+    const selectedRows = checkedRowKeys.value.map(idx => tableData.value[idx]).filter(Boolean)
+    let successCount = 0
+    let failCount = 0
+
+    for (const row of selectedRows) {
+      try {
+        const res = await deleteDBManagerRecordAPI({
+          serverId: props.selectedServerId,
+          databaseName: props.selectedDatabase,
+          tableName: props.selectedTable,
+          conditions: row
+        })
+        if (res.code === 0) {
+          successCount++
+        } else {
+          failCount++
+        }
+      } catch {
+        failCount++
+      }
+    }
+
+    if (successCount > 0) {
+      message.success(`成功删除 ${successCount} 条记录${failCount > 0 ? `，${failCount} 条失败` : ''}`)
+    } else {
+      message.error('删除失败')
+    }
+
+    checkedRowKeys.value = []
+    fetchTableData()
+  }
+
   const tableData = ref<any[]>([])
   const tableColumns = ref<any[]>([])
   const pagination = ref({
@@ -346,13 +486,75 @@ export const useDataView = (
       }
     }
 
+    const isEditingThisCell = (rowIndex: number, key: string) => {
+      return editingCell.value?.rowIndex === rowIndex && editingCell.value?.columnKey === key
+    }
+
+    const selectionCol = {
+      title: '',
+      key: '__selection',
+      width: 40,
+      render(row: any, rowIndex: number) {
+        const isChecked = checkedRowKeys.value.includes(rowIndex)
+        return h('input', {
+          type: 'checkbox',
+          checked: isChecked,
+          onChange: (e: Event) => {
+            const target = e.target as HTMLInputElement
+            if (target.checked) {
+              checkedRowKeys.value = [...checkedRowKeys.value, rowIndex]
+            } else {
+              checkedRowKeys.value = checkedRowKeys.value.filter(k => k !== rowIndex)
+            }
+          }
+        })
+      }
+    }
+
     tableColumns.value = [
+      selectionCol,
       actionCol,
       ...visibleCols.map((col: string, index: number) => ({
         title: col,
         key: col,
         ellipsis: { tooltip: true as const },
-        className: index === 0 ? 'db-primary-col' : undefined
+        className: index === 0 ? 'db-primary-col' : undefined,
+        render(row: any, rowIndex: number) {
+          if (isEditingThisCell(rowIndex, col)) {
+            return h('div', { class: 'db-inline-edit-cell' }, [
+              h(NInput, {
+                value: editingValue.value,
+                'onUpdate:value': (v: string) => { editingValue.value = v },
+                size: 'small',
+                autofocus: true,
+                onKeyup: (e: KeyboardEvent) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    handleCellEditSave()
+                  }
+                  if (e.key === 'Escape') {
+                    e.preventDefault()
+                    handleCellEditCancel()
+                  }
+                },
+                onBlur: () => {
+                  // Guard: only save if still in editing mode (Enter may have cleared it)
+                  setTimeout(() => {
+                    if (editingCell.value) handleCellEditSave()
+                  }, 100)
+                }
+              })
+            ])
+          }
+          return h('span', {
+            class: 'db-cell-inline',
+            onDblclick: (e: MouseEvent) => {
+              e.stopPropagation()
+              handleCellDblClick(row, rowIndex, col)
+            },
+            style: { cursor: 'pointer', minHeight: '22px', display: 'inline-block', width: '100%' }
+          }, formatCell(row[col]))
+        }
       }))
     ]
   }
@@ -431,8 +633,17 @@ export const useDataView = (
   return {
     advancedSearch,
     applyTableSearch,
+    checkedRowKeys,
+    editingCell,
+    editingValue,
     fetchTableData,
     fetchTableList,
+    handleBatchDelete,
+    handleCellDblClick,
+    handleCellEditSave,
+    handleCellEditCancel,
+    handleExportCSV,
+    handleExportSQL,
     handleReset,
     handleSearch,
     handleTableListPageChange,
