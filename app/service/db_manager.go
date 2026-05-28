@@ -501,20 +501,36 @@ func (s *DBManagerService) ExportTable(req request.ExportTableReq) (string, stri
 		return q + name + q
 	}
 
-	// Get columns info
-	colSQL := fmt.Sprintf("SELECT %s FROM %s LIMIT 0", "*", quote(tableName))
-	colRows, err := db.Query(colSQL)
-	if err != nil {
-		return "", "", err
-	}
-	columns, err := colRows.Columns()
-	colRows.Close()
-	if err != nil {
-		return "", "", err
+	// 确定导出的列
+	var colList string
+	var exportColumns []string
+	if len(req.Columns) > 0 {
+		quotedCols := make([]string, len(req.Columns))
+		for i, c := range req.Columns {
+			quotedCols[i] = quote(sanitizeIdent(c))
+		}
+		colList = strings.Join(quotedCols, ", ")
+		exportColumns = req.Columns
+	} else {
+		colList = "*"
+		// 用 LIMIT 0 获取列名
+		colSQL := fmt.Sprintf("SELECT %s FROM %s LIMIT 0", colList, quote(tableName))
+		colRows, err := db.Query(colSQL)
+		if err != nil {
+			return "", "", err
+		}
+		exportColumns, err = colRows.Columns()
+		colRows.Close()
+		if err != nil {
+			return "", "", err
+		}
 	}
 
-	// Get all data
-	dataSQL := fmt.Sprintf("SELECT %s FROM %s", "*", quote(tableName))
+	// 构建数据查询 SQL
+	dataSQL := fmt.Sprintf("SELECT %s FROM %s", colList, quote(tableName))
+	if req.Where != "" {
+		dataSQL += " WHERE " + req.Where
+	}
 	rows, err := db.Query(dataSQL)
 	if err != nil {
 		return "", "", err
@@ -522,13 +538,13 @@ func (s *DBManagerService) ExportTable(req request.ExportTableReq) (string, stri
 	defer rows.Close()
 
 	if req.Format == "sql" {
-		dump := generateSQLDump(server.Type, tableName, columns, rows, quote)
+		dump := generateSQLDump(db, server.Type, tableName, req, exportColumns, rows, quote)
 		filename := fmt.Sprintf("%s_%s.sql", req.DatabaseName, tableName)
 		return dump, filename, nil
 	}
 
-	// CSV format
-	csv := generateCSV(columns, rows)
+	// CSV 格式
+	csv := generateCSV(exportColumns, rows)
 	filename := fmt.Sprintf("%s_%s.csv", req.DatabaseName, tableName)
 	return csv, filename, nil
 }
@@ -540,10 +556,83 @@ func quoteChar(dbType model.DatabaseType) string {
 	return `"`
 }
 
-func generateSQLDump(dbType model.DatabaseType, tableName string, columns []string, rows *sql.Rows, quote func(string) string) string {
+func getCreateTableSQL(db *sql.DB, dbType model.DatabaseType, tableName string, quote func(string) string) string {
+	switch dbType {
+	case model.DatabaseTypeMysql, model.DatabaseTypeMariaDB:
+		row := db.QueryRow(fmt.Sprintf("SHOW CREATE TABLE %s", quote(tableName)))
+		var tName, createSQL string
+		if err := row.Scan(&tName, &createSQL); err == nil {
+			return createSQL + ";\n\n"
+		}
+	case model.DatabaseSQLite:
+		row := db.QueryRow("SELECT sql FROM sqlite_master WHERE type='table' AND name=?", tableName)
+		var createSQL string
+		if err := row.Scan(&createSQL); err == nil {
+			return createSQL + ";\n\n"
+		}
+	case model.DatabaseTypePostgresql:
+		// PostgreSQL: 从 pg_catalog 重建 CREATE TABLE
+		rows, err := db.Query(fmt.Sprintf(`
+			SELECT a.attname, pg_catalog.format_type(a.atttypid, a.atttypmod), a.attnotnull,
+				COALESCE(d.adsrc, NULL) AS default_val
+			FROM pg_catalog.pg_attribute a
+			LEFT JOIN pg_catalog.pg_attrdef d ON a.attrelid = d.adrelid AND a.attnum = d.adnum
+			WHERE a.attrelid = '%s'::regclass AND a.attnum > 0 AND NOT a.attisdropped
+			ORDER BY a.attnum`, tableName))
+		if err != nil {
+			return ""
+		}
+		defer rows.Close()
+
+		var b strings.Builder
+		b.WriteString(fmt.Sprintf("CREATE TABLE %s (\n", quote(tableName)))
+		var cols []string
+		for rows.Next() {
+			var colName, colType string
+			var notNull bool
+			var defaultVal *string
+			if err := rows.Scan(&colName, &colType, &notNull, &defaultVal); err != nil {
+				continue
+			}
+			def := fmt.Sprintf("  %s %s", quote(colName), colType)
+			if notNull {
+				def += " NOT NULL"
+			}
+			if defaultVal != nil && *defaultVal != "" {
+				def += " DEFAULT " + *defaultVal
+			}
+			cols = append(cols, def)
+		}
+		b.WriteString(strings.Join(cols, ",\n"))
+		b.WriteString("\n);\n\n")
+		return b.String()
+	}
+	return ""
+}
+
+func generateSQLDump(db *sql.DB, dbType model.DatabaseType, tableName string, req request.ExportTableReq, columns []string, rows *sql.Rows, quote func(string) string) string {
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("-- GoPanel Export: %s\n", tableName))
+	b.WriteString(fmt.Sprintf("-- Database: %s\n", req.DatabaseName))
 	b.WriteString(fmt.Sprintf("-- Date: %s\n\n", time.Now().Format("2006-01-02 15:04:05")))
+
+	// DROP TABLE
+	if req.IncludeDropTable {
+		b.WriteString(fmt.Sprintf("DROP TABLE IF EXISTS %s;\n\n", quote(tableName)))
+	}
+
+	// CREATE TABLE
+	if req.IncludeCreateTable || req.IncludeDropTable {
+		// 重新获取 db 连接来查询表结构
+		if createSQL := getCreateTableSQL(db, dbType, tableName, quote); createSQL != "" {
+			b.WriteString(createSQL)
+		}
+	}
+
+	// 只有有数据列时才输出 INSERT
+	if len(columns) == 0 {
+		return b.String()
+	}
 
 	// INSERT header
 	b.WriteString(fmt.Sprintf("INSERT INTO %s (", quote(tableName)))

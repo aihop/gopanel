@@ -110,6 +110,14 @@ const {
   checkedRowKeys,
   editingCell,
   editingValue,
+  exportAllColumns,
+  exportColumnOptions,
+  exportColumns,
+  exportFormat,
+  exportIncludeCreateTable,
+  exportIncludeDropTable,
+  exportWhere,
+  exporting,
   fetchTableData,
   fetchTableList,
   handleBatchDelete,
@@ -118,6 +126,8 @@ const {
   handleCellEditCancel,
   handleExportCSV,
   handleExportSQL,
+  handleExportWithOptions,
+  handleOpenExportModal,
   handleReset,
   handleSearch,
   handleTableListPageChange,
@@ -132,6 +142,7 @@ const {
   searchValue,
   selectedServerLabel,
   setAdvancedSearch,
+  showExportModal,
   tableColumns,
   tableData,
   tableKeyword,
@@ -324,7 +335,7 @@ defineExpose({ fetchTableData, setAdvancedSearch, handleCellEditCancel })
               { key: 'csv', label: '导出 CSV' },
               { key: 'sql', label: '导出 SQL' }
             ]"
-            @select="(key: string) => key === 'csv' ? handleExportCSV() : handleExportSQL()"
+            @select="(key: string) => handleOpenExportModal(key)"
           >
             <n-button
               size="tiny"
@@ -440,6 +451,67 @@ defineExpose({ fetchTableData, setAdvancedSearch, handleCellEditCancel })
             :loading="importing"
             @click="handleImport"
           >{{ selectedFile ? '上传并导入' : '开始导入' }}</n-button>
+        </div>
+      </div>
+    </n-modal>
+
+    <!-- Export Modal -->
+    <n-modal
+      v-model:show="showExportModal"
+      preset="card"
+      style="width: 500px"
+      :title="`导出表数据 - ${selectedTable} (${exportFormat.toUpperCase()})`"
+    >
+      <div class="flex flex-col gap-4 text-sm">
+        <div>
+          <div class="text-slate-600 mb-1">导出字段</div>
+          <n-radio-group v-model:value="exportAllColumns" class="mb-2">
+            <n-radio :value="true" size="small">全部字段</n-radio>
+            <n-radio :value="false" size="small">选择字段</n-radio>
+          </n-radio-group>
+          <n-select
+            v-if="!exportAllColumns"
+            v-model:value="exportColumns"
+            :options="exportColumnOptions"
+            multiple
+            placeholder="选择要导出的字段"
+            class="w-full"
+            size="small"
+          />
+        </div>
+
+        <div>
+          <div class="text-slate-600 mb-1">WHERE 条件（可选）</div>
+          <n-input
+            v-model:value="exportWhere"
+            placeholder="例如: status = 1 AND created_at > '2025-01-01'"
+            size="small"
+            clearable
+          />
+        </div>
+
+        <div v-if="exportFormat === 'sql'">
+          <div class="text-slate-600 mb-2">SQL 选项</div>
+          <div class="flex flex-col gap-2">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <n-switch v-model:value="exportIncludeDropTable" size="small" />
+              <span class="text-xs text-slate-600">包含 DROP TABLE IF EXISTS</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <n-switch v-model:value="exportIncludeCreateTable" size="small" />
+              <span class="text-xs text-slate-600">包含 CREATE TABLE</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2 mt-2">
+          <n-button size="small" @click="showExportModal = false">取消</n-button>
+          <n-button
+            size="small"
+            type="primary"
+            :loading="exporting"
+            @click="handleExportWithOptions"
+          >导出</n-button>
         </div>
       </div>
     </n-modal>

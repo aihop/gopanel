@@ -61,10 +61,14 @@ type DeleteRecordReq struct {
 }
 
 type ExportTableReq struct {
-	ServerID     uint   `json:"serverId" validate:"required"`
-	DatabaseName string `json:"databaseName" validate:"required"`
-	TableName    string `json:"tableName" validate:"required"`
-	Format       string `json:"format" validate:"required"` // csv or sql
+	ServerID          uint     `json:"serverId" validate:"required"`
+	DatabaseName      string   `json:"databaseName" validate:"required"`
+	TableName         string   `json:"tableName" validate:"required"`
+	Format            string   `json:"format" validate:"required"` // csv or sql
+	Columns           []string `json:"columns"`                    // 空 = 全部字段
+	Where             string   `json:"where"`                      // 可选 WHERE 条件
+	IncludeDropTable  bool     `json:"includeDropTable"`           // SQL 格式：包含 DROP TABLE
+	IncludeCreateTable bool    `json:"includeCreateTable"`         // SQL 格式：包含 CREATE TABLE
 }
 
 type ImportTableReq struct {

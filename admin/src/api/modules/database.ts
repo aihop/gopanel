@@ -97,7 +97,16 @@ export const deleteDBManagerRecordAPI = (data: any) => {
 	return http.post(`/database/manager/delete`, data)
 }
 
-export const exportDBManagerTableAPI = (data: { serverId: number; databaseName: string; tableName: string; format: string }) => {
+export const exportDBManagerTableAPI = (data: {
+	serverId: number
+	databaseName: string
+	tableName: string
+	format: string
+	columns?: string[]
+	where?: string
+	includeDropTable?: boolean
+	includeCreateTable?: boolean
+}) => {
 	return http.post(`/database/manager/export`, data, { responseType: 'text' })
 }
 

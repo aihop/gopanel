@@ -1,6 +1,6 @@
 import { computed, h, onMounted, ref, watch } from 'vue'
 import { NButton, NPopconfirm, NInput } from 'naive-ui'
-import { getDBManagerTableListAPI, getDBManagerTableDataAPI, deleteDBManagerRecordAPI, updateDBManagerRecordAPI, exportDBManagerTableAPI } from '@/api/modules/database'
+import { getDBManagerTableListAPI, getDBManagerTableDataAPI, deleteDBManagerRecordAPI, updateDBManagerRecordAPI, exportDBManagerTableAPI, execDBManagerSqlAPI } from '@/api/modules/database'
 
 type MessageLike = {
   error: (content: string) => void
@@ -141,6 +141,73 @@ export const useDataView = (
       message.success('SQL 已导出')
     } catch (error) {
       message.error('导出 SQL 失败')
+    }
+  }
+
+  // ═══════════════ 导出选项 Modal ═══════════════
+  const showExportModal = ref(false)
+  const exportFormat = ref('csv')
+  const exportColumns = ref<string[]>([])
+  const exportAllColumns = ref(true)
+  const exportColumnOptions = ref<{ label: string; value: string }[]>([])
+  const exportWhere = ref('')
+  const exportIncludeDropTable = ref(false)
+  const exportIncludeCreateTable = ref(false)
+  const exporting = ref(false)
+
+  const handleOpenExportModal = async (format: string) => {
+    exportFormat.value = format
+    exportWhere.value = ''
+    exportAllColumns.value = true
+    exportColumns.value = []
+    exportIncludeDropTable.value = false
+    exportIncludeCreateTable.value = false
+    showExportModal.value = true
+
+    // 获取列列表
+    if (!props.selectedServerId || !props.selectedDatabase || !props.selectedTable) return
+
+    const server = props.serverOptions.find((s: any) => s.value === props.selectedServerId)
+    const isPg = server?.type === 'postgresql'
+    const q = isPg ? '"' : '`'
+
+    try {
+      const res = await execDBManagerSqlAPI({
+        serverId: props.selectedServerId,
+        databaseName: props.selectedDatabase,
+        sql: `SELECT * FROM ${q}${props.selectedTable}${q} LIMIT 0`
+      })
+      if (res.code === 0 && res.data && res.data.type === 'query' && res.data.columns) {
+        exportColumnOptions.value = res.data.columns.map((c: string) => ({ label: c, value: c }))
+      }
+    } catch {
+      exportColumnOptions.value = []
+    }
+  }
+
+  const handleExportWithOptions = async () => {
+    if (!props.selectedServerId || !props.selectedDatabase || !props.selectedTable) return
+    exporting.value = true
+    try {
+      const res = await exportDBManagerTableAPI({
+        serverId: props.selectedServerId,
+        databaseName: props.selectedDatabase,
+        tableName: props.selectedTable,
+        format: exportFormat.value,
+        columns: exportAllColumns.value ? undefined : exportColumns.value,
+        where: exportWhere.value || undefined,
+        includeDropTable: exportFormat.value === 'sql' ? exportIncludeDropTable.value : undefined,
+        includeCreateTable: exportFormat.value === 'sql' ? exportIncludeCreateTable.value : undefined
+      })
+      const data = (res as any).data || res
+      const ext = exportFormat.value
+      downloadFile(data, `${props.selectedDatabase}_${props.selectedTable}.${ext}`)
+      message.success('导出成功')
+      showExportModal.value = false
+    } catch (error) {
+      message.error('导出失败')
+    } finally {
+      exporting.value = false
     }
   }
 
@@ -644,7 +711,18 @@ export const useDataView = (
     handleCellEditCancel,
     handleExportCSV,
     handleExportSQL,
+    handleExportWithOptions,
+    handleOpenExportModal,
     handleReset,
+    exportAllColumns,
+    exportColumnOptions,
+    exportColumns,
+    exportFormat,
+    exportIncludeCreateTable,
+    exportIncludeDropTable,
+    exportWhere,
+    exporting,
+    showExportModal,
     handleSearch,
     handleTableListPageChange,
     handleTableListPageSizeChange,
