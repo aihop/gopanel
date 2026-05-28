@@ -406,7 +406,6 @@ defineExpose({ fetchTableData, setAdvancedSearch, handleCellEditCancel })
         </div>
       </div>
     </n-modal>
-  </div>
 </template>
 
 <style scoped>
