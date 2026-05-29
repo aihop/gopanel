@@ -142,6 +142,10 @@ const {
   searchValue,
   selectedServerLabel,
   setAdvancedSearch,
+  detailColumns,
+  detailRow,
+  openDetail,
+  showDetailModal,
   showExportModal,
   tableColumns,
   tableData,
@@ -514,6 +518,35 @@ defineExpose({ fetchTableData, setAdvancedSearch, handleCellEditCancel })
           >导出</n-button>
         </div>
       </div>
+    </n-modal>
+
+    <!-- Row Detail Modal -->
+    <n-modal
+      v-model:show="showDetailModal"
+      preset="card"
+      style="width: 600px; max-height: 80vh;"
+      title="行详情"
+      size="small"
+    >
+      <div class="flex flex-col gap-1 text-sm max-h-[60vh] overflow-y-auto">
+        <div
+          v-for="col in detailColumns"
+          :key="col.key"
+          class="flex border-b border-slate-100 last:border-b-0"
+        >
+          <div class="w-48 shrink-0 px-3 py-2 text-slate-500 font-mono text-xs bg-slate-50 truncate">
+            {{ col.label }}
+          </div>
+          <div class="flex-1 px-3 py-2 text-slate-800 font-mono text-xs break-all">
+            {{ detailRow[col.key] === null ? 'NULL' : detailRow[col.key] === undefined ? '' : String(detailRow[col.key]) }}
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <div class="flex justify-end">
+          <n-button size="small" @click="showDetailModal = false">关闭</n-button>
+        </div>
+      </template>
     </n-modal>
 </template>
 

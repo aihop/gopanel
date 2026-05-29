@@ -532,6 +532,20 @@ export const useDataView = (
     }
   }
 
+  // 行级详情
+  const showDetailModal = ref(false)
+  const detailRow = ref<Record<string, any>>({})
+  const detailColumns = ref<{ key: string; label: string }[]>([])
+
+  const openDetail = (row: any, orderColumns: string[]) => {
+    detailRow.value = row
+    detailColumns.value = orderColumns.map((col: string) => ({
+      key: col,
+      label: col
+    }))
+    showDetailModal.value = true
+  }
+
   const buildRowColumns = (cols: string[]) => {
     const visibleCols = cols.filter((col: string) => col !== '__rowid__')
     searchOptions.value = visibleCols.map((col: string) => ({ label: col, value: col }))
@@ -540,10 +554,11 @@ export const useDataView = (
       title: '操作',
       key: 'actions',
       fixed: 'left',
-      width: 140,
+      width: 200,
       render(row: any) {
         return h('div', { class: 'flex gap-2' }, [
           h(NButton, { size: 'tiny', type: 'primary', ghost: true, onClick: () => emit.editRecord(row) }, { default: () => '编辑' }),
+          h(NButton, { size: 'tiny', ghost: true, onClick: () => openDetail(row, visibleCols) }, { default: () => '详情' }),
           h(NButton, { size: 'tiny', type: 'primary', ghost: true, onClick: () => emit.copyRecord(row) }, { default: () => '复制' }),
           h(NPopconfirm, { onPositiveClick: () => deleteRecord(row) }, {
             trigger: () => h(NButton, { size: 'tiny', type: 'error', ghost: true }, { default: () => '删除' }),
@@ -709,11 +724,15 @@ export const useDataView = (
     handleCellDblClick,
     handleCellEditSave,
     handleCellEditCancel,
+    detailColumns,
+    detailRow,
     handleExportCSV,
     handleExportSQL,
     handleExportWithOptions,
     handleOpenExportModal,
     handleReset,
+    openDetail,
+    showDetailModal,
     exportAllColumns,
     exportColumnOptions,
     exportColumns,
