@@ -24,12 +24,16 @@ const checkedKeys = ref<string[]>([])
 const batchLoading = ref(false)
 
 // 视图管理
-const viewMode = ref<'tables' | 'views'>('tables')
+const viewMode = ref<'tables' | 'views' | 'routines'>('tables')
 const views = ref<string[]>([])
 const loadingViews = ref(false)
 const viewDefinition = ref('')
 const viewDefinitionTitle = ref('')
 const showViewDefModal = ref(false)
+
+// 函数/存储过程管理
+const routines = ref<{ name: string; type: string }[]>([])
+const loadingRoutines = ref(false)
 
 const serverType = computed(() => {
   const s = props.serverOptions.find(s => s.value === props.selectedServerId)
@@ -213,6 +217,80 @@ const dropView = async (viewName: string) => {
   }
 }
 
+// 函数/存储过程
+const fetchRoutines = async () => {
+  if (!props.selectedServerId || !props.selectedDatabase) return
+  loadingRoutines.value = true
+  const t = serverType.value
+  let sql = ''
+  if (t === 'mysql' || t === 'mariadb') {
+    sql = `SELECT ROUTINE_NAME AS name, ROUTINE_TYPE AS type FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA = '${props.selectedDatabase.replace(/'/g, "''")}' ORDER BY ROUTINE_TYPE, ROUTINE_NAME`
+  } else if (t === 'postgresql') {
+    sql = `SELECT p.proname AS name, CASE p.prokind WHEN 'f' THEN 'FUNCTION' WHEN 'p' THEN 'PROCEDURE' ELSE 'FUNCTION' END AS type FROM pg_proc p JOIN pg_namespace n ON p.pronamespace = n.oid WHERE n.nspname = 'public' AND p.prokind IN ('f', 'p') ORDER BY p.proname`
+  }
+  if (!sql) { loadingRoutines.value = false; routines.value = []; return }
+  try {
+    const res = await execDBManagerSqlAPI({ serverId: props.selectedServerId, databaseName: props.selectedDatabase, sql })
+    if (res.code === 0 && res.data && res.data.type === 'query') {
+      routines.value = (res.data.rows || []).map((r: any) => ({
+        name: r.name || Object.values(r)[0] || '',
+        type: r.type || (t === 'mysql' ? 'FUNCTION' : 'FUNCTION')
+      }))
+    } else {
+      routines.value = []
+    }
+  } catch {
+    routines.value = []
+  } finally {
+    loadingRoutines.value = false
+  }
+}
+
+const openRoutineDefinition = async (name: string, type: string) => {
+  const t = serverType.value
+  const q = t === 'mysql' || t === 'mariadb' ? '`' : '"'
+  let sql = ''
+  if (t === 'mysql' || t === 'mariadb') {
+    sql = `SHOW CREATE ${type} ${q}${name}${q}`
+  } else if (t === 'postgresql') {
+    sql = `SELECT pg_get_functiondef(p.oid) AS definition FROM pg_proc p JOIN pg_namespace n ON p.pronamespace = n.oid WHERE n.nspname = 'public' AND p.proname = '${name.replace(/'/g, "''")}'`
+  }
+  if (!sql) { message.warning('当前数据库类型不支持'); return }
+  try {
+    const res = await execDBManagerSqlAPI({ serverId: props.selectedServerId!, databaseName: props.selectedDatabase!, sql })
+    if (res.code === 0 && res.data && res.data.type === 'query' && res.data.rows && res.data.rows.length > 0) {
+      const row = res.data.rows[0]
+      if (t === 'mysql') {
+        const val = Object.values(row)
+        viewDefinition.value = (val[2] || val[1] || val[0]) as string
+      } else {
+        viewDefinition.value = Object.values(row)[0] as string
+      }
+    } else {
+      viewDefinition.value = '-- 无法获取定义'
+    }
+  } catch {
+    viewDefinition.value = '-- 获取定义失败'
+  }
+  viewDefinitionTitle.value = `${type} ${name}`
+  showViewDefModal.value = true
+}
+
+const dropRoutine = async (name: string, type: string) => {
+  const q = serverType.value === 'mysql' || serverType.value === 'mariadb' ? '`' : '"'
+  try {
+    const res = await execDBManagerSqlAPI({ serverId: props.selectedServerId!, databaseName: props.selectedDatabase!, sql: `DROP ${type} IF EXISTS ${q}${name}${q}` })
+    if (res.code === 0) {
+      message.success(`${type} ${name} 已删除`)
+      fetchRoutines()
+    } else {
+      message.error(res.message || '删除失败')
+    }
+  } catch {
+    message.error('删除请求失败')
+  }
+}
+
 const handleBatchTruncate = async () => {
   if (checkedKeys.value.length === 0) return
   batchLoading.value = true
@@ -267,6 +345,7 @@ watch(() => [props.selectedServerId, props.selectedDatabase], () => {
 
 watch(viewMode, (mode) => {
   if (mode === 'views') fetchViews()
+  if (mode === 'routines') fetchRoutines()
 })
 
 onMounted(fetchData)
@@ -290,6 +369,14 @@ onMounted(fetchData)
       >
         <template #icon><n-icon :component="renderIcon('mdi:eye-outline')" /></template>
         视图
+      </n-button>
+      <n-button
+        size="tiny"
+        :type="viewMode === 'routines' ? 'primary' : 'default'"
+        @click="viewMode = 'routines'"
+      >
+        <template #icon><n-icon :component="renderIcon('mdi:code-braces')" /></template>
+        函数
       </n-button>
     </div>
 
@@ -388,9 +475,51 @@ onMounted(fetchData)
         </div>
       </div>
     </template>
+
+    <!-- 函数/存储过程列表 -->
+    <template v-if="viewMode === 'routines'">
+      <div class="p-2 border-b border-slate-200 bg-[#f8f9fa] flex justify-between items-center text-xs">
+        <div class="text-slate-700 flex items-center gap-2">
+          <n-icon :component="renderIcon('mdi:code-braces')" />
+          <span class="font-semibold">函数与存储过程</span>
+          <span class="text-slate-400">·</span>
+          <span>{{ routines.length }} 个</span>
+        </div>
+        <div class="flex gap-2">
+          <n-button size="tiny" @click="fetchRoutines" :loading="loadingRoutines">刷新</n-button>
+        </div>
+      </div>
+      <div class="flex-1 p-2 bg-white overflow-auto">
+        <n-empty v-if="!loadingRoutines && routines.length === 0" description="当前数据库中没有函数或存储过程" class="mt-10" />
+        <div v-else class="flex flex-col gap-2">
+          <div
+            v-for="r in routines"
+            :key="r.name"
+            class="flex items-center justify-between rounded border border-slate-200 px-3 py-2 hover:bg-slate-50"
+          >
+            <div class="flex items-center gap-2">
+              <n-icon :component="renderIcon(r.type === 'PROCEDURE' ? 'mdi:application-braces' : 'mdi:code-braces')" class="text-slate-400" />
+              <span>
+                <span class="font-medium text-sm">{{ r.name }}</span>
+                <n-tag size="tiny" :type="r.type === 'PROCEDURE' ? 'info' : 'success'" class="ml-2">{{ r.type }}</n-tag>
+              </span>
+            </div>
+            <div class="flex gap-2">
+              <n-button size="tiny" @click="openRoutineDefinition(r.name, r.type)">定义</n-button>
+              <n-popconfirm @positive-click="dropRoutine(r.name, r.type)">
+                <template #trigger>
+                  <n-button size="tiny" type="error" ghost>删除</n-button>
+                </template>
+                确定要删除 {{ r.type }} {{ r.name }} 吗？
+              </n-popconfirm>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
   </div>
 
-  <!-- 视图定义 Modal -->
+  <!-- 定义查看 Modal -->
   <n-modal
     v-model:show="showViewDefModal"
     preset="card"
