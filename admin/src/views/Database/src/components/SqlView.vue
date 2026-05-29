@@ -49,6 +49,32 @@ const clearHistory = () => {
   if (key) localStorage.removeItem(key)
 }
 
+const downloadFile = (content: string, filename: string) => {
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+const exportSqlResultAsCSV = () => {
+  if (!sqlResult.value || sqlResult.value.type !== 'query') return
+  const cols = sqlResult.value.columns || []
+  const rows = sqlResult.value.rows || []
+  const csvRows: string[] = []
+  csvRows.push(cols.map((c: string) => `"${c.replace(/"/g, '""')}"`).join(','))
+  for (const row of rows) {
+    csvRows.push(cols.map((c: string) => {
+      const v = row[c]
+      if (v === null || v === undefined) return ''
+      return `"${String(v).replace(/"/g, '""')}"`
+    }).join(','))
+  }
+  downloadFile('\ufeff' + csvRows.join('\n'), `sql_result_${Date.now()}.csv`)
+}
+
 onMounted(loadHistory)
 
 const selectedServerLabel = computed(() => {
@@ -272,10 +298,13 @@ const executeSql = async () => {
         >
           影响行数: {{ sqlResult.affected }}
         </n-alert>
-        <div
-          v-else
-          class="h-full bg-white border border-slate-200"
-        >
+        <div v-else class="bg-white border border-slate-200 flex flex-col h-full">
+          <div class="p-1.5 border-b border-slate-200 bg-[#f8f9fa] flex justify-end gap-2">
+            <n-button size="tiny" @click="exportSqlResultAsCSV">
+              <template #icon><n-icon :component="renderIcon('mdi:file-delimited-outline')" /></template>
+              导出 CSV
+            </n-button>
+          </div>
           <n-data-table
             :columns="sqlResultColumns"
             :data="sqlResult.rows"
