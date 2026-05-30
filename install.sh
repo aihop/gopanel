@@ -112,33 +112,39 @@ json_get() {
   local key="$1"
   local json="$2"
 
-  if command -v python3 >/dev/null 2>&1; then
-    python3 -c 'import json,sys
-key=sys.argv[1]
-try:
-    data=json.loads(sys.stdin.read() or "{}")
-except Exception:
-    sys.exit(1)
-v=data.get(key, "")
-print("" if v is None else v)' "$key" <<<"$json"
+  # 使用 awk 提取简单的顶层 JSON 字段 (支持跨行和包含转义引号的字符串)
+  # 匹配模式: "key"\s*:\s*"value" 或 "key"\s*:\s*123
+  local val
+  val="$(echo "$json" | awk -v k="\"$key\"" '
+    BEGIN { FS=":"; RS="," }
+    $1 ~ k {
+      # 去掉前导和后置的空格、换行
+      gsub(/^[ \t\n]+/, "", $2)
+      gsub(/[ \t\n]+$/, "", $2)
+      # 移除引号
+      gsub(/^"/, "", $2)
+      gsub(/"$/, "", $2)
+      # 移除结尾的可能存在的 } 或者 ]
+      gsub(/}$/, "", $2)
+      gsub(/]$/, "", $2)
+      gsub(/"$/, "", $2)
+      print $2
+      exit
+    }
+  ')"
+  
+  if [ -n "$val" ] && [ "$val" != "null" ]; then
+    echo "$val"
     return 0
   fi
-  if command -v python >/dev/null 2>&1; then
-    python -c 'import json,sys
-key=sys.argv[1]
-try:
-    data=json.loads(sys.stdin.read() or "{}")
-except Exception:
-    sys.exit(1)
-v=data.get(key, "")
-print("" if v is None else v)' "$key" <<<"$json"
+  
+  # 如果 awk 没有提取到，且有 jq，则回退到 jq
+  if command -v jq >/dev/null 2>&1; then
+    echo "$json" | jq -r ".${key} // empty"
     return 0
   fi
-  if command -v node >/dev/null 2>&1; then
-    node -e 'const fs=require("fs");const key=process.argv[1];let data={};try{data=JSON.parse(fs.readFileSync(0,"utf8")||"{}")}catch(e){process.exit(1)}const v=data[key];process.stdout.write((v===undefined||v===null)?"":String(v));' "$key" <<<"$json"
-    return 0
-  fi
-  die "缺少 JSON 解析工具（python3/python/node 任一即可）"
+
+  return 1
 }
 
 require_cmds() {
@@ -569,6 +575,24 @@ prompt_basic_config() {
     read -r -e -p "请输入端口 (默认: ${CONFIG_PORT}): " input_port || true
     input_port="${input_port:-$CONFIG_PORT}"
     if [[ "$input_port" =~ ^[0-9]+$ ]] && [ "$input_port" -ge 1 ] && [ "$input_port" -le 65535 ]; then
+      # 端口冲突检测
+      if command -v ss >/dev/null 2>&1; then
+        if ss -tuln | grep -q ":${input_port} "; then
+          warn "端口 ${input_port} 似乎已被占用，请尝试其他端口。"
+          continue
+        fi
+      elif command -v netstat >/dev/null 2>&1; then
+        if netstat -tuln | grep -q ":${input_port} "; then
+          warn "端口 ${input_port} 似乎已被占用，请尝试其他端口。"
+          continue
+        fi
+      elif command -v lsof >/dev/null 2>&1; then
+        if run_privileged lsof -i ":${input_port}" >/dev/null 2>&1; then
+          warn "端口 ${input_port} 似乎已被占用，请尝试其他端口。"
+          continue
+        fi
+      fi
+
       CONFIG_PORT="$input_port"
       break
     fi
@@ -766,7 +790,11 @@ install_gpc_binary() {
 install_gopanel_binary() {
   log "安装 gopanel 到 ${CONFIG_INSTALL_DIR}"
   run_privileged mkdir -p "${CONFIG_INSTALL_DIR}"
-  run_privileged cp "${BIN_GOPANEL_PATH}" "${CONFIG_INSTALL_DIR}/gopanel"
+  if [ "${UPDATE_MODE}" = "true" ] && [ -f "${CONFIG_INSTALL_DIR}/gopanel" ]; then
+    log "升级模式：备份旧版 gopanel"
+    run_privileged cp -f "${CONFIG_INSTALL_DIR}/gopanel" "${CONFIG_INSTALL_DIR}/gopanel.bak"
+  fi
+  run_privileged cp -f "${BIN_GOPANEL_PATH}" "${CONFIG_INSTALL_DIR}/gopanel"
   run_privileged chmod 755 "${CONFIG_INSTALL_DIR}/gopanel"
 }
 
@@ -784,10 +812,14 @@ install_gpagent_binary() {
   fi
   if [ "${UPDATE_MODE}" = "true" ]; then
     stop_gpagent_service
+    if [ -f "${CONFIG_INSTALL_DIR}/gp-agent" ]; then
+      log "升级模式：备份旧版 gp-agent"
+      run_privileged cp -f "${CONFIG_INSTALL_DIR}/gp-agent" "${CONFIG_INSTALL_DIR}/gp-agent.bak"
+    fi
   fi
   log "安装 gp-agent 到 ${CONFIG_INSTALL_DIR}/gp-agent"
   run_privileged mkdir -p "${CONFIG_INSTALL_DIR}"
-  run_privileged cp "${BIN_GPAGENT_PATH}" "${CONFIG_INSTALL_DIR}/gp-agent"
+  run_privileged cp -f "${BIN_GPAGENT_PATH}" "${CONFIG_INSTALL_DIR}/gp-agent"
   run_privileged chmod 755 "${CONFIG_INSTALL_DIR}/gp-agent"
 }
 
@@ -1272,6 +1304,38 @@ install_autostart_services() {
     install_service_gpc_linux
     install_service_gopanel_linux
     install_service_gpagent_linux
+    
+    if [ "${UPDATE_MODE}" = "true" ]; then
+      log "检查升级后的服务状态..."
+      sleep 3
+      if ! systemctl is-active --quiet gopanel.service; then
+        warn "GoPanel 升级后启动失败，开始回滚..."
+        if [ -f "${CONFIG_INSTALL_DIR}/gopanel.bak" ]; then
+          run_privileged cp -f "${CONFIG_INSTALL_DIR}/gopanel.bak" "${CONFIG_INSTALL_DIR}/gopanel"
+          run_privileged systemctl restart gopanel.service
+          if systemctl is-active --quiet gopanel.service; then
+            warn "GoPanel 回滚成功，当前仍运行旧版本。"
+          else
+            die "GoPanel 回滚后仍然启动失败，请检查 ${CONFIG_INSTALL_DIR} 日志。"
+          fi
+        else
+          die "无法回滚：未找到 gopanel.bak 备份。"
+        fi
+      fi
+      if bool_is_true "${CONFIG_INSTALL_GPAGENT}" && [ -x "${CONFIG_INSTALL_DIR}/gp-agent" ]; then
+        if ! systemctl is-active --quiet gp-agent.service; then
+          warn "gp-agent 升级后启动失败，开始回滚..."
+          if [ -f "${CONFIG_INSTALL_DIR}/gp-agent.bak" ]; then
+            run_privileged cp -f "${CONFIG_INSTALL_DIR}/gp-agent.bak" "${CONFIG_INSTALL_DIR}/gp-agent"
+            run_privileged systemctl restart gp-agent.service
+            warn "gp-agent 回滚完成。"
+          else
+            warn "无法回滚：未找到 gp-agent.bak 备份。"
+          fi
+        fi
+      fi
+    fi
+
   else
     install_service_gpc_macos
     install_service_gopanel_macos
@@ -1300,95 +1364,9 @@ install_podman() {
     return 0
   fi
 
-  ensure_gnupg_for_apt() {
-    if command -v gpg >/dev/null 2>&1; then
-      return 0
-    fi
-    run_privileged apt-get update
-    run_privileged apt-get install -y gnupg ca-certificates
-  }
-
-  read_os_release_value() {
-    local key="$1"
-    local file="/etc/os-release"
-    if [ ! -f "${file}" ]; then
-      echo ""
-      return 0
-    fi
-    awk -F= -v k="${key}" '
-      $1==k {
-        v=$2
-        gsub(/^"/,"",v); gsub(/"$/,"",v)
-        print v
-        exit
-      }
-    ' "${file}" 2>/dev/null || true
-  }
-
-  configure_podman_repo_apt_latest() {
-    local id version_id repo_dist repo_url key_url keyring list_file
-    id="$(read_os_release_value ID)"
-    version_id="$(read_os_release_value VERSION_ID)"
-    id="$(echo "${id}" | tr '[:upper:]' '[:lower:]')"
-
-    if [ -z "${version_id}" ]; then
-      warn "无法识别系统版本（/etc/os-release VERSION_ID 为空），将尝试直接 apt 安装 Podman。"
-      return 1
-    fi
-
-    case "${id}" in
-      debian)
-        local major
-        major="${version_id%%.*}"
-        if [[ "${major}" =~ ^[0-9]+$ ]] && [ "${major}" -ge 13 ]; then
-          warn "检测到 Debian ${version_id}，将跳过 devel:kubic:libcontainers:stable 源（该源可能缺少 Debian_${version_id}），改为直接使用 Debian 官方仓库安装 Podman。"
-          return 1
-        fi
-        repo_dist="Debian_${version_id}"
-        ;;
-      ubuntu)
-        repo_dist="xUbuntu_${version_id}"
-        ;;
-      *)
-        warn "当前发行版 ${id} 未配置 Podman 官方新版本源，将尝试直接 apt 安装。"
-        return 1
-        ;;
-    esac
-
-    repo_url="https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/${repo_dist}/"
-    key_url="${repo_url}Release.key"
-    keyring="/etc/apt/keyrings/libcontainers-archive-keyring.gpg"
-    list_file="/etc/apt/sources.list.d/devel:kubic:libcontainers:stable.list"
-
-    run_privileged mkdir -p /etc/apt/keyrings
-    local tmpkey
-    tmpkey="$(mktemp -t libcontainers_key.XXXXXX)"
-    if ! curl -fsSL "${key_url}" -o "${tmpkey}"; then
-      rm -f "${tmpkey}"
-      warn "下载 Podman 源密钥失败（将回退到官方仓库安装）: ${key_url}"
-      return 1
-    fi
-    if ! curl -fsSL "${repo_url}Release" -o /dev/null; then
-      rm -f "${tmpkey}"
-      warn "Podman 源不存在或不可用（将回退到官方仓库安装）: ${repo_url}"
-      return 1
-    fi
-    run_privileged gpg --dearmor -o "${keyring}" "${tmpkey}"
-    rm -f "${tmpkey}"
-    run_privileged chmod 644 "${keyring}"
-    printf "deb [signed-by=%s] %s /\n" "${keyring}" "${repo_url}" | run_privileged tee "${list_file}" >/dev/null
-    return 0
-  }
-
   if command -v apt-get >/dev/null 2>&1; then
-    ensure_gnupg_for_apt
-    if configure_podman_repo_apt_latest; then
-      run_privileged apt-get update
-      run_privileged apt-get install -y podman
-    else
-      run_privileged apt-get update
-      run_privileged apt-get install -y podman
-    fi
+    run_privileged apt-get update
+    run_privileged apt-get install -y podman
   elif command -v dnf >/dev/null 2>&1; then
     run_privileged dnf install -y podman
   elif command -v yum >/dev/null 2>&1; then
