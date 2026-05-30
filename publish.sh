@@ -57,8 +57,12 @@ else
     TAG_NAME="v${VERSION}"
 fi
 
-# 仓库名称
-REPO="${2:-aihop/gopanel}"
+# 仓库名称 (防止误传 VERSION_CODE，要求必须包含 / 才视为仓库名)
+if [ -n "${2:-}" ] && [[ "${2}" == */* ]]; then
+    REPO="${2}"
+else
+    REPO="aihop/gopanel"
+fi
 OUTDIR="${PROJECT_ROOT}/dist/${TAG_NAME}"
 
 echo "==========================================="
