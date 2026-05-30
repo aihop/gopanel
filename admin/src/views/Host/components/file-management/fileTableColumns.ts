@@ -39,6 +39,8 @@ export const createFileTableColumns = (options: FileTableColumnOptions): DataTab
 
   // 已计算的目录大小缓存 { [path]: size }
   const dirSizeMap = reactive({} as Record<string, number>)
+  // 正在计算中的目录 { [path]: true }
+  const dirSizeLoadingMap = reactive({} as Record<string, boolean>)
 
   const copyAuthorizedDownloadLink = async (row: File.File) => {
     if (!row?.path) return
@@ -75,6 +77,8 @@ export const createFileTableColumns = (options: FileTableColumnOptions): DataTab
 
   const handleDirSize = async (row: File.File) => {
     if (!row.isDir || !row.path) return
+    if (dirSizeLoadingMap[row.path]) return // 已经在计算中
+    dirSizeLoadingMap[row.path] = true
     try {
       const res = await ComputeDirSize({ path: row.path })
       const size = res?.data?.size
@@ -83,6 +87,8 @@ export const createFileTableColumns = (options: FileTableColumnOptions): DataTab
       }
     } catch {
       // 静默失败，保留按钮状态
+    } finally {
+      dirSizeLoadingMap[row.path] = false
     }
   }
 
@@ -127,12 +133,15 @@ export const createFileTableColumns = (options: FileTableColumnOptions): DataTab
         if (cached !== undefined) {
           return h("span", computeSize(cached))
         }
+        const loading = dirSizeLoadingMap[row.path]
         return h(
           NButton,
           {
             size: "tiny",
             text: true,
             type: "primary",
+            loading: loading,
+            disabled: loading,
             onClick: () => handleDirSize(row)
           },
           { default: () => t("file.calcDirSize") }
