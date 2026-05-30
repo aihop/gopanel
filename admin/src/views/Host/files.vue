@@ -88,10 +88,10 @@
 
 <script lang="ts" setup>
 import type { File } from "@/api/interface/file"
-import { ComputeDirSize, GetFileContent, GetFilesList } from "@/api/modules/file"
+import { GetFileContent, GetFilesList } from "@/api/modules/file"
 import { Languages } from "@/global/mimetype"
-import { MsgWarning, MsgSuccess, MsgError } from "@/utils/message"
-import { computeSize, copyText, getFileType } from "@/utils/util"
+import { MsgWarning } from "@/utils/message"
+import { copyText, getFileType } from "@/utils/util"
 import { useMessage } from "naive-ui"
 import { onMounted, reactive, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
@@ -321,21 +321,6 @@ function openView(row: File.File) {
 	return action ? action(row) : openCodeEditor(path, row.extension)
 }
 
-const openDirSize = async (row: File.File) => {
-	if (!row.isDir) return
-	try {
-		const res = await ComputeDirSize({ path: row.path })
-		const size = res?.data?.size
-		if (size !== undefined && size !== null) {
-			MsgSuccess(`${row.name} 大小：${computeSize(size)}`)
-		} else {
-			MsgError(t("commons.msg.operationFailed"))
-		}
-	} catch (e: any) {
-		MsgError(e?.msg || t("commons.msg.operationFailed"))
-	}
-}
-
 const openCodeEditor = (path: string, extension: string) => {
 	codeReq.path = path
 	codeReq.expand = true
@@ -392,7 +377,6 @@ const columns = createFileTableColumns({
 	onCompress: openCompress,
 	onDecompress: openDeCompress,
 	onRename: openRename,
-	onDirSize: openDirSize,
 	onError: (text) => message.error(text)
 })
 

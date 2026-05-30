@@ -1,10 +1,11 @@
 import type { File } from "@/api/interface/file"
 import type { DataTableColumns } from "naive-ui"
 import { userTokenAPI } from "@/api/modules/user"
+import { ComputeDirSize } from "@/api/modules/file"
 import { Mimetypes } from "@/global/mimetype"
 import { formatTime } from "@/utils/date"
 import { computeSize, copyText, downloadFile } from "@/utils/util"
-import { h } from "vue"
+import { h, reactive } from "vue"
 import { NButton, NDropdown, NSpace } from "naive-ui"
 
 type Translate = (key: string) => string
@@ -19,7 +20,6 @@ interface FileTableColumnOptions {
   onCompress: (items: File.File[]) => void
   onDecompress: (row: File.File) => void
   onRename: (row: File.File) => void
-  onDirSize: (row: File.File) => void
   onError: (message: string) => void
 }
 
@@ -34,9 +34,11 @@ export const createFileTableColumns = (options: FileTableColumnOptions): DataTab
     onCompress,
     onDecompress,
     onRename,
-    onDirSize,
     onError
   } = options
+
+  // 已计算的目录大小缓存 { [path]: size }
+  const dirSizeMap = reactive({} as Record<string, number>)
 
   const copyAuthorizedDownloadLink = async (row: File.File) => {
     if (!row?.path) return
@@ -69,6 +71,19 @@ export const createFileTableColumns = (options: FileTableColumnOptions): DataTab
       return
     }
     downloadFile(row.path, auth)
+  }
+
+  const handleDirSize = async (row: File.File) => {
+    if (!row.isDir || !row.path) return
+    try {
+      const res = await ComputeDirSize({ path: row.path })
+      const size = res?.data?.size
+      if (size !== undefined && size !== null) {
+        dirSizeMap[row.path] = size
+      }
+    } catch {
+      // 静默失败，保留按钮状态
+    }
   }
 
   return [
@@ -105,7 +120,23 @@ export const createFileTableColumns = (options: FileTableColumnOptions): DataTab
       title: "大小",
       key: "size",
       render(row: File.File) {
-        return h("span", row.isDir ? "-" : computeSize(row.size))
+        if (!row.isDir) {
+          return h("span", computeSize(row.size))
+        }
+        const cached = dirSizeMap[row.path]
+        if (cached !== undefined) {
+          return h("span", computeSize(cached))
+        }
+        return h(
+          NButton,
+          {
+            size: "tiny",
+            text: true,
+            type: "primary",
+            onClick: () => handleDirSize(row)
+          },
+          { default: () => t("file.calcDirSize") }
+        )
       }
     },
     {
@@ -172,7 +203,6 @@ export const createFileTableColumns = (options: FileTableColumnOptions): DataTab
                   options: [
                     { label: t("file.copyDir"), key: "copyDir" },
                     { label: t("file.editPermissions"), key: "batchRole" },
-                    { label: t("file.calcDirSize"), key: "dirSize", disabled: !row.isDir },
                     { label: t("file.rename"), key: "rename" },
                     { label: t("file.compress"), key: "compress" },
                     {
@@ -201,9 +231,6 @@ export const createFileTableColumns = (options: FileTableColumnOptions): DataTab
                         break
                       case "decompress":
                         onDecompress(row)
-                        break
-                      case "dirSize":
-                        onDirSize(row)
                         break
                       case "rename":
                         onRename(row)
