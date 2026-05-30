@@ -31,6 +31,8 @@ type WebsiteCreate struct {
 	IPBlocklist    string `json:"ipBlocklist"`
 	SecurityHeader bool   `json:"securityHeader"`
 	HstsEnabled    bool   `json:"hstsEnabled"`
+
+	HttpConfig string `json:"httpConfig"`
 }
 
 type NewAppInstall struct {
@@ -61,6 +63,8 @@ type WebsiteUpdate struct {
 	IPBlocklist    string `json:"ipBlocklist"`
 	SecurityHeader bool   `json:"securityHeader"`
 	HstsEnabled    bool   `json:"hstsEnabled"`
+
+	HttpConfig string `json:"httpConfig"`
 }
 
 type WebsiteLogRead struct {

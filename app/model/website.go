@@ -10,7 +10,7 @@ type Website struct {
 	Alias         string    `gorm:"type:varchar;not null" json:"alias"`
 	Remark        string    `gorm:"type:longtext;" json:"remark"`
 	Status        string    `gorm:"type:varchar;not null" json:"status"`
-	HttpConfig    string    `gorm:"type:varchar;not null" json:"httpConfig"`
+	HttpConfig    string    `gorm:"type:text;" json:"httpConfig"`
 	ExpireDate    time.Time `json:"expireDate"`
 
 	Proxy         string `gorm:"type:varchar;" json:"proxy"`

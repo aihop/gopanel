@@ -121,6 +121,7 @@ func (s WebsiteService) Create(ctx context.Context, req *request.WebsiteCreate, 
 		IPBlocklist:    strings.TrimSpace(req.IPBlocklist),
 		SecurityHeader: req.SecurityHeader,
 		HstsEnabled:    req.HstsEnabled,
+		HttpConfig:     req.HttpConfig,
 	}
 
 	var appInstall *model.AppInstall

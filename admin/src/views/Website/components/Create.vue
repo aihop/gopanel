@@ -258,6 +258,29 @@
 
         <n-divider class="!my-4" />
 
+        <details class="mb-4 rounded-2xl border border-slate-200">
+          <summary class="cursor-pointer select-none px-4 py-3 text-sm font-medium text-slate-600 hover:text-slate-800">
+            自定义 Caddy 配置
+            <span class="ml-2 text-xs text-slate-400">（可选）</span>
+          </summary>
+          <div class="border-t border-slate-100 px-4 py-3">
+            <n-alert
+              type="info"
+              :show-icon="true"
+              class="mb-3 text-xs"
+            >
+              追加到该站点的 Caddy server block 末尾，修改面板参数不会覆盖此处内容。
+              修改后需重新"应用配置"才能生效。
+            </n-alert>
+            <n-input
+              type="textarea"
+              v-model:value="form.httpConfig"
+              placeholder="# 示例：\nheader /api/* {\n  Access-Control-Allow-Origin *\n}\nbasicauth /admin/* {\n  user $2a$...\n}"
+              :autosize="{ minRows: 4, maxRows: 16 }"
+            />
+          </div>
+        </details>
+
         <n-form-item
           label="备注"
           path="remark"
@@ -331,6 +354,7 @@ type WebsiteFormState = {
 	ipBlocklist: string
 	securityHeader: boolean
 	hstsEnabled: boolean
+	httpConfig: string
 }
 type WebsiteFormRecord = Website.WebsiteDTO & {
 	domains?: WebsiteDomainValue[]
@@ -371,6 +395,7 @@ function createDefaultForm(): WebsiteFormState {
 		ipBlocklist: "",
 		securityHeader: false,
 		hstsEnabled: false,
+		httpConfig: "",
 	}
 }
 
@@ -510,6 +535,7 @@ function buildCreatePayload(): Website.WebSiteCreateReq {
 		ipBlocklist: form.value.ipBlocklist,
 		securityHeader: form.value.securityHeader,
 		hstsEnabled: form.value.hstsEnabled,
+		httpConfig: form.value.httpConfig,
 	}
 }
 
@@ -533,7 +559,8 @@ function buildUpdatePayload(): Website.WebSiteUpdateReq {
 		ipAllowlist: form.value.ipAllowlist,
 		ipBlocklist: form.value.ipBlocklist,
 		securityHeader: form.value.securityHeader,
-		hstsEnabled: form.value.hstsEnabled
+		hstsEnabled: form.value.hstsEnabled,
+		httpConfig: form.value.httpConfig
 	}
 }
 

@@ -170,6 +170,11 @@ func renderCaddyfile(websites []model.Website, domainByWebsite map[uint][]model.
 			b.WriteString("  }\n\n")
 		}
 
+		if custom := strings.TrimSpace(w.HttpConfig); custom != "" {
+			b.WriteString(custom)
+			b.WriteString("\n\n")
+		}
+
 		switch w.Type {
 		case constant.Static:
 			root := strings.TrimSpace(w.SiteDir)

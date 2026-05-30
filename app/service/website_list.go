@@ -119,6 +119,7 @@ func (s *WebsiteService) List(ctx *gormx.Contextx) (websiteDTOs []*response.Webs
 			IPBlocklist:        web.IPBlocklist,
 			SecurityHeader:     web.SecurityHeader,
 			HstsEnabled:        web.HstsEnabled,
+			HttpConfig:         web.HttpConfig,
 			ActiveRelease:      buildWebsiteDeploySummary(activeReleaseMap[web.ID]),
 			LatestPipelineSync: buildWebsiteDeploySummary(latestPipelineSyncMap[web.ID]),
 		})

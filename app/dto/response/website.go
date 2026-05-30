@@ -54,6 +54,7 @@ type WebsiteRes struct {
 	IPBlocklist    string `json:"ipBlocklist"`
 	SecurityHeader bool   `json:"securityHeader"`
 	HstsEnabled    bool   `json:"hstsEnabled"`
+	HttpConfig     string `json:"httpConfig"`
 
 	ActiveRelease      *WebsiteDeploySummary `json:"activeRelease,omitempty"`
 	LatestPipelineSync *WebsiteDeploySummary `json:"latestPipelineSync,omitempty"`

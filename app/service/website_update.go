@@ -51,6 +51,7 @@ func (s WebsiteService) Update(ctx context.Context, req *request.WebsiteUpdate) 
 	website.IPBlocklist = strings.TrimSpace(req.IPBlocklist)
 	website.SecurityHeader = req.SecurityHeader
 	website.HstsEnabled = req.HstsEnabled
+	website.HttpConfig = req.HttpConfig
 
 	var newContent, updatedContent string
 	var domains []model.WebsiteDomain

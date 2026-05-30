@@ -47,6 +47,7 @@ export namespace Website {
         ipBlocklist?: string;
         securityHeader?: boolean;
         hstsEnabled?: boolean;
+        httpConfig?: string;
     }
 
     export interface WebsiteDTO extends Website {
@@ -166,6 +167,7 @@ export namespace Website {
         ipBlocklist?: string;
         securityHeader?: boolean;
         hstsEnabled?: boolean;
+        httpConfig?: string;
     }
 
     export interface WebSiteUpdateReq {
@@ -191,6 +193,7 @@ export namespace Website {
         ipBlocklist?: string;
         securityHeader?: boolean;
         hstsEnabled?: boolean;
+        httpConfig?: string;
     }
 
     export interface WebSiteOp {
