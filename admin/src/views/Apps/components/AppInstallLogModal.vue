@@ -53,7 +53,10 @@ watch(() => props.logsData.length, () => {
     >
       <div class="text-sm leading-6">
         <div v-if="repairTipMessage">{{ repairTipMessage }}</div>
-        <div class="mt-2 whitespace-pre-wrap rounded-md bg-slate-50 p-3 font-mono text-xs text-slate-700">{{ repairTipCommands }}</div>
+        <div
+          v-if="repairTipCommands"
+          class="mt-2 whitespace-pre-wrap rounded-md bg-slate-50 p-3 font-mono text-xs text-slate-700"
+        >{{ repairTipCommands }}</div>
         <div
           v-if="repairTipOutput"
           class="mt-2 whitespace-pre-wrap rounded-md bg-slate-50 p-3 font-mono text-xs text-slate-700"
