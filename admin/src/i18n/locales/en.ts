@@ -1211,6 +1211,7 @@ export default {
 		replace: "Overwrite existing files",
 		compressSuccess: "Compressed successfully",
 		compressFailed: "Compression failed",
+		calcDirSize: "Calculate size",
 		downloadRemote: "Download Remote File",
 		remoteUrl: "Remote URL",
 		remoteUrlPlaceholder: "https://example.com/file.zip",

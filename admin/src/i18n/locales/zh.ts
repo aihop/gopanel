@@ -1161,6 +1161,7 @@ export default {
 		replace: "覆盖已存在的文件",
 		compressSuccess: "压缩成功",
 		compressFailed: "压缩失败",
+		calcDirSize: "计算大小",
 		downloadRemote: "下载远程文件",
 		remoteUrl: "远程地址",
 		remoteUrlPlaceholder: "https://example.com/file.zip",

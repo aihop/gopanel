@@ -19,6 +19,7 @@ interface FileTableColumnOptions {
   onCompress: (items: File.File[]) => void
   onDecompress: (row: File.File) => void
   onRename: (row: File.File) => void
+  onDirSize: (row: File.File) => void
   onError: (message: string) => void
 }
 
@@ -33,6 +34,7 @@ export const createFileTableColumns = (options: FileTableColumnOptions): DataTab
     onCompress,
     onDecompress,
     onRename,
+    onDirSize,
     onError
   } = options
 
@@ -170,6 +172,7 @@ export const createFileTableColumns = (options: FileTableColumnOptions): DataTab
                   options: [
                     { label: t("file.copyDir"), key: "copyDir" },
                     { label: t("file.editPermissions"), key: "batchRole" },
+                    { label: t("file.calcDirSize"), key: "dirSize", disabled: !row.isDir },
                     { label: t("file.rename"), key: "rename" },
                     { label: t("file.compress"), key: "compress" },
                     {
@@ -198,6 +201,9 @@ export const createFileTableColumns = (options: FileTableColumnOptions): DataTab
                         break
                       case "decompress":
                         onDecompress(row)
+                        break
+                      case "dirSize":
+                        onDirSize(row)
                         break
                       case "rename":
                         onRename(row)
