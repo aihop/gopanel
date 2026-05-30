@@ -128,7 +128,7 @@ func (u *LogService) ReadSystemLog(name string) (string, error) {
 	if name == time.Now().Format("2006-01-02") {
 		fileName = "gopanel.log"
 	} else {
-		fileName = fmt.Sprintf("gopanel-%s.log.gz", name)
+		fileName = fmt.Sprintf("gopanel-%s.log", name)
 	}
 
 	fullPath := filepath.Join(logDir, fileName)
