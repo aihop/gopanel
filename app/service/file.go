@@ -1,8 +1,17 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"io/fs"
+	"os"
+	"os/exec"
+	"path"
+	"path/filepath"
+	"strings"
+	"time"
+
 	"github.com/aihop/gopanel/app/dto/request"
 	"github.com/aihop/gopanel/app/dto/response"
 	"github.com/aihop/gopanel/buserr"
@@ -12,13 +21,6 @@ import (
 	"github.com/aihop/gopanel/utils/files"
 	"github.com/aihop/gopanel/utils/token"
 	"github.com/gofiber/fiber/v3"
-	"io/fs"
-	"os"
-	"os/exec"
-	"path"
-	"path/filepath"
-	"strings"
-	"time"
 )
 
 type FileService struct{ c fiber.Ctx }
@@ -307,7 +309,8 @@ func (f *FileService) Wget(w request.FileWget) (string, error) {
 }
 
 // WgetStream 通过 DownloadFileLogger 异步下载文件并实时回传进度
-func (f *FileService) WgetStream(w request.FileWget, logger *DownloadFileLogger) error {
+// ctx 用于支持取消下载
+func (f *FileService) WgetStream(ctx context.Context, w request.FileWget, logger *DownloadFileLogger) error {
 	fo := files.NewFileOp()
 	dstPath := filepath.Join(w.Path, w.Name)
 
@@ -321,8 +324,13 @@ func (f *FileService) WgetStream(w request.FileWget, logger *DownloadFileLogger)
 		logger.SetProgress(written, total)
 	}
 
-	err := fo.DownloadFileWithCallback(w.Url, dstPath, w.IgnoreCertificate, progressFn)
+	err := fo.DownloadFileWithCallback(ctx, w.Url, dstPath, w.IgnoreCertificate, progressFn)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			logger.AppendLine("下载已取消")
+			logger.SetStatus("cancelled")
+			return err
+		}
 		logger.Appendf("下载失败：%v", err)
 		logger.SetStatus("failed")
 		return err

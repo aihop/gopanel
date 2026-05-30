@@ -119,6 +119,10 @@ type FileProcessReq struct {
 	Key string `json:"key"`
 }
 
+type FileCancelReq struct {
+	Key string `json:"key" validate:"required"`
+}
+
 type FileRoleUpdate struct {
 	Path  string `json:"path" validate:"required"`
 	User  string `json:"user" validate:"required"`

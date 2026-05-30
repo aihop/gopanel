@@ -82,6 +82,10 @@ export function WgetFileStream(params: File.FileWget) {
 	return http.post<{ key: string }>("/file/wget/stream", params)
 }
 
+export function WgetCancel(params: { key: string }) {
+	return http.post<any>("/file/wget/cancel", params)
+}
+
 export function MoveFile(params: File.FileMove) {
 	return http.post<File.File>("/file/move", params, TimeoutEnum.T_5M)
 }

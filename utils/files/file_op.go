@@ -336,21 +336,25 @@ func (f FileOp) DownloadFileWithProcess(url, dst, key string, ignoreCertificate 
 }
 
 // DownloadFileWithCallback 同步下载文件，通过 progressFn(written, total) 实时回传进度。
-// 调用方应在 goroutine 中运行此方法以避免阻塞。
-func (f FileOp) DownloadFileWithCallback(url, dst string, ignoreCertificate bool, progressFn func(written, total uint64)) error {
+// ctx 用于支持取消；调用方应在 goroutine 中运行此方法以避免阻塞。
+func (f FileOp) DownloadFileWithCallback(ctx context.Context, url, dst string, ignoreCertificate bool, progressFn func(written, total uint64)) error {
 	client := &http.Client{}
 	if ignoreCertificate {
 		client.Transport = &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		}
 	}
-	request, err := http.NewRequest("GET", url, nil)
+	request, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return err
 	}
 	request.Header.Set("Accept-Encoding", "identity")
 	resp, err := client.Do(request)
 	if err != nil {
+		// 如果是取消操作，返回明确错误
+		if errors.Is(err, context.Canceled) {
+			return err
+		}
 		global.LOG.Errorf("download file [%s] error, err %s", dst, err.Error())
 		return err
 	}
@@ -368,8 +372,8 @@ func (f FileOp) DownloadFileWithCallback(url, dst string, ignoreCertificate bool
 		total = uint64(resp.ContentLength)
 	}
 
-	// 包装 io.TeeReader 以实时回传进度
 	progressReader := &progressCallbackReader{
+		ctx:        ctx,
 		reader:     resp.Body,
 		written:    0,
 		total:      total,
@@ -377,13 +381,18 @@ func (f FileOp) DownloadFileWithCallback(url, dst string, ignoreCertificate bool
 	}
 
 	if _, err = io.Copy(out, progressReader); err != nil {
+		if errors.Is(err, context.Canceled) {
+			_ = os.Remove(dst)
+			return err
+		}
 		return fmt.Errorf("save download file [%s] error, err %s", dst, err.Error())
 	}
 	return nil
 }
 
-// progressCallbackReader 包装 io.Reader，每次读取后回调进度
+// progressCallbackReader 包装 io.Reader，支持取消，每次读取后回调进度
 type progressCallbackReader struct {
+	ctx        context.Context
 	reader     io.Reader
 	written    uint64
 	total      uint64
@@ -391,6 +400,12 @@ type progressCallbackReader struct {
 }
 
 func (p *progressCallbackReader) Read(buf []byte) (int, error) {
+	// 检查是否已取消
+	select {
+	case <-p.ctx.Done():
+		return 0, p.ctx.Err()
+	default:
+	}
 	n, err := p.reader.Read(buf)
 	if n > 0 {
 		p.written += uint64(n)

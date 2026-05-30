@@ -2,6 +2,7 @@ package api
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -27,6 +28,9 @@ import (
 	websocket2 "github.com/aihop/gopanel/utils/websocket"
 	"github.com/gofiber/fiber/v3"
 )
+
+// downloadCancelFuncs 存储下载任务的取消函数，key 为任务 key
+var downloadCancelFuncs = sync.Map{}
 
 func UploadFiles(c fiber.Ctx) error {
 	form, err := c.MultipartForm()
@@ -251,17 +255,45 @@ func WgetFileStream(c fiber.Ctx) error {
 	}
 
 	key := "download_" + common.RandStrAndNum(20)
+	ctx, cancel := context.WithCancel(context.Background())
+	downloadCancelFuncs.Store(key, cancel)
+
 	logger := service.GetDownloadLogger(key)
 	logger.Appendf("已提交远程下载任务：URL=%s，保存路径=%s/%s", req.Url, req.Path, req.Name)
 
 	go func() {
 		defer func() {
+			downloadCancelFuncs.Delete(key)
 			service.RemoveDownloadLogger(key)
 		}()
-		_ = fileService.WgetStream(*req, logger)
+		_ = fileService.WgetStream(ctx, *req, logger)
 	}()
 
 	return c.JSON(e.Succ(map[string]interface{}{"key": key}))
+}
+
+// WgetCancel 取消正在进行的远程下载任务
+func WgetCancel(c fiber.Ctx) error {
+	req, err := e.BodyToStruct[request.FileCancelReq](c.Body())
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	if req.Key == "" {
+		return c.JSON(e.Fail(errors.New("key is required")))
+	}
+
+	cancelVal, ok := downloadCancelFuncs.Load(req.Key)
+	if !ok {
+		return c.JSON(e.Fail(errors.New("task not found or already completed")))
+	}
+
+	cancel, ok := cancelVal.(context.CancelFunc)
+	if !ok {
+		return c.JSON(e.Fail(errors.New("invalid cancel function")))
+	}
+
+	cancel()
+	return c.JSON(e.Succ(nil))
 }
 
 // WgetLogsStream SSE 实时推送远程下载任务的日志和进度

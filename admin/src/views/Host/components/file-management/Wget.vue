@@ -1,12 +1,12 @@
 <template>
-	<n-drawer v-model:show="open" :mask-closable="false" width="50%" :destroy-on-close="true">
+	<n-drawer v-model:show="open" :mask-closable="false" width="40%" :destroy-on-close="true">
 		<n-drawer-content>
 			<template #header>
 				<DrawerHeader :header="t('file.downloadRemote')" :back="handleClose" />
 			</template>
 
 			<!-- 表单模式（URL 输入） -->
-			<div v-if="!showLog" style="padding: 16px">
+			<div v-if="!showProgress" style="padding: 16px">
 				<n-form ref="formRef" :model="form" label-placement="top">
 					<n-form-item :label="t('file.remoteUrl')" path="url" required>
 						<n-input v-model:value="form.url" :placeholder="t('file.remoteUrlPlaceholder')" />
@@ -24,28 +24,40 @@
 				</n-form>
 			</div>
 
-			<!-- 日志模式（SSE 实时进度） -->
-			<div v-else style="padding: 16px">
-				<div style="display:flex; justify-content: space-between; align-items:center; margin-bottom: 12px;">
-					<div style="font-size: 12px; color: #64748b;">{{ logStatusLabel }}</div>
+			<!-- 进度模式 -->
+			<div v-else style="padding: 16px; text-align: center;">
+				<div style="margin-bottom: 16px;">
+					<span style="font-size: 14px; color: #64748b;">{{ statusText }}</span>
 				</div>
-				<div
-					ref="terminalRef"
-					style="height: 50vh; overflow: auto; background: #0b1020; color: #e2e8f0; border-radius: 8px; padding: 12px; font-size: 12px; line-height: 18px;"
-				>
-					<div v-for="(line, index) in streamLogs" :key="index" style="white-space: pre-wrap; word-break: break-word;">
-						{{ line }}
-					</div>
+				<div style="margin-bottom: 8px;">
+					<n-progress
+						:percentage="Math.round(progressPercent)"
+						:indicator-placement="'inside'"
+						:height="28"
+						:border-radius="6"
+						:color="progressColor"
+						:rail-color="'#e2e8f0'"
+						:status="progressStatus"
+					/>
+				</div>
+				<div v-if="downloadedSize" style="margin-bottom: 16px; font-size: 12px; color: #94a3b8;">
+					{{ downloadedSize }} / {{ totalSize }}
+				</div>
+				<div style="font-size: 12px; color: #64748b; margin-bottom: 16px;">
+					{{ progressPercent.toFixed(1) }}%
 				</div>
 			</div>
 
 			<template #footer>
 				<div style="display: flex; justify-content: flex-end; gap: 12px; padding: 12px">
-					<n-button @click="handleClose" :disabled="!showLog && loading">
-						{{ showLog ? t("commons.button.close") : t("commons.button.cancel") }}
+					<n-button @click="handleClose" :disabled="downloading">
+						{{ showProgress ? t("commons.button.close") : t("commons.button.cancel") }}
 					</n-button>
-					<n-button v-if="!showLog" type="primary" @click="submit" :loading="loading">
+					<n-button v-if="!showProgress" type="primary" @click="submit" :loading="loading">
 						{{ t("commons.button.confirm") }}
+					</n-button>
+					<n-button v-if="downloading" type="error" @click="cancelDownload" :loading="cancelling">
+						{{ t("commons.button.stop") || "终止下载" }}
 					</n-button>
 				</div>
 			</template>
@@ -54,11 +66,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, nextTick, onUnmounted } from "vue"
+import { ref, reactive, computed, onUnmounted } from "vue"
 import { useI18n } from "vue-i18n"
-import { NDrawer, NForm, NFormItem, NInput, NCheckbox, NButton } from "naive-ui"
+import { NDrawer, NForm, NFormItem, NInput, NCheckbox, NButton, NProgress } from "naive-ui"
 import DrawerHeader from "@/components/DrawerHeader.vue"
-import { WgetFileStream } from "@/api/modules/file"
+import { WgetFileStream, WgetCancel } from "@/api/modules/file"
 import { MsgSuccess, MsgError } from "@/utils/message"
 import { useAuthStore } from "@/store/auth"
 
@@ -81,30 +93,25 @@ const form = reactive({
 })
 
 let downloadPath = ""
+let currentKey = ""
 
-// SSE 日志相关
-const showLog = ref(false)
-const streamLogs = ref<string[]>([])
-const logStatus = ref<"idle" | "connecting" | "streaming" | "success" | "failed">("idle")
-const terminalRef = ref<HTMLElement | null>(null)
+// 进度
+const showProgress = ref(false)
+const downloading = ref(false)
+const cancelling = ref(false)
+const progressPercent = ref(0)
+const downloadedSize = ref("")
+const totalSize = ref("")
+const statusText = ref("")
+const progressStatus = ref<"default" | "success" | "error" | "warning">("default")
 let eventSource: EventSource | null = null
 
-const logStatusLabel = computed(() => {
-	switch (logStatus.value) {
-		case "connecting": return "连接中..."
-		case "streaming": return "下载中..."
-		case "success": return "下载完成"
-		case "failed": return "下载失败"
-		default: return ""
-	}
+const progressColor = computed(() => {
+	if (progressStatus.value === "error") return "#ef4444"
+	if (progressStatus.value === "success") return "#22c55e"
+	if (progressStatus.value === "warning") return "#f59e0b"
+	return "#2080f0"
 })
-
-const scrollToBottom = () => {
-	nextTick(() => {
-		if (!terminalRef.value) return
-		terminalRef.value.scrollTop = terminalRef.value.scrollHeight
-	})
-}
 
 const stopLogStream = () => {
 	if (eventSource) {
@@ -113,63 +120,111 @@ const stopLogStream = () => {
 	}
 }
 
-const startLogStream = (sseKey: string) => {
+const formatBytes = (bytes: number): string => {
+	if (bytes === 0) return "0 B"
+	const units = ["B", "KB", "MB", "GB"]
+	const k = 1024
+	const i = Math.floor(Math.log(bytes) / Math.log(k))
+	return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + units[i]
+}
+
+const startProgressStream = (sseKey: string) => {
 	stopLogStream()
-	logStatus.value = "connecting"
-	showLog.value = true
+	showProgress.value = true
+	downloading.value = true
+	progressPercent.value = 0
+	progressStatus.value = "default"
+	statusText.value = t("commons.loading") || "下载中..."
+	currentKey = sseKey
 
 	const apiUrl = (window as any).__VITE_API_URL__ || "/api"
 	const safeToken = encodeURIComponent(authStore.getAuth() || authStore.auth || "")
 	eventSource = new EventSource(`${apiUrl}/file/wget/logs?key=${encodeURIComponent(sseKey)}&token=${safeToken}`)
 
-	eventSource.onmessage = event => {
-		if (event.data === "ping" || event.data === ":" || event.data === "") return
-		logStatus.value = logStatus.value === "connecting" ? "streaming" : logStatus.value
-		streamLogs.value.push(event.data)
-		scrollToBottom()
-	}
-
+	// progress 事件：更新进度百分比
 	eventSource.addEventListener("progress", event => {
-		logStatus.value = "streaming"
+		const val = parseFloat((event as MessageEvent).data)
+		if (!isNaN(val)) {
+			progressPercent.value = val
+		}
 	})
 
 	eventSource.addEventListener("status", event => {
 		const data = (event as MessageEvent).data
 		if (data === "success") {
-			logStatus.value = "success"
+			progressStatus.value = "success"
+			progressPercent.value = 100
+			statusText.value = t("file.downloadSuccess")
+			downloading.value = false
 		} else if (data === "failed") {
-			logStatus.value = "failed"
-		} else {
-			logStatus.value = "streaming"
+			progressStatus.value = "error"
+			statusText.value = t("file.downloadFailed")
+			downloading.value = false
+		} else if (data === "cancelled") {
+			progressStatus.value = "warning"
+			statusText.value = "下载已取消"
+			downloading.value = false
 		}
 	})
 
+	// log 事件：更新状态描述文本
+	eventSource.onmessage = event => {
+		if (event.data === "ping" || event.data === ":" || event.data === "") return
+		// 只取最后一条作为状态描述
+		if (event.data.indexOf("已提交") === -1) {
+			statusText.value = event.data
+		}
+	}
+
 	eventSource.addEventListener("eof", () => {
 		stopLogStream()
-		if (logStatus.value === "success") {
+		if (progressStatus.value === "success") {
 			MsgSuccess(t("file.downloadSuccess"))
-		} else if (logStatus.value === "failed") {
+		} else if (progressStatus.value === "error") {
 			MsgError(t("file.downloadFailed"))
 		}
 		emit("close")
 	})
 
 	eventSource.onerror = () => {
-		streamLogs.value.push("连接已断开或发生错误")
-		scrollToBottom()
 		stopLogStream()
-		logStatus.value = logStatus.value === "success" ? "success" : "failed"
+		if (progressStatus.value === "success") {
+			MsgSuccess(t("file.downloadSuccess"))
+		} else if (progressStatus.value === "warning") {
+			// 已取消，不需要额外提示
+		} else {
+			progressStatus.value = "error"
+			statusText.value = "连接已断开"
+		}
+		downloading.value = false
+	}
+}
+
+const cancelDownload = async () => {
+	if (!currentKey) return
+	cancelling.value = true
+	try {
+		await WgetCancel({ key: currentKey })
+		statusText.value = "正在终止..."
+	} catch (e: any) {
+		MsgError(e?.msg || "取消失败")
+	} finally {
+		cancelling.value = false
 	}
 }
 
 const handleClose = () => {
 	stopLogStream()
+	currentKey = ""
 	form.url = ""
 	form.name = ""
 	form.ignoreCertificate = false
-	showLog.value = false
-	streamLogs.value = []
-	logStatus.value = "idle"
+	showProgress.value = false
+	downloading.value = false
+	progressPercent.value = 0
+	progressStatus.value = "default"
+	downloadedSize.value = ""
+	totalSize.value = ""
 	open.value = false
 	emit("close", open)
 }
@@ -190,7 +245,7 @@ const submit = async () => {
 		const res = await WgetFileStream(payload)
 		const key = res?.data?.key || res?.key
 		if (key) {
-			startLogStream(key)
+			startProgressStream(key)
 		} else {
 			MsgSuccess(t("file.downloadSuccess"))
 			handleClose()
@@ -208,9 +263,9 @@ const acceptParams = (props: WgetProps) => {
 	form.url = ""
 	form.name = ""
 	form.ignoreCertificate = false
-	showLog.value = false
-	streamLogs.value = []
-	logStatus.value = "idle"
+	showProgress.value = false
+	progressPercent.value = 0
+	currentKey = ""
 	open.value = true
 }
 
