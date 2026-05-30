@@ -208,25 +208,36 @@ if [[ "${TARGET_PLATFORM}" == "all" || "${TARGET_PLATFORM}" == "gitcode" ]]; the
                 }')
             
             # 检查是否创建成功或因 Tag 不存在而失败
-            # GitCode 在 Tag 不存在时创建 Release 会失败，这里我们加上 target_commitish 参数，让 GitCode 自动创建 Tag
-            if echo "$CREATE_RES" | grep -q '"error_code":'; then
-                echo "提示：创建 Release 失败，可能是 Tag 不存在。尝试携带 target_commitish 参数重新创建..."
-                
-                curl -s -X POST "https://api.gitcode.com/api/v5/repos/${REPO}/releases" \
-                    -H "PRIVATE-TOKEN: ${GITCODE_TOKEN}" \
-                    -H "Content-Type: application/json" \
-                    -d '{
-                        "tag_name": "'"${TAG_NAME}"'",
-                        "target_commitish": "main",
-                        "name": "GoPanel Release '"${TAG_NAME}"'",
-                        "body": "GoPanel '"${TAG_NAME}"' auto released",
-                        "release_status": "latest"
-                    }' > /dev/null
+            # GitCode 在 Tag 不存在时创建 Release 会失败，这里我们加上 ref 参数，让 GitCode 自动创建 Tag
+                if echo "$CREATE_RES" | grep -q '"error_code":'; then
+                    echo "提示：创建 Release 失败，可能是 Tag 不存在。尝试携带 ref 参数重新创建..."
+                    
+                    RETRY_RES=$(curl -s -X POST "https://api.gitcode.com/api/v5/repos/${REPO}/releases" \
+                        -H "PRIVATE-TOKEN: ${GITCODE_TOKEN}" \
+                        -H "Content-Type: application/json" \
+                        -d '{
+                            "tag_name": "'"${TAG_NAME}"'",
+                            "ref": "main",
+                            "name": "GoPanel Release '"${TAG_NAME}"'",
+                            "body": "GoPanel '"${TAG_NAME}"' auto released",
+                            "release_status": "latest"
+                        }')
+                    
+                    if echo "$RETRY_RES" | grep -q '"error_code":'; then
+                         echo "错误：重新创建 GitCode Release 依然失败: $RETRY_RES"
+                         echo "跳过 GitCode 上传..."
+                         GC_SKIP_UPLOAD="true"
+                    fi
+                fi
             fi
-        fi
             
-            echo "正在上传文件到 GitCode..."
-            for asset in "${ASSETS[@]}"; do
+            if [ "${GC_SKIP_UPLOAD:-false}" != "true" ]; then
+                # 重新获取一次 Release 信息以确保可以拿到最新的资源列表
+                GC_RELEASE_INFO=$(curl -s -H "PRIVATE-TOKEN: ${GITCODE_TOKEN}" "https://api.gitcode.com/api/v5/repos/${REPO}/releases/tags/${TAG_NAME}")
+                GC_RELEASE_ID=$(echo "$GC_RELEASE_INFO" | jq -r '.id // empty')
+
+                echo "正在上传文件到 GitCode..."
+                for asset in "${ASSETS[@]}"; do
                 GC_FILENAME=$(basename "$asset")
                 
                 # 如果是已有 Release，检查文件是否已经存在
@@ -259,14 +270,15 @@ if [[ "${TARGET_PLATFORM}" == "all" || "${TARGET_PLATFORM}" == "gitcode" ]]; the
                 fi
                 
                 echo "上传到 GitCode: $GC_FILENAME"
-                curl -s -X PUT "${curl_opts[@]}" -T "$asset" "$upload_url" > /dev/null
-            done
-            
-            echo "==========================================="
-            echo "🎉 GitCode 发布成功！"
-            echo "您可以访问以下链接查看您的 Release："
-            echo "https://gitcode.com/${REPO}/-/releases/${TAG_NAME}"
-            echo "==========================================="
+                    curl -s -X PUT "${curl_opts[@]}" -T "$asset" "$upload_url" > /dev/null
+                done
+                
+                echo "==========================================="
+                echo "🎉 GitCode 发布成功！"
+                echo "您可以访问以下链接查看您的 Release："
+                echo "https://gitcode.com/${REPO}/-/releases/${TAG_NAME}"
+                echo "==========================================="
+            fi
         fi
     else
         echo "提示：未配置 GITCODE_TOKEN 环境变量，已跳过 GitCode 发布。"
