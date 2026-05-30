@@ -787,8 +787,21 @@ prepare_gpagent_binary() {
 
 install_gpc_binary() {
   log "安装 gpc 到 /usr/local/bin/gpc"
+  
+  # 如果目标文件已经存在，可能是由于它正在运行导致 "Text file busy"
+  if [ -f /usr/local/bin/gpc ]; then
+    log "检测到旧版 gpc 存在，尝试停止服务..."
+    if [ "$os_name" = "linux" ] && command -v systemctl >/dev/null 2>&1; then
+      run_privileged systemctl stop gpc.service >/dev/null 2>&1 || true
+    elif [ "$os_name" = "darwin" ] && command -v launchctl >/dev/null 2>&1; then
+      run_privileged launchctl bootout system /Library/LaunchDaemons/io.aihop.gpc.plist >/dev/null 2>&1 || true
+    fi
+    # 删除旧文件，而不是直接覆盖，能100%避免 Text file busy
+    run_privileged rm -f /usr/local/bin/gpc
+  fi
+
   run_privileged mkdir -p /usr/local/bin
-  run_privileged cp "${BIN_GPC_PATH}" /usr/local/bin/gpc
+  run_privileged cp -f "${BIN_GPC_PATH}" /usr/local/bin/gpc
   run_privileged chmod 755 /usr/local/bin/gpc
 }
 
