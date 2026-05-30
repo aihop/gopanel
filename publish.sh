@@ -1,92 +1,209 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-# ==============================================================================
-# GoPanel 发布脚本
-# ==============================================================================
+# ==========================================
+# GoPanel GitHub & GitCode Releases 自动发布脚本
+# ==========================================
 
-set -e
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "${PROJECT_ROOT}"
 
-# --- 配置项 ---
-# 注意：这里可以只写 Bucket 名字或者 Endpoint，我们在下面会强制格式化
-OSS_BUCKET_NAME="ft-shoply" # 建议只写 bucket 名称
-APP_NAME="${2:-gopanel}"
-OSS_PREFIX="${APP_NAME}/releases" 
-LOCAL_DIST_DIR="./dist"
-if [ "${APP_NAME}" = "consolex" ]; then
-  LOCAL_DIST_DIR="./dist/consolex"
-fi
-# --- 参数校验 ---
-if [ -z "$1" ]; then
-  echo "❌ 错误: 请指定要发布的版本号!"
-  echo "用法: ./publish.sh <version>"
-  exit 1
-fi
-
-VERSION=$1
-TARGET_DIR="${LOCAL_DIST_DIR}/${VERSION}"
-if [ ! -d "$TARGET_DIR" ] && [[ "${VERSION}" != v* ]]; then
-  ALT_TARGET_DIR="${LOCAL_DIST_DIR}/v${VERSION}"
-  if [ -d "${ALT_TARGET_DIR}" ]; then
-    TARGET_DIR="${ALT_TARGET_DIR}"
-  fi
-fi
-
-echo "========================================"
-echo "🚀 开始发布 GoPanel 版本: ${VERSION}"
-echo "========================================"
-
-# 1. 检查本地目录
-if [ ! -d "$TARGET_DIR" ]; then
-  echo "❌ 错误: 找不到目录: $TARGET_DIR"
-  exit 1
-fi
-
-# 2. 检查 ossutil 工具
-if command -v ossutil &> /dev/null; then
-    OSS_CMD="ossutil"
-else
-    echo "❌ 错误: 未找到 ossutil，请先安装。"
+# ==========================================
+# 1. 检查必要命令
+# ==========================================
+if ! command -v gh >/dev/null 2>&1; then
+    echo "错误：未找到 gh 命令 (GitHub CLI)"
+    echo "请先安装: "
+    echo "  macOS: brew install gh"
+    echo "  Linux: 按官方文档安装 https://github.com/cli/cli#installation"
+    echo "安装后请执行 'gh auth login' 登录您的 GitHub 账号"
     exit 1
 fi
 
-# 3. 加载凭证并格式化路径
-if [ -f "./.oss_env" ]; then
-  echo "🔑 加载本地 .oss_env 凭证..."
-  source ./.oss_env
-else
-  echo "❌ 错误: 找不到 .oss_env 配置文件"
-  exit 1
+if ! command -v jq >/dev/null 2>&1; then
+    echo "警告：未找到 jq 命令，发布到 GitCode 时需要使用 jq 解析 JSON 响应。"
+    echo "如果不需要发布到 GitCode，请忽略此警告。"
+    echo "请先安装: "
+    echo "  macOS: brew install jq"
+    echo "  Linux: apt-get install jq"
 fi
 
-# 【关键点】强制添加 oss:// 前缀，并清理多余斜杠
-CLEAN_PREFIX=$(echo "${OSS_PREFIX}" | sed 's|^/||;s|/$||')
-# 确保目标路径格式为 oss://bucket-name/path/
-OSS_TARGET_PATH="oss://${OSS_BUCKET_NAME}/${CLEAN_PREFIX}/${VERSION}/"
+# ==========================================
+# 2. 检查登录状态
+# ==========================================
+if ! gh auth status >/dev/null 2>&1; then
+    echo "错误：您还没有登录 GitHub CLI。"
+    echo "请执行 'gh auth login' 进行授权登录。"
+    exit 1
+fi
 
-echo "📦 待发布目录: $TARGET_DIR"
-echo "☁️ 目标 OSS 路径: $OSS_TARGET_PATH"
+# ==========================================
+# 3. 确定版本号
+# ==========================================
+VERSION="${1:-}"
 
-# 4. 生成临时配置文件
-# 使用 .oss_env 里的变量
-TEMP_CONFIG=".tmp_oss_config"
-cat > $TEMP_CONFIG <<EOF
-[Credentials]
-    endpoint = ${OSS_ENDPOINT}
-    accessKeyID = ${OSS_ACCESS_KEY_ID}
-    accessKeySecret = ${OSS_ACCESS_KEY_SECRET}
-    region = ${OSS_REGION}
-EOF
+if [ -z "${VERSION}" ]; then
+    echo "用法: $0 <版本号> [仓库名称]"
+    echo "示例: $0 1.0.0"
+    echo "示例: $0 1.0.0 aihop/gopanel"
+    exit 1
+fi
 
-# 5. 执行上传
-echo "----------------------------------------"
+# 确保 TAG_NAME 带 v 前缀 (例如 v0.4.2)
+if [[ "${VERSION}" == v* ]]; then
+    TAG_NAME="${VERSION}"
+    VERSION="${VERSION#v}"
+else
+    TAG_NAME="v${VERSION}"
+fi
 
-# 显式指定配置文件执行
-# 这样 ossutil 就会从临时文件里读取你配置好的 endpoint 和 key
-$OSS_CMD cp "${TARGET_DIR}/" "${OSS_TARGET_PATH}" -r -f --config-file "$TEMP_CONFIG"
+# 仓库名称
+REPO="${2:-aihop/gopanel}"
+OUTDIR="${PROJECT_ROOT}/dist/${TAG_NAME}"
 
-# 6. 清理
-rm -f "$TEMP_CONFIG"
+echo "==========================================="
+echo "即将发布版本: ${TAG_NAME} (${VERSION})"
+echo "目标仓库: ${REPO}"
+echo "打包目录: ${OUTDIR}"
+echo "==========================================="
 
-echo "========================================"
-echo "✅ 成功: 版本 ${VERSION} 已同步至 OSS!"
-echo "========================================"
+# ==========================================
+# 4. 检查打包文件是否存在
+# ==========================================
+if [ ! -d "${OUTDIR}" ]; then
+    echo "错误：未找到打包目录 ${OUTDIR}"
+    echo "请先运行: bash build.sh ${VERSION}"
+    exit 1
+fi
+
+# 收集所有需要上传的文件
+ASSETS=()
+while IFS=  read -r -d $'\0'; do
+    ASSETS+=("$REPLY")
+done < <(find "${OUTDIR}" -maxdepth 1 -name "*.tar.gz" -print0)
+
+# 如果存在说明文档，也一并作为 Release 附件上传
+if [ -f "${PROJECT_ROOT}/README.md" ]; then
+    ASSETS+=("${PROJECT_ROOT}/README.md")
+fi
+if [ -f "${PROJECT_ROOT}/README_zh.md" ]; then
+    ASSETS+=("${PROJECT_ROOT}/README_zh.md")
+fi
+if [ -f "${PROJECT_ROOT}/perview.png" ]; then
+    ASSETS+=("${PROJECT_ROOT}/perview.png")
+fi
+
+if [ ${#ASSETS[@]} -eq 0 ]; then
+    echo "错误：在 ${OUTDIR} 下没有找到任何 .tar.gz 文件。"
+    echo "请先运行: bash build.sh ${VERSION}"
+    exit 1
+fi
+
+echo "找到以下需要上传的发布包:"
+for asset in "${ASSETS[@]}"; do
+    echo "  - $(basename "$asset")"
+done
+echo ""
+
+# ==========================================
+# 5. 二次确认
+# ==========================================
+read -p "确认要创建 Release 并上传这些文件到 GitHub (如配置了 GITCODE_TOKEN 还会发布到 GitCode) 吗? (y/n): " confirm
+if [[ "${confirm}" != "y" && "${confirm}" != "Y" ]]; then
+    echo "已取消发布。"
+    exit 0
+fi
+
+# ==========================================
+# 6. 创建或更新 GitHub Release
+# ==========================================
+echo "正在检查是否已存在同名 Release ${TAG_NAME} ..."
+
+# 如果已存在该 Release，则直接上传/覆盖资源；如果不存在，则创建新的 Release
+if gh release view "${TAG_NAME}" --repo "${REPO}" >/dev/null 2>&1; then
+    echo "Release ${TAG_NAME} 已存在，准备上传资源..."
+else
+    echo "创建新的 Release: ${TAG_NAME} ..."
+    gh release create "${TAG_NAME}" \
+        --repo "${REPO}" \
+        --title "GoPanel Release ${TAG_NAME}" \
+        --notes "GoPanel ${TAG_NAME} 自动发布" \
+        --draft=false \
+        --prerelease=false
+fi
+
+echo "正在上传文件到 GitHub..."
+for asset in "${ASSETS[@]}"; do
+    echo "上传: $(basename "$asset")"
+    # --clobber 表示如果同名文件存在则覆盖
+    gh release upload "${TAG_NAME}" "$asset" --repo "${REPO}" --clobber
+done
+
+echo "==========================================="
+echo "🎉 GitHub 发布成功！"
+echo "您可以访问以下链接查看您的 Release："
+echo "https://github.com/${REPO}/releases/tag/${TAG_NAME}"
+echo "==========================================="
+
+# ==========================================
+# 7. 创建或更新 GitCode Release
+# ==========================================
+if [ -n "${GITCODE_TOKEN:-}" ]; then
+    if ! command -v jq >/dev/null 2>&1; then
+        echo "错误：未找到 jq 命令，无法发布到 GitCode。请先安装 jq。"
+    else
+        echo "==========================================="
+        echo "正在检查是否已存在同名 GitCode Release ${TAG_NAME} ..."
+        
+        # GitCode API 获取 Release 信息
+        GC_RELEASE_INFO=$(curl -s -H "PRIVATE-TOKEN: ${GITCODE_TOKEN}" "https://api.gitcode.com/api/v5/repos/${REPO}/releases/tags/${TAG_NAME}")
+        GC_RELEASE_ID=$(echo "$GC_RELEASE_INFO" | jq -r '.id // empty')
+        
+        if [ -n "$GC_RELEASE_ID" ] && [ "$GC_RELEASE_ID" != "null" ]; then
+            echo "GitCode Release ${TAG_NAME} 已存在，准备上传资源..."
+        else
+            echo "创建新的 GitCode Release: ${TAG_NAME} ..."
+            curl -s -X POST "https://api.gitcode.com/api/v5/repos/${REPO}/releases" \
+                -H "PRIVATE-TOKEN: ${GITCODE_TOKEN}" \
+                -H "Content-Type: application/json" \
+                -d '{
+                    "tag_name": "'"${TAG_NAME}"'",
+                    "name": "GoPanel Release '"${TAG_NAME}"'",
+                    "body": "GoPanel '"${TAG_NAME}"' 自动发布",
+                    "release_status": "latest"
+                }' > /dev/null
+        fi
+        
+        echo "正在上传文件到 GitCode..."
+        for asset in "${ASSETS[@]}"; do
+            filename=$(basename "$asset")
+            echo "正在获取 GitCode 上传地址: $filename"
+            
+            upload_info=$(curl -s -G -H "PRIVATE-TOKEN: ${GITCODE_TOKEN}" --data-urlencode "file_name=${filename}" "https://api.gitcode.com/api/v5/repos/${REPO}/releases/${TAG_NAME}/upload_url")
+            upload_url=$(echo "$upload_info" | jq -r '.url // empty')
+            
+            if [ -z "$upload_url" ] || [ "$upload_url" == "null" ]; then
+                echo "获取 GitCode 上传地址失败: $upload_info"
+                continue
+            fi
+            
+            # 提取 headers 构造成 curl 的 -H 参数
+            curl_opts=()
+            while read -r header_key header_val; do
+                curl_opts+=("-H" "$header_key: $header_val")
+            done < <(echo "$upload_info" | jq -r '.headers | to_entries | .[] | "\(.key) \(.value)"')
+            
+            echo "上传到 GitCode: $filename"
+            curl -s -X PUT "${curl_opts[@]}" -T "$asset" "$upload_url" > /dev/null
+        done
+        
+        echo "==========================================="
+        echo "🎉 GitCode 发布成功！"
+        echo "您可以访问以下链接查看您的 Release："
+        echo "https://gitcode.com/${REPO}/-/releases/${TAG_NAME}"
+        echo "==========================================="
+    fi
+else
+    echo "提示：未配置 GITCODE_TOKEN 环境变量，已跳过 GitCode 发布。"
+fi
+
