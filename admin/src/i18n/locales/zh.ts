@@ -1160,6 +1160,7 @@ export default {
 		compressDst: "压缩路径",
 		replace: "覆盖已存在的文件",
 		compressSuccess: "压缩成功",
+		compressFailed: "压缩失败",
 		deCompressSuccess: "解压成功",
 		deCompressDst: "解压路径",
 		linkType: "链接类型",

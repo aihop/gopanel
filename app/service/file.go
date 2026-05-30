@@ -259,6 +259,33 @@ func (f *FileService) Compress(c request.FileCompress) error {
 	}
 	return fo.Compress(c.Files, c.Dst, c.Name, files.CompressType(c.Type), c.Secret)
 }
+
+// CompressStream 通过 FileCompressLogger 异步执行压缩并实时回传进度
+func (f *FileService) CompressStream(c request.FileCompress, logger *FileCompressLogger) error {
+	fo := files.NewFileOp()
+	if !c.Replace && fo.Stat(filepath.Join(c.Dst, c.Name)) {
+		return buserr.New(constant.ErrFileIsExist)
+	}
+
+	logger.Appendf("开始打包，类型：%s，目标：%s/%s", c.Type, c.Dst, c.Name)
+	logger.Appendf("待打包文件：%d 个", len(c.Files))
+
+	progressFn := func(msg string) {
+		logger.AppendLine(msg)
+	}
+
+	err := fo.CompressWithCallback(c.Files, c.Dst, c.Name, files.CompressType(c.Type), c.Secret, progressFn)
+	if err != nil {
+		logger.Appendf("打包失败：%v", err)
+		logger.SetStatus("failed")
+		return err
+	}
+
+	logger.AppendLine("打包完成")
+	logger.SetStatus("success")
+	return nil
+}
+
 func (f *FileService) DeCompress(c request.FileDeCompress) error {
 	fo := files.NewFileOp()
 	if c.Type == "tar" && len(c.Secret) != 0 {

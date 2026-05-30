@@ -34,7 +34,8 @@ export function ChangeFileMode(form: File.FileCreate) {
 }
 
 export function fileCompressAPI(form: File.FileCompress) {
-	return http.post<File.File>("/file/compress", form, TimeoutEnum.T_10M)
+	// 异步任务，返回 { key: string }，不再需要超时限制
+	return http.post<{ key: string }>("/file/compress", form)
 }
 
 export function DeCompressFile(form: File.FileDeCompress) {

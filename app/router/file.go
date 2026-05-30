@@ -22,6 +22,7 @@ func FileRouter(r fiber.Router) {
 		fileRouter.Post("/mode", api.ChangeFileMode)
 		fileRouter.Post("/owner", api.ChangeFileOwner)
 		fileRouter.Post("/compress", api.CompressFile)
+		fileRouter.Get("/compress/logs", api.FileCompressLogs)
 		fileRouter.Post("/decompress", api.DeCompressFile)
 		fileRouter.Post("/content", api.GetContent)
 		fileRouter.Post("/save", api.SaveContent)

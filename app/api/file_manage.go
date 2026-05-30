@@ -1,17 +1,23 @@
 package api
 
 import (
+	"bufio"
 	"errors"
-	"github.com/aihop/gopanel/app/dto/request"
-	"github.com/aihop/gopanel/app/e"
-	"github.com/aihop/gopanel/buserr"
-	"github.com/aihop/gopanel/constant"
-	"github.com/aihop/gopanel/utils/files"
-	"github.com/aihop/gopanel/utils/token"
-	"github.com/gofiber/fiber/v3"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
+
+	"github.com/aihop/gopanel/app/dto/request"
+	"github.com/aihop/gopanel/app/e"
+	"github.com/aihop/gopanel/app/service"
+	"github.com/aihop/gopanel/buserr"
+	"github.com/aihop/gopanel/constant"
+	"github.com/aihop/gopanel/utils/common"
+	"github.com/aihop/gopanel/utils/files"
+	"github.com/aihop/gopanel/utils/token"
+	"github.com/gofiber/fiber/v3"
 )
 
 func ListFiles(c fiber.Ctx) error {
@@ -109,6 +115,8 @@ func ChangeFileOwner(c fiber.Ctx) error {
 	}
 	return c.JSON(e.Succ(nil))
 }
+
+// CompressFile 发起压缩任务，返回任务 key，客户端通过 /file/compress/logs?key=xxx 订阅实时日志
 func CompressFile(c fiber.Ctx) error {
 	req, err := e.BodyToStruct[request.FileCompress](c.Body())
 	if err != nil {
@@ -125,12 +133,98 @@ func CompressFile(c fiber.Ctx) error {
 			}
 		}
 	}
-	err = fileService.Compress(*req)
-	if err != nil {
-		return c.JSON(e.Fail(err))
-	}
-	return c.JSON(e.Succ(nil))
+
+	key := "compress_" + common.RandStrAndNum(20)
+	logger := service.GetFileCompressLogger(key)
+	logger.Appendf("已提交压缩任务：类型=%s，目标=%s/%s，文件数=%d", req.Type, req.Dst, req.Name, len(req.Files))
+
+	go func() {
+		defer func() {
+			service.RemoveFileCompressLogger(key)
+		}()
+
+		_ = fileService.CompressStream(*req, logger)
+	}()
+
+	return c.JSON(e.Succ(map[string]interface{}{"key": key}))
 }
+
+// FileCompressLogs SSE 实时推送压缩任务的日志和状态
+func FileCompressLogs(c fiber.Ctx) error {
+	key := strings.TrimSpace(c.Query("key"))
+	if key == "" {
+		return c.JSON(e.Fail(errors.New("key is required")))
+	}
+
+	c.Set("Content-Type", "text/event-stream")
+	c.Set("Cache-Control", "no-cache")
+	c.Set("Connection", "keep-alive")
+	c.Set("Transfer-Encoding", "chunked")
+
+	c.RequestCtx().SetBodyStreamWriter(func(w *bufio.Writer) {
+		writeData := func(data string) {
+			_, _ = fmt.Fprintf(w, "data: %s\n\n", strings.ReplaceAll(data, "\n", " "))
+			_ = w.Flush()
+		}
+		writeEvent := func(event, data string) {
+			_, _ = fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, strings.ReplaceAll(data, "\n", " "))
+			_ = w.Flush()
+		}
+
+		if !service.IsFileCompressLoggerActive(key) {
+			lines, err := service.ReadFileCompressLogFromFile(key)
+			if err == nil {
+				for _, line := range lines {
+					writeData(line)
+				}
+			}
+			writeEvent("eof", "EOF")
+			return
+		}
+
+		logger := service.GetFileCompressLogger(key)
+		for _, line := range logger.GetLogs() {
+			writeData(line)
+		}
+		writeEvent("status", logger.GetStatus())
+
+		ch := logger.Subscribe()
+		defer logger.Unsubscribe(ch)
+
+		ticker := time.NewTicker(15 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-c.Context().Done():
+				return
+			case <-ticker.C:
+				_, _ = fmt.Fprintf(w, "event: ping\ndata: ping\n\n")
+				_ = w.Flush()
+			case evt, ok := <-ch:
+				if !ok {
+					return
+				}
+				switch evt.Type {
+				case "log":
+					writeData(evt.Message)
+				case "status":
+					writeEvent("status", evt.Status)
+				case "eof":
+					writeEvent("eof", "EOF")
+					return
+				default:
+					if evt.Message != "" {
+						writeData(evt.Message)
+					}
+				}
+			}
+		}
+	})
+
+	return nil
+}
+
 func DeCompressFile(c fiber.Ctx) error {
 	req, err := e.BodyToStruct[request.FileDeCompress](c.Body())
 	if err != nil {

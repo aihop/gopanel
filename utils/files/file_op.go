@@ -568,6 +568,87 @@ func (f FileOp) Compress(srcRiles []string, dst string, name string, cType Compr
 	return nil
 }
 
+// CompressWithCallback 执行压缩并通过 progressFn 回传进度消息。
+func (f FileOp) CompressWithCallback(srcFiles []string, dst string, name string, cType CompressType, secret string, progressFn func(msg string)) error {
+	if progressFn != nil {
+		progressFn(fmt.Sprintf("开始打包 %d 个文件...", len(srcFiles)))
+	}
+
+	fileMaps := make(map[string]string, len(srcFiles))
+	for _, s := range srcFiles {
+		base := filepath.Base(s)
+		fileMaps[s] = base
+	}
+
+	if !f.Stat(dst) {
+		_ = f.CreateDir(dst, 0755)
+	}
+
+	dstFile := filepath.Join(dst, name)
+
+	switch cType {
+	case Zip:
+		// 先尝试 SDK 方式
+		files, err := archiver.FilesFromDisk(nil, fileMaps)
+		if err == nil {
+			out, err := f.Fs.Create(dstFile)
+			if err == nil {
+				if err := ZipFile(files, out); err == nil {
+					if progressFn != nil {
+						progressFn(fmt.Sprintf("打包完成，共 %d 个文件", len(srcFiles)))
+					}
+					return nil
+				}
+				_ = out.Close()
+				_ = f.DeleteFile(dstFile)
+			}
+		}
+		// SDK 失败，回退到 shell zip（带 verbose 输出）
+		if progressFn != nil {
+			progressFn("SDK 打包失败，尝试系统 zip 命令...")
+		}
+		outputFn := func(line string) {
+			if progressFn != nil {
+				progressFn(line)
+			}
+		}
+		if err := NewZipArchiver().(*ZipArchiver).CompressWithOutput(srcFiles, dstFile, "", outputFn); err != nil {
+			_ = f.DeleteFile(dstFile)
+			return err
+		}
+	case TarGz:
+		outputFn := func(line string) {
+			if progressFn != nil {
+				progressFn(line)
+			}
+		}
+		if err := NewTarGzArchiver().(*TarGzArchiver).CompressWithOutput(srcFiles, dstFile, secret, outputFn); err != nil {
+			_ = f.DeleteFile(dstFile)
+			return err
+		}
+	default:
+		// Tar、Bz2、Xz 等使用 SDK 方式
+		format := getFormat(cType)
+		files, err := archiver.FilesFromDisk(nil, fileMaps)
+		if err != nil {
+			return err
+		}
+		out, err := f.Fs.Create(dstFile)
+		if err != nil {
+			return err
+		}
+		if err = format.Archive(context.Background(), out, files); err != nil {
+			_ = f.DeleteFile(dstFile)
+			return err
+		}
+	}
+
+	if progressFn != nil {
+		progressFn(fmt.Sprintf("打包完成：%s", dstFile))
+	}
+	return nil
+}
+
 func isIgnoreFile(name string) bool {
 	return strings.HasPrefix(name, "__MACOSX") || strings.HasSuffix(name, ".DS_Store") || strings.HasPrefix(name, "._")
 }

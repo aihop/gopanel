@@ -1210,6 +1210,7 @@ export default {
 		compressDst: "Compress path",
 		replace: "Overwrite existing files",
 		compressSuccess: "Compressed successfully",
+		compressFailed: "Compression failed",
 		deCompressSuccess: "Decompress succeeded",
 		deCompressDst: "Decompress path",
 		linkType: "Link type",

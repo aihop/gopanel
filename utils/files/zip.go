@@ -50,3 +50,30 @@ func (z ZipArchiver) Compress(sourcePaths []string, dstFile string, _ string) er
 	}
 	return nil
 }
+
+// CompressWithOutput 执行压缩并通过 outputFn 逐行回传输出，使用 -r（非安静模式）展示每个文件
+func (z ZipArchiver) CompressWithOutput(sourcePaths []string, dstFile string, _ string, outputFn func(line string)) error {
+	var err error
+	tmpFile := path.Join(global.CONF.System.TmpDir, fmt.Sprintf("%s%s.zip", common.RandStr(50), time.Now().Format(constant.DateTimeSlimLayout)))
+	op := NewFileOp()
+	defer func() {
+		_ = op.DeleteFile(tmpFile)
+		if err != nil {
+			_ = op.DeleteFile(dstFile)
+		}
+	}()
+	baseDir := path.Dir(sourcePaths[0])
+	relativePaths := make([]string, len(sourcePaths))
+	for i, sp := range sourcePaths {
+		relativePaths[i] = path.Base(sp)
+	}
+	// 使用 -r (非安静) 使 zip 逐行输出被添加的文件名
+	cmdStr := fmt.Sprintf("zip -r %s  %s", tmpFile, strings.Join(relativePaths, " "))
+	if err = cmd.ExecCmdWithStream(cmdStr, baseDir, outputFn); err != nil {
+		return err
+	}
+	if err = op.Mv(tmpFile, dstFile); err != nil {
+		return err
+	}
+	return nil
+}

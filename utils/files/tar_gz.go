@@ -33,6 +33,35 @@ func (t TarGzArchiver) Extract(filePath, dstDir string, secret string) error {
 	return nil
 }
 
+// CompressWithOutput 执行压缩并通过 outputFn 逐行回传输出，使用 -zcvf（verbose）展示每个文件
+func (t TarGzArchiver) CompressWithOutput(sourcePaths []string, dstFile string, secret string, outputFn func(line string)) error {
+	var itemDirs []string
+	for _, item := range sourcePaths {
+		itemDirs = append(itemDirs, fmt.Sprintf("\"%s\"", filepath.Base(item)))
+	}
+	itemDir := strings.Join(itemDirs, " ")
+	aheadDir := filepath.Dir(sourcePaths[0])
+	if len(aheadDir) == 0 {
+		aheadDir = "/"
+	}
+	commands := ""
+	if len(secret) != 0 {
+		extraCmd := fmt.Sprintf("| openssl enc -aes-256-cbc -salt -k '%s' -out '%s'", secret, dstFile)
+		// verbose 模式下，tar 输出到 stderr，这里全量捕获通过 callback 推送
+		commands = fmt.Sprintf("tar -zcvf - -C \"%s\" %s %s", aheadDir, itemDir, extraCmd)
+		global.LOG.Debug(strings.ReplaceAll(commands, fmt.Sprintf(" %s ", secret), "******"))
+	} else {
+		// 使用 -zcvf (verbose) 替代 -zcf 使 tar 逐行输出被添加的文件名
+		commands = fmt.Sprintf("tar -zcvf \"%s\" -C \"%s\" %s", dstFile, aheadDir, itemDir)
+		global.LOG.Debug(commands)
+	}
+	if err := cmd.ExecCmdWithStream(commands, "", outputFn); err != nil {
+		return err
+	}
+	return nil
+}
+
+
 func (t TarGzArchiver) Compress(sourcePaths []string, dstFile string, secret string) error {
 	var itemDirs []string
 	for _, item := range sourcePaths {
