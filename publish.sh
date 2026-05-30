@@ -123,9 +123,11 @@ fi
 # ==========================================
 echo "正在检查是否已存在同名 Release ${TAG_NAME} ..."
 
-# 如果已存在该 Release，则直接上传/覆盖资源；如果不存在，则创建新的 Release
+GH_RELEASE_EXISTS="false"
+# 如果已存在该 Release，则获取现有的 assets 列表
 if gh release view "${TAG_NAME}" --repo "${REPO}" >/dev/null 2>&1; then
-    echo "Release ${TAG_NAME} 已存在，准备上传资源..."
+    echo "Release ${TAG_NAME} 已存在，准备检查并上传资源..."
+    GH_RELEASE_EXISTS="true"
 else
     echo "创建新的 Release: ${TAG_NAME} ..."
     gh release create "${TAG_NAME}" \
@@ -138,8 +140,19 @@ fi
 
 echo "正在上传文件到 GitHub..."
 for asset in "${ASSETS[@]}"; do
-    echo "上传: $(basename "$asset")"
-    # --clobber 表示如果同名文件存在则覆盖
+    filename=$(basename "$asset")
+    
+    if [ "${GH_RELEASE_EXISTS}" = "true" ]; then
+        # 检查文件是否已经在 release 中存在
+        # gh release view 会列出所有 asset，grep 精确匹配文件名
+        if gh release view "${TAG_NAME}" --repo "${REPO}" --json assets --jq '.assets[].name' | grep -qx "$filename"; then
+            echo "GitHub 已存在文件 $filename，跳过上传"
+            continue
+        fi
+    fi
+    
+    echo "上传: $filename"
+    # --clobber 表示如果同名文件存在则覆盖，虽然上面已经做了检查，保留此参数作为双重保险
     gh release upload "${TAG_NAME}" "$asset" --repo "${REPO}" --clobber
 done
 
@@ -173,7 +186,7 @@ if [ -n "${GITCODE_TOKEN:-}" ]; then
                 -d '{
                     "tag_name": "'"${TAG_NAME}"'",
                     "name": "GoPanel Release '"${TAG_NAME}"'",
-                    "body": "GoPanel '"${TAG_NAME}"' 自动发布",
+                    "body": "GoPanel '"${TAG_NAME}"' auto released",
                     "release_status": "latest"
                 }' > /dev/null
         fi
