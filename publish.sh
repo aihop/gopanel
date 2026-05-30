@@ -164,7 +164,7 @@ if [ -n "${GITCODE_TOKEN:-}" ]; then
         GC_RELEASE_ID=$(echo "$GC_RELEASE_INFO" | jq -r '.id // empty')
         
         if [ -n "$GC_RELEASE_ID" ] && [ "$GC_RELEASE_ID" != "null" ]; then
-            echo "GitCode Release ${TAG_NAME} 已存在，准备上传资源..."
+            echo "GitCode Release ${TAG_NAME} 已存在，准备检查并上传资源..."
         else
             echo "创建新的 GitCode Release: ${TAG_NAME} ..."
             curl -s -X POST "https://api.gitcode.com/api/v5/repos/${REPO}/releases" \
@@ -181,6 +181,16 @@ if [ -n "${GITCODE_TOKEN:-}" ]; then
         echo "正在上传文件到 GitCode..."
         for asset in "${ASSETS[@]}"; do
             filename=$(basename "$asset")
+            
+            # 如果是已有 Release，检查文件是否已经存在
+            if [ -n "$GC_RELEASE_ID" ] && [ "$GC_RELEASE_ID" != "null" ]; then
+                asset_exists=$(echo "$GC_RELEASE_INFO" | jq -r --arg name "$filename" '.assets[]? | select(.name == $name) | .name')
+                if [ -n "$asset_exists" ]; then
+                    echo "GitCode 已存在文件 $filename，跳过上传"
+                    continue
+                fi
+            fi
+            
             echo "正在获取 GitCode 上传地址: $filename"
             
             upload_info=$(curl -s -G -H "PRIVATE-TOKEN: ${GITCODE_TOKEN}" --data-urlencode "file_name=${filename}" "https://api.gitcode.com/api/v5/repos/${REPO}/releases/${TAG_NAME}/upload_url")
@@ -193,9 +203,13 @@ if [ -n "${GITCODE_TOKEN:-}" ]; then
             
             # 提取 headers 构造成 curl 的 -H 参数
             curl_opts=()
-            while read -r header_key header_val; do
-                curl_opts+=("-H" "$header_key: $header_val")
-            done < <(echo "$upload_info" | jq -r '.headers | to_entries | .[] | "\(.key) \(.value)"')
+            if echo "$upload_info" | jq -e '.headers' >/dev/null 2>&1; then
+                while read -r header_key header_val; do
+                    if [ -n "$header_key" ]; then
+                        curl_opts+=("-H" "$header_key: $header_val")
+                    fi
+                done < <(echo "$upload_info" | jq -r '.headers | to_entries | .[] | "\(.key) \(.value)"')
+            fi
             
             echo "上传到 GitCode: $filename"
             curl -s -X PUT "${curl_opts[@]}" -T "$asset" "$upload_url" > /dev/null
