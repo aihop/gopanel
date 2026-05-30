@@ -469,8 +469,12 @@ is_in_china() {
 fetch_upgrade_info() {
   local cur_version="${CUR_VERSION:-0.0.0}"
   local cur_version_code="${CUR_VERSION_CODE:-0}"
+  local source="github"
+  if is_in_china; then
+    source="gitcode"
+  fi
   local url
-  url="${API_UPGRADE_URL}?versionCode=${cur_version_code}&version=${cur_version}&os=${os_name}&arch=${arch_name}&appBrand=${APP_BRAND}"
+  url="${API_UPGRADE_URL}?versionCode=${cur_version_code}&version=${cur_version}&os=${os_name}&arch=${arch_name}&appBrand=${APP_BRAND}&source=${source}"
 
   log "检查最新版本..."
   local json
@@ -493,12 +497,7 @@ fetch_upgrade_info() {
   version="$latest_name"
   version_code="$latest_code"
   PACKAGE_NAME="$(basename "$download_url")"
-  
-  if is_in_china; then
-    PACKAGE_URL="https://gitcode.com/aihop/gopanel/releases/download/${version}/${PACKAGE_NAME}"
-  else
-    PACKAGE_URL="https://github.com/aihop/gopanel/releases/download/${version}/${PACKAGE_NAME}"
-  fi
+  PACKAGE_URL="$download_url"
 
   log "最新版本: ${version} (code: ${version_code})"
 }
@@ -506,8 +505,12 @@ fetch_upgrade_info() {
 fetch_gpagent_upgrade_info() {
   local cur_version="${CUR_VERSION:-0.0.0}"
   local cur_version_code="${CUR_VERSION_CODE:-0}"
+  local source="github"
+  if is_in_china; then
+    source="gitcode"
+  fi
   local url
-  url="${API_UPGRADE_URL}?versionCode=${cur_version_code}&version=${cur_version}&os=${os_name}&arch=${arch_name}&appBrand=${APP_BRAND}&package=gp-agent"
+  url="${API_UPGRADE_URL}?versionCode=${cur_version_code}&version=${cur_version}&os=${os_name}&arch=${arch_name}&appBrand=${APP_BRAND}&package=gp-agent&source=${source}"
 
   GPAGENT_FETCH_ERROR=""
   log "获取 gp-agent 最新安装包信息..."
@@ -535,12 +538,7 @@ fetch_gpagent_upgrade_info() {
   GPAGENT_VERSION="$latest_name"
   GPAGENT_VERSION_CODE="$latest_code"
   GPAGENT_PACKAGE_NAME="$(basename "$download_url")"
-  
-  if is_in_china; then
-    GPAGENT_PACKAGE_URL="https://gitcode.com/aihop/gp-agent/releases/download/${GPAGENT_VERSION}/${GPAGENT_PACKAGE_NAME}"
-  else
-    GPAGENT_PACKAGE_URL="https://github.com/aihop/gp-agent/releases/download/${GPAGENT_VERSION}/${GPAGENT_PACKAGE_NAME}"
-  fi
+  GPAGENT_PACKAGE_URL="$download_url"
 
   return 0
 }
