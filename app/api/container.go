@@ -142,7 +142,7 @@ func ContainerOperation(c fiber.Ctx) error {
 		return c.JSON(e.Fail(buserr.Err(err)))
 	}
 	if err := service.NewIContainerService().ContainerOperation(R); err != nil {
-		return c.JSON(e.Fail(buserr.Err(errors.New(constant.ErrTypeInternalServer))))
+		return c.JSON(e.Fail(buserr.Err(err)))
 	}
 	return c.JSON(e.Succ())
 }
