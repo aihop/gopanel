@@ -118,17 +118,22 @@ json_get() {
   val="$(echo "$json" | awk -v k="\"$key\"" '
     BEGIN { FS=":"; RS="," }
     $1 ~ k {
+      val = $2
+      # 如果 value 中包含冒号(例如 URL)，将其拼凑回来
+      for (i=3; i<=NF; i++) {
+        val = val ":" $i
+      }
       # 去掉前导和后置的空格、换行
-      gsub(/^[ \t\n]+/, "", $2)
-      gsub(/[ \t\n]+$/, "", $2)
+      gsub(/^[ \t\n]+/, "", val)
+      gsub(/[ \t\n]+$/, "", val)
       # 移除引号
-      gsub(/^"/, "", $2)
-      gsub(/"$/, "", $2)
+      gsub(/^"/, "", val)
+      gsub(/"$/, "", val)
       # 移除结尾的可能存在的 } 或者 ]
-      gsub(/}$/, "", $2)
-      gsub(/]$/, "", $2)
-      gsub(/"$/, "", $2)
-      print $2
+      gsub(/}$/, "", val)
+      gsub(/]$/, "", val)
+      gsub(/"$/, "", val)
+      print val
       exit
     }
   ')"
