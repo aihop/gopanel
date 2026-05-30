@@ -1462,6 +1462,24 @@ ensure_podman_socket_access() {
   if [ "${RUNTIME_USER}" = "root" ]; then
     return 0
   fi
+
+  # newuidmap/newgidmap is required by rootless Podman for user namespace mapping.
+  # Without it, `podman system service` exits with code 125.
+  if ! command -v newuidmap >/dev/null 2>&1 || ! command -v newgidmap >/dev/null 2>&1; then
+    log "安装 uidmap（提供 newuidmap/newgidmap，rootless Podman 必需）..."
+    if command -v apt-get >/dev/null 2>&1; then
+      run_privileged env DEBIAN_FRONTEND=noninteractive apt-get install -y uidmap
+    elif command -v dnf >/dev/null 2>&1; then
+      run_privileged dnf install -y shadow-utils
+    elif command -v yum >/dev/null 2>&1; then
+      run_privileged yum install -y shadow-utils
+    elif command -v zypper >/dev/null 2>&1; then
+      run_privileged zypper --non-interactive in -y shadow-utils
+    else
+      warn "未安装 newuidmap/newgidmap，rootless Podman 功能可能受限。请手动安装 uidmap (Debian/Ubuntu) 或 shadow-utils (RHEL/Fedora/openSUSE)。"
+    fi
+  fi
+
   if ! command -v loginctl >/dev/null 2>&1; then
     warn "未检测到 loginctl，无法自动启用 rootless Podman 用户会话，请手动为 ${RUNTIME_USER} 启用 linger 与 podman.socket。"
     return 0
@@ -1490,6 +1508,17 @@ ensure_podman_socket_access() {
     warn "非 root 运行面板时将优先使用该用户的 rootless Podman；若 socket 缺失，容器/镜像/流水线可能不可用。"
     warn "请检查 linger、systemd --user 与 podman.socket，必要时手动执行: loginctl enable-linger ${RUNTIME_USER} && su -s /bin/sh - ${RUNTIME_USER} -c 'export HOME=${user_home}; export XDG_RUNTIME_DIR=${runtime_dir}; export DBUS_SESSION_BUS_ADDRESS=unix:path=${runtime_dir}/bus; systemctl --user enable --now podman.socket'"
   fi
+
+  # 确保可通过短名拉取镜像（如 nginx 自动解析为 docker.io/library/nginx）
+  local reg_conf="/etc/containers/registries.conf"
+  if ! grep -q "unqualified-search-registries" "${reg_conf}" 2>/dev/null; then
+    log "配置 Podman 短名镜像源（追加 docker.io 到 ${reg_conf}）..."
+    run_privileged mkdir -p /etc/containers
+    printf '\n# Added by GoPanel installer\nunqualified-search-registries = ["docker.io"]\n' | \
+      run_privileged tee -a "${reg_conf}" >/dev/null 2>&1 || \
+      warn "写入 ${reg_conf} 失败，短名拉取镜像可能不可用（可后续在面板中一键修复）。"
+  fi
+
   return 0
 }
 
