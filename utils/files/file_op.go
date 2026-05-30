@@ -335,6 +335,72 @@ func (f FileOp) DownloadFileWithProcess(url, dst, key string, ignoreCertificate 
 	return nil
 }
 
+// DownloadFileWithCallback 同步下载文件，通过 progressFn(written, total) 实时回传进度。
+// 调用方应在 goroutine 中运行此方法以避免阻塞。
+func (f FileOp) DownloadFileWithCallback(url, dst string, ignoreCertificate bool, progressFn func(written, total uint64)) error {
+	client := &http.Client{}
+	if ignoreCertificate {
+		client.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}
+	}
+	request, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return err
+	}
+	request.Header.Set("Accept-Encoding", "identity")
+	resp, err := client.Do(request)
+	if err != nil {
+		global.LOG.Errorf("download file [%s] error, err %s", dst, err.Error())
+		return err
+	}
+	defer resp.Body.Close()
+
+	out, err := os.Create(dst)
+	if err != nil {
+		global.LOG.Errorf("create download file [%s] error, err %s", dst, err.Error())
+		return err
+	}
+	defer out.Close()
+
+	var total uint64
+	if resp.ContentLength > 0 {
+		total = uint64(resp.ContentLength)
+	}
+
+	// 包装 io.TeeReader 以实时回传进度
+	progressReader := &progressCallbackReader{
+		reader:     resp.Body,
+		written:    0,
+		total:      total,
+		progressFn: progressFn,
+	}
+
+	if _, err = io.Copy(out, progressReader); err != nil {
+		return fmt.Errorf("save download file [%s] error, err %s", dst, err.Error())
+	}
+	return nil
+}
+
+// progressCallbackReader 包装 io.Reader，每次读取后回调进度
+type progressCallbackReader struct {
+	reader     io.Reader
+	written    uint64
+	total      uint64
+	progressFn func(written, total uint64)
+}
+
+func (p *progressCallbackReader) Read(buf []byte) (int, error) {
+	n, err := p.reader.Read(buf)
+	if n > 0 {
+		p.written += uint64(n)
+		if p.progressFn != nil {
+			p.progressFn(p.written, p.total)
+		}
+	}
+	return n, err
+}
+
 func (f FileOp) DownloadFile(url, dst string) error {
 	resp, err := http2.GetHttpRes(url)
 	if err != nil {

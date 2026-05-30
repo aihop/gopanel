@@ -14,6 +14,7 @@ interface UseFileManagementActionsOptions {
   deCompressRef: { value: any }
   compressRef: { value: any }
   createRef: { value: any }
+  wgetRef: { value: any }
   batchRoleRef: { value: any }
   renameRef: { value: any }
   moveRef: { value: any }
@@ -31,6 +32,7 @@ export const useFileManagementActions = (options: UseFileManagementActionsOption
     deCompressRef,
     compressRef,
     createRef,
+    wgetRef,
     batchRoleRef,
     renameRef,
     moveRef,
@@ -92,6 +94,10 @@ export const useFileManagementActions = (options: UseFileManagementActionsOption
   }
 
   const handleCreate = (command: string) => {
+    if (command === "downloadRemote") {
+      wgetRef.value?.acceptParams({ path: searchParams.value.path })
+      return
+    }
     fileCreate.path = searchParams.value.path
     fileCreate.isDir = command === "dir"
     createRef.value?.acceptParams(fileCreate)

@@ -305,6 +305,33 @@ func (f *FileService) Wget(w request.FileWget) (string, error) {
 	key := "file-wget-" + common.GetUuid()
 	return key, fo.DownloadFileWithProcess(w.Url, filepath.Join(w.Path, w.Name), key, w.IgnoreCertificate)
 }
+
+// WgetStream 通过 DownloadFileLogger 异步下载文件并实时回传进度
+func (f *FileService) WgetStream(w request.FileWget, logger *DownloadFileLogger) error {
+	fo := files.NewFileOp()
+	dstPath := filepath.Join(w.Path, w.Name)
+
+	logger.Appendf("开始下载远程文件：%s", w.Url)
+	logger.Appendf("保存路径：%s", dstPath)
+	if w.IgnoreCertificate {
+		logger.AppendLine("已忽略 SSL 证书验证")
+	}
+
+	progressFn := func(written, total uint64) {
+		logger.SetProgress(written, total)
+	}
+
+	err := fo.DownloadFileWithCallback(w.Url, dstPath, w.IgnoreCertificate, progressFn)
+	if err != nil {
+		logger.Appendf("下载失败：%v", err)
+		logger.SetStatus("failed")
+		return err
+	}
+
+	logger.AppendLine("下载完成")
+	logger.SetStatus("success")
+	return nil
+}
 func (f *FileService) MvFile(m request.FileMove) error {
 	fo := files.NewFileOp()
 	if !fo.Stat(m.NewPath) {

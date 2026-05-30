@@ -1,19 +1,9 @@
 package api
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
-	"github.com/aihop/gopanel/app/dto/request"
-	"github.com/aihop/gopanel/app/dto/response"
-	"github.com/aihop/gopanel/app/e"
-	"github.com/aihop/gopanel/buserr"
-	"github.com/aihop/gopanel/constant"
-	"github.com/aihop/gopanel/global"
-	"github.com/aihop/gopanel/pkg/websocket"
-	"github.com/aihop/gopanel/utils/files"
-	"github.com/aihop/gopanel/utils/token"
-	websocket2 "github.com/aihop/gopanel/utils/websocket"
-	"github.com/gofiber/fiber/v3"
 	"io"
 	"os"
 	"path"
@@ -21,6 +11,21 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
+
+	"github.com/aihop/gopanel/app/dto/request"
+	"github.com/aihop/gopanel/app/dto/response"
+	"github.com/aihop/gopanel/app/e"
+	"github.com/aihop/gopanel/app/service"
+	"github.com/aihop/gopanel/buserr"
+	"github.com/aihop/gopanel/constant"
+	"github.com/aihop/gopanel/global"
+	"github.com/aihop/gopanel/pkg/websocket"
+	"github.com/aihop/gopanel/utils/common"
+	"github.com/aihop/gopanel/utils/files"
+	"github.com/aihop/gopanel/utils/token"
+	websocket2 "github.com/aihop/gopanel/utils/websocket"
+	"github.com/gofiber/fiber/v3"
 )
 
 func UploadFiles(c fiber.Ctx) error {
@@ -231,6 +236,115 @@ func WgetFile(c fiber.Ctx) error {
 	}
 	return c.JSON(e.Succ(response.FileWgetRes{Key: key}))
 }
+
+// WgetFileStream 异步下载远程文件，返回 task key，通过 /file/wget/logs 订阅 SSE 日志
+func WgetFileStream(c fiber.Ctx) error {
+	req, err := e.BodyToStruct[request.FileWget](c.Body())
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	if claims, ok := c.Locals(constant.AppAuthName).(*token.CustomClaims); ok && claims.Role == constant.UserRoleSubAdmin {
+		baseDir := filepath.Clean(claims.FileBaseDir)
+		if !strings.HasPrefix(filepath.Clean(req.Path), baseDir) {
+			return c.JSON(e.Fail(errors.New("permission denied: you can only access your designated workspace")))
+		}
+	}
+
+	key := "download_" + common.RandStrAndNum(20)
+	logger := service.GetDownloadLogger(key)
+	logger.Appendf("已提交远程下载任务：URL=%s，保存路径=%s/%s", req.Url, req.Path, req.Name)
+
+	go func() {
+		defer func() {
+			service.RemoveDownloadLogger(key)
+		}()
+		_ = fileService.WgetStream(*req, logger)
+	}()
+
+	return c.JSON(e.Succ(map[string]interface{}{"key": key}))
+}
+
+// WgetLogsStream SSE 实时推送远程下载任务的日志和进度
+func WgetLogsStream(c fiber.Ctx) error {
+	key := strings.TrimSpace(c.Query("key"))
+	if key == "" {
+		return c.JSON(e.Fail(errors.New("key is required")))
+	}
+
+	c.Set("Content-Type", "text/event-stream")
+	c.Set("Cache-Control", "no-cache")
+	c.Set("Connection", "keep-alive")
+	c.Set("Transfer-Encoding", "chunked")
+
+	c.RequestCtx().SetBodyStreamWriter(func(w *bufio.Writer) {
+		writeData := func(data string) {
+			_, _ = fmt.Fprintf(w, "data: %s\n\n", strings.ReplaceAll(data, "\n", " "))
+			_ = w.Flush()
+		}
+		writeEvent := func(event, data string) {
+			_, _ = fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, strings.ReplaceAll(data, "\n", " "))
+			_ = w.Flush()
+		}
+
+		if !service.IsDownloadLoggerActive(key) {
+			lines, err := service.ReadDownloadLogFromFile(key)
+			if err == nil {
+				for _, line := range lines {
+					writeData(line)
+				}
+			}
+			writeEvent("eof", "EOF")
+			return
+		}
+
+		logger := service.GetDownloadLogger(key)
+		for _, line := range logger.GetLogs() {
+			writeData(line)
+		}
+		writeEvent("status", logger.GetStatus())
+
+		ch := logger.Subscribe()
+		defer logger.Unsubscribe(ch)
+
+		ticker := time.NewTicker(15 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-c.Context().Done():
+				return
+			case <-ticker.C:
+				_, _ = fmt.Fprintf(w, "event: ping\ndata: ping\n\n")
+				_ = w.Flush()
+			case evt, ok := <-ch:
+				if !ok {
+					return
+				}
+				switch evt.Type {
+				case "log":
+					writeData(evt.Message)
+				case "progress":
+					writeEvent("progress", fmt.Sprintf("%.2f", evt.Percent))
+					if evt.Message != "" {
+						writeData(evt.Message)
+					}
+				case "status":
+					writeEvent("status", evt.Status)
+				case "eof":
+					writeEvent("eof", "EOF")
+					return
+				default:
+					if evt.Message != "" {
+						writeData(evt.Message)
+					}
+				}
+			}
+		}
+	})
+
+	return nil
+}
+
 func Download(c fiber.Ctx) error {
 	filePath := c.Query("path")
 	if claims, ok := c.Locals(constant.AppAuthName).(*token.CustomClaims); ok && claims.Role == constant.UserRoleSubAdmin {

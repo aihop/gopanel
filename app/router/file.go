@@ -32,6 +32,8 @@ func FileRouter(r fiber.Router) {
 		fileRouter.Post("/chunkUpload", api.UploadChunkFiles)
 		fileRouter.Post("/rename", api.ChangeFileName)
 		fileRouter.Post("/wget", api.WgetFile)
+		fileRouter.Post("/wget/stream", api.WgetFileStream)
+		fileRouter.Get("/wget/logs", api.WgetLogsStream)
 		fileRouter.Post("/move", api.MoveFile)
 		fileRouter.Post("/chunkDownload", api.DownloadChunkFiles)
 		fileRouter.Post("/size", api.Size)

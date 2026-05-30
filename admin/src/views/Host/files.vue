@@ -61,6 +61,10 @@
     ref="createRef"
     @close="loadData"
   />
+  <Wget
+    ref="wgetRef"
+    @close="loadData"
+  />
   <Chown
     @close="loadData"
   ></Chown>
@@ -99,6 +103,7 @@ import DeleteFile from "./components/file-management/DeleteFile.vue"
 import Preview from "./components/file-management/Preview.vue"
 import Upload from "./components/file-management/Upload.vue"
 import CreateFile from "./components/file-management/Create.vue"
+import Wget from "./components/file-management/Wget.vue"
 import Chown from "./components/file-management/Chown.vue"
 import BatchRole from "./components/file-management/BatchRole.vue"
 import FileRename from "./components/file-management/Rename.vue"
@@ -130,6 +135,7 @@ const uploadRef = ref<InstanceType<typeof Upload> | null>(null)
 const deCompressRef = ref<InstanceType<typeof Decompress> | null>(null)
 const compressRef = ref<InstanceType<typeof Compress> | null>(null)
 const createRef = ref<InstanceType<typeof CreateFile> | null>(null)
+const wgetRef = ref<InstanceType<typeof Wget> | null>(null)
 const batchRoleRef = ref<InstanceType<typeof BatchRole> | null>(null)
 const renameRef = ref<InstanceType<typeof FileRename> | null>(null)
 const moveRef = ref<InstanceType<typeof Move> | null>(null)
@@ -176,6 +182,7 @@ const {
 	deCompressRef,
 	compressRef,
 	createRef,
+	wgetRef,
 	batchRoleRef,
 	renameRef,
 	moveRef,
@@ -202,6 +209,10 @@ const options = [
 	{
 		label: "📄 " + t("file.file"),
 		key: "file"
+	},
+	{
+		label: "⬇ " + t("file.downloadRemote"),
+		key: "downloadRemote"
 	}
 ]
 
