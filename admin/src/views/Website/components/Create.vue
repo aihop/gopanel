@@ -264,22 +264,31 @@
             <span class="ml-2 text-xs text-slate-400">（可选）</span>
           </summary>
           <div class="border-t border-slate-100 px-4 py-3">
-            <n-alert
-              type="info"
-              :show-icon="true"
-              class="mb-3 text-xs"
-            >
-              追加到该站点的 Caddy server block 末尾，修改面板参数不会覆盖此处内容。
-              修改后需重新"应用配置"才能生效。
-            </n-alert>
-            <n-input
-              type="textarea"
-              v-model:value="form.httpConfig"
-              placeholder="# 示例：\nheader /api/* {\n  Access-Control-Allow-Origin *\n}\nbasicauth /admin/* {\n  user $2a$...\n}"
-              :autosize="{ minRows: 4, maxRows: 16 }"
-            />
-          </div>
-        </details>
+              <n-alert
+                type="info"
+                :show-icon="true"
+                class="mb-3 text-xs"
+              >
+                追加到该站点的 Caddy server block 末尾，修改面板参数不会覆盖此处内容。
+                修改后需重新"应用配置"才能生效。
+              </n-alert>
+              <div class="h-[240px] w-full overflow-hidden rounded-lg border border-slate-200">
+                <vue-monaco-editor
+                  v-model:value="form.httpConfig"
+                  language="ini"
+                  theme="vs-dark"
+                  class="h-full w-full"
+                  :options="{
+                    automaticLayout: true,
+                    wordWrap: 'on',
+                    minimap: { enabled: false },
+                    scrollBeyondLastLine: false,
+                    padding: { top: 8, bottom: 8 },
+                    fontSize: 13,
+                    lineNumbersMinChars: 3
+                  }"
+                />
+              </div>          </div>        </details>
 
         <n-form-item
           label="备注"
@@ -314,6 +323,7 @@ import type { Pipeline } from "@/api/interface/pipeline"
 import type { Container } from "@/api/interface/container"
 import { computed, ref, watch, onMounted } from "vue"
 import { websiteCreateAPI, websiteUpdateAPI } from "@/api/modules/website"
+import FtEditor from "@/components/FtEditor/index.vue"
 import { ListAppInstalled } from "@/api/modules/apps"
 import { listAllImage } from "@/api/modules/container"
 import { buildRuntimeBadgeText, buildRuntimeDetailText as formatRuntimeDetailText, getRunUserLabel } from "@/utils/runtime"

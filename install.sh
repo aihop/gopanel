@@ -1500,7 +1500,7 @@ ensure_podman_socket_access() {
   run_privileged chown "${runtime_uid}:${runtime_uid}" "${runtime_dir}" >/dev/null 2>&1 || true
   run_privileged chmod 0700 "${runtime_dir}" >/dev/null 2>&1 || true
   run_privileged mkdir -p "${user_home}/.config/containers" >/dev/null 2>&1 || true
-  printf '[containers]\nlog_driver = "k8s-file"\n' | run_privileged tee "${user_home}/.config/containers/containers.conf" >/dev/null 2>&1 || true
+  printf '[containers]\nlog_driver = "k8s-file"\nshort_name_mode = "permissive"\n' | run_privileged tee "${user_home}/.config/containers/containers.conf" >/dev/null 2>&1 || true
   run_privileged chown -R "${runtime_uid}:${runtime_uid}" "${user_home}/.config" >/dev/null 2>&1 || true
   run_privileged su -s /bin/sh - "${RUNTIME_USER}" -c "export HOME='${user_home}'; export XDG_RUNTIME_DIR='${runtime_dir}'; export DBUS_SESSION_BUS_ADDRESS='unix:path=${runtime_dir}/bus'; systemctl --user daemon-reload >/dev/null 2>&1 || true; systemctl --user enable --now podman.socket >/dev/null 2>&1 || true"
   if ! run_privileged test -S "${runtime_dir}/podman/podman.sock"; then

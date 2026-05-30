@@ -484,7 +484,7 @@ export default {
 		host: "主机",
 		serverHost: "服务器地址",
 		port: "端口",
-		serverPost: "服务器端口",
+		serverPort: "服务器端口",
 		password: "密码",
 		username: "用户名",
 		comment: "备注",
