@@ -39,7 +39,7 @@
       :remote="true"
       :pagination="pagination"
       v-model:checked-row-keys="selects"
-      min-width="1280px"
+      scroll-x="1000"
     />
   </FileBrowserFilters>
 

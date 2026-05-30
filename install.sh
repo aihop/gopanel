@@ -458,6 +458,14 @@ detect_local_package() {
   return 1
 }
 
+is_in_china() {
+  if curl -s -I -m 3 https://www.google.com >/dev/null 2>&1; then
+    return 1 # Can access Google, not in China
+  else
+    return 0 # Cannot access Google, assume in China
+  fi
+}
+
 fetch_upgrade_info() {
   local cur_version="${CUR_VERSION:-0.0.0}"
   local cur_version_code="${CUR_VERSION_CODE:-0}"
@@ -484,8 +492,13 @@ fetch_upgrade_info() {
 
   version="$latest_name"
   version_code="$latest_code"
-  PACKAGE_URL="$download_url"
   PACKAGE_NAME="$(basename "$download_url")"
+  
+  if is_in_china; then
+    PACKAGE_URL="https://gitcode.com/aihop/gopanel/releases/download/${version}/${PACKAGE_NAME}"
+  else
+    PACKAGE_URL="https://github.com/aihop/gopanel/releases/download/${version}/${PACKAGE_NAME}"
+  fi
 
   log "最新版本: ${version} (code: ${version_code})"
 }
@@ -521,8 +534,14 @@ fetch_gpagent_upgrade_info() {
 
   GPAGENT_VERSION="$latest_name"
   GPAGENT_VERSION_CODE="$latest_code"
-  GPAGENT_PACKAGE_URL="$download_url"
   GPAGENT_PACKAGE_NAME="$(basename "$download_url")"
+  
+  if is_in_china; then
+    GPAGENT_PACKAGE_URL="https://gitcode.com/aihop/gp-agent/releases/download/${GPAGENT_VERSION}/${GPAGENT_PACKAGE_NAME}"
+  else
+    GPAGENT_PACKAGE_URL="https://github.com/aihop/gp-agent/releases/download/${GPAGENT_VERSION}/${GPAGENT_PACKAGE_NAME}"
+  fi
+
   return 0
 }
 
