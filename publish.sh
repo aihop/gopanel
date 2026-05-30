@@ -140,18 +140,18 @@ fi
 
 echo "正在上传文件到 GitHub..."
 for asset in "${ASSETS[@]}"; do
-    filename=$(basename "$asset")
+    FILENAME=$(basename "$asset")
     
     if [ "${GH_RELEASE_EXISTS}" = "true" ]; then
         # 检查文件是否已经在 release 中存在
         # gh release view 会列出所有 asset，grep 精确匹配文件名
-        if gh release view "${TAG_NAME}" --repo "${REPO}" --json assets --jq '.assets[].name' | grep -qx "$filename"; then
-            echo "GitHub 已存在文件 $filename，跳过上传"
+        if gh release view "${TAG_NAME}" --repo "${REPO}" --json assets --jq '.assets[].name' | grep -Fqx "$FILENAME"; then
+            echo "GitHub 已存在文件 $FILENAME，跳过上传"
             continue
         fi
     fi
     
-    echo "上传: $filename"
+    echo "上传: $FILENAME"
     # --clobber 表示如果同名文件存在则覆盖，虽然上面已经做了检查，保留此参数作为双重保险
     gh release upload "${TAG_NAME}" "$asset" --repo "${REPO}" --clobber
 done
@@ -193,20 +193,20 @@ if [ -n "${GITCODE_TOKEN:-}" ]; then
         
         echo "正在上传文件到 GitCode..."
         for asset in "${ASSETS[@]}"; do
-            filename=$(basename "$asset")
+            GC_FILENAME=$(basename "$asset")
             
             # 如果是已有 Release，检查文件是否已经存在
             if [ -n "$GC_RELEASE_ID" ] && [ "$GC_RELEASE_ID" != "null" ]; then
-                asset_exists=$(echo "$GC_RELEASE_INFO" | jq -r --arg name "$filename" '.assets[]? | select(.name == $name) | .name')
+                asset_exists=$(echo "$GC_RELEASE_INFO" | jq -r --arg name "$GC_FILENAME" '.assets[]? | select(.name == $name) | .name')
                 if [ -n "$asset_exists" ]; then
-                    echo "GitCode 已存在文件 $filename，跳过上传"
+                    echo "GitCode 已存在文件 $GC_FILENAME，跳过上传"
                     continue
                 fi
             fi
             
-            echo "正在获取 GitCode 上传地址: $filename"
+            echo "正在获取 GitCode 上传地址: $GC_FILENAME"
             
-            upload_info=$(curl -s -G -H "PRIVATE-TOKEN: ${GITCODE_TOKEN}" --data-urlencode "file_name=${filename}" "https://api.gitcode.com/api/v5/repos/${REPO}/releases/${TAG_NAME}/upload_url")
+            upload_info=$(curl -s -G -H "PRIVATE-TOKEN: ${GITCODE_TOKEN}" --data-urlencode "file_name=${GC_FILENAME}" "https://api.gitcode.com/api/v5/repos/${REPO}/releases/${TAG_NAME}/upload_url")
             upload_url=$(echo "$upload_info" | jq -r '.url // empty')
             
             if [ -z "$upload_url" ] || [ "$upload_url" == "null" ]; then
@@ -224,7 +224,7 @@ if [ -n "${GITCODE_TOKEN:-}" ]; then
                 done < <(echo "$upload_info" | jq -r '.headers | to_entries | .[] | "\(.key) \(.value)"')
             fi
             
-            echo "上传到 GitCode: $filename"
+            echo "上传到 GitCode: $GC_FILENAME"
             curl -s -X PUT "${curl_opts[@]}" -T "$asset" "$upload_url" > /dev/null
         done
         
