@@ -153,10 +153,10 @@ func (a AppService) Install(ctx context.Context, req request.AppInstallCreate) (
 		installErr := error(nil)
 		defer func() {
 			if installErr != nil {
-				appInstall.Status = constant.UpErr
-				appInstall.Message = installErr.Error()
 				logger.Error("Installation failed: %s", installErr.Error())
-				_ = appInstallRepo.Save(context.Background(), appInstall)
+				// 清理 DB 记录和文件，避免列表中残留失败项
+				_ = appInstallRepo.DeleteBy(commonRepo.WithByID(appInstall.ID))
+				files.NewFileOp().DeleteDir(appInstall.GetPath())
 			} else {
 				if appInstall.Status == constant.Running {
 					logger.Info("Installation completed successfully")
