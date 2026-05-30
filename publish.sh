@@ -43,9 +43,10 @@ fi
 VERSION="${1:-}"
 
 if [ -z "${VERSION}" ]; then
-    echo "用法: $0 <版本号> [仓库名称]"
+    echo "用法: $0 <版本号> [仓库名称] [目标平台]"
     echo "示例: $0 1.0.0"
     echo "示例: $0 1.0.0 aihop/gopanel"
+    echo "示例: $0 1.0.0 aihop/gopanel gitcode"
     exit 1
 fi
 
@@ -63,11 +64,23 @@ if [ -n "${2:-}" ] && [[ "${2}" == */* ]]; then
 else
     REPO="aihop/gopanel"
 fi
+
+# 目标平台 (github, gitcode, 或 all)
+TARGET_PLATFORM="all"
+# 检查 $2 是否是不带 / 的平台参数 (比如 publish.sh 1.1.0 gitcode)
+if [ -n "${2:-}" ] && [[ "${2}" != */* ]] && [[ "${2}" =~ ^(github|gitcode|all)$ ]]; then
+    TARGET_PLATFORM="${2}"
+# 检查 $3 是否是平台参数 (比如 publish.sh 1.1.0 aihop/gopanel gitcode)
+elif [ -n "${3:-}" ] && [[ "${3}" =~ ^(github|gitcode|all)$ ]]; then
+    TARGET_PLATFORM="${3}"
+fi
+
 OUTDIR="${PROJECT_ROOT}/dist/${TAG_NAME}"
 
 echo "==========================================="
 echo "即将发布版本: ${TAG_NAME} (${VERSION})"
 echo "目标仓库: ${REPO}"
+echo "目标平台: ${TARGET_PLATFORM}"
 echo "打包目录: ${OUTDIR}"
 echo "==========================================="
 
@@ -121,120 +134,125 @@ fi
 # ==========================================
 # 6. 创建或更新 GitHub Release
 # ==========================================
-echo "正在检查是否已存在同名 Release ${TAG_NAME} ..."
-
-GH_RELEASE_EXISTS="false"
-# 如果已存在该 Release，则获取现有的 assets 列表
-if gh release view "${TAG_NAME}" --repo "${REPO}" >/dev/null 2>&1; then
-    echo "Release ${TAG_NAME} 已存在，准备检查并上传资源..."
-    GH_RELEASE_EXISTS="true"
-else
-    echo "创建新的 Release: ${TAG_NAME} ..."
-    gh release create "${TAG_NAME}" \
-        --repo "${REPO}" \
-        --title "GoPanel Release ${TAG_NAME}" \
-        --notes "GoPanel ${TAG_NAME} 自动发布" \
-        --draft=false \
-        --prerelease=false
-fi
-
-echo "正在上传文件到 GitHub..."
-for asset in "${ASSETS[@]}"; do
-    FILENAME=$(basename "$asset")
+if [[ "${TARGET_PLATFORM}" == "all" || "${TARGET_PLATFORM}" == "github" ]]; then
+    echo "==========================================="
+    echo "正在检查是否已存在同名 GitHub Release ${TAG_NAME} ..."
     
-    if [ "${GH_RELEASE_EXISTS}" = "true" ]; then
-        # 检查文件是否已经在 release 中存在
-        # gh release view 会列出所有 asset，grep 精确匹配文件名
-        if gh release view "${TAG_NAME}" --repo "${REPO}" --json assets --jq '.assets[].name' | grep -Fqx "$FILENAME"; then
-            echo "GitHub 已存在文件 $FILENAME，跳过上传"
-            continue
-        fi
+    GH_RELEASE_EXISTS="false"
+    # 如果已存在该 Release，则获取现有的 assets 列表
+    if gh release view "${TAG_NAME}" --repo "${REPO}" >/dev/null 2>&1; then
+        echo "GitHub Release ${TAG_NAME} 已存在，准备检查并上传资源..."
+        GH_RELEASE_EXISTS="true"
+    else
+        echo "创建新的 GitHub Release: ${TAG_NAME} ..."
+        gh release create "${TAG_NAME}" \
+            --repo "${REPO}" \
+            --title "GoPanel Release ${TAG_NAME}" \
+            --notes "GoPanel ${TAG_NAME} 自动发布" \
+            --draft=false \
+            --prerelease=false
     fi
     
-    echo "上传: $FILENAME"
-    # --clobber 表示如果同名文件存在则覆盖，虽然上面已经做了检查，保留此参数作为双重保险
-    gh release upload "${TAG_NAME}" "$asset" --repo "${REPO}" --clobber
-done
-
-echo "==========================================="
-echo "🎉 GitHub 发布成功！"
-echo "您可以访问以下链接查看您的 Release："
-echo "https://github.com/${REPO}/releases/tag/${TAG_NAME}"
-echo "==========================================="
+    echo "正在上传文件到 GitHub..."
+    for asset in "${ASSETS[@]}"; do
+        FILENAME=$(basename "$asset")
+        
+        if [ "${GH_RELEASE_EXISTS}" = "true" ]; then
+            # 检查文件是否已经在 release 中存在
+            # gh release view 会列出所有 asset，grep 精确匹配文件名
+            if gh release view "${TAG_NAME}" --repo "${REPO}" --json assets --jq '.assets[].name' | grep -Fqx "$FILENAME"; then
+                echo "GitHub 已存在文件 $FILENAME，跳过上传"
+                continue
+            fi
+        fi
+        
+        echo "上传: $FILENAME"
+        # --clobber 表示如果同名文件存在则覆盖，虽然上面已经做了检查，保留此参数作为双重保险
+        gh release upload "${TAG_NAME}" "$asset" --repo "${REPO}" --clobber
+    done
+    
+    echo "==========================================="
+    echo "🎉 GitHub 发布成功！"
+    echo "您可以访问以下链接查看您的 Release："
+    echo "https://github.com/${REPO}/releases/tag/${TAG_NAME}"
+    echo "==========================================="
+fi
 
 # ==========================================
 # 7. 创建或更新 GitCode Release
 # ==========================================
-if [ -n "${GITCODE_TOKEN:-}" ]; then
-    if ! command -v jq >/dev/null 2>&1; then
-        echo "错误：未找到 jq 命令，无法发布到 GitCode。请先安装 jq。"
-    else
-        echo "==========================================="
-        echo "正在检查是否已存在同名 GitCode Release ${TAG_NAME} ..."
-        
-        # GitCode API 获取 Release 信息
-        GC_RELEASE_INFO=$(curl -s -H "PRIVATE-TOKEN: ${GITCODE_TOKEN}" "https://api.gitcode.com/api/v5/repos/${REPO}/releases/tags/${TAG_NAME}")
-        GC_RELEASE_ID=$(echo "$GC_RELEASE_INFO" | jq -r '.id // empty')
-        
-        if [ -n "$GC_RELEASE_ID" ] && [ "$GC_RELEASE_ID" != "null" ]; then
-            echo "GitCode Release ${TAG_NAME} 已存在，准备检查并上传资源..."
+if [[ "${TARGET_PLATFORM}" == "all" || "${TARGET_PLATFORM}" == "gitcode" ]]; then
+    if [ -n "${GITCODE_TOKEN:-}" ]; then
+        if ! command -v jq >/dev/null 2>&1; then
+            echo "错误：未找到 jq 命令，无法发布到 GitCode。请先安装 jq。"
         else
-            echo "创建新的 GitCode Release: ${TAG_NAME} ..."
-            curl -s -X POST "https://api.gitcode.com/api/v5/repos/${REPO}/releases" \
-                -H "PRIVATE-TOKEN: ${GITCODE_TOKEN}" \
-                -H "Content-Type: application/json" \
-                -d '{
-                    "tag_name": "'"${TAG_NAME}"'",
-                    "name": "GoPanel Release '"${TAG_NAME}"'",
-                    "body": "GoPanel '"${TAG_NAME}"' auto released",
-                    "release_status": "latest"
-                }' > /dev/null
-        fi
-        
-        echo "正在上传文件到 GitCode..."
-        for asset in "${ASSETS[@]}"; do
-            GC_FILENAME=$(basename "$asset")
+            echo "==========================================="
+            echo "正在检查是否已存在同名 GitCode Release ${TAG_NAME} ..."
             
-            # 如果是已有 Release，检查文件是否已经存在
+            # GitCode API 获取 Release 信息
+            GC_RELEASE_INFO=$(curl -s -H "PRIVATE-TOKEN: ${GITCODE_TOKEN}" "https://api.gitcode.com/api/v5/repos/${REPO}/releases/tags/${TAG_NAME}")
+            GC_RELEASE_ID=$(echo "$GC_RELEASE_INFO" | jq -r '.id // empty')
+            
             if [ -n "$GC_RELEASE_ID" ] && [ "$GC_RELEASE_ID" != "null" ]; then
-                asset_exists=$(echo "$GC_RELEASE_INFO" | jq -r --arg name "$GC_FILENAME" '.assets[]? | select(.name == $name) | .name')
-                if [ -n "$asset_exists" ]; then
-                    echo "GitCode 已存在文件 $GC_FILENAME，跳过上传"
+                echo "GitCode Release ${TAG_NAME} 已存在，准备检查并上传资源..."
+            else
+                echo "创建新的 GitCode Release: ${TAG_NAME} ..."
+                curl -s -X POST "https://api.gitcode.com/api/v5/repos/${REPO}/releases" \
+                    -H "PRIVATE-TOKEN: ${GITCODE_TOKEN}" \
+                    -H "Content-Type: application/json" \
+                    -d '{
+                        "tag_name": "'"${TAG_NAME}"'",
+                        "name": "GoPanel Release '"${TAG_NAME}"'",
+                        "body": "GoPanel '"${TAG_NAME}"' auto released",
+                        "release_status": "latest"
+                    }' > /dev/null
+            fi
+            
+            echo "正在上传文件到 GitCode..."
+            for asset in "${ASSETS[@]}"; do
+                GC_FILENAME=$(basename "$asset")
+                
+                # 如果是已有 Release，检查文件是否已经存在
+                if [ -n "$GC_RELEASE_ID" ] && [ "$GC_RELEASE_ID" != "null" ]; then
+                    asset_exists=$(echo "$GC_RELEASE_INFO" | jq -r --arg name "$GC_FILENAME" '.assets[]? | select(.name == $name) | .name')
+                    if [ -n "$asset_exists" ]; then
+                        echo "GitCode 已存在文件 $GC_FILENAME，跳过上传"
+                        continue
+                    fi
+                fi
+                
+                echo "正在获取 GitCode 上传地址: $GC_FILENAME"
+                
+                upload_info=$(curl -s -G -H "PRIVATE-TOKEN: ${GITCODE_TOKEN}" --data-urlencode "file_name=${GC_FILENAME}" "https://api.gitcode.com/api/v5/repos/${REPO}/releases/${TAG_NAME}/upload_url")
+                upload_url=$(echo "$upload_info" | jq -r '.url // empty')
+                
+                if [ -z "$upload_url" ] || [ "$upload_url" == "null" ]; then
+                    echo "获取 GitCode 上传地址失败: $upload_info"
                     continue
                 fi
-            fi
+                
+                # 提取 headers 构造成 curl 的 -H 参数
+                curl_opts=()
+                if echo "$upload_info" | jq -e '.headers' >/dev/null 2>&1; then
+                    while read -r header_key header_val; do
+                        if [ -n "$header_key" ]; then
+                            curl_opts+=("-H" "$header_key: $header_val")
+                        fi
+                    done < <(echo "$upload_info" | jq -r '.headers | to_entries | .[] | "\(.key) \(.value)"')
+                fi
+                
+                echo "上传到 GitCode: $GC_FILENAME"
+                curl -s -X PUT "${curl_opts[@]}" -T "$asset" "$upload_url" > /dev/null
+            done
             
-            echo "正在获取 GitCode 上传地址: $GC_FILENAME"
-            
-            upload_info=$(curl -s -G -H "PRIVATE-TOKEN: ${GITCODE_TOKEN}" --data-urlencode "file_name=${GC_FILENAME}" "https://api.gitcode.com/api/v5/repos/${REPO}/releases/${TAG_NAME}/upload_url")
-            upload_url=$(echo "$upload_info" | jq -r '.url // empty')
-            
-            if [ -z "$upload_url" ] || [ "$upload_url" == "null" ]; then
-                echo "获取 GitCode 上传地址失败: $upload_info"
-                continue
-            fi
-            
-            # 提取 headers 构造成 curl 的 -H 参数
-            curl_opts=()
-            if echo "$upload_info" | jq -e '.headers' >/dev/null 2>&1; then
-                while read -r header_key header_val; do
-                    if [ -n "$header_key" ]; then
-                        curl_opts+=("-H" "$header_key: $header_val")
-                    fi
-                done < <(echo "$upload_info" | jq -r '.headers | to_entries | .[] | "\(.key) \(.value)"')
-            fi
-            
-            echo "上传到 GitCode: $GC_FILENAME"
-            curl -s -X PUT "${curl_opts[@]}" -T "$asset" "$upload_url" > /dev/null
-        done
-        
-        echo "==========================================="
-        echo "🎉 GitCode 发布成功！"
-        echo "您可以访问以下链接查看您的 Release："
-        echo "https://gitcode.com/${REPO}/-/releases/${TAG_NAME}"
-        echo "==========================================="
+            echo "==========================================="
+            echo "🎉 GitCode 发布成功！"
+            echo "您可以访问以下链接查看您的 Release："
+            echo "https://gitcode.com/${REPO}/-/releases/${TAG_NAME}"
+            echo "==========================================="
+        fi
+    else
+        echo "提示：未配置 GITCODE_TOKEN 环境变量，已跳过 GitCode 发布。"
     fi
-else
-    echo "提示：未配置 GITCODE_TOKEN 环境变量，已跳过 GitCode 发布。"
 fi
 
