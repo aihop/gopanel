@@ -152,12 +152,15 @@ func getContainerNames(install model.AppInstall) ([]string, error) {
 	containerMap := make(map[string]struct{})
 	projectName := normalizeComposeProjectName(project.Name)
 	for _, service := range project.AllServices() {
-		containerName := normalizeContainerName(service.ContainerName)
-		if containerName != "" && containerName != "${CONTAINER_NAME}" {
-			containerMap[containerName] = struct{}{}
-		}
 		serviceName := normalizeContainerName(service.Name)
-		if projectName != "" && serviceName != "" {
+		containerName := normalizeContainerName(service.ContainerName)
+
+		if containerName != "" && containerName != "${CONTAINER_NAME}" {
+			// compose explicitly sets container_name — use only that
+			containerMap[containerName] = struct{}{}
+		} else if projectName != "" && serviceName != "" {
+			// no explicit container_name — docker-compose auto-generates
+			// projectName-serviceName-1 (v2) or projectName_serviceName_1 (v1)
 			containerMap[projectName+"-"+serviceName+"-1"] = struct{}{}
 			containerMap[projectName+"_"+serviceName+"_1"] = struct{}{}
 		}
