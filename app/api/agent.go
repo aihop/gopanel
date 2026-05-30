@@ -13,6 +13,7 @@ import (
 	"github.com/aihop/gopanel/app/service"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
+	"github.com/aihop/gopanel/init/geo"
 	"github.com/aihop/gopanel/utils/gpagent"
 	"github.com/aihop/gopanel/utils/gpc"
 	"github.com/gofiber/fiber/v3"
@@ -82,6 +83,11 @@ func AgentEnsure(c fiber.Ctx) error {
 			return
 		}
 
+		source := "github"
+		if strings.Contains(geo.Region(c.IP()), "中国") {
+			source = "gitcode"
+		}
+
 		baseUpgradeReq := dto.SettingUpgradeVersion{
 			VersionName: currentVersionInfo.VersionName,
 			VersionCode: currentVersionInfo.VersionCode,
@@ -89,6 +95,7 @@ func AgentEnsure(c fiber.Ctx) error {
 			Arch:        runtime.GOARCH,
 			Lang:        "zh",
 			AppBrand:    constant.AppBrand,
+			Source:      source,
 		}
 		var updateInfo *dto.AppUpdateData
 		for _, pkg := range []string{"gp-agent", ""} {

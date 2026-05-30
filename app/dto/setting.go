@@ -87,6 +87,8 @@ type SettingUpgradeReq struct {
 	CurrentVersion string `json:"currentVersion"`
 	// 目标版本
 	TargetVersion string `json:"targetVersion"`
+	// 下载源 (如 github, gitcode, cdn)
+	Source string `json:"source"`
 	// 语言
 	Lang string `json:"lang"`
 }
@@ -111,6 +113,7 @@ type SettingUpgradeVersion struct {
 	Lang        string `json:"lang"`
 	AppBrand    string `json:"appBrand"`
 	Package     string `json:"package"`
+	Source      string `json:"source"`
 }
 
 type SSLUpdate struct {

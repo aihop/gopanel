@@ -14,6 +14,7 @@ import (
 	"github.com/aihop/gopanel/app/service"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
+	"github.com/aihop/gopanel/init/geo"
 	"github.com/aihop/gopanel/utils/cmd"
 	"github.com/aihop/gopanel/utils/common"
 	"github.com/gofiber/fiber/v3"
@@ -190,6 +191,15 @@ func SettingSystemUpgrade(c fiber.Ctx) error {
 	runtimeOS := runtime.GOOS
 	runtimeArch := runtime.GOARCH
 
+	source := req.Source
+	if source == "" {
+		source = "github"
+		// 检查是否为中国 IP，如果是，则默认 source 使用 gitcode
+		if strings.Contains(geo.Region(c.IP()), "中国") {
+			source = "gitcode"
+		}
+	}
+
 	currentVersionInfo, _ := appVersionService.GoPanelVersion()
 	// 获取最新版本信息
 	updateInfo, err := appVersionService.GetUpdateInfo(constant.UpgradeUrl, &dto.SettingUpgradeVersion{
@@ -199,6 +209,7 @@ func SettingSystemUpgrade(c fiber.Ctx) error {
 		Arch:        runtimeArch,
 		Lang:        req.Lang,
 		AppBrand:    constant.AppBrand,
+		Source:      source,
 	})
 	if err != nil {
 		return c.JSON(e.Fail(err))
@@ -356,6 +367,12 @@ func SettingSystemCheck(c fiber.Ctx) error {
 	runtimeOS := runtime.GOOS
 	runtimeArch := runtime.GOARCH
 
+	source := "github"
+	// 检查是否为中国 IP，如果是，则默认 source 使用 gitcode
+	if strings.Contains(geo.Region(c.IP()), "中国") {
+		source = "gitcode"
+	}
+
 	// 2. 获取最新版本信息
 	updateInfo, err := appVersionService.GetUpdateInfo(constant.UpgradeUrl, &dto.SettingUpgradeVersion{
 		VersionName: currentVersionInfo.VersionName,
@@ -364,6 +381,7 @@ func SettingSystemCheck(c fiber.Ctx) error {
 		Arch:        runtimeArch,
 		Lang:        R.Lang,
 		AppBrand:    R.AppBrand,
+		Source:      source,
 	})
 	if err != nil {
 		return c.JSON(e.Fail(err))
