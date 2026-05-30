@@ -1363,19 +1363,26 @@ install_autostart_services() {
   fi
 }
 
+
 install_podman() {
   if command -v podman >/dev/null 2>&1; then
-    log "Podman 已安装，跳过。"
-    ensure_podman_compose || true
-    ensure_podman_machine_macos || true
-    ensure_podman_socket_access || true
-    return 0
+    local pver
+    pver="$(podman version --format '{{.Server.Version}}' 2>/dev/null || podman --version 2>/dev/null | grep -oP '\d+\.\d+' | head -1 || echo "0")"
+    # Check if >= 5.x
+    if echo "$pver" | grep -qE '^[5-9]' 2>/dev/null; then
+      log "Podman ${pver} 已安装（版本 >= 5），跳过。"
+      ensure_podman_compose || true
+      ensure_podman_machine_macos || true
+      ensure_podman_socket_access || true
+      return 0
+    fi
+    log "当前 Podman 版本 ${pver}，低于 5.x，尝试升级..."
   fi
 
-  log "开始安装 Podman..."
   if [ "$os_name" = "darwin" ]; then
+    log "开始安装/升级 Podman (macOS)..."
     if command -v brew >/dev/null 2>&1; then
-      brew install podman || warn "Podman 安装失败，请手动安装。"
+      brew upgrade podman 2>/dev/null || brew install podman || warn "Podman 安装失败，请手动安装。"
       brew install podman-compose || warn "podman-compose 安装失败，请手动安装。"
       ensure_podman_machine_macos || true
     else
@@ -1384,9 +1391,11 @@ install_podman() {
     return 0
   fi
 
+  # ---- Linux ----
+  log "开始安装 Podman 5.0+..."
+
   if command -v apt-get >/dev/null 2>&1; then
-    run_privileged apt-get update
-    run_privileged apt-get install -y podman
+    install_podman_debian
   elif command -v dnf >/dev/null 2>&1; then
     run_privileged dnf install -y podman
   elif command -v yum >/dev/null 2>&1; then
@@ -1396,13 +1405,55 @@ install_podman() {
   elif command -v zypper >/dev/null 2>&1; then
     run_privileged zypper --non-interactive install podman
   else
-    warn "未识别的 Linux 包管理器，请手动安装 Podman。"
+    warn "未识别的 Linux 包管理器，请手动安装 Podman 5.0+。"
   fi
 
   ensure_podman_compose || true
   ensure_podman_socket_access || true
 }
 
+install_podman_debian() {
+  log "尝试通过 OBS 仓库安装最新版本 Podman（Debian/Ubuntu）..."
+
+  local distro_id distro_version repo_url=""
+  if [ -f /etc/os-release ]; then
+    distro_id="$(awk -F= '$1=="ID"{gsub("\"","",$2);print $2}' /etc/os-release | head -n 1)"
+    distro_version="$(awk -F= '$1=="VERSION_ID"{gsub("\"","",$2);print $2}' /etc/os-release | head -n 1)"
+  fi
+
+  case "${distro_id}" in
+    debian)
+      case "${distro_version}" in
+        12*) repo_url="https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/Debian_12/" ;;
+        11*) repo_url="https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/Debian_11/" ;;
+      esac
+      ;;
+    ubuntu)
+      case "${distro_version}" in
+        24.*) repo_url="https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_24.04/" ;;
+        22.04*) repo_url="https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_22.04/" ;;
+        20.04*) repo_url="https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_20.04/" ;;
+      esac
+      ;;
+  esac
+
+  if [ -n "${repo_url}" ]; then
+    log "添加 Podman OBS 仓库: ${repo_url}"
+    run_privileged mkdir -p /etc/apt/sources.list.d /usr/share/keyrings
+    local keyring="/usr/share/keyrings/devel_kubic_libcontainers_stable.gpg"
+    run_privileged curl -fsSL "${repo_url}/Release.key" | gpg --dearmor | run_privileged tee "${keyring}" >/dev/null 2>&1 || true
+    echo "deb [signed-by=${keyring}] ${repo_url} /" | run_privileged tee "/etc/apt/sources.list.d/devel:kubic:libcontainers:stable.list" >/dev/null 2>&1 || true
+    run_privileged apt-get update -y
+    run_privileged apt-get install -y podman slirp4netns || {
+      warn "通过 OBS 仓库安装 Podman 失败，回退到系统..."
+      run_privileged apt-get install -y podman slirp4netns
+    }
+  else
+    warn "未找到匹配的 Debian/Ubuntu 版本 OBS 仓库（${distro_id} ${distro_version}），使用系统仓库..."
+    run_privileged apt-get update -y
+    run_privileged apt-get install -y podman slirp4netns
+  fi
+}
 ensure_podman_machine_macos() {
   if [ "$os_name" != "darwin" ]; then
     return 0
@@ -1702,3 +1753,4 @@ main() {
 }
 
 main
+
