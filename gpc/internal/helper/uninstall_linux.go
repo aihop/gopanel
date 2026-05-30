@@ -15,10 +15,14 @@ import (
 )
 
 func (s *Server) actionGoPanelUninstall(ctx context.Context, params map[string]interface{}) (string, error) {
-	_ = params
+	return UninstallGoPanel(ctx, s.cfg)
+}
 
+// UninstallGoPanel stops services, removes binaries, startup files,
+// PID file, and socket for both gopanel and gp-agent on Linux.
+func UninstallGoPanel(ctx context.Context, cfg Config) (string, error) {
 	report := &uninstallReport{}
-	serviceNames := uniqueNonEmptyStrings("gopanel.service", s.cfg.GoPanelServiceName, "gp-agent.service")
+	serviceNames := uniqueNonEmptyStrings("gopanel.service", cfg.GoPanelServiceName, "gp-agent.service")
 
 	if _, err := exec.LookPath("systemctl"); err == nil {
 		for _, name := range serviceNames {
@@ -37,7 +41,7 @@ func (s *Server) actionGoPanelUninstall(ctx context.Context, params map[string]i
 		report.notef("skip systemd operations: %v", err)
 	}
 
-	if pid, ok := readPidfileForUninstall(s.cfg.GoPanelPidfilePath); ok && pidRunningForUninstall(pid) {
+	if pid, ok := readPidfileForUninstall(cfg.GoPanelPidfilePath); ok && pidRunningForUninstall(pid) {
 		if err := stopPidForUninstall(ctx, pid); err != nil {
 			report.notef("skip stopping pid %d: %v", pid, err)
 		} else {
@@ -45,12 +49,12 @@ func (s *Server) actionGoPanelUninstall(ctx context.Context, params map[string]i
 		}
 	}
 
-	report.removePath(defaultGoPanelBinaryPath(s.cfg.BaseDir), "removed binary")
-	report.removePath(defaultGpAgentBinaryPath(s.cfg.BaseDir), "removed binary")
+	report.removePath(defaultGoPanelBinaryPath(cfg.BaseDir), "removed binary")
+	report.removePath(defaultGpAgentBinaryPath(cfg.BaseDir), "removed binary")
 	report.removePath("/etc/systemd/system/gopanel.service", "removed startup file")
 	report.removePath("/etc/systemd/system/gp-agent.service", "removed startup file")
-	report.removePath(s.cfg.GoPanelPidfilePath, "removed runtime file")
-	report.removePath(defaultGpAgentSocketPath(s.cfg.BaseDir), "removed runtime file")
+	report.removePath(cfg.GoPanelPidfilePath, "removed runtime file")
+	report.removePath(defaultGpAgentSocketPath(cfg.BaseDir), "removed runtime file")
 
 	if _, err := exec.LookPath("systemctl"); err == nil {
 		if out, runErr := systemctl(ctx, "daemon-reload"); runErr != nil {
@@ -132,4 +136,33 @@ func uniqueNonEmptyStrings(items ...string) []string {
 		out = append(out, item)
 	}
 	return out
+}
+
+// CleanupGPC removes gpc binary, service unit, and socket.
+// Called separately because gpc cannot safely clean itself up
+// when running in service mode (would kill the handler process).
+func CleanupGPC(ctx context.Context, cfg Config) (string, error) {
+	report := &uninstallReport{}
+	report.removePath("/usr/local/bin/gpc", "removed gpc binary")
+	report.removePath("/etc/systemd/system/gpc.service", "removed gpc startup file")
+	report.removePath(filepath.Join(cfg.BaseDir, "gpc.sock"), "removed gpc socket")
+	if _, err := exec.LookPath("systemctl"); err == nil {
+		if out, runErr := systemctl(ctx, "disable", "--now", "gpc.service"); runErr != nil {
+			report.notef("skip disable/stop gpc.service: %v", runErr)
+		} else if strings.TrimSpace(out) == "" {
+			report.notef("disabled and stopped service: gpc.service")
+		} else {
+			report.notef("disabled and stopped service: gpc.service (%s)", strings.TrimSpace(out))
+		}
+	}
+	if _, err := exec.LookPath("systemctl"); err == nil {
+		if out, runErr := systemctl(ctx, "daemon-reload"); runErr != nil {
+			report.notef("skip systemctl daemon-reload: %v", runErr)
+		} else if strings.TrimSpace(out) == "" {
+			report.notef("reloaded systemd daemon")
+		} else {
+			report.notef("reloaded systemd daemon (%s)", strings.TrimSpace(out))
+		}
+	}
+	return report.result()
 }

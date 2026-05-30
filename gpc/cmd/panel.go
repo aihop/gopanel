@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"time"
 
+	"github.com/aihop/gopanel/gpc/internal/helper"
 	"github.com/aihop/gopanel/gpc/pkg/proto"
 	"github.com/aihop/gopanel/gpc/pkg/transport"
 	"github.com/spf13/cobra"
@@ -183,14 +185,68 @@ var goPanelUninstallCmd = &cobra.Command{
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		resp, err := callHelper("GOPANEL_UNINSTALL", map[string]interface{}{})
-		if err := handleResponse(resp, err); err != nil {
-			return err
+		if err == nil {
+			if err := handleResponse(resp, err); err != nil {
+				return err
+			}
+			if resp.Output != "" {
+				fmt.Fprintln(os.Stdout, resp.Output)
+			}
+			return nil
 		}
-		if resp.Output != "" {
-			fmt.Fprintln(os.Stdout, resp.Output)
+
+		// Service socket unavailable — run uninstall directly in this process
+		if isSocketError(err) {
+			fmt.Fprintln(os.Stderr, "gpc service not running, executing uninstall directly...")
+			return runDirectUninstall()
 		}
-		return nil
+		return err
 	},
+}
+
+func isSocketError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) {
+		return true
+	}
+	if os.IsNotExist(err) {
+		return true
+	}
+	return false
+}
+
+func runDirectUninstall() error {
+	ctx, cancel := context.WithTimeout(context.Background(), actionTimeout()+2*time.Second)
+	defer cancel()
+
+	hcfg := helper.Config{
+		SocketPath:         cfg.SocketPath,
+		BaseDir:            cfg.BaseDir,
+		GoPanelServiceName: cfg.GoPanelServiceName,
+		GoPanelBinaryPath:  cfg.GoPanelBinaryPath,
+		GoPanelConfigPath:  cfg.GoPanelConfigPath,
+		GoPanelPidfilePath: cfg.GoPanelPidfilePath,
+		ActionTimeout:      actionTimeout(),
+		LockTimeout:        time.Duration(cfg.LockTimeoutMs) * time.Millisecond,
+	}
+	out, err := helper.UninstallGoPanel(ctx, hcfg)
+	if err != nil {
+		return err
+	}
+	if out != "" {
+		fmt.Fprintln(os.Stdout, out)
+	}
+
+	// Clean up gpc itself (cannot do this from service mode since gpc.service
+	// would kill the handler before the response is sent).
+	gpcOut, gpcErr := helper.CleanupGPC(ctx, hcfg)
+	if gpcOut != "" {
+		fmt.Fprintln(os.Stdout, gpcOut)
+	}
+	return gpcErr
 }
 
 func init() {

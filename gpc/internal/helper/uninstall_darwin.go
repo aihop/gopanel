@@ -5,12 +5,17 @@ package helper
 import (
 	"context"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
 func (s *Server) actionGoPanelUninstall(ctx context.Context, params map[string]interface{}) (string, error) {
-	_ = params
+	return UninstallGoPanel(ctx, s.cfg)
+}
 
+// UninstallGoPanel stops services, removes binaries, startup files,
+// PID file, and socket for both gopanel and gp-agent on macOS.
+func UninstallGoPanel(ctx context.Context, cfg Config) (string, error) {
 	report := &uninstallReport{}
 	for _, item := range []struct {
 		label string
@@ -26,7 +31,7 @@ func (s *Server) actionGoPanelUninstall(ctx context.Context, params map[string]i
 		}
 	}
 
-	if pid, ok := readPidfile(s.cfg.GoPanelPidfilePath); ok && pidRunning(pid) {
+	if pid, ok := readPidfile(cfg.GoPanelPidfilePath); ok && pidRunning(pid) {
 		if err := stopPid(ctx, pid); err != nil {
 			report.notef("skip stopping pid %d: %v", pid, err)
 		} else {
@@ -34,13 +39,21 @@ func (s *Server) actionGoPanelUninstall(ctx context.Context, params map[string]i
 		}
 	}
 
-	report.removePath(defaultGoPanelBinaryPath(s.cfg.BaseDir), "removed binary")
-	report.removePath(defaultGpAgentBinaryPath(s.cfg.BaseDir), "removed binary")
+	report.removePath(defaultGoPanelBinaryPath(cfg.BaseDir), "removed binary")
+	report.removePath(defaultGpAgentBinaryPath(cfg.BaseDir), "removed binary")
 	report.removePath("/Library/LaunchDaemons/io.aihop.gopanel.plist", "removed startup file")
 	report.removePath("/Library/LaunchDaemons/io.aihop.gp-agent.plist", "removed startup file")
-	report.removePath(s.cfg.GoPanelPidfilePath, "removed runtime file")
-	report.removePath(defaultGpAgentSocketPath(s.cfg.BaseDir), "removed runtime file")
+	report.removePath(cfg.GoPanelPidfilePath, "removed runtime file")
+	report.removePath(defaultGpAgentSocketPath(cfg.BaseDir), "removed runtime file")
 
+	return report.result()
+}
+
+// CleanupGPC removes gpc socket. On macOS gpc has no launchd service
+// and binary location varies, so only the socket file is cleaned.
+func CleanupGPC(ctx context.Context, cfg Config) (string, error) {
+	report := &uninstallReport{}
+	report.removePath(filepath.Join(cfg.BaseDir, "gpc.sock"), "removed gpc socket")
 	return report.result()
 }
 

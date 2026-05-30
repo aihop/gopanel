@@ -43,9 +43,19 @@ func (s *Server) actionGoPanelInfo(ctx context.Context, params map[string]interf
 }
 
 func (s *Server) actionGoPanelUninstall(ctx context.Context, params map[string]interface{}) (string, error) {
+	return UninstallGoPanel(ctx, s.cfg)
+}
+
+func UninstallGoPanel(ctx context.Context, cfg Config) (string, error) {
 	_ = ctx
-	_ = params
+	_ = cfg
 	return "", errors.New("unsupported platform")
+}
+
+func CleanupGPC(ctx context.Context, cfg Config) (string, error) {
+	_ = ctx
+	_ = cfg
+	return "", nil
 }
 
 func (s *Server) actionPodmanSocketRepair(ctx context.Context, params map[string]interface{}) (string, error) {
