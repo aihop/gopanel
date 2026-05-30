@@ -177,7 +177,9 @@ func qualifyImageName(img string) string {
 		first = img[:i]
 		rest = img[i+1:]
 	}
-	if first == "localhost" || strings.Contains(first, ".") || strings.Contains(first, ":") {
+	// Only treat "." and ":" as registry host indicators when a path (/) exists.
+	// Without a "/": dots come from version tags (8.4.9), colons from tag separators.
+	if rest != "" && (first == "localhost" || strings.Contains(first, ".") || strings.Contains(first, ":")) {
 		return img
 	}
 	if rest == "" {

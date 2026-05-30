@@ -896,10 +896,12 @@ create_linux_user_if_needed() {
   fi
 
   if run_privileged test -x /usr/sbin/nologin; then
-    run_privileged useradd --system --create-home --shell /usr/sbin/nologin "$username"
+    run_privileged useradd --system --create-home --home-dir "${CONFIG_INSTALL_DIR}" --shell /usr/sbin/nologin "$username"
   else
-    run_privileged useradd --system --create-home --shell /bin/bash "$username"
+    run_privileged useradd --system --create-home --home-dir "${CONFIG_INSTALL_DIR}" --shell /bin/bash "$username"
   fi
+  # Ensure home directory ownership (useradd may skip chown if dir already exists)
+  run_privileged chown "${username}:${username}" "${CONFIG_INSTALL_DIR}" 2>/dev/null || true
 
   # Ensure subuid and subgid for rootless podman
   if ! grep -q "^${username}:" /etc/subuid 2>/dev/null; then
