@@ -197,16 +197,33 @@ if [[ "${TARGET_PLATFORM}" == "all" || "${TARGET_PLATFORM}" == "gitcode" ]]; the
                 echo "GitCode Release ${TAG_NAME} 已存在，准备检查并上传资源..."
             else
                 echo "创建新的 GitCode Release: ${TAG_NAME} ..."
+            CREATE_RES=$(curl -s -X POST "https://api.gitcode.com/api/v5/repos/${REPO}/releases" \
+                -H "PRIVATE-TOKEN: ${GITCODE_TOKEN}" \
+                -H "Content-Type: application/json" \
+                -d '{
+                    "tag_name": "'"${TAG_NAME}"'",
+                    "name": "GoPanel Release '"${TAG_NAME}"'",
+                    "body": "GoPanel '"${TAG_NAME}"' auto released",
+                    "release_status": "latest"
+                }')
+            
+            # 检查是否创建成功或因 Tag 不存在而失败
+            # GitCode 在 Tag 不存在时创建 Release 会失败，这里我们加上 target_commitish 参数，让 GitCode 自动创建 Tag
+            if echo "$CREATE_RES" | grep -q '"error_code":'; then
+                echo "提示：创建 Release 失败，可能是 Tag 不存在。尝试携带 target_commitish 参数重新创建..."
+                
                 curl -s -X POST "https://api.gitcode.com/api/v5/repos/${REPO}/releases" \
                     -H "PRIVATE-TOKEN: ${GITCODE_TOKEN}" \
                     -H "Content-Type: application/json" \
                     -d '{
                         "tag_name": "'"${TAG_NAME}"'",
+                        "target_commitish": "main",
                         "name": "GoPanel Release '"${TAG_NAME}"'",
                         "body": "GoPanel '"${TAG_NAME}"' auto released",
                         "release_status": "latest"
                     }' > /dev/null
             fi
+        fi
             
             echo "正在上传文件到 GitCode..."
             for asset in "${ASSETS[@]}"; do
