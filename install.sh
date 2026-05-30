@@ -922,6 +922,17 @@ choose_gopanel_runtime_user() {
     return 0
   fi
 
+  # 检测是否已安装 Docker 且未安装 Podman
+  # 如果安装了 Docker，强制要求以 root 运行（因为 Docker 守护进程需要 root 权限，且普通用户加入 docker 组有安全风险，这里选择稳妥的强制 root）
+  if command -v docker >/dev/null 2>&1 && ! command -v podman >/dev/null 2>&1; then
+    warn "检测到系统已安装 Docker。"
+    warn "由于 Docker 架构特性，GoPanel 需要使用 root 权限运行才能正常管理容器。"
+    RUN_AS_NORMAL_USER="false"
+    RUNTIME_USER="root"
+    log "已强制配置 gopanel 运行用户为: root"
+    return 0
+  fi
+
   local answer
   read -r -p "是否以普通用户运行 gopanel？[Y/n]: " answer || true
   case "${answer}" in
