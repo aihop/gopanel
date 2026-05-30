@@ -1241,7 +1241,6 @@ export default {
 		root: "Root directory",
 		list: "File list",
 		sub: "Subfolders",
-		downloadSuccess: "Successfully downloaded",
 		theme: "Theme",
 		language: "Language",
 		eol: "End of line",
@@ -1283,7 +1282,6 @@ export default {
 		wordWrap: "Automatically wrap",
 		deleteHelper2:
 			"Are you sure you want to delete the selected file? The deletion operation cannot be rolled back",
-		ignoreCertificate: "Allow insecure server connections",
 		ignoreCertificateHelper:
 			"Allowing inscure server connections may lead to data leak or tampering. Use this option only when trusting the download source.",
 		uploadOverLimit: "The number of files exceeds 1000! Please compress and upload",

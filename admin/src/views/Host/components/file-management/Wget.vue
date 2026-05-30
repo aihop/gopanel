@@ -243,7 +243,7 @@ const submit = async () => {
 	try {
 		const payload = { url: form.url, path: downloadPath, name: form.name, ignoreCertificate: form.ignoreCertificate }
 		const res = await WgetFileStream(payload)
-		const key = res?.data?.key || res?.key
+		const key = res?.data?.key || ""
 		if (key) {
 			startProgressStream(key)
 		} else {

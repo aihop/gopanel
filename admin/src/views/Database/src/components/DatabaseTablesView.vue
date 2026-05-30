@@ -412,7 +412,7 @@ onMounted(fetchData)
         <n-empty v-if="!loading && tables.length === 0" description="当前数据库中没有表" class="mt-10" />
         <n-data-table
           v-else
-          :columns="columns"
+          :columns="columns as any[]"
           :data="tables"
           :loading="loading"
           :pagination="false"
@@ -420,7 +420,7 @@ onMounted(fetchData)
           size="small"
           class="text-xs"
           :row-key="(row: any) => row.name"
-          @update:checked-row-keys="checkedKeys = $event"
+          @update:checked-row-keys="checkedKeys = $event as string[]"
         />
       </div>
       <div v-if="total > 0" class="p-2 border-t border-slate-200 bg-white flex justify-end">

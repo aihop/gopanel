@@ -222,7 +222,7 @@ const submit = async () => {
 	loading.value = true
 	try {
 		const res = await fileCompressAPI(payload as FileType.FileCompress)
-		const key = res?.data?.key || res?.key
+		const key = res?.data?.key || ""
 		if (key) {
 			startLogStream(key)
 		} else {
