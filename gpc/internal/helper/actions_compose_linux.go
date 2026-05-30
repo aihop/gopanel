@@ -73,4 +73,3 @@ func (s *Server) actionComposeInstall(ctx context.Context, params map[string]int
 	_ = run(nil, "podman-compose", "version")
 	return strings.TrimSpace(out.String()), nil
 }
-

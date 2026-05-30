@@ -142,7 +142,7 @@ func (s *Server) actionSecurityScanPort(ctx context.Context, params map[string]i
 	// Look for typical database ports open to 0.0.0.0
 	// For example: 3306 (MySQL), 6379 (Redis), 5432 (PostgreSQL), 27017 (MongoDB)
 	highRiskPorts := []string{"3306", "6379", "5432", "27017"}
-	
+
 	cmd := exec.CommandContext(ctx, "ss", "-tulnp")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -157,7 +157,7 @@ func (s *Server) actionSecurityScanPort(ctx context.Context, params map[string]i
 	var exposedPorts []string
 	outStr := string(out)
 	lines := strings.Split(outStr, "\n")
-	
+
 	// A simple regex to find 0.0.0.0:port or :::port
 	re := regexp.MustCompile(`(0\.0\.0\.0|:::|::|127\.0\.0\.1|localhost):(\d+)`)
 
@@ -166,13 +166,13 @@ func (s *Server) actionSecurityScanPort(ctx context.Context, params map[string]i
 		if !strings.Contains(line, "LISTEN") {
 			continue
 		}
-		
+
 		matches := re.FindAllStringSubmatch(line, -1)
 		for _, match := range matches {
 			if len(match) == 3 {
 				ip := match[1]
 				port := match[2]
-				
+
 				// We only care about exposed ports
 				if ip == "0.0.0.0" || ip == ":::" || ip == "::" {
 					for _, riskPort := range highRiskPorts {

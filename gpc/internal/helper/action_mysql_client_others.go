@@ -12,4 +12,3 @@ func (s *Server) actionMysqlClientInstall(ctx context.Context, params map[string
 	_ = params
 	return "", errors.New("mysql client install is only supported on linux")
 }
-

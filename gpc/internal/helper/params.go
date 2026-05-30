@@ -99,4 +99,3 @@ func getIntSlice(m map[string]interface{}, key string) ([]int, error) {
 		return nil, errors.New("invalid params: ports")
 	}
 }
-

@@ -209,9 +209,7 @@ const dropView = async (viewName: string) => {
     if (res.code === 0) {
       message.success(`视图 ${viewName} 已删除`)
       fetchViews()
-    } else {
-      message.error(res.message || '删除视图失败')
-    }
+    } 
   } catch {
     message.error('删除视图请求失败')
   }
@@ -283,9 +281,7 @@ const dropRoutine = async (name: string, type: string) => {
     if (res.code === 0) {
       message.success(`${type} ${name} 已删除`)
       fetchRoutines()
-    } else {
-      message.error(res.message || '删除失败')
-    }
+    } 
   } catch {
     message.error('删除请求失败')
   }

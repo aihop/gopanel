@@ -20,4 +20,3 @@ func (c Client) Do(ctx context.Context, req proto.Request) (proto.Response, erro
 	_ = req
 	return proto.Response{}, errors.New("windows transport not implemented")
 }
-

@@ -182,6 +182,8 @@ func allowedDownloadHostPatterns() []string {
 		"githubusercontent.com",
 		".githubusercontent.com",
 		".aliyuncs.com",
+		"gitcode.com",
+		".gitcode.com",
 	}
 	if extra := strings.TrimSpace(os.Getenv("GPAGENT_ALLOWED_DOWNLOAD_HOSTS")); extra != "" {
 		for _, item := range strings.Split(extra, ",") {

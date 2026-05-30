@@ -80,4 +80,3 @@ func hasMysqlClientCommands() bool {
 	}
 	return false
 }
-

@@ -51,4 +51,3 @@ func (c Client) Do(ctx context.Context, req proto.Request) (proto.Response, erro
 	}
 	return resp, nil
 }
-

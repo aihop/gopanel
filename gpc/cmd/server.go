@@ -15,4 +15,3 @@ var serverCmd = &cobra.Command{
 		return errors.New("gpc server is optional; keep server responsibilities in GoPanel")
 	},
 }
-

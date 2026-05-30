@@ -8,4 +8,3 @@ func authorizeUnixConn(c *net.UnixConn) error {
 	_ = c
 	return nil
 }
-

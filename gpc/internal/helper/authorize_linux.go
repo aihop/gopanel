@@ -23,4 +23,3 @@ func authorizeUnixConn(c *net.UnixConn) error {
 	})
 	return gerr
 }
-
