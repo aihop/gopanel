@@ -208,44 +208,31 @@ const columns: DataTableColumns<Pipeline.ResRecord> = [
     }
   },
   {
-    title: "Runner",
-    key: "runner",
-    width: 190,
+    title: "运行环境",
+    key: "runtime",
+    width: 260,
     ellipsis: { tooltip: true },
     render(row: Pipeline.ResRecord) {
-      if (!row.runnerHostPort) {
-        return h("span", { class: "text-slate-400 text-xs" }, "未启用")
-      }
-      return h("div", { class: "flex flex-col gap-0.5 text-xs overflow-hidden" }, [
-        h("div", { class: "flex items-center gap-1 truncate" }, [
-          h("span", { class: "font-mono text-emerald-600 truncate" }, `127.0.0.1:${row.runnerHostPort}`)
-        ]),
-        row.runnerContainerId ? h("span", { class: "font-mono text-slate-500 truncate" }, row.runnerContainerId.slice(0, 12)) : null
-      ])
-    }
-  },
-  {
-    title: "运行类型",
-    key: "runtimeType",
-    width: 250,
-    render(row: Pipeline.ResRecord) {
-      if (!row.runnerContainerId) {
-        return h("span", { class: "text-slate-400 text-xs" }, "无 Runner 容器")
-      }
-      return h("div", { class: "flex flex-col gap-1 text-xs" }, [
-        h("div", { class: "flex flex-wrap items-center gap-2" }, [
-          h(NTag, { size: "small", type: row.runtimeKind === "docker" ? "success" : "warning" }, {
-            default: () => getRuntimeKindLabel(row, { kindFallback: "运行时" })
+      const children: any[] = [
+        h("div", { class: "flex flex-wrap items-center gap-1" }, [
+          h(NTag, { size: "tiny", type: row.runtimeKind === "docker" ? "success" : "warning" }, {
+            default: () => getRuntimeKindLabel(row, { kindFallback: "?" })
           }),
-          h(NTag, { size: "small", type: row.runtimeMode === "rootless" ? "warning" : "default" }, {
+          h(NTag, { size: "tiny", type: row.runtimeMode === "rootless" ? "warning" : "default" }, {
             default: () => getRuntimeModeLabel(row)
-          })
-        ]),
-        h("span", { class: "text-slate-500" }, `运行用户: ${getRunUserLabel(row)}`),
-        row.runtimeHost
-          ? h("span", { class: "text-slate-500 break-all" }, `Host: ${row.runtimeHost}`)
-          : null
-      ])
+          }),
+          h("span", { class: "text-[11px] text-slate-400" }, getRunUserLabel(row))
+        ])
+      ]
+      if (row.runnerHostPort) {
+        children.push(
+          h("div", { class: "flex items-center gap-1 mt-0.5 truncate" }, [
+            h("span", { class: "text-[11px] text-slate-400" }, "预览:"),
+            h("span", { class: "font-mono text-emerald-600 text-xs truncate" }, `127.0.0.1:${row.runnerHostPort}`)
+          ])
+        )
+      }
+      return h("div", { class: "flex flex-col py-0.5 overflow-hidden" }, children)
     }
   },
   { title: "错误信息", key: "errorMessage", ellipsis: true },
