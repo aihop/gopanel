@@ -91,7 +91,7 @@ func SettingSystemRestart(c fiber.Ctx) error {
 	switch operation {
 	case "panel":
 		err = cmd.RestartGoPanel()
-	case "server":
+	case "server", "system":
 		err = cmd.RestartServer()
 	default:
 		err = fmt.Errorf("unsupported restart operation: %s", operation)
