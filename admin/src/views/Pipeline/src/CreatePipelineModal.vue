@@ -71,11 +71,11 @@ const currentRuntimeModeLabel = computed(() => {
 
 const runnerRuntimeHint = computed(() => {
   if (!runtimeValidate.value?.runtimeKind) {
-    return "Runner 会跟随当前面板已选中的容器运行时。`runnerUser` 只影响容器内进程用户，不会改变宿主机是 rootless 还是 rootful。"
+    return "Runner 会跟随当前面板已选中的容器运行时，不会改变宿主机是 rootless 还是 rootful"
   }
   const host = String(runtimeValidate.value?.runtimeHost || "").trim()
   const hostText = host ? `；当前 Host：${host}` : ""
-  return `Runner 当前会跟随 ${currentRuntimeKindLabel.value} / ${currentRuntimeModeLabel.value}${hostText}。非 root 安装通常应落到 rootless 运行时；这里的“容器内运行用户”仅控制进程身份，不改变宿主机运行时模式。`
+  return `Runner 当前会跟随 ${currentRuntimeKindLabel.value} / ${currentRuntimeModeLabel.value}${hostText}。非 root 安装会落到 rootless 运行时 `
 })
 
 const existingRuntimeHint = computed(() => {
@@ -243,7 +243,6 @@ const handleSubmit = () => {
       if (payload.pipelineMode === "runner") {
         payload.buildImage = ""
         payload.buildScript = ""
-        payload.outputImage = ""
         payload.artifactPath = payload.artifactPath || "."
         payload.runnerEnabled = true
       } else {
@@ -284,8 +283,6 @@ const handleSubmit = () => {
         payload.runnerMode = ""
         payload.runnerConfig = undefined
       }
-
-      payload.exposePort = Number(payload.exposePort) || 0
 
       if (isEdit.value && props.editData) {
         await updatePipeline({ id: props.editData.id, ...payload })
