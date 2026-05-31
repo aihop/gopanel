@@ -189,6 +189,8 @@ type RepositoryRow = {
 	name: string
 	downloadUrl: string
 	protocol?: string
+	auth?: boolean
+	username?: string
 	status?: string
 	statusType?: "success" | "error" | "warning" | "info"
 	creationTime?: string
@@ -260,10 +262,10 @@ const openAddRepoDrawer = (repoToEdit?: RepositoryRow) => {
 		addRepoFormValue.value = {
 			name: repoToEdit.name,
 			downloadUrl: repoToEdit.downloadUrl,
-			protocol: repoToEdit.protocol || "https", // Default if not present
-			authRequired: false, // Default to false as auth details are not in listImageRepo response
-			username: "",
-			password: "" // Always clear password for edit
+			protocol: repoToEdit.protocol || "https",
+			authRequired: !!repoToEdit.auth,
+			username: repoToEdit.username || "",
+			password: ""
 		}
 	} else {
 		drawerMode.value = "add"
@@ -289,13 +291,18 @@ const handleSaveRepo = async () => {
 			let response: any
 
 			if (drawerMode.value === "edit") {
-				const payload = {
+				const payload: any = {
 					id: editingRepoId.value,
 					name: formValues.name,
 					downloadUrl: formValues.downloadUrl,
 					protocol: formValues.protocol,
-					auth: formValues.authRequired,
-					...(formValues.authRequired && { username: formValues.username, password: formValues.password })
+					auth: formValues.authRequired
+				}
+				if (formValues.authRequired) {
+					payload.username = formValues.username
+					if (formValues.password) {
+						payload.password = formValues.password
+					}
 				}
 				try {
 					console.log("API Payload for updateImageRepo:", payload)
@@ -527,6 +534,8 @@ const fetchRepositoryData = async () => {
 					name: repo.name,
 					downloadUrl: repo.downloadUrl,
 					protocol: repo.protocol || "https",
+					auth: !!repo.auth,
+					username: repo.username || "",
 					status,
 					statusType,
 					creationTime: repo.createdAt ? new Date(repo.createdAt).toLocaleString() : ""
