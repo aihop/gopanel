@@ -125,13 +125,17 @@ const getRecordResultTags = (row: Pipeline.ResRecord) => {
   const tags: Array<{ label: string; type: "success" | "warning" | "info" | "default" }> = []
 
   if (row.runnerHostPort) {
-    tags.push({ label: `🚀 预览 :${row.runnerHostPort}`, type: "success" })
-  } else if (row.imageTag) {
-    tags.push({ label: "🐳 镜像", type: "warning" })
-  } else if (row.archiveFile) {
-    tags.push({ label: "📦 归档", type: "info" })
-  } else {
-    tags.push({ label: "📄 脚本", type: "default" })
+    tags.push({ label: "运行实例", type: "success" })
+  }
+  if (row.archiveFile) {
+    tags.push({ label: "归档包", type: "info" })
+  }
+  if (row.imageTag) {
+    tags.push({ label: row.runnerHostPort ? "镜像引用" : "脚本识别镜像", type: "warning" })
+  }
+
+  if (tags.length === 0) {
+    tags.push({ label: "脚本结果", type: "default" })
   }
 
   return tags
@@ -139,62 +143,73 @@ const getRecordResultTags = (row: Pipeline.ResRecord) => {
 
 const columns: DataTableColumns<Pipeline.ResRecord> = [
   { title: "ID", key: "id", width: 60 },
-  { title: "创建时间", key: "createdAt", width: 180, render: (row: Pipeline.ResRecord) => row.createdAt ? dayjs(row.createdAt).format("YYYY-MM-DD HH:mm") : "-" },
-  { title: "版本", key: "version", render: (row: Pipeline.ResRecord) => h(NTag, { type: "success", size: "small" }, { default: () => `v${row.version || '-'}` }) },
+  { title: "创建时间", key: "createdAt", width: 150, ellipsis: { tooltip: true }, render: (row: Pipeline.ResRecord) => row.createdAt ? dayjs(row.createdAt).format("YYYY-MM-DD HH:mm") : "-" },
+  { title: "版本", key: "version", width: 100, render: (row: Pipeline.ResRecord) => h(NTag, { type: "success", size: "small" }, { default: () => `v${row.version || '-'}` }) },
   {
     title: "Commit",
     key: "commitHash",
-    width: 130,
+    width: 140,
+    ellipsis: { tooltip: true },
     render(row: Pipeline.ResRecord) {
       if (!row.commitHash) {
         return h("span", { class: "text-slate-400 text-xs" }, "-")
       }
-      return h("div", { class: "flex items-center gap-1 text-xs min-w-0" }, [
-        h("span", {
-          class: "font-mono text-slate-700 shrink-0 cursor-pointer",
-          title: "点击复制完整 SHA",
+      return h("div", { class: "flex items-center gap-1 text-xs min-w-0 overflow-hidden" }, [
+        h("span", { class: "font-mono text-slate-700 truncate", title: row.commitHash }, row.commitHash.slice(0, 12)),
+        h("button", {
+          type: "button",
+          class: "shrink-0 text-[12px] leading-none text-blue-600 hover:text-blue-700 whitespace-nowrap",
           onClick: (event: MouseEvent) => {
             event.stopPropagation()
             void handleCopy(row.commitHash || "", "Commit SHA 已复制")
           }
-        }, row.commitHash.slice(0, 7))
+        }, "复制")
       ])
     }
   },
   {
     title: "状态",
     key: "status",
-    width: 120,
+    width: 90,
     render(row: Pipeline.ResRecord) {
       let type: "default" | "info" | "success" | "warning" | "error" = "default"
-      let label = row.status
       switch (row.status) {
         case "pending": type = "default"; break
         case "cloning": type = "info"; break
         case "building": type = "warning"; break
         case "deploying": type = "info"; break
-        case "success":
-          type = "success"
-          label = row.released ? "已发布" : "构建成功"
-          break
+        case "success": type = "success"; break
         case "failed": type = "error"; break
       }
-      return h(NTag, { type, size: "small" }, { default: () => label })
+      return h(NTag, { type, size: "small" }, { default: () => row.status })
+    }
+  },
+  {
+    title: "正式版本",
+    key: "released",
+    width: 100,
+    render(row: Pipeline.ResRecord) {
+      return h(
+        NTag,
+        { size: "small", type: row.released ? "success" : "default" },
+        { default: () => (row.released ? "已发布" : "未发布") }
+      )
     }
   },
   {
     title: "结果类型",
     key: "resultType",
-    width: 220,
+    width: 150,
+    ellipsis: { tooltip: true },
     render(row: Pipeline.ResRecord) {
       const tags = getRecordResultTags(row)
       return h(
         "div",
-        { class: "flex flex-wrap gap-1" },
-        tags.map((item) =>
+        { class: "flex gap-1 overflow-hidden" },
+        tags.slice(0, 2).map((item) =>
           h(
             NTag,
-            { size: "small", type: item.type },
+            { size: "tiny", type: item.type },
             { default: () => item.label }
           )
         )
@@ -204,24 +219,17 @@ const columns: DataTableColumns<Pipeline.ResRecord> = [
   {
     title: "Runner",
     key: "runner",
-    width: 260,
+    width: 190,
+    ellipsis: { tooltip: true },
     render(row: Pipeline.ResRecord) {
       if (!row.runnerHostPort) {
-        return h("span", { class: "text-slate-400 text-xs" }, "未启用 / 未产出")
+        return h("span", { class: "text-slate-400 text-xs" }, "未启用")
       }
-      return h("div", { class: "flex flex-col gap-0.5 text-xs min-w-0" }, [
-        h("div", { class: "flex items-center gap-1 min-w-0" }, [
-          h("span", { class: "font-mono text-emerald-600 shrink-0" }, `127.0.0.1:${row.runnerHostPort}`),
-          h("button", {
-            type: "button",
-            class: "shrink-0 text-[12px] leading-none text-blue-600 hover:text-blue-700",
-            onClick: (event: MouseEvent) => {
-              event.stopPropagation()
-              void handleCopy(`127.0.0.1:${row.runnerHostPort}`, "Runner 地址已复制")
-            }
-          }, "复制")
+      return h("div", { class: "flex flex-col gap-0.5 text-xs overflow-hidden" }, [
+        h("div", { class: "flex items-center gap-1 truncate" }, [
+          h("span", { class: "font-mono text-emerald-600 truncate" }, `127.0.0.1:${row.runnerHostPort}`)
         ]),
-        row.runnerContainerId ? h("span", { class: "font-mono text-slate-500" }, row.runnerContainerId.slice(0, 12)) : null
+        row.runnerContainerId ? h("span", { class: "font-mono text-slate-500 truncate" }, row.runnerContainerId.slice(0, 12)) : null
       ])
     }
   },
