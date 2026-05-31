@@ -2,6 +2,7 @@ package docker
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -100,11 +101,8 @@ func (a *defaultRuntimeAdapter) DockerClient(ctx context.Context) (*client.Clien
 	if err == nil {
 		return cli, nil
 	}
-	// On macOS with podman, the docker API socket is not available.
-	// Return a nil client without error so callers can skip docker
-	// operations gracefully when the API is not needed.
 	if resolved.Kind == RuntimePodman && runtime.GOOS == "darwin" {
-		return nil, nil
+		return podmanDarwinDockerClient(resolved.Host)
 	}
 	return nil, err
 }
@@ -303,4 +301,42 @@ func dockerComposeAvailable() bool {
 		}
 	}
 	return true
+}
+
+// podmanDarwinDockerClient creates a Docker client for Podman on macOS.
+func podmanDarwinDockerClient(host string) (*client.Client, error) {
+	if host != "" {
+		cli, err := client.NewClientWithOpts(
+			client.WithHost(host),
+			client.WithAPIVersionNegotiation(),
+		)
+		if err == nil {
+			return cli, nil
+		}
+	}
+
+	cmd := exec.Command("podman", "machine", "inspect", "--format", "json")
+	out, err := cmd.Output()
+	if err == nil {
+		var machines []struct {
+			ConnectionInfo struct {
+				PodmanSocket struct {
+					Path string `json:"Path"`
+				} `json:"PodmanSocket"`
+			} `json:"ConnectionInfo"`
+		}
+		if err := json.Unmarshal(out, &machines); err == nil && len(machines) > 0 {
+			if p := machines[0].ConnectionInfo.PodmanSocket.Path; p != "" {
+				cli, err := client.NewClientWithOpts(
+					client.WithHost("unix://"+p),
+					client.WithAPIVersionNegotiation(),
+				)
+				if err == nil {
+					return cli, nil
+				}
+			}
+		}
+	}
+
+	return nil, nil
 }
