@@ -30,6 +30,9 @@ func detectBuiltImageRef(p *model.Pipeline, version string, logs []string) strin
 	if len(candidates) > 0 {
 		return candidates[0]
 	}
+	if p.PipelineKey != "" {
+		return fmt.Sprintf("%s:%s", p.PipelineKey, version)
+	}
 	if p.BuildImage != "host" && p.BuildImage != "" {
 		return fmt.Sprintf("%s:%s", p.BuildImage, version)
 	}
