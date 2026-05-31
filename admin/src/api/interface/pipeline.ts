@@ -17,7 +17,6 @@ export namespace Pipeline {
     runnerConfig?: any;
     actionType?: string;
     actionParams?: string;
-    autoDeploy?: boolean;
   }
 
   export interface ReqUpdate extends ReqCreate {
@@ -45,7 +44,6 @@ export namespace Pipeline {
     runnerConfig?: any;
     actionType?: string;
     actionParams?: string;
-    autoDeploy?: boolean;
     runtimeHost?: string;
     runtimeKind?: string;
     runtimeMode?: string;

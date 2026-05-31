@@ -19,7 +19,6 @@ type Pipeline struct {
 
 	ActionType   string `gorm:"column:action_type;type:varchar(32);not null;default:'deploy'" json:"actionType"`
 	ActionParams string `gorm:"column:action_params;type:text" json:"actionParams"`
-	AutoDeploy   bool   `gorm:"column:auto_deploy;type:boolean;default:true" json:"autoDeploy"`
 	BuildImage   string `gorm:"column:build_image;type:varchar(100);not null" json:"buildImage"`
 	BuildScript  string `gorm:"column:build_script;type:text" json:"buildScript"`
 	OutputImage  string `gorm:"column:output_image;type:varchar(255)" json:"outputImage"`

@@ -18,7 +18,6 @@ export interface PipelineFormModel {
   pipelineKey: string
   actionType: string
   actionParams: string
-  autoDeploy: boolean
   runnerEnabled: boolean
   runnerPolicy: "run" | "build_run"
   runnerAdvanced: boolean
@@ -124,7 +123,6 @@ export const createDefaultPipelineFormModel = (): PipelineFormModel => ({
   pipelineKey: "",
   actionType: "deploy",
   actionParams: "",
-  autoDeploy: true,
   runnerEnabled: false,
   runnerPolicy: "build_run",
   runnerAdvanced: false,

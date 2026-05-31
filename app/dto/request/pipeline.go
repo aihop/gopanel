@@ -18,7 +18,6 @@ type PipelineCreate struct {
 	PipelineKey  string                 `json:"pipelineKey"`
 	RunnerMode   string                 `json:"runnerMode"`
 	RunnerConfig map[string]interface{} `json:"runnerConfig"`
-	AutoDeploy   bool                   `json:"autoDeploy"`
 }
 
 type PipelineUpdate struct {
@@ -40,7 +39,6 @@ type PipelineUpdate struct {
 	PipelineKey  string                 `json:"pipelineKey"`
 	RunnerMode   string                 `json:"runnerMode"`
 	RunnerConfig map[string]interface{} `json:"runnerConfig"`
-	AutoDeploy   bool                   `json:"autoDeploy"`
 }
 
 type PipelineRun struct {
