@@ -184,9 +184,59 @@ func (s *Server) actionPodmanRegistriesSet(ctx context.Context, params map[strin
 }
 
 func (s *Server) actionPodmanContainerJournalLogs(ctx context.Context, params map[string]interface{}) (string, error) {
-	_ = ctx
-	_ = params
-	return "", errors.New("unsupported platform")
+	containerID := strings.TrimSpace(getString(params, "container_id"))
+	containerName := strings.TrimSpace(getString(params, "container_name"))
+	identifier := containerID
+	if identifier == "" {
+		identifier = containerName
+	}
+	if identifier == "" {
+		return "", errors.New("invalid params: container_id or container_name required")
+	}
+
+	tail := strings.TrimSpace(getString(params, "tail"))
+	if tail == "" || tail == "0" {
+		tail = "50"
+	}
+
+	args := []string{"logs", "--tail", tail, identifier}
+	out, err := exec.CommandContext(ctx, "podman", args...).CombinedOutput()
+	if err != nil {
+		msg := strings.TrimSpace(string(out))
+		if msg == "" {
+			msg = err.Error()
+		}
+		return "", errors.New(msg)
+	}
+
+	result := podmanJournalLogsResult{
+		Lines: splitLines(string(out)),
+	}
+	b, err := json.Marshal(result)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+func splitLines(s string) []string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return []string{}
+	}
+	lines := strings.Split(s, "\n")
+	result := make([]string, 0, len(lines))
+	for _, l := range lines {
+		if trimmed := strings.TrimSpace(l); trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
+}
+
+type podmanJournalLogsResult struct {
+	Lines  []string `json:"lines"`
+	Cursor string   `json:"cursor,omitempty"`
 }
 
 func (s *Server) actionComposeInstall(ctx context.Context, params map[string]interface{}) (string, error) {
