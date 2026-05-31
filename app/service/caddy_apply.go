@@ -61,7 +61,23 @@ func renderCaddyfile(websites []model.Website, domainByWebsite map[uint][]model.
 			continue
 		}
 
-		addrs := collectAddresses(w, domainByWebsite[w.ID])
+		otherDomains := domainByWebsite[w.ID]
+
+		// When redirectDomainsToPrimary is enabled, secondary domains
+		// must be excluded from the main server block to avoid Caddy's
+		// "ambiguous site definition" error (same domain in two blocks).
+		mainDomains := otherDomains
+		if w.RedirectDomainsToPrimary {
+			var primaryOnly []model.WebsiteDomain
+			for _, d := range otherDomains {
+				if normalizeWebsiteDomainForCompare(d.Domain) == normalizeWebsiteDomainForCompare(w.PrimaryDomain) {
+					primaryOnly = append(primaryOnly, d)
+				}
+			}
+			mainDomains = primaryOnly
+		}
+
+		addrs := collectAddresses(w, mainDomains)
 		if len(addrs) == 0 {
 			continue
 		}
