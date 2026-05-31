@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { PipelineFormModel } from "./pipelineForm"
+import FtEditor from "@/components/FtEditor/index.vue"
 
 defineProps<{
   formModel: PipelineFormModel
@@ -78,10 +79,11 @@ const markCustomPreset = () => {
     label="构建命令"
   >
     <div class="w-full">
-      <n-input
-        v-model:value="formModel.runnerBuildCommand"
+      <FtEditor
+        v-model="formModel.runnerBuildCommand"
+        language="bash"
+        height="200px"
         :placeholder="runnerBuildCommandPlaceholder"
-        @update:value="markCustomPreset"
       />
       <div class="mt-2 text-xs text-slate-500">
         {{ runnerBuildCommandHint }}
