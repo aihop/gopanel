@@ -133,10 +133,12 @@ const onSubmit = async (formEl: any | undefined) => {
 	if (!formEl) return
 	formEl.validate(async (errors: any) => {
 		if (errors) return
-		await imagePush(form)
-		MsgSuccess(t("commons.msg.operationSuccess"))
-		drawerVisible.value = false
-		emit("search")
+		const res = await imagePush(form)
+		logConfig.name = res.data
+		logVisible.value = true
+		isStartReading.value = true
+		await nextTick()
+		logRef.value?.changeTail(true)
 	})
 }
 
