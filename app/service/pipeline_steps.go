@@ -4,14 +4,16 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/aihop/gopanel/app/model"
-	udocker "github.com/aihop/gopanel/utils/docker"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/aihop/gopanel/app/model"
+	"github.com/aihop/gopanel/constant"
+	udocker "github.com/aihop/gopanel/utils/docker"
 )
 
 func (s *PipelineService) stepClone(ctx context.Context, logger *PipelineLogger, p *model.Pipeline, workspace string) (string, error) {
@@ -73,6 +75,9 @@ func (s *PipelineService) stepClone(ctx context.Context, logger *PipelineLogger,
 	return "", nil
 }
 func (s *PipelineService) stepBuild(ctx context.Context, logger *PipelineLogger, p *model.Pipeline, workspace string, releaseDir string, version string) error {
+	if p.RunnerMode == constant.PipelineRunnerModeRunner {
+		return nil
+	}
 	if p.BuildScript == "" {
 		logger.Info("未配置构建脚本，跳过容器构建阶段")
 		return nil

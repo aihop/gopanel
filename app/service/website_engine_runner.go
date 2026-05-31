@@ -347,6 +347,7 @@ func normalizeRunnerExtraNetworks(items []string) []string {
 	}
 	return out
 }
+
 func buildRunnerScript(rc runnerConfig, sourceDir string) string {
 	mode := strings.ToLower(strings.TrimSpace(rc.Mode))
 	wd := strings.TrimSpace(rc.WorkingDir)

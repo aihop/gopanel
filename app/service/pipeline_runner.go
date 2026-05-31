@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/aihop/gopanel/app/dto/request"
-	"github.com/aihop/gopanel/app/model"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/aihop/gopanel/app/dto/request"
+	"github.com/aihop/gopanel/app/model"
 )
 
 func (s *PipelineService) stepRunner(ctx context.Context, logger *PipelineLogger, p *model.Pipeline, workspaceDir string) (int, string, string, error) {
@@ -75,6 +76,7 @@ func resolveRunnerCodeRoot(logger *PipelineLogger, p *model.Pipeline, workspaceD
 	}
 	return codeRoot, nil
 }
+
 func validateRunnerModeSource(codeRoot string, runnerCfg map[string]interface{}) error {
 	if err := ValidateRunnerPersistentPaths(runnerCfg); err != nil {
 		return err

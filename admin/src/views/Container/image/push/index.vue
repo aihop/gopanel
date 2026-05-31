@@ -5,7 +5,7 @@
 		@close="onCloseLog"
 		:close-on-click-modal="false"
 		:close-on-press-escape="false"
-		width="400px"
+		width="600px"
 		>
 		<n-drawer-content>
 			<template #header>
@@ -47,7 +47,7 @@
 						:default-button="false"
 						v-model:is-reading="isReading"
 						v-if="logVisible"
-						:style="'height: calc(100vh - 200px);min-height: 200px'"
+						style="height: calc(100vh - 150px); min-height: 200px"
 						v-model:loading="loading"
 					/>
 				</n-col>
@@ -68,14 +68,12 @@
 </template>
 
 <script lang="ts" setup>
-import { nextTick, reactive, ref } from "vue"
+import { reactive, ref } from "vue"
 import { Rules } from "@/global/form-rules"
-import { t } from "@/i18n"
 import { imagePush } from "@/api/modules/container"
 import { Container } from "@/api/interface/container"
 import DrawerHeader from "@/components/DrawerHeader.vue"
 import LogFile from "@/components/LogFile.vue"
-import { MsgSuccess } from "@/utils/message"
 
 const drawerVisible = ref(false)
 const form = reactive({
