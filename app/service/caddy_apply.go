@@ -232,7 +232,7 @@ func renderCaddyfile(websites []model.Website, domainByWebsite map[uint][]model.
 		b.WriteString("}\n\n")
 
 		// Append separate redirect blocks for secondary domains
-		if w.RedirectDomainsToPrimary {
+		if w.RedirectDomainsToPrimary && w.Type != constant.Redirect {
 			for _, d := range domainByWebsite[w.ID] {
 				host := strings.TrimSpace(d.Domain)
 				if host == "" || normalizeWebsiteDomainForCompare(host) == normalizeWebsiteDomainForCompare(w.PrimaryDomain) {
