@@ -79,6 +79,9 @@ func (s *WebsiteService) List(ctx *gormx.Contextx) (websiteDTOs []*response.Webs
 		if len(web.Domains) > 0 {
 			var dList []string
 			for _, d := range web.Domains {
+				if d.Domain == "" || normalizeWebsiteDomainForCompare(d.Domain) == normalizeWebsiteDomainForCompare(web.PrimaryDomain) {
+					continue
+				}
 				dList = append(dList, d.Domain)
 			}
 			otherDomains = strings.Join(dList, ",")
