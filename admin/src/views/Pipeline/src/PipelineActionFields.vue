@@ -44,6 +44,17 @@ const imageName = computed({
   </n-form-item>
 
   <n-form-item
+    v-if="formModel.actionType === 'deploy'"
+    label="产物路径"
+    path="artifactPath"
+  >
+    <n-input
+      v-model:value="formModel.artifactPath"
+      placeholder="例如: dist/，如果不填则不进行部署和备份"
+    />
+  </n-form-item>
+
+  <n-form-item
     v-if="formModel.actionType === 'build_image'"
     label="产出镜像名"
   >
