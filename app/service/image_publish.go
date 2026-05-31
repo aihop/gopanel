@@ -64,6 +64,12 @@ func (u *ImageService) ImagePush(req dto.ImagePush) (string, error) {
 			}
 			_, _ = file.WriteString(out)
 			_, _ = file.WriteString("\nimage push successful!")
+
+			// 推送完成后删除临时标签，避免本地残留 registry 地址镜像
+			if targetName != req.TagName {
+				_, _ = file.WriteString("\n清理临时标签: " + targetName)
+				_, _ = docker.PodmanRemoveImage(context.Background(), targetName)
+			}
 		}()
 		return path.Base(logItem), nil
 	}
