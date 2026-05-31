@@ -3,11 +3,12 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
+
 	"github.com/aihop/gopanel/app/dto/request"
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
 	"github.com/aihop/gopanel/global"
-	"strings"
 )
 
 func deployStaticWebsite(website *model.Website, releaseDir string) error {
@@ -23,13 +24,21 @@ func deployStaticWebsite(website *model.Website, releaseDir string) error {
 	}
 	return nil
 }
-func deployProxyWebsite(website *model.Website) error {
-	if err := ApplyCaddyFromDB(context.Background()); err != nil {
-		return fmt.Errorf("应用代理站点配置失败: %w", err)
-	}
-	return nil
-}
-func deployWebAppWebsite(website *model.Website, releaseDir, runtimeDir, imageTag string, pipelineRecordID uint, allowPipelineBridge bool) (int, string, string, error) {
+
+// deployWebAppWebsite 部署Web应用网站
+// @param website 网站模型
+// @param releaseDir 发布目录
+// @param runtimeDir 运行时目录
+// @param imageTag 镜像标签
+// @param pipelineRecordID 流水线记录ID
+// @param allowPipelineBridge 是否允许流水线桥接
+// @param exposePort 暴露端口
+// @return int, string, string, error
+// @return exposePort 暴露端口
+// @return containerID 容器ID
+// @return runtimeDir 运行时目录
+// @return error 错误
+func deployWebAppWebsite(website *model.Website, releaseDir, runtimeDir, imageTag string, pipelineRecordID uint, allowPipelineBridge bool, exposePort int) (int, string, string, error) {
 	if website.PipelineID > 0 && allowPipelineBridge {
 		if hostPort, containerID, actualRuntimeDir, ok, err := resolvePipelineRunnerBridge(website, pipelineRecordID); err != nil {
 			return 0, "", "", err
@@ -42,7 +51,7 @@ func deployWebAppWebsite(website *model.Website, releaseDir, runtimeDir, imageTa
 			cleanupPreviousWebsiteContainer(oldContainerID, containerID, pipelineRecordID, website.Alias)
 			return hostPort, containerID, actualRuntimeDir, nil
 		}
-		if hostPort, containerID, ok, err := resolvePipelineScriptProxyTarget(website, pipelineRecordID); err != nil {
+		if hostPort, containerID, ok, err := resolvePipelineScriptProxyTarget(website, pipelineRecordID, exposePort); err != nil {
 			return 0, "", "", err
 		} else if ok {
 			oldContainerID := strings.TrimSpace(website.ContainerID)
@@ -103,6 +112,13 @@ func deployWebAppWebsite(website *model.Website, releaseDir, runtimeDir, imageTa
 	cleanupPreviousWebsiteContainer(oldContainerID, containerID, pipelineRecordID, website.Alias)
 	return hostPort, containerID, actualRuntimeDir, nil
 }
+
+// switchWebsiteRuntimeTarget 切换网站运行时目标
+// @param website 网站模型
+// @param proxy 代理
+// @param containerID 容器ID
+// @param runtimeDir 运行时目录
+// @return error 错误
 func switchWebsiteRuntimeTarget(website *model.Website, proxy, containerID, runtimeDir string) error {
 	if website == nil {
 		return fmt.Errorf("website is nil")
@@ -128,6 +144,7 @@ func switchWebsiteRuntimeTarget(website *model.Website, proxy, containerID, runt
 	}
 	return nil
 }
+
 func cleanupPreviousWebsiteContainer(oldContainerID, newContainerID string, pipelineRecordID uint, websiteAlias string) {
 	oldContainerID = strings.TrimSpace(oldContainerID)
 	newContainerID = strings.TrimSpace(newContainerID)

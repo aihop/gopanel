@@ -53,12 +53,11 @@ func (s *AppDeployApplicationService) ListByWebsite(websiteID uint) ([]model.App
 	return list, nil
 }
 
-func (s *AppDeployApplicationService) Switch(deployID uint) error {
+func (s *AppDeployApplicationService) Switch(deployID uint, exposePort int) error {
 	var targetDeploy model.AppDeploy
 	if err := s.db.First(&targetDeploy, deployID).Error; err != nil {
 		return fmt.Errorf("部署记录不存在")
 	}
-
 	var website model.Website
 	if err := s.db.Preload("Domains").First(&website, targetDeploy.WebsiteID).Error; err != nil {
 		return fmt.Errorf("网站不存在")
@@ -76,7 +75,7 @@ func (s *AppDeployApplicationService) Switch(deployID uint) error {
 		targetDeploy.ArchiveFile = archiveFile
 		targetDeploy.SourceUrl = archiveFile
 		targetDeploy.ReleaseDir = releaseDir
-		if _, err := ReuseAppDeployment(website, &targetDeploy); err != nil {
+		if _, err := ReuseAppDeployment(website, &targetDeploy, exposePort); err != nil {
 			return fmt.Errorf("回滚发布失败: %w", err)
 		}
 		return nil
@@ -123,7 +122,7 @@ func (s *AppDeployApplicationService) Delete(deployID uint) error {
 	return nil
 }
 
-func (s *AppDeployApplicationService) Trigger(opts AppDeployTriggerOptions) error {
+func (s *AppDeployApplicationService) Trigger(opts AppDeployTriggerOptions, exposePort int) error {
 	var website model.Website
 	if err := s.db.Preload("Domains").First(&website, opts.WebsiteID).Error; err != nil {
 		return fmt.Errorf("网站不存在")
@@ -140,7 +139,7 @@ func (s *AppDeployApplicationService) Trigger(opts AppDeployTriggerOptions) erro
 		if release.Status != "ready" {
 			return fmt.Errorf("该正式版本当前不可部署")
 		}
-		go ProcessReleaseAppDeployment(website, release)
+		go ProcessReleaseAppDeployment(website, release, exposePort)
 		return nil
 	}
 
@@ -153,7 +152,7 @@ func (s *AppDeployApplicationService) Trigger(opts AppDeployTriggerOptions) erro
 	case strings.TrimSpace(opts.ZipPath) != "":
 		sourceType = "upload"
 	}
-	go ProcessAppDeployment(website, 0, version, opts.ZipPath, releaseDir, "", opts.ImageTag, sourceType)
+	go ProcessAppDeployment(website, 0, version, opts.ZipPath, releaseDir, "", opts.ImageTag, sourceType, exposePort)
 	return nil
 }
 

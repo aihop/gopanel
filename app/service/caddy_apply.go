@@ -14,11 +14,13 @@ import (
 	"github.com/aihop/gopanel/utils/gpagent"
 )
 
+// ApplyCaddyFromDB 从数据库应用Caddy配置
+// @param ctx 上下文
+// @return error 错误
 func ApplyCaddyFromDB(ctx context.Context) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-
 	var websites []model.Website
 	if err := global.DB.Order("id ASC").Find(&websites).Error; err != nil {
 		return err

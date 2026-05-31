@@ -2,9 +2,7 @@ package service
 
 import (
 	"context"
-	"fmt"
 	"path"
-	"path/filepath"
 	"strings"
 
 	"github.com/aihop/gopanel/app/dto/response"
@@ -88,45 +86,45 @@ func (s *WebsiteService) List(ctx *gormx.Contextx) (websiteDTOs []*response.Webs
 		}
 
 		websiteDTOs = append(websiteDTOs, &response.WebsiteRes{
-			ID:                 web.ID,
-			CreatedAt:          web.CreatedAt,
-			UpdatedAt:          web.UpdatedAt,
-			Protocol:           web.Protocol,
-			PrimaryDomain:      web.PrimaryDomain,
-			Type:               web.Type,
-			Remark:             web.Remark,
-			Status:             web.Status,
-			CodeSource:         web.CodeSource,
-			Alias:              web.Alias,
-			AppName:            appName,
-			ExpireDate:         web.ExpireDate,
-			RuntimeName:        runtimeName,
-			RuntimeDir:         web.RuntimeDir,
-			SitePath:           sitePath,
-			AccessLogPath:      accessLogPath,
-			ErrorLogPath:       errorLogPath,
-			AppInstallID:       appInstallID,
-			PipelineID:         web.PipelineID,
-			RuntimeType:        runtimeType,
-			OtherDomains:       otherDomains,
-			DefaultServer:      web.DefaultServer,
-			Proxy:              web.Proxy,
-			IPV6:               web.IPV6,
-			Ipv6:               web.IPV6,
-			AntiCrawler:        web.AntiCrawler,
-			AntiLeech:          web.AntiLeech,
-			RateLimitMode:      web.RateLimitMode,
-			WafEnable:          web.WafEnable,
-			BlockSensitive:     web.BlockSensitive,
-			IPAllowlist:        web.IPAllowlist,
-			IPBlocklist:        web.IPBlocklist,
-			SecurityHeader:     web.SecurityHeader,
-			HstsEnabled:        web.HstsEnabled,
+			ID:                       web.ID,
+			CreatedAt:                web.CreatedAt,
+			UpdatedAt:                web.UpdatedAt,
+			Protocol:                 web.Protocol,
+			PrimaryDomain:            web.PrimaryDomain,
+			Type:                     web.Type,
+			Remark:                   web.Remark,
+			Status:                   web.Status,
+			CodeSource:               web.CodeSource,
+			Alias:                    web.Alias,
+			AppName:                  appName,
+			ExpireDate:               web.ExpireDate,
+			RuntimeName:              runtimeName,
+			RuntimeDir:               web.RuntimeDir,
+			SitePath:                 sitePath,
+			AccessLogPath:            accessLogPath,
+			ErrorLogPath:             errorLogPath,
+			AppInstallID:             appInstallID,
+			PipelineID:               web.PipelineID,
+			RuntimeType:              runtimeType,
+			OtherDomains:             otherDomains,
+			DefaultServer:            web.DefaultServer,
+			Proxy:                    web.Proxy,
+			IPV6:                     web.IPV6,
+			Ipv6:                     web.IPV6,
+			AntiCrawler:              web.AntiCrawler,
+			AntiLeech:                web.AntiLeech,
+			RateLimitMode:            web.RateLimitMode,
+			WafEnable:                web.WafEnable,
+			BlockSensitive:           web.BlockSensitive,
+			IPAllowlist:              web.IPAllowlist,
+			IPBlocklist:              web.IPBlocklist,
+			SecurityHeader:           web.SecurityHeader,
+			HstsEnabled:              web.HstsEnabled,
 			HttpConfig:               web.HttpConfig,
 			RedirectCode:             web.RedirectCode,
 			RedirectDomainsToPrimary: web.RedirectDomainsToPrimary,
-			ActiveRelease:      buildWebsiteDeploySummary(activeReleaseMap[web.ID]),
-			LatestPipelineSync: buildWebsiteDeploySummary(latestPipelineSyncMap[web.ID]),
+			ActiveRelease:            buildWebsiteDeploySummary(activeReleaseMap[web.ID]),
+			LatestPipelineSync:       buildWebsiteDeploySummary(latestPipelineSyncMap[web.ID]),
 		})
 	}
 	FillWebsiteRuntimeMeta(context.Background(), websiteDTOs)
@@ -135,43 +133,4 @@ func (s *WebsiteService) List(ctx *gormx.Contextx) (websiteDTOs []*response.Webs
 
 func (s *WebsiteService) CountByWhere(where *gormx.Wherex) (res int64, err error) {
 	return s.repo.CountByWhere(where)
-}
-
-type PipelineDeploySummary struct {
-	Matched int
-	Success int
-	Failed  int
-}
-
-func (s *WebsiteService) DeployFromPipeline(ctx context.Context, pipelineID uint, pipelineRecordID uint, version string, artifactPath string, imageTag string) (*PipelineDeploySummary, error) {
-	websites, err := s.repo.ListBy(s.repo.WithPipelineID(pipelineID))
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch websites for pipeline: %w", err)
-	}
-
-	summary := &PipelineDeploySummary{Matched: len(websites)}
-	if len(websites) == 0 {
-		global.LOG.Infof("No websites associated with pipeline %d. Skipping deployment.", pipelineID)
-		return summary, nil
-	}
-
-	var failed []string
-	for _, w := range websites {
-		if ctx.Err() != nil {
-			return summary, ctx.Err()
-		}
-		global.LOG.Infof("Triggering pipeline result sync for website %s (ID: %d) from pipeline %d", w.Alias, w.ID, pipelineID)
-		releaseDir := filepath.Join(global.CONF.System.BaseDir, "www", w.Alias, "releases", version)
-		if _, err := ProcessAppDeployment(w, pipelineRecordID, version, artifactPath, releaseDir, "", imageTag, "pipeline_sync"); err != nil {
-			summary.Failed++
-			failed = append(failed, fmt.Sprintf("%s: %v", w.Alias, err))
-			continue
-		}
-		summary.Success++
-	}
-
-	if len(failed) > 0 {
-		return summary, fmt.Errorf("网站构建结果同步失败: %s", strings.Join(failed, " | "))
-	}
-	return summary, nil
 }

@@ -28,6 +28,7 @@ func (s *PipelineService) RunPipeline(pipelineID uint, version string) (uint, er
 	go s.executePipeline(pipeline, record)
 	return record.ID, nil
 }
+
 func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.PipelineRecord) {
 	recordID := record.ID
 	logger := GetPipelineLogger(recordID)
@@ -84,7 +85,10 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 	}
 	s.recordRepo.UpdateStatus(recordID, "building", "")
 	logger.Info("开始构建版本...，版本号: %s", record.Version)
-	err := s.stepBuild(ctx, logger, p, workspaceDir, releaseDir, record.Version)
+	// 这里要加判断，如果是 build_run，才执行构建命令
+
+	exposePort, err := s.stepBuild(ctx, logger, p, workspaceDir, releaseDir, record.Version)
+
 	if err != nil {
 		if ctx.Err() != nil {
 			s.recordRepo.UpdateStatus(recordID, "failed", "用户手动终止")
@@ -166,7 +170,7 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 			_ = s.recordRepo.UpdateImageTag(recordID, finalImage)
 			record.ImageTag = finalImage
 		}
-		summary, err := NewWebsite().DeployFromPipeline(ctx, p.ID, recordID, record.Version, archivePath, finalImage)
+		summary, err := NewWebsite().DeployFromPipeline(ctx, p.ID, recordID, record.Version, archivePath, finalImage, exposePort)
 		if err != nil {
 			s.recordRepo.UpdateStatus(recordID, "failed", err.Error())
 			logger.Error("同步网站运行结果失败: %v", err)

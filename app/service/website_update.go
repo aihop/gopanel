@@ -14,6 +14,10 @@ import (
 	"github.com/aihop/gopanel/utils/files"
 )
 
+// Update 更新网站
+// @param ctx 上下文
+// @param req 更新网站请求
+// @return error 错误
 func (s WebsiteService) Update(ctx context.Context, req *request.WebsiteUpdate) error {
 	website, err := s.repo.GetFirst(commonRepo.WithByID(req.ID))
 	if err != nil {

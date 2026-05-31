@@ -10,10 +10,11 @@ const (
 	NewApp       = "new"
 	InstalledApp = "installed"
 
-	WebApp = "web_app"
-	Static = "static"
-	Proxy    = "proxy"
-	Redirect = "redirect"
+	WebApp    = "web_app"
+	Container = "container"
+	Static    = "static"
+	Proxy     = "proxy"
+	Redirect  = "redirect"
 
 	SSLExisted = "existed"
 	SSLAuto    = "auto"
