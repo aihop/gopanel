@@ -30,6 +30,8 @@ type Website struct {
 	ContainerID string `gorm:"type:varchar;" json:"containerId"`
 	Message     string `gorm:"type:text;" json:"message"`
 
+	RedirectCode   int    `json:"redirectCode" gorm:"type:integer;default:301"`
+
 	AntiCrawler    bool   `json:"antiCrawler" gorm:"type:boolean;default:false"`
 	AntiLeech      bool   `json:"antiLeech" gorm:"type:boolean;default:false"`
 	RateLimitMode  string `json:"rateLimitMode" gorm:"type:varchar(32);default:'none'"`

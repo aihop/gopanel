@@ -122,6 +122,7 @@ func (s WebsiteService) Create(ctx context.Context, req *request.WebsiteCreate, 
 		SecurityHeader: req.SecurityHeader,
 		HstsEnabled:    req.HstsEnabled,
 		HttpConfig:     req.HttpConfig,
+		RedirectCode:   req.RedirectCode,
 	}
 
 	var appInstall *model.AppInstall

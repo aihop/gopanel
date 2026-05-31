@@ -184,6 +184,16 @@ func renderCaddyfile(websites []model.Website, domainByWebsite map[uint][]model.
 			b.WriteString("  root * ")
 			b.WriteString(root)
 			b.WriteString("\n  file_server\n")
+		case constant.Redirect:
+			target := strings.TrimSpace(w.Proxy)
+			if target == "" {
+				target = "/"
+			}
+			code := w.RedirectCode
+			if code == 0 {
+				code = 301
+			}
+			b.WriteString("  redir " + target + "{uri} " + strconv.Itoa(code) + "\n")
 		case constant.Proxy, constant.WebApp:
 			up := strings.TrimSpace(w.Proxy)
 			if up == "" {

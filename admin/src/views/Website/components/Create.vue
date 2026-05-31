@@ -38,7 +38,8 @@
             :options="[
               { label: '📦 静态网站 (HTML/Vue/React)', value: 'static' },
               { label: '🚀 容器化应用 (需 Docker 镜像)', value: 'web_app' },
-              { label: '🔌 纯反向代理 (不托管代码)', value: 'proxy' }
+              { label: '🔌 纯反向代理 (不托管代码)', value: 'proxy' },
+              { label: '🔗 URL 重定向 (301/302)', value: 'redirect' }
             ]"
             placeholder="请选择类型"
           />
@@ -156,6 +157,28 @@
             </div>
           </div>
         </n-form-item>
+
+        <template v-if="form.type === 'redirect'">
+          <n-form-item
+            label="重定向目标 URL"
+            path="proxy"
+          >
+            <n-input
+              v-model:value="form.proxy"
+              placeholder="例：https://newdomain.com"
+            />
+          </n-form-item>
+          <n-form-item label="重定向类型">
+            <n-radio-group v-model:value="form.redirectCode">
+              <n-space>
+                <n-radio :value="301">301 永久重定向</n-radio>
+                <n-radio :value="302">302 临时重定向</n-radio>
+                <n-radio :value="307">307 临时重定向 (保持请求方法)</n-radio>
+                <n-radio :value="308">308 永久重定向 (保持请求方法)</n-radio>
+              </n-space>
+            </n-radio-group>
+          </n-form-item>
+        </template>
 
         <n-form-item
           label="选择已安装应用"
@@ -365,6 +388,7 @@ type WebsiteFormState = {
 	securityHeader: boolean
 	hstsEnabled: boolean
 	httpConfig: string
+	redirectCode: number
 }
 type WebsiteFormRecord = Website.WebsiteDTO & {
 	domains?: WebsiteDomainValue[]
@@ -406,6 +430,7 @@ function createDefaultForm(): WebsiteFormState {
 		securityHeader: false,
 		hstsEnabled: false,
 		httpConfig: "",
+		redirectCode: 301,
 	}
 }
 
@@ -546,6 +571,7 @@ function buildCreatePayload(): Website.WebSiteCreateReq {
 		securityHeader: form.value.securityHeader,
 		hstsEnabled: form.value.hstsEnabled,
 		httpConfig: form.value.httpConfig,
+		redirectCode: form.value.redirectCode,
 	}
 }
 
@@ -570,7 +596,8 @@ function buildUpdatePayload(): Website.WebSiteUpdateReq {
 		ipBlocklist: form.value.ipBlocklist,
 		securityHeader: form.value.securityHeader,
 		hstsEnabled: form.value.hstsEnabled,
-		httpConfig: form.value.httpConfig
+		httpConfig: form.value.httpConfig,
+		redirectCode: form.value.redirectCode
 	}
 }
 

@@ -12,7 +12,8 @@ const (
 
 	WebApp = "web_app"
 	Static = "static"
-	Proxy  = "proxy"
+	Proxy    = "proxy"
+	Redirect = "redirect"
 
 	SSLExisted = "existed"
 	SSLAuto    = "auto"

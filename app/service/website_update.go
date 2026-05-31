@@ -52,6 +52,7 @@ func (s WebsiteService) Update(ctx context.Context, req *request.WebsiteUpdate) 
 	website.SecurityHeader = req.SecurityHeader
 	website.HstsEnabled = req.HstsEnabled
 	website.HttpConfig = req.HttpConfig
+	website.RedirectCode = req.RedirectCode
 
 	var newContent, updatedContent string
 	var domains []model.WebsiteDomain
@@ -161,7 +162,7 @@ func shouldEnsureWebsiteCaddyConfig(website *model.Website) bool {
 		return false
 	}
 	switch website.Type {
-	case constant.Static, constant.Proxy, constant.WebApp:
+	case constant.Static, constant.Proxy, constant.WebApp, constant.Redirect:
 	default:
 		return false
 	}

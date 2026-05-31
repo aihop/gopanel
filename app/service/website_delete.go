@@ -17,7 +17,7 @@ func (s WebsiteService) Delete(ctx context.Context, id uint) error {
 	if err != nil {
 		return errors.New("网站不存在")
 	}
-	if website.Type == constant.Proxy || website.Type == constant.WebApp || website.Type == constant.Static {
+	if website.Type == constant.Proxy || website.Type == constant.WebApp || website.Type == constant.Static || website.Type == constant.Redirect {
 		var otherDomains []string
 		if website.Domains != nil {
 			for _, d := range website.Domains {

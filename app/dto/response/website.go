@@ -55,6 +55,7 @@ type WebsiteRes struct {
 	SecurityHeader bool   `json:"securityHeader"`
 	HstsEnabled    bool   `json:"hstsEnabled"`
 	HttpConfig     string `json:"httpConfig"`
+	RedirectCode   int    `json:"redirectCode"`
 
 	ActiveRelease      *WebsiteDeploySummary `json:"activeRelease,omitempty"`
 	LatestPipelineSync *WebsiteDeploySummary `json:"latestPipelineSync,omitempty"`

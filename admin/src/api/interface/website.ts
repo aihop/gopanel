@@ -48,6 +48,7 @@ export namespace Website {
         securityHeader?: boolean;
         hstsEnabled?: boolean;
         httpConfig?: string;
+        redirectCode?: number;
     }
 
     export interface WebsiteDTO extends Website {
@@ -168,6 +169,7 @@ export namespace Website {
         securityHeader?: boolean;
         hstsEnabled?: boolean;
         httpConfig?: string;
+        redirectCode?: number;
     }
 
     export interface WebSiteUpdateReq {
@@ -194,6 +196,7 @@ export namespace Website {
         securityHeader?: boolean;
         hstsEnabled?: boolean;
         httpConfig?: string;
+        redirectCode?: number;
     }
 
     export interface WebSiteOp {
