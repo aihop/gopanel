@@ -84,7 +84,7 @@ func AgentEnsure(c fiber.Ctx) error {
 		}
 
 		source := "github"
-		if strings.Contains(geo.Region(c.IP()), "中国") {
+		if strings.Contains(geo.Region(service.GetOutboundIP()), "中国") {
 			source = "gitcode"
 		}
 

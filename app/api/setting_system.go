@@ -195,7 +195,7 @@ func SettingSystemUpgrade(c fiber.Ctx) error {
 	if source == "" {
 		source = "github"
 		// 检查是否为中国 IP，如果是，则默认 source 使用 gitcode
-		if strings.Contains(geo.Region(c.IP()), "中国") {
+		if strings.Contains(geo.Region(service.GetOutboundIP()), "中国") {
 			source = "gitcode"
 		}
 	}
@@ -369,7 +369,7 @@ func SettingSystemCheck(c fiber.Ctx) error {
 
 	source := "github"
 	// 检查是否为中国 IP，如果是，则默认 source 使用 gitcode
-	if strings.Contains(geo.Region(c.IP()), "中国") {
+	if strings.Contains(geo.Region(service.GetOutboundIP()), "中国") {
 		source = "gitcode"
 	}
 
