@@ -352,6 +352,7 @@ import type { Pipeline } from "@/api/interface/pipeline"
 import type { Container } from "@/api/interface/container"
 import { computed, ref, watch, onMounted } from "vue"
 import { websiteCreateAPI, websiteUpdateAPI } from "@/api/modules/website"
+import { VueMonacoEditor } from "@guolao/vue-monaco-editor"
 import FtEditor from "@/components/FtEditor/index.vue"
 import { ListAppInstalled } from "@/api/modules/apps"
 import { listAllImage } from "@/api/modules/container"
@@ -807,9 +808,8 @@ const open = (record?: WebsiteFormRecord, action: "add" | "update" = "add") => {
 				}
 			}
 			editableRecord.otherDomains = otherDomain
-		} else {
-			editableRecord.otherDomains = ""
 		}
+		// Keep editableRecord.otherDomains from API response when domains array is not available
 		form.value = {
 			...createDefaultForm(),
 			...editableRecord,
