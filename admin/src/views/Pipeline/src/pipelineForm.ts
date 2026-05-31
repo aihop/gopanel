@@ -12,12 +12,10 @@ export interface PipelineFormModel {
   buildEnv: string
   buildImage: string
   buildScript: string
-  outputImage: string
   artifactPath: string
-  exposePort: number | null
   pipelineKey: string
   actionType: string
-  actionParams: string
+  actionParams: Record<string, any>
   runnerEnabled: boolean
   runnerPolicy: "run" | "build_run"
   runnerAdvanced: boolean
@@ -117,12 +115,10 @@ export const createDefaultPipelineFormModel = (): PipelineFormModel => ({
   buildEnv: "container",
   buildImage: "node:20-alpine",
   buildScript: "npm install && npm run build",
-  outputImage: "",
   artifactPath: ".",
-  exposePort: null,
   pipelineKey: "",
   actionType: "none",
-  actionParams: "",
+  actionParams: {},
   runnerEnabled: false,
   runnerPolicy: "build_run",
   runnerAdvanced: false,
@@ -327,12 +323,10 @@ export const createPipelineFormFromEdit = (editData: Pipeline.ResPipeline) => {
       buildEnv: isHost ? "host" : "container",
       buildImage: isHost ? "node:20-alpine" : editData.buildImage,
       buildScript: editData.buildScript || "",
-      outputImage: editData.outputImage || "",
       artifactPath: editData.artifactPath || ".",
-      exposePort: editData.exposePort || null,
       pipelineKey: editData.pipelineKey || "",
-      actionType: editData.actionType || "deploy",
-      actionParams: editData.actionParams || "",
+      actionType: editData.actionType || "none",
+      actionParams: editData.actionParams || {},
       runnerEnabled,
       runnerPolicy: runnerConfig.mode || "build_run",
       runnerAdvanced: inferRunnerAdvanced(runnerConfig),

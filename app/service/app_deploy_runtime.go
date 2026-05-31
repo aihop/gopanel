@@ -2,16 +2,20 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"github.com/aihop/gopanel/app/model"
-	"github.com/aihop/gopanel/app/repo"
-	"github.com/aihop/gopanel/global"
-	"github.com/aihop/gopanel/utils/docker"
-	container "github.com/docker/docker/api/types/container"
 	"net"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/aihop/gopanel/app/dto"
+	"github.com/aihop/gopanel/app/model"
+	"github.com/aihop/gopanel/app/repo"
+	"github.com/aihop/gopanel/constant"
+	"github.com/aihop/gopanel/global"
+	"github.com/aihop/gopanel/utils/docker"
+	container "github.com/docker/docker/api/types/container"
 )
 
 func resolvePipelineRunnerBridge(website *model.Website, pipelineRecordID uint) (int, string, string, bool, error) {
@@ -45,6 +49,8 @@ func resolvePipelineRunnerBridge(website *model.Website, pipelineRecordID uint) 
 	}
 	return record.RunnerHostPort, strings.TrimSpace(record.RunnerContainerID), strings.TrimSpace(record.RunnerReleaseDir), true, nil
 }
+
+// 解析纯脚本流水线的代理目标
 func resolvePipelineScriptProxyTarget(website *model.Website, pipelineRecordID uint) (int, string, bool, error) {
 	if website == nil || website.PipelineID == 0 {
 		return 0, "", false, nil
@@ -52,6 +58,10 @@ func resolvePipelineScriptProxyTarget(website *model.Website, pipelineRecordID u
 	pipeline, err := repo.NewPipeline(global.DB).Get(website.PipelineID)
 	if err != nil {
 		return 0, "", false, fmt.Errorf("读取流水线配置失败: %w", err)
+	}
+	// 靨署流水线不支持代理
+	if pipeline.ActionType != constant.PipelineActionTypeDeploy {
+		return 0, "", false, nil
 	}
 	if strings.EqualFold(strings.TrimSpace(pipeline.RunnerMode), "runner") {
 		return 0, "", false, nil
@@ -63,7 +73,9 @@ func resolvePipelineScriptProxyTarget(website *model.Website, pipelineRecordID u
 	if containerName == "" {
 		return 0, "", false, fmt.Errorf("纯脚本流水线缺少稳定容器名，无法自动识别运行端口；请为流水线设置 pipelineKey")
 	}
-	hostPort, containerID, err := detectScriptRuntimePortByContainerName(containerName, pipeline.ExposePort)
+	var actionParams dto.PipelineActionParams
+	json.Unmarshal([]byte(pipeline.ActionParams), &actionParams)
+	hostPort, containerID, err := detectScriptRuntimePortByContainerName(containerName, actionParams.ExposePort)
 	if err != nil {
 		return 0, "", false, fmt.Errorf("纯脚本流水线未检测到可用容器端口，请确认脚本已成功启动容器 %s: %w", containerName, err)
 	}
@@ -94,6 +106,7 @@ func detectScriptRuntimePortByContainerName(containerName string, preferredPort 
 	}
 	return hostPort, inspect.ID, nil
 }
+
 func choosePublishedHostPort(inspect container.InspectResponse, preferredPort int) (int, error) {
 	portBindings := inspect.NetworkSettings.Ports
 	if len(portBindings) == 0 && inspect.ContainerJSONBase != nil && inspect.ContainerJSONBase.HostConfig != nil {
@@ -143,6 +156,7 @@ func choosePublishedHostPort(inspect container.InspectResponse, preferredPort in
 	}
 	return 0, fmt.Errorf("容器存在多个端口映射，无法自动判断入口端口")
 }
+
 func verifyLocalProxyPortReachable(port int) error {
 	target := fmt.Sprintf("127.0.0.1:%d", port)
 	conn, err := net.DialTimeout("tcp", target, 2*time.Second)

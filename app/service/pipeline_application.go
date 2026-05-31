@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
 	"github.com/aihop/gopanel/app/dto/request"
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
@@ -40,12 +41,19 @@ func (s *PipelineApplicationService) Create(req request.PipelineCreate) error {
 			return err
 		}
 	}
-	pipeline := &model.Pipeline{Name: req.Name, Description: req.Description, RepoUrl: req.RepoUrl, Branch: req.Branch, Version: req.Version, AuthType: req.AuthType, AuthData: req.AuthData, ActionType: req.ActionType, ActionParams: req.ActionParams, BuildImage: req.BuildImage, BuildScript: req.BuildScript, OutputImage: req.OutputImage, ArtifactPath: req.ArtifactPath, ExposePort: req.ExposePort, PipelineKey: pipelineKey, RunnerMode: req.RunnerMode}
+	pipeline := &model.Pipeline{Name: req.Name, Description: req.Description, RepoUrl: req.RepoUrl, Branch: req.Branch, Version: req.Version, AuthType: req.AuthType, AuthData: req.AuthData, ActionType: req.ActionType, BuildImage: req.BuildImage, BuildScript: req.BuildScript, ArtifactPath: req.ArtifactPath, PipelineKey: pipelineKey, RunnerMode: req.RunnerMode}
 	if req.RunnerMode == "runner" && len(req.RunnerConfig) > 0 {
 		if b, err := json.Marshal(req.RunnerConfig); err == nil {
 			pipeline.RunnerConfig = string(b)
 		}
 	}
+
+	if len(req.ActionParams) > 0 {
+		if b, err := json.Marshal(req.ActionParams); err == nil {
+			pipeline.ActionParams = string(b)
+		}
+	}
+
 	return s.pipelineRepo.Create(pipeline)
 }
 func (s *PipelineApplicationService) Update(req request.PipelineUpdate) error {
@@ -70,12 +78,16 @@ func (s *PipelineApplicationService) Update(req request.PipelineUpdate) error {
 	pipeline.AuthType = req.AuthType
 	pipeline.AuthData = req.AuthData
 	pipeline.ActionType = req.ActionType
-	pipeline.ActionParams = req.ActionParams
+
+	if len(req.ActionParams) > 0 {
+		if b, err := json.Marshal(req.ActionParams); err == nil {
+			pipeline.ActionParams = string(b)
+		}
+	}
+
 	pipeline.BuildImage = req.BuildImage
 	pipeline.BuildScript = req.BuildScript
-	pipeline.OutputImage = req.OutputImage
 	pipeline.ArtifactPath = req.ArtifactPath
-	pipeline.ExposePort = req.ExposePort
 	pipeline.PipelineKey = pipelineKey
 	pipeline.RunnerMode = req.RunnerMode
 	if req.RunnerMode != "runner" {

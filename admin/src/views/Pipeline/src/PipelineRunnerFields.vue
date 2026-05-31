@@ -147,7 +147,7 @@ const markCustomPreset = () => {
     </n-form-item>
 
     <n-form-item
-      label="固定发布端口"
+      label="发布端口"
       path="runnerHostPort"
     >
       <div class="w-full">
@@ -156,7 +156,7 @@ const markCustomPreset = () => {
           placeholder="留空则自动分配，例如：3101"
         />
         <div class="mt-2 text-xs text-slate-500">
-          这是宿主机稳定入口端口，不是容器内部监听端口。留空时每次自动分配并同步网站代理；填写后会固定绑定到 `127.0.0.1:该端口`，后续发布无需再变更网站端口。
+          这是宿主机稳定入口端口，不是容器内部监听端口。留空时每次自动分配并同步网站代理；填写后会固定绑定到 `127.0.0.1:该端口`，后续发布无需再变更网站端口
         </div>
       </div>
     </n-form-item>

@@ -5,9 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
+
 	"github.com/aihop/gopanel/app/model"
 	"gorm.io/gorm"
-	"strings"
 )
 
 func (s *PipelineApplicationService) Run(pipelineID uint, version string) (uint, error) {
@@ -104,7 +105,7 @@ func (s *PipelineApplicationService) PublishRecord(recordID uint) (*model.Releas
 			return nil, err
 		}
 	}
-	artifactMeta, err := json.Marshal(map[string]interface{}{"artifactPath": strings.TrimSpace(pipeline.ArtifactPath), "buildImage": strings.TrimSpace(pipeline.BuildImage), "outputImage": strings.TrimSpace(pipeline.OutputImage), "pipelineKey": strings.TrimSpace(pipeline.PipelineKey), "runnerMode": strings.TrimSpace(pipeline.RunnerMode), "runnerHostPort": record.RunnerHostPort, "runnerContainerId": strings.TrimSpace(record.RunnerContainerID)})
+	artifactMeta, err := json.Marshal(map[string]interface{}{"artifactPath": strings.TrimSpace(pipeline.ArtifactPath), "buildImage": strings.TrimSpace(pipeline.BuildImage), "pipelineKey": strings.TrimSpace(pipeline.PipelineKey), "runnerMode": strings.TrimSpace(pipeline.RunnerMode), "runnerHostPort": record.RunnerHostPort, "runnerContainerId": strings.TrimSpace(record.RunnerContainerID)})
 	if err != nil {
 		return nil, err
 	}

@@ -378,14 +378,14 @@ watch(() => [formModel.repoUrl, formModel.branch, formModel.authType, formModel.
         @apply-runner-preset="applyRunnerPreset"
         @mark-runner-preset-custom="markRunnerPresetCustom"
       />
+      <template v-else>
       <PipelineScriptFields
-        v-else
         :form-model="formModel"
       />
       <PipelineActionFields
-        v-show="formModel.buildEnv === 'host'"
         :form-model="formModel"
       />
+      </template>
     </n-form>
     <template #footer>
       <div class="mt-8 flex justify-end gap-3">

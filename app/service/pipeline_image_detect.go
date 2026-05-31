@@ -2,12 +2,13 @@ package service
 
 import (
 	"fmt"
-	"github.com/aihop/gopanel/app/model"
 	"strings"
+
+	"github.com/aihop/gopanel/app/model"
 )
 
 func detectBuiltImageRef(p *model.Pipeline, version string, logs []string) string {
-	outputImage := strings.TrimSpace(p.OutputImage)
+	outputImage := strings.TrimSpace(p.PipelineKey)
 	candidates := extractBuiltImageCandidates(logs)
 	if outputImage != "" {
 		for _, candidate := range candidates {

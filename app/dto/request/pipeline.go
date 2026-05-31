@@ -9,12 +9,10 @@ type PipelineCreate struct {
 	AuthType     string                 `json:"authType" validate:"required"`
 	AuthData     string                 `json:"authData"`
 	ActionType   string                 `json:"actionType"`
-	ActionParams string                 `json:"actionParams"`
+	ActionParams map[string]interface{} `json:"actionParams"`
 	BuildImage   string                 `json:"buildImage"`
 	BuildScript  string                 `json:"buildScript"`
-	OutputImage  string                 `json:"outputImage"`
 	ArtifactPath string                 `json:"artifactPath"`
-	ExposePort   int                    `json:"exposePort"`
 	PipelineKey  string                 `json:"pipelineKey"`
 	RunnerMode   string                 `json:"runnerMode"`
 	RunnerConfig map[string]interface{} `json:"runnerConfig"`
@@ -30,10 +28,9 @@ type PipelineUpdate struct {
 	AuthType     string                 `json:"authType"`
 	AuthData     string                 `json:"authData"`
 	ActionType   string                 `json:"actionType"`
-	ActionParams string                 `json:"actionParams"`
+	ActionParams map[string]interface{} `json:"actionParams"`
 	BuildImage   string                 `json:"buildImage"`
 	BuildScript  string                 `json:"buildScript"`
-	OutputImage  string                 `json:"outputImage"`
 	ArtifactPath string                 `json:"artifactPath"`
 	ExposePort   int                    `json:"exposePort"`
 	PipelineKey  string                 `json:"pipelineKey"`

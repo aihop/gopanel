@@ -9,14 +9,12 @@ export namespace Pipeline {
     authData?: string;
     buildImage: string;
     buildScript: string;
-    outputImage?: string;
     artifactPath: string;
-    exposePort?: number;
     pipelineKey?: string;
     runnerMode?: string;
     runnerConfig?: any;
     actionType?: string;
-    actionParams?: string;
+    actionParams?: Record<string, any>;
   }
 
   export interface ReqUpdate extends ReqCreate {
@@ -36,14 +34,12 @@ export namespace Pipeline {
     authData: string;
     buildImage: string;
     buildScript: string;
-    outputImage?: string;
     artifactPath: string;
-    exposePort: number;
     pipelineKey?: string;
     runnerMode?: string;
     runnerConfig?: any;
     actionType?: string;
-    actionParams?: string;
+    actionParams?: Record<string, any>;
     runtimeHost?: string;
     runtimeKind?: string;
     runtimeMode?: string;

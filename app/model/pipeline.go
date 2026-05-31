@@ -21,9 +21,7 @@ type Pipeline struct {
 	ActionParams string `gorm:"column:action_params;type:text" json:"actionParams"`
 	BuildImage   string `gorm:"column:build_image;type:varchar(100);not null" json:"buildImage"`
 	BuildScript  string `gorm:"column:build_script;type:text" json:"buildScript"`
-	OutputImage  string `gorm:"column:output_image;type:varchar(255)" json:"outputImage"`
 	ArtifactPath string `gorm:"column:artifact_path;type:varchar(255);not null;default:'dist/'" json:"artifactPath"`
-	ExposePort   int    `gorm:"column:expose_port;type:int;not null;default:80" json:"exposePort"`
 	PipelineKey  string `gorm:"column:pipeline_key;uniqueIndex;type:varchar(100)" json:"pipelineKey"`
 
 	RunnerMode   string `gorm:"column:runner_mode;type:varchar(32)" json:"runnerMode"`

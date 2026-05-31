@@ -38,4 +38,14 @@ defineProps<{
       placeholder="npm install && npm run build"
     />
   </n-form-item>
+
+  <n-form-item
+    label="产物路径"
+    path="artifactPath"
+  >
+    <n-input
+      v-model:value="formModel.artifactPath"
+      placeholder="例如: dist/，如果不填则不进行部署和备份"
+    />
+  </n-form-item>
 </template>
