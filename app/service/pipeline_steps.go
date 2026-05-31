@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -11,8 +12,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aihop/gopanel/app/dto"
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/constant"
+	"github.com/aihop/gopanel/utils/common"
 	udocker "github.com/aihop/gopanel/utils/docker"
 )
 
@@ -74,16 +77,16 @@ func (s *PipelineService) stepClone(ctx context.Context, logger *PipelineLogger,
 	}
 	return "", nil
 }
-func (s *PipelineService) stepBuild(ctx context.Context, logger *PipelineLogger, p *model.Pipeline, workspace string, releaseDir string, version string) error {
+func (s *PipelineService) stepBuild(ctx context.Context, logger *PipelineLogger, p *model.Pipeline, workspace string, releaseDir string, version string) (exposePortInt int, err error) {
 	if p.RunnerMode == constant.PipelineRunnerModeRunner {
-		return nil
+		return 0, nil
 	}
 	if p.BuildScript == "" {
 		logger.Info("未配置构建脚本，跳过容器构建阶段")
-		return nil
+		return 0, nil
 	}
 	if p.BuildImage == "" {
-		return fmt.Errorf("构建镜像不能为空，请在流水线配置中设置 BuildImage")
+		return 0, fmt.Errorf("构建镜像不能为空，请在流水线配置中设置 BuildImage")
 	}
 	if p.BuildImage == "host" {
 		logger.Info("选择宿主机本地环境构建 (版本: v%s)，注意：构建环境不可重复！", version)
@@ -91,10 +94,30 @@ func (s *PipelineService) stepBuild(ctx context.Context, logger *PipelineLogger,
 		runtimeCLI, rerr := udocker.RuntimeCLI(ctx)
 		if rerr != nil {
 			logger.Error("未找到可用容器运行时命令: %v", rerr)
-			return rerr
+			return 0, rerr
+		}
+		if p.ActionParams != "" {
+			var params dto.PipelineActionParams
+			json.Unmarshal([]byte(p.ActionParams), &params)
+			if params.ExposePort > 0 {
+				exposePortInt = params.ExposePort
+			}
+		}
+		// 判断p.BuildScript里面是否包含扩展端口EXPOSE
+		exposePort := ""
+		if strings.Contains(p.BuildScript, "EXPOSE_PORT") {
+			if exposePortInt == 0 {
+				exposePortInt, err = common.GetStrictFreePort(10000, 65535)
+				if err != nil {
+					exposePortInt = 12345
+				}
+			}
+			logger.Info("使用端口: %d", exposePortInt)
+			exposePort = fmt.Sprintf("export EXPOSE_PORT=%d", exposePortInt)
 		}
 		resolvedRuntime := udocker.DefaultRuntimeAdapter().Resolve(ctx)
-		compatHeader := fmt.Sprintf(`
+		compatHeader := exposePort
+		compatHeader += fmt.Sprintf(`
 # 1. 补全基础环境变量
 export PATH=$PATH:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 
@@ -330,28 +353,28 @@ echo "--- 使用运行时: $RUNTIME (类型: $CONTAINER_RUNTIME_KIND, 兼容别�
 		cmd.Stderr = io.MultiWriter(&errBuf, newLogWriter(logger, true))
 		if err := cmd.Run(); err != nil {
 			if ctx.Err() != nil {
-				return ctx.Err()
+				return 0, ctx.Err()
 			}
 			logger.Error("本地构建执行失败: %v", err)
-			return err
+			return exposePortInt, err
 		}
-		return nil
+		return exposePortInt, nil
 	}
 	runtimeCLI, rerr := udocker.RuntimeCLI(ctx)
 	if rerr != nil {
-		return rerr
+		return exposePortInt, rerr
 	}
 	infoCmd, ierr := udocker.RuntimeCommand(ctx, "info")
 	if ierr != nil {
-		return ierr
+		return exposePortInt, ierr
 	}
 	if err := infoCmd.Run(); err != nil {
 		if ctx.Err() != nil {
-			return ctx.Err()
+			return exposePortInt, ctx.Err()
 		}
 		logger.Error("无法连接到容器引擎（%s）！请检查运行时是否已安装并正在运行。", runtimeCLI)
 		logger.Error("错误详情: %v", err)
-		return fmt.Errorf("%s daemon is not running", runtimeCLI)
+		return exposePortInt, fmt.Errorf("%s daemon is not running", runtimeCLI)
 	}
 	logger.Info("启动构建容器: %s (版本: v%s)", p.BuildImage, version)
 	cmdArgs := []string{"run", "-i", "--rm", "-v", fmt.Sprintf("%s:/workspace", releaseDir), "-v", fmt.Sprintf("%s:/source:ro", workspace)}
@@ -372,7 +395,7 @@ echo "--- 使用运行时: $RUNTIME (类型: $CONTAINER_RUNTIME_KIND, 兼容别�
 	cmdArgs = append(cmdArgs, "-e", fmt.Sprintf("PIPELINE_VERSION=%s", version), "-e", fmt.Sprintf("VERSION=%s", version), "-e", fmt.Sprintf("CONTAINER_CLI=%s", runtimeCLI), "-e", "PIPELINE_WORKSPACE_DIR=/source", "-e", "GOPANEL_WORKSPACE_DIR=/source", "-e", "PIPELINE_RELEASE_DIR=/workspace", "-e", "GOPANEL_RELEASE_DIR=/workspace", "-e", "DOCKER_HOST=unix:///var/run/docker.sock", "-w", "/workspace", p.BuildImage, "sh")
 	cmd, cerr := udocker.RuntimeCommand(ctx, cmdArgs...)
 	if cerr != nil {
-		return cerr
+		return exposePortInt, cerr
 	}
 	compatHeader := fmt.Sprintf(`
 CONTAINER_CLI="%s"
@@ -411,14 +434,15 @@ fi
 	logger.Info("开始执行构建...")
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() != nil {
-			return ctx.Err()
+			return exposePortInt, ctx.Err()
 		}
 		logger.Error("容器构建失败: %v", err)
-		return err
+		return exposePortInt, err
 	}
 	logger.Info("构建执行完毕")
-	return nil
+	return exposePortInt, nil
 }
+
 func (s *PipelineService) stepArchive(ctx context.Context, logger *PipelineLogger, p *model.Pipeline, workspace string, recordID uint) (string, error) {
 	if ctx.Err() != nil {
 		logger.Error("流水线已手动取消")

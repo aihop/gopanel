@@ -210,6 +210,35 @@ func ScanUDPPort(port int) bool {
 	return false
 }
 
+func GetStrictFreePort(startPort, endPort int) (int, error) {
+	for port := startPort; port <= endPort; port++ {
+		address := fmt.Sprintf("127.0.0.1:%d", port)
+
+		// 1. 尝试监听特定端口
+		l, err := net.Listen("tcp", address)
+		if err != nil {
+			// 说明被占用了，直接看下一个端口
+			continue
+		}
+
+		// 2. 进阶校验：不仅要能 Listen，还要确保它没有处于 Linux 的 TIME_WAIT 幽灵状态
+		// 我们快速关闭它，并给系统协议栈一个微小的缓和期
+		l.Close()
+
+		// 3. 再次用 Dial 撞击一下，双重保险确保它确实死透了且能被立刻复用
+		conn, err := net.DialTimeout("tcp", address, 5*time.Millisecond)
+		if err == nil {
+			// 如果居然连上了，说明这端口是个伪空闲的僵尸端口，放弃它
+			conn.Close()
+			continue
+		}
+
+		return port, nil
+	}
+
+	return 0, fmt.Errorf("在指定区间内未找到任何可用空闲端口")
+}
+
 func ScanPortWithProto(port int, proto string) bool {
 	if proto == "udp" {
 		return ScanUDPPort(port)

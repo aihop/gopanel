@@ -2,14 +2,12 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/aihop/gopanel/app/dto"
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
 	"github.com/aihop/gopanel/constant"
@@ -51,7 +49,7 @@ func resolvePipelineRunnerBridge(website *model.Website, pipelineRecordID uint) 
 }
 
 // 解析纯脚本流水线的代理目标
-func resolvePipelineScriptProxyTarget(website *model.Website, pipelineRecordID uint) (int, string, bool, error) {
+func resolvePipelineScriptProxyTarget(website *model.Website, pipelineRecordID uint, exposePort int) (int, string, bool, error) {
 	if website == nil || website.PipelineID == 0 {
 		return 0, "", false, nil
 	}
@@ -73,9 +71,7 @@ func resolvePipelineScriptProxyTarget(website *model.Website, pipelineRecordID u
 	if containerName == "" {
 		return 0, "", false, fmt.Errorf("纯脚本流水线缺少稳定容器名，无法自动识别运行端口；请为流水线设置 pipelineKey")
 	}
-	var actionParams dto.PipelineActionParams
-	json.Unmarshal([]byte(pipeline.ActionParams), &actionParams)
-	hostPort, containerID, err := detectScriptRuntimePortByContainerName(containerName, actionParams.ExposePort)
+	hostPort, containerID, err := detectScriptRuntimePortByContainerName(containerName, exposePort)
 	if err != nil {
 		return 0, "", false, fmt.Errorf("纯脚本流水线未检测到可用容器端口，请确认脚本已成功启动容器 %s: %w", containerName, err)
 	}
@@ -84,29 +80,70 @@ func resolvePipelineScriptProxyTarget(website *model.Website, pipelineRecordID u
 	}
 	return hostPort, containerID, true, nil
 }
+
+// detectScriptRuntimePortByContainerName 检测脚本流水线容器运行端口
+// @param containerName 容器名称
+// @param preferredPort 优先端口
+// @return int 宿器端口
+// @return string 容器ID
+// @return error 错误
 func detectScriptRuntimePortByContainerName(containerName string, preferredPort int) (int, string, error) {
 	cli, err := docker.NewDockerClient()
 	if err != nil {
 		return 0, "", err
 	}
 	defer cli.Close()
-	inspect, err := cli.ContainerInspect(context.Background(), containerName)
-	if err != nil {
-		return 0, "", err
+
+	var hostPort int
+	var inspect container.InspectResponse
+	var lastErr error
+
+	for i := 0; i < 30; i++ { // 最多等待 60 秒
+		inspect, err = cli.ContainerInspect(context.Background(), containerName)
+		if err != nil {
+			lastErr = err
+			time.Sleep(2 * time.Second)
+			continue
+		}
+
+		if preferredPort > 0 {
+			if err := verifyLocalProxyPortReachable(preferredPort); err != nil {
+				lastErr = fmt.Errorf("容器 %s 已运行，但优先端口 %d 当前不可访问: %w", containerName, preferredPort, err)
+				time.Sleep(2 * time.Second)
+				continue
+			}
+			return preferredPort, inspect.ID, nil
+		}
+
+		// 检查容器是否在运行
+		if inspect.State == nil || !inspect.State.Running {
+			lastErr = fmt.Errorf("容器 %s 未在运行", containerName)
+			time.Sleep(2 * time.Second)
+			continue
+		}
+
+		// 选择宿主机端口
+		hostPort, err = choosePublishedHostPort(inspect, preferredPort)
+		if err != nil {
+			lastErr = err
+			time.Sleep(2 * time.Second)
+			continue
+		}
+
+		// 验证宿主机端口是否可访问
+		if err := verifyLocalProxyPortReachable(hostPort); err != nil {
+			lastErr = fmt.Errorf("容器 %s 已运行，但宿主机端口 %d 当前不可访问: %w", containerName, hostPort, err)
+			time.Sleep(2 * time.Second)
+			continue
+		}
+
+		return hostPort, inspect.ID, nil
 	}
-	if inspect.State == nil || !inspect.State.Running {
-		return 0, "", fmt.Errorf("容器 %s 未在运行", containerName)
-	}
-	hostPort, err := choosePublishedHostPort(inspect, preferredPort)
-	if err != nil {
-		return 0, "", err
-	}
-	if err := verifyLocalProxyPortReachable(hostPort); err != nil {
-		return 0, "", fmt.Errorf("容器 %s 已运行，但宿主机端口 %d 当前不可访问: %w", containerName, hostPort, err)
-	}
-	return hostPort, inspect.ID, nil
+
+	return 0, "", lastErr
 }
 
+// 选择发布的端口
 func choosePublishedHostPort(inspect container.InspectResponse, preferredPort int) (int, error) {
 	portBindings := inspect.NetworkSettings.Ports
 	if len(portBindings) == 0 && inspect.ContainerJSONBase != nil && inspect.ContainerJSONBase.HostConfig != nil {
