@@ -114,8 +114,8 @@ const onSubmit = async (formEl: any | undefined) => {
 	formEl.validate(async valid => {
 		if (!valid) return
 		  await dialog.warning({
-				title: "确认删除",
-				content: `确定要删除容器 ${form.containerName} 吗？`,
+				title: "确认提交",
+				content: `确定要将容器 ${form.containerName} 提交为新镜像吗？`,
 				positiveText: "确定",
 				negativeText: "取消",
 				onPositiveClick: async () => {
