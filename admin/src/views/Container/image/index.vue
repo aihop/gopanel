@@ -107,7 +107,7 @@ const openBuildDrawer = () => {
 	buildImageRef.value?.acceptParams()
 }
 
-const getPushableTags = (row: ImageRow) => row.tags.filter(tag => tag && !tag.includes(":<none>"))
+const getPushableTags = (row: ImageRow) => (row.tags || []).filter(tag => tag && !tag.includes(":<none>"))
 
 const openPushDrawer = (row: ImageRow) => {
 	const tags = getPushableTags(row)
