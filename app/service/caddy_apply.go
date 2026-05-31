@@ -146,7 +146,7 @@ func renderCaddyfile(websites []model.Website, domainByWebsite map[uint][]model.
 
 		if w.BlockSensitive {
 			b.WriteString("  @sensitive_hidden {\n")
-			b.WriteString("    path /.* /*/.*\n")
+			b.WriteString("    path_regexp \"/\\\\.\"\n")
 			b.WriteString("    not path /.well-known/*\n")
 			b.WriteString("  }\n")
 			b.WriteString("  respond @sensitive_hidden \"Access Denied\" 403\n\n")
