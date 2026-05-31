@@ -189,6 +189,20 @@ func normalizeHostConfigForRuntime(hostConf *container.HostConfig) {
 		return
 	}
 	hostConf.MemorySwappiness = nil
+	// Podman's specgen is stricter than Docker: empty mode strings
+	// cause "invalid option type" errors. Set sensible defaults.
+	if hostConf.CgroupnsMode == "" {
+		hostConf.CgroupnsMode = "private"
+	}
+	if hostConf.IpcMode == "" {
+		hostConf.IpcMode = "private"
+	}
+	if hostConf.UTSMode == "" {
+		hostConf.UTSMode = "host"
+	}
+	if hostConf.RestartPolicy.Name == "" {
+		hostConf.RestartPolicy.Name = container.RestartPolicyMode("no")
+	}
 }
 func reCreateAfterUpdate(name string, client *client.Client, config *container.Config, hostConf *container.HostConfig, networkConf *types.NetworkSettings) {
 	ctx := context.Background()
