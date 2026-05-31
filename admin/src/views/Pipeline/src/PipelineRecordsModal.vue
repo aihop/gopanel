@@ -125,17 +125,13 @@ const getRecordResultTags = (row: Pipeline.ResRecord) => {
   const tags: Array<{ label: string; type: "success" | "warning" | "info" | "default" }> = []
 
   if (row.runnerHostPort) {
-    tags.push({ label: "运行实例", type: "success" })
-  }
-  if (row.archiveFile) {
-    tags.push({ label: "归档包", type: "info" })
-  }
-  if (row.imageTag) {
-    tags.push({ label: row.runnerHostPort ? "镜像引用" : "脚本识别镜像", type: "warning" })
-  }
-
-  if (tags.length === 0) {
-    tags.push({ label: "脚本结果", type: "default" })
+    tags.push({ label: `🚀 预览 :${row.runnerHostPort}`, type: "success" })
+  } else if (row.imageTag) {
+    tags.push({ label: "🐳 镜像", type: "warning" })
+  } else if (row.archiveFile) {
+    tags.push({ label: "📦 归档", type: "info" })
+  } else {
+    tags.push({ label: "📄 脚本", type: "default" })
   }
 
   return tags
@@ -148,52 +144,42 @@ const columns: DataTableColumns<Pipeline.ResRecord> = [
   {
     title: "Commit",
     key: "commitHash",
-    width: 170,
+    width: 130,
     render(row: Pipeline.ResRecord) {
       if (!row.commitHash) {
         return h("span", { class: "text-slate-400 text-xs" }, "-")
       }
       return h("div", { class: "flex items-center gap-1 text-xs min-w-0" }, [
-        h("span", { class: "font-mono text-slate-700 shrink-0" }, row.commitHash.slice(0, 12)),
-        h("button", {
-          type: "button",
-          class: "shrink-0 text-[12px] leading-none text-blue-600 hover:text-blue-700",
+        h("span", {
+          class: "font-mono text-slate-700 shrink-0 cursor-pointer",
+          title: "点击复制完整 SHA",
           onClick: (event: MouseEvent) => {
             event.stopPropagation()
             void handleCopy(row.commitHash || "", "Commit SHA 已复制")
           }
-        }, "复制")
+        }, row.commitHash.slice(0, 7))
       ])
     }
   },
   {
     title: "状态",
     key: "status",
+    width: 120,
     render(row: Pipeline.ResRecord) {
       let type: "default" | "info" | "success" | "warning" | "error" = "default"
+      let label = row.status
       switch (row.status) {
         case "pending": type = "default"; break
         case "cloning": type = "info"; break
         case "building": type = "warning"; break
         case "deploying": type = "info"; break
-        case "success": type = "success"; break
+        case "success":
+          type = "success"
+          label = row.released ? "已发布" : "构建成功"
+          break
         case "failed": type = "error"; break
       }
-      return h(NTag, { type }, { default: () => row.status })
-    }
-  },
-  {
-    title: "正式版本",
-    key: "released",
-    width: 160,
-    render(row: Pipeline.ResRecord) {
-      return h("div", { class: "flex flex-wrap gap-1" }, [
-        h(
-          NTag,
-          { size: "small", type: row.released ? "success" : "default" },
-          { default: () => (row.released ? "已发布" : "未发布") }
-        )
-      ])
+      return h(NTag, { type, size: "small" }, { default: () => label })
     }
   },
   {
