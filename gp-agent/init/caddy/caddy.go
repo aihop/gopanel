@@ -11,7 +11,10 @@ import (
 	"github.com/caddyserver/caddy/v2/caddyconfig"
 	"go.uber.org/zap"
 
+	// 【DNS 自动化证书板块】
+	_ "github.com/caddy-dns/alidns"
 	_ "github.com/caddy-dns/cloudflare"
+
 	_ "github.com/caddyserver/cache-handler"
 	_ "github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 	_ "github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
