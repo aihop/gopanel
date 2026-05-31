@@ -121,7 +121,7 @@ export const createDefaultPipelineFormModel = (): PipelineFormModel => ({
   artifactPath: ".",
   exposePort: null,
   pipelineKey: "",
-  actionType: "deploy",
+  actionType: "none",
   actionParams: "",
   runnerEnabled: false,
   runnerPolicy: "build_run",

@@ -8,14 +8,13 @@ defineProps<{
 </script>
 
 <template>
-  <div class="mb-4 mt-6 text-sm font-semibold text-slate-700">高级模式 (纯脚本)</div>
-  <n-form-item
+ <n-form-item
     label="构建环境"
     path="buildEnv"
   >
     <n-radio-group v-model:value="formModel.buildEnv">
-      <n-radio value="container">容器化构建 (推荐，基于 Docker/Podman)</n-radio>
-      <n-radio value="host">宿主机本地构建 (环境依赖复杂，仅限专家)</n-radio>
+      <n-radio value="container">容器化构建</n-radio>
+      <n-radio value="host">宿主机本地构建 (仅限专家)</n-radio>
     </n-radio-group>
   </n-form-item>
   <n-form-item

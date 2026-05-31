@@ -36,7 +36,7 @@ const handlePipelineKeyInput = () => {
     />
   </n-form-item>
   <n-form-item
-    label="流水线标识"
+    label="唯一标识"
     path="pipelineKey"
   >
     <div class="w-full">
@@ -47,12 +47,12 @@ const handlePipelineKeyInput = () => {
         @blur="formModel.pipelineKey = normalizePipelineKey(formModel.pipelineKey)"
       />
       <div class="mt-2 text-xs text-slate-500">
-        用于生成流水线固定目录：`安装目录/pipelines/流水线标识/`。仅支持字母、数字和中划线；失焦时会自动规范化。创建或更新时会检查该目录是否已存在；若已被其他流水线占用，会提示你更换标识。
+        用于生成流水线固定目录：`安装目录/pipelines/唯一标识/`。仅支持字母、数字和中划线；失焦时会自动规范化。创建或更新时会检查该目录是否已存在；若已被其他流水线占用，会提示你更换标识。
       </div>
     </div>
   </n-form-item>
   <n-form-item
-    label="初始版本号"
+    label="版本号"
     path="version"
   >
     <n-input
@@ -61,34 +61,7 @@ const handlePipelineKeyInput = () => {
     />
   </n-form-item>
 
-  <div class="mb-4 mt-6 text-sm font-semibold text-slate-700">交付模式</div>
-  <n-form-item label="模式选择">
-    <n-radio-group v-model:value="formModel.pipelineMode">
-      <n-space vertical>
-        <n-radio value="runner">简单模式 (代码产物部署，推荐)</n-radio>
-        <div class="ml-6 text-xs text-slate-500">流水线会把代码产物解压到版本目录，再交给运行时基础镜像执行；正式版本通常展示为归档包或发布目录。</div>
-        <n-radio value="script">高级模式 (纯脚本)</n-radio>
-        <div class="ml-6 text-xs text-slate-500">适合熟练用户。BuildScript 完全自管，交付结果可能是归档、目录或运行中的服务；只有脚本显式构建镜像时，才会额外记录镜像引用。</div>
-      </n-space>
-    </n-radio-group>
-  </n-form-item>
-
-  <div class="mb-4 mt-6 text-sm font-semibold text-slate-700">交付后操作</div>
-  <n-form-item label="构建产物操作">
-    <n-radio-group v-model:value="formModel.actionType">
-      <n-space vertical>
-        <n-radio value="deploy">部署到关联网站</n-radio>
-        <div class="ml-6 text-xs text-slate-500">构建产物自动推送到绑定的网站运行</div>
-        <n-radio value="build_image">构建 Docker 镜像</n-radio>
-        <div class="ml-6 text-xs text-slate-500">从 release 目录打包为 Docker 镜像</div>
-        <n-radio value="none">仅构建，不执行后续操作</n-radio>
-        <div class="ml-6 text-xs text-slate-500">只完成打包归档，不部署到任何位置</div>
-      </n-space>
-    </n-radio-group>
-  </n-form-item>
-
-  <div class="mb-4 mt-6 text-sm font-semibold text-slate-700">源码配置 (选填，纯脚本模式可留空)</div>
-  <n-form-item
+    <n-form-item
     label="仓库地址"
     path="repoUrl"
   >
@@ -127,4 +100,16 @@ const handlePipelineKeyInput = () => {
       show-password-on="click"
     />
   </n-form-item>
+
+ <n-form-item label="构建模式">
+    <n-radio-group v-model:value="formModel.pipelineMode">
+      <n-space vertical>
+        <n-radio value="runner">简单模式 (代码产物部署)</n-radio>
+        <div class="ml-6 text-xs text-slate-500">流水线会把代码产物解压到版本目录，再交给运行时基础镜像执行</div>
+        <n-radio value="script">高级模式 (纯脚本)</n-radio>
+        <div class="ml-6 text-xs text-slate-500">适合熟练用户，BuildScript 完全自管，交付结果可能是归档包或目录或运行中的服务</div>
+      </n-space>
+    </n-radio-group>
+  </n-form-item>
+
 </template>

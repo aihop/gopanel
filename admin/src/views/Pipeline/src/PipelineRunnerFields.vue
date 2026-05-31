@@ -30,7 +30,6 @@ const markCustomPreset = () => {
 </script>
 
 <template>
-  <div class="mb-4 mt-6 text-sm font-semibold text-slate-700">简单模式 (代码产物部署)</div>
   <div
     v-if="isEdit && existingRuntimeHint"
     class="mb-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-4 text-sm text-slate-700"
@@ -206,7 +205,7 @@ const markCustomPreset = () => {
           placeholder="一行一个，例如：uploads&#10;.data&#10;storage"
         />
         <div class="mt-2 text-xs text-slate-500">
-          只填写容器内需要持久化的子目录即可，例如 `uploads`、`.data`、`storage`。不要填写 `node_modules` 这类依赖目录；系统会自动映射到 `安装目录/apps/流水线标识/对应子目录`，并保持代码目录与数据目录分离。
+          只填写容器内需要持久化的子目录即可，例如 uploads、.data、storage 
         </div>
       </div>
     </n-form-item>

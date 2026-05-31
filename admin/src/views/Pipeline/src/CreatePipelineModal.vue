@@ -9,6 +9,7 @@ import { buildRuntimeDetailText, getRuntimeKindLabel, getRuntimeModeLabel } from
 import PipelineBasicFields from "./PipelineBasicFields.vue"
 import PipelineRunnerFields from "./PipelineRunnerFields.vue"
 import PipelineScriptFields from "./PipelineScriptFields.vue"
+import PipelineActionFields from "./PipelineActionFields.vue"
 import {
   applyRunnerPresetToForm,
   buildRunnerDirectorySummary,
@@ -70,11 +71,11 @@ const currentRuntimeModeLabel = computed(() => {
 
 const runnerRuntimeHint = computed(() => {
   if (!runtimeValidate.value?.runtimeKind) {
-    return "简单模式 Runner 会跟随当前面板已选中的容器运行时。`runnerUser` 只影响容器内进程用户，不会改变宿主机是 rootless 还是 rootful。"
+    return "Runner 会跟随当前面板已选中的容器运行时。`runnerUser` 只影响容器内进程用户，不会改变宿主机是 rootless 还是 rootful。"
   }
   const host = String(runtimeValidate.value?.runtimeHost || "").trim()
   const hostText = host ? `；当前 Host：${host}` : ""
-  return `简单模式 Runner 当前会跟随 ${currentRuntimeKindLabel.value} / ${currentRuntimeModeLabel.value}${hostText}。非 root 安装通常应落到 rootless 运行时；这里的“容器内运行用户”仅控制进程身份，不改变宿主机运行时模式。`
+  return `Runner 当前会跟随 ${currentRuntimeKindLabel.value} / ${currentRuntimeModeLabel.value}${hostText}。非 root 安装通常应落到 rootless 运行时；这里的“容器内运行用户”仅控制进程身份，不改变宿主机运行时模式。`
 })
 
 const existingRuntimeHint = computed(() => {
@@ -111,14 +112,14 @@ const validateOptionalPort = (_rule: any, value: string) => {
 const rules = {
   name: { required: true, message: "请输入名称", trigger: "blur" },
   branch: { required: true, message: "请输入分支名称", trigger: "blur" },
-  version: { required: true, message: "请输入初始版本号", trigger: "blur" },
+  version: { required: true, message: "请输入版本号", trigger: "blur" },
   pipelineKey: {
     validator: (_rule: any, value: string) => {
       const raw = String(value || "").trim()
-      if (!raw) return new Error("请输入流水线标识")
+      if (!raw) return new Error("请输入流水线唯一标识")
       const normalized = normalizePipelineKey(raw)
       if (!normalized) {
-        return new Error("流水线标识仅支持字母、数字、中划线，且规范化后不能为空")
+        return new Error("流水线唯一标识仅支持字母、数字、中划线，且规范化后不能为空")
       }
       return true
     },
@@ -382,6 +383,9 @@ watch(() => [formModel.repoUrl, formModel.branch, formModel.authType, formModel.
       />
       <PipelineScriptFields
         v-else
+        :form-model="formModel"
+      />
+      <PipelineActionFields
         :form-model="formModel"
       />
     </n-form>
