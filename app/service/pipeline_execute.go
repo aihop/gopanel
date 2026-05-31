@@ -135,25 +135,6 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 		_ = s.recordRepo.UpdateImageTag(recordID, finalImage)
 		record.ImageTag = finalImage
 	}
-	if !p.AutoDeploy {
-		logger.Info("自动同步已关闭，跳过网站部署（autoDeploy=false）")
-		release := &model.Release{
-			PipelineID:       p.ID,
-			PipelineRecordID: recordID,
-			Version:          record.Version,
-			CommitHash:       record.CommitHash,
-			SourceType:       "pipeline",
-			ImageTag:         record.ImageTag,
-			ArchiveFile:      archivePath,
-			Status:           "ready",
-		}
-		_ = s.releaseRepo.Create(release)
-		s.recordRepo.UpdateStatus(recordID, "success", "构建成功（未同步）")
-		logger.Info("====== Pipeline #%d 执行成功！======", recordID)
-		return
-	}
-	s.recordRepo.UpdateStatus(recordID, "deploying", "同步关联网站的临时运行结果...")
-	logger.Info("正在同步所有关联此流水线的网站临时运行结果...")
 	// Auto-create a Release record so rollback/publish works.
 	release := &model.Release{
 		PipelineID:       p.ID,

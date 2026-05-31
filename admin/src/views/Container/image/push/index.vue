@@ -13,12 +13,12 @@
 			</template>
 			<n-row type="flex" justify="center">
 				<n-col :span="22">
-					<n-form ref="formRef" label-position="top" :model="form" label-width="80px">
+					<n-form ref="formRef" label-position="top" :model="form" label-width="80px" v-if="!logVisible">
 						<n-form-item :label="$t('container.tag')" :rules="Rules.requiredSelect" prop="tagName">
 							<n-select
 								@change="onEdit(true)"
 								filterable
-								v-model="form.tagName"
+								v-model:value="form.tagName"
 								:options="form.tags.map(item => ({ label: item, value: item }))"
 							/>
 						</n-form-item>
@@ -28,14 +28,14 @@
 								clearable
 								style="width: 100%"
 								filterable
-								v-model="form.repoID"
+								v-model:value="form.repoID"
 								:options="dialogData.repos.map(item => ({ label: item.name, value: item.id }))"
 							/>
 						</n-form-item>
 						<n-form-item :label="$t('container.image')" :rules="Rules.imageName" prop="name">
 							<n-input
 								@change="onEdit()"
-								v-model.trim="form.name"
+								v-model:value="form.name"
 								:placeholder="`${loadDetailInfo(form.repoID)}/image:tag`"
 							/>
 						</n-form-item>
@@ -47,7 +47,7 @@
 						:default-button="false"
 						v-model:is-reading="isReading"
 						v-if="logVisible"
-						:style="'height: calc(100vh - 370px);min-height: 200px'"
+						:style="'height: calc(100vh - 200px);min-height: 200px'"
 						v-model:loading="loading"
 					/>
 				</n-col>
