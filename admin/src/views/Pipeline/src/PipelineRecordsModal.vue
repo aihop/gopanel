@@ -181,19 +181,10 @@ const columns: DataTableColumns<Pipeline.ResRecord> = [
         case "success": type = "success"; break
         case "failed": type = "error"; break
       }
-      return h(NTag, { type, size: "small" }, { default: () => row.status })
-    }
-  },
-  {
-    title: "正式版本",
-    key: "released",
-    width: 100,
-    render(row: Pipeline.ResRecord) {
-      return h(
-        NTag,
-        { size: "small", type: row.released ? "success" : "default" },
-        { default: () => (row.released ? "已发布" : "未发布") }
-      )
+      return h("div", { class: "flex flex-col items-center gap-0.5" }, [
+        h(NTag, { type, size: "tiny" }, { default: () => row.status }),
+        h("span", { class: "text-[11px] leading-none", style: { color: row.released ? "#22c55e" : "#94a3b8" } }, row.released ? "已发布" : "未发布")
+      ])
     }
   },
   {
