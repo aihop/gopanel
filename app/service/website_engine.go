@@ -23,6 +23,11 @@ const runnerWorkspaceMountPath = "/gopanel/workspace"
 func DeployWebsiteEngine(ctx context.Context, alias string, req *request.WebsiteCreate, progress func(format string, a ...interface{})) (int, string, string, error) {
 	cli, err := docker.NewDockerClient()
 	if err != nil {
+		// Prevent macOS podman error from blocking website creation
+		// (Docker API is not available via podman on darwin).
+		if strings.Contains(err.Error(), "podman on darwin") {
+			return 0, "", "", nil
+		}
 		return 0, "", "", fmt.Errorf("failed to init docker client: %w", err)
 	}
 	defer cli.Close()

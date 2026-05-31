@@ -92,10 +92,21 @@ func dockerDaemonHealthy(ctx context.Context) bool {
 
 func (a *defaultRuntimeAdapter) DockerClient(ctx context.Context) (*client.Client, error) {
 	resolved := a.Resolve(ctx)
-	if resolved.Kind == RuntimePodman && runtime.GOOS == "darwin" {
-		return nil, errors.New("podman on darwin does not support docker api client")
+	opts := []client.Opt{client.FromEnv, client.WithAPIVersionNegotiation()}
+	if resolved.Host != "" {
+		opts = append(opts, client.WithHost(resolved.Host))
 	}
-	return client.NewClientWithOpts(client.FromEnv, client.WithHost(resolved.Host), client.WithAPIVersionNegotiation())
+	cli, err := client.NewClientWithOpts(opts...)
+	if err == nil {
+		return cli, nil
+	}
+	// On macOS with podman, the docker API socket is not available.
+	// Return a nil client without error so callers can skip docker
+	// operations gracefully when the API is not needed.
+	if resolved.Kind == RuntimePodman && runtime.GOOS == "darwin" {
+		return nil, nil
+	}
+	return nil, err
 }
 
 func (a *defaultRuntimeAdapter) Command(ctx context.Context, args ...string) (*exec.Cmd, error) {
