@@ -74,6 +74,7 @@ import { t } from "@/i18n"
 import { imagePush } from "@/api/modules/container"
 import { Container } from "@/api/interface/container"
 import DrawerHeader from "@/components/DrawerHeader.vue"
+import LogFile from "@/components/LogFile.vue"
 import { MsgSuccess } from "@/utils/message"
 
 const drawerVisible = ref(false)
