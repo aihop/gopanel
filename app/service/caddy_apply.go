@@ -63,11 +63,11 @@ func renderCaddyfile(websites []model.Website, domainByWebsite map[uint][]model.
 
 		otherDomains := domainByWebsite[w.ID]
 
-		// When redirectDomainsToPrimary is enabled, secondary domains
-		// must be excluded from the main server block to avoid Caddy's
-		// "ambiguous site definition" error (same domain in two blocks).
+		// When redirectDomainsToPrimary is enabled:
+		// - Redirect type: merge all domains into the main block (same redirect target)
+		// - Other types: exclude secondary domains to avoid duplicate blocks
 		mainDomains := otherDomains
-		if w.RedirectDomainsToPrimary {
+		if w.RedirectDomainsToPrimary && w.Type != constant.Redirect {
 			var primaryOnly []model.WebsiteDomain
 			for _, d := range otherDomains {
 				if normalizeWebsiteDomainForCompare(d.Domain) == normalizeWebsiteDomainForCompare(w.PrimaryDomain) {
