@@ -181,9 +181,9 @@ const columns: DataTableColumns<Pipeline.ResRecord> = [
         case "success": type = "success"; break
         case "failed": type = "error"; break
       }
-      return h("div", { class: "flex flex-col items-center gap-0.5" }, [
+      return h("div", { class: "flex flex-col items-center py-0.5" }, [
         h(NTag, { type, size: "tiny" }, { default: () => row.status }),
-        h("span", { class: "text-[11px] leading-none", style: { color: row.released ? "#22c55e" : "#94a3b8" } }, row.released ? "已发布" : "未发布")
+        h("span", { class: "text-[11px] leading-4 mt-0.5", style: { color: row.released ? "#22c55e" : "#94a3b8" } }, row.released ? "已发布" : "未发布")
       ])
     }
   },
