@@ -94,11 +94,12 @@ const onSubmitName = async (formEl: any | undefined) => {
 
 interface DialogProps {
 	container: string
+	containerName: string
 }
 
 const acceptParams = (props: DialogProps): void => {
 	renameForm.name = props.container
-	renameForm.newName = ""
+	renameForm.newName = props.containerName || ""
 	newNameVisible.value = true
 }
 

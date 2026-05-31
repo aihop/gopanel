@@ -167,9 +167,9 @@ const getRowActions = (row: Container.ContainerInfo) => [
 	},
 	{
 		label: t("container.rename"),
-		disabled: row.isFromCompose,
+		disabled: row.isFromCompose || row.state === "running",
 		click: () => {
-			dialogRenameRef.value!.acceptParams({ container: row.name })
+			dialogRenameRef.value!.acceptParams({ container: row.name, containerName: row.name })
 		}
 	},
 	{
