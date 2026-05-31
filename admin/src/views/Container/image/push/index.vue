@@ -109,6 +109,7 @@ const acceptParams = async (params: DialogProps): Promise<void> => {
 	logVisible.value = false
 	loading.value = false
 	drawerVisible.value = true
+	pushVisible.value = true
 	form.tags = params.tags
 	form.repoID = 1
 	form.tagName = form.tags.length !== 0 ? form.tags[0] : ""
