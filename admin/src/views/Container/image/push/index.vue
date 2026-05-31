@@ -1,6 +1,6 @@
 <template>
 	<n-drawer
-		v-model:show="pushVisible"
+		v-model:show="drawerVisible"
 		:destroy-on-close="true"
 		@close="onCloseLog"
 		:close-on-click-modal="false"
