@@ -439,8 +439,16 @@ function createDefaultForm(): WebsiteFormState {
 		hstsEnabled: false,
 		httpConfig: "",
 		redirectCode: 301,
-		redirectDomainsToPrimary: false,
+		redirectDomainsToPrimary: true,
 	}
+}
+
+function sanitizeOtherDomains(raw: string, primary: string): string {
+	return raw.split("\n")
+		.map(s => s.trim())
+		.filter(Boolean)
+		.filter(s => s.toLowerCase() !== (primary || "").trim().toLowerCase())
+		.join("\n")
 }
 
 const title = ref("添加域名")
@@ -552,14 +560,6 @@ function syncSourceSpecificFields(source: string) {
 	if (source !== "upload") {
 		form.value.codeDir = ""
 	}
-}
-
-function sanitizeOtherDomains(raw: string, primary: string): string {
-	return raw.split("\n")
-		.map(s => s.trim())
-		.filter(Boolean)
-		.filter(s => s.toLowerCase() !== (primary || "").trim().toLowerCase())
-		.join("\n")
 }
 
 function buildCreatePayload(): Website.WebSiteCreateReq {
