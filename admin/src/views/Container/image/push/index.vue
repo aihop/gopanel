@@ -5,8 +5,8 @@
 		@close="onCloseLog"
 		:close-on-click-modal="false"
 		:close-on-press-escape="false"
-		size="50%"
-	>
+		width="400px"
+		>
 		<n-drawer-content>
 			<template #header>
 				<DrawerHeader :header="$t('container.imagePush')" :back="onCloseLog" />
@@ -54,14 +54,14 @@
 			</n-row>
 
 			<template #footer>
-				<span class="dialog-footer">
+				<n-space>
 					<n-button @click="drawerVisible = false">
 						{{ $t("commons.button.cancel") }}
 					</n-button>
 					<n-button :disabled="isStartReading || isReading" type="primary" @click="onSubmit(formRef)">
 						{{ $t("container.push") }}
 					</n-button>
-				</span>
+				</n-space>
 			</template>
 		</n-drawer-content>
 	</n-drawer>

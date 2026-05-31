@@ -3,9 +3,6 @@ package service
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/aihop/gopanel/app/dto"
-	"github.com/aihop/gopanel/constant"
-	"github.com/aihop/gopanel/global"
 	"io"
 	"net/http"
 	"os"
@@ -13,6 +10,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/aihop/gopanel/app/dto"
+	"github.com/aihop/gopanel/constant"
+	"github.com/aihop/gopanel/global"
 )
 
 func NewIAppVersionService() IAppVersionService {
@@ -31,7 +32,7 @@ type IAppVersionService interface {
 
 func (a *AppVersionService) GetUpdateInfo(checkUrl string, upgradeVersion *dto.SettingUpgradeVersion) (*dto.AppUpdateData, error) {
 	client := &http.Client{Timeout: 10 * time.Second}
-	req, err := http.NewRequest("GET", checkUrl+"?versionCode="+strconv.FormatInt(upgradeVersion.VersionCode, 10)+"&version="+upgradeVersion.VersionName+"&os="+upgradeVersion.OS+"&arch="+upgradeVersion.Arch+"&appBrand="+upgradeVersion.AppBrand+"&package="+upgradeVersion.Package, nil)
+	req, err := http.NewRequest("GET", checkUrl+"?versionCode="+strconv.FormatInt(upgradeVersion.VersionCode, 10)+"&version="+upgradeVersion.VersionName+"&os="+upgradeVersion.OS+"&arch="+upgradeVersion.Arch+"&appBrand="+upgradeVersion.AppBrand+"&package="+upgradeVersion.Package+"&source="+upgradeVersion.Source, nil)
 	if err != nil {
 		return nil, nil
 	}

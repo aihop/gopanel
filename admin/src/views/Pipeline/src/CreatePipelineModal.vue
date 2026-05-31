@@ -349,7 +349,7 @@ watch(() => [formModel.repoUrl, formModel.branch, formModel.authType, formModel.
   <FullModal
     :show="show"
     :title="isEdit ? '编辑流水线' : '新增流水线'"
-    width="800px"
+    width="900px"
     @update:show="handleClose"
   >
     <n-form

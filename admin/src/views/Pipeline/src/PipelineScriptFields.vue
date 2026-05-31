@@ -40,7 +40,7 @@ defineProps<{
     />
   </n-form-item>
   <n-form-item
-    label="脚本产出镜像名"
+    label="产出镜像名"
     path="outputImage"
   >
     <div class="w-full">

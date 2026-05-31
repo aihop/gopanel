@@ -69,7 +69,7 @@ const buildPipelineRuntimeText = (row: Pipeline.ResPipeline | null, options?: { 
 }
 
 const columns: DataTableColumns<Pipeline.ResPipeline> = [
-  { title: "ID", key: "id", width: 60 },
+  { title: "ID", key: "id", width: 40 },
   { title: t("pipeline.pipelineName"), key: "name" },
   {
     title: "模式",
@@ -84,7 +84,7 @@ const columns: DataTableColumns<Pipeline.ResPipeline> = [
   {
     title: t("container.runtimeType"),
     key: "runtimeType",
-    minWidth: 300,
+    minWidth: 180,
     render: (row: Pipeline.ResPipeline) => {
       return h("div", { class: "flex flex-col gap-1" }, [
         h("div", { class: "flex flex-wrap items-center gap-2" }, [
@@ -113,7 +113,7 @@ const columns: DataTableColumns<Pipeline.ResPipeline> = [
   {
     title: t("pipeline.actions"),
     key: "actions",
-    width: 240,
+    width: 220,
     fixed: "right",
     render(row: Pipeline.ResPipeline) {
       return h(NSpace, {}, {
@@ -285,7 +285,7 @@ defineExpose({
       :loading="loading"
       :pagination="pagination"
       :bordered="false"
-      :scroll-x="1080"
+      :scroll-x="1280"
       class="bg-transparent"
     />
     <PipelineRecordsModal
