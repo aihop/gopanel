@@ -135,10 +135,9 @@ const onSubmit = async (formEl: any | undefined) => {
 		if (errors) return
 		const res = await imagePush(form)
 		logConfig.name = res.data
+		logConfig.tail = true
 		logVisible.value = true
 		isStartReading.value = true
-		await nextTick()
-		logRef.value?.changeTail(true)
 	})
 }
 
