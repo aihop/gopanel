@@ -242,9 +242,22 @@ func renderCaddyfile(websites []model.Website, domainByWebsite map[uint][]model.
 				if strings.EqualFold(w.Protocol, constant.ProtocolHTTP) {
 					proto = "http"
 				}
+				// For redirect type websites, other domains should redirect
+				// directly to the target URL (w.Proxy), not to the primary
+				// domain which would then redirect again (2 hops → 1 hop).
+				redirectURL := w.PrimaryDomain
+				needProto := true
+				if w.Type == constant.Redirect && strings.TrimSpace(w.Proxy) != "" {
+					redirectURL = strings.TrimSpace(w.Proxy)
+					needProto = false // redirect target is already a full URL
+				}
 				b.WriteString(host)
 				b.WriteString(" {\n")
-				b.WriteString("  redir " + proto + "://" + w.PrimaryDomain + "{uri} 301\n")
+				if needProto {
+					b.WriteString("  redir " + proto + "://" + redirectURL + "{uri} 301\n")
+				} else {
+					b.WriteString("  redir " + redirectURL + "{uri} 301\n")
+				}
 				b.WriteString("}\n\n")
 			}
 		}
