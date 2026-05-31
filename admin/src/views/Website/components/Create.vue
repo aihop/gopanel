@@ -66,6 +66,12 @@
         </n-form-item>
 
         <n-checkbox
+          class="mb-2"
+          v-model:checked="form.redirectDomainsToPrimary"
+          :disabled="!form.otherDomains"
+        >其他域名自动 301 跳转到主域名</n-checkbox>
+
+        <n-checkbox
           class="mb-6"
           v-model:checked="form.IPV6"
         >监听IPV6</n-checkbox>
@@ -389,6 +395,7 @@ type WebsiteFormState = {
 	hstsEnabled: boolean
 	httpConfig: string
 	redirectCode: number
+	redirectDomainsToPrimary: boolean
 }
 type WebsiteFormRecord = Website.WebsiteDTO & {
 	domains?: WebsiteDomainValue[]
@@ -431,6 +438,7 @@ function createDefaultForm(): WebsiteFormState {
 		hstsEnabled: false,
 		httpConfig: "",
 		redirectCode: 301,
+		redirectDomainsToPrimary: false,
 	}
 }
 
@@ -572,6 +580,7 @@ function buildCreatePayload(): Website.WebSiteCreateReq {
 		hstsEnabled: form.value.hstsEnabled,
 		httpConfig: form.value.httpConfig,
 		redirectCode: form.value.redirectCode,
+		redirectDomainsToPrimary: form.value.redirectDomainsToPrimary,
 	}
 }
 
@@ -597,7 +606,8 @@ function buildUpdatePayload(): Website.WebSiteUpdateReq {
 		securityHeader: form.value.securityHeader,
 		hstsEnabled: form.value.hstsEnabled,
 		httpConfig: form.value.httpConfig,
-		redirectCode: form.value.redirectCode
+		redirectCode: form.value.redirectCode,
+		redirectDomainsToPrimary: form.value.redirectDomainsToPrimary
 	}
 }
 

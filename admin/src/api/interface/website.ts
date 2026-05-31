@@ -49,6 +49,7 @@ export namespace Website {
         hstsEnabled?: boolean;
         httpConfig?: string;
         redirectCode?: number;
+        redirectDomainsToPrimary?: boolean;
     }
 
     export interface WebsiteDTO extends Website {
@@ -170,6 +171,7 @@ export namespace Website {
         hstsEnabled?: boolean;
         httpConfig?: string;
         redirectCode?: number;
+        redirectDomainsToPrimary?: boolean;
     }
 
     export interface WebSiteUpdateReq {
@@ -197,6 +199,7 @@ export namespace Website {
         hstsEnabled?: boolean;
         httpConfig?: string;
         redirectCode?: number;
+        redirectDomainsToPrimary?: boolean;
     }
 
     export interface WebSiteOp {

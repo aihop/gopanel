@@ -53,6 +53,7 @@ func (s WebsiteService) Update(ctx context.Context, req *request.WebsiteUpdate) 
 	website.HstsEnabled = req.HstsEnabled
 	website.HttpConfig = req.HttpConfig
 	website.RedirectCode = req.RedirectCode
+	website.RedirectDomainsToPrimary = req.RedirectDomainsToPrimary
 
 	var newContent, updatedContent string
 	var domains []model.WebsiteDomain

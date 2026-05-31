@@ -214,6 +214,24 @@ func renderCaddyfile(websites []model.Website, domainByWebsite map[uint][]model.
 		}
 
 		b.WriteString("}\n\n")
+
+		// Append separate redirect blocks for secondary domains
+		if w.RedirectDomainsToPrimary {
+			for _, d := range domainByWebsite[w.ID] {
+				host := strings.TrimSpace(d.Domain)
+				if host == "" || normalizeWebsiteDomainForCompare(host) == normalizeWebsiteDomainForCompare(w.PrimaryDomain) {
+					continue
+				}
+				proto := "https"
+				if strings.EqualFold(w.Protocol, constant.ProtocolHTTP) {
+					proto = "http"
+				}
+				b.WriteString(host)
+				b.WriteString(" {\n")
+				b.WriteString("  redir " + proto + "://" + w.PrimaryDomain + "{uri} 301\n")
+				b.WriteString("}\n\n")
+			}
+		}
 	}
 
 	return b.String()

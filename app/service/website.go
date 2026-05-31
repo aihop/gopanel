@@ -121,8 +121,9 @@ func (s WebsiteService) Create(ctx context.Context, req *request.WebsiteCreate, 
 		IPBlocklist:    strings.TrimSpace(req.IPBlocklist),
 		SecurityHeader: req.SecurityHeader,
 		HstsEnabled:    req.HstsEnabled,
-		HttpConfig:     req.HttpConfig,
-		RedirectCode:   req.RedirectCode,
+		HttpConfig:               req.HttpConfig,
+		RedirectCode:             req.RedirectCode,
+		RedirectDomainsToPrimary: req.RedirectDomainsToPrimary,
 	}
 
 	var appInstall *model.AppInstall

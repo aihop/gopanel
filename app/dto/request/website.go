@@ -31,7 +31,8 @@ type WebsiteCreate struct {
 	IPBlocklist    string `json:"ipBlocklist"`
 	SecurityHeader bool   `json:"securityHeader"`
 	HstsEnabled    bool   `json:"hstsEnabled"`
-	RedirectCode   int    `json:"redirectCode"`
+	RedirectCode             int  `json:"redirectCode"`
+	RedirectDomainsToPrimary bool `json:"redirectDomainsToPrimary"`
 
 	HttpConfig string `json:"httpConfig"`
 }
@@ -64,7 +65,8 @@ type WebsiteUpdate struct {
 	IPBlocklist    string `json:"ipBlocklist"`
 	SecurityHeader bool   `json:"securityHeader"`
 	HstsEnabled    bool   `json:"hstsEnabled"`
-	RedirectCode   int    `json:"redirectCode"`
+	RedirectCode             int  `json:"redirectCode"`
+	RedirectDomainsToPrimary bool `json:"redirectDomainsToPrimary"`
 
 	HttpConfig string `json:"httpConfig"`
 }
