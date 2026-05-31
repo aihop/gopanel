@@ -383,7 +383,7 @@ watch(() => [formModel.repoUrl, formModel.branch, formModel.authType, formModel.
         :form-model="formModel"
       />
       <PipelineActionFields
-        v-if="formModel.buildEnv === 'host'"
+        v-show="formModel.buildEnv === 'host'"
         :form-model="formModel"
       />
     </n-form>
