@@ -16,6 +16,8 @@ export interface PipelineFormModel {
   artifactPath: string
   exposePort: number | null
   pipelineKey: string
+  actionType: string
+  actionParams: string
   autoDeploy: boolean
   runnerEnabled: boolean
   runnerPolicy: "run" | "build_run"
@@ -120,6 +122,8 @@ export const createDefaultPipelineFormModel = (): PipelineFormModel => ({
   artifactPath: ".",
   exposePort: null,
   pipelineKey: "",
+  actionType: "deploy",
+  actionParams: "",
   autoDeploy: true,
   runnerEnabled: false,
   runnerPolicy: "build_run",
@@ -329,6 +333,8 @@ export const createPipelineFormFromEdit = (editData: Pipeline.ResPipeline) => {
       artifactPath: editData.artifactPath || ".",
       exposePort: editData.exposePort || null,
       pipelineKey: editData.pipelineKey || "",
+      actionType: editData.actionType || "deploy",
+      actionParams: editData.actionParams || "",
       runnerEnabled,
       runnerPolicy: runnerConfig.mode || "build_run",
       runnerAdvanced: inferRunnerAdvanced(runnerConfig),

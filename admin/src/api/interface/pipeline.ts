@@ -15,6 +15,8 @@ export namespace Pipeline {
     pipelineKey?: string;
     runnerMode?: string;
     runnerConfig?: any;
+    actionType?: string;
+    actionParams?: string;
     autoDeploy?: boolean;
   }
 
@@ -41,6 +43,8 @@ export namespace Pipeline {
     pipelineKey?: string;
     runnerMode?: string;
     runnerConfig?: any;
+    actionType?: string;
+    actionParams?: string;
     autoDeploy?: boolean;
     runtimeHost?: string;
     runtimeKind?: string;

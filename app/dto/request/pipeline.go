@@ -8,6 +8,8 @@ type PipelineCreate struct {
 	Version      string                 `json:"version" validate:"required"` // 新增版本号
 	AuthType     string                 `json:"authType" validate:"required"`
 	AuthData     string                 `json:"authData"`
+	ActionType   string                 `json:"actionType"`
+	ActionParams string                 `json:"actionParams"`
 	BuildImage   string                 `json:"buildImage"`
 	BuildScript  string                 `json:"buildScript"`
 	OutputImage  string                 `json:"outputImage"`
@@ -25,9 +27,11 @@ type PipelineUpdate struct {
 	Description  string                 `json:"description"`
 	RepoUrl      string                 `json:"repoUrl"`
 	Branch       string                 `json:"branch"`
-	Version      string                 `json:"version"` // 新增版本号
+	Version      string                 `json:"version"`
 	AuthType     string                 `json:"authType"`
 	AuthData     string                 `json:"authData"`
+	ActionType   string                 `json:"actionType"`
+	ActionParams string                 `json:"actionParams"`
 	BuildImage   string                 `json:"buildImage"`
 	BuildScript  string                 `json:"buildScript"`
 	OutputImage  string                 `json:"outputImage"`

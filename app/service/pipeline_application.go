@@ -40,7 +40,7 @@ func (s *PipelineApplicationService) Create(req request.PipelineCreate) error {
 			return err
 		}
 	}
-	pipeline := &model.Pipeline{Name: req.Name, Description: req.Description, RepoUrl: req.RepoUrl, Branch: req.Branch, Version: req.Version, AuthType: req.AuthType, AuthData: req.AuthData, AutoDeploy: req.AutoDeploy, BuildImage: req.BuildImage, BuildScript: req.BuildScript, OutputImage: req.OutputImage, ArtifactPath: req.ArtifactPath, ExposePort: req.ExposePort, PipelineKey: pipelineKey, RunnerMode: req.RunnerMode}
+	pipeline := &model.Pipeline{Name: req.Name, Description: req.Description, RepoUrl: req.RepoUrl, Branch: req.Branch, Version: req.Version, AuthType: req.AuthType, AuthData: req.AuthData, ActionType: req.ActionType, ActionParams: req.ActionParams, AutoDeploy: req.AutoDeploy, BuildImage: req.BuildImage, BuildScript: req.BuildScript, OutputImage: req.OutputImage, ArtifactPath: req.ArtifactPath, ExposePort: req.ExposePort, PipelineKey: pipelineKey, RunnerMode: req.RunnerMode}
 	if req.RunnerMode == "runner" && len(req.RunnerConfig) > 0 {
 		if b, err := json.Marshal(req.RunnerConfig); err == nil {
 			pipeline.RunnerConfig = string(b)
@@ -70,6 +70,8 @@ func (s *PipelineApplicationService) Update(req request.PipelineUpdate) error {
 	pipeline.AuthType = req.AuthType
 	pipeline.AuthData = req.AuthData
 	pipeline.AutoDeploy = req.AutoDeploy
+	pipeline.ActionType = req.ActionType
+	pipeline.ActionParams = req.ActionParams
 	pipeline.BuildImage = req.BuildImage
 	pipeline.BuildScript = req.BuildScript
 	pipeline.OutputImage = req.OutputImage
