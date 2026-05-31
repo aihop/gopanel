@@ -554,6 +554,14 @@ function syncSourceSpecificFields(source: string) {
 	}
 }
 
+function sanitizeOtherDomains(raw: string, primary: string): string {
+	return raw.split("\n")
+		.map(s => s.trim())
+		.filter(Boolean)
+		.filter(s => s.toLowerCase() !== (primary || "").trim().toLowerCase())
+		.join("\n")
+}
+
 function buildCreatePayload(): Website.WebSiteCreateReq {
 	const source = form.value.codeSource
 	return {
@@ -561,7 +569,7 @@ function buildCreatePayload(): Website.WebSiteCreateReq {
 		primaryDomain: form.value.primaryDomain,
 		protocol: normalizeWebsiteProtocolValue(form.value.protocol) || "HTTPS",
 		alias: form.value.alias,
-		otherDomains: form.value.otherDomains,
+		otherDomains: sanitizeOtherDomains(form.value.otherDomains, form.value.primaryDomain),
 		proxy: form.value.proxy,
 		IPV6: form.value.IPV6,
 		appInstallId: source === "app_store" ? form.value.appInstallId : undefined,
@@ -591,7 +599,7 @@ function buildUpdatePayload(): Website.WebSiteUpdateReq {
 		id: form.value.id || 0,
 		primaryDomain: form.value.primaryDomain,
 		protocol: normalizeWebsiteProtocolValue(form.value.protocol),
-		otherDomains: form.value.otherDomains,
+		otherDomains: sanitizeOtherDomains(form.value.otherDomains, form.value.primaryDomain),
 		proxy: form.value.proxy,
 		pipelineId: source === "pipeline" ? form.value.pipelineId : undefined,
 		codeSource: source,
@@ -704,6 +712,21 @@ const rules = {
 	alias: {
 		required: true,
 		message: "请输入网站目录、代号",
+		trigger: "blur"
+	},
+	otherDomains: {
+		validator(_rule: unknown, value: string) {
+			if (!value) return true
+			const lines = value.split("\n").map(s => s.trim()).filter(Boolean)
+			const primary = (form.value.primaryDomain || "").trim().toLowerCase()
+			if (!primary) return true
+			for (const line of lines) {
+				if (line.toLowerCase() === primary) {
+					return new Error("其他域名不能包含主域名")
+				}
+			}
+			return true
+		},
 		trigger: "blur"
 	},
 	proxy: {
