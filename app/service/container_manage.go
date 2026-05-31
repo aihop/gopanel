@@ -160,7 +160,7 @@ func (u *ContainerService) ContainerUpdate(req *dto.ContainerOperate) error {
 	defer client.Close()
 	ctx := context.Background()
 	newContainer, _ := client.ContainerInspect(ctx, req.Name)
-	if newContainer.ContainerJSONBase != nil && newContainer.ID != req.ContainerID {
+	if newContainer.ContainerJSONBase != nil && !containerIDsEqual(newContainer.ID, req.ContainerID) {
 		return buserr.New(constant.ErrContainerName)
 	}
 	oldContainer, err := client.ContainerInspect(ctx, req.ContainerID)
@@ -350,4 +350,16 @@ func (u *ContainerService) ContainerOperation(req *dto.ContainerOperation) error
 	}
 	invalidateContainerListCaches()
 	return nil
+}
+
+// containerIDsEqual compares two Docker container IDs.
+// One may be a short prefix; they match if the shorter is a prefix of the longer.
+func containerIDsEqual(a, b string) bool {
+	if a == b {
+		return true
+	}
+	if len(a) < len(b) {
+		return strings.HasPrefix(b, a)
+	}
+	return strings.HasPrefix(a, b)
 }
