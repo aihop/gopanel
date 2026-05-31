@@ -17,6 +17,7 @@ type Pipeline struct {
 	AuthType string `gorm:"column:auth_type;type:varchar(20);not null;default:'none'" json:"authType"`
 	AuthData string `gorm:"column:auth_data;type:text" json:"authData"` // JSON format credentials
 
+	AutoDeploy   bool   `gorm:"column:auto_deploy;type:boolean;default:true" json:"autoDeploy"`
 	BuildImage   string `gorm:"column:build_image;type:varchar(100);not null" json:"buildImage"`
 	BuildScript  string `gorm:"column:build_script;type:text" json:"buildScript"`
 	OutputImage  string `gorm:"column:output_image;type:varchar(255)" json:"outputImage"`

@@ -16,6 +16,7 @@ export interface PipelineFormModel {
   artifactPath: string
   exposePort: number | null
   pipelineKey: string
+  autoDeploy: boolean
   runnerEnabled: boolean
   runnerPolicy: "run" | "build_run"
   runnerAdvanced: boolean
@@ -119,6 +120,7 @@ export const createDefaultPipelineFormModel = (): PipelineFormModel => ({
   artifactPath: ".",
   exposePort: null,
   pipelineKey: "",
+  autoDeploy: true,
   runnerEnabled: false,
   runnerPolicy: "build_run",
   runnerAdvanced: false,

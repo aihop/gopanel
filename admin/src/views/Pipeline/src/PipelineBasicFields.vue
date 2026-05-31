@@ -61,6 +61,11 @@ const handlePipelineKeyInput = () => {
     />
   </n-form-item>
 
+  <n-checkbox
+    v-model:checked="formModel.autoDeploy"
+    class="mb-4"
+  >执行后自动同步到关联网站</n-checkbox>
+
   <div class="mb-4 mt-6 text-sm font-semibold text-slate-700">交付模式</div>
   <n-form-item label="模式选择">
     <n-radio-group v-model:value="formModel.pipelineMode">
