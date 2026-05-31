@@ -131,8 +131,8 @@ const onEdit = (isName?: boolean) => {
 }
 const onSubmit = async (formEl: any | undefined) => {
 	if (!formEl) return
-	formEl.validate(async valid => {
-		if (!valid) return
+	formEl.validate(async (errors: any) => {
+		if (errors) return
 		const res = await imagePush(form)
 		logVisible.value = true
 		isStartReading.value = true
