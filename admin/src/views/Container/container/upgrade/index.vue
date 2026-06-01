@@ -147,7 +147,7 @@ defineExpose({
 <style scoped>
 .input-help {
 	font-size: 12px;
-	color: #888;
+	color: var(--fg-tertiary-color);
 	margin-left: 8px;
 }
 </style>

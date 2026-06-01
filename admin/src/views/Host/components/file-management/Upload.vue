@@ -76,7 +76,7 @@
 
       <!-- 文件列表 -->
       <n-scrollbar
-        style="max-height: 280px; background-color: #eeeeee80"
+        style="max-height: 280px; background-color: var(--bg-secondary-color)"
         class="mt-4 p-4"
       >
         <n-space

@@ -27,7 +27,7 @@
 			<!-- 进度模式 -->
 			<div v-else style="padding: 16px; text-align: center;">
 				<div style="margin-bottom: 16px;">
-					<span style="font-size: 14px; color: #64748b;">{{ statusText }}</span>
+					<span style="font-size: 14px; color: var(--fg-secondary-color);">{{ statusText }}</span>
 				</div>
 				<div style="margin-bottom: 8px;">
 					<n-progress
@@ -40,10 +40,10 @@
 						:status="progressStatus"
 					/>
 				</div>
-				<div v-if="downloadedSize" style="margin-bottom: 16px; font-size: 12px; color: #94a3b8;">
+				<div v-if="downloadedSize" style="margin-bottom: 16px; font-size: 12px; color: var(--fg-tertiary-color);">
 					{{ downloadedSize }} / {{ totalSize }}
 				</div>
-				<div style="font-size: 12px; color: #64748b; margin-bottom: 16px;">
+				<div style="font-size: 12px; color: var(--fg-secondary-color); margin-bottom: 16px;">
 					{{ progressPercent.toFixed(1) }}%
 				</div>
 			</div>

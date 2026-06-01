@@ -24,7 +24,7 @@ const { show } = defineProps<{
 	bottom: 0;
 	width: 100vw;
 	height: 100vh;
-	background: rgba(255, 255, 255, 0.2);
+	background: color-mix(in srgb, var(--bg-default-color) 30%, transparent);
 	backdrop-filter: blur(20px);
 	display: flex;
 	align-content: center;

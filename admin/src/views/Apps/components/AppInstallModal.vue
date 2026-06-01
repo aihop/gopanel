@@ -106,7 +106,7 @@ const handleSubmit = () => {
               v-if="field.description"
               #feedback
             >
-              <div style="font-size: 12px; color: #999; margin-top: 4px;">
+              <div style="font-size: 12px; color: var(--fg-tertiary-color); margin-top: 4px;">
                 {{ field.description.zh || field.description.en || field.description }}
               </div>
             </template>

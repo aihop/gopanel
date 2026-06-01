@@ -552,7 +552,7 @@ defineExpose({ fetchTableData, setAdvancedSearch, handleCellEditCancel })
 
 <style scoped>
 :deep(.db-primary-col) {
-  background: #f8fafc;
+  background: var(--bg-secondary-color);
   font-weight: 600;
 }
 
@@ -565,7 +565,7 @@ defineExpose({ fetchTableData, setAdvancedSearch, handleCellEditCancel })
 }
 
 :deep(.db-cell-inline):hover {
-  background: #f0f5ff;
+  background: color-mix(in srgb, var(--primary-color) 10%, var(--bg-default-color));
   border-radius: 3px;
 }
 </style>

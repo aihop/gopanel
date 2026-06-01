@@ -60,13 +60,13 @@ function goBack() {
 .not-found-page {
 	height: 100vh;
 	width: 100vw;
-	background-color: #f8fafc;
+	background-color: var(--bg-body-color);
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	overflow: hidden;
 	position: relative;
-	background-image: radial-gradient(#e2e8f0 1px, transparent 1px);
+	background-image: radial-gradient(var(--border-color) 1px, transparent 1px);
 	background-size: 24px 24px;
 }
 
@@ -106,10 +106,10 @@ function goBack() {
 .error-container {
 	text-align: center;
 	padding: 40px;
-	background: rgba(255, 255, 255, 0.7);
+	background: color-mix(in srgb, var(--bg-default-color) 70%, transparent);
 	backdrop-filter: blur(20px);
 	-webkit-backdrop-filter: blur(20px);
-	border: 1px solid rgba(255, 255, 255, 0.8);
+	border: 1px solid color-mix(in srgb, var(--border-color) 80%, transparent);
 	border-radius: 32px;
 	box-shadow: 0 24px 48px rgba(15, 23, 42, 0.05);
 	transform: translateY(20px);
@@ -130,7 +130,7 @@ function goBack() {
 }
 
 .gradient-text {
-	background: linear-gradient(135deg, #0f172a 0%, #334155 100%);
+	background: linear-gradient(135deg, var(--fg-default-color) 0%, var(--fg-secondary-color) 100%);
 	-webkit-background-clip: text;
 	-webkit-text-fill-color: transparent;
 }
@@ -139,11 +139,11 @@ function goBack() {
 .orbit-circle {
 	width: 140px;
 	height: 140px;
-	border: 8px solid #eff6ff;
+	border: 8px solid color-mix(in srgb, var(--primary-color) 15%, var(--bg-secondary-color));
 	border-radius: 50%;
 	position: relative;
 	box-shadow: inset 0 0 20px rgba(59, 130, 246, 0.1);
-	background: linear-gradient(135deg, rgba(255,255,255,0.8), rgba(255,255,255,0.4));
+	background: linear-gradient(135deg, color-mix(in srgb, var(--bg-default-color) 80%, transparent), color-mix(in srgb, var(--bg-default-color) 40%, transparent));
 	
 	&::after {
 		content: '';
@@ -175,14 +175,14 @@ function goBack() {
 .title {
 	font-size: 32px;
 	font-weight: 700;
-	color: #0f172a;
+	color: var(--fg-default-color);
 	margin-bottom: 16px;
 	letter-spacing: -0.02em;
 }
 
 .desc {
 	font-size: 16px;
-	color: #64748b;
+	color: var(--fg-secondary-color);
 	line-height: 1.6;
 	margin-bottom: 40px;
 }

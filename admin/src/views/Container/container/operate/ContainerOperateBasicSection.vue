@@ -87,6 +87,6 @@ const emit = defineEmits<{
 
 <style scoped lang="scss">
 .input-help {
-  color: #adb0bc;
+  color: var(--fg-tertiary-color);
 }
 </style>

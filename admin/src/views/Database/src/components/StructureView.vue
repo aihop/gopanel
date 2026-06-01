@@ -416,7 +416,7 @@ const handleRefresh = () => {
 
 <style scoped>
 :deep(.db-structure-primary-col) {
-  background: #f8fafc;
+  background: var(--bg-secondary-color);
   font-weight: 600;
 }
 </style>

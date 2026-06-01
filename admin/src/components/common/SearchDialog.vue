@@ -581,7 +581,7 @@ const getHighlighterText = (text: string) => {
 			padding: 10px 0;
 
 			.icon {
-				background-color: rgba(255, 255, 255, 0.3);
+				background-color: color-mix(in srgb, var(--fg-default-color) 18%, transparent);
 				width: 18px;
 				height: 18px;
 				padding-top: 1px;

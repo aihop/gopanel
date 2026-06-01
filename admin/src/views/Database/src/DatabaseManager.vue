@@ -324,16 +324,16 @@ const handleDropDatabase = async () => {
 }
 
 :deep(.n-tabs-tab) {
-  background-color: #e9ecef !important;
-  border: 1px solid #ced4da !important;
+  background-color: var(--bg-secondary-color) !important;
+  border: 1px solid var(--n-border-color) !important;
   border-bottom: none !important;
   margin-right: 4px !important;
 }
 
 :deep(.n-tabs-tab--active) {
-  background-color: #ffffff !important;
-  border-color: #ced4da !important;
-  border-bottom: 1px solid #ffffff !important;
+  background-color: var(--bg-default-color) !important;
+  border-color: var(--n-border-color) !important;
+  border-bottom: 1px solid var(--bg-default-color) !important;
   margin-bottom: -1px !important;
   font-weight: bold;
 }
