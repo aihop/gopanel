@@ -1,5 +1,5 @@
 <template>
-  <div class="grid grid-cols-1 gap-8 2xl:grid-cols-[minmax(0,1fr)_300px]">
+  <div class="dashboard-root grid grid-cols-1 gap-8 2xl:grid-cols-[minmax(0,1fr)_300px]">
     <div class="min-w-0 space-y-8">
       <StatusCard ref="statusRef"></StatusCard>
 
@@ -469,3 +469,45 @@ onUnmounted(() => {
 	emitter.off("gopanel:lowPowerMode", handleLowPowerMode)
 })
 </script>
+
+<style>
+/* Dark mode overrides for Dashboard page */
+.theme-dark .dashboard-root .text-slate-900,
+.theme-dark .dashboard-root .text-slate-800 {
+  color: var(--fg-default-color) !important;
+}
+.theme-dark .dashboard-root .text-slate-700 {
+  color: var(--fg-secondary-color) !important;
+}
+.theme-dark .dashboard-root .text-slate-500,
+.theme-dark .dashboard-root .text-slate-400 {
+  color: var(--fg-secondary-color) !important;
+}
+.theme-dark .dashboard-root .border-slate-200 {
+  border-color: color-mix(in srgb, var(--border-color) 80%, transparent) !important;
+}
+.theme-dark .dashboard-root .bg-slate-50,
+.theme-dark .dashboard-root .bg-slate-50\/80,
+.theme-dark .dashboard-root .bg-slate-50\/60,
+.theme-dark .dashboard-root .bg-slate-50\/90 {
+  background-color: color-mix(in srgb, var(--bg-default-color) 95%, transparent) !important;
+}
+.theme-dark .dashboard-root .bg-white,
+.theme-dark .dashboard-root .bg-white\/90,
+.theme-dark .dashboard-root .bg-white\/85,
+.theme-dark .dashboard-root .bg-white\/80 {
+  background-color: var(--bg-default-color) !important;
+}
+.theme-dark .dashboard-root .hover\:bg-white:hover {
+  background-color: var(--bg-default-color) !important;
+}
+.theme-dark .dashboard-root .hover\:border-blue-300:hover {
+  border-color: color-mix(in srgb, var(--primary-color) 50%, transparent) !important;
+}
+.theme-dark .dashboard-root [class*="border-\[rgba\(147\,197\,253"] {
+  border-color: color-mix(in srgb, var(--border-color) 80%, transparent) !important;
+}
+.theme-dark .dashboard-root [class*="bg-white\/"] {
+  background-color: var(--bg-default-color) !important;
+}
+</style>

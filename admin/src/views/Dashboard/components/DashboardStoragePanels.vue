@@ -45,7 +45,7 @@
                 :height="8"
                 :processing="false"
                 :color="progressColor(item.usedPercent)"
-                :rail-color="'#e2e8f0'"
+                :rail-color="railColor"
                 :percentage="formatNumber(item.usedPercent)"
               />
             </div>
@@ -109,7 +109,7 @@
                 :height="8"
                 :processing="false"
                 :color="progressColor(item.util)"
-                :rail-color="'#e2e8f0'"
+                :rail-color="railColor"
                 :percentage="item.util"
               />
             </div>
@@ -163,4 +163,9 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+
+import { computed } from 'vue'
+import { useThemeStore } from '@/store/theme'
+const themeStore = useThemeStore()
+const railColor = computed(() => themeStore.isThemeDark ? '#2d2d2d' : '#e2e8f0')
 </script>
