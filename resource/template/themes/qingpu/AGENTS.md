@@ -18,7 +18,16 @@
 
 ### 渲染语言
 
-Go 标准库 `html/template`，模板文件中使用 `{{ }}` 语法。
+**Go Jet 模板引擎**（非标准库 `html/template`），参考 [CloudyKit/jet](https://github.com/CloudyKit/jet)。
+
+Jet 语法特征：
+- `{{ }}` 分隔符，与标准库类似但更强大
+- `{{def(fallback, defaultVal)}}` — 默认值函数，变量为空时返回后备值
+- `{{raw}}` — 输出原始 HTML（不过滤转义）
+- `{{jso}}` — 输出 JSON 安全字符串
+- `{{import "/path/to/template.html"}}` — 导入子模板
+- `{{has(var, "key")}}` — 检查 map/struct 是否有某字段
+- 支持 `:=` 在模板内定义变量：`{{ scores := Comment().DetailScores(Data.ID)}}`
 
 ### 模板入口
 
@@ -250,7 +259,7 @@ Product {
 
 ### 参考
 
-- Shoply `template/common/` 的模板机制
-- Go 标准库 `html/template` 文档
+- Shoply `template/common/` 的模板机制（Jet 模板引擎）
+- [CloudyKit/jet](https://github.com/CloudyKit/jet) — Go Jet 模板引擎文档
 - schema.org/Product
 - schema.org/Store
