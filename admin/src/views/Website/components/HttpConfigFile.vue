@@ -3,7 +3,8 @@ lu
   <div>
     <div
       v-if="scopeSummary"
-      class="mb-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600"
+      class="mb-4 rounded-2xl px-4 py-4 text-sm fg-secondary-color"
+      style="border: 1px solid color-mix(in srgb, var(--border-color) 80%, transparent); background-color: color-mix(in srgb, var(--bg-default-color) 95%, transparent)"
     >
       {{ scopeSummary }}
     </div>

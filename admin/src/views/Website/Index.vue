@@ -1,5 +1,5 @@
 <template>
-  <div class="mt-4 space-y-8">
+  <div class="website-index-root mt-4 space-y-8">
 
     <div class="flex flex-col gap-8 lg:flex-row lg:items-start lg:justify-between">
       <div class="max-w-3xl space-y-4">
@@ -763,5 +763,14 @@ onMounted(() => {
 	margin-bottom: 20px;
 	display: flex;
 	gap: 10px;
+}
+</style>
+
+<style>
+.theme-dark .website-index-root .border-slate-100 {
+  border-color: color-mix(in srgb, var(--border-color) 80%, transparent) !important;
+}
+.theme-dark .website-index-root .bg-slate-50\/70 {
+  background-color: color-mix(in srgb, var(--bg-default-color) 70%, transparent) !important;
 }
 </style>
