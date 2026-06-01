@@ -169,6 +169,8 @@ func formatExportValue(val interface{}) string {
 		return "0"
 	case string:
 		return quoteSQLString(v)
+	case []byte:
+		return quoteSQLString(string(v))
 	default:
 		return quoteSQLString(fmt.Sprint(val))
 	}
@@ -205,29 +207,111 @@ func isNumericTypeGuess(dbType model.DatabaseType, colName string) bool {
 	return false
 }
 
-func execSQLImport(db *sql.DB, content string) (int, error) {
-	// Split by semicolons and execute each statement
-	statements := strings.Split(content, ";")
-	executed := 0
-	for _, stmt := range statements {
-		// Remove comment lines and trim
-		lines := strings.Split(stmt, "\n")
-		var cleanLines []string
-		for _, line := range lines {
-			trimmed := strings.TrimSpace(line)
-			if trimmed == "" || strings.HasPrefix(trimmed, "--") {
-				continue
-			}
-			cleanLines = append(cleanLines, line)
+// splitSQLStatements 智能分割 SQL 语句，识别引号和注释内的分号不切割
+func splitSQLStatements(content string) []string {
+	var statements []string
+	var cur strings.Builder
+	inSingleQ := false  // '
+	inDoubleQ := false  // "
+	inBacktick := false // `
+	inLineComment := false  // --
+	inBlockComment := false // /* */
+
+	runes := []rune(content)
+	for i := 0; i < len(runes); i++ {
+		ch := runes[i]
+
+		// 转义字符（MySQL 用 '' 转义单引号）
+		if inSingleQ && ch == '\'' && i+1 < len(runes) && runes[i+1] == '\'' {
+			cur.WriteString("''")
+			i++
+			continue
 		}
-		cleanStmt := strings.TrimSpace(strings.Join(cleanLines, "\n"))
-		if cleanStmt == "" {
+		if inDoubleQ && ch == '"' && i+1 < len(runes) && runes[i+1] == '"' {
+			cur.WriteString(`""`)
+			i++
 			continue
 		}
 
-		_, err := db.Exec(cleanStmt)
+		// 引号切换
+		if !inLineComment && !inBlockComment {
+			if ch == '\'' && !inDoubleQ && !inBacktick {
+				inSingleQ = !inSingleQ
+				cur.WriteRune(ch)
+				continue
+			}
+			if ch == '"' && !inSingleQ && !inBacktick {
+				inDoubleQ = !inDoubleQ
+				cur.WriteRune(ch)
+				continue
+			}
+			if ch == '`' && !inSingleQ && !inDoubleQ {
+				inBacktick = !inBacktick
+				cur.WriteRune(ch)
+				continue
+			}
+		}
+
+		// 行注释 -- (需要后面跟空格或控制字符)
+		if !inSingleQ && !inDoubleQ && !inBacktick && !inBlockComment && !inLineComment &&
+			ch == '-' && i+1 < len(runes) && runes[i+1] == '-' {
+			if i+2 >= len(runes) || runes[i+2] == ' ' || runes[i+2] == '\t' || runes[i+2] == '\n' || runes[i+2] == '\r' {
+				inLineComment = true
+				cur.WriteString("--")
+				i++
+				continue
+			}
+		}
+		if inLineComment && (ch == '\n' || ch == '\r') {
+			inLineComment = false
+			cur.WriteRune(ch)
+			continue
+		}
+
+		// 块注释 /* */
+		if !inSingleQ && !inDoubleQ && !inBacktick && !inLineComment && !inBlockComment &&
+			ch == '/' && i+1 < len(runes) && runes[i+1] == '*' {
+			inBlockComment = true
+			cur.WriteString("/*")
+			i++
+			continue
+		}
+		if inBlockComment && ch == '*' && i+1 < len(runes) && runes[i+1] == '/' {
+			inBlockComment = false
+			cur.WriteString("*/")
+			i++
+			continue
+		}
+
+		// 分号切分（仅在正常状态下）
+		if !inSingleQ && !inDoubleQ && !inBacktick && !inLineComment && !inBlockComment && ch == ';' {
+			stmt := strings.TrimSpace(cur.String())
+			if stmt != "" {
+				statements = append(statements, stmt)
+			}
+			cur.Reset()
+			continue
+		}
+
+		cur.WriteRune(ch)
+	}
+
+	// 收尾
+	stmt := strings.TrimSpace(cur.String())
+	if stmt != "" {
+		statements = append(statements, stmt)
+	}
+
+	return statements
+}
+
+func execSQLImport(db *sql.DB, content string) (int, error) {
+	statements := splitSQLStatements(content)
+	executed := 0
+	for i, stmt := range statements {
+		_, err := db.Exec(stmt)
 		if err != nil {
-			return executed, fmt.Errorf("statement %d failed: %v", executed+1, err)
+			return executed, fmt.Errorf("statement %d failed: %v", i+1, err)
 		}
 		executed++
 	}
