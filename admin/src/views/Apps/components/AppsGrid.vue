@@ -19,13 +19,13 @@ const emit = defineEmits<{
       <div
         v-for="item in apps"
         :key="item.id"
-        class="relative overflow-hidden rounded-[24px] border border-[rgba(226,232,240,0.88)] bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.12),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.92))] shadow-[0_14px_36px_rgba(15,23,42,0.06)] transition-[transform,box-shadow,border-color] duration-[260ms] ease-[ease] hover:-translate-y-1 hover:border-[rgba(59,130,246,0.22)] hover:shadow-[0_22px_44px_rgba(15,23,42,0.1)]"
+        class="app-grid-card"
       >
-        <div class="pointer-events-none absolute -right-8 -top-10 h-[120px] w-[120px] rounded-full bg-[rgba(59,130,246,0.14)] blur-[20px]"></div>
+        <div class="app-grid-card__glow pointer-events-none absolute -right-8 -top-10 h-[120px] w-[120px] rounded-full blur-[20px]"></div>
         <div class="relative z-[1] flex h-full flex-col gap-[18px] p-[22px]">
           <div class="flex justify-between gap-[14px] max-sm:flex-col">
             <div class="flex min-w-0 flex-1 items-start gap-3">
-              <div class="flex h-[54px] w-[54px] flex-shrink-0 items-center justify-center rounded-[18px] border border-[rgba(219,234,254,0.9)] bg-[linear-gradient(135deg,rgba(239,246,255,0.95),rgba(255,255,255,0.75))] shadow-[inset_0_1px_0_rgba(255,255,255,0.65)]">
+              <div class="app-grid-card__icon flex h-[54px] w-[54px] flex-shrink-0 items-center justify-center rounded-[18px]">
                 <img
                   v-if="item.icon"
                   :src="item.icon"
@@ -87,13 +87,13 @@ const emit = defineEmits<{
           <p class="m-0 min-h-[66px] text-[0.92rem] leading-[1.7] text-slate-500">{{ item.shortDescZh || item.description || "暂无应用说明，点击详情查看完整信息。" }}</p>
 
           <div class="grid grid-cols-2 gap-[10px] max-sm:grid-cols-1">
-            <div class="rounded-2xl border border-[rgba(226,232,240,0.9)] bg-[rgba(248,250,252,0.95)] px-3 py-2.5">
+            <div class="app-grid-card__info rounded-2xl px-3 py-2.5">
               <span class="mb-1 block text-[0.72rem] text-slate-400">来源</span>
               <span class="block break-words text-[0.88rem] font-semibold text-slate-800">{{ item.resource || "应用商店" }}</span>
             </div>
             <div
               v-if="item.versions && item.versions.length"
-              class="rounded-2xl border border-[rgba(226,232,240,0.9)] bg-[rgba(248,250,252,0.95)] px-3 py-2.5"
+              class="app-grid-card__info rounded-2xl px-3 py-2.5"
             >
               <span class="mb-1 block text-[0.72rem] text-slate-400">版本</span>
               <span class="block break-words text-[0.88rem] font-semibold text-slate-800">{{ item.versions[0] }}</span>
@@ -131,3 +131,34 @@ const emit = defineEmits<{
     </div>
   </n-spin>
 </template>
+
+<style scoped>
+.app-grid-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 24px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 88%, transparent);
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--primary-color) 12%, transparent), transparent 28%),
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-default-color) 98%, white), color-mix(in srgb, var(--bg-secondary-color) 92%, transparent));
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.06);
+  transition: transform 260ms ease, box-shadow 260ms ease, border-color 260ms ease;
+}
+.app-grid-card:hover {
+  transform: translateY(-4px);
+  border-color: color-mix(in srgb, var(--primary-color) 22%, transparent);
+  box-shadow: 0 22px 44px rgba(15, 23, 42, 0.1);
+}
+.app-grid-card__glow {
+  background: color-mix(in srgb, var(--primary-color) 14%, transparent);
+}
+.app-grid-card__icon {
+  border: 1px solid color-mix(in srgb, var(--primary-color) 22%, var(--bg-secondary-color));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--primary-color) 18%, var(--bg-default-color)), color-mix(in srgb, var(--bg-default-color) 75%, transparent));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--bg-default-color) 65%, transparent);
+}
+.app-grid-card__info {
+  border: 1px solid color-mix(in srgb, var(--border-color) 90%, transparent);
+  background: color-mix(in srgb, var(--bg-secondary-color) 95%, transparent);
+}
+</style>

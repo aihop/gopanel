@@ -1,5 +1,5 @@
 <template>
-  <div class="relative flex h-full min-h-[calc(100vh-130px)] w-full flex-col overflow-hidden rounded-[28px] border border-slate-200/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.92))] shadow-[0_18px_45px_rgba(15,23,42,0.08)]">
+  <div class="ai-workspace-root relative flex h-full min-h-[calc(100vh-130px)] w-full flex-col overflow-hidden rounded-[28px] border border-slate-200/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.92))] shadow-[0_18px_45px_rgba(15,23,42,0.08)]">
     <n-layout
       has-sider
       class="h-full flex-1 !bg-transparent"
@@ -11,12 +11,12 @@
         :collapsed-width="0"
         :width="320"
         show-trigger="bar"
-        class="!bg-[rgba(248,250,252,0.75)] backdrop-blur-sm"
+        class="ai-workspace-sider !bg-[rgba(248,250,252,0.75)] backdrop-blur-sm"
         style="height: 100%"
       >
-        <div class="flex h-full flex-col border-r border-slate-200/80">
-          <div class="border-b border-slate-200/80 p-5">
-            <div class="rounded-[24px] border border-slate-200/80 bg-white/90 p-4 shadow-sm">
+        <div class="ai-workspace-sider-inner flex h-full flex-col border-r border-slate-200/80">
+          <div class="ai-workspace-sider-header border-b border-slate-200/80 p-5">
+            <div class="ai-workspace-sider-card rounded-[24px] border border-slate-200/80 bg-white/90 p-4 shadow-sm">
               <div class="flex flex-col gap-4">
                 <div
                   class="flex cursor-pointer items-center gap-3 rounded-2xl px-1 py-1 transition-opacity hover:opacity-80"
@@ -57,7 +57,7 @@
             <n-scrollbar class="flex-1 px-4 pb-4 pt-4">
               <div
                 v-if="tasks.length === 0"
-                class="flex min-h-[240px] items-center justify-center rounded-[22px] border border-dashed border-slate-200 bg-white/70"
+                class="ai-workspace-task-empty flex min-h-[240px] items-center justify-center rounded-[22px] border border-dashed border-slate-200 bg-white/70"
               >
                 <n-empty description="该组暂无对话历史" />
               </div>
@@ -69,10 +69,10 @@
                 <div
                   v-for="task in tasks"
                   :key="task.id"
-                  class="group/task relative flex cursor-pointer items-start justify-between gap-3 rounded-[22px] border border-slate-200/80 bg-white/90 p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-[0_16px_30px_rgba(15,23,42,0.08)]"
+                  class="ai-workspace-task-card group/task relative flex cursor-pointer items-start justify-between gap-3 rounded-[22px] border border-slate-200/80 bg-white/90 p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-[0_16px_30px_rgba(15,23,42,0.08)]"
                   :class="
                     currentTaskId === task.id
-                      ? '!border-blue-200 !bg-[linear-gradient(180deg,rgba(239,246,255,0.95),rgba(255,255,255,0.96))] shadow-[0_18px_34px_rgba(37,99,235,0.12)]'
+                      ? 'ai-workspace-task-card--active !border-blue-200 !bg-[linear-gradient(180deg,rgba(239,246,255,0.95),rgba(255,255,255,0.96))] shadow-[0_18px_34px_rgba(37,99,235,0.12)]'
                       : ''
                   "
                   @click="selectTask(task)"
@@ -110,7 +110,7 @@
                         quaternary
                         circle
                         size="small"
-                        class="!bg-slate-100"
+                        class="ai-workspace-task-btn !bg-slate-100"
                       >
                         <template #icon>
                           <MoreIcon />
@@ -127,8 +127,8 @@
 
       <!-- 右侧：终端工作区 -->
       <n-layout-content content-style="padding: 0; display: flex; flex-direction: column; height: 100%;">
-        <div class="flex h-full min-h-0 flex-1 flex-col bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.08),transparent_28%)] p-4 md:p-5">
-          <div class="mb-4 flex items-center justify-between rounded-[22px] border border-slate-200/80 bg-white/85 px-4 py-3 shadow-sm">
+        <div class="ai-workspace-content-panel flex h-full min-h-0 flex-1 flex-col bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.08),transparent_28%)] p-4 md:p-5">
+          <div class="ai-workspace-session-bar mb-4 flex items-center justify-between rounded-[22px] border border-slate-200/80 bg-white/85 px-4 py-3 shadow-sm">
             <div class="min-w-0">
               <div class="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600">Current Session</div>
               <div class="truncate text-sm font-semibold text-slate-800">
@@ -145,7 +145,7 @@
             </n-button>
           </div>
 
-          <div class="min-h-0 flex-1 overflow-hidden rounded-[26px] border border-slate-200/80 bg-[#0f172a] shadow-[0_24px_50px_rgba(15,23,42,0.18)]">
+          <div class="ai-workspace-terminal-wrap min-h-0 flex-1 overflow-hidden rounded-[26px] border border-slate-200/80 bg-[#0f172a] shadow-[0_24px_50px_rgba(15,23,42,0.18)]">
             <AgentTerminal
               v-if="currentTaskId !== null || isNewTask"
               :key="terminalKey"
@@ -156,7 +156,7 @@
             />
             <div
               v-else
-              class="flex h-full flex-1 items-center justify-center bg-[linear-gradient(180deg,#ffffff,#f8fafc)]"
+              class="ai-workspace-empty-bg flex h-full flex-1 items-center justify-center bg-[linear-gradient(180deg,#ffffff,#f8fafc)]"
             >
               <n-empty
                 description="请在左侧选择一个历史任务，或发起新对话"
@@ -347,3 +347,65 @@ const submitRename = async () => {
   }
 }
 </script>
+
+<style scoped>
+.theme-dark .ai-workspace-root {
+  border-color: color-mix(in srgb, var(--border-color) 70%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-default-color) 98%, white), color-mix(in srgb, var(--bg-secondary-color) 92%, transparent));
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.25);
+}
+
+.theme-dark .ai-workspace-sider {
+  background: color-mix(in srgb, var(--bg-secondary-color) 75%, transparent) !important;
+}
+
+.theme-dark .ai-workspace-sider-inner {
+  border-right-color: color-mix(in srgb, var(--border-color) 80%, transparent);
+}
+
+.theme-dark .ai-workspace-sider-header {
+  border-bottom-color: color-mix(in srgb, var(--border-color) 80%, transparent);
+}
+
+.theme-dark .ai-workspace-sider-card {
+  border-color: color-mix(in srgb, var(--border-color) 80%, transparent);
+  background-color: color-mix(in srgb, var(--bg-default-color) 90%, transparent);
+}
+
+.theme-dark .ai-workspace-task-empty {
+  border-color: color-mix(in srgb, var(--border-color) 60%, transparent) !important;
+  background-color: color-mix(in srgb, var(--bg-default-color) 70%, transparent) !important;
+}
+
+.theme-dark .ai-workspace-task-card {
+  border-color: color-mix(in srgb, var(--border-color) 80%, transparent) !important;
+  background-color: color-mix(in srgb, var(--bg-default-color) 90%, transparent) !important;
+}
+
+.theme-dark .ai-workspace-task-card--active {
+  border-color: color-mix(in srgb, var(--primary-color) 50%, transparent) !important;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--primary-color) 18%, var(--bg-default-color)), color-mix(in srgb, var(--bg-default-color) 96%, transparent)) !important;
+}
+
+.theme-dark .ai-workspace-task-btn {
+  background-color: color-mix(in srgb, var(--fg-secondary-color) 15%, transparent) !important;
+}
+
+.theme-dark .ai-workspace-content-panel {
+  background: radial-gradient(circle at top right, color-mix(in srgb, var(--primary-color) 8%, transparent), transparent 28%);
+}
+
+.theme-dark .ai-workspace-session-bar {
+  border-color: color-mix(in srgb, var(--border-color) 80%, transparent);
+  background-color: color-mix(in srgb, var(--bg-default-color) 85%, transparent);
+}
+
+.theme-dark .ai-workspace-terminal-wrap {
+  border-color: color-mix(in srgb, var(--border-color) 80%, transparent);
+}
+
+.theme-dark .ai-workspace-empty-bg {
+  background: linear-gradient(180deg, var(--bg-default-color), var(--bg-secondary-color));
+}
+</style>

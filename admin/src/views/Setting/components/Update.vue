@@ -333,7 +333,7 @@ const handleUpdate = async (u: any) => {
 .update-html :deep(h1),
 .update-html :deep(h2),
 .update-html :deep(h3) {
-	color: rgb(15, 23, 42);
+	color: var(--fg-default-color);
 	font-weight: 700;
 }
 
@@ -348,7 +348,7 @@ const handleUpdate = async (u: any) => {
 }
 
 .update-html :deep(p) {
-	color: rgb(71, 85, 105);
+	color: var(--fg-secondary-color);
 	line-height: 1.8;
 	margin: 10px 0;
 }
@@ -356,16 +356,16 @@ const handleUpdate = async (u: any) => {
 .update-html :deep(ul),
 .update-html :deep(ol) {
 	padding-left: 18px;
-	color: rgb(71, 85, 105);
+	color: var(--fg-secondary-color);
 	line-height: 1.8;
 	margin: 10px 0;
 }
 
 .update-html :deep(code) {
-	background: rgba(15, 23, 42, 0.06);
+	background: color-mix(in srgb, var(--fg-default-color) 6%, transparent);
 	padding: 2px 6px;
 	border-radius: 8px;
-	color: rgb(15, 23, 42);
+	color: var(--fg-default-color);
 }
 
 .update-html :deep(pre) {
@@ -379,7 +379,7 @@ const handleUpdate = async (u: any) => {
 }
 
 .update-html :deep(a) {
-	color: rgb(37, 99, 235);
+	color: var(--primary-color);
 	text-decoration: underline;
 }
 
@@ -392,17 +392,17 @@ const handleUpdate = async (u: any) => {
 .update-html :deep(blockquote) {
 	margin: 12px 0;
 	padding: 12px 14px;
-	border-left: 3px solid rgba(37, 99, 235, 0.5);
-	background: rgba(219, 234, 254, 0.35);
+	border-left: 3px solid color-mix(in srgb, var(--primary-color) 50%, transparent);
+	background: color-mix(in srgb, var(--primary-color) 12%, var(--bg-secondary-color));
 	border-radius: 14px;
-	color: rgb(51, 65, 85);
+	color: var(--fg-secondary-color);
 }
 
 .update-html :deep(table) {
 	width: 100%;
 	border-collapse: separate;
 	border-spacing: 0;
-	border: 1px solid rgba(226, 232, 240, 1);
+	border: 1px solid var(--border-color);
 	border-radius: 14px;
 	overflow: hidden;
 	margin: 14px 0;
@@ -411,12 +411,12 @@ const handleUpdate = async (u: any) => {
 .update-html :deep(th),
 .update-html :deep(td) {
 	padding: 10px 12px;
-	border-bottom: 1px solid rgba(226, 232, 240, 1);
-	color: rgb(51, 65, 85);
+	border-bottom: 1px solid var(--border-color);
+	color: var(--fg-secondary-color);
 }
 
 .update-html :deep(th) {
-	background: rgba(248, 250, 252, 1);
+	background: var(--bg-secondary-color);
 	font-weight: 700;
 }
 

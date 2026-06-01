@@ -169,10 +169,10 @@ const handlePageSizeChange = (size: number) => {
 	justify-content: space-between;
 	padding: 28px;
 	border-radius: 28px;
-	border: 1px solid rgba(226, 232, 240, 0.9);
+	border: 1px solid color-mix(in srgb, var(--border-color) 90%, transparent);
 	background:
-		radial-gradient(circle at top right, rgba(59, 130, 246, 0.12), transparent 30%),
-		linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.92));
+		radial-gradient(circle at top right, color-mix(in srgb, var(--primary-color) 12%, transparent), transparent 30%),
+		linear-gradient(180deg, color-mix(in srgb, var(--bg-default-color) 98%, white), color-mix(in srgb, var(--bg-secondary-color) 92%, transparent));
 	box-shadow: 0 18px 40px rgba(15, 23, 42, 0.06);
 }
 
@@ -189,8 +189,8 @@ const handlePageSizeChange = (size: number) => {
 	align-self: flex-end;
 	padding: 8px 18px;
 	border-radius: 20px;
-	border: 1px solid rgba(226, 232, 240, 0.92);
-	background: rgba(248, 250, 252, 0.85);
+	border: 1px solid color-mix(in srgb, var(--border-color) 92%, transparent);
+	background: color-mix(in srgb, var(--bg-secondary-color) 85%, transparent);
 }
 
 .toolbar-actions {
