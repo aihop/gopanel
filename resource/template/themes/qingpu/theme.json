@@ -1,0 +1,16 @@
+{
+  "name": "qingpu",
+  "label": "轻铺默认主题",
+  "version": "1.0.0",
+  "author": "GoPanel",
+  "description": "面向 H5 移动端的轻量店铺模板，SEO 友好，AI 爬虫可抓取",
+  "screenshot": "preview.png",
+  "lang": "zh",
+  "pages": ["shop", "list", "product", "about"],
+  "settings": {
+    "primaryColor": "#07c160",
+    "pageSize": 20,
+    "enableBreadcrumb": false,
+    "enableShare": true
+  }
+}
