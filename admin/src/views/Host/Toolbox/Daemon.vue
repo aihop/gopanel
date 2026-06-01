@@ -1,5 +1,5 @@
 <template>
-  <div class="mt-2 space-y-8">
+  <div class="dmn-root mt-2 space-y-8">
     <DaemonOverviewPanel
       :summary-cards="summaryCards"
       :is-running="isRunning"
@@ -210,3 +210,30 @@ onMounted(() => {
 	refreshAll()
 })
 </script>
+
+<style>
+.theme-dark .dmn-root .text-slate-500,
+.theme-dark .dmn-root .text-slate-400 {
+  color: var(--fg-secondary-color) !important;
+}
+.theme-dark .dmn-root .text-slate-600,
+.theme-dark .dmn-root .text-slate-700,
+.theme-dark .dmn-root .text-slate-900 {
+  color: var(--fg-default-color) !important;
+}
+.theme-dark .dmn-root .border-slate-100 {
+  border-color: color-mix(in srgb, var(--border-color) 80%, transparent) !important;
+}
+.theme-dark .dmn-root .border-blue-100\/80 {
+  border-color: color-mix(in srgb, var(--primary-color) 20%, transparent) !important;
+}
+.theme-dark .dmn-root .bg-slate-50\/75 {
+  background-color: color-mix(in srgb, var(--bg-default-color) 75%, transparent) !important;
+}
+.theme-dark .dmn-root .bg-slate-100 {
+  background-color: color-mix(in srgb, var(--bg-default-color) 92%, transparent) !important;
+}
+.theme-dark .dmn-root .hover\:text-slate-700:hover {
+  color: var(--fg-default-color) !important;
+}
+</style>

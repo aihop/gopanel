@@ -1,5 +1,5 @@
 <template>
-  <div class="mt-4">
+  <div class="cloud-account-root mt-4">
     <div class="rounded-3xl border border-blue-100 bg-white p-6 shadow-sm">
       <div class="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
         <div class="max-w-3xl space-y-3">
@@ -363,3 +363,18 @@ onMounted(() => {
 	fetchData()
 })
 </script>
+
+<style>
+.theme-dark .cloud-account-root .text-slate-500 {
+  color: var(--fg-secondary-color) !important;
+}
+.theme-dark .cloud-account-root .text-slate-900 {
+  color: var(--fg-default-color) !important;
+}
+.theme-dark .cloud-account-root .border-blue-100 {
+  border-color: color-mix(in srgb, var(--primary-color) 20%, transparent) !important;
+}
+.theme-dark .cloud-account-root .bg-white {
+  background-color: var(--bg-default-color) !important;
+}
+</style>

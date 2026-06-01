@@ -1,5 +1,5 @@
 <template>
-  <div class="rounded-[28px] border border-blue-100/80 bg-white/86 p-8 shadow-[0_28px_80px_rgba(15,23,42,0.08)] backdrop-blur-xl sm:p-10">
+  <div class="dmn-overview rounded-[28px] border border-blue-100/80 bg-white/86 p-8 shadow-[0_28px_80px_rgba(15,23,42,0.08)] backdrop-blur-xl sm:p-10">
     <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
       <div class="max-w-3xl space-y-4">
         <div class="inline-flex rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">
@@ -118,3 +118,30 @@ const emit = defineEmits<{
   (e: "ensure-agent"): void
 }>()
 </script>
+
+<style>
+.theme-dark .dmn-overview .text-slate-500 {
+  color: var(--fg-secondary-color) !important;
+}
+.theme-dark .dmn-overview .text-slate-400 {
+  color: var(--fg-secondary-color) !important;
+}
+.theme-dark .dmn-overview .border-slate-200 {
+  border-color: color-mix(in srgb, var(--border-color) 80%, transparent) !important;
+}
+.theme-dark .dmn-overview .bg-slate-50\/80 {
+  background-color: color-mix(in srgb, var(--bg-default-color) 80%, transparent) !important;
+}
+.theme-dark .dmn-overview .bg-white\/86 {
+  background-color: color-mix(in srgb, var(--bg-default-color) 86%, transparent) !important;
+}
+.theme-dark .dmn-overview .border-blue-100\/80 {
+  border-color: color-mix(in srgb, var(--primary-color) 20%, transparent) !important;
+}
+.theme-dark .dmn-overview .border-blue-200 {
+  border-color: color-mix(in srgb, var(--primary-color) 30%, transparent) !important;
+}
+.theme-dark .dmn-overview .bg-blue-50 {
+  background-color: color-mix(in srgb, var(--primary-color) 10%, var(--bg-default-color)) !important;
+}
+</style>

@@ -338,3 +338,25 @@ onBeforeUnmount(() => {
 	}
 })
 </script>
+
+<style>
+.theme-dark .fwl-root .text-slate-500,
+.theme-dark .fwl-root .text-slate-400 {
+  color: var(--fg-secondary-color) !important;
+}
+.theme-dark .fwl-root .text-slate-600,
+.theme-dark .fwl-root .text-slate-700,
+.theme-dark .fwl-root .text-slate-800,
+.theme-dark .fwl-root .text-slate-900 {
+  color: var(--fg-default-color) !important;
+}
+.theme-dark .fwl-root .border-slate-100,
+.theme-dark .fwl-root .border-slate-200 {
+  border-color: color-mix(in srgb, var(--border-color) 80%, transparent) !important;
+}
+.theme-dark .fwl-root .bg-slate-50,
+.theme-dark .fwl-root .bg-slate-50\/80,
+.theme-dark .fwl-root .bg-slate-50\/90 {
+  background-color: color-mix(in srgb, var(--bg-default-color) 95%, transparent) !important;
+}
+</style>

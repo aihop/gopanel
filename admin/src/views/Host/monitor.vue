@@ -1,5 +1,5 @@
 <template>
-  <div class="mt-2 space-y-8">
+  <div class="mon-root mt-2 space-y-8">
     <div class="bg-white/86 rounded-[28px] border border-blue-100/80 p-8 shadow-[0_28px_80px_rgba(15,23,42,0.08)] backdrop-blur-xl sm:p-10">
       <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
         <div class="max-w-3xl space-y-4">
@@ -373,5 +373,38 @@ onBeforeUnmount(() => {
 .control-select :deep(.n-base-selection) {
 	--n-height: 48px;
 	--n-border-radius: 18px;
+}
+</style>
+
+<style>
+.theme-dark .mon-root .text-slate-500,
+.theme-dark .mon-root .text-slate-400 {
+  color: var(--fg-secondary-color) !important;
+}
+.theme-dark .mon-root .text-slate-600,
+.theme-dark .mon-root .text-slate-700,
+.theme-dark .mon-root .text-slate-800,
+.theme-dark .mon-root .text-slate-900 {
+  color: var(--fg-default-color) !important;
+}
+.theme-dark .mon-root .border-slate-100,
+.theme-dark .mon-root .border-slate-200 {
+  border-color: color-mix(in srgb, var(--border-color) 80%, transparent) !important;
+}
+.theme-dark .mon-root .bg-slate-50\/80,
+.theme-dark .mon-root .bg-slate-50\/90 {
+  background-color: color-mix(in srgb, var(--bg-default-color) 95%, transparent) !important;
+}
+.theme-dark .mon-root .bg-white\/86 {
+  background-color: color-mix(in srgb, var(--bg-default-color) 86%, transparent) !important;
+}
+.theme-dark .mon-root .border-blue-100\/80 {
+  border-color: color-mix(in srgb, var(--primary-color) 20%, transparent) !important;
+}
+.theme-dark .mon-root .border-blue-200 {
+  border-color: color-mix(in srgb, var(--primary-color) 30%, transparent) !important;
+}
+.theme-dark .mon-root .bg-blue-50 {
+  background-color: color-mix(in srgb, var(--primary-color) 10%, var(--bg-default-color)) !important;
 }
 </style>
