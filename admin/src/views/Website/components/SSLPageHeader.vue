@@ -13,7 +13,7 @@ defineEmits<{
       <div class="max-w-3xl space-y-3">
         <div class="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">Security</div>
         <div class="text-2xl font-semibold fg-base-100">{{ $t("ssl.sslManagement") }}</div>
-        <div class="text-sm leading-7 text-slate-500">
+        <div class="text-sm leading-7 fg-secondary-color">
           {{ $t("ssl.sslManagementHelper") }}
         </div>
       </div>

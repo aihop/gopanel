@@ -41,9 +41,9 @@ export const createSSLColumns = (options: SSLColumnOptions): DataTableColumns<SS
         { class: "flex flex-wrap gap-2" },
         domains.length
           ? domains.map(domain =>
-              h("span", { class: "rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600" }, domain)
+              h("span", { class: "rounded-full px-3 py-1 text-xs fg-base-100", style: "background-color: color-mix(in srgb, var(--fg-default-color) 8%, var(--bg-default-color))" }, domain)
             )
-          : [h("span", { class: "text-slate-400" }, "--")]
+          : [h("span", { class: "fg-tertiary-color" }, "--")]
       )
     }
   },
@@ -62,7 +62,7 @@ export const createSSLColumns = (options: SSLColumnOptions): DataTableColumns<SS
     render(row) {
       const items = row.websites || []
       if (!items.length) {
-        return h("span", { class: "text-slate-400" }, "未绑定")
+        return h("span", { class: "fg-tertiary-color" }, "未绑定")
       }
       return h(
         "div",
@@ -75,7 +75,7 @@ export const createSSLColumns = (options: SSLColumnOptions): DataTableColumns<SS
               trigger: () =>
                 h(
                   "span",
-                  { class: "rounded-full bg-blue-50 px-3 py-1 text-xs text-blue-600" },
+                  { class: "rounded-full px-3 py-1 text-xs text-blue-600", style: "background-color: color-mix(in srgb, var(--primary-color) 12%, var(--bg-default-color))" },
                   item.name || item.primaryDomain || `#${item.id}`
                 ),
               default: () => options.buildBoundWebsiteRuntimeText(item)

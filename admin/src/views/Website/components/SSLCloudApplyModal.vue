@@ -27,12 +27,12 @@ const emit = defineEmits<{
     @update:show="emit('update:show', $event)"
   >
     <div class="space-y-6">
-      <div class="rounded-xl border border-blue-100 bg-blue-50/50 p-5 transition-all">
+      <div class="rounded-xl p-5 transition-all" style="border: 1px solid color-mix(in srgb, var(--primary-color) 20%, transparent); background-color: color-mix(in srgb, var(--primary-color) 8%, var(--bg-default-color))">
         <div class="mb-3 flex items-center gap-3">
           <div class="flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">1</div>
-          <div class="text-base font-bold text-slate-800">选择业务服务商</div>
+          <div class="text-base font-bold fg-base-100">选择业务服务商</div>
         </div>
-        <div class="mb-4 ml-9 text-sm text-slate-500">
+        <div class="mb-4 ml-9 text-sm fg-secondary-color">
           该域名实际部署在哪个云服务商（如阿里云 CDN、OSS）？系统将尝试拉取您的已有业务域名，并且未来支持证书到期自动推送到该云资源。
         </div>
         <div class="ml-9">
@@ -48,7 +48,8 @@ const emit = defineEmits<{
 
       <div
         class="rounded-xl border p-5 transition-all duration-300"
-        :class="form.cdnAccountId ? 'border-blue-100 bg-blue-50/30' : 'pointer-events-none border-slate-100 bg-slate-50 opacity-50 grayscale'"
+        :class="form.cdnAccountId ? 'border-blue-100' : 'pointer-events-none opacity-50 grayscale'"
+        :style="{ borderColor: form.cdnAccountId ? 'color-mix(in srgb, var(--primary-color) 20%, transparent)' : 'color-mix(in srgb, var(--border-color) 60%, transparent)', backgroundColor: 'color-mix(in srgb, var(--bg-default-color) 95%, transparent)' }"
       >
         <div class="mb-3 flex items-center gap-3">
           <div
@@ -57,9 +58,9 @@ const emit = defineEmits<{
           >
             2
           </div>
-          <div class="text-base font-bold text-slate-800">选择或填写证书域名</div>
+          <div class="text-base font-bold fg-base-100">选择或填写证书域名</div>
         </div>
-        <div class="mb-4 ml-9 text-sm text-slate-500">
+        <div class="mb-4 ml-9 text-sm fg-secondary-color">
           您可以直接在下拉列表中选择从云服务商拉取的 CDN 域名，或手动输入（如 *.example.com）。
         </div>
         <div class="ml-9">

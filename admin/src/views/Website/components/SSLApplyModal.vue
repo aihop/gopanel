@@ -25,7 +25,7 @@ const emit = defineEmits<{
     @update:show="emit('update:show', $event)"
   >
     <div class="space-y-4">
-      <div class="text-sm leading-7 text-slate-500">
+      <div class="text-sm leading-7 fg-secondary-color">
         手动上传证书可以绑定到指定网站，系统会为该网站写入 `tls cert key` 配置。Caddy 自动 HTTPS 类型无需手动绑定。
       </div>
       <n-form label-placement="top">
@@ -40,7 +40,7 @@ const emit = defineEmits<{
       </n-form>
       <div
         v-if="selectedRuntimeText"
-        class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600"
+        class="rounded-2xl px-4 py-4 text-sm fg-secondary-color" style="border: 1px solid color-mix(in srgb, var(--border-color) 80%, transparent); background-color: color-mix(in srgb, var(--bg-default-color) 95%, transparent)"
       >
         {{ selectedRuntimeText }}
       </div>
