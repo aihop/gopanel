@@ -372,4 +372,13 @@ onBeforeUnmount(() => {
 .theme-dark .fwl-root .bg-blue-50 {
   background-color: color-mix(in srgb, var(--primary-color) 10%, var(--bg-default-color)) !important;
 }
+.theme-dark .fwl-root .border-amber-100 {
+  border-color: color-mix(in srgb, var(--warning-color) 30%, transparent) !important;
+}
+.theme-dark .fwl-root .bg-amber-50\/80 {
+  background-color: color-mix(in srgb, var(--warning-color) 15%, var(--bg-default-color)) !important;
+}
+.theme-dark .fwl-root .text-amber-700 {
+  color: color-mix(in srgb, var(--warning-color) 85%, var(--fg-default-color)) !important;
+}
 </style>
