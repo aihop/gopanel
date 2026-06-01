@@ -3,7 +3,7 @@
     v-slot="u"
     class="mt-4"
   >
-    <div>
+    <div class="update-page-root">
       <n-space
         vertical
         size="large"
@@ -441,5 +441,23 @@ const handleUpdate = async (u: any) => {
 		width: 100%;
 		justify-content: flex-end;
 	}
+}
+</style>
+
+<style>
+.theme-dark .update-page-root .text-slate-500 {
+  color: var(--fg-secondary-color) !important;
+}
+.theme-dark .update-page-root .text-slate-400 {
+  color: var(--fg-secondary-color) !important;
+}
+.theme-dark .update-page-root .border-slate-200 {
+  border-color: color-mix(in srgb, var(--border-color) 80%, transparent) !important;
+}
+.theme-dark .update-page-root .bg-slate-50\/80 {
+  background-color: color-mix(in srgb, var(--bg-default-color) 80%, transparent) !important;
+}
+.theme-dark .update-page-root .bg-white {
+  background-color: var(--bg-default-color) !important;
 }
 </style>
