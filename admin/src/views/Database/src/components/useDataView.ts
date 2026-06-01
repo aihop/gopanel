@@ -249,6 +249,26 @@ export const useDataView = (
 
   const tableData = ref<any[]>([])
   const tableColumns = ref<any[]>([])
+
+  // 列宽持久化存储，key 为表名
+  const colWidths = ref<Record<string, Record<string, number>>>({})
+  const getStoredWidth = (tableName: string, col: string): number | undefined => {
+    return colWidths.value[tableName]?.[col]
+  }
+  const saveColWidth = (tableName: string, col: string, width: number) => {
+    if (!colWidths.value[tableName]) {
+      colWidths.value[tableName] = {}
+    }
+    colWidths.value[tableName][col] = width
+    try {
+      localStorage.setItem('db_manager_col_widths', JSON.stringify(colWidths.value))
+    } catch { /* quota exceeded */ }
+  }
+  // 初始化时从 localStorage 恢复
+  try {
+    const saved = localStorage.getItem('db_manager_col_widths')
+    if (saved) colWidths.value = JSON.parse(saved)
+  } catch { /* ignore */ }
   const pagination = ref({
     page: 1,
     limit: 20,
@@ -599,8 +619,15 @@ export const useDataView = (
       ...visibleCols.map((col: string, index: number) => ({
         title: col,
         key: col,
+        width: getStoredWidth(props.selectedTable ?? '', col) || 150,
+        resizable: true,
         ellipsis: { tooltip: true as const },
         className: index === 0 ? 'db-primary-col' : undefined,
+        onColumnResize(width: number) {
+          if (props.selectedTable) {
+            saveColWidth(props.selectedTable, col, width)
+          }
+        },
         render(row: any, rowIndex: number) {
           if (isEditingThisCell(rowIndex, col)) {
             return h('div', { class: 'db-inline-edit-cell' }, [
