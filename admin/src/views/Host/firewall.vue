@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div class="fwl-root">
     <FirewallOverview
       :summary-cards="summaryCards"
       :base="base"
@@ -341,7 +341,8 @@ onBeforeUnmount(() => {
 
 <style>
 .theme-dark .fwl-root .text-slate-500,
-.theme-dark .fwl-root .text-slate-400 {
+.theme-dark .fwl-root .text-slate-400,
+.theme-dark .fwl-root .text-slate-300 {
   color: var(--fg-secondary-color) !important;
 }
 .theme-dark .fwl-root .text-slate-600,
@@ -358,5 +359,17 @@ onBeforeUnmount(() => {
 .theme-dark .fwl-root .bg-slate-50\/80,
 .theme-dark .fwl-root .bg-slate-50\/90 {
   background-color: color-mix(in srgb, var(--bg-default-color) 95%, transparent) !important;
+}
+.theme-dark .fwl-root .bg-white\/86 {
+  background-color: color-mix(in srgb, var(--bg-default-color) 86%, transparent) !important;
+}
+.theme-dark .fwl-root .border-blue-100\/80 {
+  border-color: color-mix(in srgb, var(--primary-color) 20%, transparent) !important;
+}
+.theme-dark .fwl-root .border-blue-200 {
+  border-color: color-mix(in srgb, var(--primary-color) 30%, transparent) !important;
+}
+.theme-dark .fwl-root .bg-blue-50 {
+  background-color: color-mix(in srgb, var(--primary-color) 10%, var(--bg-default-color)) !important;
 }
 </style>
