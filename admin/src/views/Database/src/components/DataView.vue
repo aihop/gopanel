@@ -376,7 +376,7 @@ defineExpose({ fetchTableData, setAdvancedSearch, handleCellEditCancel })
           :pagination="false"
           :bordered="true"
           size="small"
-          :scroll-x="'max-content'"
+          :scroll-x="Math.max(tableColumns.reduce((s, c) => s + (c.width || 150), 0), 600)"
           class="h-full text-xs"
           flex-height
         />
