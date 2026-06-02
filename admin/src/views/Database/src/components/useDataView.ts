@@ -657,6 +657,16 @@ export const useDataView = (
           }
           return h('span', {
             class: 'db-cell-inline',
+            onClick: (e: MouseEvent) => {
+              e.stopPropagation()
+              // 单击单元格按该列=该值搜索（类似 phpMyAdmin）
+              const val = row[col]
+              if (val !== null && val !== undefined && val !== '') {
+                searchColumn.value = col
+                searchValue.value = String(val)
+                handleSearch()
+              }
+            },
             onDblclick: (e: MouseEvent) => {
               e.stopPropagation()
               handleCellDblClick(row, rowIndex, col)
