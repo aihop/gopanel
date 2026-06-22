@@ -8,7 +8,11 @@ import (
 	"time"
 )
 
-func normalizeComposeTimezoneVolumes(volumes interface{}) (interface{}, bool) {
+// normalizeComposeTimezoneVolumes strips host timezone bind mounts (/etc/timezone,
+// /etc/localtime) that break container startup. When removeMissingOnly is true the
+// mount is only dropped if the host source file is absent (e.g. Debian/minimal Linux
+// without /etc/timezone), so normal hosts keep their original mounts untouched.
+func normalizeComposeTimezoneVolumes(volumes interface{}, removeMissingOnly bool) (interface{}, bool) {
 	list, ok := volumes.([]interface{})
 	if !ok {
 		return volumes, false
@@ -16,9 +20,11 @@ func normalizeComposeTimezoneVolumes(volumes interface{}) (interface{}, bool) {
 	filtered := make([]interface{}, 0, len(list))
 	changed := false
 	for _, item := range list {
-		if shouldRemoveComposeTimezoneVolume(item) {
-			changed = true
-			continue
+		if source, isTimezone := composeTimezoneVolumeSource(item); isTimezone {
+			if !removeMissingOnly || !hostPathExists(source) {
+				changed = true
+				continue
+			}
 		}
 		filtered = append(filtered, item)
 	}
@@ -30,17 +36,40 @@ func normalizeComposeTimezoneVolumes(volumes interface{}) (interface{}, bool) {
 	}
 	return filtered, true
 }
-func shouldRemoveComposeTimezoneVolume(item interface{}) bool {
+
+// composeTimezoneVolumeSource reports whether the volume mounts /etc/timezone or
+// /etc/localtime from the host and returns that host source path.
+func composeTimezoneVolumeSource(item interface{}) (string, bool) {
 	switch v := item.(type) {
 	case string:
 		raw := strings.TrimSpace(v)
-		return strings.HasPrefix(raw, "/etc/timezone:") || strings.HasPrefix(raw, "/etc/localtime:")
+		if strings.HasPrefix(raw, "/etc/timezone:") {
+			return "/etc/timezone", true
+		}
+		if strings.HasPrefix(raw, "/etc/localtime:") {
+			return "/etc/localtime", true
+		}
+		return "", false
 	case map[string]interface{}:
 		source := strings.TrimSpace(fmt.Sprint(v["source"]))
-		return source == "/etc/timezone" || source == "/etc/localtime"
+		if source == "/etc/timezone" || source == "/etc/localtime" {
+			return source, true
+		}
+		return "", false
 	default:
+		return "", false
+	}
+}
+
+// hostPathExists reports whether path exists on the host. It uses Lstat so a
+// (possibly dangling) /etc/localtime symlink still counts as present, since the
+// bind mount of the link itself works.
+func hostPathExists(path string) bool {
+	if path == "" {
 		return false
 	}
+	_, err := os.Lstat(path)
+	return err == nil
 }
 func ensureComposeTimezoneEnv(environment interface{}, timezone string) (interface{}, bool) {
 	switch env := environment.(type) {

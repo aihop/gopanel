@@ -3,12 +3,18 @@ package api
 import (
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/aihop/gopanel/app/dto/request"
 	"github.com/aihop/gopanel/app/e"
 	"github.com/aihop/gopanel/app/service"
+	"github.com/aihop/gopanel/buserr"
+	"github.com/aihop/gopanel/constant"
+	"github.com/aihop/gopanel/global"
+	"github.com/aihop/gopanel/utils/files"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -174,6 +180,92 @@ func UploadImportDBManagerTable(c fiber.Ctx) error {
 		return c.JSON(e.Fail(err))
 	}
 	return c.JSON(e.Succ(fiber.Map{"imported": imported}))
+}
+
+// UploadChunkDBImport 分片上传导入 SQL 文件（支持大文件）
+func UploadChunkDBImport(c fiber.Ctx) error {
+	fileForm, err := c.FormFile("chunk")
+	if err != nil {
+		return c.JSON(e.Fail(fmt.Errorf("chunk is required: %v", err)))
+	}
+
+	uploadFile, err := fileForm.Open()
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	defer uploadFile.Close()
+
+	serverID, err := strconv.Atoi(c.FormValue("serverId"))
+	if err != nil {
+		return c.JSON(e.Fail(fmt.Errorf("invalid serverId")))
+	}
+	databaseName := c.FormValue("databaseName")
+	filename := c.FormValue("filename")
+	chunkIndex, err := strconv.Atoi(c.FormValue("chunkIndex"))
+	if err != nil {
+		return c.JSON(e.Fail(fmt.Errorf("invalid chunkIndex")))
+	}
+	chunkCount, err := strconv.Atoi(c.FormValue("chunkCount"))
+	if err != nil {
+		return c.JSON(e.Fail(fmt.Errorf("invalid chunkCount")))
+	}
+
+	if serverID == 0 || databaseName == "" || filename == "" {
+		return c.JSON(e.Fail(fmt.Errorf("serverId, databaseName, filename are required")))
+	}
+
+	// 创建临时目录：{tmpDir}/upload/db_import/{filename}/
+	fileOp := files.NewFileOp()
+	tmpDir := filepath.Join(global.CONF.System.TmpDir, "upload", "db_import")
+	if !fileOp.Stat(tmpDir) {
+		if err := fileOp.CreateDir(tmpDir, 0755); err != nil {
+			return c.JSON(e.Fail(err))
+		}
+	}
+	chunkDir := filepath.Join(tmpDir, filename)
+	if chunkIndex == 0 {
+		if fileOp.Stat(chunkDir) {
+			_ = fileOp.DeleteDir(chunkDir)
+		}
+		_ = os.MkdirAll(chunkDir, 0755)
+	}
+
+	// 保存当前分片
+	chunkData, err := io.ReadAll(uploadFile)
+	if err != nil {
+		return c.JSON(e.Fail(buserr.WithMap(constant.ErrFileUpload, map[string]interface{}{"name": filename, "detail": err.Error()})))
+	}
+	chunkPath := filepath.Join(chunkDir, fmt.Sprintf("%s.%d", filename, chunkIndex))
+	if err := os.WriteFile(chunkPath, chunkData, 0644); err != nil {
+		return c.JSON(e.Fail(buserr.WithMap(constant.ErrFileUpload, map[string]interface{}{"name": filename, "detail": err.Error()})))
+	}
+
+	// 不是最后一个分片，提前返回
+	if chunkIndex+1 < chunkCount {
+		return c.JSON(e.Succ(fiber.Map{"done": false}))
+	}
+
+	// 最后一个分片：合并所有分片内容并导入数据库
+	defer func() {
+		_ = os.RemoveAll(chunkDir)
+	}()
+
+	var content strings.Builder
+	for i := 0; i < chunkCount; i++ {
+		p := filepath.Join(chunkDir, fmt.Sprintf("%s.%d", filename, i))
+		data, err := os.ReadFile(p)
+		if err != nil {
+			return c.JSON(e.Fail(fmt.Errorf("failed to read chunk %d: %v", i, err)))
+		}
+		content.Write(data)
+		_ = os.Remove(p)
+	}
+
+	imported, err := service.NewDBManagerService().ImportSQLContent(uint(serverID), databaseName, content.String())
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	return c.JSON(e.Succ(fiber.Map{"imported": imported, "done": true}))
 }
 
 // ImportDBManagerTable imports data from CSV content or SQL dump into a table

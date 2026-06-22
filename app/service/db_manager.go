@@ -265,6 +265,16 @@ func (s *DBManagerService) ImportTable(req request.ImportTableReq) (int, error) 
 	}
 }
 
+// ImportSQLContent 导入原始 SQL 内容（用于分片上传场景，仅支持 SQL 格式）
+func (s *DBManagerService) ImportSQLContent(serverID uint, databaseName, content string) (int, error) {
+	db, err := s.getDBConn(serverID, databaseName)
+	if err != nil {
+		return 0, err
+	}
+	defer db.Close()
+	return execSQLImport(db, content)
+}
+
 func (s *DBManagerService) ExportTable(req request.ExportTableReq) (string, string, error) {
 	db, err := s.getDBConn(req.ServerID, req.DatabaseName)
 	if err != nil {

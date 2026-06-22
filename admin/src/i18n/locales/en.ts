@@ -555,6 +555,7 @@ export default {
 		noTable: "No database table",
 		selectTable: "Please select a database table",
 		addColumn: "Add column",
+		importSql: "Import SQL",
 	},
 	container: {
 		create: "Create container",

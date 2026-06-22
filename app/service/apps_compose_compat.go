@@ -238,24 +238,36 @@ func applyComposeCommandEnvCompatYAML(composeYml string, envMap map[string]strin
 	return string(out), true, nil
 }
 func applyComposeTimezoneCompat(services map[string]interface{}) {
-	if runtime.GOOS != "darwin" || !docker.IsPodmanRuntime(context.Background()) {
+	if !docker.IsPodmanRuntime(context.Background()) {
 		return
 	}
+	// On darwin keep the original unconditional behavior (the podman machine has
+	// trouble with these host mounts). On other systems (e.g. Debian 12 without
+	// /etc/timezone) only drop the mount when the host source file is missing, so
+	// normal Linux hosts are left untouched.
+	isDarwin := runtime.GOOS == "darwin"
 	tz := resolveComposeTimezoneCompatValue()
 	for name, raw := range services {
 		serviceMap, ok := raw.(map[string]interface{})
 		if !ok || serviceMap == nil {
 			continue
 		}
-		if normalized, changed := normalizeComposeTimezoneVolumes(serviceMap["volumes"]); changed {
+		removedVolume := false
+		if normalized, changed := normalizeComposeTimezoneVolumes(serviceMap["volumes"], !isDarwin); changed {
+			removedVolume = true
 			if normalized == nil {
 				delete(serviceMap, "volumes")
 			} else {
 				serviceMap["volumes"] = normalized
 			}
 		}
-		if normalized, changed := ensureComposeTimezoneEnv(serviceMap["environment"], tz); changed {
-			serviceMap["environment"] = normalized
+		// Inject TZ as a replacement for the dropped mount. On darwin keep the
+		// prior behavior of always ensuring TZ; elsewhere only do so when we
+		// actually removed a timezone mount, to avoid changing healthy hosts.
+		if isDarwin || removedVolume {
+			if normalized, changed := ensureComposeTimezoneEnv(serviceMap["environment"], tz); changed {
+				serviceMap["environment"] = normalized
+			}
 		}
 		services[name] = serviceMap
 	}

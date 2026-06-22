@@ -99,7 +99,7 @@ const emit = defineEmits<{
         :value="tableKeywordInput"
         size="small"
         clearable
-        :disabled="!selectedDatabase || loadingTables || tables.length === 0"
+        :disabled="!selectedDatabase || loadingTables"
         placeholder="输入表名后回车搜索"
         @update:value="emit('update:tableKeywordInput', $event)"
         @keyup.enter="emit('searchTables')"

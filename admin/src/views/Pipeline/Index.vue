@@ -145,15 +145,10 @@ const templateOptions = [
         </div>
       </template>
       <template #tabbar></template>
-      <n-flex
-        vertical
-        class="rounded-[28px] border border-slate-100 bg-slate-50/70 p-4 sm:p-6"
-      >
         <PipelineList
           ref="pipelineListRef"
           @edit="handleEdit"
         />
-      </n-flex>
     </common-page>
     <CreatePipelineModal
       v-model:show="createPipelineModalShow"

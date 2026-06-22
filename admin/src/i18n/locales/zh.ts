@@ -540,7 +540,8 @@ export default {
 		action: "操作",
 		noTable: "暂无数据库",
 		selectTable: "请选择一个数据表",
-		addColumn: "添加字段"
+		addColumn: "添加字段",
+		importSql: "导入 SQL"
 	},
 	container: {
 		create: "创建容器",

@@ -198,7 +198,7 @@ func upApp(appInstall *model.AppInstall, pullImages bool, logger *AppInstallLogg
 		if fixed, changed, ferr := applyComposeTimezoneCompatYAML(string(composeContent)); ferr == nil && changed {
 			composeContent = []byte(fixed)
 			_ = files.NewFileOp().WriteFile(appInstall.GetComposePath(), strings.NewReader(fixed), 0644)
-			logger.Info("Applied compose timezone compatibility for podman on darwin")
+			logger.Info("Applied compose timezone compatibility for podman runtime")
 		}
 		if validateErr := validateComposeEnvForPortsVolumes(string(composeContent), string(envContent)); validateErr != nil {
 			logger.Error("Compose params invalid: %s", validateErr.Error())

@@ -8,14 +8,10 @@ const props = defineProps<{
 
 const actionParamsObj = computed({
   get() {
-    try {
-      return props.formModel.actionParams ? JSON.parse(props.formModel.actionParams) : {}
-    } catch (e) {
-      return {}
-    }
+    return props.formModel.actionParams || {}
   },
   set(val) {
-    props.formModel.actionParams = JSON.stringify(val)
+    props.formModel.actionParams = val
   }
 })
 

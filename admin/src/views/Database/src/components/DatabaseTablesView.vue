@@ -2,7 +2,7 @@
 import { ref, computed, h, onMounted, watch } from 'vue'
 import { useMessage, NEmpty, NIcon, NButton, NDataTable, NPagination, NPopconfirm, NCheckbox, NTag, NInput, NModal } from 'naive-ui'
 import { renderIcon } from '@/utils'
-import { getDBManagerTableListAPI, execDBManagerSqlAPI } from '@/api/modules/database'
+import { getDBManagerTableListAPI, execDBManagerSqlAPI, chunkImportDBAPI } from '@/api/modules/database'
 
 const props = defineProps<{
   selectedServerId: number | null
@@ -21,6 +21,9 @@ const total = ref(0)
 const page = ref(1)
 const limit = ref(20)
 const checkedKeys = ref<string[]>([])
+const importing = ref(false)
+const importProgress = ref(0)
+const fileInputRef = ref<HTMLInputElement | null>(null)
 const batchLoading = ref(false)
 
 // 视图管理
@@ -112,6 +115,71 @@ const columns = [
     render: (row: any) => row.updateTime || '-'
   }
 ]
+
+const handleImportSQL = () => {
+  fileInputRef.value?.click()
+}
+
+const CHUNK_IMPORT_SIZE = 1024 * 1024 // 1MB 每分片
+
+const onFileSelected = async (e: Event) => {
+  const target = e.target as HTMLInputElement
+  const file = target.files?.[0]
+  if (!file) return
+  if (!props.selectedServerId || !props.selectedDatabase) {
+    message.warning('请先选择数据库服务器和数据库')
+    target.value = ''
+    return
+  }
+  if (!file.name.toLowerCase().endsWith('.sql')) {
+    message.error('请选择 .sql 文件')
+    target.value = ''
+    return
+  }
+
+  importing.value = true
+  importProgress.value = 0
+  const fileSize = file.size
+  const chunkCount = Math.ceil(fileSize / CHUNK_IMPORT_SIZE)
+  let uploadedChunks = 0
+
+  try {
+    for (let i = 0; i < chunkCount; i++) {
+      const start = i * CHUNK_IMPORT_SIZE
+      const end = Math.min(start + CHUNK_IMPORT_SIZE, fileSize)
+      const chunk = file.slice(start, end)
+
+      const fd = new FormData()
+      fd.append('serverId', String(props.selectedServerId))
+      fd.append('databaseName', props.selectedDatabase!)
+      fd.append('filename', file.name)
+      fd.append('chunk', chunk)
+      fd.append('chunkIndex', i.toString())
+      fd.append('chunkCount', chunkCount.toString())
+
+      const res = await chunkImportDBAPI(fd)
+      uploadedChunks++
+      importProgress.value = Math.round((uploadedChunks / chunkCount) * 100)
+
+      // 最后一个分片才看结果
+      if (i === chunkCount - 1) {
+        if (res.code === 0) {
+          const count = res.data?.imported ?? 0
+          message.success(`SQL 导入成功，已执行 ${count} 条语句`)
+          fetchData()
+        } else {
+          message.error(res.message || '导入失败')
+        }
+      }
+    }
+  } catch (err: any) {
+    message.error(err?.message || '导入请求失败')
+  } finally {
+    importing.value = false
+    importProgress.value = 0
+    target.value = ''
+  }
+}
 
 const fetchData = async () => {
   if (!props.selectedServerId || !props.selectedDatabase) return
@@ -401,9 +469,20 @@ onMounted(fetchData)
               确定要删除选中的 {{ checkedKeys.length }} 个表吗？此操作不可恢复！
             </n-popconfirm>
           </template>
+          <n-button size="tiny" @click="handleImportSQL" :loading="importing" type="success" ghost :disabled="importing">
+            <template #icon><n-icon :component="renderIcon('mdi:file-upload-outline')" /></template>
+            {{ importing ? `导入中 ${importProgress}%` : $t('database.importSql') }}
+          </n-button>
           <n-button size="tiny" @click="fetchData" :loading="loading">刷新</n-button>
         </div>
       </div>
+      <input
+        ref="fileInputRef"
+        type="file"
+        accept=".sql"
+        class="hidden"
+        @change="onFileSelected"
+      />
       <div class="flex-1 p-2 bg-white overflow-auto">
         <n-empty v-if="!loading && tables.length === 0" description="当前数据库中没有表" class="mt-10" />
         <n-data-table

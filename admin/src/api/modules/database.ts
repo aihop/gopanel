@@ -129,6 +129,15 @@ export const uploadDBManagerImportAPI = (data: { serverId: number; databaseName:
 	})
 }
 
+// 分片上传导入 SQL（支持大文件）
+export const chunkImportDBAPI = (formData: FormData, config?: import('axios').AxiosRequestConfig) => {
+	return http.upload(`/database/manager/chunk-import`, formData, {
+		headers: { 'Content-Type': 'multipart/form-data' },
+		timeout: 300000, // 5 min
+		...config,
+	})
+}
+
 export const databaseUserGetAPI = (params: any) => {
 	return http.post(`/database/user/get`, params)
 }

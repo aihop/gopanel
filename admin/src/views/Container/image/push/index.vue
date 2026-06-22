@@ -42,12 +42,12 @@
 					</n-form>
 
 					<LogFile
+						v-if="logVisible"
 						ref="logRef"
 						:config="logConfig"
 						:default-button="false"
 						v-model:is-reading="isReading"
-						v-if="logVisible"
-						style="height: calc(100vh - 150px); min-height: 200px"
+						:style="{ height: 'calc(100vh - 150px)', minHeight: '200px' } as any"
 						v-model:loading="loading"
 					/>
 				</n-col>
@@ -134,7 +134,7 @@ const onSubmit = async (formEl: any | undefined) => {
 		if (errors) return
 		const res = await imagePush(form)
 		logConfig.name = res.data
-		logConfig.tail = true
+		;(logConfig as any).tail = true
 		logVisible.value = true
 		isStartReading.value = true
 	})

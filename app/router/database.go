@@ -40,6 +40,7 @@ func DatabaseRouter(r fiber.Router) {
 		managerGroup.Post("/export", api.ExportDBManagerTable)
 		managerGroup.Post("/import", api.ImportDBManagerTable)
 		managerGroup.Post("/upload", api.UploadImportDBManagerTable)
+		managerGroup.Post("/chunk-import", api.UploadChunkDBImport)
 
 		// 新增 API
 		managerGroup.Post("/create-database", api.CreateDBManagerDatabase)
