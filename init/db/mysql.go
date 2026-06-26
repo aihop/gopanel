@@ -118,7 +118,7 @@ func (r *MySQL) UserPassword(user, password, host string) error {
 }
 
 func (r *MySQL) PrivilegesGrant(user, database, host string) error {
-	_, err := r.Exec(fmt.Sprintf("GRANT ALL PRIVILEGES ON %s.* TO %s@%s", mysqlQuotedIdentifier(database), mysqlLiteral(user), mysqlLiteral(host)))
+	_, err := r.Exec(fmt.Sprintf("GRANT ALL PRIVILEGES ON %s.* TO %s@%s WITH GRANT OPTION", mysqlQuotedIdentifier(database), mysqlLiteral(user), mysqlLiteral(host)))
 	r.flushPrivileges()
 	return err
 }

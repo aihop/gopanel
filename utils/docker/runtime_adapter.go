@@ -15,6 +15,53 @@ import (
 	"github.com/docker/docker/client"
 )
 
+func commandName(bin string) string {
+	name := filepath.Base(strings.TrimSpace(bin))
+	return strings.ToLower(name)
+}
+
+func withPatchedPath(env []string, prependDirs ...string) []string {
+	pathParts := make([]string, 0, len(prependDirs)+8)
+	seen := map[string]struct{}{}
+	appendPart := func(part string) {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			return
+		}
+		if _, ok := seen[part]; ok {
+			return
+		}
+		seen[part] = struct{}{}
+		pathParts = append(pathParts, part)
+	}
+
+	for _, dir := range prependDirs {
+		appendPart(dir)
+	}
+
+	pathIndex := -1
+	for i, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			pathIndex = i
+			for _, part := range strings.Split(strings.TrimPrefix(kv, "PATH="), string(os.PathListSeparator)) {
+				appendPart(part)
+			}
+			break
+		}
+	}
+
+	for _, dir := range []string{"/opt/homebrew/bin", "/opt/homebrew/sbin", "/usr/local/bin", "/usr/local/sbin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"} {
+		appendPart(dir)
+	}
+
+	pathValue := "PATH=" + strings.Join(pathParts, string(os.PathListSeparator))
+	if pathIndex >= 0 {
+		env[pathIndex] = pathValue
+		return env
+	}
+	return append(env, pathValue)
+}
+
 type RuntimeAdapter interface {
 	Resolve(ctx context.Context) ResolvedRuntime
 	CLI(ctx context.Context) (string, error)
@@ -115,10 +162,12 @@ func (a *defaultRuntimeAdapter) Command(ctx context.Context, args ...string) (*e
 	if err != nil {
 		return nil, err
 	}
-	if bin == "podman" && runtime.GOOS == "darwin" {
+	if commandName(bin) == "podman" && runtime.GOOS == "darwin" {
 		_ = PodmanEnsureReady(ctx)
 	}
-	return exec.CommandContext(ctx, bin, args...), nil
+	cmd := exec.CommandContext(ctx, bin, args...)
+	cmd.Env = withPatchedPath(os.Environ(), filepath.Dir(bin))
+	return cmd, nil
 }
 
 func (a *defaultRuntimeAdapter) CommandWithHost(ctx context.Context, host string, args ...string) (*exec.Cmd, error) {
@@ -129,18 +178,20 @@ func (a *defaultRuntimeAdapter) CommandWithHost(ctx context.Context, host string
 	if err != nil {
 		return nil, err
 	}
-	if bin == "podman" && runtime.GOOS == "darwin" {
+	if commandName(bin) == "podman" && runtime.GOOS == "darwin" {
 		_ = PodmanEnsureReady(ctx)
 	}
 	h := strings.TrimSpace(host)
 	if h != "" && h != "podman-cli" && h != "podman://local" {
-		if bin == "podman" {
+		if commandName(bin) == "podman" {
 			args = append([]string{"--url", h}, args...)
 		} else {
 			args = append([]string{"-H", h}, args...)
 		}
 	}
-	return exec.CommandContext(ctx, bin, args...), nil
+	cmd := exec.CommandContext(ctx, bin, args...)
+	cmd.Env = withPatchedPath(os.Environ(), filepath.Dir(bin))
+	return cmd, nil
 }
 
 func (a *defaultRuntimeAdapter) ResolveComposeCommand(ctx context.Context) (string, []string, error) {
@@ -197,6 +248,7 @@ func (a *defaultRuntimeAdapter) ComposeCommand(ctx context.Context, args ...stri
 	if err != nil {
 		return nil, err
 	}
+	binName := commandName(bin)
 	allArgs := append(prefix, args...)
 	var workDir string
 	for i := 0; i < len(args)-1; i++ {
@@ -208,7 +260,7 @@ func (a *defaultRuntimeAdapter) ComposeCommand(ctx context.Context, args ...stri
 	var extraEnv []string
 	host := strings.TrimSpace(resolved.Host)
 	if host != "" && host != "podman-cli" && host != "podman://local" {
-		switch bin {
+		switch binName {
 		case "podman":
 			allArgs = append([]string{"--url", host}, allArgs...)
 		case "docker":
@@ -222,7 +274,7 @@ func (a *defaultRuntimeAdapter) ComposeCommand(ctx context.Context, args ...stri
 			)
 		}
 	}
-	if bin == "podman" && len(prefix) > 0 && prefix[0] == "compose" {
+	if binName == "podman" && len(prefix) > 0 && prefix[0] == "compose" {
 		extraEnv = append(extraEnv, "PODMAN_COMPOSE_WARNING_LOGS=false")
 		if host != "" && host != "podman-cli" && host != "podman://local" {
 			extraEnv = append(extraEnv,
@@ -250,9 +302,14 @@ func (a *defaultRuntimeAdapter) ComposeCommand(ctx context.Context, args ...stri
 	if workDir != "" {
 		c.Dir = workDir
 	}
-	if len(extraEnv) > 0 {
-		c.Env = append(os.Environ(), extraEnv...)
+	pathDirs := []string{filepath.Dir(bin)}
+	if podmanPath, err := runtimeBinaryPath("podman"); err == nil {
+		pathDirs = append(pathDirs, filepath.Dir(podmanPath))
 	}
+	if dockerPath, err := runtimeBinaryPath("docker"); err == nil {
+		pathDirs = append(pathDirs, filepath.Dir(dockerPath))
+	}
+	c.Env = withPatchedPath(append(os.Environ(), extraEnv...), pathDirs...)
 	return c, nil
 }
 

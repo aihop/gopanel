@@ -94,7 +94,10 @@ func normalizeDatabaseUserHost(serverType model.DatabaseType, host string) strin
 	host = strings.TrimSpace(host)
 	if serverType == model.DatabaseTypeMysql {
 		if host == "" {
-			return "localhost"
+			// 容器化场景下应用多从其它容器经 TCP 连入，来源是容器网段 IP，
+			// 绑定 localhost 会匹配不上导致 Access denied，故默认放行任意主机。
+			// 安全性依赖不对公网 publish 数据库端口 + 强密码 + 库级授权。
+			return "%"
 		}
 		return host
 	}
