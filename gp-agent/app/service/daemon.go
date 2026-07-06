@@ -163,7 +163,14 @@ func DaemonAppLogJSON(ctx context.Context, params map[string]interface{}) (strin
 	if err := daemon.Supervisor.ReadProcessStdoutLog(nil, &supervisord.ProcessLogReadInfo{Name: name, Offset: offset, Length: length}, &reply); err != nil {
 		return "", err
 	}
-	b, err := json.Marshal(map[string]interface{}{"logData": reply.LogData, "offset": offset, "length": length, "at": time.Now().UnixMilli()})
+	var logSize int64
+	var procInfo struct{ ProcInfo types.ProcessInfo }
+	if err := daemon.Supervisor.GetProcessInfo(nil, &struct{ Name string }{Name: name}, &procInfo); err == nil {
+		if fi, err := os.Stat(procInfo.ProcInfo.StdoutLogfile); err == nil {
+			logSize = fi.Size()
+		}
+	}
+	b, err := json.Marshal(map[string]interface{}{"logData": reply.LogData, "offset": offset, "length": length, "logSize": logSize, "at": time.Now().UnixMilli()})
 	if err != nil {
 		return "", err
 	}
