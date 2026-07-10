@@ -106,6 +106,20 @@ export default function getItems(_: { mode: "vertical" | "horizontal"; collapsed
 					RouterLink,
 					{
 						to: {
+							name: "Cronjob-Index"
+						}
+					},
+					{ default: () => t("menu.cronjob") }
+				),
+			key: "cronjob",
+			icon: renderIcon("mdi:calendar-clock")
+		},
+		{
+			label: () =>
+				h(
+					RouterLink,
+					{
+						to: {
 							name: "Container-Index"
 						}
 					},

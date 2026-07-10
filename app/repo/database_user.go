@@ -153,8 +153,13 @@ func (r *DatabaseUserRepo) FirstOrInit(ins, outs *model.DatabaseUser) (err error
 }
 
 func (r *DatabaseUserRepo) Save(item *model.DatabaseUser) (err error) {
-	err = r.db.Model(&model.DatabaseUser{}).Save(item).Error
-	return
+	if item == nil {
+		return nil
+	}
+	if item.ID == 0 {
+		return r.Create(item)
+	}
+	return r.Update(item)
 }
 
 func (r *DatabaseUserRepo) CountByWhere(where *gormx.Wherex) (res int64, err error) {

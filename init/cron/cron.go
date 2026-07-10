@@ -5,7 +5,9 @@ import (
 	"time"
 
 	"github.com/aihop/gopanel/app/model"
+	"github.com/aihop/gopanel/app/repo"
 	"github.com/aihop/gopanel/app/service"
+	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
 	"github.com/robfig/cron/v3"
 	"github.com/shirou/gopsutil/v4/cpu"
@@ -16,7 +18,6 @@ import (
 )
 
 var (
-	CronScheduler   *cron.Cron
 	lastIOCounters  map[string]disk.IOCountersStat
 	lastNetCounters []net.IOCountersStat
 	lastMonitorTime time.Time
@@ -30,53 +31,64 @@ func Init() {
 	}
 	isCronInit = true
 
-	CronScheduler = cron.New(cron.WithLocation(time.Local))
+	global.Cron = cron.New(cron.WithLocation(time.Local))
 
-	// 每天凌晨 2:00 执行 SSL 自动续签任务
-	_, err := CronScheduler.AddFunc("0 2 * * *", func() {
-		global.LOG.Info("[Cron] 开始执行每日 SSL 自动续签检查任务")
-		checkAndRenewSSL()
-	})
-
-	if err != nil {
-		global.LOG.Errorf("[Cron] 添加 SSL 自动续签任务失败: %v", err)
-	}
-
-	// 2. 监控数据采集任务（每分钟执行一次）
-	_, err = CronScheduler.AddFunc("* * * * *", func() {
+	// 监控数据采集任务（每分钟执行一次），系统遥测，不是用户可配置的计划任务
+	_, err := global.Cron.AddFunc("* * * * *", func() {
 		recordMonitorData()
 	})
 	if err != nil {
 		global.LOG.Errorf("[Cron] 添加 Monitor 任务失败: %v", err)
 	}
 
-	CronScheduler.Start()
+	global.Cron.Start()
 	global.LOG.Info("[Cron] task scheduler started")
+
+	seedDefaultSSLRenewJob()
+	loadCronjobs()
 }
 
-func checkAndRenewSSL() {
-	sslService := service.NewSSL()
-
-	// 查找开启了自动续签的证书
-	var certs []model.SSL
-	if err := global.DB.Where("auto_renew = ?", true).Find(&certs).Error; err != nil {
-		global.LOG.Errorf("[Cron] 查询需要自动续签的证书失败: %v", err)
+// seedDefaultSSLRenewJob 把原本硬编码的每日 SSL 续签任务收编成一条默认计划任务，
+// 只在第一次启动（还没有任何 ssl_renew 类型任务）时插入一次，之后完全交给用户在计划任务页面管理
+func seedDefaultSSLRenewJob() {
+	jobs, err := repo.NewCronjob().ListByType("ssl_renew")
+	if err != nil {
+		global.LOG.Errorf("[Cron] 查询 SSL 续签计划任务失败: %v", err)
 		return
 	}
+	if len(jobs) > 0 {
+		return
+	}
+	job := &model.Cronjob{
+		Name:   "SSL 证书自动续签",
+		Type:   "ssl_renew",
+		Spec:   "0 2 * * *",
+		Status: constant.StatusEnable,
+	}
+	if err := repo.NewCronjob().Create(job); err != nil {
+		global.LOG.Errorf("[Cron] 创建默认 SSL 续签计划任务失败: %v", err)
+	}
+}
 
-	now := time.Now()
-	for _, cert := range certs {
-		// 只有通过 DNS API 签发的证书支持自动续签
-		if cert.Type == "upload" || cert.Type == "caddy" {
+// loadCronjobs 启动时把所有已启用的计划任务注册进调度器
+func loadCronjobs() {
+	jobs, err := repo.NewCronjob().ListEnabled()
+	if err != nil {
+		global.LOG.Errorf("[Cron] 加载计划任务失败: %v", err)
+		return
+	}
+	cronjobRepo := repo.NewCronjob()
+	for _, job := range jobs {
+		jobID := job.ID
+		entryID, err := global.Cron.AddFunc(job.Spec, func() {
+			service.NewCronjobService().Run(jobID)
+		})
+		if err != nil {
+			global.LOG.Errorf("[Cron] 注册计划任务 %d(%s) 失败: %v", job.ID, job.Name, err)
 			continue
 		}
-
-		// 如果过期时间减去7天在当前时间之前，说明距离过期不足7天了
-		if cert.ExpireDate.AddDate(0, 0, -7).Before(now) {
-			global.LOG.Infof("[Cron] 证书 %s (ID: %d) 将于 %s 过期，开始自动续签", cert.PrimaryDomain, cert.ID, cert.ExpireDate.Format("2006-01-02"))
-			if err := sslService.Renew(cert.ID); err != nil {
-				global.LOG.Errorf("[Cron] 证书 %s 自动续签请求失败: %v", cert.PrimaryDomain, err)
-			}
+		if err := cronjobRepo.UpdateEntryID(job.ID, int(entryID)); err != nil {
+			global.LOG.Errorf("[Cron] 更新计划任务 %d EntryID 失败: %v", job.ID, err)
 		}
 	}
 }

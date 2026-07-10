@@ -49,5 +49,6 @@ func DatabaseRouter(r fiber.Router) {
 		managerGroup.Post("/database-info", api.GetDBManagerDatabaseInfo)
 		managerGroup.Post("/copy-table", api.CopyDBManagerTable)
 		managerGroup.Post("/create-table", api.CreateDBManagerTable)
+		managerGroup.Post("/change-table-owner", api.ChangeDBManagerTableOwner)
 	}
 }

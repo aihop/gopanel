@@ -736,3 +736,21 @@ func (s *DBManagerService) CopyTable(req request.CopyTableReq) error {
 
 	return nil
 }
+
+// ChangeTableOwner 修改表的所有者，仅 PostgreSQL 有真正的表级 owner 概念
+func (s *DBManagerService) ChangeTableOwner(req request.ChangeTableOwnerReq) error {
+	server, err := s.serverRepo.Get(req.ServerID)
+	if err != nil {
+		return err
+	}
+	if server.Type != model.DatabaseTypePostgresql {
+		return fmt.Errorf("当前数据库类型不支持修改表所有者")
+	}
+	db, err := s.getDBConn(req.ServerID, req.DatabaseName)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	_, err = db.Exec(fmt.Sprintf("ALTER TABLE %s OWNER TO %s", quoteTable(server.Type, req.TableName), quoteIdent(server.Type, req.Owner)))
+	return err
+}

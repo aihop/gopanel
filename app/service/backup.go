@@ -2,12 +2,13 @@ package service
 
 import (
 	"context"
-	"fmt"
+	"os"
 	"path"
 
 	"github.com/aihop/gopanel/app/dto"
 	"github.com/aihop/gopanel/app/repo"
 	"github.com/aihop/gopanel/constant"
+	"github.com/aihop/gopanel/global"
 )
 
 type BackupService struct {
@@ -26,7 +27,15 @@ func (u *BackupService) BatchDeleteRecord(ids []uint) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println(records)
+	for _, record := range records {
+		if string(record.Source) != "LOCAL" {
+			continue
+		}
+		filePath := path.Join(constant.BackupDir, record.FileDir, record.FileName)
+		if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
+			global.LOG.Errorf("delete backup file %s failed, err: %v", filePath, err)
+		}
+	}
 	return backupRepo.DeleteRecord(context.Background(), commonRepo.WithIdsIn(ids))
 }
 

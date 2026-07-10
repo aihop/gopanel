@@ -113,6 +113,20 @@ const router = createRouter({
 			]
 		},
 		{
+			path: "/cronjob",
+			name: "Cronjob",
+			redirect: "/cronjob/index",
+			meta: { title: "计划任务", titleKey: "menu.cronjob", auth: true, roles: "all" },
+			children: [
+				{
+					path: "index",
+					name: "Cronjob-Index",
+					component: () => import("@/views/Cronjob/Index.vue"),
+					meta: { title: "计划任务", titleKey: "menu.cronjob", auth: true, roles: "all" }
+				}
+			]
+		},
+		{
 			path: "/apps",
 			name: "Apps",
 			redirect: "/apps/index",

@@ -34,6 +34,7 @@ func AppRegister(r fiber.Router) {
 	LogsRouter(apiRouter)      // 日志
 	DaemonRouter(apiRouter)    // 守护进程
 	AgentRouter(apiRouter)     // gp-agent
+	CronjobRouter(apiRouter)   // 计划任务
 
 	staticRouter(r) // 静态资源文件
 }

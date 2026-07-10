@@ -162,7 +162,8 @@ CASE WHEN c.relkind IN ('r', 'p', 'm') THEN pg_total_relation_size(c.oid) ELSE N
 NULL::text AS collation,
 NULL::timestamp AS "createTime",
 NULL::timestamp AS "updateTime",
-pg_catalog.obj_description(c.oid, 'pg_class') AS comment
+pg_catalog.obj_description(c.oid, 'pg_class') AS comment,
+pg_catalog.pg_get_userbyid(c.relowner) AS owner
 FROM pg_class c
 JOIN pg_namespace n ON n.oid = c.relnamespace
 LEFT JOIN pg_stat_user_tables s ON s.relid = c.oid

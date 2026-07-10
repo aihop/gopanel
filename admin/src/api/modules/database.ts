@@ -210,3 +210,8 @@ export const createDBManagerTableAPI = (data: {
 }) => {
 	return http.post(`/database/manager/create-table`, data)
 }
+
+// 修改表所有者（仅 PostgreSQL）
+export const changeDBManagerTableOwnerAPI = (data: { serverId: number; databaseName: string; tableName: string; owner: string }) => {
+	return http.post(`/database/manager/change-table-owner`, data)
+}

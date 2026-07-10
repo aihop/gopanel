@@ -1,5 +1,4 @@
 import { ReqPage } from "."
-import { Cronjob } from "./cronjob"
 
 export namespace Toolbox {
 	export interface DeviceBaseInfo {
@@ -137,7 +136,7 @@ export namespace Toolbox {
 		lastHandleDate: string
 		hasSpec: boolean
 		spec: string
-		specObj: Cronjob.SpecObj
+		specObj: any
 		description: string
 		hasAlert: boolean
 		alertCount: number
@@ -149,7 +148,7 @@ export namespace Toolbox {
 		infectedStrategy: string
 		infectedDir: string
 		spec: string
-		specObj: Cronjob.SpecObj
+		specObj: any
 		description: string
 	}
 	export interface ClamUpdate {
@@ -159,7 +158,7 @@ export namespace Toolbox {
 		infectedStrategy: string
 		infectedDir: string
 		spec: string
-		specObj: Cronjob.SpecObj
+		specObj: any
 		description: string
 	}
 	export interface ClamSearchLog extends ReqPage {

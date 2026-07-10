@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, h, onMounted, watch } from 'vue'
-import { useMessage, NEmpty, NIcon, NButton, NDataTable, NPagination, NPopconfirm, NCheckbox, NTag, NInput, NModal } from 'naive-ui'
+import { useMessage, useDialog, NEmpty, NIcon, NButton, NDataTable, NPagination, NPopconfirm, NCheckbox, NTag, NInput, NModal, NPopselect } from 'naive-ui'
 import { renderIcon } from '@/utils'
-import { getDBManagerTableListAPI, execDBManagerSqlAPI, chunkImportDBAPI } from '@/api/modules/database'
+import { getDBManagerTableListAPI, execDBManagerSqlAPI, chunkImportDBAPI, databaseUserListAPI, changeDBManagerTableOwnerAPI } from '@/api/modules/database'
 
 const props = defineProps<{
   selectedServerId: number | null
@@ -15,6 +15,7 @@ const emit = defineEmits<{
 }>()
 
 const message = useMessage()
+const dialog = useDialog()
 const loading = ref(false)
 const tables = ref<any[]>([])
 const total = ref(0)
@@ -37,6 +38,56 @@ const showViewDefModal = ref(false)
 // 函数/存储过程管理
 const routines = ref<{ name: string; type: string }[]>([])
 const loadingRoutines = ref(false)
+
+// 所属用户（MySQL/MariaDB 按库授权，Postgres 有真正的表级 owner）
+const dbUsers = ref<{ username: string; privileges: string[] }[]>([])
+const changingOwnerTable = ref<string | null>(null)
+
+const authorizedUsersForDb = computed(() => {
+  if (!props.selectedDatabase) return []
+  return dbUsers.value.filter(u => u.privileges?.includes(props.selectedDatabase!)).map(u => u.username)
+})
+
+const ownerOptions = computed(() => dbUsers.value.map(u => ({ label: u.username, value: u.username })))
+
+const fetchDbUsers = async () => {
+  if (!props.selectedServerId) { dbUsers.value = []; return }
+  try {
+    const res: any = await databaseUserListAPI({
+      wheres: [{ field: 'server_id', rule: 'eq', val: String(props.selectedServerId) }]
+    })
+    if (res.code === 0 && res.data) {
+      dbUsers.value = (res.data.items || []).map((u: any) => ({ username: u.username, privileges: u.privileges || [] }))
+    } else {
+      dbUsers.value = []
+    }
+  } catch {
+    dbUsers.value = []
+  }
+}
+
+const handleChangeOwner = async (tableName: string, owner: string) => {
+  if (!props.selectedServerId || !props.selectedDatabase) return
+  changingOwnerTable.value = tableName
+  try {
+    const res: any = await changeDBManagerTableOwnerAPI({
+      serverId: props.selectedServerId,
+      databaseName: props.selectedDatabase,
+      tableName,
+      owner
+    })
+    if (res.code === 0) {
+      message.success(`表 ${tableName} 的所有者已改为 ${owner}`)
+      fetchData()
+    } else {
+      message.error(res.message || '修改失败')
+    }
+  } catch {
+    message.error('修改请求失败')
+  } finally {
+    changingOwnerTable.value = null
+  }
+}
 
 const serverType = computed(() => {
   const s = props.serverOptions.find(s => s.value === props.selectedServerId)
@@ -113,6 +164,44 @@ const columns = [
     key: 'updateTime',
     width: 160,
     render: (row: any) => row.updateTime || '-'
+  },
+  {
+    title: '所属用户',
+    key: 'owner',
+    width: 180,
+    render: (row: any) => {
+      // Postgres 有真正的表级 owner，可以直接改
+      if (serverType.value === 'postgresql') {
+        return h(
+          NPopselect,
+          {
+            options: ownerOptions.value,
+            value: row.owner,
+            trigger: 'click',
+            'onUpdate:value': (val: string) => handleChangeOwner(row.name, val)
+          },
+          {
+            default: () =>
+              h(
+                NTag,
+                { size: 'small', type: 'info', bordered: false, class: 'cursor-pointer' },
+                { default: () => (changingOwnerTable.value === row.name ? '修改中...' : row.owner || '-') }
+              )
+          }
+        )
+      }
+      // MySQL/MariaDB 是按库整体授权的，没有表级归属，只能展示当前库被授权给了谁
+      if (serverType.value === 'mysql' || serverType.value === 'mariadb') {
+        const users = authorizedUsersForDb.value
+        if (users.length === 0) return h('span', { class: 'text-gray-400' }, '-')
+        return h(
+          'span',
+          { title: '该数据库类型按库授权，非按表，此处显示的是当前库的授权用户' },
+          users.join(', ')
+        )
+      }
+      return h('span', { class: 'text-gray-400' }, '-')
+    }
   }
 ]
 
@@ -379,25 +468,59 @@ const handleBatchTruncate = async () => {
   batchLoading.value = false
 }
 
-const handleBatchDrop = async () => {
-  if (checkedKeys.value.length === 0) return
-  batchLoading.value = true
+// Postgres 在表被其他对象（视图、外键等）依赖时会拒绝 DROP TABLE，这里识别这个特定报错，
+// 询问用户是否改用 CASCADE 连带删除依赖对象，而不是默认就带上 CASCADE 静默删掉更多东西
+const isDependencyError = (msg: string) => /depend(s|ency)? on it|dependent objects/i.test(msg || '')
+
+const dropTables = async (names: string[], cascade: boolean) => {
   const q = serverType.value === 'mysql' || serverType.value === 'mariadb' ? '`' : '"'
   let success = 0
-  for (const name of checkedKeys.value) {
+  const dependencyFailed: string[] = []
+  for (const name of names) {
     try {
       const res = await execDBManagerSqlAPI({
         serverId: props.selectedServerId!,
         databaseName: props.selectedDatabase!,
-        sql: `DROP TABLE ${q}${name}${q}`
+        sql: `DROP TABLE ${q}${name}${q}${cascade ? ' CASCADE' : ''}`
       })
-      if (res.code === 0) success++
+      if (res.code === 0) {
+        success++
+      } else if (!cascade && serverType.value === 'postgresql' && isDependencyError(res.msg)) {
+        dependencyFailed.push(name)
+      }
     } catch { /* skip */ }
   }
-  message.success(`已删除 ${success}/${checkedKeys.value.length} 个表`)
+  return { success, dependencyFailed }
+}
+
+const handleBatchDrop = async () => {
+  if (checkedKeys.value.length === 0) return
+  batchLoading.value = true
+  const names = [...checkedKeys.value]
+  const { success, dependencyFailed } = await dropTables(names, false)
+  batchLoading.value = false
+
+  if (dependencyFailed.length > 0) {
+    if (success > 0) message.success(`已删除 ${success}/${names.length} 个表`)
+    dialog.warning({
+      title: '存在依赖对象',
+      content: `以下 ${dependencyFailed.length} 个表被其他数据库对象（如视图、外键）依赖，无法直接删除：${dependencyFailed.join('、')}。是否级联删除（CASCADE）？这会连带删除所有依赖它们的对象，此操作不可恢复！`,
+      positiveText: '级联删除',
+      negativeText: '取消',
+      onPositiveClick: async () => {
+        batchLoading.value = true
+        const retry = await dropTables(dependencyFailed, true)
+        batchLoading.value = false
+        message.success(`已级联删除 ${retry.success}/${dependencyFailed.length} 个表`)
+        checkedKeys.value = []
+        fetchData()
+      }
+    })
+  } else {
+    message.success(`已删除 ${success}/${names.length} 个表`)
+  }
   checkedKeys.value = []
   if (success > 0) fetchData()
-  batchLoading.value = false
 }
 
 watch(() => [props.selectedServerId, props.selectedDatabase], () => {
@@ -405,6 +528,7 @@ watch(() => [props.selectedServerId, props.selectedDatabase], () => {
   checkedKeys.value = []
   viewMode.value = 'tables'
   fetchData()
+  fetchDbUsers()
 })
 
 watch(viewMode, (mode) => {
@@ -412,7 +536,10 @@ watch(viewMode, (mode) => {
   if (mode === 'routines') fetchRoutines()
 })
 
-onMounted(fetchData)
+onMounted(() => {
+  fetchData()
+  fetchDbUsers()
+})
 </script>
 
 <template>

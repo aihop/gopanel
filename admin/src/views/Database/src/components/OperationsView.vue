@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { useMessage, NEmpty, NButton, NInput, NInputGroup, NCard, NPopconfirm, NIcon, NModal, NCheckbox } from 'naive-ui'
+import { useMessage, useDialog, NEmpty, NButton, NInput, NInputGroup, NCard, NPopconfirm, NIcon, NModal, NCheckbox } from 'naive-ui'
 import { renderIcon } from '@/utils'
 import { execDBManagerSqlAPI, copyDBManagerTableAPI } from '@/api/modules/database'
 import DatabaseWorkspaceHeader from './DatabaseWorkspaceHeader.vue'
@@ -19,6 +19,7 @@ const emit = defineEmits<{
 }>()
 
 const message = useMessage()
+const dialog = useDialog()
 const newTableName = ref('')
 const loadingTruncate = ref(false)
 const loadingDrop = ref(false)
@@ -81,12 +82,35 @@ const handleTruncate = async () => {
       message.success('表数据已清空')
       emit('tableTruncated')
     } else {
-      message.error(res.message || '清空失败')
+      message.error(res.msg || '清空失败')
     }
   } catch (err: any) {
     message.error('请求失败')
   } finally {
     loadingTruncate.value = false
+  }
+}
+
+// Postgres 在表被其他对象（视图、外键等）依赖时会拒绝 DROP TABLE，这里识别这个特定报错，
+// 询问用户是否改用 CASCADE 连带删除依赖对象，而不是默认就带上 CASCADE 静默删掉更多东西
+const isDependencyError = (msg: string) => /depend(s|ency)? on it|dependent objects/i.test(msg || '')
+
+const dropTableCascade = async () => {
+  if (!props.selectedTable) return
+  loadingDrop.value = true
+  try {
+    const q = getQuote()
+    const res = await execSql(`DROP TABLE ${q}${props.selectedTable}${q} CASCADE`)
+    if (res.code === 0) {
+      message.success('表及其依赖对象已删除')
+      emit('tableDropped')
+    } else {
+      message.error(res.msg || '删除失败')
+    }
+  } catch {
+    message.error('请求失败')
+  } finally {
+    loadingDrop.value = false
   }
 }
 
@@ -99,8 +123,18 @@ const handleDrop = async () => {
     if (res.code === 0) {
       message.success('表已删除')
       emit('tableDropped')
+    } else if (serverType.value === 'postgresql' && isDependencyError(res.msg)) {
+      loadingDrop.value = false
+      dialog.warning({
+        title: '存在依赖对象',
+        content: `表 ${props.selectedTable} 被其他数据库对象（如视图、外键）依赖，无法直接删除。是否级联删除（CASCADE）？这会连带删除所有依赖它的对象，此操作不可恢复！`,
+        positiveText: '级联删除',
+        negativeText: '取消',
+        onPositiveClick: dropTableCascade
+      })
+      return
     } else {
-      message.error(res.message || '删除失败')
+      message.error(res.msg || '删除失败')
     }
   } catch (err: any) {
     message.error('请求失败')
@@ -123,7 +157,7 @@ const handleRename = async () => {
       emit('tableRenamed', newTableName.value)
       newTableName.value = ''
     } else {
-      message.error(res.message || '重命名失败')
+      message.error(res.msg || '重命名失败')
     }
   } catch (err: any) {
     message.error('请求失败')
@@ -162,7 +196,7 @@ const handleCopy = async () => {
       copyTargetName.value = ''
       emit('tableRenamed', name)
     } else {
-      message.error(res.message || '复制失败')
+      message.error(res.msg || '复制失败')
     }
   } catch (err: any) {
     message.error(err?.message || '复制请求失败')
@@ -256,9 +290,9 @@ const handleMaintain = async (operation: string) => {
       maintainResults.value = [{
         operation: operation.toUpperCase(),
         type: 'ERROR',
-        text: res.message || '操作失败'
+        text: res.msg || '操作失败'
       }]
-      message.error(res.message || `${operation.toUpperCase()} 执行失败`)
+      message.error(res.msg || `${operation.toUpperCase()} 执行失败`)
     }
   } catch (err: any) {
     maintainResults.value = [{

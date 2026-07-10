@@ -127,6 +127,14 @@ type CopyTableReq struct {
 	CopyData       bool   `json:"copyData"`
 }
 
+// ChangeTableOwnerReq 修改表的所有者（仅 PostgreSQL 支持真正的表级 owner）
+type ChangeTableOwnerReq struct {
+	ServerID     uint   `json:"serverId" validate:"required"`
+	DatabaseName string `json:"databaseName" validate:"required"`
+	TableName    string `json:"tableName" validate:"required"`
+	Owner        string `json:"owner" validate:"required"`
+}
+
 // CreateTableReq 创建表
 type CreateTableReq struct {
 	ServerID     uint        `json:"serverId" validate:"required"`

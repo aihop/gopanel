@@ -378,3 +378,17 @@ func CreateDBManagerTable(c fiber.Ctx) error {
 	}
 	return c.JSON(e.Succ("创建成功"))
 }
+
+// ChangeDBManagerTableOwner 修改表的所有者（仅 PostgreSQL）
+// @Router /database/manager/change-table-owner [post]
+func ChangeDBManagerTableOwner(c fiber.Ctx) error {
+	req, err := e.BodyToStruct[request.ChangeTableOwnerReq](c.Body())
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	err = service.NewDBManagerService().ChangeTableOwner(*req)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	return c.JSON(e.Succ("修改成功"))
+}

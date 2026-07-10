@@ -4,47 +4,40 @@ import (
 	"time"
 )
 
+// Cronjob 计划任务
 type Cronjob struct {
 	BaseModel
 
-	Name string `gorm:"type:varchar(64);not null" json:"name"`
-	Type string `gorm:"type:varchar(64);not null" json:"type"`
-	Spec string `gorm:"type:varchar(64);not null" json:"spec"`
+	Name   string `gorm:"type:varchar(64);not null" json:"name"`
+	Type   string `gorm:"type:varchar(32);not null" json:"type"` // shell | db_backup | log_clean | ssl_renew
+	Spec   string `gorm:"type:varchar(64);not null" json:"spec"` // 5 段 cron 表达式
+	Status string `gorm:"type:varchar(16);not null" json:"status"`
+	// robfig/cron 返回的 EntryID，未调度（如禁用状态）时为 0
+	EntryID int `gorm:"type:int;not null;default:0" json:"entryID"`
 
-	Command        string `gorm:"type:varchar(64)" json:"command"`
-	ContainerName  string `gorm:"type:varchar(64)" json:"containerName"`
-	Script         string `gorm:"longtext" json:"script"`
-	Website        string `gorm:"type:varchar(64)" json:"website"`
-	AppID          string `gorm:"type:varchar(64)" json:"appID"`
-	DBType         string `gorm:"type:varchar(64)" json:"dbType"`
-	DBName         string `gorm:"type:varchar(64)" json:"dbName"`
-	URL            string `gorm:"type:varchar(256)" json:"url"`
-	SourceDir      string `gorm:"type:varchar(256)" json:"sourceDir"`
-	ExclusionRules string `gorm:"longtext" json:"exclusionRules"`
+	// shell 类型
+	Script string `gorm:"type:longtext" json:"script"`
 
-	// 已废弃
-	KeepLocal   bool   `gorm:"type:varchar(64)" json:"keepLocal"`
-	TargetDirID uint64 `gorm:"type:decimal" json:"targetDirID"`
+	// db_backup 类型
+	ServerID     uint   `gorm:"type:int unsigned;not null;default:0" json:"serverID"`
+	DBType       string `gorm:"type:varchar(32)" json:"dbType"`
+	DBName       string `gorm:"type:varchar(128)" json:"dbName"`
+	RetainCopies int    `gorm:"type:int;not null;default:0" json:"retainCopies"`
 
-	BackupAccounts  string `gorm:"type:varchar(64)" json:"backupAccounts"`
-	DefaultDownload string `gorm:"type:varchar(64)" json:"defaultDownload"`
-	RetainCopies    uint64 `gorm:"type:decimal" json:"retainCopies"`
+	// log_clean 类型
+	LogType string `gorm:"type:varchar(32)" json:"logType"` // operation | login | all
 
-	Status   string       `gorm:"type:varchar(64)" json:"status"`
-	EntryIDs string       `gorm:"type:varchar(64)" json:"entryIDs"`
-	Records  []JobRecords `json:"records"`
-	Secret   string       `gorm:"type:varchar(64)" json:"secret"`
+	// 最近一次执行记录，仅列表接口回填展示用，不持久化
+	LastRecord *JobRecords `gorm:"-" json:"lastRecord,omitempty"`
 }
 
+// JobRecords 计划任务执行记录
 type JobRecords struct {
 	BaseModel
 
-	CronjobID uint      `gorm:"type:decimal" json:"cronjobID"`
-	StartTime time.Time `gorm:"type:datetime" json:"startTime"`
-	Interval  float64   `gorm:"type:float" json:"interval"`
-	Records   string    `gorm:"longtext" json:"records"`
-	FromLocal bool      `gorm:"type:varchar(64)" json:"source"`
-	File      string    `gorm:"type:varchar(256)" json:"file"`
-	Status    string    `gorm:"type:varchar(64)" json:"status"`
-	Message   string    `gorm:"longtext" json:"message"`
+	CronjobID uint      `gorm:"type:int unsigned;not null;index" json:"cronjobID"`
+	StartTime time.Time `json:"startTime"`
+	EndTime   time.Time `json:"endTime"`
+	Status    string    `gorm:"type:varchar(16);not null" json:"status"`
+	Message   string    `gorm:"type:longtext" json:"message"`
 }
