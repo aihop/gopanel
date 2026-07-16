@@ -1,4 +1,9 @@
 import http from "@/api"
+import type { ResultData } from "@/api/interface"
+
+type DBManagerImportResult = {
+	imported: number
+}
 
 export const databaseListAPI = (params: any) => {
 	return http.post(`/database/list`, params)
@@ -111,7 +116,7 @@ export const exportDBManagerTableAPI = (data: {
 }
 
 export const importDBManagerTableAPI = (data: { serverId: number; databaseName: string; tableName: string; format: string; content: string }) => {
-	return http.post(`/database/manager/import`, data)
+	return http.post<DBManagerImportResult>(`/database/manager/import`, data)
 }
 
 export const uploadDBManagerImportAPI = (data: { serverId: number; databaseName: string; tableName: string; format: string; file: File }) => {
@@ -121,7 +126,7 @@ export const uploadDBManagerImportAPI = (data: { serverId: number; databaseName:
 	formData.append('tableName', data.tableName)
 	formData.append('format', data.format)
 	formData.append('file', data.file)
-	return http.upload(`/database/manager/upload`, formData, {
+	return http.upload<ResultData<DBManagerImportResult>>(`/database/manager/upload`, formData, {
 		headers: { 
 			'Content-Type': 'multipart/form-data' 
 		},
@@ -131,7 +136,7 @@ export const uploadDBManagerImportAPI = (data: { serverId: number; databaseName:
 
 // 分片上传导入 SQL（支持大文件）
 export const chunkImportDBAPI = (formData: FormData, config?: import('axios').AxiosRequestConfig) => {
-	return http.upload(`/database/manager/chunk-import`, formData, {
+	return http.upload<ResultData<DBManagerImportResult>>(`/database/manager/chunk-import`, formData, {
 		headers: { 'Content-Type': 'multipart/form-data' },
 		timeout: 300000, // 5 min
 		...config,
