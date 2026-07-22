@@ -257,7 +257,7 @@ const onFileSelected = async (e: Event) => {
           message.success(`SQL 导入成功，已执行 ${count} 条语句`)
           fetchData()
         } else {
-          message.error(res.message || '导入失败')
+          message.error(res.msg || '导入失败')
         }
       }
     }

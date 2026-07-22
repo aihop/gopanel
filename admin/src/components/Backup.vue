@@ -78,8 +78,8 @@
             :loading="loading"
             :pagination="paginationOptions"
             remote
-            @update:page="onPageChange"
-            @update:pageSize="onPageSizeChange"
+            @update:page="handlePageChange"
+            @update:pageSize="handlePageSizeChange"
             @update:checked-row-keys="handleCheckAll"
             scroll-x="1000"
           />
@@ -134,7 +134,7 @@
 
     <OpDialog
       ref="opRef"
-      @search="getData"
+      @search="refreshBackupRecords"
     />
   </div>
 </template>
@@ -184,13 +184,6 @@ const router = useRouter()
 const selects = ref<any[]>([])
 const opRef = ref<any>(null)
 
-const data = ref<any[]>([])
-const paginationConfig = reactive({
-	currentPage: 1,
-	limit: 10,
-	total: 0
-})
-
 const backupVisible = ref(false)
 const type = ref<string>("")
 const name = ref<string>("")
@@ -211,13 +204,13 @@ const modalTitle = computed(() =>
 )
 
 const paginationOptions = computed(() => ({
-	page: paginationConfig.currentPage,
-	limit: paginationConfig.limit,
-	pageCount: Math.max(1, Math.ceil((paginationConfig.total || 0) / paginationConfig.limit)),
+	page: curPage.value,
+	pageSize: pageSize.value,
+	pageCount: Math.max(1, Math.ceil((total.value || 0) / pageSize.value)),
 	showSizePicker: true,
 	pageSizes: [10, 20, 50, 100],
 	showQuickJumper: true,
-	itemCount: paginationConfig.total
+	itemCount: total.value
 }))
 
 const loadBackupDir = async () => {
@@ -241,22 +234,28 @@ const goFile = async () => {
 	router.push({ name: "File", query: { path: `${backupPath.value}/app/${name.value}/${detailName.value}` } })
 }
 
-const loadSize = async (params: any) => {
+const loadSize = async () => {
 	try {
-		const res = await backupRecordSizeAPI(params)
+		// 复用 useTable 的查询参数构造，保证 size 查询和列表查询命中同一批记录
+		const res = await backupRecordSizeAPI({
+			page: curPage.value,
+			limit: pageSize.value,
+			...(getParams() || {})
+		})
 		const stats = (res.data as any[]) || []
-		if (!stats.length) return
+		const statsMap = new Map(stats.map((item: any) => [item.id, item.size]))
 		for (const backup of list.value) {
-			for (const item of stats) {
-				if (backup.id === item.id) {
-					backup.hasLoad = true
-					backup.size = item.size
-					break
-				}
+			backup.hasLoad = true
+			// 后端没返回的记录保持 size 为 undefined（显示 "-" 且不禁用恢复/下载），
+			// 不能写 0：size===0 会被当作空备份禁用恢复和下载按钮
+			if (statsMap.has(backup.id)) {
+				backup.size = statsMap.get(backup.id)
 			}
 		}
 	} catch {
-		loading.value = false
+		for (const backup of list.value) {
+			backup.hasLoad = true
+		}
 	}
 }
 
@@ -360,12 +359,12 @@ const params = reactive({
 		wheres: [
 			{
 				field: "detailName",
-				rule: "=",
+				rule: "eq",
 				val: ""
 			},
 			{
 				field: "type",
-				rule: "=",
+				rule: "eq",
 				val: ""
 			}
 		]
@@ -374,17 +373,30 @@ const params = reactive({
 
 const {
 	list,
-	pages,
 	curPage,
 	pageSize,
-	getList,
 	loading,
 	getData,
-	onPageSizeChange,
-	onPageChange,
-	pageSizeOptions,
+	getParams,
 	total
 } = useTable(params)
+
+const refreshBackupRecords = async () => {
+	await getData()
+	if (!list.value.length) return
+	await loadSize()
+}
+
+const handlePageChange = async (page: number) => {
+	curPage.value = page
+	await refreshBackupRecords()
+}
+
+const handlePageSizeChange = async (size: number) => {
+	pageSize.value = size
+	curPage.value = 1
+	await refreshBackupRecords()
+}
 
 const onRecover = async (row: Backup.RecordInfo) => {
 	isBackup.value = false
@@ -543,23 +555,21 @@ const acceptParams = (param: { type: string; name: string; detailName: string; s
 	backupVisible.value = true
 	status.value = "Running"
 	detailId.value = param.detailId || 0
+	selects.value = []
+	curPage.value = 1
 	params.params.wheres[0].val = detailName.value
 	params.params.wheres[1].val = param.type
-	getData()
-	setTimeout(() => {
-		if (total.value === 0) return
-		loadSize(params)
-	}, 300)
+	void refreshBackupRecords()
 }
 
 defineExpose({ acceptParams })
 
 onMounted(() => {
-	emitter.on("database:refresh", getData)
+	emitter.on("database:refresh", refreshBackupRecords)
 })
 
 onUnmounted(() => {
-	emitter.off("database:refresh", getData)
+	emitter.off("database:refresh", refreshBackupRecords)
 })
 </script>
 

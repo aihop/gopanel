@@ -236,6 +236,7 @@ export function useTable(params: any) {
 		pageSize,
 		pageSizeOptions,
 		getList,
+		getParams,
 		loading,
 		onPageChange,
 		onPageSizeChange,

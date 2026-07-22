@@ -341,13 +341,15 @@ func getCreateTableSQL(db *sql.DB, dbType model.DatabaseType, tableName string, 
 		}
 	case model.DatabaseTypePostgresql:
 		// PostgreSQL: 从 pg_catalog 重建 CREATE TABLE
+		// 注意：默认值必须用 pg_get_expr(adbin, adrelid)，adsrc 列在 PostgreSQL 12 中已被移除
+		regclass := quote(tableName)
 		rows, err := db.Query(fmt.Sprintf(`
 			SELECT a.attname, pg_catalog.format_type(a.atttypid, a.atttypmod), a.attnotnull,
-				COALESCE(d.adsrc, NULL) AS default_val
+				pg_catalog.pg_get_expr(d.adbin, d.adrelid) AS default_val
 			FROM pg_catalog.pg_attribute a
 			LEFT JOIN pg_catalog.pg_attrdef d ON a.attrelid = d.adrelid AND a.attnum = d.adnum
 			WHERE a.attrelid = '%s'::regclass AND a.attnum > 0 AND NOT a.attisdropped
-			ORDER BY a.attnum`, tableName))
+			ORDER BY a.attnum`, regclass))
 		if err != nil {
 			return ""
 		}
@@ -367,11 +369,38 @@ func getCreateTableSQL(db *sql.DB, dbType model.DatabaseType, tableName string, 
 			if notNull {
 				def += " NOT NULL"
 			}
-			if defaultVal != nil && *defaultVal != "" {
+			// 跳过 nextval(...) 序列默认值：导出文件里没有对应的 CREATE SEQUENCE，
+			// 带上它会导致导入到新库时报 "relation xxx_seq does not exist"
+			if defaultVal != nil && *defaultVal != "" && !strings.Contains(*defaultVal, "nextval(") {
 				def += " DEFAULT " + *defaultVal
 			}
 			cols = append(cols, def)
 		}
+		if len(cols) == 0 {
+			return ""
+		}
+
+		// 主键
+		pkRows, err := db.Query(fmt.Sprintf(`
+			SELECT a.attname
+			FROM pg_catalog.pg_index i
+			JOIN pg_catalog.pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+			WHERE i.indrelid = '%s'::regclass AND i.indisprimary
+			ORDER BY array_position(i.indkey::int2[], a.attnum)`, regclass))
+		if err == nil {
+			var pkCols []string
+			for pkRows.Next() {
+				var colName string
+				if err := pkRows.Scan(&colName); err == nil {
+					pkCols = append(pkCols, quote(colName))
+				}
+			}
+			pkRows.Close()
+			if len(pkCols) > 0 {
+				cols = append(cols, fmt.Sprintf("  PRIMARY KEY (%s)", strings.Join(pkCols, ", ")))
+			}
+		}
+
 		b.WriteString(strings.Join(cols, ",\n"))
 		b.WriteString("\n);\n\n")
 		return b.String()

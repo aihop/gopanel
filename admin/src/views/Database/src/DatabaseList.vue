@@ -239,14 +239,18 @@ const openRecover = (row: any) => {
 	})
 }
 
+const handleDatabaseRefresh = () => {
+	getData()
+}
+
 onMounted(() => {
-	emitter.on("database:refresh", () => {
-		getData()
-	})
+	emitter.on("database:refresh", handleDatabaseRefresh)
 })
 
 onUnmounted(() => {
-	emitter.off("database:refresh")
+	// 必须传入具体 handler：不带参数的 off 会清空该事件的全部监听器，
+	// 连同 Backup.vue 等其他组件注册的一起移除
+	emitter.off("database:refresh", handleDatabaseRefresh)
 })
 </script>
 

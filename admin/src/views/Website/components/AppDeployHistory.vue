@@ -229,7 +229,7 @@ import { computed, ref, h } from "vue"
 import { NButton, NTag, NSpace, useMessage, useDialog, NModal, NUpload } from "naive-ui"
 import type { DataTableColumns, UploadCustomRequestOptions } from "naive-ui"
 import { formatTime } from "@/utils/date"
-import { UploadFileData } from "@/api/modules/file"
+import { UploadFileData, ChunkUploadFileData } from "@/api/modules/file"
 import { listAllPipelines } from "@/utils/pipeline"
 import { hasWebsiteRuntimeMeta, isImageWebsiteSource, resolveWebsiteBindingMeta } from "@/utils/websiteRuntime"
 import { AppDeployDeleteAPI, AppDeployListAPI, AppDeploySwitchAPI, AppDeployTriggerAPI, AppDeploySnapshotAPI, WebsiteReleasePageAPI } from "@/api/modules/website"
@@ -389,28 +389,57 @@ async function handleCreateSnapshot() {
 	}
 }
 
+const UPLOAD_DIR = "/opt/gopanel/upload"
+// 服务端默认请求体大小限制在 4MB 左右，超过这个大小的文件必须走分片上传，否则会被拒绝
+const MAX_SINGLE_FILE_SIZE = 1024 * 1024 * 4
+const CHUNK_SIZE = 1024 * 1024 * 3
+
+async function uploadSingle(file: File, onProgress: UploadCustomRequestOptions["onProgress"]) {
+	const formData = new FormData()
+	formData.append("file", file)
+	formData.append("path", UPLOAD_DIR)
+	await UploadFileData(formData, {
+		onUploadProgress: ({ loaded, total }) => {
+			onProgress({ percent: Math.round((loaded / (total || 1)) * 100) })
+		}
+	})
+}
+
+async function uploadLarge(file: File, onProgress: UploadCustomRequestOptions["onProgress"]) {
+	const chunkCount = Math.ceil(file.size / CHUNK_SIZE)
+	for (let i = 0; i < chunkCount; i++) {
+		const start = i * CHUNK_SIZE
+		const end = Math.min(start + CHUNK_SIZE, file.size)
+		const formData = new FormData()
+		formData.append("filename", file.name)
+		formData.append("path", UPLOAD_DIR)
+		formData.append("chunk", file.slice(start, end))
+		formData.append("chunkIndex", i.toString())
+		formData.append("chunkCount", chunkCount.toString())
+		formData.append("overwrite", "true")
+		await ChunkUploadFileData(formData, {})
+		onProgress({ percent: Math.round(((i + 1) / chunkCount) * 100) })
+	}
+}
+
 async function customRequest({ file, onFinish, onError, onProgress }: UploadCustomRequestOptions) {
 	if (!file.file) {
 		onError()
 		return
 	}
-
-	const formData = new FormData()
-	formData.append("file", file.file)
-	// Put the file into /opt/gopanel/upload (or a generic upload dir)
-	formData.append("path", "/opt/gopanel/upload")
+	const rawFile = file.file
 
 	try {
-		await UploadFileData(formData, {
-			onUploadProgress: ({ loaded, total }) => {
-				onProgress({ percent: Math.round((loaded / (total || 1)) * 100) })
-			}
-		})
-		
+		if (rawFile.size <= MAX_SINGLE_FILE_SIZE) {
+			await uploadSingle(rawFile, onProgress)
+		} else {
+			await uploadLarge(rawFile, onProgress)
+		}
+
 		// If upload succeeds, trigger deployment
 		await AppDeployTriggerAPI({
 			websiteId: website.value.id,
-			zipPath: `/opt/gopanel/upload/${file.file.name}`
+			zipPath: `${UPLOAD_DIR}/${rawFile.name}`
 		})
 
 		showUploadModal.value = false

@@ -273,7 +273,7 @@ const fileInput = ref<HTMLInputElement | null>(null)
 
 const paginationOptions = {
 	page: paginationConfig.currentPage,
-	limit: paginationConfig.limit,
+	pageSize: paginationConfig.limit,
 	pageCount: Math.max(1, Math.ceil((paginationConfig.total || 0) / paginationConfig.limit)),
 	showSizePicker: true,
 	pageSizes: [10, 20, 50, 100],

@@ -58,45 +58,48 @@ type loadSizeHelper struct {
 }
 
 func (u *BackupRecordService) loadRecordSize(records []*model.BackupRecord) ([]dto.BackupFile, error) {
-	var datas []dto.BackupFile
+	datas := make([]dto.BackupFile, len(records))
 	clientMap := make(map[string]loadSizeHelper)
-	var wg sync.WaitGroup
 	var backupAccountRepo = repo.NewCloudAccount()
 	for i := 0; i < len(records); i++ {
-		var item dto.BackupFile
-		item.ID = records[i].ID
-		item.Name = records[i].FileName
-		itemPath := path.Join(records[i].FileDir, records[i].FileName)
+		datas[i].ID = records[i].ID
+		datas[i].Name = records[i].FileName
 		if _, ok := clientMap[string(records[i].Source)]; !ok {
 			backup, err := backupAccountRepo.Get(context.Background(), string(records[i].Source))
 			if err != nil {
 				global.LOG.Errorf("load backup model %s from db failed, err: %v", records[i].Source, err)
 				clientMap[string(records[i].Source)] = loadSizeHelper{}
-				datas = append(datas, item)
 				continue
 			}
 			client, config, err := u.NewClient(&backup)
 			if err != nil {
 				global.LOG.Errorf("load backup client %s from db failed, err: %v", records[i].Source, err)
 				clientMap[string(records[i].Source)] = loadSizeHelper{}
-				datas = append(datas, item)
 				continue
 			}
-			item.Size, _ = client.Size(path.Join(strings.TrimLeft(config.BackupPath, "/"), itemPath))
-			datas = append(datas, item)
 			clientMap[string(records[i].Source)] = loadSizeHelper{backupPath: strings.TrimLeft(config.BackupPath, "/"), client: client, isOk: true}
+		}
+	}
+
+	// 并发获取远端文件大小（每条记录一次网络往返，串行会让接口耗时随记录数线性放大），
+	// 结果按下标写入各自的槽位，避免旧版并发 append 的数据竞争
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 8)
+	for i := 0; i < len(records); i++ {
+		helper := clientMap[string(records[i].Source)]
+		if !helper.isOk {
 			continue
 		}
-		if clientMap[string(records[i].Source)].isOk {
-			wg.Add(1)
-			go func(index int) {
-				item.Size, _ = clientMap[string(records[index].Source)].client.Size(path.Join(clientMap[string(records[index].Source)].backupPath, itemPath))
-				datas = append(datas, item)
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(index int, h loadSizeHelper) {
+			defer func() {
+				<-sem
 				wg.Done()
-			}(i)
-		} else {
-			datas = append(datas, item)
-		}
+			}()
+			itemPath := path.Join(records[index].FileDir, records[index].FileName)
+			datas[index].Size, _ = h.client.Size(path.Join(h.backupPath, itemPath))
+		}(i, helper)
 	}
 	wg.Wait()
 	return datas, nil
