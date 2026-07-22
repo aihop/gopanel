@@ -386,20 +386,30 @@ func (s *Server) cleanAndCheckPath(p string, mustExist bool) (string, error) {
 		}
 		resolved = checkPath
 	}
-	for _, r := range roots {
-		r = strings.TrimSpace(r)
-		if r == "" {
-			continue
-		}
-		r = filepath.Clean(r)
-		if resolved == r || strings.HasPrefix(resolved, r+string(os.PathSeparator)) {
-			if mustExist {
-				if _, err := os.Lstat(clean); err != nil {
-					return "", err
-				}
+	within := func(target string) bool {
+		for _, r := range roots {
+			r = strings.TrimSpace(r)
+			if r == "" {
+				continue
 			}
-			return clean, nil
+			r = filepath.Clean(r)
+			if target == r || strings.HasPrefix(target, r+string(os.PathSeparator)) {
+				return true
+			}
 		}
+		return false
+	}
+	if within(resolved) {
+		if mustExist {
+			if _, err := os.Lstat(clean); err != nil {
+				return "", err
+			}
+		} else if full, err := filepath.EvalSymlinks(clean); err == nil && !within(full) {
+			// 写入场景下，最终路径本身若是指向 roots 外的符号链接，
+			// os.WriteFile 会跟随它以 root 身份写到允许根之外——这里显式拦截。
+			return "", errors.New("path is outside allowed roots")
+		}
+		return clean, nil
 	}
 	return "", errors.New("path is outside allowed roots")
 }

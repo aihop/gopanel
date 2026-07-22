@@ -345,7 +345,7 @@ func (s *Server) actionPodmanSocketRepair(ctx context.Context, params map[string
 		_ = os.Chmod(filepath.Dir(socketPath), 0700)
 
 		userScript := fmt.Sprintf(
-			"export XDG_RUNTIME_DIR=%s; export DBUS_SESSION_BUS_ADDRESS=unix:path=%s; systemctl --user daemon-reload || true; systemctl --user enable podman.socket || true; systemctl --user restart podman.socket || systemctl --user start podman.socket",
+			"export XDG_RUNTIME_DIR=%s; export DBUS_SESSION_BUS_ADDRESS=unix:path=%s; systemctl --user daemon-reload || true; systemctl --user enable podman.socket || true; systemctl --user restart podman.socket || systemctl --user start podman.socket; systemctl --user enable podman-restart.service || true",
 			runtimeDir,
 			filepath.Join(runtimeDir, "bus"),
 		)

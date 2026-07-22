@@ -1513,6 +1513,11 @@ ensure_podman_socket_access() {
     return 0
   fi
   if [ "${RUNTIME_USER}" = "root" ]; then
+    # root 场景：启用系统级 podman.socket。不能只依赖 gopanel.service 的 Wants=podman.socket，
+    # 否则单独重启 podman 或单元未重建时 socket 不会被拉起。
+    log "启用系统级 podman.socket"
+    run_privileged systemctl enable --now podman.socket >/dev/null 2>&1 || \
+      warn "系统级 podman.socket 启用失败，请手动执行: systemctl enable --now podman.socket"
     return 0
   fi
 
@@ -1555,8 +1560,35 @@ ensure_podman_socket_access() {
   run_privileged mkdir -p "${user_home}/.config/containers" >/dev/null 2>&1 || true
   printf '[containers]\nlog_driver = "k8s-file"\nshort_name_mode = "permissive"\n' | run_privileged tee "${user_home}/.config/containers/containers.conf" >/dev/null 2>&1 || true
   run_privileged chown -R "${runtime_uid}:${runtime_uid}" "${user_home}/.config" >/dev/null 2>&1 || true
-  run_privileged su -s /bin/sh - "${RUNTIME_USER}" -c "export HOME='${user_home}'; export XDG_RUNTIME_DIR='${runtime_dir}'; export DBUS_SESSION_BUS_ADDRESS='unix:path=${runtime_dir}/bus'; systemctl --user daemon-reload >/dev/null 2>&1 || true; systemctl --user enable --now podman.socket >/dev/null 2>&1 || true"
-  if ! run_privileged test -S "${runtime_dir}/podman/podman.sock"; then
+
+  # enable-linger 拉起 user@UID.service 是异步的，必须等用户级 systemd 就绪，
+  # 否则紧接着的 systemctl --user 会因连不上 bus 而静默失败（podman socket 就不会被启用）
+  local wait_i
+  for wait_i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+    if run_privileged test -S "${runtime_dir}/systemd/private"; then
+      break
+    fi
+    if [ "${wait_i}" = "1" ]; then
+      log "等待用户 ${RUNTIME_USER} 的 systemd user manager 启动..."
+    fi
+    sleep 1
+  done
+  if ! run_privileged test -S "${runtime_dir}/systemd/private"; then
+    warn "用户 ${RUNTIME_USER} 的 systemd user manager 未就绪（${runtime_dir}/systemd/private 不存在），rootless Podman socket 可能无法启用。"
+  fi
+
+  # 启用 podman.socket，失败时重试几次（首次启动 user manager 后短暂窗口内仍可能失败）
+  local try_i
+  for try_i in 1 2 3; do
+    run_privileged su -s /bin/sh - "${RUNTIME_USER}" -c "export HOME='${user_home}'; export XDG_RUNTIME_DIR='${runtime_dir}'; export DBUS_SESSION_BUS_ADDRESS='unix:path=${runtime_dir}/bus'; systemctl --user daemon-reload >/dev/null 2>&1 || true; systemctl --user enable --now podman.socket >/dev/null 2>&1 || true; systemctl --user enable podman-restart.service >/dev/null 2>&1 || true"
+    if run_privileged test -S "${runtime_dir}/podman/podman.sock"; then
+      break
+    fi
+    sleep 2
+  done
+  if run_privileged test -S "${runtime_dir}/podman/podman.sock"; then
+    log "rootless Podman socket 已就绪: ${runtime_dir}/podman/podman.sock"
+  else
     warn "用户 ${RUNTIME_USER} 的 rootless Podman socket 尚未成功创建: ${runtime_dir}/podman/podman.sock"
     warn "非 root 运行面板时将优先使用该用户的 rootless Podman；若 socket 缺失，容器/镜像/流水线可能不可用。"
     warn "请检查 linger、systemd --user 与 podman.socket，必要时手动执行: loginctl enable-linger ${RUNTIME_USER} && su -s /bin/sh - ${RUNTIME_USER} -c 'export HOME=${user_home}; export XDG_RUNTIME_DIR=${runtime_dir}; export DBUS_SESSION_BUS_ADDRESS=unix:path=${runtime_dir}/bus; systemctl --user enable --now podman.socket'"

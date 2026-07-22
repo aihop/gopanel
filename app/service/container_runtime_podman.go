@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/aihop/gopanel/app/repo"
@@ -163,12 +164,14 @@ func ensurePodmanAPIReady() error {
 			curSetting, err := settingRepo.Get(settingRepo.WithByKey("DockerSockPath"))
 			if err != nil {
 				_ = settingRepo.UpdateOrCreate("DockerSockPath", okHost)
+				ensurePodmanRestartServiceEnabled(okHost)
 				return nil
 			}
 			cur := strings.TrimSpace(curSetting.Value)
 			if shouldUpdateDockerSockPath(cur) && cur != okHost {
 				_ = settingRepo.UpdateOrCreate("DockerSockPath", okHost)
 			}
+			ensurePodmanRestartServiceEnabled(okHost)
 			return nil
 		}
 		select {
@@ -189,6 +192,39 @@ func ensurePodmanAPIReady() error {
 		case <-ticker.C:
 		}
 	}
+}
+
+var podmanRestartEnableOnce sync.Once
+
+// ensurePodmanRestartServiceEnabled 保证 podman-restart.service 已启用。
+// Podman 的 --restart 策略只在 podman 会话存活期间生效；整机重启后，
+// 需要 podman-restart.service（开机触发的 oneshot，执行
+// `podman start --all --filter restart-policy=always`）才能把设置了
+// always 策略的容器重新拉起。仅启用 podman.socket 不会启动任何容器。
+// 面板本身以 rootless 运行用户身份运行，可直接 systemctl --user enable。
+// 用 sync.Once 保证每个进程只尝试一次，避免在 ensurePodmanAPIReady 轮询里反复执行。
+func ensurePodmanRestartServiceEnabled(host string) {
+	if runtime.GOOS != "linux" {
+		return
+	}
+	if _, err := exec.LookPath("systemctl"); err != nil {
+		return
+	}
+	podmanRestartEnableOnce.Do(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		var c *exec.Cmd
+		if os.Geteuid() != 0 && docker.IsRootlessPodmanHost(host) {
+			// rootless：面板即为该用户，直接启用用户级单元
+			c = exec.CommandContext(ctx, "systemctl", "--user", "enable", "podman-restart.service")
+		} else if os.Geteuid() == 0 {
+			// rootful：启用系统级单元
+			c = exec.CommandContext(ctx, "systemctl", "enable", "podman-restart.service")
+		} else {
+			return
+		}
+		_ = c.Run()
+	})
 }
 
 func firstReachablePodmanHost(ctx context.Context, candidates []string, lastErrs map[string]string) string {

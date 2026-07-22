@@ -109,14 +109,22 @@ func (s *DBManagerService) GetTableData(req request.GetTableDataReq) (map[string
 	defer db.Close()
 	var countSql, dataSql string
 	var whereClauses []string
+	// 搜索条件的「值」一律走占位符参数化，杜绝 SQL 注入（含 MySQL 反斜杠转义闭合引号的场景）；
+	// 只有列名/表名这类标识符无法参数化，仍走 sanitizeIdent + quoteIdent。
+	var args []interface{}
+	addParam := func(v interface{}) string {
+		args = append(args, v)
+		if server.Type == model.DatabaseTypePostgresql {
+			return fmt.Sprintf("$%d", len(args))
+		}
+		return "?"
+	}
 	if req.SearchColumn != "" && req.SearchValue != "" {
 		col := sanitizeIdent(req.SearchColumn)
-		val := strings.ReplaceAll(req.SearchValue, "'", "''")
-		whereClauses = append(whereClauses, fmt.Sprintf("%s LIKE '%%%s%%'", quoteIdent(server.Type, col), val))
+		whereClauses = append(whereClauses, fmt.Sprintf("%s LIKE %s", quoteIdent(server.Type, col), addParam("%"+req.SearchValue+"%")))
 	}
 	for _, cond := range req.AdvancedSearch {
 		col := sanitizeIdent(cond.Column)
-		val := strings.ReplaceAll(cond.Value, "'", "''")
 		op := strings.ToUpper(cond.Operator)
 		validOps := map[string]bool{"=": true, "!=": true, ">": true, "<": true, ">=": true, "<=": true, "LIKE": true, "NOT LIKE": true, "IS NULL": true, "IS NOT NULL": true}
 		if !validOps[op] {
@@ -126,12 +134,13 @@ func (s *DBManagerService) GetTableData(req request.GetTableDataReq) (map[string
 		if op == "IS NULL" || op == "IS NOT NULL" {
 			clause = fmt.Sprintf("%s %s", quoteIdent(server.Type, col), op)
 		} else {
+			val := cond.Value
 			if op == "LIKE" || op == "NOT LIKE" {
 				if !strings.Contains(val, "%") {
 					val = "%" + val + "%"
 				}
 			}
-			clause = fmt.Sprintf("%s %s '%s'", quoteIdent(server.Type, col), op, val)
+			clause = fmt.Sprintf("%s %s %s", quoteIdent(server.Type, col), op, addParam(val))
 		}
 		whereClauses = append(whereClauses, clause)
 	}
@@ -146,10 +155,10 @@ func (s *DBManagerService) GetTableData(req request.GetTableDataReq) (map[string
 	}
 	dataSql = fmt.Sprintf("SELECT %s FROM %s%s LIMIT %d OFFSET %d", selectCols, quoteTable(server.Type, tableName), whereClause, req.Limit, offset)
 	var total int64
-	if err := db.QueryRow(countSql).Scan(&total); err != nil {
+	if err := db.QueryRow(countSql, args...).Scan(&total); err != nil {
 		return nil, err
 	}
-	rows, err := db.Query(dataSql)
+	rows, err := db.Query(dataSql, args...)
 	if err != nil {
 		return nil, err
 	}

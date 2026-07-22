@@ -201,7 +201,9 @@ func normalizeHostConfigForRuntime(hostConf *container.HostConfig) {
 		hostConf.UTSMode = "host"
 	}
 	if hostConf.RestartPolicy.Name == "" {
-		hostConf.RestartPolicy.Name = container.RestartPolicyMode("no")
+		// 默认 always：整机重启后配合已启用的 podman-restart.service 自动恢复容器。
+		// 仅当未显式指定策略时生效；用户在 UI 里显式选择 no 会原样保留。
+		hostConf.RestartPolicy.Name = container.RestartPolicyMode("always")
 	}
 }
 func reCreateAfterUpdate(name string, client *client.Client, config *container.Config, hostConf *container.HostConfig, networkConf *types.NetworkSettings) {
