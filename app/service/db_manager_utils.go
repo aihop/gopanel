@@ -163,10 +163,18 @@ func formatExportValue(val interface{}) string {
 	case int64, int, float64, float32:
 		return fmt.Sprint(v)
 	case bool:
+		// 用 TRUE/FALSE 而非裸 1/0：PG 的 boolean 列不接受整数字面量，
+		// MySQL / SQLite 也都识别 TRUE/FALSE
 		if v {
-			return "1"
+			return "TRUE"
 		}
-		return "0"
+		return "FALSE"
+	case time.Time:
+		// 关键：不能用 fmt.Sprint(time.Time)，它会输出 Go 默认格式
+		// "2006-01-02 15:04:05.999999 -0700 MST"，其中的时区名(CST 等)会被
+		// PG/MySQL 拒绝。这里输出标准 SQL 时间字面量（不带时区偏移，
+		// 对 timestamp / timestamptz / datetime 均可解析）。
+		return "'" + v.Format("2006-01-02 15:04:05.999999") + "'"
 	case string:
 		return quoteSQLString(v)
 	case []byte:
