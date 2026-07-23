@@ -7,7 +7,7 @@ import (
 	"github.com/aihop/gopanel/app/e"
 	"github.com/aihop/gopanel/app/service"
 	"github.com/aihop/gopanel/buserr"
-	"github.com/aihop/gopanel/constant"
+	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/pkg/websocket"
 	"github.com/gofiber/fiber/v3"
 	"os"
@@ -28,7 +28,8 @@ func ContainerList(c fiber.Ctx) error {
 func ContainerAll(c fiber.Ctx) error {
 	list, err := service.NewIContainerService().List()
 	if err != nil {
-		return c.JSON(e.Error(buserr.Err(errors.New(constant.ErrTypeInternalServer))))
+		global.LOG.Errorf("%s api error: %v", c.Path(), err)
+		return c.JSON(e.Error(buserr.Err(err)))
 	}
 	return c.JSON(e.Succ(list))
 }
@@ -49,21 +50,24 @@ func ContainerInfo(c fiber.Ctx) error {
 	}
 	data, err := service.NewIContainerService().ContainerInfo(R)
 	if err != nil {
-		return c.JSON(e.Fail(buserr.Err(errors.New(constant.ErrTypeInternalServer))))
+		global.LOG.Errorf("container info failed, name: %s, host: %s, err: %v", R.Name, R.RuntimeHost, err)
+		return c.JSON(e.Fail(buserr.Err(err)))
 	}
 	return c.JSON(e.Succ(data))
 }
 func LoadResourceLimit(c fiber.Ctx) error {
 	data, err := service.NewIContainerService().LoadResourceLimit()
 	if err != nil {
-		return c.JSON(e.Error(buserr.Err(errors.New(constant.ErrTypeInternalServer))))
+		global.LOG.Errorf("%s api error: %v", c.Path(), err)
+		return c.JSON(e.Error(buserr.Err(err)))
 	}
 	return c.JSON(e.Succ(data))
 }
 func ContainerListStats(c fiber.Ctx) error {
 	data, err := service.NewIContainerService().ContainerListStats()
 	if err != nil {
-		return c.JSON(e.Error(buserr.Err(errors.New(constant.ErrTypeInternalServer))))
+		global.LOG.Errorf("%s api error: %v", c.Path(), err)
+		return c.JSON(e.Error(buserr.Err(err)))
 	}
 	return c.JSON(e.Succ(data))
 }
@@ -73,7 +77,8 @@ func ContainerCreate(c fiber.Ctx) error {
 		return c.JSON(e.Fail(buserr.Err(err)))
 	}
 	if err := service.NewIContainerService().ContainerCreate(R); err != nil {
-		return c.JSON(e.Fail(buserr.Err(errors.New(constant.ErrTypeInternalServer))))
+		global.LOG.Errorf("%s api error: %v", c.Path(), err)
+		return c.JSON(e.Fail(buserr.Err(err)))
 	}
 	return c.JSON(e.Succ())
 }
@@ -83,7 +88,8 @@ func ContainerUpgrade(c fiber.Ctx) error {
 		return c.JSON(e.Fail(buserr.Err(err)))
 	}
 	if err := service.NewIContainerService().ContainerUpgrade(R); err != nil {
-		return c.JSON(e.Fail(buserr.Err(errors.New(constant.ErrTypeInternalServer))))
+		global.LOG.Errorf("%s api error: %v", c.Path(), err)
+		return c.JSON(e.Fail(buserr.Err(err)))
 	}
 	return c.JSON(e.Succ())
 }
@@ -122,7 +128,8 @@ func ContainerRename(c fiber.Ctx) error {
 		return c.JSON(e.Fail(buserr.Err(err)))
 	}
 	if err := service.NewIContainerService().ContainerRename(R); err != nil {
-		return c.JSON(e.Fail(buserr.Err(errors.New(constant.ErrTypeInternalServer))))
+		global.LOG.Errorf("%s api error: %v", c.Path(), err)
+		return c.JSON(e.Fail(buserr.Err(err)))
 	}
 	return c.JSON(e.Succ())
 }
@@ -132,7 +139,8 @@ func ContainerCommit(c fiber.Ctx) error {
 		return c.JSON(e.Fail(buserr.Err(err)))
 	}
 	if err := service.NewIContainerService().ContainerCommit(R); err != nil {
-		return c.JSON(e.Fail(buserr.Err(errors.New(constant.ErrTypeInternalServer))))
+		global.LOG.Errorf("%s api error: %v", c.Path(), err)
+		return c.JSON(e.Fail(buserr.Err(err)))
 	}
 	return c.JSON(e.Succ())
 }
@@ -154,7 +162,8 @@ func ContainerStatsID(c fiber.Ctx) error {
 	}
 	result, err := service.NewIContainerService().ContainerStatsByID(containerID)
 	if err != nil {
-		return c.JSON(e.Fail(buserr.Err(errors.New(constant.ErrTypeInternalServer))))
+		global.LOG.Errorf("%s api error: %v", c.Path(), err)
+		return c.JSON(e.Fail(buserr.Err(err)))
 	}
 	return c.JSON(e.Succ(result))
 }
@@ -165,7 +174,8 @@ func ContainerInspect(c fiber.Ctx) error {
 	}
 	result, err := service.NewIContainerService().Inspect(R)
 	if err != nil {
-		return c.JSON(e.Fail(buserr.Err(errors.New(constant.ErrTypeInternalServer))))
+		global.LOG.Errorf("%s api error: %v", c.Path(), err)
+		return c.JSON(e.Fail(buserr.Err(err)))
 	}
 	return c.JSON(e.Succ(result))
 }
@@ -187,7 +197,8 @@ func DownloadContainerLogs(c fiber.Ctx) error {
 	}
 	info, err := service.NewIContainerService().DownloadContainerLogs(R.ContainerType, R.Container, R.Since, strconv.Itoa(int(R.Tail)), R.RuntimeHost)
 	if err != nil {
-		return c.JSON(e.Fail(buserr.Err(errors.New(constant.ErrTypeInternalServer))))
+		global.LOG.Errorf("%s api error: %v", c.Path(), err)
+		return c.JSON(e.Fail(buserr.Err(err)))
 	}
 	defer os.Remove(info)
 	return c.Download(info)

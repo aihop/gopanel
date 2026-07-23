@@ -1,13 +1,11 @@
 package api
 
 import (
-	"errors"
-
 	"github.com/aihop/gopanel/app/dto"
 	"github.com/aihop/gopanel/app/e"
 	"github.com/aihop/gopanel/app/service"
 	"github.com/aihop/gopanel/buserr"
-	"github.com/aihop/gopanel/constant"
+	"github.com/aihop/gopanel/global"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -64,7 +62,8 @@ func GetLoginLogs(c fiber.Ctx) error {
 	logService := service.NewLogService()
 	total, list, err := logService.PageLoginLog(*req)
 	if err != nil {
-		return c.JSON(e.Fail(buserr.Err(errors.New(constant.ErrTypeInternalServer))))
+		global.LOG.Errorf("%s api error: %v", c.Path(), err)
+		return c.JSON(e.Fail(buserr.Err(err)))
 	}
 
 	return c.JSON(e.Succ(fiber.Map{
@@ -111,7 +110,8 @@ func GetOperationLogs(c fiber.Ctx) error {
 	logService := service.NewLogService()
 	total, list, err := logService.PageOperationLog(*req)
 	if err != nil {
-		return c.JSON(e.Fail(buserr.Err(errors.New(constant.ErrTypeInternalServer))))
+		global.LOG.Errorf("%s api error: %v", c.Path(), err)
+		return c.JSON(e.Fail(buserr.Err(err)))
 	}
 
 	return c.JSON(e.Succ(fiber.Map{
@@ -135,7 +135,8 @@ func LogsClean(c fiber.Ctx) error {
 	}
 	logService := service.NewLogService()
 	if err := logService.CleanLogs(req.LogType); err != nil {
-		return c.JSON(e.Fail(buserr.Err(errors.New(constant.ErrTypeInternalServer))))
+		global.LOG.Errorf("%s api error: %v", c.Path(), err)
+		return c.JSON(e.Fail(buserr.Err(err)))
 	}
 	return c.JSON(e.Succ())
 }
