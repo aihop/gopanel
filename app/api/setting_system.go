@@ -14,7 +14,6 @@ import (
 	"github.com/aihop/gopanel/app/service"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
-	"github.com/aihop/gopanel/init/geo"
 	"github.com/aihop/gopanel/utils/cmd"
 	"github.com/aihop/gopanel/utils/common"
 	"github.com/gofiber/fiber/v3"
@@ -194,8 +193,8 @@ func SettingSystemUpgrade(c fiber.Ctx) error {
 	source := req.Source
 	if source == "" {
 		source = "github"
-		// 检查是否为中国 IP，如果是，则默认 source 使用 gitcode
-		if strings.Contains(geo.Region(service.GetOutboundIP()), "中国") {
+		// 检查是否为中国大陆服务器，如果是，则默认 source 使用 gitcode
+		if service.IsChinaMainlandServer() {
 			source = "gitcode"
 		}
 	}
@@ -368,8 +367,8 @@ func SettingSystemCheck(c fiber.Ctx) error {
 	runtimeArch := runtime.GOARCH
 
 	source := "github"
-	// 检查是否为中国 IP，如果是，则默认 source 使用 gitcode
-	if strings.Contains(geo.Region(service.GetOutboundIP()), "中国") {
+	// 检查是否为中国大陆服务器，如果是，则默认 source 使用 gitcode
+	if service.IsChinaMainlandServer() {
 		source = "gitcode"
 	}
 

@@ -13,7 +13,6 @@ import (
 	"github.com/aihop/gopanel/app/service"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
-	"github.com/aihop/gopanel/init/geo"
 	"github.com/aihop/gopanel/utils/gpagent"
 	"github.com/aihop/gopanel/utils/gpc"
 	"github.com/gofiber/fiber/v3"
@@ -84,7 +83,7 @@ func AgentEnsure(c fiber.Ctx) error {
 		}
 
 		source := "github"
-		if strings.Contains(geo.Region(service.GetOutboundIP()), "中国") {
+		if service.IsChinaMainlandServer() {
 			source = "gitcode"
 		}
 
