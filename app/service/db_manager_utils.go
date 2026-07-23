@@ -354,13 +354,22 @@ func splitSQLStatements(content string) []string {
 
 func execSQLImport(db *sql.DB, content string) (int, error) {
 	statements := splitSQLStatements(content)
+	// 包在事务里：任一语句失败整体回滚，避免留下半成品（已 DROP/CREATE 的表）。
+	// 注意 MySQL 的 DDL 会隐式提交、无法回滚，属其固有行为；PG/SQLite 可完整回滚。
+	tx, err := db.Begin()
+	if err != nil {
+		return 0, err
+	}
 	executed := 0
 	for i, stmt := range statements {
-		_, err := db.Exec(stmt)
-		if err != nil {
+		if _, err := tx.Exec(stmt); err != nil {
+			_ = tx.Rollback()
 			return executed, fmt.Errorf("statement %d failed: %v", i+1, err)
 		}
 		executed++
+	}
+	if err := tx.Commit(); err != nil {
+		return executed, fmt.Errorf("commit failed: %v", err)
 	}
 	return executed, nil
 }
@@ -370,6 +379,72 @@ func quoteChar(dbType model.DatabaseType) string {
 		return "`"
 	}
 	return `"`
+}
+
+// extractNextvalSeq 从 PG 列默认值表达式 nextval('<seq>'::regclass) 中提取序列名。
+// 提取出的序列名保留了 PG 自身的引用形式（如 public.t_id_seq 或 "Schema"."Seq"），
+// 可直接用作 regclass 引用。非 nextval 默认值返回空字符串。
+func extractNextvalSeq(expr string) string {
+	if !strings.Contains(expr, "nextval(") {
+		return ""
+	}
+	start := strings.Index(expr, "'")
+	if start < 0 {
+		return ""
+	}
+	rest := expr[start+1:]
+	end := strings.Index(rest, "'")
+	if end < 0 {
+		return ""
+	}
+	return strings.TrimSpace(rest[:end])
+}
+
+// postgresSequenceStatements 返回 PG 表的序列语句：
+// pre 为建表前的 CREATE SEQUENCE，post 为数据插入后的 setval（按导出时序列当前值）。
+func postgresSequenceStatements(db *sql.DB, regclass string) (pre []string, post []string) {
+	rows, err := db.Query(fmt.Sprintf(`
+		SELECT pg_catalog.pg_get_expr(d.adbin, d.adrelid)
+		FROM pg_catalog.pg_attrdef d
+		WHERE d.adrelid = '%s'::regclass`, regclass))
+	if err != nil {
+		return nil, nil
+	}
+	var seqs []string
+	for rows.Next() {
+		var expr string
+		if err := rows.Scan(&expr); err != nil {
+			continue
+		}
+		if seq := extractNextvalSeq(expr); seq != "" {
+			seqs = append(seqs, seq)
+		}
+	}
+	rows.Close()
+
+	for _, seq := range seqs {
+		pre = append(pre, fmt.Sprintf("CREATE SEQUENCE IF NOT EXISTS %s;", seq))
+		var lastVal int64
+		var isCalled bool
+		if err := db.QueryRow(fmt.Sprintf("SELECT last_value, is_called FROM %s", seq)).Scan(&lastVal, &isCalled); err == nil {
+			post = append(post, fmt.Sprintf("SELECT setval('%s', %d, %t);", seq, lastVal, isCalled))
+		}
+	}
+	return pre, post
+}
+
+// appendPostgresSetval 在数据插入之后追加 setval，把序列重置到导出时的当前值，
+// 保证 SERIAL/自增列在导入后继续正确自增。非 PG 或无序列时不产生任何输出。
+func appendPostgresSetval(b *strings.Builder, db *sql.DB, dbType model.DatabaseType, tableName string, quote func(string) string) {
+	if dbType != model.DatabaseTypePostgresql {
+		return
+	}
+	if _, postSeq := postgresSequenceStatements(db, quote(tableName)); len(postSeq) > 0 {
+		b.WriteString("\n")
+		for _, s := range postSeq {
+			b.WriteString(s + "\n")
+		}
+	}
 }
 
 func getCreateTableSQL(db *sql.DB, dbType model.DatabaseType, tableName string, quote func(string) string) string {
@@ -416,6 +491,14 @@ func getCreateTableSQL(db *sql.DB, dbType model.DatabaseType, tableName string, 
 		defer rows.Close()
 
 		var b strings.Builder
+		// 先建表引用的序列：保留列上的 nextval 默认值需要序列已存在，
+		// 否则导入报 "relation xxx_seq does not exist"。setval 在数据插入后由 generateSQLDump 追加。
+		if preSeq, _ := postgresSequenceStatements(db, regclass); len(preSeq) > 0 {
+			for _, s := range preSeq {
+				b.WriteString(s + "\n")
+			}
+			b.WriteString("\n")
+		}
 		b.WriteString(fmt.Sprintf("CREATE TABLE %s (\n", quote(tableName)))
 		var cols []string
 		for rows.Next() {
@@ -429,9 +512,8 @@ func getCreateTableSQL(db *sql.DB, dbType model.DatabaseType, tableName string, 
 			if notNull {
 				def += " NOT NULL"
 			}
-			// 跳过 nextval(...) 序列默认值：导出文件里没有对应的 CREATE SEQUENCE，
-			// 带上它会导致导入到新库时报 "relation xxx_seq does not exist"
-			if defaultVal != nil && *defaultVal != "" && !strings.Contains(*defaultVal, "nextval(") {
+			// 保留默认值（含 nextval 序列默认值）：序列已在上面 CREATE SEQUENCE，可正常导入
+			if defaultVal != nil && *defaultVal != "" {
 				def += " DEFAULT " + *defaultVal
 			}
 			cols = append(cols, def)
@@ -522,6 +604,7 @@ func generateSQLDump(db *sql.DB, dbType model.DatabaseType, tableName string, re
 
 	// 只有有数据列时才输出 INSERT
 	if len(columns) == 0 {
+		appendPostgresSetval(&b, db, dbType, tableName, quote)
 		return b.String()
 	}
 
@@ -559,6 +642,7 @@ func generateSQLDump(db *sql.DB, dbType model.DatabaseType, tableName string, re
 
 	b.WriteString(strings.Join(rowValues, ",\n"))
 	b.WriteString(";\n")
+	appendPostgresSetval(&b, db, dbType, tableName, quote)
 	return b.String()
 }
 
