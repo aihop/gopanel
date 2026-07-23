@@ -211,9 +211,9 @@ func isNumericTypeGuess(dbType model.DatabaseType, colName string) bool {
 func splitSQLStatements(content string) []string {
 	var statements []string
 	var cur strings.Builder
-	inSingleQ := false  // '
-	inDoubleQ := false  // "
-	inBacktick := false // `
+	inSingleQ := false      // '
+	inDoubleQ := false      // "
+	inBacktick := false     // `
 	inLineComment := false  // --
 	inBlockComment := false // /* */
 
@@ -337,7 +337,20 @@ func getCreateTableSQL(db *sql.DB, dbType model.DatabaseType, tableName string, 
 		row := db.QueryRow("SELECT sql FROM sqlite_master WHERE type='table' AND name=?", tableName)
 		var createSQL string
 		if err := row.Scan(&createSQL); err == nil {
-			return createSQL + ";\n\n"
+			var b strings.Builder
+			b.WriteString(createSQL + ";\n\n")
+			// 独立索引：PK/UNIQUE 的自动索引 sql 为 NULL（已随建表语句内联），只导出显式 CREATE INDEX
+			if idxRows, err := db.Query("SELECT sql FROM sqlite_master WHERE type='index' AND tbl_name=? AND sql IS NOT NULL", tableName); err == nil {
+				for idxRows.Next() {
+					var idxSQL string
+					if err := idxRows.Scan(&idxSQL); err == nil && strings.TrimSpace(idxSQL) != "" {
+						b.WriteString(idxSQL + ";\n")
+					}
+				}
+				idxRows.Close()
+				b.WriteString("\n")
+			}
+			return b.String()
 		}
 	case model.DatabaseTypePostgresql:
 		// PostgreSQL: 从 pg_catalog 重建 CREATE TABLE
@@ -403,6 +416,39 @@ func getCreateTableSQL(db *sql.DB, dbType model.DatabaseType, tableName string, 
 
 		b.WriteString(strings.Join(cols, ",\n"))
 		b.WriteString("\n);\n\n")
+
+		// 索引：主键索引已随建表语句内联，这里导出其余全部索引（含唯一索引，即唯一约束的实现）。
+		// 用 pg_get_indexdef 直接拿到官方 DDL 文本，避免手工拼装出错。
+		if idxRows, err := db.Query(fmt.Sprintf(`
+			SELECT pg_catalog.pg_get_indexdef(i.indexrelid)
+			FROM pg_catalog.pg_index i
+			WHERE i.indrelid = '%s'::regclass AND NOT i.indisprimary
+			ORDER BY i.indexrelid`, regclass)); err == nil {
+			for idxRows.Next() {
+				var def string
+				if err := idxRows.Scan(&def); err == nil && strings.TrimSpace(def) != "" {
+					b.WriteString(def)
+					b.WriteString(";\n")
+				}
+			}
+			idxRows.Close()
+		}
+
+		// 约束：外键(f)、CHECK(c)。主键(p)已内联，唯一约束(u)已由上面的唯一索引覆盖，均跳过。
+		if conRows, err := db.Query(fmt.Sprintf(`
+			SELECT conname, pg_catalog.pg_get_constraintdef(oid)
+			FROM pg_catalog.pg_constraint
+			WHERE conrelid = '%s'::regclass AND contype IN ('f','c')
+			ORDER BY conname`, regclass)); err == nil {
+			for conRows.Next() {
+				var name, def string
+				if err := conRows.Scan(&name, &def); err == nil && strings.TrimSpace(def) != "" {
+					b.WriteString(fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s %s;\n", quote(tableName), quote(name), def))
+				}
+			}
+			conRows.Close()
+		}
+		b.WriteString("\n")
 		return b.String()
 	}
 	return ""
