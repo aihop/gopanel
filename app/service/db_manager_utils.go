@@ -2,6 +2,7 @@ package service
 
 import (
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"sort"
 	"strconv"
@@ -149,13 +150,46 @@ func stripComplexConditions(conditions map[string]interface{}) {
 	}
 }
 
-func quoteSQLString(val string) string {
+func quoteSQLString(dbType model.DatabaseType, val string) string {
 	escaped := strings.ReplaceAll(val, "'", "''")
-	escaped = strings.ReplaceAll(escaped, "\\", "\\\\")
+	// 只有 MySQL/MariaDB 默认把反斜杠当转义符；PostgreSQL(standard_conforming_strings)
+	// 与 SQLite 中反斜杠是普通字面量，若在这些库上双写反斜杠会把 1 个反斜杠变成 2 个，
+	// 造成静默的数据损坏。因此仅对 MySQL 系双写。
+	if dbType == model.DatabaseTypeMysql || dbType == model.DatabaseTypeMariaDB {
+		escaped = strings.ReplaceAll(escaped, "\\", "\\\\")
+	}
 	return "'" + escaped + "'"
 }
 
-func formatExportValue(val interface{}) string {
+// isBinaryColumn 判断列是否为二进制类型（BYTEA/BLOB 等），用于决定按十六进制字面量导出。
+func isBinaryColumn(ct *sql.ColumnType) bool {
+	if ct == nil {
+		return false
+	}
+	switch strings.ToUpper(ct.DatabaseTypeName()) {
+	case "BYTEA", "BLOB", "TINYBLOB", "MEDIUMBLOB", "LONGBLOB", "BINARY", "VARBINARY", "BYTES", "IMAGE":
+		return true
+	}
+	return false
+}
+
+// encodeBinaryLiteral 将二进制数据编码为对应数据库的十六进制字面量。
+func encodeBinaryLiteral(dbType model.DatabaseType, b []byte) string {
+	hexStr := hex.EncodeToString(b)
+	switch dbType {
+	case model.DatabaseTypeMysql, model.DatabaseTypeMariaDB:
+		if len(b) == 0 {
+			return "''"
+		}
+		return "0x" + hexStr // MySQL 十六进制字面量，直接作为 BLOB
+	case model.DatabaseTypePostgresql:
+		return "'\\x" + hexStr + "'" // PG bytea hex 格式，插入 bytea 列时隐式转换
+	default: // sqlite
+		return "X'" + hexStr + "'" // SQLite blob 字面量
+	}
+}
+
+func formatExportValue(dbType model.DatabaseType, val interface{}, binary bool) string {
 	if val == nil {
 		return "NULL"
 	}
@@ -175,12 +209,17 @@ func formatExportValue(val interface{}) string {
 		// PG/MySQL 拒绝。这里输出标准 SQL 时间字面量（不带时区偏移，
 		// 对 timestamp / timestamptz / datetime 均可解析）。
 		return "'" + v.Format("2006-01-02 15:04:05.999999") + "'"
-	case string:
-		return quoteSQLString(v)
 	case []byte:
-		return quoteSQLString(string(v))
+		// 二进制列按十六进制字面量导出，避免当作文本转义导致损坏；
+		// 非二进制列（MySQL 文本列驱动常返回 []byte）仍按字符串处理。
+		if binary {
+			return encodeBinaryLiteral(dbType, v)
+		}
+		return quoteSQLString(dbType, string(v))
+	case string:
+		return quoteSQLString(dbType, v)
 	default:
-		return quoteSQLString(fmt.Sprint(val))
+		return quoteSQLString(dbType, fmt.Sprint(val))
 	}
 }
 
@@ -495,6 +534,9 @@ func generateSQLDump(db *sql.DB, dbType model.DatabaseType, tableName string, re
 	b.WriteString(strings.Join(colParts, ", "))
 	b.WriteString(") VALUES\n")
 
+	// 列类型：用于识别二进制列，按十六进制字面量导出
+	colTypes, _ := rows.ColumnTypes()
+
 	// Values
 	values := make([]interface{}, len(columns))
 	valuePtrs := make([]interface{}, len(columns))
@@ -509,7 +551,8 @@ func generateSQLDump(db *sql.DB, dbType model.DatabaseType, tableName string, re
 		}
 		rowParts := make([]string, len(columns))
 		for i := range columns {
-			rowParts[i] = formatExportValue(values[i])
+			binary := i < len(colTypes) && isBinaryColumn(colTypes[i])
+			rowParts[i] = formatExportValue(dbType, values[i], binary)
 		}
 		rowValues = append(rowValues, "("+strings.Join(rowParts, ", ")+")")
 	}

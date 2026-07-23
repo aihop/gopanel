@@ -244,7 +244,12 @@ func (s *DBManagerService) ImportTable(req request.ImportTableReq) (int, error) 
 					continue
 				}
 				cols = append(cols, quote(col))
-				placeholders = append(placeholders, "?")
+				// PostgreSQL(pgx) 只认 $N 占位符，其余库用 ?
+				if server.Type == model.DatabaseTypePostgresql {
+					placeholders = append(placeholders, fmt.Sprintf("$%d", len(placeholders)+1))
+				} else {
+					placeholders = append(placeholders, "?")
+				}
 				if values[i] == "" && isNumericTypeGuess(server.Type, col) {
 					args = append(args, nil)
 				} else {
