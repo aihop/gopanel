@@ -1,6 +1,11 @@
 import { computed, h, onMounted, ref, watch } from 'vue'
 import { NButton, NPopconfirm } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
 import { execDBManagerSqlAPI } from '@/api/modules/database'
+
+// 表结构字段列的逻辑展示顺序。后端以 Go map 返回每行，JSON 序列化会把列名按字母序打乱
+// （导致 Default 跑到 Field 前面），这里按语义主次重排：标识信息在前，默认值/额外信息在后。
+const STRUCTURE_COLUMN_ORDER = ['Field', 'Type', 'Null', 'Key', 'Default', 'Extra', 'Collation', 'Privileges', 'Comment']
 
 type MessageLike = {
   success: (content: string) => void
@@ -26,6 +31,24 @@ export const useStructureView = (
   emit: EmitLike,
   message: MessageLike
 ) => {
+  const { t } = useI18n()
+
+  // 已知字段列的 i18n 列头，未知列回退到原始 key
+  const structureColumnLabel = (key: string): string => {
+    const labels: Record<string, string> = {
+      Field: t('database.colField'),
+      Type: t('database.colType'),
+      Null: t('database.colNull'),
+      Key: t('database.colKey'),
+      Default: t('database.colDefault'),
+      Extra: t('database.colExtra'),
+      Collation: t('database.colCollation'),
+      Privileges: t('database.colPrivileges'),
+      Comment: t('database.colComment')
+    }
+    return labels[key] || key
+  }
+
   const showColumnModal = ref(false)
   const isEditColumn = ref(false)
   const submittingColumn = ref(false)
@@ -610,10 +633,17 @@ export const useStructureView = (
       }
     }
 
+    // 按逻辑顺序重排：已知列按 STRUCTURE_COLUMN_ORDER，未知列排在最后并保持原相对顺序
+    const rank = (col: string) => {
+      const i = STRUCTURE_COLUMN_ORDER.indexOf(col)
+      return i === -1 ? STRUCTURE_COLUMN_ORDER.length + keys.indexOf(col) : i
+    }
+    const ordered = [...keys].sort((a, b) => rank(a) - rank(b))
+
     return [
       actionCol,
-      ...keys.map((col, index) => ({
-        title: col,
+      ...ordered.map((col, index) => ({
+        title: structureColumnLabel(col),
         key: col,
         ellipsis: { tooltip: true as const },
         className: index === 0 ? 'db-structure-primary-col' : undefined

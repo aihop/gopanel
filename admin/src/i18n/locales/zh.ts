@@ -541,7 +541,16 @@ export default {
 		noTable: "暂无数据库",
 		selectTable: "请选择一个数据表",
 		addColumn: "添加字段",
-		importSql: "导入 SQL"
+		importSql: "导入 SQL",
+		colField: "字段",
+		colType: "类型",
+		colNull: "可空",
+		colKey: "键",
+		colDefault: "默认值",
+		colExtra: "额外",
+		colCollation: "排序规则",
+		colPrivileges: "权限",
+		colComment: "注释"
 	},
 	container: {
 		create: "创建容器",
