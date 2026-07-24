@@ -91,6 +91,24 @@ export const useStructureView = (
     return selectedServer.value?.label || ''
   })
 
+  // 字段类型下拉选项（按数据库类型给常用完整类型，含常见长度预设）。
+  // 值即最终写入 ALTER TABLE 的类型串，配合 select 的 tag 模式仍可手输自定义类型。
+  const columnTypeOptions = computed(() => {
+    const t = selectedServer.value?.type
+    let base: string[]
+    if (t === 'postgresql') {
+      base = ['integer', 'bigint', 'smallint', 'numeric(10,2)', 'real', 'double precision', 'varchar(255)', 'char(50)', 'text', 'date', 'timestamp', 'timestamptz', 'time', 'boolean', 'json', 'jsonb', 'uuid', 'bytea']
+    } else if (t === 'sqlite') {
+      base = ['INTEGER', 'REAL', 'TEXT', 'BLOB', 'NUMERIC']
+    } else {
+      base = ['INT', 'BIGINT', 'SMALLINT', 'TINYINT', 'DECIMAL(10,2)', 'FLOAT', 'DOUBLE', 'VARCHAR(255)', 'CHAR(50)', 'TEXT', 'LONGTEXT', 'MEDIUMTEXT', 'BLOB', 'DATE', 'DATETIME', 'TIMESTAMP', 'TIME', 'YEAR', 'BOOLEAN', 'JSON']
+    }
+    // 编辑已有字段时，其当前类型可能不在预设内，补进去以便正常回显
+    const cur = (columnForm.value.type || '').trim()
+    if (cur && !base.includes(cur)) base = [cur, ...base]
+    return base.map(v => ({ label: v, value: v }))
+  })
+
   const fieldSummary = computed(() => {
     const rows = Array.isArray(props.structureData) ? props.structureData : []
     const primaryCount = rows.filter((row: any) => row.Key === 'PRI').length
@@ -924,6 +942,7 @@ export const useStructureView = (
   return {
     afterColumnOptions,
     columnForm,
+    columnTypeOptions,
     dropColumn,
     dropForeignKey,
     fetchTableForeignKeys,

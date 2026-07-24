@@ -20,6 +20,7 @@ const message = useMessage()
 const {
   afterColumnOptions,
   columnForm,
+  columnTypeOptions,
   dropForeignKey,
   fetchTableForeignKeys,
   fetchTableIndexes,
@@ -212,9 +213,13 @@ const handleRefresh = () => {
         </div>
         <div class="flex items-center gap-2">
           <span class="w-16 text-right">类型:</span>
-          <n-input
+          <n-select
             v-model:value="columnForm.type"
-            placeholder="例如: INT, VARCHAR(255)"
+            :options="columnTypeOptions"
+            filterable
+            tag
+            :show-checkmark="false"
+            placeholder="选择或输入类型，如 VARCHAR(255)"
             class="flex-1"
             size="small"
           />
