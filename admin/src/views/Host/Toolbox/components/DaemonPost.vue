@@ -115,6 +115,7 @@ import { ref } from "vue"
 const visible = ref(false)
 const loading = ref(false)
 const isUpdate = ref(false)
+const originalConfig = ref<Record<string, any> | null>(null)
 const formData = ref({
 	name: "",
 	user: "root",
@@ -147,10 +148,14 @@ const rules = {
 }
 const emit = defineEmits(["confirm"])
 const formRef = ref()
+const buildPayload = () => ({
+        ...(originalConfig.value || {}),
+        ...formData.value
+})
 const onConfirm = () => {
 	formRef.value.validate((errors: any) => {
 		if (errors) return
-		emit("confirm", formData.value, loading)
+                emit("confirm", { data: buildPayload(), isUpdate: isUpdate.value }, loading)
 	})
 }
 
@@ -158,27 +163,30 @@ const title = ref("创建")
 const open = (record?: any) => {
 	visible.value = true
 	if (record) {
+                const config = record.config || {}
+                originalConfig.value = { ...config }
 		formData.value = {
 			name: record.name,
-			user: record.config.user,
-			directory: record.config.directory,
-			command: record.config.command,
-			numprocs: record.config.numprocs,
-			autostart: record.config.autostart,
-			...record
+                        user: config.user,
+                        directory: config.directory,
+                        command: config.command,
+                        numprocs: config.numprocs,
+                        autostart: config.autostart
 		}
 		isUpdate.value = true
-		if (typeof record.config.user == "undefined") {
+                if (typeof config.user == "undefined") {
 			formData.value.user = "root"
 		}
-		if (typeof record.config.autostart === "undefined") {
+                if (typeof config.autostart === "undefined") {
 			formData.value.autostart = true
 		}
-		if (typeof record.config.numprocs === "undefined" || record.config.numprocs <= 0) {
+                if (typeof config.numprocs === "undefined" || config.numprocs <= 0) {
 			formData.value.numprocs = 1
 		}
 		title.value = "编辑"
 	} else {
+                isUpdate.value = false
+                originalConfig.value = null
 		title.value = "创建"
 		formData.value = {
 			name: "",

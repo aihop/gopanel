@@ -82,12 +82,12 @@ export const useDaemonActions = (
     })
   }
 
-  const postConfirm = async (data: any, submitLoading: Ref<boolean>) => {
+  const postConfirm = async (payload: { data: any; isUpdate: boolean }, submitLoading: Ref<boolean>) => {
     submitLoading.value = true
-    if (data.config) {
-      await DaemonConfigUpdate(data)
+    if (payload.isUpdate) {
+      await DaemonConfigUpdate(payload.data)
     } else {
-      await DaemonConfigAdd(data)
+      await DaemonConfigAdd(payload.data)
     }
     await DaemonReload()
     getData()
