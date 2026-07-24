@@ -57,3 +57,7 @@ func (w WebsiteDomainRepo) GetBy(opts ...DBOption) ([]model.WebsiteDomain, error
 func (w WebsiteDomainRepo) DeleteByWebsiteIdNotIsPrimary(ctx context.Context, websiteId uint) error {
 	return getTx(ctx).Where("website_id = ? AND is_primary != 20", websiteId).Delete(&model.WebsiteDomain{}).Error
 }
+
+func (w WebsiteDomainRepo) DeleteByWebsiteId(ctx context.Context, websiteId uint) error {
+	return getTx(ctx).Where("website_id = ?", websiteId).Delete(&model.WebsiteDomain{}).Error
+}

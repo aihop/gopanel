@@ -148,7 +148,6 @@ func (s WebsiteService) Create(ctx context.Context, req *request.WebsiteCreate, 
 		}
 	}()
 
-	caddyDomain := BuildWebsiteCaddyDomain(req.PrimaryDomain, req.Protocol)
 	staticRoot := resolveWebsiteStaticRoot(alias)
 
 	if req.CodeSource == "app_store" {
@@ -192,9 +191,9 @@ func (s WebsiteService) Create(ctx context.Context, req *request.WebsiteCreate, 
 			}
 			global.LOG.Infof("Website created with pipeline source. Waiting for pipeline execution.")
 		} else {
-			hostPort, containerID, runtimeDir, err := DeployWebsiteEngine(context.Background(), alias, req, nil)
-			if err != nil {
-				return fmt.Errorf("failed to deploy container: %w", err)
+			hostPort, containerID, runtimeDir, deployErr := DeployWebsiteEngine(context.Background(), alias, req, nil)
+			if deployErr != nil {
+				return fmt.Errorf("failed to deploy container: %w", deployErr)
 			}
 			website.Proxy = fmt.Sprintf("127.0.0.1:%d", hostPort)
 			website.ContainerID = containerID
@@ -205,47 +204,34 @@ func (s WebsiteService) Create(ctx context.Context, req *request.WebsiteCreate, 
 		}
 	}
 
-	if req.Type == constant.Proxy || req.Type == constant.WebApp {
-		caddyProxy := website.Proxy
-		if caddyProxy == "" {
-			caddyProxy = req.Proxy
-		}
-		if strings.HasPrefix(alias, "/") {
-			_, err = CaddyAddServerPathBlock(ctx, caddyDomain, alias, caddyProxy, req.OtherDomains, req.Protocol)
-		} else {
-			_, err = CaddyAddServerBlock(ctx, caddyDomain, caddyProxy, req.OtherDomains, req.Protocol)
-		}
-		if err != nil {
-			return err
-		}
-	}
 	if req.Type == constant.Static {
 		website.SiteDir = staticRoot
 		if err = ensureStaticWebsiteIndex(staticRoot); err != nil {
 			return err
 		}
-		_, err = CaddyAddStaticServerBlock(ctx, caddyDomain, staticRoot, req.OtherDomains, req.Protocol)
-		if err != nil {
-			return err
-		}
 	}
 	tx := global.DB.Begin()
-	defer tx.Rollback()
-	if err = websiteRepo.Create(context.Background(), website); err != nil {
+	defer func() {
+		if tx != nil {
+			tx.Rollback()
+		}
+	}()
+	txCtx := context.WithValue(ctx, constant.DB, tx)
+	if err = websiteRepo.Create(txCtx, website); err != nil {
 		return err
 	}
 	for i := range domains {
 		domains[i].WebsiteID = website.ID
 	}
 	websiteDomainRepo := repo.NewWebsiteDomain()
-	if err = websiteDomainRepo.BatchCreate(context.Background(), domains); err != nil {
+	if err = websiteDomainRepo.BatchCreate(txCtx, domains); err != nil {
 		return err
 	}
 	if website.Type == constant.Proxy {
 		for i := range upstreams {
 			upstreams[i].WebsiteID = website.ID
 		}
-		if err = repo.NewWebsiteUpstream().BatchCreate(context.Background(), upstreams); err != nil {
+		if err = repo.NewWebsiteUpstream().BatchCreate(txCtx, upstreams); err != nil {
 			return err
 		}
 	}
@@ -265,11 +251,17 @@ func (s WebsiteService) Create(ctx context.Context, req *request.WebsiteCreate, 
 			IsActive:    true,
 			RuntimeDir:  website.RuntimeDir,
 		}
-		if err := global.DB.Create(&deploy).Error; err != nil {
-			global.LOG.Errorf("Failed to create initial website deploy record for git image: %v", err)
+		if createDeployErr := tx.Create(&deploy).Error; createDeployErr != nil {
+			global.LOG.Errorf("Failed to create initial website deploy record for git image: %v", createDeployErr)
 		}
 	}
 
-	tx.Commit()
-	return ApplyCaddyFromDB(ctx)
+	if err = ApplyCaddyFromDB(txCtx); err != nil {
+		return err
+	}
+	if err = tx.Commit().Error; err != nil {
+		return err
+	}
+	tx = nil
+	return nil
 }

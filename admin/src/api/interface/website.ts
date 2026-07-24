@@ -76,7 +76,6 @@ export namespace Website {
 		httpConfig?: string
 		redirectCode?: number
 		redirectDomainsToPrimary?: boolean
-		upstreams?: WebsiteUpstreamInput[]
 	}
 
 	export interface WebsiteDTO extends Website {

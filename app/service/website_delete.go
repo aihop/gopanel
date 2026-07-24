@@ -5,7 +5,6 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
@@ -17,6 +16,13 @@ func (s WebsiteService) Delete(ctx context.Context, id uint) error {
 	if err != nil {
 		return errors.New("网站不存在")
 	}
+	tx := global.DB.Begin()
+	defer func() {
+		if tx != nil {
+			tx.Rollback()
+		}
+	}()
+	txCtx := context.WithValue(ctx, constant.DB, tx)
 	if website.Type == constant.Proxy || website.Type == constant.WebApp || website.Type == constant.Static || website.Type == constant.Redirect {
 		var otherDomains []string
 		if website.Domains != nil {
@@ -39,7 +45,20 @@ func (s WebsiteService) Delete(ctx context.Context, id uint) error {
 			return err
 		}
 	}
-
+	domainRepo := repo.NewWebsiteDomain()
+	if err := domainRepo.DeleteByWebsiteId(txCtx, id); err != nil {
+		return err
+	}
+	if err := repo.NewWebsiteUpstream().DeleteByWebsiteID(txCtx, id); err != nil {
+		return err
+	}
+	if err := s.repo.DeleteBy(txCtx, commonRepo.WithByID(id)); err != nil {
+		return err
+	}
+	if err := tx.Commit().Error; err != nil {
+		return err
+	}
+	tx = nil
 	if website.Type == constant.WebApp && website.ContainerID != "" {
 		cli, err := docker.NewDockerClient()
 		if err == nil {
@@ -49,17 +68,6 @@ func (s WebsiteService) Delete(ctx context.Context, id uint) error {
 				global.LOG.Errorf("Failed to remove engine container %s: %v", website.ContainerID, err)
 			}
 		}
-	}
-
-	if err := s.repo.DeleteBy(context.Background(), commonRepo.WithByID(id)); err != nil {
-		return err
-	}
-
-	_ = repo.NewWebsiteDomain().DeleteByWebsiteIdNotIsPrimary(context.Background(), id)
-
-	db := global.DB.Where("website_id = ?", id).Delete(&model.WebsiteDomain{})
-	if db.Error != nil {
-		global.LOG.Errorf("Failed to delete website domains for website %d: %v", id, db.Error)
 	}
 	return nil
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/utils/gpagent"
+	"gorm.io/gorm"
 )
 
 // ApplyCaddyFromDB 从数据库应用Caddy配置
@@ -21,8 +22,12 @@ func ApplyCaddyFromDB(ctx context.Context) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	db := global.DB
+	if tx, ok := ctx.Value(constant.DB).(*gorm.DB); ok && tx != nil {
+		db = tx
+	}
 	var websites []model.Website
-	if err := global.DB.Order("id ASC").Find(&websites).Error; err != nil {
+	if err := db.Order("id ASC").Find(&websites).Error; err != nil {
 		return err
 	}
 
@@ -35,14 +40,14 @@ func ApplyCaddyFromDB(ctx context.Context) error {
 	upstreamByWebsite := map[uint][]*model.WebsiteUpstream{}
 	if len(ids) > 0 {
 		var domains []model.WebsiteDomain
-		if err := global.DB.Where("website_id IN ?", ids).Find(&domains).Error; err != nil {
+		if err := db.Where("website_id IN ?", ids).Find(&domains).Error; err != nil {
 			return err
 		}
 		for _, d := range domains {
 			domainByWebsite[d.WebsiteID] = append(domainByWebsite[d.WebsiteID], d)
 		}
 		var upstreams []model.WebsiteUpstream
-		if err := global.DB.Where("website_id IN ?", ids).Order("sort asc,id asc").Find(&upstreams).Error; err != nil {
+		if err := db.Where("website_id IN ?", ids).Order("sort asc,id asc").Find(&upstreams).Error; err != nil {
 			return err
 		}
 		for i := range upstreams {
@@ -226,10 +231,11 @@ func renderCaddyfile(websites []model.Website, domainByWebsite map[uint][]model.
 			b.WriteString("  redir " + target + "{uri} " + strconv.Itoa(code) + "\n")
 		case constant.Proxy, constant.WebApp:
 			dials := reverseProxyDialList(w)
-			if len(dials) == 0 {
-				dials = []string{"127.0.0.1:80"}
-			}
 			healthURI, healthInterval, healthTimeout := reverseProxyHealthSettings(w)
+			if len(dials) == 0 {
+				b.WriteString("  respond \"backend not configured\" 502\n")
+				break
+			}
 			if len(dials) == 1 && healthURI == "" && healthInterval == "" && healthTimeout == "" {
 				b.WriteString("  reverse_proxy ")
 				b.WriteString(dials[0])
@@ -281,22 +287,10 @@ func renderCaddyfile(websites []model.Website, domainByWebsite map[uint][]model.
 				if strings.EqualFold(w.Protocol, constant.ProtocolHTTP) {
 					proto = "http"
 				}
-				// For redirect type websites, other domains should redirect
-				// directly to the target URL (w.Proxy), not to the primary
-				// domain which would then redirect again (2 hops → 1 hop).
 				redirectURL := w.PrimaryDomain
-				needProto := true
-				if w.Type == constant.Redirect && strings.TrimSpace(w.Proxy) != "" {
-					redirectURL = strings.TrimSpace(w.Proxy)
-					needProto = false // redirect target is already a full URL
-				}
 				b.WriteString(host)
 				b.WriteString(" {\n")
-				if needProto {
-					b.WriteString("  redir " + proto + "://" + redirectURL + "{uri} 301\n")
-				} else {
-					b.WriteString("  redir " + redirectURL + "{uri} 301\n")
-				}
+				b.WriteString("  redir " + proto + "://" + redirectURL + "{uri} 301\n")
 				b.WriteString("}\n\n")
 			}
 		}

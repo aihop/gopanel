@@ -36,3 +36,7 @@ func (r *WebsiteUpstreamRepo) ReplaceByWebsiteID(ctx context.Context, websiteID 
 	}
 	return tx.Model(&model.WebsiteUpstream{}).Create(&upstreams).Error
 }
+
+func (r *WebsiteUpstreamRepo) DeleteByWebsiteID(ctx context.Context, websiteID uint) error {
+	return getTx(ctx).Where("website_id = ?", websiteID).Delete(&model.WebsiteUpstream{}).Error
+}

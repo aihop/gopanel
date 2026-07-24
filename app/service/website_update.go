@@ -4,14 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/aihop/gopanel/app/dto/request"
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
 	"github.com/aihop/gopanel/constant"
-	"github.com/aihop/gopanel/utils/files"
+	"github.com/aihop/gopanel/global"
 )
 
 // Update 更新网站
@@ -23,10 +22,9 @@ func (s WebsiteService) Update(ctx context.Context, req *request.WebsiteUpdate) 
 	if err != nil {
 		return errors.New("网站不存在")
 	}
-	if err := ensurePipelineExists(req.PipelineId); err != nil {
-		return err
+	if pipelineErr := ensurePipelineExists(req.PipelineId); pipelineErr != nil {
+		return pipelineErr
 	}
-	oldProxy := website.Proxy
 	originalDomains := website.Domains
 	var upstreams []model.WebsiteUpstream
 	if normalizedPrimaryDomain := sanitizeWebsitePrimaryDomain(req.PrimaryDomain); normalizedPrimaryDomain != "" {
@@ -70,22 +68,10 @@ func (s WebsiteService) Update(ctx context.Context, req *request.WebsiteUpdate) 
 	website.RedirectCode = req.RedirectCode
 	website.RedirectDomainsToPrimary = req.RedirectDomainsToPrimary
 
-	var newContent, updatedContent string
 	var domains []model.WebsiteDomain
 	var isUpdateOtherDomains bool
-	var shouldRewriteCaddy bool
-	var targetOtherDomains string
 	var oldDomain, newDomain []string
 	if req.OtherDomains != "" && website.PrimaryDomain != req.OtherDomains {
-		fileUtil := files.NewFileOp()
-		content, err := fileUtil.GetContent(CaddyFilePath())
-		if err != nil {
-			if os.IsNotExist(err) {
-				shouldRewriteCaddy = true
-			} else {
-				return err
-			}
-		}
 		defaultHttpPort := 80
 		domains, _, _, _ = getWebsiteDomains(req.OtherDomains, defaultHttpPort, website.ID)
 		var otherDomains, newOtherDomains string
@@ -107,56 +93,35 @@ func (s WebsiteService) Update(ctx context.Context, req *request.WebsiteUpdate) 
 		}
 		otherDomains = strings.TrimSuffix(otherDomains, "\n")
 		newOtherDomains = strings.TrimSuffix(newOtherDomains, "\n")
-		targetOtherDomains = newOtherDomains
 
-		if !shouldRewriteCaddy && isDomainChanged(oldDomain, newDomain) {
-			newContent, err = CaddyUpdateOtherDomains(ctx, string(content), website.PrimaryDomain, otherDomains, newOtherDomains)
-			if err != nil {
-				return err
-			}
-			isUpdateOtherDomains = true
-		} else if isDomainChanged(oldDomain, newDomain) {
+		if isDomainChanged(oldDomain, newDomain) {
 			isUpdateOtherDomains = true
 		}
-
-		if isUpdateOtherDomains {
-			domainRepo := repo.NewWebsiteDomain()
-			if err := domainRepo.DeleteByWebsiteIdNotIsPrimary(context.Background(), website.ID); err != nil {
-				return err
-			}
-		}
 	}
-	if oldProxy != req.Proxy {
-		if newContent != "" {
-			fileUtil := files.NewFileOp()
-			content, err := fileUtil.GetContent(CaddyFilePath())
-			if err != nil {
-				if os.IsNotExist(err) {
-					shouldRewriteCaddy = true
-				} else {
-					return err
-				}
-			}
-			updatedContent = string(content)
+	tx := global.DB.Begin()
+	defer func() {
+		if tx != nil {
+			tx.Rollback()
 		}
-		if !shouldRewriteCaddy {
-			newContent, _ = CaddyUpdateProxy(updatedContent, website.PrimaryDomain, req.Proxy)
-		}
-	}
-	if err := s.repo.Save(context.Background(), &website); err != nil {
+	}()
+	txCtx := context.WithValue(ctx, constant.DB, tx)
+	if err := s.repo.Save(txCtx, &website); err != nil {
 		return err
 	}
 	if website.Type == constant.Proxy {
 		for i := range upstreams {
 			upstreams[i].WebsiteID = website.ID
 		}
-		if err := repo.NewWebsiteUpstream().ReplaceByWebsiteID(context.Background(), website.ID, upstreams); err != nil {
+		if err := repo.NewWebsiteUpstream().ReplaceByWebsiteID(txCtx, website.ID, upstreams); err != nil {
 			return err
 		}
 	}
 	if isUpdateOtherDomains {
 		domainRepo := repo.NewWebsiteDomain()
-		if err := domainRepo.BatchCreate(context.Background(), domains); err != nil {
+		if err := domainRepo.DeleteByWebsiteIdNotIsPrimary(txCtx, website.ID); err != nil {
+			return err
+		}
+		if err := domainRepo.BatchCreate(txCtx, domains); err != nil {
 			return err
 		}
 		website.Domains = make([]*model.WebsiteDomain, 0, len(domains))
@@ -168,49 +133,12 @@ func (s WebsiteService) Update(ctx context.Context, req *request.WebsiteUpdate) 
 	if !isUpdateOtherDomains {
 		website.Domains = originalDomains
 	}
-	if shouldEnsureWebsiteCaddyConfig(&website) {
-		shouldRewriteCaddy = true
+	if err := ApplyCaddyFromDB(txCtx); err != nil {
+		return err
 	}
-	if shouldRewriteCaddy || newContent != "" {
-		if targetOtherDomains == "" && len(website.Domains) > 0 {
-			targetOtherDomains = buildWebsiteOtherDomains(&website)
-		}
-		_ = targetOtherDomains
-		return ApplyCaddyFromDB(ctx)
+	if err := tx.Commit().Error; err != nil {
+		return err
 	}
-	return ApplyCaddyFromDB(ctx)
-}
-
-func shouldEnsureWebsiteCaddyConfig(website *model.Website) bool {
-	if website == nil {
-		return false
-	}
-	switch website.Type {
-	case constant.Static, constant.Proxy, constant.WebApp, constant.Redirect:
-	default:
-		return false
-	}
-	domain := BuildWebsiteCaddyDomain(website.PrimaryDomain, website.Protocol)
-	if domain == "" {
-		return false
-	}
-	exists, err := CaddyExistAddress(domain)
-	if err != nil {
-		return true
-	}
-	return !exists
-}
-
-func buildWebsiteOtherDomains(website *model.Website) string {
-	if len(website.Domains) == 0 {
-		return ""
-	}
-	var domains []string
-	for _, d := range website.Domains {
-		if d.Domain == "" || normalizeWebsiteDomainForCompare(d.Domain) == normalizeWebsiteDomainForCompare(website.PrimaryDomain) {
-			continue
-		}
-		domains = append(domains, d.Domain)
-	}
-	return strings.Join(domains, "\n")
+	tx = nil
+	return nil
 }
