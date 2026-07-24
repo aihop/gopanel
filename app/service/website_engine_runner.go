@@ -133,7 +133,7 @@ func asNumberString(v interface{}) string {
 		return ""
 	}
 }
-func mergeRunnerEnvs(base []string, rc runnerConfig, containerPort string) []string {
+func mergeRunnerEnvs(base []string, rc runnerConfig, containerPort string, pipelineVersion string) []string {
 	envMap := make(map[string]string)
 	for _, e := range base {
 		parts := strings.SplitN(e, "=", 2)
@@ -153,6 +153,9 @@ func mergeRunnerEnvs(base []string, rc runnerConfig, containerPort string) []str
 	}
 	if _, ok := envMap["HOST"]; !ok {
 		envMap["HOST"] = "0.0.0.0"
+	}
+	if version := strings.TrimSpace(pipelineVersion); version != "" {
+		envMap["GOPANEL_PIPELINE_VERSION"] = version
 	}
 	out := make([]string, 0, len(envMap))
 	for k, v := range envMap {

@@ -36,7 +36,7 @@ func (s *PipelineService) stepRunner(ctx context.Context, logger *PipelineLogger
 	if prev, err := s.recordRepo.LatestRunnerContainerID(p.ID); err == nil {
 		previousContainerID = strings.TrimSpace(prev)
 	}
-	req := &request.WebsiteCreate{CodeSource: "pipeline", GitRepo: "", CodeDir: "", CodeDirFallback: codeRoot, PreviousContainerID: previousContainerID, PipelineKey: strings.TrimSpace(p.PipelineKey), RunnerConfig: runnerCfg}
+	req := &request.WebsiteCreate{CodeSource: "pipeline", GitRepo: "", CodeDir: "", CodeDirFallback: codeRoot, PreviousContainerID: previousContainerID, PipelineKey: strings.TrimSpace(p.PipelineKey), PipelineVersion: strings.TrimSpace(p.Version), RunnerConfig: runnerCfg}
 	progress := func(format string, a ...interface{}) {
 		logger.Info("[Runner] "+format, a...)
 	}

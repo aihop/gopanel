@@ -98,7 +98,7 @@ func DeployWebsiteEngine(ctx context.Context, alias string, req *request.Website
 	runnerExtraNetworks := make([]string, 0, len(rc.ExtraNetworks))
 	selectedCodeDir := ""
 	if req.CodeSource == "pipeline" {
-		envs = mergeRunnerEnvs(envs, rc, containerPort)
+			envs = mergeRunnerEnvs(envs, rc, containerPort, req.PipelineVersion)
 		runnerSourceMountDir := resolveRunnerSourceMountDir(rc, workingDir)
 		cmd = []string{"sh", "-lc", buildRunnerScript(rc, runnerSourceMountDir)}
 		logEngineProgress(progress, "Runner 配置: baseImage=%s, mode=%s", imageName, strings.TrimSpace(rc.Mode))
