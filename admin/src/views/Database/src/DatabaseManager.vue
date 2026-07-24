@@ -170,7 +170,8 @@ const handleDropDatabase = async () => {
         @back-to-tables="clearSelectedTable"
       />
 
-      <div class="border-b border-slate-200 bg-[#f5f5f5] pt-1 px-2">
+      <!-- 未选中表时隐藏整排标签：这些标签都是针对具体表的操作，此处仅显示数据库级表概览 -->
+      <div v-if="selectedTable" class="border-b border-slate-200 bg-[#f5f5f5] pt-1 px-2">
         <n-tabs
           v-model:value="activeTab"
           type="card"
