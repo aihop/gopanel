@@ -718,7 +718,23 @@ export const useStructureView = (
             DELETE_RULE: row.on_delete || 'NO ACTION'
           }))
         } else {
-          fkData.value = res.data.rows || []
+          // MySQL 返回大写列名、PostgreSQL 返回小写列名，统一按大小写不敏感规整成
+          // fkColumns 所用的大写 key，否则 PG 下除删除按钮外各列取不到值全为空。
+          const pick = (row: any, ...names: string[]) => {
+            for (const n of names) {
+              const hit = Object.keys(row).find(k => k.toLowerCase() === n.toLowerCase())
+              if (hit !== undefined && row[hit] != null) return row[hit]
+            }
+            return ''
+          }
+          fkData.value = (res.data.rows || []).map((row: any) => ({
+            CONSTRAINT_NAME: pick(row, 'CONSTRAINT_NAME'),
+            COLUMN_NAME: pick(row, 'COLUMN_NAME'),
+            REFERENCED_TABLE_NAME: pick(row, 'REFERENCED_TABLE_NAME'),
+            REFERENCED_COLUMN_NAME: pick(row, 'REFERENCED_COLUMN_NAME'),
+            UPDATE_RULE: pick(row, 'UPDATE_RULE') || 'NO ACTION',
+            DELETE_RULE: pick(row, 'DELETE_RULE') || 'NO ACTION'
+          }))
         }
       } else {
         fkData.value = []
