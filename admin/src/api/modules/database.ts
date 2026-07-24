@@ -78,8 +78,18 @@ export const getDBManagerTablesAPI = (data: { serverId: number; databaseName: st
 	return http.post<string[]>(`/database/manager/tables`, data)
 }
 
+// 侧边栏与主面板会各自请求一次表列表；进入页面时两者参数相同，这里对「同参数在途请求」
+// 去重，让并发的相同请求共用同一个 Promise（settle 后清除），避免重复请求。参数不同则各自请求。
+const inflightTableList = new Map<string, Promise<any>>()
 export const getDBManagerTableListAPI = (data: { serverId: number; databaseName: string; page: number; limit: number; keyword?: string; sortField?: string; sortOrder?: string }) => {
-	return http.post<any>(`/database/manager/table-list`, data)
+	const key = JSON.stringify(data)
+	const existing = inflightTableList.get(key)
+	if (existing) return existing
+	const p = http.post<any>(`/database/manager/table-list`, data).finally(() => {
+		inflightTableList.delete(key)
+	})
+	inflightTableList.set(key, p)
+	return p
 }
 
 export const getDBManagerTableDataAPI = (data: { serverId: number; databaseName: string; tableName: string; page: number; limit: number; searchColumn?: string; searchValue?: string; advancedSearch?: any[] }) => {
