@@ -15,12 +15,51 @@ import (
 	"github.com/aihop/gopanel/pkg/cloud"
 	"github.com/go-acme/lego/v4/certcrypto"
 	"github.com/go-acme/lego/v4/certificate"
+	"github.com/go-acme/lego/v4/challenge/dns01"
 	"github.com/go-acme/lego/v4/lego"
 	legolog "github.com/go-acme/lego/v4/log"
 	"github.com/go-acme/lego/v4/registration"
 	"strings"
 	"time"
 )
+
+var acmeRecursiveResolvers = []string{
+	"1.1.1.1:53",
+	"1.0.0.1:53",
+	"8.8.8.8:53",
+	"8.8.4.4:53",
+}
+
+func logDNS01FailureDiagnosis(logger *SSLLogger, account *model.CloudAccount, domains []string, errStr string) {
+	probeDomain := ""
+	if len(domains) > 0 {
+		probeDomain = strings.TrimPrefix(strings.TrimSpace(domains[0]), "*.")
+	}
+
+	logger.Error(" -> 域名: %s", strings.Join(domains, ", "))
+	if account != nil {
+		logger.Error(" -> DNS 服务商账号: %s (%s)", account.Name, account.Type)
+	}
+
+	switch {
+	case strings.Contains(errStr, "The domain name belongs to other users"):
+		logger.Error("👉 [诊断建议] 当前选择的 DNS 服务商账号不具备该域名的解析管理权，请确认域名解析确实托管在该账号下。")
+		logger.Error("👉 [诊断建议] 解决方法：请在签注表单第 3 步重新选择真正管理该域名解析的云账号。")
+	case strings.Contains(errStr, "InvalidAccessKeyId"), strings.Contains(errStr, "SignatureDoesNotMatch"), strings.Contains(strings.ToLower(errStr), "unauthorized"), strings.Contains(strings.ToLower(errStr), "permission"):
+		logger.Error("👉 [诊断建议] 当前 DNS 服务商凭证无效、已过期，或缺少编辑 DNS 记录的权限。")
+		logger.Error("👉 [诊断建议] 若使用 Cloudflare，请确认该 Token 至少具备 Zone:Read 与 DNS:Edit 权限，且授权范围覆盖目标 Zone。")
+	case strings.Contains(strings.ToLower(errStr), "propagation"), strings.Contains(strings.ToLower(errStr), "time limit exceeded"), strings.Contains(strings.ToLower(errStr), "nx domain"), strings.Contains(strings.ToLower(errStr), "nxdomain"):
+		logger.Error("👉 [诊断建议] TXT 记录可能已创建，但 DNS 传播检查未在超时前通过。")
+		logger.Error("👉 [诊断建议] 如果日志中看到类似 `192.168.x.x`、`fe80::1` 这类本地 DNS，说明系统正在使用本机解析器检查传播，本地 DNS 可能看不到 Cloudflare 的最新 TXT 记录。")
+		if probeDomain != "" {
+			logger.Error("👉 [诊断建议] 请立即执行 `dig TXT _acme-challenge.%s @1.1.1.1` 验证 Cloudflare 外部解析是否已生效。", probeDomain)
+		}
+	case strings.Contains(strings.ToLower(errStr), "zone"), strings.Contains(strings.ToLower(errStr), "could not find zone"):
+		logger.Error("👉 [诊断建议] 系统未能匹配到正确的 Zone，请确认 Cloudflare 账号中确实存在该根域名，并且 Token 可读取 Zone 列表。")
+	default:
+		logger.Error("👉 [诊断建议] 请结合上面的原始错误，优先检查 DNS 服务商权限、Zone 归属以及 `_acme-challenge` TXT 记录是否实际写入。")
+	}
+}
 
 func (l *acmeLogger) Fatal(args ...interface{}) {
 	l.logger.Error("%s", fmt.Sprint(args...))
@@ -153,7 +192,12 @@ func (s *SSLService) obtainCloudAcmeCertificate(item *model.SSL) {
 		logger.Error("创建 ACME 客户端失败: %v", err)
 		return
 	}
-	err = client.Challenge.SetDNS01Provider(provider)
+	logger.Info("DNS-01 传播检查将使用公共递归 DNS: %s", strings.Join(acmeRecursiveResolvers, ", "))
+	logger.Info("DNS-01 传播等待上限将由 Provider 决定；Cloudflare 当前配置为 5 分钟。")
+	err = client.Challenge.SetDNS01Provider(
+		provider,
+		dns01.AddRecursiveNameservers(acmeRecursiveResolvers),
+	)
 	if err != nil {
 		logger.Error("设置 DNS-01 Provider 失败: %v", err)
 		return
@@ -197,16 +241,9 @@ func (s *SSLService) obtainCloudAcmeCertificate(item *model.SSL) {
 	certificates, err := client.Certificate.Obtain(request)
 	if err != nil {
 		logger.Error("DNS-01 验证或签发证书失败:")
-		errStr := err.Error()
-		errStr = strings.ReplaceAll(errStr, "[", "")
-		errStr = strings.ReplaceAll(errStr, "]", "")
-		logger.Error(" -> %s", errStr)
-		if strings.Contains(errStr, "The domain name belongs to other users") {
-			logger.Error("👉 [诊断建议] 系统检测到您当前选择用于 DNS 验证的云账号（%s），并不具备该域名（%s）的解析管理权。", account.Name, item.Domains)
-			logger.Error("👉 [诊断建议] 解决方法：请在签注表单的第 3 步（授权 DNS 解析服务商），下拉选择一个真正管理该域名解析的云账号（如您的 Cloudflare 账号或另一个阿里云账号）。")
-		} else if strings.Contains(errStr, "InvalidAccessKeyId") || strings.Contains(errStr, "SignatureDoesNotMatch") {
-			logger.Error("👉 [诊断建议] 系统检测到当前云账号（%s）的 API 密钥无效或已过期，请前往“云账号授权”页面重新配置正确的 AccessKey 和 SecretKey。", account.Name)
-		}
+		errStr := strings.TrimSpace(err.Error())
+		logger.Error(" -> 原始错误: %s", errStr)
+		logDNS01FailureDiagnosis(logger, &account, cleanDomains, strings.ToLower(errStr))
 		item.Status = "error"
 		_ = s.repo.SaveWithoutCtx(item)
 		logger.Info("EOF")

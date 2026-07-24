@@ -277,12 +277,12 @@ defineExpose({ fetchTableData, setAdvancedSearch, handleCellEditCancel })
           <span class="font-bold">{{ selectedTable }}</span>
         </div>
         <div class="flex items-center gap-2">
-          <div class="hidden xl:flex items-center gap-2 text-[11px] text-slate-500">
-            <span class="px-2 py-1 rounded bg-slate-100">{{ recordSummary.total }} 条记录</span>
-            <span class="px-2 py-1 rounded bg-slate-100">{{ recordSummary.columnCount }} 列</span>
+          <div class="hidden 2xl:flex shrink-0 items-center gap-2 text-[11px] text-slate-500 whitespace-nowrap">
+            <span class="px-2 py-1 rounded bg-slate-100 whitespace-nowrap">{{ recordSummary.total }} 条记录</span>
+            <span class="px-2 py-1 rounded bg-slate-100 whitespace-nowrap">{{ recordSummary.columnCount }} 列</span>
             <span
               v-if="recordSummary.hasFilters"
-              class="px-2 py-1 rounded bg-blue-50 text-blue-600"
+              class="px-2 py-1 rounded bg-blue-50 text-blue-600 whitespace-nowrap"
             >已启用筛选</span>
           </div>
           <template v-if="checkedRowKeys.length > 0">
