@@ -8,7 +8,7 @@ export default {
 	},
 	lang: {
 		chinese: "中文",
-		english: "英语",
+		english: "英语"
 	},
 	auth: {
 		login: "登录",
@@ -228,7 +228,8 @@ export default {
 			mfaTitle: "MFA 认证",
 			mfaCode: "MFA 验证码",
 			title: "GoPanel 云平台",
-			licenseHelper: '同意 &laquo; <a href="https://gopanel.cn/licenses" target="_blank"> GoPanel 社区软件协议</a> &raquo;',
+			licenseHelper:
+				'同意 &laquo; <a href="https://gopanel.cn/licenses" target="_blank"> GoPanel 社区软件协议</a> &raquo;',
 			errorAgree: "请点击同意软件协议",
 			agreeTitle: "服务协议及隐私保护",
 			agreeContent:
@@ -397,7 +398,8 @@ export default {
 	},
 	home: {
 		homeHelper: "轻量、高效、实用性强",
-		homeHelperDesc: "GoPanel 专注于容器管理、网站部署、应用安装与系统运维，用更少的步骤完成比传统面板更直接的操作流程。",
+		homeHelperDesc:
+			"GoPanel 专注于容器管理、网站部署、应用安装与系统运维，用更少的步骤完成比传统面板更直接的操作流程。",
 		popularApps: "热门应用推荐",
 		popularAppsDesc: "热门应用直接读取本地应用商店接口，优先展示适合快速部署的常用服务。",
 		restart_gopanel: "重启面板",
@@ -447,7 +449,7 @@ export default {
 		disk: "磁盘",
 		blockDevice: "块设备"
 	},
-	ai:{
+	ai: {
 		workspace: "团队 AI 工作空间",
 		workspaceDesc: "Manage your AI tools in one place.",
 		agentHub: "终端与智能体",
@@ -1791,13 +1793,13 @@ export default {
 		diffHelper: "左侧为旧版本，右侧为新版，编辑之后点击使用自定义版本保存",
 		pullImage: "拉取镜像",
 		pullImageHelper: "在应用启动之前执行 docker pull 来拉取镜像",
-		gpuConfig: "GPU 加速"		,
+		gpuConfig: "GPU 加速",
 		containerApp: "容器应用",
 		containerAppHelper: "部分应用的安装使用说明请在应用详情页查看，其他应用的安装使用说明请在应用市场查看。",
 		summary: "当前共 {0} 条记录，支持按应用名快速检索和分页浏览。",
 		syncHelper: "同步应用列表",
 		upgrade: "升级",
-		allApp: "全部应用",
+		allApp: "全部应用"
 	},
 	pipeline: {
 		workspace: "CI/CD 流水线",
@@ -1814,7 +1816,7 @@ export default {
 		records: "记录",
 		edit: "编辑",
 		delete: "删除",
-		actions: "操作",
+		actions: "操作"
 	},
 	website: {
 		websiteList: "网站列表",
@@ -1822,7 +1824,31 @@ export default {
 		webServer: "Web服务器",
 		website: "网站",
 		primaryDomain: "主域名",
+		typeRequired: "请选择网站类型",
+		primaryDomainRequired: "请输入主域名",
+		aliasRequired: "请输入网站目录或代号",
+		otherDomainsDuplicate: "其他域名不能包含主域名",
 		otherDomains: "其他域名",
+		upstreams: "后端节点",
+		node: "节点",
+		addUpstream: "添加节点",
+		upstreamAddressPlaceholder: "例如 127.0.0.1:8080 或 backend:3000",
+		upstreamEnabled: "启用该节点",
+		upstreamRequired: "请至少添加一个后端节点",
+		upstreamEnabledRequired: "请至少启用一个后端节点",
+		backends: "后端",
+		backendsEnabled: "已启用 {count} 个",
+		backendNotConfigured: "后端未配置",
+		healthCheck: "健康检查",
+		healthUriPlaceholder: "例如 /health",
+		proxyTarget: "代理地址",
+		proxyTargetPlaceholder: "例如 http://127.0.0.1:8080 或 8080",
+		proxyTargetRequired: "请输入代理地址或容器内部端口",
+		pipelineProxyPlaceholderHelper:
+			"这里可留空。流水线成功后只会同步临时运行结果并回填真实代理地址；稳定上线、网站切换与回滚请在正式版本中操作。",
+		appInstallRequired: "请选择已安装的容器应用",
+		pipelineRequired: "请选择关联流水线",
+		dockerImageRequired: "请输入容器镜像地址",
 		static: "静态网站",
 		deployment: "一键部署",
 		supportUpType: "仅支持 .tar.gz 文件",
@@ -1961,7 +1987,7 @@ export default {
 		restoreHelper: "确认使用此备份恢复？",
 		wafValueHelper: "值",
 		wafRemarkHelper: "描述",
-		runtimeProxyHelper: "使用从 GoPanel 创建的运行环境",	
+		runtimeProxyHelper: "使用从 GoPanel 创建的运行环境",
 		runtime: "运行环境",
 		deleteRuntimeHelper: "运行环境应用需要跟网站一并删除，请谨慎处理",
 		proxyType: "监听网络类型",
@@ -2061,7 +2087,7 @@ export default {
 		sni: "回源 SNI",
 		sniHelper: "反代后端为 https 的时候可能需要设置回源 SNI，具体需要看 CDN 服务商文档",
 		huaweicloud: "华为云",
-		restart: "重启",
+		restart: "重启"
 	},
 	ssl: {
 		create: "申请证书",
@@ -2136,7 +2162,7 @@ export default {
 		refreshHelper: "刷新证书后，证书会自动部署到指定网站",
 		domainList: "域名列表",
 		source: "来源",
-		bindWebsite: "绑定网站",
+		bindWebsite: "绑定网站"
 	},
 	firewall: {
 		create: "创建规则",

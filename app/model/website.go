@@ -43,9 +43,10 @@ type Website struct {
 	SecurityHeader bool   `json:"securityHeader" gorm:"type:boolean;default:false"`
 	HstsEnabled    bool   `json:"hstsEnabled" gorm:"type:boolean;default:false"`
 
-	User    string           `gorm:"type:varchar;" json:"user"`
-	Group   string           `gorm:"type:varchar;" json:"group"`
-	Domains []*WebsiteDomain `json:"domains" gorm:"-:migration"`
+	User      string             `gorm:"type:varchar;" json:"user"`
+	Group     string             `gorm:"type:varchar;" json:"group"`
+	Domains   []*WebsiteDomain   `json:"domains" gorm:"-:migration"`
+	Upstreams []*WebsiteUpstream `json:"upstreams" gorm:"foreignKey:WebsiteID"`
 }
 
 func (Website) TableName() string {

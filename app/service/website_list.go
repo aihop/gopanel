@@ -125,6 +125,7 @@ func (s *WebsiteService) List(ctx *gormx.Contextx) (websiteDTOs []*response.Webs
 			RedirectDomainsToPrimary: web.RedirectDomainsToPrimary,
 			ActiveRelease:            buildWebsiteDeploySummary(activeReleaseMap[web.ID]),
 			LatestPipelineSync:       buildWebsiteDeploySummary(latestPipelineSyncMap[web.ID]),
+			Upstreams:                responseWebsiteUpstreams(web.Upstreams, web.Proxy),
 		})
 	}
 	FillWebsiteRuntimeMeta(context.Background(), websiteDTOs)

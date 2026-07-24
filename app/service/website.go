@@ -70,6 +70,7 @@ func (s WebsiteService) Create(ctx context.Context, req *request.WebsiteCreate, 
 	var (
 		otherDomains []model.WebsiteDomain
 		domains      []model.WebsiteDomain
+		upstreams    []model.WebsiteUpstream
 	)
 	req.Protocol = normalizeWebsiteProtocol(req.Protocol)
 	if strings.HasPrefix(req.PrimaryDomain, "http://") {
@@ -95,32 +96,39 @@ func (s WebsiteService) Create(ctx context.Context, req *request.WebsiteCreate, 
 	if req.Protocol == "" {
 		req.Protocol = constant.ProtocolHTTPS
 	}
+	if req.Type == constant.Proxy {
+		upstreams, err = ensureWebsiteProxyUpstreams(req.Upstreams, req.Proxy)
+		if err != nil {
+			return err
+		}
+		req.Proxy = websiteProxyFromUpstreams(upstreams, req.Proxy)
+	}
 
 	defaultDate, _ := time.Parse(constant.DateLayout, constant.DefaultDate)
 	website := &model.Website{
-		PrimaryDomain:  req.PrimaryDomain,
-		Type:           req.Type,
-		Alias:          alias,
-		Remark:         req.Remark,
-		Status:         constant.WebRunning,
-		ExpireDate:     defaultDate,
-		Protocol:       req.Protocol,
-		Proxy:          req.Proxy,
-		SiteDir:        "/",
-		CodeSource:     req.CodeSource,
-		AccessLog:      true,
-		ErrorLog:       true,
-		IPV6:           req.IPV6,
-		PipelineID:     req.PipelineId,
-		AntiCrawler:    req.AntiCrawler,
-		AntiLeech:      req.AntiLeech,
-		RateLimitMode:  req.RateLimitMode,
-		WafEnable:      req.WafEnable,
-		BlockSensitive: req.BlockSensitive,
-		IPAllowlist:    strings.TrimSpace(req.IPAllowlist),
-		IPBlocklist:    strings.TrimSpace(req.IPBlocklist),
-		SecurityHeader: req.SecurityHeader,
-		HstsEnabled:    req.HstsEnabled,
+		PrimaryDomain:            req.PrimaryDomain,
+		Type:                     req.Type,
+		Alias:                    alias,
+		Remark:                   req.Remark,
+		Status:                   constant.WebRunning,
+		ExpireDate:               defaultDate,
+		Protocol:                 req.Protocol,
+		Proxy:                    req.Proxy,
+		SiteDir:                  "/",
+		CodeSource:               req.CodeSource,
+		AccessLog:                true,
+		ErrorLog:                 true,
+		IPV6:                     req.IPV6,
+		PipelineID:               req.PipelineId,
+		AntiCrawler:              req.AntiCrawler,
+		AntiLeech:                req.AntiLeech,
+		RateLimitMode:            req.RateLimitMode,
+		WafEnable:                req.WafEnable,
+		BlockSensitive:           req.BlockSensitive,
+		IPAllowlist:              strings.TrimSpace(req.IPAllowlist),
+		IPBlocklist:              strings.TrimSpace(req.IPBlocklist),
+		SecurityHeader:           req.SecurityHeader,
+		HstsEnabled:              req.HstsEnabled,
 		HttpConfig:               req.HttpConfig,
 		RedirectCode:             req.RedirectCode,
 		RedirectDomainsToPrimary: req.RedirectDomainsToPrimary,
@@ -158,6 +166,13 @@ func (s WebsiteService) Create(ctx context.Context, req *request.WebsiteCreate, 
 			website.Proxy = fmt.Sprintf("127.0.0.1:%d", appInstall.HttpPort)
 		}
 		website.Type = constant.Proxy
+		if len(req.Upstreams) > 0 {
+			upstreams, err = ensureWebsiteProxyUpstreams(req.Upstreams, website.Proxy)
+			if err != nil {
+				return err
+			}
+			website.Proxy = websiteProxyFromUpstreams(upstreams, website.Proxy)
+		}
 	}
 
 	switch req.Type {
@@ -225,6 +240,14 @@ func (s WebsiteService) Create(ctx context.Context, req *request.WebsiteCreate, 
 	websiteDomainRepo := repo.NewWebsiteDomain()
 	if err = websiteDomainRepo.BatchCreate(context.Background(), domains); err != nil {
 		return err
+	}
+	if website.Type == constant.Proxy {
+		for i := range upstreams {
+			upstreams[i].WebsiteID = website.ID
+		}
+		if err = repo.NewWebsiteUpstream().BatchCreate(context.Background(), upstreams); err != nil {
+			return err
+		}
 	}
 
 	// 如果是 git (自定义镜像部署)，初始部署成功后，生成一条发布记录

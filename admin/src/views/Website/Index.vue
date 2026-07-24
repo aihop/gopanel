@@ -1,180 +1,134 @@
 <template>
-  <div class="website-index-root mt-4 space-y-8">
+	<div class="website-index-root mt-4 space-y-8">
+		<div class="flex flex-col gap-8 lg:flex-row lg:items-start lg:justify-between">
+			<div class="max-w-3xl space-y-4">
+				<div class="flex flex-wrap items-center gap-3">
+					<div
+						class="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium"
+						:class="
+							httpServerStatus
+								? 'border-emerald-200 bg-emerald-50 text-emerald-600'
+								: 'border-rose-200 bg-rose-50 text-rose-500'
+						"
+					>
+						<span
+							class="h-2.5 w-2.5 rounded-full"
+							:class="httpServerStatus ? 'bg-emerald-500' : 'bg-rose-500'"
+						></span>
+						{{ httpServerStatus ? "HTTP服务 运行中" : "HTTP服务 未启动" }}
+						{{ statusStartErrorText }}
+					</div>
+					<div class="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-500">
+						当前共管理 {{ total }} 个网站
+					</div>
+				</div>
+			</div>
+			<div class="flex flex-wrap gap-3 lg:justify-end">
+				<n-button ghost type="primary" @click="handleReload">{{ $t("website.restart") }}</n-button>
+				<n-button ghost :disabled="!httpServerStatus" @click="handleStop">
+					{{ $t("commons.button.stop") }}
+				</n-button>
+			</div>
+		</div>
 
-    <div class="flex flex-col gap-8 lg:flex-row lg:items-start lg:justify-between">
-      <div class="max-w-3xl space-y-4">
-        <div class="flex flex-wrap items-center gap-3">
-          <div
-            class="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium"
-            :class="
-								httpServerStatus
-									? 'border-emerald-200 bg-emerald-50 text-emerald-600'
-									: 'border-rose-200 bg-rose-50 text-rose-500'
-							"
-          >
-            <span
-              class="h-2.5 w-2.5 rounded-full"
-              :class="httpServerStatus ? 'bg-emerald-500' : 'bg-rose-500'"
-            ></span>
-            {{ httpServerStatus ? "HTTP服务 运行中" : "HTTP服务 未启动" }}
-            {{ statusStartErrorText }}
-          </div>
-          <div class="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-500">
-            当前共管理 {{ total }} 个网站
-          </div>
-        </div>
-      </div>
-      <div class="flex flex-wrap gap-3 lg:justify-end">
-        <n-button
-          ghost
-          type="primary"
-          @click="handleReload"
-        >{{ $t("website.restart") }}</n-button>
-        <n-button
-          ghost
-          :disabled="!httpServerStatus"
-          @click="handleStop"
-        >
-          {{ $t("commons.button.stop") }}
-        </n-button>
-      </div>
-    </div>
-
-    <n-alert
-      v-if="!agentStatus.online"
-      type="warning"
-      :show-icon="true"
-      title="Agent 未初始化"
-      class="rounded-[28px] border border-blue-100/80 bg-base-100 p-6 shadow-[0_18px_48px_rgba(15,23,42,0.08)]"
-    >
-      <div class="text-sm leading-7 text-slate-600">
-        <div>gp-agent 未启动或未安装，网站功能暂不可用。</div>
-        <div
-          v-if="agentStatus.error"
-          class="mt-1 text-slate-500"
-        >{{ agentStatus.error }}</div>
-        <n-space class="mt-4">
-          <n-button
-            type="primary"
-            :loading="ensuringAgent"
-            @click="ensureAgent"
-          >一键初始化</n-button>
-        </n-space>
-      </div>
-    </n-alert>
-    <div class="rounded-[28px] border border-blue-100/80 bg-base-100 shadow-[0_24px_72px_rgba(15,23,42,0.08)]">
-      <div class="flex flex-col gap-5 border-b border-slate-100 px-8 py-7 lg:flex-row lg:items-center lg:justify-between">
-        <div class="space-y-2">
-          <div class="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">Website Workspace</div>
-          <div class="text-2xl font-semibold fg-base-100">
-            {{ activeTab === "list" ? $t("website.websiteList") : "配置文件" }}
-          </div>
-          <div class="text-sm leading-7 text-slate-500">
-            {{
+		<n-alert
+			v-if="!agentStatus.online"
+			type="warning"
+			:show-icon="true"
+			title="Agent 未初始化"
+			class="bg-base-100 rounded-[28px] border border-blue-100/80 p-6 shadow-[0_18px_48px_rgba(15,23,42,0.08)]"
+		>
+			<div class="text-sm leading-7 text-slate-600">
+				<div>gp-agent 未启动或未安装，网站功能暂不可用。</div>
+				<div v-if="agentStatus.error" class="mt-1 text-slate-500">{{ agentStatus.error }}</div>
+				<n-space class="mt-4">
+					<n-button type="primary" :loading="ensuringAgent" @click="ensureAgent">一键初始化</n-button>
+				</n-space>
+			</div>
+		</n-alert>
+		<div class="bg-base-100 rounded-[28px] border border-blue-100/80 shadow-[0_24px_72px_rgba(15,23,42,0.08)]">
+			<div
+				class="flex flex-col gap-5 border-b border-slate-100 px-8 py-7 lg:flex-row lg:items-center lg:justify-between"
+			>
+				<div class="space-y-2">
+					<div class="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">Website Workspace</div>
+					<div class="fg-base-100 text-2xl font-semibold">
+						{{ activeTab === "list" ? $t("website.websiteList") : "配置文件" }}
+					</div>
+					<div class="text-sm leading-7 text-slate-500">
+						{{
 							activeTab === "list"
 								? "集中管理域名、站点类型与更新时间，快速进入日常维护。"
 								: "查看内置 HTTP 服务配置文件，便于排查与调整站点设置。"
 						}}
-          </div>
-        </div>
-        <div class="flex flex-wrap gap-3">
-          <div class="rounded-full bg-slate-100 p-1">
-            <button
-              class="rounded-full px-5 py-2 text-sm font-medium transition"
-              :class="
+					</div>
+				</div>
+				<div class="flex flex-wrap gap-3">
+					<div class="rounded-full bg-slate-100 p-1">
+						<button
+							class="rounded-full px-5 py-2 text-sm font-medium transition"
+							:class="
 								activeTab === 'list'
 									? 'bg-base-100 text-blue-600 shadow-sm'
 									: 'text-slate-500 hover:text-slate-100'
 							"
-              @click="activeTab = 'list'"
-            >
-              {{ $t("website.websiteList") }}
-            </button>
-            <button
-              class="rounded-full px-5 py-2 text-sm font-medium transition"
-              :class="
+							@click="activeTab = 'list'"
+						>
+							{{ $t("website.websiteList") }}
+						</button>
+						<button
+							class="rounded-full px-5 py-2 text-sm font-medium transition"
+							:class="
 								activeTab === 'config'
 									? 'bg-base-100 text-blue-600 shadow-sm'
 									: 'text-slate-500 hover:text-slate-100'
 							"
-              @click="activeTab = 'config'"
-            >
-              {{ $t("website.config") }}
-            </button>
-          </div>
-          <n-button
-            v-if="activeTab === 'list'"
-            ghost
-            @click="fetchData"
-          >刷新列表</n-button>
-          <n-button
-            v-if="activeTab === 'list'"
-            type="primary"
-            @click="handleAdd"
-          >创建网站</n-button>
-        </div>
-      </div>
+							@click="activeTab = 'config'"
+						>
+							{{ $t("website.config") }}
+						</button>
+					</div>
+					<n-button v-if="activeTab === 'list'" ghost @click="fetchData">刷新列表</n-button>
+					<n-button v-if="activeTab === 'list'" type="primary" @click="handleAdd">创建网站</n-button>
+				</div>
+			</div>
 
-      <div class="p-8">
-        <div
-          v-if="activeTab === 'list'"
-          class="space-y-5"
-        >
-          <n-data-table
-            :loading="loading"
-            :columns="columns"
-            :data="tableData"
-            :bordered="false"
-            class="rounded-3xl"
-          >
-            <template #empty>
-              <div class="flex flex-col items-center justify-center py-14">
-                <n-empty
-                  description="暂无网站"
-                  class="mb-3"
-                />
-                <n-button
-                  type="primary"
-                  ghost
-                  class="mt-6"
-                  @click="handleAdd"
-                >立即创建</n-button>
-              </div>
-            </template>
-          </n-data-table>
-        </div>
+			<div class="p-8">
+				<div v-if="activeTab === 'list'" class="space-y-5">
+					<n-data-table
+						:loading="loading"
+						:columns="columns"
+						:data="tableData"
+						:bordered="false"
+						class="rounded-3xl"
+					>
+						<template #empty>
+							<div class="flex flex-col items-center justify-center py-14">
+								<n-empty description="暂无网站" class="mb-3" />
+								<n-button type="primary" ghost class="mt-6" @click="handleAdd">立即创建</n-button>
+							</div>
+						</template>
+					</n-data-table>
+				</div>
 
-        <div
-          v-else
-          class="overflow-hidden rounded-3xl border border-slate-100 bg-slate-50/70"
-        >
-          <HttpConfigFile scope-summary="这里编辑的是全局 HTTP 服务配置，作用于代理层本身，不对应某一个网站的应用运行时。具体网站绑定的是 Docker/Podman、rootless/rootful 与运行用户，请在网站列表、部署管理或安全/日志入口查看。" />
-        </div>
-      </div>
-    </div>
+				<div v-else class="overflow-hidden rounded-3xl border border-slate-100 bg-slate-50/70">
+					<HttpConfigFile
+						scope-summary="这里编辑的是全局 HTTP 服务配置，作用于代理层本身，不对应某一个网站的应用运行时。具体网站绑定的是 Docker/Podman、rootless/rootful 与运行用户，请在网站列表、部署管理或安全/日志入口查看。"
+					/>
+				</div>
+			</div>
+		</div>
 
-    <Create
-      ref="createRef"
-      @confirm="postConfirm"
-    />
+		<Create ref="createRef" @confirm="postConfirm" />
 
-    <AppDeployHistory
-      ref="appDeployHistoryRef"
-      @confirm="postConfirm"
-    />
+		<AppDeployHistory ref="appDeployHistoryRef" @confirm="postConfirm" />
 
-    <AccessLogDrawer ref="accessLogDrawerRef" />
+		<AccessLogDrawer ref="accessLogDrawerRef" />
 
-    <SecurityDrawer
-      ref="securityDrawerRef"
-      @confirm="fetchData"
-    />
+		<SecurityDrawer ref="securityDrawerRef" @confirm="fetchData" />
 
-    <OpDialog
-      ref="opDialogRef"
-      @search="handleEnsureFinished"
-    />
-  </div>
+		<OpDialog ref="opDialogRef" @search="handleEnsureFinished" />
+	</div>
 </template>
 
 <script setup lang="ts">
@@ -199,7 +153,13 @@ import { useAuthStore } from "@/store/auth"
 import OpDialog from "@/components/OpDialog.vue"
 import { buildRuntimeDetailText } from "@/utils/runtime"
 import { listAllPipelines } from "@/utils/pipeline"
-import { getWebsiteSourceLabel, isHttpsWebsiteProtocol, needsWebsiteBindingLookup, normalizeWebsiteProtocol, resolveWebsiteBindingMeta } from "@/utils/websiteRuntime"
+import {
+	getWebsiteSourceLabel,
+	isHttpsWebsiteProtocol,
+	needsWebsiteBindingLookup,
+	normalizeWebsiteProtocol,
+	resolveWebsiteBindingMeta
+} from "@/utils/websiteRuntime"
 
 type WebsiteTableRow = Website.WebsiteDTO & {
 	domains?: Array<string | { domain?: string }>
@@ -289,7 +249,7 @@ const activeTab = ref("list")
 function normalizeDomainList(row: WebsiteTableRow) {
 	if (Array.isArray(row.domains)) {
 		const domains = row.domains as Array<string | { domain?: string }>
-		return domains.map((item) => (typeof item === "string" ? item : item?.domain)).filter(Boolean) as string[]
+		return domains.map(item => (typeof item === "string" ? item : item?.domain)).filter(Boolean) as string[]
 	}
 	if (typeof row.otherDomains === "string") {
 		return row.otherDomains
@@ -352,16 +312,20 @@ function getSecuritySummary(row: WebsiteTableRow) {
 }
 
 function getWebsiteBindingMeta(row: WebsiteTableRow) {
-	return resolveWebsiteBindingMeta(row, {
-		appInstallMap: appInstallMap.value,
-		pipelineMap: pipelineMap.value
-	}, {
-		includeSourceInDetail: false,
-		kindFallback: "Runtime",
-		userFallback: "镜像默认",
-		runtimePrefix: "",
-		runUserPrefix: "用户:"
-	})
+	return resolveWebsiteBindingMeta(
+		row,
+		{
+			appInstallMap: appInstallMap.value,
+			pipelineMap: pipelineMap.value
+		},
+		{
+			includeSourceInDetail: false,
+			kindFallback: "Runtime",
+			userFallback: "镜像默认",
+			runtimePrefix: "",
+			runUserPrefix: "用户:"
+		}
+	)
 }
 
 function getWebsiteDeploySummary(row: WebsiteTableRow) {
@@ -372,9 +336,30 @@ function getWebsiteDeploySummary(row: WebsiteTableRow) {
 		lines.push("正式版本 未上线")
 	}
 	if (row.latestPipelineSync?.pipelineRecordId) {
-		lines.push(`${row.latestPipelineSync.isActive ? "构建同步 当前生效" : "构建同步"} #${row.latestPipelineSync.pipelineRecordId}`)
+		lines.push(
+			`${row.latestPipelineSync.isActive ? "构建同步 当前生效" : "构建同步"} #${row.latestPipelineSync.pipelineRecordId}`
+		)
 	}
 	return lines
+}
+
+function getBackendSummary(row: WebsiteTableRow) {
+	if (row.type !== "proxy" && row.type !== "web_app") {
+		return ""
+	}
+	const upstreams = Array.isArray(row.upstreams) ? row.upstreams.filter(item => item?.address) : []
+	if (upstreams.length > 0) {
+		const enabledCount = upstreams.filter(item => item.enabled !== false).length
+		const preview = upstreams
+			.slice(0, 2)
+			.map(item => item.address)
+			.join(", ")
+		return `${t("website.backends")}: ${upstreams.length} · ${t("website.backendsEnabled", { count: enabledCount })} · ${preview}`
+	}
+	if (row.proxy) {
+		return `${t("website.backends")}: ${row.proxy}`
+	}
+	return t("website.backendNotConfigured")
 }
 
 const columns: DataTableColumns<WebsiteTableRow> = [
@@ -384,7 +369,15 @@ const columns: DataTableColumns<WebsiteTableRow> = [
 		render(row) {
 			const protocol = normalizeWebsiteProtocol(row.protocol) || "HTTP"
 			return h("div", { class: "flex flex-col space-y-1" }, [
-				h("a", { href: protocol === "HTTP" ? `http://${row.primaryDomain}` : `https://${row.primaryDomain}`, target: "_blank", class: "text-base font-semibold fg-base-100" }, row.primaryDomain),
+				h(
+					"a",
+					{
+						href: protocol === "HTTP" ? `http://${row.primaryDomain}` : `https://${row.primaryDomain}`,
+						target: "_blank",
+						class: "text-base font-semibold fg-base-100"
+					},
+					row.primaryDomain
+				),
 				h(
 					"div",
 					{ class: "flex flex-wrap gap-2 pt-1" },
@@ -463,7 +456,7 @@ const columns: DataTableColumns<WebsiteTableRow> = [
 				tags.push(
 					h(
 						NTag,
-						{ type: "default", size: "small", bordered: false, style: { marginLeft: '4px' } },
+						{ type: "default", size: "small", bordered: false, style: { marginLeft: "4px" } },
 						{ default: () => sourceText }
 					)
 				)
@@ -472,14 +465,15 @@ const columns: DataTableColumns<WebsiteTableRow> = [
 			const bindingMeta = getWebsiteBindingMeta(row)
 			const deploySummary = getWebsiteDeploySummary(row)
 			return h("div", { class: "flex flex-col gap-2" }, [
-				h('div', { class: 'flex items-center flex-wrap gap-1' }, tags),
+				h("div", { class: "flex items-center flex-wrap gap-1" }, tags),
 				bindingMeta
 					? h("div", { class: "text-xs text-slate-500" }, `${bindingMeta.source} · ${bindingMeta.detail}`)
 					: null,
+				h("div", { class: "text-xs text-slate-500" }, getBackendSummary(row)),
 				h(
 					"div",
 					{ class: "flex flex-wrap gap-2 text-xs text-slate-400" },
-					deploySummary.map((item) => h("span", item))
+					deploySummary.map(item => h("span", item))
 				)
 			])
 		}
@@ -517,14 +511,14 @@ const columns: DataTableColumns<WebsiteTableRow> = [
 									size: "small",
 									round: true,
 									bordered: false,
-									type: "success",
+									type: "success"
 								},
 								{ default: () => item }
 							)
 						)
 					: [h("span", { class: "text-sm text-slate-400" }, "未启用")]
 			)
-		},
+		}
 	},
 	{
 		title: t("commons.table.createdAt"),
@@ -577,15 +571,19 @@ const columns: DataTableColumns<WebsiteTableRow> = [
 			]
 
 			if (row.type === "web_app" || row.type === "static") {
-				buttons.splice(1, 0, h(
-					NButton,
-					{
-						text: true,
-						type: "success",
-						onClick: () => handleDeploy(row)
-					},
-					{ default: () => "部署管理" }
-				))
+				buttons.splice(
+					1,
+					0,
+					h(
+						NButton,
+						{
+							text: true,
+							type: "success",
+							onClick: () => handleDeploy(row)
+						},
+						{ default: () => "部署管理" }
+					)
+				)
 			}
 
 			buttons.push(
@@ -625,10 +623,7 @@ async function fetchData() {
 
 async function fetchBindingMeta() {
 	try {
-		const [appsRes, pipelines] = await Promise.all([
-			ListAppInstalled(),
-			listAllPipelines()
-		])
+		const [appsRes, pipelines] = await Promise.all([ListAppInstalled(), listAllPipelines()])
 		const apps: App.AppInstalledInfo[] = Array.isArray(appsRes.data) ? appsRes.data : []
 		const nextAppMap: Record<number, App.AppInstalledInfo> = {}
 		for (const item of apps) {
@@ -670,10 +665,13 @@ function handleAdd() {
 
 function handleUpdate(row: WebsiteTableRow) {
 	const bindingMeta = getWebsiteBindingMeta(row)
-	createRef.value?.open({
-		...row,
-		runtimeBindingSummary: bindingMeta ? `${bindingMeta.source} · ${bindingMeta.detail}` : ""
-	}, "update")
+	createRef.value?.open(
+		{
+			...row,
+			runtimeBindingSummary: bindingMeta ? `${bindingMeta.source} · ${bindingMeta.detail}` : ""
+		},
+		"update"
+	)
 }
 
 function handleDeploy(row: WebsiteTableRow) {
@@ -768,9 +766,9 @@ onMounted(() => {
 
 <style>
 .theme-dark .website-index-root .border-slate-100 {
-  border-color: color-mix(in srgb, var(--border-color) 80%, transparent) !important;
+	border-color: color-mix(in srgb, var(--border-color) 80%, transparent) !important;
 }
 .theme-dark .website-index-root .bg-slate-50\/70 {
-  background-color: color-mix(in srgb, var(--bg-default-color) 70%, transparent) !important;
+	background-color: color-mix(in srgb, var(--bg-default-color) 70%, transparent) !important;
 }
 </style>

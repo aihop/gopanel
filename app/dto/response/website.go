@@ -2,6 +2,22 @@ package response
 
 import "time"
 
+type WebsiteUpstream struct {
+	ID             uint      `json:"id"`
+	CreatedAt      time.Time `json:"createdAt"`
+	UpdatedAt      time.Time `json:"updatedAt"`
+	Address        string    `json:"address"`
+	Scheme         string    `json:"scheme"`
+	Weight         int       `json:"weight"`
+	Enabled        bool      `json:"enabled"`
+	Backup         bool      `json:"backup"`
+	HealthURI      string    `json:"healthUri"`
+	HealthInterval string    `json:"healthInterval"`
+	HealthTimeout  string    `json:"healthTimeout"`
+	Transport      string    `json:"transport"`
+	Sort           int       `json:"sort"`
+}
+
 type WebsiteDeploySummary struct {
 	ID               uint      `json:"id"`
 	Version          string    `json:"version"`
@@ -45,21 +61,22 @@ type WebsiteRes struct {
 	RuntimeMode   string    `json:"runtimeMode"`
 	RunUser       string    `json:"runUser"`
 
-	AntiCrawler    bool   `json:"antiCrawler"`
-	AntiLeech      bool   `json:"antiLeech"`
-	RateLimitMode  string `json:"rateLimitMode"`
-	WafEnable      bool   `json:"wafEnable"`
-	BlockSensitive bool   `json:"blockSensitive"`
-	IPAllowlist    string `json:"ipAllowlist"`
-	IPBlocklist    string `json:"ipBlocklist"`
-	SecurityHeader bool   `json:"securityHeader"`
-	HstsEnabled    bool   `json:"hstsEnabled"`
-	HttpConfig     string `json:"httpConfig"`
-	RedirectCode             int  `json:"redirectCode"`
-	RedirectDomainsToPrimary bool `json:"redirectDomainsToPrimary"`
+	AntiCrawler              bool   `json:"antiCrawler"`
+	AntiLeech                bool   `json:"antiLeech"`
+	RateLimitMode            string `json:"rateLimitMode"`
+	WafEnable                bool   `json:"wafEnable"`
+	BlockSensitive           bool   `json:"blockSensitive"`
+	IPAllowlist              string `json:"ipAllowlist"`
+	IPBlocklist              string `json:"ipBlocklist"`
+	SecurityHeader           bool   `json:"securityHeader"`
+	HstsEnabled              bool   `json:"hstsEnabled"`
+	HttpConfig               string `json:"httpConfig"`
+	RedirectCode             int    `json:"redirectCode"`
+	RedirectDomainsToPrimary bool   `json:"redirectDomainsToPrimary"`
 
 	ActiveRelease      *WebsiteDeploySummary `json:"activeRelease,omitempty"`
 	LatestPipelineSync *WebsiteDeploySummary `json:"latestPipelineSync,omitempty"`
+	Upstreams          []WebsiteUpstream     `json:"upstreams"`
 }
 
 type WebsiteLogTopIP struct {

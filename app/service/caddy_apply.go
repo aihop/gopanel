@@ -32,6 +32,7 @@ func ApplyCaddyFromDB(ctx context.Context) error {
 	}
 
 	domainByWebsite := map[uint][]model.WebsiteDomain{}
+	upstreamByWebsite := map[uint][]*model.WebsiteUpstream{}
 	if len(ids) > 0 {
 		var domains []model.WebsiteDomain
 		if err := global.DB.Where("website_id IN ?", ids).Find(&domains).Error; err != nil {
@@ -40,8 +41,19 @@ func ApplyCaddyFromDB(ctx context.Context) error {
 		for _, d := range domains {
 			domainByWebsite[d.WebsiteID] = append(domainByWebsite[d.WebsiteID], d)
 		}
+		var upstreams []model.WebsiteUpstream
+		if err := global.DB.Where("website_id IN ?", ids).Order("sort asc,id asc").Find(&upstreams).Error; err != nil {
+			return err
+		}
+		for i := range upstreams {
+			item := &upstreams[i]
+			upstreamByWebsite[item.WebsiteID] = append(upstreamByWebsite[item.WebsiteID], item)
+		}
 	}
 
+	for i := range websites {
+		websites[i].Upstreams = upstreamByWebsite[websites[i].ID]
+	}
 	caddyfile := renderCaddyfile(websites, domainByWebsite)
 	if strings.TrimSpace(caddyfile) == "" {
 		return errors.New("generated caddyfile is empty")
@@ -213,13 +225,38 @@ func renderCaddyfile(websites []model.Website, domainByWebsite map[uint][]model.
 			}
 			b.WriteString("  redir " + target + "{uri} " + strconv.Itoa(code) + "\n")
 		case constant.Proxy, constant.WebApp:
-			up := strings.TrimSpace(w.Proxy)
-			if up == "" {
-				up = "127.0.0.1:80"
+			dials := reverseProxyDialList(w)
+			if len(dials) == 0 {
+				dials = []string{"127.0.0.1:80"}
 			}
-			b.WriteString("  reverse_proxy ")
-			b.WriteString(up)
+			healthURI, healthInterval, healthTimeout := reverseProxyHealthSettings(w)
+			if len(dials) == 1 && healthURI == "" && healthInterval == "" && healthTimeout == "" {
+				b.WriteString("  reverse_proxy ")
+				b.WriteString(dials[0])
+				b.WriteString("\n")
+				break
+			}
+			b.WriteString("  reverse_proxy {\n")
+			b.WriteString("    lb_policy round_robin\n")
+			b.WriteString("    to ")
+			b.WriteString(strings.Join(dials, " "))
 			b.WriteString("\n")
+			if healthURI != "" {
+				b.WriteString("    health_uri ")
+				b.WriteString(healthURI)
+				b.WriteString("\n")
+			}
+			if healthInterval != "" {
+				b.WriteString("    health_interval ")
+				b.WriteString(healthInterval)
+				b.WriteString("\n")
+			}
+			if healthTimeout != "" {
+				b.WriteString("    health_timeout ")
+				b.WriteString(healthTimeout)
+				b.WriteString("\n")
+			}
+			b.WriteString("  }\n")
 		default:
 			up := strings.TrimSpace(w.Proxy)
 			if up != "" {

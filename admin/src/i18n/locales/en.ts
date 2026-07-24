@@ -8,7 +8,7 @@ export default {
 	},
 	lang: {
 		chinese: "Chinese",
-		english: "English",
+		english: "English"
 	},
 	auth: {
 		login: "Login",
@@ -407,9 +407,11 @@ export default {
 	},
 	home: {
 		homeHelper: "Lightweight, efficient, and practical",
-		homeHelperDesc: "GoPanel focuses on container management, website deployment, application installation, and system maintenance. It uses fewer steps than traditional panels to complete the operation process.",
+		homeHelperDesc:
+			"GoPanel focuses on container management, website deployment, application installation, and system maintenance. It uses fewer steps than traditional panels to complete the operation process.",
 		popularApps: "Popular Apps",
-		popularAppsDesc: "Popular apps directly read from the local app store, prioritizing common services for quick deployment.",
+		popularAppsDesc:
+			"Popular apps directly read from the local app store, prioritizing common services for quick deployment.",
 		restart_panel: "Restart panel",
 		restart_gopanel: "Restart panel",
 		restart_system: "Restart server",
@@ -458,7 +460,7 @@ export default {
 		blockDevice: "Block device",
 		setting: "Setting"
 	},
-	ai:{
+	ai: {
 		workspace: "Team AI Workspace",
 		workspaceDesc: "Manage your AI tools in one place.",
 		agentHub: "Terminal & Agents",
@@ -564,7 +566,7 @@ export default {
 		colExtra: "Extra",
 		colCollation: "Collation",
 		colPrivileges: "Privileges",
-		colComment: "Comment",
+		colComment: "Comment"
 	},
 	container: {
 		create: "Create container",
@@ -1909,9 +1911,10 @@ export default {
 			"The left side is the old version, the right side is the new version. After editing, click to save the custom version",
 		pullImage: "Pull Image",
 		pullImageHelper: "Execute docker pull to pull the image before the application starts",
-		gpuConfig: "GPU Acceleration",		
+		gpuConfig: "GPU Acceleration",
 		containerApp: "Container application",
-		containerAppHelper: "Part of the applications have installation instructions in the application details page, and other applications have installation instructions in the app store.",
+		containerAppHelper:
+			"Part of the applications have installation instructions in the application details page, and other applications have installation instructions in the app store.",
 		summary: "Current total {0} records, support quick retrieval by application name and pagination browsing.",
 		syncHelper: "Sync application list",
 		upgrade: "Upgrade",
@@ -1920,7 +1923,8 @@ export default {
 	pipeline: {
 		workspace: "CI/CD Pipeline",
 		codePipeline: "Code Pipeline Workspace",
-		codePipelineHelper: "One-click configuration of build process. In a secure sandbox, it pulls code, builds, and deploys it. This prevents source code leakage and ensures the security of the build process.",
+		codePipelineHelper:
+			"One-click configuration of build process. In a secure sandbox, it pulls code, builds, and deploys it. This prevents source code leakage and ensures the security of the build process.",
 		createPipeline: "Create New Pipeline",
 		createPipelineHelper: "Configure project repository and deployment rules",
 		addPipeline: "Add Pipeline",
@@ -1932,7 +1936,7 @@ export default {
 		records: "Records",
 		edit: "Edit",
 		delete: "Delete",
-		actions: "Actions",
+		actions: "Actions"
 	},
 	website: {
 		websiteList: "Website List",
@@ -1940,7 +1944,31 @@ export default {
 		webServer: "Web Server",
 		website: "Website | Websites",
 		primaryDomain: "Primary domain",
+		typeRequired: "Please select a website type",
+		primaryDomainRequired: "Please enter the primary domain",
+		aliasRequired: "Please enter the website alias",
+		otherDomainsDuplicate: "Other domains cannot include the primary domain",
 		otherDomains: "Other domains",
+		upstreams: "Backends",
+		node: "Node",
+		addUpstream: "Add backend",
+		upstreamAddressPlaceholder: "For example 127.0.0.1:8080 or backend:3000",
+		upstreamEnabled: "Enable this backend",
+		upstreamRequired: "Add at least one backend",
+		upstreamEnabledRequired: "Enable at least one backend",
+		backends: "Backends",
+		backendsEnabled: "{count} enabled",
+		backendNotConfigured: "No backend configured",
+		healthCheck: "Health check",
+		healthUriPlaceholder: "For example /health",
+		proxyTarget: "Proxy target",
+		proxyTargetPlaceholder: "For example http://127.0.0.1:8080 or 8080",
+		proxyTargetRequired: "Enter a proxy target or container port",
+		pipelineProxyPlaceholderHelper:
+			"You can leave this empty. After the pipeline succeeds, only the temporary runtime target will be synced back automatically; use formal releases for stable cutover and rollback.",
+		appInstallRequired: "Please select an installed application",
+		pipelineRequired: "Please select a pipeline",
+		dockerImageRequired: "Please enter the container image address",
 		static: "Static",
 		deployment: "Deployment",
 		supportUpType: "Only .tar.gz files are supported",
@@ -2189,7 +2217,7 @@ export default {
 		sniHelper:
 			"When the reverse proxy backend is HTTPS, you might need to set the origin SNI. Please refer to the CDN service provider's documentation for details.",
 		huaweicloud: "Huawei Cloud",
-		restart: "Restart",
+		restart: "Restart"
 	},
 	ssl: {
 		create: "Request",
@@ -2261,14 +2289,15 @@ export default {
 		shellHelper:
 			"The default execution directory of the script is the GoPanel installation directory. If a certificate is pushed into local directory, the execution directory will be the certificate push directory. The default execution timeout is 30 minutes.",
 		sslManagement: "SSL Certificate Management",
-		sslManagementHelper: "Synchronize website certificates, upload existing certificates, and bind manually uploaded certificates to specified websites, and remote CDN certificate deployment automatically",
+		sslManagementHelper:
+			"Synchronize website certificates, upload existing certificates, and bind manually uploaded certificates to specified websites, and remote CDN certificate deployment automatically",
 		cdnApply: "CDN Auto-Application",
 		sync: "Sync website",
 		refresh: "Refresh",
 		refreshHelper: "Refresh certificate after refresh",
 		domainList: "Domain list",
 		source: "Source",
-		bindWebsite: "Bind website",
+		bindWebsite: "Bind website"
 	},
 	firewall: {
 		create: "Create rule",

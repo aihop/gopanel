@@ -28,6 +28,7 @@ func (s WebsiteService) Update(ctx context.Context, req *request.WebsiteUpdate) 
 	}
 	oldProxy := website.Proxy
 	originalDomains := website.Domains
+	var upstreams []model.WebsiteUpstream
 	if normalizedPrimaryDomain := sanitizeWebsitePrimaryDomain(req.PrimaryDomain); normalizedPrimaryDomain != "" {
 		website.PrimaryDomain = normalizedPrimaryDomain
 	}
@@ -38,7 +39,17 @@ func (s WebsiteService) Update(ctx context.Context, req *request.WebsiteUpdate) 
 	}
 	website.Remark = req.Remark
 	website.IPV6 = req.IPV6
-	if strings.TrimSpace(req.Proxy) != "" {
+	if website.Type == constant.Proxy {
+		proxyFallback := strings.TrimSpace(req.Proxy)
+		if proxyFallback == "" {
+			proxyFallback = website.Proxy
+		}
+		upstreams, err = ensureWebsiteProxyUpstreams(req.Upstreams, proxyFallback)
+		if err != nil {
+			return err
+		}
+		website.Proxy = websiteProxyFromUpstreams(upstreams, website.Proxy)
+	} else if strings.TrimSpace(req.Proxy) != "" {
 		website.Proxy = strings.TrimSpace(req.Proxy)
 	}
 	website.PipelineID = req.PipelineId
@@ -134,6 +145,14 @@ func (s WebsiteService) Update(ctx context.Context, req *request.WebsiteUpdate) 
 	}
 	if err := s.repo.Save(context.Background(), &website); err != nil {
 		return err
+	}
+	if website.Type == constant.Proxy {
+		for i := range upstreams {
+			upstreams[i].WebsiteID = website.ID
+		}
+		if err := repo.NewWebsiteUpstream().ReplaceByWebsiteID(context.Background(), website.ID, upstreams); err != nil {
+			return err
+		}
 	}
 	if isUpdateOtherDomains {
 		domainRepo := repo.NewWebsiteDomain()

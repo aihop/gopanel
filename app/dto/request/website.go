@@ -1,5 +1,17 @@
 package request
 
+type WebsiteUpstream struct {
+	Address        string `json:"address"`
+	Scheme         string `json:"scheme"`
+	Weight         int    `json:"weight"`
+	Enabled        bool   `json:"enabled"`
+	Backup         bool   `json:"backup"`
+	HealthURI      string `json:"healthUri"`
+	HealthInterval string `json:"healthInterval"`
+	HealthTimeout  string `json:"healthTimeout"`
+	Transport      string `json:"transport"`
+}
+
 type WebsiteCreate struct {
 	PrimaryDomain string        `json:"primaryDomain" validate:"required"`
 	Type          string        `json:"type" validate:"required"`
@@ -22,19 +34,20 @@ type WebsiteCreate struct {
 	PipelineKey         string                 `json:"-"`
 	RunnerConfig        map[string]interface{} `json:"-"`
 
-	AntiCrawler    bool   `json:"antiCrawler"`
-	AntiLeech      bool   `json:"antiLeech"`
-	RateLimitMode  string `json:"rateLimitMode"`
-	WafEnable      bool   `json:"wafEnable"`
-	BlockSensitive bool   `json:"blockSensitive"`
-	IPAllowlist    string `json:"ipAllowlist"`
-	IPBlocklist    string `json:"ipBlocklist"`
-	SecurityHeader bool   `json:"securityHeader"`
-	HstsEnabled    bool   `json:"hstsEnabled"`
-	RedirectCode             int  `json:"redirectCode"`
-	RedirectDomainsToPrimary bool `json:"redirectDomainsToPrimary"`
+	AntiCrawler              bool   `json:"antiCrawler"`
+	AntiLeech                bool   `json:"antiLeech"`
+	RateLimitMode            string `json:"rateLimitMode"`
+	WafEnable                bool   `json:"wafEnable"`
+	BlockSensitive           bool   `json:"blockSensitive"`
+	IPAllowlist              string `json:"ipAllowlist"`
+	IPBlocklist              string `json:"ipBlocklist"`
+	SecurityHeader           bool   `json:"securityHeader"`
+	HstsEnabled              bool   `json:"hstsEnabled"`
+	RedirectCode             int    `json:"redirectCode"`
+	RedirectDomainsToPrimary bool   `json:"redirectDomainsToPrimary"`
 
-	HttpConfig string `json:"httpConfig"`
+	HttpConfig string            `json:"httpConfig"`
+	Upstreams  []WebsiteUpstream `json:"upstreams"`
 }
 
 type NewAppInstall struct {
@@ -56,19 +69,20 @@ type WebsiteUpdate struct {
 	PipelineId    uint   `json:"pipelineId"`
 	CodeSource    string `json:"codeSource"`
 
-	AntiCrawler    bool   `json:"antiCrawler"`
-	AntiLeech      bool   `json:"antiLeech"`
-	RateLimitMode  string `json:"rateLimitMode"`
-	WafEnable      bool   `json:"wafEnable"`
-	BlockSensitive bool   `json:"blockSensitive"`
-	IPAllowlist    string `json:"ipAllowlist"`
-	IPBlocklist    string `json:"ipBlocklist"`
-	SecurityHeader bool   `json:"securityHeader"`
-	HstsEnabled    bool   `json:"hstsEnabled"`
-	RedirectCode             int  `json:"redirectCode"`
-	RedirectDomainsToPrimary bool `json:"redirectDomainsToPrimary"`
+	AntiCrawler              bool   `json:"antiCrawler"`
+	AntiLeech                bool   `json:"antiLeech"`
+	RateLimitMode            string `json:"rateLimitMode"`
+	WafEnable                bool   `json:"wafEnable"`
+	BlockSensitive           bool   `json:"blockSensitive"`
+	IPAllowlist              string `json:"ipAllowlist"`
+	IPBlocklist              string `json:"ipBlocklist"`
+	SecurityHeader           bool   `json:"securityHeader"`
+	HstsEnabled              bool   `json:"hstsEnabled"`
+	RedirectCode             int    `json:"redirectCode"`
+	RedirectDomainsToPrimary bool   `json:"redirectDomainsToPrimary"`
 
-	HttpConfig string `json:"httpConfig"`
+	HttpConfig string            `json:"httpConfig"`
+	Upstreams  []WebsiteUpstream `json:"upstreams"`
 }
 
 type WebsiteLogRead struct {

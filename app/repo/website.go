@@ -21,7 +21,7 @@ type WebsiteRepo struct {
 }
 
 func (r *WebsiteRepo) MigrateTable() error {
-	return r.db.AutoMigrate(&model.Website{}, &model.WebsiteDomain{})
+	return r.db.AutoMigrate(&model.Website{}, &model.WebsiteDomain{}, &model.WebsiteUpstream{})
 }
 
 func (w *WebsiteRepo) WithAppInstallId(appInstallID uint) DBOption {
@@ -82,20 +82,26 @@ func (w *WebsiteRepo) Page(page, size int, opts ...DBOption) (int64, []model.Web
 }
 
 func (r *WebsiteRepo) List(ctx *gormx.Contextx) (res []*model.Website, err error) {
-	err = r.db.Model(&model.Website{}).Preload("Domains").Find(&res).Error
+	err = r.db.Model(&model.Website{}).Preload("Domains").Preload("Upstreams", func(db *gorm.DB) *gorm.DB {
+		return db.Order("sort asc,id asc")
+	}).Find(&res).Error
 	return
 }
 
 func (w *WebsiteRepo) ListBy(opts ...DBOption) ([]model.Website, error) {
 	var websites []model.Website
-	err := getDb(opts...).Model(&model.Website{}).Preload("Domains").Find(&websites).Error
+	err := getDb(opts...).Model(&model.Website{}).Preload("Domains").Preload("Upstreams", func(db *gorm.DB) *gorm.DB {
+		return db.Order("sort asc,id asc")
+	}).Find(&websites).Error
 	return websites, err
 }
 
 func (w *WebsiteRepo) GetFirst(opts ...DBOption) (model.Website, error) {
 	var website model.Website
 	db := getDb(opts...).Model(&model.Website{})
-	if err := db.Preload("Domains").First(&website).Error; err != nil {
+	if err := db.Preload("Domains").Preload("Upstreams", func(db *gorm.DB) *gorm.DB {
+		return db.Order("sort asc,id asc")
+	}).First(&website).Error; err != nil {
 		return website, err
 	}
 	return website, nil
