@@ -30,32 +30,59 @@ export const useDataView = (
   // Inline editing state
   const editingCell = ref<{ rowIndex: number; columnKey: string } | null>(null)
   const editingValue = ref('')
+  const editingIsNull = ref(false)
   const editingConditions = ref<Record<string, any>>({})
   const editingOriginalValue = ref<any>(null)
+
+  const isNullish = (v: any) => v === null || v === undefined
 
   const handleCellDblClick = (row: any, rowIndex: number, columnKey: string) => {
     editingConditions.value = { ...row }
     editingOriginalValue.value = row[columnKey]
-    editingValue.value = String(row[columnKey] ?? '')
+    editingIsNull.value = isNullish(row[columnKey])
+    editingValue.value = editingIsNull.value ? '' : String(row[columnKey])
     editingCell.value = { rowIndex, columnKey }
+  }
+
+  // 编辑框输入时更新值，并取消 NULL 标记
+  const onEditingInput = (v: string) => {
+    editingValue.value = v
+    editingIsNull.value = false
+  }
+
+  // 点击「NULL」把当前单元格置空为 NULL
+  const setEditingNull = () => {
+    editingIsNull.value = true
+    editingValue.value = ''
   }
 
   const handleCellEditSave = async () => {
     if (!editingCell.value) return
     const { rowIndex, columnKey } = editingCell.value
 
+    const newVal = editingIsNull.value ? null : editingValue.value
+    // 无变化则不提交（同时避免双击后直接失焦把 NULL 误写成空串）
+    const origIsNull = isNullish(editingOriginalValue.value)
+    const unchanged = editingIsNull.value
+      ? origIsNull
+      : !origIsNull && editingValue.value === String(editingOriginalValue.value)
+    if (unchanged) {
+      editingCell.value = null
+      return
+    }
+
     try {
       const res = await updateDBManagerRecordAPI({
         serverId: props.selectedServerId,
         databaseName: props.selectedDatabase,
         tableName: props.selectedTable,
-        data: { [columnKey]: editingValue.value },
+        data: { [columnKey]: newVal },
         conditions: { ...editingConditions.value }
       })
       if (res.code === 0) {
         message.success('保存成功')
         if (tableData.value[rowIndex]) {
-          tableData.value[rowIndex][columnKey] = editingValue.value
+          tableData.value[rowIndex][columnKey] = newVal
         }
         editingCell.value = null
       } else {
@@ -630,10 +657,11 @@ export const useDataView = (
         },
         render(row: any, rowIndex: number) {
           if (isEditingThisCell(rowIndex, col)) {
-            return h('div', { class: 'db-inline-edit-cell' }, [
+            return h('div', { class: 'db-inline-edit-cell flex items-center gap-1' }, [
               h(NInput, {
                 value: editingValue.value,
-                'onUpdate:value': (v: string) => { editingValue.value = v },
+                placeholder: editingIsNull.value ? 'NULL' : '',
+                'onUpdate:value': onEditingInput,
                 size: 'small',
                 autofocus: true,
                 onKeyup: (e: KeyboardEvent) => {
@@ -652,17 +680,35 @@ export const useDataView = (
                     if (editingCell.value) handleCellEditSave()
                   }, 100)
                 }
-              })
+              }),
+              // 置为 NULL：用 mousedown+preventDefault 避免先触发输入框失焦保存
+              h(NButton, {
+                size: 'tiny',
+                quaternary: true,
+                type: editingIsNull.value ? 'primary' : 'default',
+                title: '设为 NULL',
+                onMousedown: (e: MouseEvent) => { e.preventDefault(); setEditingNull() }
+              }, { default: () => 'NULL' })
             ])
+          }
+          const raw = row[col]
+          if (isNullish(raw)) {
+            // NULL 显示为灰色斜体，和空串区分开
+            return h('span', {
+              class: 'db-cell-inline db-cell-null',
+              onDblclick: (e: MouseEvent) => { e.stopPropagation(); handleCellDblClick(row, rowIndex, col) },
+              style: { cursor: 'pointer', minHeight: '22px', display: 'inline-block', width: '100%', color: '#bbb', fontStyle: 'italic' }
+            }, 'NULL')
           }
           return h('span', {
             class: 'db-cell-inline',
+            title: '双击编辑',
             onDblclick: (e: MouseEvent) => {
               e.stopPropagation()
               handleCellDblClick(row, rowIndex, col)
             },
             style: { cursor: 'pointer', minHeight: '22px', display: 'inline-block', width: '100%' }
-          }, formatCell(row[col]))
+          }, raw === '' ? '' : formatCell(raw))
         }
       }))
     ]
