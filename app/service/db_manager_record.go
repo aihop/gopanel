@@ -17,6 +17,7 @@ func (s *DBManagerService) InsertRecord(req request.InsertRecordReq) error {
 	dbType := server.Type
 	tableName := sanitizeIdent(req.TableName)
 	removeVirtualColumns(req.Data)
+	strCols := tableStringColumns(db, quoteTable(dbType, tableName))
 	var cols []string
 	var placeholders []string
 	var args []interface{}
@@ -26,9 +27,7 @@ func (s *DBManagerService) InsertRecord(req request.InsertRecordReq) error {
 		if col == "" {
 			continue
 		}
-		if v == "" {
-			v = nil
-		}
+		v = emptyStringToNull(v, col, strCols)
 		cols = append(cols, quoteIdent(dbType, col))
 		if dbType == model.DatabaseTypePostgresql {
 			placeholders = append(placeholders, fmt.Sprintf("$%d", paramOffset))
@@ -52,6 +51,7 @@ func (s *DBManagerService) UpdateRecord(req request.UpdateRecordReq) error {
 	dbType := server.Type
 	tableName := sanitizeIdent(req.TableName)
 	removeVirtualColumns(req.Data)
+	strCols := tableStringColumns(db, quoteTable(dbType, tableName))
 	var setCols []string
 	var args []interface{}
 	paramOffset := 1
@@ -70,7 +70,7 @@ func (s *DBManagerService) UpdateRecord(req request.UpdateRecordReq) error {
 						continue
 					}
 					setCols = append(setCols, fmt.Sprintf("%s = ?", quoteIdent(dbType, col)))
-					args = append(args, val)
+					args = append(args, emptyStringToNull(val, col, strCols))
 				}
 				args = append(args, rowid)
 				sqlStr := fmt.Sprintf("UPDATE %s SET %s WHERE rowid = ?", quoteTable(dbType, tableName), strings.Join(setCols, ", "))
@@ -84,9 +84,7 @@ func (s *DBManagerService) UpdateRecord(req request.UpdateRecordReq) error {
 		if col == "" {
 			continue
 		}
-		if v == "" {
-			v = nil
-		}
+		v = emptyStringToNull(v, col, strCols)
 		if dbType == model.DatabaseTypePostgresql {
 			setCols = append(setCols, fmt.Sprintf("%s = $%d", quoteIdent(dbType, col), paramOffset))
 		} else {
@@ -96,6 +94,9 @@ func (s *DBManagerService) UpdateRecord(req request.UpdateRecordReq) error {
 		paramOffset++
 	}
 	whereSql, whereArgs := buildWhereClause(req.Conditions, paramOffset, dbType)
+	if strings.TrimSpace(whereSql) == "" {
+		return fmt.Errorf("拒绝执行：更新条件为空，会影响整张表的所有记录")
+	}
 	args = append(args, whereArgs...)
 	sqlStr := fmt.Sprintf("UPDATE %s SET %s WHERE %s", quoteTable(dbType, tableName), strings.Join(setCols, ", "), whereSql)
 	_, err = db.Exec(sqlStr, args...)
@@ -125,6 +126,9 @@ func (s *DBManagerService) DeleteRecord(req request.DeleteRecordReq) error {
 		}
 	}
 	whereSql, args := buildWhereClause(req.Conditions, 1, dbType)
+	if strings.TrimSpace(whereSql) == "" {
+		return fmt.Errorf("拒绝执行：删除条件为空，会删除整张表的所有记录")
+	}
 	sqlStr := fmt.Sprintf("DELETE FROM %s WHERE %s", quoteTable(dbType, tableName), whereSql)
 	_, err = db.Exec(sqlStr, args...)
 	return err

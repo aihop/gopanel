@@ -33,6 +33,50 @@ func quoteTable(dbType model.DatabaseType, table string) string {
 	}
 	return fmt.Sprintf("\"%s\"", table)
 }
+
+// isStringColumnType 判断列是否为文本类型。文本列的空字符串是合法值，应原样保留；
+// 非文本列（数值/时间/布尔/JSON 等）的空字符串应转为 NULL，否则会报类型错误。
+func isStringColumnType(name string) bool {
+	name = strings.ToUpper(strings.TrimSpace(name))
+	if strings.Contains(name, "CHAR") || strings.Contains(name, "TEXT") {
+		return true
+	}
+	switch name {
+	case "STRING", "NAME", "CITEXT", "ENUM", "SET":
+		return true
+	}
+	return false
+}
+
+// tableStringColumns 返回表中文本类型列的集合（小写列名）。查询失败时返回空集合，
+// 调用方据此退回到「空串一律转 NULL」的旧行为，保证安全。
+func tableStringColumns(db *sql.DB, quotedTable string) map[string]bool {
+	res := map[string]bool{}
+	rows, err := db.Query(fmt.Sprintf("SELECT * FROM %s LIMIT 0", quotedTable))
+	if err != nil {
+		return res
+	}
+	defer rows.Close()
+	cts, err := rows.ColumnTypes()
+	if err != nil {
+		return res
+	}
+	for _, ct := range cts {
+		if isStringColumnType(ct.DatabaseTypeName()) {
+			res[strings.ToLower(ct.Name())] = true
+		}
+	}
+	return res
+}
+
+// emptyStringToNull 对非文本列把空字符串转为 nil(NULL)，文本列保留空串。
+func emptyStringToNull(v interface{}, col string, strCols map[string]bool) interface{} {
+	if s, ok := v.(string); ok && s == "" && !strCols[strings.ToLower(col)] {
+		return nil
+	}
+	return v
+}
+
 func buildWhereClause(conditions map[string]interface{}, paramOffset int, dbType model.DatabaseType) (string, []interface{}) {
 	var where []string
 	var args []interface{}
@@ -60,7 +104,9 @@ func buildWhereClause(conditions map[string]interface{}, paramOffset int, dbType
 		}
 	}
 	if len(where) == 0 {
-		return "1=1", args
+		// 返回空串而非 "1=1"：调用方（UPDATE/DELETE）必须据此拒绝无条件的全表写操作，
+		// 避免误删/误更新整张表。
+		return "", args
 	}
 	return strings.Join(where, " AND "), args
 }
