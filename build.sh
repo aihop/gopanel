@@ -4,8 +4,21 @@ set -euo pipefail
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${PROJECT_ROOT}"
 
+# 从版本名推导 version_code：1.2.3 -> 102003（major*100000+minor*1000+patch）
+derive_version_code() {
+  local v="${1#v}"; v="${v%%-*}"; local a b c
+  IFS='.' read -r a b c <<< "${v}"
+  a="${a:-0}"; b="${b:-0}"; c="${c:-0}"
+  echo $(( 10#${a} * 100000 + 10#${b} * 1000 + 10#${c} ))
+}
+
 VERSION="${1:-1.0.0}"
-VERSION_CODE="${2:-100000}"
+# version_code 未显式传入(第二参非纯数字)则从版本名推导，避免误用默认 100000
+if [[ "${2:-}" =~ ^[0-9]+$ ]]; then
+  VERSION_CODE="${2}"
+else
+  VERSION_CODE="$(derive_version_code "${VERSION}")"
+fi
 APP_BRAND="${3:-GoPanel}"
 APP_NAME="gopanel"
 BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
