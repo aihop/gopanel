@@ -8,6 +8,65 @@ set -euo pipefail
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${PROJECT_ROOT}"
 
+# 加载 .env（GOPANEL_ADMIN_KEY 等，已在 .gitignore 忽略、不入库）
+ENV_FILE="${PROJECT_ROOT}/.env"
+if [ -f "${ENV_FILE}" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  . "${ENV_FILE}"
+  set +a
+fi
+
+# 从版本名推导 version_code：1.2.1 -> 102001（major*100000+minor*1000+patch）
+derive_version_code() {
+  local v="${1#v}"; v="${v%%-*}"; local a b c
+  IFS='.' read -r a b c <<< "${v}"
+  a="${a:-0}"; b="${b:-0}"; c="${c:-0}"
+  echo $(( 10#${a} * 100000 + 10#${b} * 1000 + 10#${c} ))
+}
+
+# 从 git 记录生成更新内容 HTML（上个 tag..HEAD 的提交标题；无 tag 取最近若干条）
+git_changelog_html() {
+  local last range lines html line
+  last="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+  range="HEAD"; [ -n "${last}" ] && range="${last}..HEAD"
+  lines="$(git log ${range} --no-merges --pretty=format:'%s' 2>/dev/null | head -30)"
+  [ -z "${lines}" ] && lines="$(git log -10 --no-merges --pretty=format:'%s' 2>/dev/null || true)"
+  html=""
+  while IFS= read -r line; do
+    [ -z "${line}" ] && continue
+    line="${line//&/&amp;}"; line="${line//</&lt;}"; line="${line//>/&gt;}"
+    html="${html}<p>${line}</p>"
+  done <<< "${lines}"
+  [ -z "${html}" ] && html="<p>${1:-更新}</p>"
+  echo "${html}"
+}
+
+# 登记 changelog 到 gopanel.cn（主包手动更新读取的版本记录来源）
+register_changelog() {
+  local url="${GOPANEL_ADMIN_POSTS_URL:-https://gopanel.cn/api/admin/posts}"
+  local key="${GOPANEL_ADMIN_KEY:-}"
+  if [ -z "${key}" ]; then echo "ERROR: GOPANEL_ADMIN_KEY 未设置（.env）" >&2; return 1; fi
+  if ! command -v jq >/dev/null 2>&1 || ! command -v curl >/dev/null 2>&1; then
+    echo "ERROR: 需要 jq 和 curl" >&2; return 1
+  fi
+  local slug="${SLUG_PREFIX}-v${VERSION//./-}"
+  local title="${RELEASE_TITLE:-${BRAND_TITLE} v${VERSION}}"
+  local desc="${RELEASE_DESC:-常规更新}"
+  local content="${RELEASE_CONTENT:-$(git_changelog_html "${BRAND_TITLE} v${VERSION} 更新")}"
+  local body
+  body="$(jq -n --arg slug "${slug}" --arg title "${title}" --arg description "${desc}" \
+    --arg content "${content}" --arg key "v${VERSION}" --argjson sort "${VERSION_CODE}" \
+    '{slug:$slug,title:$title,description:$description,content:$content,type:"changelog",is_active:1,key:$key,sort:$sort,meta_data:"{\"translations\":{\"zh\":{\"title\":\"\",\"description\":\"\",\"content\":\"\"}}}"}')"
+  echo ">>> POST ${url}  (slug=${slug}, sort=${VERSION_CODE})"
+  local http
+  http="$(curl -sS -o /tmp/gopanel_post_resp.$$ -w '%{http_code}' -X POST "${url}" \
+    -H "Authorization: Bearer ${key}" -H "Content-Type: application/json" -d "${body}")" \
+    || { echo "ERROR: 请求失败"; return 1; }
+  echo "HTTP ${http}"; cat /tmp/gopanel_post_resp.$$ 2>/dev/null; echo; rm -f /tmp/gopanel_post_resp.$$
+  case "${http}" in 2*) echo "changelog 登记成功";; *) echo "WARN: 非 2xx（若已存在需改用更新接口或先删旧记录）"; return 1;; esac
+}
+
 # ==========================================
 # 1. 检查必要命令
 # ==========================================
@@ -56,6 +115,15 @@ if [[ "${VERSION}" == v* ]]; then
     VERSION="${VERSION#v}"
 else
     TAG_NAME="v${VERSION}"
+fi
+
+# changelog 登记用：version_code（可用 VERSION_CODE 覆盖，否则从版本名推导）+ 品牌/slug 前缀
+VERSION_CODE="${VERSION_CODE:-$(derive_version_code "${VERSION}")}"
+APP_BRAND="${APP_BRAND:-GoPanel}"
+if [ "${APP_BRAND}" = "ConsoleX" ] || [ "${APP_BRAND}" = "consolex" ]; then
+    SLUG_PREFIX="consolex"; BRAND_TITLE="ConsoleX"
+else
+    SLUG_PREFIX="gopanel"; BRAND_TITLE="GoPanel"
 fi
 
 # 仓库名称 (防止误传 VERSION_CODE，要求必须包含 / 才视为仓库名)
@@ -285,3 +353,19 @@ if [[ "${TARGET_PLATFORM}" == "all" || "${TARGET_PLATFORM}" == "gitcode" ]]; the
     fi
 fi
 
+
+# ==========================================
+# 登记 changelog 到 gopanel.cn（主包手动更新读取的版本记录；默认询问，或 PUBLISH_POST=1 开启）
+# ==========================================
+PUBLISH_POST="${PUBLISH_POST:-}"
+if [ -z "${PUBLISH_POST}" ] && [ -t 1 ]; then
+    read -r -p "登记 changelog 到 gopanel.cn（供面板手动更新读取）? [y/N] " ans_post || true
+    case "${ans_post:-}" in
+        y|Y|yes|YES) PUBLISH_POST="1" ;;
+        *) PUBLISH_POST="0" ;;
+    esac
+fi
+if [ "${PUBLISH_POST:-0}" = "1" ]; then
+    echo "=== 登记 changelog 到 gopanel.cn ==="
+    register_changelog
+fi
