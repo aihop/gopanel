@@ -138,7 +138,8 @@
             </template>
             <n-input-number
               v-model:value="formData.startretries"
-              :min="0"
+              :min="1"
+              :max="100"
             />
           </n-form-item>
 
@@ -161,7 +162,8 @@
             </template>
             <n-input-number
               v-model:value="formData.startsecs"
-              :min="0"
+              :min="1"
+              :max="300"
             />
           </n-form-item>
         </n-collapse-item>
