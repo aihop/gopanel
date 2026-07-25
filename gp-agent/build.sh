@@ -182,12 +182,13 @@ publish_git() {
 
 # 从 git 记录生成更新内容（HTML）：默认取「上一个 tag..HEAD」的提交标题，取不到则取最近 10 条
 git_changelog_html() {
-  local last range lines html line
+  local last range lines html line max
+  max="${CHANGELOG_MAX:-8}"
   last="$(git describe --tags --abbrev=0 2>/dev/null || true)"
   range="HEAD"
   [ -n "${last}" ] && range="${last}..HEAD"
-  lines="$(git log ${range} --no-merges --pretty=format:'%s' 2>/dev/null | head -30)"
-  [ -z "${lines}" ] && lines="$(git log -10 --no-merges --pretty=format:'%s' 2>/dev/null || true)"
+  lines="$(git log ${range} --no-merges --pretty=format:'%s' 2>/dev/null | head -n "${max}")"
+  [ -z "${lines}" ] && lines="$(git log -n "${max}" --no-merges --pretty=format:'%s' 2>/dev/null || true)"
   html=""
   while IFS= read -r line; do
     [ -z "${line}" ] && continue
