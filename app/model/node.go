@@ -11,6 +11,9 @@ type Node struct {
 	Addr        string `json:"addr" gorm:"type:varchar(255);not null"`        // 面板地址，含协议与端口，如 https://1.2.3.4:5470
 	Entrance    string `json:"entrance" gorm:"type:varchar(255);default:''"` // 节点安全入口，节点未开启则留空
 	AccessToken string `json:"-" gorm:"type:varchar(512)"`                   // 节点只读令牌，AES 加密后存储，不出接口
+	// ControlToken 节点控制令牌，AES 加密存储。为空表示该节点只观测不可操作。
+	// 与只读令牌分开：它等价于该机管理员，能通过代理执行任意写操作。
+	ControlToken string `json:"-" gorm:"type:varchar(512)"`
 	ConnectMode string `json:"connectMode" gorm:"type:varchar(32);default:'direct'"`
 	SkipVerify  bool   `json:"skipVerify" gorm:"default:false"` // 节点使用自签证书时跳过 TLS 校验
 	IsProd      bool   `json:"isProd" gorm:"default:false"`     // 生产节点，前端高亮标记

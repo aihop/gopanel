@@ -37,6 +37,23 @@ func JWT(role string) func(fiber.Ctx) error {
 			c.Request().Header.Set("x-auth", c.Query("token"))
 		}
 
+		// 主控代理转发过来的请求没有用户 JWT，身份由节点控制令牌的签名证明。
+		// 带了签名头就必须走这条路：验不过直接拒绝，不再回落到 JWT，
+		// 否则错误会变成"未登录"，掩盖真正的原因（令牌不符 / 时钟偏差 / 重放）。
+		if HasNodeProxySignature(c) {
+			if err := VerifyNodeProxy(c); err != nil {
+				return c.JSON(e.Auth(err.Error()))
+			}
+			// 与下方 API Key 鉴权一致：虚拟一个管理员身份放行。
+			// 控制令牌本身就等价于该机管理员，这一点在签发时已向用户明示。
+			c.Locals(constant.AppAuthName, &token.CustomClaims{
+				UserId: 1,
+				Role:   constant.UserRoleSuper,
+			})
+			c.Locals(constant.AuthMethodName, constant.AuthMethodNodeProxy)
+			return c.Next()
+		}
+
 		xAuth := XGetAuth(c)
 		info, err := JwtCheck(xAuth, role)
 		if err != nil && info == nil {

@@ -82,6 +82,10 @@ const (
 	// NodeAccessTokenKey 被控侧只读令牌在 setting 表中的存储键
 	NodeAccessTokenKey = "NodeAccessToken"
 
+	// NodeControlTokenKey 被控侧控制令牌。与只读令牌严格分开：
+	// 只读令牌只能取摘要，控制令牌等价于该机管理员，能通过代理执行写操作。
+	NodeControlTokenKey = "NodeControlToken"
+
 	OperateUp = "up"
 )
 

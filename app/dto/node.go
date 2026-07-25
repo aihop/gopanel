@@ -11,10 +11,12 @@ type NodeCreateReq struct {
 	Name        string `json:"name" validate:"required"`
 	Addr        string `json:"addr" validate:"required"`
 	AccessToken string `json:"accessToken" validate:"required"`
-	Entrance    string `json:"entrance"`
-	SkipVerify  bool   `json:"skipVerify"`
-	IsProd      bool   `json:"isProd"`
-	Sort        int    `json:"sort"`
+	// ControlToken 可选。留空表示该节点只观测，不开放代理操作。
+	ControlToken string `json:"controlToken"`
+	Entrance     string `json:"entrance"`
+	SkipVerify   bool   `json:"skipVerify"`
+	IsProd       bool   `json:"isProd"`
+	Sort         int    `json:"sort"`
 }
 
 // NodeUpdateReq 更新节点。AccessToken 留空表示不修改。
@@ -23,10 +25,12 @@ type NodeUpdateReq struct {
 	Name        string `json:"name" validate:"required"`
 	Addr        string `json:"addr" validate:"required"`
 	AccessToken string `json:"accessToken"`
-	Entrance    string `json:"entrance"`
-	SkipVerify  bool   `json:"skipVerify"`
-	IsProd      bool   `json:"isProd"`
-	Sort        int    `json:"sort"`
+	// ControlToken 留空表示不修改；显式传 "-" 表示清除（关闭该节点的操作能力）
+	ControlToken string `json:"controlToken"`
+	Entrance     string `json:"entrance"`
+	SkipVerify   bool   `json:"skipVerify"`
+	IsProd       bool   `json:"isProd"`
+	Sort         int    `json:"sort"`
 }
 
 // NodeWarning 节点告警项。只给出类型与数值，展示文案由前端按 type 做 i18n。
@@ -58,6 +62,9 @@ type NodeRes struct {
 	TokenLen int `json:"tokenLen"`
 	// TokenLenExpected 节点签发令牌的标准长度，供前端提示，不写死在前端
 	TokenLenExpected int `json:"tokenLenExpected"`
+	// HasControlToken 是否已配置控制令牌。为 false 时该节点只能观测，不能代理操作
+	HasControlToken bool `json:"hasControlToken"`
+	ControlTokenLen int  `json:"controlTokenLen"`
 }
 
 // NodeTokenRes 被控侧签发只读令牌的返回

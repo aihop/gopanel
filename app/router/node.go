@@ -25,5 +25,17 @@ func NodeRouter(r fiber.Router) {
 		nodeRouter.Get("/local/token", api.NodeLocalTokenStatus)
 		nodeRouter.Post("/local/token/issue", api.NodeLocalTokenIssue)
 		nodeRouter.Post("/local/token/revoke", api.NodeLocalTokenRevoke)
+
+		nodeRouter.Get("/local/control", api.NodeLocalControlStatus)
+		nodeRouter.Post("/local/control/issue", api.NodeLocalControlIssue)
+		nodeRouter.Post("/local/control/revoke", api.NodeLocalControlRevoke)
+	}
+
+	// 代理转发。单独一个前缀而不是挂在 node 分组下，避免 /node/:id/* 把
+	// /node/list、/node/probe/:id 这些具体路由吃掉（Fiber 按注册顺序匹配，容易踩坑）
+	proxyRouter := r.Group("node-proxy").
+		Use(middleware.JWT(constant.UserRoleAdmin))
+	{
+		proxyRouter.All("/:id/*", api.NodeProxy)
 	}
 }

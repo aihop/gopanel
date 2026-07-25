@@ -32,6 +32,19 @@ const (
 // 长度不对几乎总是"复制漏了"或"填的不是节点签发的串"，在保存前就该拦住。
 const NodeTokenLength = 40
 
+// clearTokenMarker 更新时传这个值表示"清除该令牌"。
+// 不能用空串表达清除——空串已经被用来表示"不修改"（前端拿不到明文，只能留空提交）。
+const clearTokenMarker = "-"
+
+// encryptOptionalToken 可选令牌的加密：空串原样返回，不做加密
+func encryptOptionalToken(raw string) (string, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" || value == clearTokenMarker {
+		return "", nil
+	}
+	return encrypt.StringEncrypt(value)
+}
+
 type NodeService struct{}
 
 func NewNode() *NodeService {
@@ -66,16 +79,21 @@ func (s *NodeService) Create(req dto.NodeCreateReq) error {
 	if err != nil {
 		return err
 	}
+	cipherControl, err := encryptOptionalToken(req.ControlToken)
+	if err != nil {
+		return err
+	}
 	node := &model.Node{
-		Name:        strings.TrimSpace(req.Name),
-		Addr:        addr,
-		Entrance:    strings.TrimSpace(req.Entrance),
-		AccessToken: cipherToken,
-		ConnectMode: "direct",
-		SkipVerify:  req.SkipVerify,
-		IsProd:      req.IsProd,
-		Sort:        req.Sort,
-		Status:      NodeStatusUnknown,
+		Name:         strings.TrimSpace(req.Name),
+		Addr:         addr,
+		Entrance:     strings.TrimSpace(req.Entrance),
+		AccessToken:  cipherToken,
+		ControlToken: cipherControl,
+		ConnectMode:  "direct",
+		SkipVerify:   req.SkipVerify,
+		IsProd:       req.IsProd,
+		Sort:         req.Sort,
+		Status:       NodeStatusUnknown,
 	}
 	return repo.NewNode().Create(node)
 }
@@ -110,6 +128,18 @@ func (s *NodeService) Update(req dto.NodeUpdateReq) error {
 			return err
 		}
 		node.AccessToken = cipherToken
+	}
+	// 控制令牌：留空=不改，"-"=清除（关闭该节点的操作能力）
+	switch control := strings.TrimSpace(req.ControlToken); control {
+	case "":
+	case clearTokenMarker:
+		node.ControlToken = ""
+	default:
+		cipherControl, err := encrypt.StringEncrypt(control)
+		if err != nil {
+			return err
+		}
+		node.ControlToken = cipherControl
 	}
 	return repo.NewNode().Save(&node)
 }
@@ -160,6 +190,10 @@ func toNodeRes(node model.Node) dto.NodeRes {
 	if plain, err := encrypt.StringDecrypt(node.AccessToken); err == nil {
 		tokenLen = len(plain)
 	}
+	controlLen := 0
+	if plain, err := encrypt.StringDecrypt(node.ControlToken); err == nil {
+		controlLen = len(plain)
+	}
 	return dto.NodeRes{
 		ID:          node.ID,
 		Name:        node.Name,
@@ -179,6 +213,8 @@ func toNodeRes(node model.Node) dto.NodeRes {
 
 		TokenLen:         tokenLen,
 		TokenLenExpected: NodeTokenLength,
+		HasControlToken:  strings.TrimSpace(node.ControlToken) != "",
+		ControlTokenLen:  controlLen,
 	}
 }
 
