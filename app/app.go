@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/mattn/go-colorable"
@@ -17,6 +18,7 @@ import (
 	"github.com/aihop/gopanel/app/dto"
 	"github.com/aihop/gopanel/app/middleware"
 	"github.com/aihop/gopanel/app/router"
+	"github.com/aihop/gopanel/app/service"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/init/app"
@@ -68,6 +70,13 @@ func (t *App) Init() {
 	cron.Init()
 	gob.Register(psession.SessionUser{})
 	session.Init()
+
+	// 后台自动更新 gp-agent（延迟片刻避开启动高峰；仅当 agent 在线且有更高版本时才更新，与主包无关）
+	go func() {
+		time.Sleep(15 * time.Second)
+		service.AutoUpdateGpAgent()
+	}()
+
 	t.IsInit = true
 }
 
