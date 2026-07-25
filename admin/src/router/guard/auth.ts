@@ -1,9 +1,19 @@
 import type { NavigationGuardNext, RouteLocationNormalized, Router } from "vue-router"
 import { useAuthStore } from "@/store/auth"
 import GlobalStore from "@/store/modules/global"
+import { AgentAutoUpdateAPI } from "@/api/modules/agent"
 
 export function checkAuth(router: Router) {
 	router.beforeEach(authCheck)
+}
+
+// 进入面板后触发一次 gp-agent 自动更新（每次页面加载一次；后端还有防重入+节流）。
+// 刻意不在后端启动时触发——开发模式频繁重启会反复更新导致崩溃。
+let agentAutoUpdateTriggered = false
+function maybeTriggerAgentAutoUpdate() {
+	if (agentAutoUpdateTriggered) return
+	agentAutoUpdateTriggered = true
+	AgentAutoUpdateAPI().catch(() => {})
 }
 
 function readEntranceCookie(): string {
@@ -59,6 +69,8 @@ async function authCheck(
 
 	// 第二步：检查是否已登录
 	if (authStore.isLogged) {
+		// 已登录 = 真正进入了面板，触发一次 gp-agent 自动更新（非阻塞）
+		maybeTriggerAgentAutoUpdate()
 		// --- 新增：菜单权限拦截 ---
 		// 检查路由对应的顶层模块 key，例如 /ai/xxx 对应 ai，/website/xxx 对应 website
 		const pathParts = to.path.split("/").filter(Boolean)

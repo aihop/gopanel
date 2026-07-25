@@ -13,6 +13,7 @@ func AgentRouter(r fiber.Router) {
 	{
 		agentRouter.Get("/status", api.AgentStatus)
 		agentRouter.Get("/update-check", api.AgentUpdateCheck)
+		agentRouter.Post("/auto-update", api.AgentAutoUpdate)
 		agentRouter.Post("/ensure", api.AgentEnsure)
 		agentRouter.Get("/ensure/logs", api.AgentEnsureLogs)
 	}

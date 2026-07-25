@@ -124,7 +124,7 @@
 								<div class="mt-3 flex flex-col gap-3 lg:flex-row">
 									<n-select
 										v-model:value="item.scheme"
-										class="lg:w-[120px]"
+                    style="width: 120px;"
 										:options="upstreamSchemeOptions"
 									/>
 									<n-input

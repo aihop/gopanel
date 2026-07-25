@@ -19,7 +19,7 @@ import (
 	"time"
 )
 
-func (a *AppVersionService) GoPanelUpload(downloadUrl string, installPath string, versionCode int64, writeLog func(string, interface{})) error {
+func (a *AppVersionService) GoPanelUpload(downloadUrl string, installPath string, versionCode int64, versionName string, writeLog func(string, interface{})) error {
 	var err error
 	filesUtil := files.NewFileOp()
 	saveDirName := ""
@@ -161,6 +161,8 @@ func (a *AppVersionService) GoPanelUpload(downloadUrl string, installPath string
 	}
 	a.WriteUploadLock(installPath, versionCode)
 	writeLog("-------------------------------", "successful update to version_code "+fmt.Sprintf("%d", versionCode))
+	// 必须在重启前上报：重启会杀掉当前进程，放到 GoPanelUpload 之后调用大概率发不出去
+	TrackEvent(TrackEventUpgradeSuccess, versionName)
 	writeLog("restart panel", runtime.GOOS)
 	if err := cmd.RestartGoPanel(); err != nil {
 		writeLog("restart error", err.Error())

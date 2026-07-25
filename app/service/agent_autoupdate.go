@@ -5,6 +5,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/aihop/gopanel/app/dto"
@@ -20,6 +21,12 @@ type agentStatusLite struct {
 	VersionCode string `json:"version_code"`
 }
 
+// 由前端「进入面板后」触发，可能被频繁/并发调用，这里做防重入 + 节流
+var (
+	autoUpdateRunning atomic.Bool
+	autoUpdateLastAt  atomic.Int64 // 上次检查的 unix 秒
+)
+
 func gpAgentServiceNameForOS() string {
 	if runtime.GOOS == "darwin" {
 		return "io.aihop.gp-agent"
@@ -34,6 +41,18 @@ func AutoUpdateGpAgent() {
 	if runtime.GOOS == "windows" {
 		return
 	}
+	// 防重入：同一时刻只跑一个
+	if !autoUpdateRunning.CompareAndSwap(false, true) {
+		return
+	}
+	defer autoUpdateRunning.Store(false)
+	// 节流：至少间隔 10 分钟才再检查一次（前端每次进面板都会调）
+	now := time.Now().Unix()
+	if last := autoUpdateLastAt.Load(); last != 0 && now-last < 600 {
+		return
+	}
+	autoUpdateLastAt.Store(now)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
@@ -88,4 +107,5 @@ func AutoUpdateGpAgent() {
 		return
 	}
 	global.LOG.Infof("auto-update gp-agent 完成（%d）: %s", info.LatestVersionCode, out.Output)
+	TrackEvent(TrackEventAgentUpgradeSuccess, info.LatestVersionName)
 }

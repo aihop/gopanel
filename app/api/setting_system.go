@@ -237,10 +237,12 @@ func SettingSystemUpgrade(c fiber.Ctx) error {
 
 		writeLog("start upload", updateInfo.LatestVersionName)
 		// 开始更新
-		err = appVersionService.GoPanelUpload(updateInfo.DownloadUrl, installPath, updateInfo.LatestVersionCode, writeLog)
+		// 面板内一键更新不走 install.sh，升级上报由 GoPanelUpload 在重启前发出
+		err = appVersionService.GoPanelUpload(updateInfo.DownloadUrl, installPath, updateInfo.LatestVersionCode, updateInfo.LatestVersionName, writeLog)
 		if err != nil {
 			writeLog("upload error", err)
 			logger.SetStatus("failed")
+			service.TrackEvent(service.TrackEventUpgradeFailed, updateInfo.LatestVersionName)
 			return
 		}
 		writeLog("upload success", updateInfo.LatestVersionName)

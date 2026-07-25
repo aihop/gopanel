@@ -100,6 +100,13 @@ func AgentUpdateCheck(c fiber.Ctx) error {
 	return c.JSON(e.Succ(resp))
 }
 
+// AgentAutoUpdate 由前端「进入面板后」调用，后台触发 gp-agent 自动更新。
+// 不在后端启动时触发（开发模式频繁重启会反复更新导致崩溃）。内部有防重入+节流。
+func AgentAutoUpdate(c fiber.Ctx) error {
+	go service.AutoUpdateGpAgent()
+	return c.JSON(e.Succ())
+}
+
 func AgentEnsure(c fiber.Ctx) error {
 	logName := "gp_agent_ensure_" + time.Now().Format("20060102150405") + ".log"
 	logger := service.GetUpdateLogger(logName)

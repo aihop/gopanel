@@ -89,7 +89,9 @@ func FetchNodeSummary(node model.Node) (model.NodeSummary, error) {
 		Data model.NodeSummary `json:"data"`
 	}
 	if err := json.Unmarshal(body, &result); err != nil {
-		return model.NodeSummary{}, fmt.Errorf("节点响应不是合法 JSON，请确认地址指向 GoPanel 面板")
+		// 旧版面板没有 /api/node/summary，请求会落到 SPA 兜底路由 r.Get("/*")，
+		// 于是拿到 200 + index.html。这时候提示"地址不对"是误导的——地址没错，是节点版本太旧。
+		return model.NodeSummary{}, describeNonJSONResponse(node)
 	}
 	if result.Code != constant.StatusCodeSuccess {
 		msg := result.Msg

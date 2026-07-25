@@ -24,7 +24,7 @@ type AppVersionService struct{}
 type IAppVersionService interface {
 	GetUpdateInfo(checkUrl string, upgradeVersion *dto.SettingUpgradeVersion) (*dto.AppUpdateData, error)
 	GoPanelVersion() (*dto.SettingAppVersion, error)
-	GoPanelUpload(downloadUrl string, installPath string, versionCode int64, writeLog func(string, interface{})) error
+	GoPanelUpload(downloadUrl string, installPath string, versionCode int64, versionName string, writeLog func(string, interface{})) error
 	WriteUploadLock(installPath string, version_code int64)
 	ReadUploadLock(installPath string) (int64, error)
 	FileDownloadAndExtract(downloadUrl string, saveDirName string, writeLog func(string, interface{})) (string, error)
@@ -32,7 +32,7 @@ type IAppVersionService interface {
 
 func (a *AppVersionService) GetUpdateInfo(checkUrl string, upgradeVersion *dto.SettingUpgradeVersion) (*dto.AppUpdateData, error) {
 	client := &http.Client{Timeout: 10 * time.Second}
-	req, err := http.NewRequest("GET", checkUrl+"?versionCode="+strconv.FormatInt(upgradeVersion.VersionCode, 10)+"&version="+upgradeVersion.VersionName+"&os="+upgradeVersion.OS+"&arch="+upgradeVersion.Arch+"&appBrand="+upgradeVersion.AppBrand+"&package="+upgradeVersion.Package+"&source="+upgradeVersion.Source, nil)
+	req, err := http.NewRequest("GET", checkUrl+"?versionCode="+strconv.FormatInt(upgradeVersion.VersionCode, 10)+"&version="+upgradeVersion.VersionName+"&os="+upgradeVersion.OS+"&arch="+upgradeVersion.Arch+"&appBrand="+upgradeVersion.AppBrand+"&package="+upgradeVersion.Package+"&source="+upgradeVersion.Source+"&installId="+InstallID(), nil)
 	if err != nil {
 		return nil, nil
 	}
