@@ -4,6 +4,15 @@ set -euo pipefail
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${PROJECT_ROOT}"
 
+# 加载仓库根的 .env（存放 GOPANEL_ADMIN_KEY 等，已在 .gitignore 忽略、不入库）
+ENV_FILE="${PROJECT_ROOT}/../.env"
+if [ -f "${ENV_FILE}" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  . "${ENV_FILE}"
+  set +a
+fi
+
 VERSION="${1:-1.0.0}"
 VERSION_CODE="${2:-100000}"
 APP_NAME="gp-agent"
@@ -136,6 +145,55 @@ r2_upload_one() {
     aws s3 cp "${local_path}" "s3://${bucket}/${remote_key}" --endpoint-url "${endpoint}" --no-progress
 }
 
+# 发版后向 gopanel.cn 登记 changelog（面板据此自动检测/更新 gp-agent）
+# slug 前缀 gp-agent- 用于和主包区分；key=版本名、sort=version_code（比对用）
+publish_changelog() {
+  local url="${GOPANEL_ADMIN_POSTS_URL:-https://gopanel.cn/api/admin/posts}"
+  local key="${GOPANEL_ADMIN_KEY:-}"
+  if [ -z "${key}" ]; then
+    echo "ERROR: GOPANEL_ADMIN_KEY 未设置（在仓库根 .env 里配置）。" >&2
+    return 1
+  fi
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "ERROR: 需要 jq 来安全构造 JSON（brew install jq）。" >&2
+    return 1
+  fi
+  if ! command -v curl >/dev/null 2>&1; then
+    echo "ERROR: 需要 curl。" >&2
+    return 1
+  fi
+
+  local slug="gp-agent-v${VERSION//./-}"
+  local title="${AGENT_RELEASE_TITLE:-GoPanel Agent v${VERSION}}"
+  local desc="${AGENT_RELEASE_DESC:-常规更新}"
+  local content="${AGENT_RELEASE_CONTENT:-<p>GoPanel Agent v${VERSION} 更新</p>}"
+
+  local body
+  body="$(jq -n \
+    --arg slug "${slug}" \
+    --arg title "${title}" \
+    --arg description "${desc}" \
+    --arg content "${content}" \
+    --arg key "v${VERSION}" \
+    --argjson sort "${VERSION_CODE}" \
+    '{slug:$slug, title:$title, description:$description, content:$content, type:"changelog", is_active:1, key:$key, sort:$sort, meta_data:"{\"translations\":{\"zh\":{\"title\":\"\",\"description\":\"\",\"content\":\"\"}}}"}')"
+
+  echo ">>> POST ${url}  (slug=${slug}, sort=${VERSION_CODE})"
+  local resp http
+  resp="$(curl -sS -o /tmp/gp_agent_post_resp.$$ -w '%{http_code}' -X POST "${url}" \
+    -H "Authorization: Bearer ${key}" \
+    -H "Content-Type: application/json" \
+    -d "${body}")" || { echo "ERROR: 请求失败"; return 1; }
+  http="${resp}"
+  echo "HTTP ${http}"
+  cat /tmp/gp_agent_post_resp.$$ 2>/dev/null; echo
+  rm -f /tmp/gp_agent_post_resp.$$
+  case "${http}" in
+    2*) echo "changelog 登记成功" ;;
+    *)  echo "WARN: 登记返回非 2xx（若是「已存在」需改用更新接口，或先删旧记录）"; return 1 ;;
+  esac
+}
+
 # Docker 构建逻辑保持不变，但增加平台参数确保架构正确
 build_docker_linux() {
   local goarch="$1" outdir="$2" exe_name="$3"
@@ -238,4 +296,21 @@ if [ "${PUBLISH_R2}" = "1" ]; then
     r2_upload_one "${f}" "${remote_base}/${bn}"
     echo "Uploaded: ${bn}"
   done
+fi
+
+# === 登记 changelog 到 gopanel.cn（面板据此自动更新 gp-agent）===
+# 默认不自动触发：交互时询问，或用 PUBLISH_POST=1 显式开启。
+PUBLISH_POST="${PUBLISH_POST:-}"
+if [ -z "${PUBLISH_POST}" ] && [ -t 1 ]; then
+  read -r -p "登记 changelog 到 gopanel.cn（触发全网面板自动更新）? [y/N] " ans2 || true
+  case "${ans2:-}" in
+    y|Y|yes|YES) PUBLISH_POST="1" ;;
+    *) PUBLISH_POST="0" ;;
+  esac
+fi
+PUBLISH_POST="${PUBLISH_POST:-0}"
+
+if [ "${PUBLISH_POST}" = "1" ]; then
+  echo "=== 登记 changelog 到 gopanel.cn ==="
+  publish_changelog
 fi
