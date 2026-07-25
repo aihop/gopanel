@@ -79,6 +79,9 @@ const (
 	ContainerName = "CONTAINER_NAME"
 	Entrance      = "Entrance"
 
+	// NodeAccessTokenKey 被控侧只读令牌在 setting 表中的存储键
+	NodeAccessTokenKey = "NodeAccessToken"
+
 	OperateUp = "up"
 )
 

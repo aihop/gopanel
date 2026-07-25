@@ -1,0 +1,230 @@
+package service
+
+import (
+	"errors"
+	"net/url"
+	"strings"
+	"time"
+
+	"github.com/aihop/gopanel/app/dto"
+	"github.com/aihop/gopanel/app/model"
+	"github.com/aihop/gopanel/app/repo"
+	"github.com/aihop/gopanel/utils/encrypt"
+)
+
+// 节点状态取值
+const (
+	NodeStatusOnline       = "online"
+	NodeStatusOffline      = "offline"
+	NodeStatusUnauthorized = "unauthorized"
+	NodeStatusUnknown      = "unknown"
+)
+
+// 告警阈值
+const (
+	diskWarnPercent   = 85.0
+	diskDangerPercent = 90.0
+	certDangerDays    = 7
+)
+
+type NodeService struct{}
+
+func NewNode() *NodeService {
+	return &NodeService{}
+}
+
+func (s *NodeService) List() ([]dto.NodeRes, error) {
+	nodes, err := repo.NewNode().List()
+	if err != nil {
+		return nil, err
+	}
+	list := make([]dto.NodeRes, 0, len(nodes))
+	for _, node := range nodes {
+		list = append(list, toNodeRes(node))
+	}
+	return list, nil
+}
+
+func (s *NodeService) Create(req dto.NodeCreateReq) error {
+	addr, err := normalizeNodeAddr(req.Addr)
+	if err != nil {
+		return err
+	}
+	exist, err := repo.NewNode().CountByAddr(addr, 0)
+	if err != nil {
+		return err
+	}
+	if exist > 0 {
+		return errors.New("该节点地址已存在")
+	}
+	cipherToken, err := encrypt.StringEncrypt(strings.TrimSpace(req.AccessToken))
+	if err != nil {
+		return err
+	}
+	node := &model.Node{
+		Name:        strings.TrimSpace(req.Name),
+		Addr:        addr,
+		Entrance:    strings.TrimSpace(req.Entrance),
+		AccessToken: cipherToken,
+		ConnectMode: "direct",
+		SkipVerify:  req.SkipVerify,
+		IsProd:      req.IsProd,
+		Sort:        req.Sort,
+		Status:      NodeStatusUnknown,
+	}
+	return repo.NewNode().Create(node)
+}
+
+func (s *NodeService) Update(req dto.NodeUpdateReq) error {
+	node, err := repo.NewNode().GetByID(req.ID)
+	if err != nil {
+		return err
+	}
+	addr, err := normalizeNodeAddr(req.Addr)
+	if err != nil {
+		return err
+	}
+	exist, err := repo.NewNode().CountByAddr(addr, req.ID)
+	if err != nil {
+		return err
+	}
+	if exist > 0 {
+		return errors.New("该节点地址已存在")
+	}
+
+	node.Name = strings.TrimSpace(req.Name)
+	node.Addr = addr
+	node.Entrance = strings.TrimSpace(req.Entrance)
+	node.SkipVerify = req.SkipVerify
+	node.IsProd = req.IsProd
+	node.Sort = req.Sort
+	// 令牌留空表示保留原值，避免前端因为拿不到明文而误清空
+	if token := strings.TrimSpace(req.AccessToken); token != "" {
+		cipherToken, err := encrypt.StringEncrypt(token)
+		if err != nil {
+			return err
+		}
+		node.AccessToken = cipherToken
+	}
+	return repo.NewNode().Save(&node)
+}
+
+func (s *NodeService) Delete(id uint) error {
+	if _, err := repo.NewNode().GetByID(id); err != nil {
+		return err
+	}
+	return repo.NewNode().DeleteByID(id)
+}
+
+// Probe 立即探测单个节点，用于新增前的“测试连接”和列表页的手动刷新
+func (s *NodeService) Probe(id uint) (dto.NodeRes, error) {
+	if _, err := repo.NewNode().GetByID(id); err != nil {
+		return dto.NodeRes{}, err
+	}
+	CollectNode(id)
+	refreshed, err := repo.NewNode().GetByID(id)
+	if err != nil {
+		return dto.NodeRes{}, err
+	}
+	return toNodeRes(refreshed), nil
+}
+
+// ProbeDraft 校验尚未保存的节点配置，供新增弹窗里的“测试连接”使用
+func (s *NodeService) ProbeDraft(req dto.NodeCreateReq) (dto.NodeTokenRes, error) {
+	addr, err := normalizeNodeAddr(req.Addr)
+	if err != nil {
+		return dto.NodeTokenRes{}, err
+	}
+	cipherToken, err := encrypt.StringEncrypt(strings.TrimSpace(req.AccessToken))
+	if err != nil {
+		return dto.NodeTokenRes{}, err
+	}
+	return ProbeNode(model.Node{
+		Addr:        addr,
+		Entrance:    strings.TrimSpace(req.Entrance),
+		AccessToken: cipherToken,
+		SkipVerify:  req.SkipVerify,
+	})
+}
+
+func toNodeRes(node model.Node) dto.NodeRes {
+	return dto.NodeRes{
+		ID:          node.ID,
+		Name:        node.Name,
+		Addr:        node.Addr,
+		Entrance:    node.Entrance,
+		ConnectMode: node.ConnectMode,
+		SkipVerify:  node.SkipVerify,
+		IsProd:      node.IsProd,
+		Sort:        node.Sort,
+		Status:      node.Status,
+		StatusMsg:   node.StatusMsg,
+		Version:     node.Version,
+		LastSeenAt:  node.LastSeenAt,
+		Summary:     node.Summary,
+		Warnings:    buildNodeWarnings(node),
+		HasToken:    strings.TrimSpace(node.AccessToken) != "",
+	}
+}
+
+// buildNodeWarnings 把摘要数值折算成告警项。
+// 阈值集中在后端，避免前端各处重复写魔法数字；文案由前端按 type 做 i18n。
+func buildNodeWarnings(node model.Node) []dto.NodeWarning {
+	warnings := make([]dto.NodeWarning, 0, 4)
+
+	switch node.Status {
+	case NodeStatusOffline:
+		offlineHours := 0.0
+		if !node.LastSeenAt.IsZero() {
+			offlineHours = time.Since(node.LastSeenAt).Hours()
+		}
+		warnings = append(warnings, dto.NodeWarning{Type: "offline", Level: "danger", Value: offlineHours})
+		return warnings
+	case NodeStatusUnauthorized:
+		warnings = append(warnings, dto.NodeWarning{Type: "unauthorized", Level: "danger", Value: 0})
+		return warnings
+	case NodeStatusUnknown:
+		return warnings
+	}
+
+	summary := node.Summary
+	if summary.DiskMaxPercent >= diskDangerPercent {
+		warnings = append(warnings, dto.NodeWarning{Type: "disk", Level: "danger", Value: summary.DiskMaxPercent})
+	} else if summary.DiskMaxPercent >= diskWarnPercent {
+		warnings = append(warnings, dto.NodeWarning{Type: "disk", Level: "warn", Value: summary.DiskMaxPercent})
+	}
+
+	if summary.CertTotal > 0 && summary.CertExpiringCount > 0 {
+		level := "warn"
+		// 负数代表已过期，同样按 danger 处理
+		if summary.CertMinDays <= certDangerDays {
+			level = "danger"
+		}
+		warnings = append(warnings, dto.NodeWarning{Type: "cert", Level: level, Value: float64(summary.CertMinDays)})
+	}
+
+	if summary.ContainerAbnormal > 0 {
+		warnings = append(warnings, dto.NodeWarning{Type: "container", Level: "warn", Value: float64(summary.ContainerAbnormal)})
+	}
+
+	return warnings
+}
+
+// normalizeNodeAddr 统一节点地址格式，必须显式带协议，避免拼出 http://https://x 这类地址
+func normalizeNodeAddr(raw string) (string, error) {
+	addr := strings.TrimRight(strings.TrimSpace(raw), "/")
+	if addr == "" {
+		return "", errors.New("节点地址不能为空")
+	}
+	parsed, err := url.Parse(addr)
+	if err != nil {
+		return "", errors.New("节点地址格式不正确")
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return "", errors.New("节点地址必须以 http:// 或 https:// 开头")
+	}
+	if parsed.Host == "" {
+		return "", errors.New("节点地址缺少主机名")
+	}
+	return addr, nil
+}

@@ -105,6 +105,11 @@ func Init() {
 		return
 	}
 
+	if err := repo.NewNode().MigrateTable(); err != nil {
+		sysLog.Println("Node table error", err)
+		return
+	}
+
 	if err := global.DB.AutoMigrate(&model.Firewall{}, &model.Forward{}, &model.AITask{}, &model.AIMessage{}, &model.OperationLog{}, &model.LoginLog{}, &model.LegacyWebsiteDeploy{}); err != nil {
 		sysLog.Println("AutoMigrate additional tables error", err)
 		return
