@@ -118,8 +118,8 @@ publish_git() {
   local repo="${PUBLISH_REPO:-aihop/gopanel}"
   local tag="v${VERSION}"
   local platform="${PUBLISH_GIT_PLATFORM:-all}"
-  local title="GoPanel Agent ${tag}"
-  local notes="GoPanel Agent ${tag} 自动发布"
+  local title="gp-agent Release ${tag}"
+  local notes="gp-agent ${tag} 自动发布"
   local assets=("${ARTIFACTS[@]}" "${MANIFESTS[@]}")
   local asset fn
 
