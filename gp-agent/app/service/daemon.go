@@ -234,12 +234,17 @@ func DaemonAppLogClear(ctx context.Context, params map[string]interface{}) (stri
 	}
 	stdoutLogfile := procInfo.ProcInfo.StdoutLogfile
 	stderrLogfile := procInfo.ProcInfo.StderrLogfile
-	// 清空日志文件内容
-	if err := os.WriteFile(stdoutLogfile, []byte{}, 0644); err != nil {
-		return "", err
+	// 清空日志文件内容。路径为空时跳过：stderr 常因 redirect_stderr=true 并入 stdout 而无独立文件，
+	// 直接 os.WriteFile("") 会报 "open : no such file or directory"。
+	if stdoutLogfile != "" {
+		if err := os.WriteFile(stdoutLogfile, []byte{}, 0644); err != nil {
+			return "", err
+		}
 	}
-	if err := os.WriteFile(stderrLogfile, []byte{}, 0644); err != nil {
-		return "", err
+	if stderrLogfile != "" && stderrLogfile != stdoutLogfile {
+		if err := os.WriteFile(stderrLogfile, []byte{}, 0644); err != nil {
+			return "", err
+		}
 	}
 	return "", nil
 }
