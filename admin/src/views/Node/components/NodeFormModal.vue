@@ -26,6 +26,25 @@ const isEdit = computed(() => !!props.node?.id)
 /** 已保存的节点是否已经配好令牌。用于在编辑态说明"输入框空着不代表没有令牌" */
 const hasStoredToken = computed(() => !!props.node?.hasToken)
 
+const expectedLen = computed(() => props.node?.tokenLenExpected || 40)
+
+/**
+ * 已存令牌长度是否可疑。长度不等于签发长度，几乎总是粘贴漏了或填的不是节点签发的串——
+ * 这种情况下测试连接可能因为用的是当场输入的值而通过，保存后采集却一直失败，很难自查。
+ */
+const storedTokenSuspicious = computed(() => {
+	const node = props.node
+	if (!node?.hasToken || !node.tokenLen) return false
+	return node.tokenLen !== node.tokenLenExpected
+})
+
+/** 当前输入框里的值长度是否可疑（留空不算） */
+const inputTokenSuspicious = computed(() => {
+	const value = form.value.accessToken.trim()
+	if (!value) return false
+	return value.length !== expectedLen.value
+})
+
 /** 连接相关字段是否被改动过（令牌留空时决定能不能拿已存配置去测连接） */
 const connectionFieldsChanged = computed(() => {
 	if (!props.node) return false
@@ -172,8 +191,13 @@ async function submit() {
 					<div class="flex items-center gap-2">
 						<span>{{ t("node.form.token") }}</span>
 						<!-- 密文不回显，输入框在编辑态永远是空的。不给个明确标记，用户会以为令牌没保存上 -->
-						<n-tag v-if="isEdit && hasStoredToken" size="tiny" type="success" :bordered="false">
-							{{ t("node.form.tokenStored") }}
+						<n-tag
+							v-if="isEdit && hasStoredToken"
+							size="tiny"
+							:type="storedTokenSuspicious ? 'warning' : 'success'"
+							:bordered="false"
+						>
+							{{ t("node.form.tokenStored") }} · {{ props.node?.tokenLen }}
 						</n-tag>
 					</div>
 				</template>
@@ -184,6 +208,19 @@ async function submit() {
 					:placeholder="isEdit ? t('node.form.tokenKeepHint') : t('node.form.tokenPlaceholder')"
 				/>
 			</n-form-item>
+
+			<!-- 长度对不上时明确点出来。这是"测试通过但采集一直失败"最常见的原因 -->
+			<n-alert v-if="inputTokenSuspicious" type="warning" :show-icon="false" class="-mt-2 mb-3 text-xs">
+				{{ t("node.form.tokenLenWarn", { actual: form.accessToken.trim().length, expected: expectedLen }) }}
+			</n-alert>
+			<n-alert
+				v-else-if="storedTokenSuspicious && !form.accessToken.trim()"
+				type="warning"
+				:show-icon="false"
+				class="-mt-2 mb-3 text-xs"
+			>
+				{{ t("node.form.tokenStoredLenWarn", { actual: props.node?.tokenLen, expected: expectedLen }) }}
+			</n-alert>
 
 			<n-form-item :label="t('node.form.entrance')">
 				<n-input v-model:value="form.entrance" :placeholder="t('node.form.entrancePlaceholder')" />

@@ -439,6 +439,8 @@ export default {
 			tokenPlaceholder: "Issue it on the target node's Nodes page",
 			tokenKeepHint: "Leave blank to keep unchanged",
 			tokenStored: "Configured",
+			tokenLenWarn: "You entered {actual} characters, but node-issued tokens are {expected}. Make sure you copied the full string from the node's Issue Token button.",
+			tokenStoredLenWarn: "The stored token is {actual} characters but node-issued tokens are {expected} - it likely was not issued by the node. Reissue on the node and paste it again.",
 			testAfterSave: "Connection settings changed. Re-enter the token to test, or save first and collect from the list.",
 			entrance: "Security Entrance",
 			entrancePlaceholder: "Leave blank if the target node has none",

@@ -44,6 +44,10 @@ export interface NodeItem {
 	summary: NodeSummary
 	warnings: NodeWarning[]
 	hasToken: boolean
+	/** 已保存令牌的明文长度（不含内容）。与 tokenLenExpected 不一致说明存错了 */
+	tokenLen: number
+	/** 节点签发令牌的标准长度，由后端给出，不写死在前端 */
+	tokenLenExpected: number
 }
 
 export interface NodeSaveParams {

@@ -53,6 +53,11 @@ type NodeRes struct {
 	Summary     model.NodeSummary `json:"summary"`
 	Warnings    []NodeWarning     `json:"warnings"`
 	HasToken    bool              `json:"hasToken"`
+	// TokenLen 已保存令牌的明文长度。只给长度不给内容——长度不等于签发长度时
+	// 几乎总是"粘贴漏了"或"填的不是节点签发的串"，这是排查时最有用的一个数字
+	TokenLen int `json:"tokenLen"`
+	// TokenLenExpected 节点签发令牌的标准长度，供前端提示，不写死在前端
+	TokenLenExpected int `json:"tokenLenExpected"`
 }
 
 // NodeTokenRes 被控侧签发只读令牌的返回

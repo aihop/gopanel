@@ -27,6 +27,11 @@ const (
 	certDangerDays    = 7
 )
 
+// NodeTokenLength 节点只读令牌的固定长度。
+// 签发和校验共用这个值，前端也据此判断用户粘贴的字符串是否完整——
+// 长度不对几乎总是"复制漏了"或"填的不是节点签发的串"，在保存前就该拦住。
+const NodeTokenLength = 40
+
 type NodeService struct{}
 
 func NewNode() *NodeService {
@@ -148,6 +153,10 @@ func (s *NodeService) ProbeDraft(req dto.NodeCreateReq) (dto.NodeTokenRes, error
 }
 
 func toNodeRes(node model.Node) dto.NodeRes {
+	tokenLen := 0
+	if plain, err := encrypt.StringDecrypt(node.AccessToken); err == nil {
+		tokenLen = len(plain)
+	}
 	return dto.NodeRes{
 		ID:          node.ID,
 		Name:        node.Name,
@@ -164,6 +173,9 @@ func toNodeRes(node model.Node) dto.NodeRes {
 		Summary:     node.Summary,
 		Warnings:    buildNodeWarnings(node),
 		HasToken:    strings.TrimSpace(node.AccessToken) != "",
+
+		TokenLen:         tokenLen,
+		TokenLenExpected: NodeTokenLength,
 	}
 }
 

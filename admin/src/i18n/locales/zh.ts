@@ -431,6 +431,8 @@ export default {
 			tokenPlaceholder: "在目标节点的多节点页面签发",
 			tokenKeepHint: "留空表示不修改",
 			tokenStored: "已配置",
+			tokenLenWarn: "当前输入 {actual} 位，节点签发的令牌是 {expected} 位。请确认是从节点「签发令牌」完整复制的，长度对不上会出现「测试通过但采集一直失败」。",
+			tokenStoredLenWarn: "已保存的令牌是 {actual} 位，而节点签发的令牌是 {expected} 位——这串很可能不是节点签发的。请在节点上重新签发并粘贴。",
 			testAfterSave: "已修改连接信息，请重新输入令牌后再测试，或先保存再从列表里点采集",
 			entrance: "安全入口",
 			entrancePlaceholder: "目标节点未开启安全入口时留空",

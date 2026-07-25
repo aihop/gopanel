@@ -74,9 +74,9 @@ func FetchNodeSummary(node model.Node) (model.NodeSummary, error) {
 	}
 
 	if resp.StatusCode == http.StatusUnauthorized {
-		// 节点侧会区分"未开启只读接入 / 签名不匹配 / 时间戳过期"，把原因带出来，
-		// 否则用户面对一句笼统的"令牌无效"没法判断该去签发令牌还是去校时
-		return model.NodeSummary{}, fmt.Errorf("%w（节点返回：%s）", ErrNodeUnauthorized, nodeRejectReason(body))
+		// 节点侧会区分三种拒绝原因，翻译成能直接照做的动作，
+		// 否则用户面对一句笼统的"令牌无效"没法判断该去签发令牌、重新粘贴还是去校时
+		return model.NodeSummary{}, explainUnauthorized(body)
 	}
 	if resp.StatusCode == http.StatusForbidden {
 		return model.NodeSummary{}, fmt.Errorf("被节点安全入口拦截，请在节点配置中填写安全入口")
@@ -116,6 +116,26 @@ func ProbeNode(node model.Node) (dto.NodeTokenRes, error) {
 		Hostname: summary.Hostname,
 		Version:  summary.Version,
 	}, nil
+}
+
+// explainUnauthorized 把节点的 401 原因翻译成用户能直接照做的动作。
+// 三种原因对应完全不同的处置：去签发、去重新粘贴、去校时——合并成一句话等于没说。
+func explainUnauthorized(body []byte) error {
+	reason := nodeRejectReason(body)
+	switch {
+	case strings.Contains(reason, "not enabled"):
+		return fmt.Errorf("%w：节点尚未开启只读接入，请先在该节点的多节点页面点「签发令牌」", ErrNodeUnauthorized)
+	case strings.Contains(reason, "signature mismatch"):
+		return fmt.Errorf("%w：令牌与节点当前令牌不一致。节点每次重新签发都会让旧令牌立即失效，请在节点上重新签发并把完整的 %d 位字符串粘贴过来",
+			ErrNodeUnauthorized, NodeTokenLength)
+	case strings.Contains(reason, "timestamp"):
+		return fmt.Errorf("%w：主控与节点时间相差超过 %d 秒，请校准两端系统时间（NTP）",
+			ErrNodeUnauthorized, nodesign.SkewSeconds)
+	case strings.Contains(reason, "missing node signature"):
+		return fmt.Errorf("%w：请求缺少签名头，通常是中间有代理剥掉了 X-Node-* 请求头", ErrNodeUnauthorized)
+	default:
+		return fmt.Errorf("%w（节点返回：%s）", ErrNodeUnauthorized, reason)
+	}
 }
 
 // nodeRejectReason 从节点的 401 响应体里取出具体拒绝原因

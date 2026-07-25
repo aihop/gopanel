@@ -90,7 +90,7 @@ func LocalNodeTokenEnabled() bool {
 // IssueLocalNodeToken 生成并保存本机只读令牌，返回明文。
 // 明文只在这一次返回，之后库里只有密文——用户没记下来就只能重新生成。
 func IssueLocalNodeToken() (string, error) {
-	token := common.RandStr(40)
+	token := common.RandStr(NodeTokenLength)
 	cipherToken, err := encrypt.StringEncrypt(token)
 	if err != nil {
 		return "", err
