@@ -14,5 +14,8 @@ PROMPT.md
 *.dev
 init.yaml
 init.yaml.dev
+.env
+.env.*
+!.env.example
 
 /public
