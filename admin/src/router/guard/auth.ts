@@ -69,6 +69,12 @@ async function authCheck(
 
 	// 第二步：检查是否已登录
 	if (authStore.isLogged) {
+		// 登录后再次访问「安全入口」路径本身：前端没有对应路由，会命中 NotFound 显示 404。
+		// 此时直接进首页（入口的使命是放行进入面板，登录后不该再停在入口路径）。
+		const entranceVal = (globalStore.entrance || cookieEntrance || "").replace(/^\/+/, "").replace(/\/+$/, "")
+		if (entranceVal && to.name === "NotFound" && to.path.replace(/\/+$/, "") === "/" + entranceVal) {
+			return next({ path: "/dashboard/index" })
+		}
 		// 已登录 = 真正进入了面板，触发一次 gp-agent 自动更新（非阻塞）
 		maybeTriggerAgentAutoUpdate()
 		// --- 新增：菜单权限拦截 ---
