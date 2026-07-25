@@ -4,7 +4,7 @@ import { nodeDeleteAPI, nodeProbeAPI } from "@/api/modules/node"
 import Icon from "@/components/common/Icon.vue"
 import CommonPage from "@/components/page/Common.vue"
 import { t } from "@/i18n"
-import { levelDotClass, nodeLevel, statusText, warningText } from "@/layouts/common/NodeRail/nodeDisplay"
+import { levelDotClass, nodeLevel, openNodePanel, statusText, warningText } from "@/layouts/common/NodeRail/nodeDisplay"
 import NodeStore from "@/store/modules/node"
 import { useDialog, useMessage } from "naive-ui"
 import { h, onMounted, ref } from "vue"
@@ -64,6 +64,11 @@ const columns = [
 		key: "actions",
 		render: (row: NodeItem) =>
 			h("div", { class: "flex gap-2" }, [
+				h(
+					"a",
+					{ class: "cursor-pointer text-primary", onClick: () => openNodePanel(row) },
+					t("node.openPanel")
+				),
 				h(
 					"a",
 					{ class: "cursor-pointer text-primary", onClick: () => probe(row) },

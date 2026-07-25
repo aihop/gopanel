@@ -375,6 +375,7 @@ export default {
 	},
 	node: {
 		prod: "Prod",
+		openPanel: "Open Panel",
 		listHint: "The controller collects node summaries every minute; you can also refresh right away",
 		addNode: "Add Node",
 		refreshAll: "Refresh All",
@@ -422,7 +423,8 @@ export default {
 		},
 		rail: {
 			expand: "Open node panel",
-			hide: "Hide node bar"
+			hide: "Hide node bar",
+			dblclickHint: "Double-click to open this node's panel"
 		},
 		drawer: {
 			title: "Node Status",

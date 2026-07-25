@@ -22,6 +22,7 @@
 					class="node-dot flex cursor-pointer flex-col items-center justify-center rounded"
 					:class="{ 'is-prod': node.isProd }"
 					@click="nodeStore.openDrawer(node.id)"
+					@dblclick="openNodePanel(node)"
 				>
 					<Icon :name="DotIcon" :size="10" :class="levelDotClass[nodeLevel(node)]" />
 					<span class="initials">{{ nodeInitials(node.name) }}</span>
@@ -30,6 +31,7 @@
 			<div class="text-xs">
 				<div class="font-medium">{{ node.name }}</div>
 				<div class="opacity-75">{{ statusText(node.status) }}</div>
+				<div class="opacity-60">{{ t("node.rail.dblclickHint") }}</div>
 				<div v-for="(warning, index) of node.warnings" :key="index" class="opacity-90">
 					{{ warningText(warning) }}
 				</div>
@@ -57,7 +59,7 @@ import { t } from "@/i18n"
 import { useAuthStore } from "@/store/auth"
 import NodeStore from "@/store/modules/node"
 import { computed, onBeforeUnmount, onMounted } from "vue"
-import { levelDotClass, nodeInitials, nodeLevel, statusText, warningText } from "./nodeDisplay"
+import { levelDotClass, nodeInitials, nodeLevel, openNodePanel, statusText, warningText } from "./nodeDisplay"
 
 const ExpandIcon = "mdi:chevron-left"
 const HideIcon = "mdi:eye-off-outline"

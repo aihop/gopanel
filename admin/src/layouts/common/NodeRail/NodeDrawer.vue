@@ -50,9 +50,21 @@
 									{{ t("node.prod") }}
 								</n-tag>
 							</div>
-							<n-tag size="tiny" :type="levelTagType[nodeLevel(node)]" :bordered="false">
-								{{ statusText(node.status) }}
-							</n-tag>
+							<div class="flex shrink-0 items-center gap-1">
+								<n-tag size="tiny" :type="levelTagType[nodeLevel(node)]" :bordered="false">
+									{{ statusText(node.status) }}
+								</n-tag>
+								<n-tooltip placement="left">
+									<template #trigger>
+										<n-button quaternary size="tiny" @click="openNodePanel(node)">
+											<template #icon>
+												<Icon name="mdi:open-in-new" :size="13" />
+											</template>
+										</n-button>
+									</template>
+									{{ t("node.openPanel") }}
+								</n-tooltip>
+							</div>
 						</div>
 
 						<!-- 离线/未授权时没有可信摘要，只展示原因，不显示上一次的水位读数免得被误读成当前值 -->
@@ -132,7 +144,7 @@ import NodeStore from "@/store/modules/node"
 import dayjs from "@/utils/dayjs"
 import { computed } from "vue"
 import { useRouter } from "vue-router"
-import { levelDotClass, levelTagType, nodeLevel, statusText, usageColor, warningText } from "./nodeDisplay"
+import { levelDotClass, levelTagType, nodeLevel, openNodePanel, statusText, usageColor, warningText } from "./nodeDisplay"
 
 const nodeStore = NodeStore()
 const router = useRouter()

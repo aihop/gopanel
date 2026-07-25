@@ -367,6 +367,7 @@ export default {
 	},
 	node: {
 		prod: "生产",
+		openPanel: "打开面板",
 		listHint: "主控每分钟自动采集一轮节点摘要，也可手动立即刷新",
 		addNode: "添加节点",
 		refreshAll: "立即刷新全部",
@@ -414,7 +415,8 @@ export default {
 		},
 		rail: {
 			expand: "展开节点面板",
-			hide: "隐藏节点条"
+			hide: "隐藏节点条",
+			dblclickHint: "双击直接打开该节点面板"
 		},
 		drawer: {
 			title: "节点状态",

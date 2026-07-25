@@ -82,6 +82,22 @@ export function usageColor(percent: number): string {
 	return "#18a058"
 }
 
+/**
+ * 拼出直接打开该节点面板的地址。
+ * 节点开了安全入口时必须走 /{entrance}——这条路径会命中节点的 authorizeEntrance
+ * 并写入入口 cookie，否则会被挡在"请从安全入口登录"页面。
+ */
+export function nodePanelUrl(node: Pick<NodeItem, "addr" | "entrance">): string {
+	const addr = (node.addr || "").replace(/\/+$/, "")
+	const entrance = (node.entrance || "").trim().replace(/^\/+/, "")
+	return entrance ? `${addr}/${entrance}` : addr
+}
+
+/** 在新标签打开节点自己的面板。noopener 避免被打开页拿到 window.opener */
+export function openNodePanel(node: Pick<NodeItem, "addr" | "entrance">): void {
+	window.open(nodePanelUrl(node), "_blank", "noopener,noreferrer")
+}
+
 export function formatBytes(bytes: number): string {
 	if (!bytes || bytes <= 0) return "0"
 	const units = ["B", "KB", "MB", "GB", "TB"]
