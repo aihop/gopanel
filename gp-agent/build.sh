@@ -112,45 +112,72 @@ write_manifest() {
 EOF
 }
 
-r2_endpoint_url() {
-  local ep="${R2_ENDPOINT_URL:-}"
-  ep="$(echo "${ep}" | xargs || true)"
-  if [ -n "${ep}" ]; then
-    echo "${ep}"
-    return 0
-  fi
-  local account="${R2_ACCOUNT_ID:-}"
-  account="$(echo "${account}" | xargs || true)"
-  if [ -z "${account}" ]; then
-    echo ""
-    return 0
-  fi
-  echo "https://${account}.r2.cloudflarestorage.com"
-}
+# 发布 gp-agent 产物到 GitHub / GitCode releases
+# 仓库默认 aihop/gopanel（可用 PUBLISH_REPO 覆盖）；tag = v${VERSION}；平台由 PUBLISH_GIT_PLATFORM 控制(all/github/gitcode)
+publish_git() {
+  local repo="${PUBLISH_REPO:-aihop/gopanel}"
+  local tag="v${VERSION}"
+  local platform="${PUBLISH_GIT_PLATFORM:-all}"
+  local title="GoPanel Agent ${tag}"
+  local notes="GoPanel Agent ${tag} 自动发布"
+  local assets=("${ARTIFACTS[@]}" "${MANIFESTS[@]}")
+  local asset fn
 
-r2_upload_one() {
-  local local_path="$1" remote_key="$2"
-  local endpoint bucket access secret region
-  endpoint="$(r2_endpoint_url)"
-  bucket="${R2_BUCKET:-}"
-  access="${R2_ACCESS_KEY_ID:-}"
-  secret="${R2_SECRET_ACCESS_KEY:-}"
-  region="${R2_REGION:-auto}"
-  if [ -z "${endpoint}" ]; then
-    echo "ERROR: R2 endpoint is empty. Set R2_ENDPOINT_URL or R2_ACCOUNT_ID." >&2
-    return 1
-  fi
-  if [ -z "${bucket}" ] || [ -z "${access}" ] || [ -z "${secret}" ]; then
-    echo "ERROR: R2 credentials/bucket missing. Need R2_BUCKET, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY." >&2
-    return 1
-  fi
-  if ! command -v aws >/dev/null 2>&1; then
-    echo "ERROR: aws cli not found. Install AWS CLI v2 (recommended) or provide your own upload hook." >&2
-    return 1
+  # --- GitHub ---
+  if [[ "${platform}" == "all" || "${platform}" == "github" ]]; then
+    if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+      if ! gh release view "${tag}" --repo "${repo}" >/dev/null 2>&1; then
+        echo "创建 GitHub Release ${tag} ..."
+        gh release create "${tag}" --repo "${repo}" --title "${title}" --notes "${notes}" --draft=false --prerelease=false || true
+      fi
+      for asset in "${assets[@]}"; do
+        echo "GitHub 上传: $(basename "${asset}")"
+        gh release upload "${tag}" "${asset}" --repo "${repo}" --clobber || true
+      done
+      echo "GitHub: https://github.com/${repo}/releases/tag/${tag}"
+    else
+      echo "跳过 GitHub：gh 未安装或未登录。"
+    fi
   fi
 
-  AWS_ACCESS_KEY_ID="${access}" AWS_SECRET_ACCESS_KEY="${secret}" AWS_DEFAULT_REGION="${region}" \
-    aws s3 cp "${local_path}" "s3://${bucket}/${remote_key}" --endpoint-url "${endpoint}" --no-progress
+  # --- GitCode ---
+  if [[ "${platform}" == "all" || "${platform}" == "gitcode" ]]; then
+    if [ -n "${GITCODE_TOKEN:-}" ] && command -v jq >/dev/null 2>&1; then
+      local info id
+      info="$(curl -s -H "PRIVATE-TOKEN: ${GITCODE_TOKEN}" "https://api.gitcode.com/api/v5/repos/${repo}/releases/tags/${tag}")"
+      id="$(echo "${info}" | jq -r '.id // empty')"
+      if [ -z "${id}" ] || [ "${id}" = "null" ]; then
+        echo "创建 GitCode Release ${tag} ..."
+        local cr
+        cr="$(curl -s -X POST "https://api.gitcode.com/api/v5/repos/${repo}/releases" \
+          -H "PRIVATE-TOKEN: ${GITCODE_TOKEN}" -H "Content-Type: application/json" \
+          -d "{\"tag_name\":\"${tag}\",\"ref\":\"main\",\"name\":\"${title}\",\"body\":\"${notes}\",\"release_status\":\"latest\"}")"
+        if echo "${cr}" | grep -q '"error_code":'; then
+          echo "GitCode 创建 Release 失败，跳过 GitCode: ${cr}"
+          return 0
+        fi
+      fi
+      for asset in "${assets[@]}"; do
+        fn="$(basename "${asset}")"
+        local up upurl
+        up="$(curl -s -G -H "PRIVATE-TOKEN: ${GITCODE_TOKEN}" --data-urlencode "file_name=${fn}" "https://api.gitcode.com/api/v5/repos/${repo}/releases/${tag}/upload_url")"
+        upurl="$(echo "${up}" | jq -r '.url // empty')"
+        if [ -z "${upurl}" ] || [ "${upurl}" = "null" ]; then
+          echo "GitCode 获取上传地址失败: ${up}"; continue
+        fi
+        local copts=()
+        if echo "${up}" | jq -e '.headers' >/dev/null 2>&1; then
+          while read -r hk hv; do [ -n "${hk}" ] && copts+=("-H" "${hk}: ${hv}"); done \
+            < <(echo "${up}" | jq -r '.headers | to_entries | .[] | "\(.key) \(.value)"')
+        fi
+        echo "GitCode 上传: ${fn}"
+        curl -s -X PUT "${copts[@]}" -T "${asset}" "${upurl}" > /dev/null
+      done
+      echo "GitCode: https://gitcode.com/${repo}/-/releases/${tag}"
+    else
+      echo "跳过 GitCode：未配置 GITCODE_TOKEN 或缺 jq。"
+    fi
+  fi
 }
 
 # 从 git 记录生成更新内容（HTML）：默认取「上一个 tag..HEAD」的提交标题，取不到则取最近 10 条
@@ -289,40 +316,17 @@ done
 echo "=== All Done ==="
 ls -lh "${OUTDIR}"
 
-PUBLISH_R2="${PUBLISH_R2:-}"
-if [ -z "${PUBLISH_R2}" ] && [ -t 1 ]; then
-  read -r -p "Publish to Cloudflare R2? [y/N] " ans || true
+PUBLISH_GIT="${PUBLISH_GIT:-}"
+if [ -z "${PUBLISH_GIT}" ] && [ -t 1 ]; then
+  read -r -p "发布 gp-agent 到 GitHub/GitCode? [y/N] " ans || true
   case "${ans:-}" in
-    y|Y|yes|YES) PUBLISH_R2="1" ;;
-    *) PUBLISH_R2="0" ;;
+    y|Y|yes|YES) PUBLISH_GIT="1" ;;
+    *) PUBLISH_GIT="0" ;;
   esac
 fi
-PUBLISH_R2="${PUBLISH_R2:-0}"
-
-if [ "${PUBLISH_R2}" = "1" ]; then
-  prefix="${R2_PREFIX:-}"
-  prefix="$(echo "${prefix}" | xargs || true)"
-  if [ -n "${prefix}" ]; then
-    prefix="${prefix%/}/"
-  fi
-  remote_base="${prefix}${APP_NAME}/v${VERSION}"
-
-  echo "=== Publishing to Cloudflare R2 ==="
-  echo "Endpoint: $(r2_endpoint_url)"
-  echo "Bucket: ${R2_BUCKET:-}"
-  echo "Path: ${remote_base}/"
-
-  for f in "${ARTIFACTS[@]}"; do
-    bn="$(basename "${f}")"
-    r2_upload_one "${f}" "${remote_base}/${bn}"
-    echo "Uploaded: ${bn}"
-  done
-
-  for f in "${MANIFESTS[@]}"; do
-    bn="$(basename "${f}")"
-    r2_upload_one "${f}" "${remote_base}/${bn}"
-    echo "Uploaded: ${bn}"
-  done
+if [ "${PUBLISH_GIT:-0}" = "1" ]; then
+  echo "=== 发布 gp-agent 到 git ==="
+  publish_git
 fi
 
 # === 登记 changelog 到 gopanel.cn（面板据此自动更新 gp-agent）===
