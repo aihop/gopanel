@@ -2,6 +2,7 @@ package router
 
 import (
 	"io/fs"
+	"time"
 
 	"github.com/aihop/gopanel/app/middleware"
 	"github.com/aihop/gopanel/global"
@@ -49,6 +50,8 @@ func staticRouter(r fiber.Router) {
 	r.Get("/assets/*", static.New("", static.Config{
 		Compress: true,
 		FS:       assetsFS,
+		// 资源名带内容哈希，可长缓存（内容变=文件名变），减少更新后的重复下载
+		CacheDuration: 365 * 24 * time.Hour,
 	}))
 	r.Get("/images/*", static.New("", static.Config{
 		FS: imagesFS,
@@ -75,6 +78,10 @@ func staticRouter(r fiber.Router) {
 			return c.SendStatus(fiber.StatusNotFound)
 		}
 		c.Set("Content-Type", "text/html; charset=utf-8")
+		// index.html 必须每次校验，避免面板更新后浏览器仍用缓存的旧 HTML（引用已不存在的旧资源，导致白屏）
+		c.Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		c.Set("Pragma", "no-cache")
+		c.Set("Expires", "0")
 		return c.Send(file)
 	})
 }
