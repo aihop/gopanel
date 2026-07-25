@@ -13,18 +13,26 @@ if [ -f "${ENV_FILE}" ]; then
   set +a
 fi
 
-VERSION="${1:-1.0.0}"
-VERSION_CODE="${2:-100000}"
 APP_NAME="gp-agent"
 
-# 必须根据实际传入的参数个数来进行 shift
-# 如果传入了参数，最多 shift 3，否则如果没传满 3 个，就会导致把默认没传的空位留给后续的 TARGETS
-if [ $# -ge 3 ]; then
-  shift 3
-elif [ $# -ge 2 ]; then
-  shift 2
-elif [ $# -ge 1 ]; then
-  shift 1
+# 从版本名推导 version_code：1.2.1 -> 102001，1.0.2 -> 100002（major*100000+minor*1000+patch）
+derive_version_code() {
+  local v="${1#v}"     # 去掉前导 v
+  v="${v%%-*}"         # 去掉预发布后缀
+  local major minor patch
+  IFS='.' read -r major minor patch <<< "${v}"
+  major="${major:-0}"; minor="${minor:-0}"; patch="${patch:-0}"
+  echo $(( 10#${major} * 100000 + 10#${minor} * 1000 + 10#${patch} ))
+}
+
+VERSION="${1:-1.0.0}"
+[ $# -ge 1 ] && shift
+# 第二个参数是纯数字则当 version_code，否则从版本名自动推导（你只传版本名即可）
+if [[ "${1:-}" =~ ^[0-9]+$ ]]; then
+  VERSION_CODE="$1"
+  shift
+else
+  VERSION_CODE="$(derive_version_code "${VERSION}")"
 fi
 
 # 默认关闭 cgo
@@ -145,6 +153,24 @@ r2_upload_one() {
     aws s3 cp "${local_path}" "s3://${bucket}/${remote_key}" --endpoint-url "${endpoint}" --no-progress
 }
 
+# 从 git 记录生成更新内容（HTML）：默认取「上一个 tag..HEAD」的提交标题，取不到则取最近 10 条
+git_changelog_html() {
+  local last range lines html line
+  last="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+  range="HEAD"
+  [ -n "${last}" ] && range="${last}..HEAD"
+  lines="$(git log ${range} --no-merges --pretty=format:'%s' 2>/dev/null | head -30)"
+  [ -z "${lines}" ] && lines="$(git log -10 --no-merges --pretty=format:'%s' 2>/dev/null || true)"
+  html=""
+  while IFS= read -r line; do
+    [ -z "${line}" ] && continue
+    line="${line//&/&amp;}"; line="${line//</&lt;}"; line="${line//>/&gt;}"
+    html="${html}<p>${line}</p>"
+  done <<< "${lines}"
+  [ -z "${html}" ] && html="<p>GoPanel Agent v${VERSION} 更新</p>"
+  echo "${html}"
+}
+
 # 发版后向 gopanel.cn 登记 changelog（面板据此自动检测/更新 gp-agent）
 # slug 前缀 gp-agent- 用于和主包区分；key=版本名、sort=version_code（比对用）
 publish_changelog() {
@@ -166,7 +192,8 @@ publish_changelog() {
   local slug="gp-agent-v${VERSION//./-}"
   local title="${AGENT_RELEASE_TITLE:-GoPanel Agent v${VERSION}}"
   local desc="${AGENT_RELEASE_DESC:-常规更新}"
-  local content="${AGENT_RELEASE_CONTENT:-<p>GoPanel Agent v${VERSION} 更新</p>}"
+  # 更新内容默认从 git 记录提取；也可用 AGENT_RELEASE_CONTENT 覆盖为手写内容
+  local content="${AGENT_RELEASE_CONTENT:-$(git_changelog_html)}"
 
   local body
   body="$(jq -n \
