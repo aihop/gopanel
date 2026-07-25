@@ -134,15 +134,17 @@ func nodeRejectReason(body []byte) string {
 func describeNonJSONResponse(node model.Node) error {
 	brand, version, err := fetchNodeHealth(node)
 	if err != nil {
-		return fmt.Errorf("节点响应不是合法 JSON，请确认地址指向 GoPanel 面板")
+		return fmt.Errorf("节点响应不是合法 JSON，请确认地址指向面板服务")
 	}
-	if !strings.EqualFold(strings.TrimSpace(brand), constant.AppBrand) {
-		return fmt.Errorf("目标地址不是 GoPanel 面板")
+	brand = strings.TrimSpace(brand)
+	version = strings.TrimSpace(version)
+	// 不拿品牌当否决条件：AppBrand 是 ldflags 注入的（GoPanel / ConsoleX），
+	// 混品牌车队里两边不一致是正常的，把它当信息展示出来就好
+	if brand == "" && version == "" {
+		return fmt.Errorf("目标地址不是面板服务")
 	}
-	if version == "" {
-		version = "未知"
-	}
-	return fmt.Errorf("节点面板版本 %s 不支持只读接入，请先把该节点升级到支持多节点的版本", version)
+	label := strings.TrimSpace(brand + " " + version)
+	return fmt.Errorf("节点面板（%s）不支持只读接入，请先把该节点升级到支持多节点的版本", label)
 }
 
 func fetchNodeHealth(node model.Node) (brand string, version string, err error) {

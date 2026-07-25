@@ -387,6 +387,10 @@ export default {
 		copyFailed: "Copy failed",
 		deleteConfirm: "Delete node \"{name}\"? The controller will stop collecting its status. The node itself is unaffected.",
 		lastSeen: "Last seen {time}",
+		alert: {
+			offlineAndWarn: "{total} node(s) with alerts, {offline} offline",
+			warnOnly: "{total} node(s) with alerts"
+		},
 		status: {
 			online: "Online",
 			offline: "Offline",
@@ -440,6 +444,8 @@ export default {
 			entrancePlaceholder: "Leave blank if the target node has none",
 			skipVerify: "Skip TLS verification",
 			isProd: "Mark as production",
+			sort: "Order",
+			sortHint: "Smaller comes first; controls order in the rail and the list",
 			test: "Test Connection",
 			testOk: "Connected: {hostname} ({version})",
 			testFailed: "Connection failed",

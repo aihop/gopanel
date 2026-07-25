@@ -18,6 +18,7 @@
       <Breadcrumb class="grow" />
 
       <SystemUpdateEntry v-if="isLogged" />
+      <NodeAlertEntry v-if="isLogged" />
       <Search />
       <MobileAdminSwitch />
       <LocaleSwitch />
@@ -41,6 +42,7 @@ import Breadcrumb from "./Breadcrumb.vue"
 import FullscreenSwitch from "./FullscreenSwitch.vue"
 import LocaleSwitch from "./LocaleSwitch.vue"
 import MobileAdminSwitch from "./MobileAdminSwitch.vue"
+import NodeAlertEntry from "./NodeAlertEntry.vue"
 import Search from "./Search.vue"
 import SystemUpdateEntry from "./SystemUpdateEntry.vue"
 import ThemeSwitch from "./ThemeSwitch.vue"

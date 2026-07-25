@@ -189,6 +189,11 @@ async function submit() {
 				<n-input v-model:value="form.entrance" :placeholder="t('node.form.entrancePlaceholder')" />
 			</n-form-item>
 
+			<n-form-item :label="t('node.form.sort')">
+				<n-input-number v-model:value="form.sort" :min="0" class="w-32" />
+				<span class="ml-2 text-xs opacity-60">{{ t("node.form.sortHint") }}</span>
+			</n-form-item>
+
 			<div class="flex items-center gap-6">
 				<n-checkbox v-model:checked="form.skipVerify">{{ t("node.form.skipVerify") }}</n-checkbox>
 				<n-checkbox v-model:checked="form.isProd">{{ t("node.form.isProd") }}</n-checkbox>

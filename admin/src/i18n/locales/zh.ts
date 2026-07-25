@@ -379,6 +379,10 @@ export default {
 		copyFailed: "复制失败",
 		deleteConfirm: "确定删除节点「{name}」？主控将不再采集它的状态，节点本身不受影响。",
 		lastSeen: "最后在线 {time}",
+		alert: {
+			offlineAndWarn: "{total} 个节点有告警，其中 {offline} 个离线",
+			warnOnly: "{total} 个节点有告警"
+		},
 		status: {
 			online: "在线",
 			offline: "离线",
@@ -432,6 +436,8 @@ export default {
 			entrancePlaceholder: "目标节点未开启安全入口时留空",
 			skipVerify: "跳过 TLS 证书校验",
 			isProd: "标记为生产节点",
+			sort: "排序",
+			sortHint: "数字越小越靠前，决定细条和列表里的顺序",
 			test: "测试连接",
 			testOk: "连接成功：{hostname}（{version}）",
 			testFailed: "连接失败",
