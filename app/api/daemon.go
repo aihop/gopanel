@@ -265,7 +265,16 @@ func DaemonProcessLog(c fiber.Ctx) error {
 }
 
 func DaemonProcessLogClear(c fiber.Ctx) error {
-	name := c.Params("name")
+	// 前端通过请求体传 name（路由 /process/log/clear 无 :name 路径参数），
+	// 此前误用 c.Params("name") 恒为空，导致「process name cannot be empty」
+	type ClearReq struct {
+		Name string `json:"name"`
+	}
+	req, err := e.BodyToStruct[ClearReq](c.Body())
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	name := req.Name
 	if name == "" {
 		return c.JSON(e.Fail(errors.New("process name cannot be empty")))
 	}
