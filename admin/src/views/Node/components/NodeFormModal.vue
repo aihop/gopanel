@@ -121,26 +121,18 @@ async function testConnection() {
 		const useSaved = blankToken && !!props.node?.id
 		if (useSaved) {
 			const res = await nodeProbeAPI(props.node!.id)
-			if (res.code === 0) {
-				message.success(
-					t("node.form.testOk", {
-						hostname: res.data?.summary?.hostname || "-",
-						version: res.data?.version || "-"
-					})
-				)
-			} else {
-				message.error(res.msg || t("node.form.testFailed"))
-			}
+			message.success(
+				t("node.form.testOk", {
+					hostname: res.data?.summary?.hostname || "-",
+					version: res.data?.version || "-"
+				})
+			)
 			return
 		}
 		const res = await nodeProbeDraftAPI(form.value)
-		if (res.code === 0) {
-			message.success(t("node.form.testOk", { hostname: res.data?.hostname || "-", version: res.data?.version || "-" }))
-		} else {
-			message.error(res.msg || t("node.form.testFailed"))
-		}
-	} catch (e: any) {
-		message.error(e?.message || t("node.form.testFailed"))
+		message.success(t("node.form.testOk", { hostname: res.data?.hostname || "-", version: res.data?.version || "-" }))
+	} catch {
+		// 失败提示由 axios 拦截器统一弹出，这里不再重复
 	} finally {
 		testing.value = false
 	}
@@ -154,15 +146,15 @@ async function submit() {
 	}
 	saving.value = true
 	try {
-		const res = isEdit.value ? await nodeUpdateAPI(form.value) : await nodeCreateAPI(form.value)
-		if (res.code === 0) {
-			message.success(t("commons.msg.operationSuccess"))
-			emit("saved")
+		if (isEdit.value) {
+			await nodeUpdateAPI(form.value)
 		} else {
-			message.error(res.msg || t("node.saveFailed"))
+			await nodeCreateAPI(form.value)
 		}
-	} catch (e: any) {
-		message.error(e?.message || t("node.saveFailed"))
+		message.success(t("commons.msg.operationSuccess"))
+		emit("saved")
+	} catch {
+		// 失败提示由 axios 拦截器统一弹出
 	} finally {
 		saving.value = false
 	}

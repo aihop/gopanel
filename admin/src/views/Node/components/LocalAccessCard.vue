@@ -16,9 +16,9 @@ async function fetchStatus() {
 	loading.value = true
 	try {
 		const res = await nodeLocalTokenStatusAPI()
-		enabled.value = res.code === 0 ? !!res.data?.enabled : false
-	} catch (e: any) {
-		message.error(e?.message || t("node.local.loadFailed"))
+		enabled.value = !!res.data?.enabled
+	} catch {
+		// 失败提示由 axios 拦截器统一弹出
 	} finally {
 		loading.value = false
 	}
@@ -28,15 +28,13 @@ async function issue() {
 	loading.value = true
 	try {
 		const res = await nodeLocalTokenIssueAPI()
-		if (res.code === 0 && res.data?.accessToken) {
+		if (res.data?.accessToken) {
 			issuedToken.value = res.data.accessToken
 			enabled.value = true
 			message.success(t("node.local.issued"))
-		} else {
-			message.error(res.msg || t("node.local.issueFailed"))
 		}
-	} catch (e: any) {
-		message.error(e?.message || t("node.local.issueFailed"))
+	} catch {
+		// 失败提示由 axios 拦截器统一弹出
 	} finally {
 		loading.value = false
 	}
@@ -66,16 +64,12 @@ function confirmRevoke() {
 		onPositiveClick: async () => {
 			loading.value = true
 			try {
-				const res = await nodeLocalTokenRevokeAPI()
-				if (res.code === 0) {
-					enabled.value = false
-					issuedToken.value = ""
-					message.success(t("node.local.revoked"))
-				} else {
-					message.error(res.msg || t("node.local.revokeFailed"))
-				}
-			} catch (e: any) {
-				message.error(e?.message || t("node.local.revokeFailed"))
+				await nodeLocalTokenRevokeAPI()
+				enabled.value = false
+				issuedToken.value = ""
+				message.success(t("node.local.revoked"))
+			} catch {
+				// 失败提示由 axios 拦截器统一弹出
 			} finally {
 				loading.value = false
 			}

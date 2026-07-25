@@ -78,17 +78,15 @@ const columns = [
 async function probe(row: NodeItem) {
 	probingId.value = row.id
 	try {
-		const res = await nodeProbeAPI(row.id)
-		if (res.code === 0) {
-			message.success(t("node.probeDone"))
-			await nodeStore.fetchList()
-		} else {
-			message.error(res.msg || t("node.probeFailed"))
-		}
-	} catch (e: any) {
-		message.error(e?.message || t("node.probeFailed"))
+		await nodeProbeAPI(row.id)
+		message.success(t("node.probeDone"))
+	} catch {
+		// 失败提示由 axios 拦截器统一弹出（api/index.ts 对 FAIL 码已 MsgError + reject），
+		// 这里再弹一次会让同一个错误出现两遍
 	} finally {
 		probingId.value = 0
+		// 成败都要刷新：失败时状态列和告警要变成最新的失败原因
+		await nodeStore.fetchList()
 	}
 }
 
@@ -110,15 +108,11 @@ function confirmDelete(row: NodeItem) {
 		negativeText: t("commons.button.cancel"),
 		onPositiveClick: async () => {
 			try {
-				const res = await nodeDeleteAPI({ id: row.id })
-				if (res.code === 0) {
-					message.success(t("commons.msg.deleteSuccess"))
-					await nodeStore.fetchList()
-				} else {
-					message.error(res.msg || t("node.deleteFailed"))
-				}
-			} catch (e: any) {
-				message.error(e?.message || t("node.deleteFailed"))
+				await nodeDeleteAPI({ id: row.id })
+				message.success(t("commons.msg.deleteSuccess"))
+				await nodeStore.fetchList()
+			} catch {
+				// 错误提示由拦截器统一处理
 			}
 		}
 	})

@@ -121,17 +121,20 @@ func (s *NodeService) Delete(id uint) error {
 	return repo.NewNode().DeleteByID(id)
 }
 
-// Probe 立即探测单个节点，用于新增前的“测试连接”和列表页的手动刷新
+// Probe 立即探测单个节点，用于列表页的手动采集和编辑态的测试连接。
+// 采集失败必须把错误返回出去——之前这里丢掉了 CollectNode 的错误，
+// 导致节点明明连不上，接口却回成功、前端提示"测试成功"。
 func (s *NodeService) Probe(id uint) (dto.NodeRes, error) {
 	if _, err := repo.NewNode().GetByID(id); err != nil {
 		return dto.NodeRes{}, err
 	}
-	CollectNode(id)
+	collectErr := CollectNode(id)
 	refreshed, err := repo.NewNode().GetByID(id)
 	if err != nil {
 		return dto.NodeRes{}, err
 	}
-	return toNodeRes(refreshed), nil
+	// 即使失败也把最新的行返回出去，前端可以顺手更新状态列
+	return toNodeRes(refreshed), collectErr
 }
 
 // ProbeDraft 校验尚未保存的节点配置，供新增弹窗里的“测试连接”使用

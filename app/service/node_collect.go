@@ -29,16 +29,21 @@ func CollectAllNodes() {
 		return
 	}
 	for _, node := range nodes {
-		CollectNode(node.ID)
+		// 定时轮采里单台失败不影响其他节点，失败原因已写进该节点的 status_msg
+		if err := CollectNode(node.ID); err != nil {
+			global.LOG.Warnf("[Node] 采集节点 %s 失败: %v", node.Name, err)
+		}
 	}
 }
 
-// CollectNode 采集单个节点，供手动刷新使用
-func CollectNode(id uint) {
+// CollectNode 采集单个节点。
+// 采集结果无论成败都会落库，同时把失败原因返回给调用方——
+// 手动「采集/测试连接」必须能看到失败，不能只写进库里就对用户报成功。
+func CollectNode(id uint) error {
 	node, err := repo.NewNode().GetByID(id)
 	if err != nil {
 		global.LOG.Errorf("[Node] 节点 %d 不存在: %v", id, err)
-		return
+		return err
 	}
 
 	summary, err := FetchNodeSummary(node)
@@ -54,7 +59,7 @@ func CollectNode(id uint) {
 		if updateErr := repo.NewNode().UpdateSummary(node.ID, fields); updateErr != nil {
 			global.LOG.Errorf("[Node] 更新节点 %s 状态失败: %v", node.Name, updateErr)
 		}
-		return
+		return err
 	}
 
 	fields["status"] = NodeStatusOnline
@@ -64,7 +69,9 @@ func CollectNode(id uint) {
 	fields["summary"] = summary
 	if updateErr := repo.NewNode().UpdateSummary(node.ID, fields); updateErr != nil {
 		global.LOG.Errorf("[Node] 更新节点 %s 摘要失败: %v", node.Name, updateErr)
+		return updateErr
 	}
+	return nil
 }
 
 // truncateStatusMsg status_msg 字段是 varchar(255)，超长的网络错误要截断，否则 sqlite 会写入失败
