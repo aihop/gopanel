@@ -373,7 +373,101 @@ export default {
 			update: "Update"
 		}
 	},
+	node: {
+		prod: "Prod",
+		listHint: "The controller collects node summaries every minute; you can also refresh right away",
+		addNode: "Add Node",
+		refreshAll: "Refresh All",
+		probe: "Collect",
+		probing: "Collecting",
+		probeDone: "Collected",
+		probeFailed: "Collection failed",
+		saveFailed: "Save failed",
+		deleteFailed: "Delete failed",
+		copyFailed: "Copy failed",
+		deleteConfirm: "Delete node \"{name}\"? The controller will stop collecting its status. The node itself is unaffected.",
+		lastSeen: "Last seen {time}",
+		status: {
+			online: "Online",
+			offline: "Offline",
+			unauthorized: "Token invalid",
+			unknown: "Not collected"
+		},
+		metric: {
+			cpu: "CPU",
+			memory: "Memory",
+			disk: "Disk",
+			container: "Containers",
+			cert: "Certs"
+		},
+		warning: {
+			offline: "Node offline",
+			offlineFor: "Offline for about {hours}h",
+			unauthorized: "Read-only token invalid, please reconfigure",
+			disk: "Disk usage {percent}%",
+			certExpiring: "Certificate expires in {days} days",
+			certExpired: "Certificate expired {days} days ago",
+			container: "{count} container(s) in abnormal state"
+		},
+		column: {
+			name: "Node",
+			addr: "Address",
+			status: "Status",
+			warnings: "Alerts",
+			version: "Version"
+		},
+		rail: {
+			expand: "Open node panel",
+			hide: "Hide node bar"
+		},
+		drawer: {
+			title: "Node Status",
+			empty: "No nodes yet",
+			addNode: "Add one"
+		},
+		form: {
+			createTitle: "Add Node",
+			editTitle: "Edit Node",
+			name: "Name",
+			namePlaceholder: "e.g. prod-hk",
+			addr: "Panel Address",
+			token: "Read-only Token",
+			tokenPlaceholder: "Issue it on the target node's Nodes page",
+			tokenKeepHint: "Leave blank to keep unchanged",
+			entrance: "Security Entrance",
+			entrancePlaceholder: "Leave blank if the target node has none",
+			skipVerify: "Skip TLS verification",
+			isProd: "Mark as production",
+			test: "Test Connection",
+			testOk: "Connected: {hostname} ({version})",
+			testFailed: "Connection failed",
+			testNeedToken: "Enter the token before testing",
+			nameRequired: "Name is required",
+			addrRequired: "Panel address is required",
+			addrScheme: "Address must start with http:// or https://",
+			tokenRequired: "Read-only token is required",
+			tokenTip: "The token only reads this machine's summary and cannot perform any write operation. It is never sent in plaintext."
+		},
+		local: {
+			title: "Read-only Access",
+			desc: "Allow another GoPanel to read this machine's status summary as a controller",
+			enabled: "Enabled",
+			disabled: "Disabled",
+			issue: "Issue Token",
+			reissue: "Reissue",
+			revoke: "Disable Access",
+			issued: "Token issued",
+			issueFailed: "Failed to issue token",
+			revoked: "Read-only access disabled",
+			revokeFailed: "Failed to disable",
+			loadFailed: "Failed to load status",
+			saveTokenNow: "Copy it now - the plaintext token is shown only once.",
+			reissueConfirm: "Reissuing immediately invalidates controllers using the old token. Continue?",
+			revokeConfirm: "No controller will be able to read this machine's status. Continue?"
+		}
+	},
 	menu: {
+		node: "Nodes",
 		dashboard: "Dashboard",
 		dashboardHelper: "View system status and metrics",
 		apps: "App Store",

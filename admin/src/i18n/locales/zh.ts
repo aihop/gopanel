@@ -365,7 +365,101 @@ export default {
 			update: "更新"
 		}
 	},
+	node: {
+		prod: "生产",
+		listHint: "主控每分钟自动采集一轮节点摘要，也可手动立即刷新",
+		addNode: "添加节点",
+		refreshAll: "立即刷新全部",
+		probe: "采集",
+		probing: "采集中",
+		probeDone: "采集完成",
+		probeFailed: "采集失败",
+		saveFailed: "保存失败",
+		deleteFailed: "删除失败",
+		copyFailed: "复制失败",
+		deleteConfirm: "确定删除节点「{name}」？主控将不再采集它的状态，节点本身不受影响。",
+		lastSeen: "最后在线 {time}",
+		status: {
+			online: "在线",
+			offline: "离线",
+			unauthorized: "令牌失效",
+			unknown: "未采集"
+		},
+		metric: {
+			cpu: "CPU",
+			memory: "内存",
+			disk: "磁盘",
+			container: "容器",
+			cert: "证书"
+		},
+		warning: {
+			offline: "节点离线",
+			offlineFor: "已离线约 {hours} 小时",
+			unauthorized: "只读令牌无效，请重新配置",
+			disk: "磁盘占用 {percent}%",
+			certExpiring: "证书 {days} 天后到期",
+			certExpired: "证书已过期 {days} 天",
+			container: "{count} 个容器状态异常"
+		},
+		column: {
+			name: "节点",
+			addr: "地址",
+			status: "状态",
+			warnings: "告警",
+			version: "版本"
+		},
+		rail: {
+			expand: "展开节点面板",
+			hide: "隐藏节点条"
+		},
+		drawer: {
+			title: "节点状态",
+			empty: "还没有添加节点",
+			addNode: "去添加"
+		},
+		form: {
+			createTitle: "添加节点",
+			editTitle: "编辑节点",
+			name: "节点名称",
+			namePlaceholder: "例：生产-香港",
+			addr: "面板地址",
+			token: "只读令牌",
+			tokenPlaceholder: "在目标节点的多节点页面签发",
+			tokenKeepHint: "留空表示不修改",
+			entrance: "安全入口",
+			entrancePlaceholder: "目标节点未开启安全入口时留空",
+			skipVerify: "跳过 TLS 证书校验",
+			isProd: "标记为生产节点",
+			test: "测试连接",
+			testOk: "连接成功：{hostname}（{version}）",
+			testFailed: "连接失败",
+			testNeedToken: "请先填写令牌再测试连接",
+			nameRequired: "请填写节点名称",
+			addrRequired: "请填写面板地址",
+			addrScheme: "地址必须以 http:// 或 https:// 开头",
+			tokenRequired: "请填写只读令牌",
+			tokenTip: "令牌只用于读取本机摘要，不能执行任何写操作。令牌不会随请求明文传输。"
+		},
+		local: {
+			title: "本机只读接入",
+			desc: "允许其他 GoPanel 作为主控读取本机的状态摘要",
+			enabled: "已开启",
+			disabled: "未开启",
+			issue: "签发令牌",
+			reissue: "重新签发",
+			revoke: "关闭接入",
+			issued: "令牌已签发",
+			issueFailed: "签发失败",
+			revoked: "已关闭只读接入",
+			revokeFailed: "关闭失败",
+			loadFailed: "读取状态失败",
+			saveTokenNow: "请立刻复制保存，令牌明文只显示这一次。",
+			reissueConfirm: "重新签发会让正在使用旧令牌的主控立即失效，是否继续？",
+			revokeConfirm: "关闭后所有主控都无法再读取本机状态，是否继续？"
+		}
+	},
 	menu: {
+		node: "多节点",
 		dashboard: "仪表盘",
 		dashboardHelper: "查看系统状态和指标",
 		apps: "应用",

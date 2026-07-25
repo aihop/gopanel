@@ -120,6 +120,20 @@ export default function getItems(_: { mode: "vertical" | "horizontal"; collapsed
 					RouterLink,
 					{
 						to: {
+							name: "Node-Index"
+						}
+					},
+					{ default: () => t("menu.node") }
+				),
+			key: "node",
+			icon: renderIcon("mdi:server-network-outline")
+		},
+		{
+			label: () =>
+				h(
+					RouterLink,
+					{
+						to: {
 							name: "Container-Index"
 						}
 					},

@@ -127,6 +127,20 @@ const router = createRouter({
 			]
 		},
 		{
+			path: "/node",
+			name: "Node",
+			redirect: "/node/index",
+			meta: { title: t("menu.node"), titleKey: "menu.node", auth: true, roles: "all" },
+			children: [
+				{
+					path: "index",
+					name: "Node-Index",
+					component: () => import("@/views/Node/Index.vue"),
+					meta: { title: t("menu.node"), titleKey: "menu.node", auth: true, roles: "all" }
+				}
+			]
+		},
+		{
 			path: "/apps",
 			name: "Apps",
 			redirect: "/apps/index",
