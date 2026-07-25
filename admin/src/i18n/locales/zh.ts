@@ -426,6 +426,8 @@ export default {
 			token: "只读令牌",
 			tokenPlaceholder: "在目标节点的多节点页面签发",
 			tokenKeepHint: "留空表示不修改",
+			tokenStored: "已配置",
+			testAfterSave: "已修改连接信息，请重新输入令牌后再测试，或先保存再从列表里点采集",
 			entrance: "安全入口",
 			entrancePlaceholder: "目标节点未开启安全入口时留空",
 			skipVerify: "跳过 TLS 证书校验",

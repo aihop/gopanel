@@ -74,7 +74,9 @@ func FetchNodeSummary(node model.Node) (model.NodeSummary, error) {
 	}
 
 	if resp.StatusCode == http.StatusUnauthorized {
-		return model.NodeSummary{}, ErrNodeUnauthorized
+		// 节点侧会区分"未开启只读接入 / 签名不匹配 / 时间戳过期"，把原因带出来，
+		// 否则用户面对一句笼统的"令牌无效"没法判断该去签发令牌还是去校时
+		return model.NodeSummary{}, fmt.Errorf("%w（节点返回：%s）", ErrNodeUnauthorized, nodeRejectReason(body))
 	}
 	if resp.StatusCode == http.StatusForbidden {
 		return model.NodeSummary{}, fmt.Errorf("被节点安全入口拦截，请在节点配置中填写安全入口")
@@ -114,6 +116,17 @@ func ProbeNode(node model.Node) (dto.NodeTokenRes, error) {
 		Hostname: summary.Hostname,
 		Version:  summary.Version,
 	}, nil
+}
+
+// nodeRejectReason 从节点的 401 响应体里取出具体拒绝原因
+func nodeRejectReason(body []byte) string {
+	var result struct {
+		Msg string `json:"msg"`
+	}
+	if err := json.Unmarshal(body, &result); err == nil && strings.TrimSpace(result.Msg) != "" {
+		return strings.TrimSpace(result.Msg)
+	}
+	return "未提供原因"
 }
 
 // describeNonJSONResponse 只在摘要接口返回非 JSON 时走一次，用 /health 把"版本太旧"和"根本不是面板"区分开。

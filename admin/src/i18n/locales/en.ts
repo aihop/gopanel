@@ -434,6 +434,8 @@ export default {
 			token: "Read-only Token",
 			tokenPlaceholder: "Issue it on the target node's Nodes page",
 			tokenKeepHint: "Leave blank to keep unchanged",
+			tokenStored: "Configured",
+			testAfterSave: "Connection settings changed. Re-enter the token to test, or save first and collect from the list.",
 			entrance: "Security Entrance",
 			entrancePlaceholder: "Leave blank if the target node has none",
 			skipVerify: "Skip TLS verification",

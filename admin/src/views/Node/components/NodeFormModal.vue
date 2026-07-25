@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { NodeItem, NodeSaveParams } from "@/api/modules/node"
-import { nodeCreateAPI, nodeProbeDraftAPI, nodeUpdateAPI } from "@/api/modules/node"
+import { nodeCreateAPI, nodeProbeAPI, nodeProbeDraftAPI, nodeUpdateAPI } from "@/api/modules/node"
 import { t } from "@/i18n"
 import { useMessage } from "naive-ui"
 import { computed, ref, watch } from "vue"
@@ -22,6 +22,19 @@ const testing = ref(false)
 const form = ref<NodeSaveParams>(emptyForm())
 
 const isEdit = computed(() => !!props.node?.id)
+
+/** 已保存的节点是否已经配好令牌。用于在编辑态说明"输入框空着不代表没有令牌" */
+const hasStoredToken = computed(() => !!props.node?.hasToken)
+
+/** 连接相关字段是否被改动过（令牌留空时决定能不能拿已存配置去测连接） */
+const connectionFieldsChanged = computed(() => {
+	if (!props.node) return false
+	return (
+		form.value.addr.trim() !== props.node.addr ||
+		(form.value.entrance || "").trim() !== (props.node.entrance || "") ||
+		!!form.value.skipVerify !== !!props.node.skipVerify
+	)
+})
 
 const visible = computed({
 	get: () => props.show,
@@ -77,12 +90,30 @@ async function testConnection() {
 		message.error(invalid)
 		return
 	}
-	if (isEdit.value && !form.value.accessToken.trim()) {
-		message.warning(t("node.form.testNeedToken"))
+	const blankToken = isEdit.value && !form.value.accessToken.trim()
+	// 令牌留空时只能用已保存的配置去探测。此时如果连接相关字段被改过，
+	// 测出来的是旧地址的结果，会误导——让用户要么重输令牌，要么先保存
+	if (blankToken && connectionFieldsChanged.value) {
+		message.warning(t("node.form.testAfterSave"))
 		return
 	}
 	testing.value = true
 	try {
+		const useSaved = blankToken && !!props.node?.id
+		if (useSaved) {
+			const res = await nodeProbeAPI(props.node!.id)
+			if (res.code === 0) {
+				message.success(
+					t("node.form.testOk", {
+						hostname: res.data?.summary?.hostname || "-",
+						version: res.data?.version || "-"
+					})
+				)
+			} else {
+				message.error(res.msg || t("node.form.testFailed"))
+			}
+			return
+		}
 		const res = await nodeProbeDraftAPI(form.value)
 		if (res.code === 0) {
 			message.success(t("node.form.testOk", { hostname: res.data?.hostname || "-", version: res.data?.version || "-" }))
@@ -136,7 +167,16 @@ async function submit() {
 				<n-input v-model:value="form.addr" placeholder="https://1.2.3.4:5470" />
 			</n-form-item>
 
-			<n-form-item :label="t('node.form.token')" :required="!isEdit">
+			<n-form-item :required="!isEdit">
+				<template #label>
+					<div class="flex items-center gap-2">
+						<span>{{ t("node.form.token") }}</span>
+						<!-- 密文不回显，输入框在编辑态永远是空的。不给个明确标记，用户会以为令牌没保存上 -->
+						<n-tag v-if="isEdit && hasStoredToken" size="tiny" type="success" :bordered="false">
+							{{ t("node.form.tokenStored") }}
+						</n-tag>
+					</div>
+				</template>
 				<n-input
 					v-model:value="form.accessToken"
 					type="password"
