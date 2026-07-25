@@ -55,6 +55,7 @@ import { NButton, NTag, NDrawer, NDrawerContent, NInput, useMessage } from "naiv
 import { DaemonProcessLog, DaemonProcessLogClearAPI } from "@/api/modules/daemon"
 import FtEditor from "@/components/FtEditor/index.vue"
 
+const message = useMessage()
 const logDrawerVisible = ref(false)
 const logContent = ref("")
 const logLoading = ref(false)
@@ -106,12 +107,14 @@ const close = () => {
 }
 
 const cleanLog = async () => {
-	const message = useMessage()
 	try {
 		await DaemonProcessLogClearAPI({ name: logName.value })
-		message.success("日志已清空")
 		logContent.value = ""
 		logTotal.value = 0
+		logPage.value = 1
+		message.success("日志已清空")
+		// 回源确认服务端已清空（避免本地清了但服务端没清的假象）
+		await fetchLogPage()
 	} catch {
 		message.error("日志清空失败")
 	}
