@@ -116,6 +116,55 @@ func ProbeNode(node model.Node) (dto.NodeTokenRes, error) {
 	}, nil
 }
 
+// describeNonJSONResponse 只在摘要接口返回非 JSON 时走一次，用 /health 把"版本太旧"和"根本不是面板"区分开。
+// 这是失败路径，多打一个请求换一条能直接照做的提示是值得的。
+func describeNonJSONResponse(node model.Node) error {
+	brand, version, err := fetchNodeHealth(node)
+	if err != nil {
+		return fmt.Errorf("节点响应不是合法 JSON，请确认地址指向 GoPanel 面板")
+	}
+	if !strings.EqualFold(strings.TrimSpace(brand), constant.AppBrand) {
+		return fmt.Errorf("目标地址不是 GoPanel 面板")
+	}
+	if version == "" {
+		version = "未知"
+	}
+	return fmt.Errorf("节点面板版本 %s 不支持只读接入，请先把该节点升级到支持多节点的版本", version)
+}
+
+func fetchNodeHealth(node model.Node) (brand string, version string, err error) {
+	target := strings.TrimRight(strings.TrimSpace(node.Addr), "/") + "/health"
+	ctx, cancel := context.WithTimeout(context.Background(), nodeRequestTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	if err != nil {
+		return "", "", err
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := newNodeHTTPClient(node.SkipVerify).Do(req)
+	if err != nil {
+		return "", "", err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
+	if err != nil {
+		return "", "", err
+	}
+	var health struct {
+		Data struct {
+			AppBrand   string `json:"appBrand"`
+			AppVersion string `json:"appVersion"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &health); err != nil {
+		return "", "", err
+	}
+	return health.Data.AppBrand, health.Data.AppVersion, nil
+}
+
 func newNodeHTTPClient(skipVerify bool) *http.Client {
 	transport := &http.Transport{
 		DisableKeepAlives: true,
