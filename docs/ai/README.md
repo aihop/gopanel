@@ -23,6 +23,7 @@
 | 网站 | `app/router/website.go` | `app/api/website*.go` | `app/model/website*.go` |
 | 流水线 | `app/router/pipeline.go` | `app/api/pipeline*.go` | — |
 | SSL | `app/router/ssl.go` | `app/api/ssl*.go` | — |
+| 多节点观测 | `app/router/node.go` | `app/api/node.go` | `app/model/node.go` |
 
 ### 前端对应
 
@@ -31,12 +32,14 @@
 | AI 工作区 | `/ai` | `admin/src/views/AIAgent/` |
 | 容器 | `/container` | `admin/src/views/Container/` |
 | 数据库 | `/database` | `admin/src/views/Database/` |
+| 多节点 | `/node` | `admin/src/views/Node/`、常驻细条 `admin/src/layouts/common/NodeRail/` |
 
 ### 辅助层
 
 - 高权限 helper：`gpc/`（Go）
 - 宿主机 agent：`gp-agent/`（Go）
 - 通信封装：`utils/gpc/`、`utils/gpagent/`
+- 主控↔节点签名：`utils/nodesign/`（单独成包，避免 service 与 middleware 循环依赖）
 
 ---
 
