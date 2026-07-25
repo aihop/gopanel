@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 
 type agentStatus struct {
 	Version          string `json:"version"`
+	VersionCode      string `json:"version_code"`
 	UptimeSeconds    int64  `json:"uptime_seconds"`
 	BaseDir          string `json:"base_dir"`
 	SocketPath       string `json:"socket"`
@@ -52,6 +54,49 @@ func AgentStatus(c fiber.Ctx) error {
 
 	resp["online"] = true
 	resp["agent"] = info
+	return c.JSON(e.Succ(resp))
+}
+
+// AgentUpdateCheck 返回 gp-agent 当前版本 + 升级服务器上的最新版本，供面板展示「版本 / 有无更新」
+func AgentUpdateCheck(c fiber.Ctx) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	resp := map[string]interface{}{"online": false}
+	r, err := gpagent.Do(ctx, "AGENT_STATUS", nil)
+	if err != nil {
+		resp["error"] = err.Error()
+		return c.JSON(e.Succ(resp))
+	}
+	info, err := gpagent.DecodeOutput[agentStatus](r)
+	if err != nil {
+		resp["error"] = err.Error()
+		return c.JSON(e.Succ(resp))
+	}
+	resp["online"] = true
+	resp["currentVersion"] = info.Version
+	curCode, _ := strconv.ParseInt(strings.TrimSpace(info.VersionCode), 10, 64)
+	resp["currentVersionCode"] = curCode
+
+	source := "github"
+	if service.IsChinaMainlandServer() {
+		source = "gitcode"
+	}
+	upd, _ := appVersionService.GetUpdateInfo(constant.UpgradeUrl, &dto.SettingUpgradeVersion{
+		VersionName: info.Version,
+		VersionCode: curCode,
+		OS:          runtime.GOOS,
+		Arch:        runtime.GOARCH,
+		Lang:        "zh",
+		AppBrand:    constant.AppBrand,
+		Source:      source,
+		Package:     "gp-agent",
+	})
+	if upd != nil {
+		resp["latestVersion"] = upd.LatestVersionName
+		resp["latestVersionCode"] = upd.LatestVersionCode
+		resp["needUpdate"] = upd.LatestVersionCode > curCode
+	}
 	return c.JSON(e.Succ(resp))
 }
 

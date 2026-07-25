@@ -42,6 +42,22 @@
         >
           当前视图 · {{ activeTab === "list" ? "进程列表" : "配置文件" }}
         </n-tag>
+        <n-tag
+          v-if="agentStatus.online && agentStatus.version"
+          round
+          :bordered="false"
+          type="default"
+        >
+          gp-agent · v{{ agentStatus.version }}
+        </n-tag>
+        <n-tag
+          v-if="agentUpdate?.needUpdate"
+          round
+          :bordered="false"
+          type="warning"
+        >
+          有新版 v{{ agentUpdate.latestVersion }} · 重启面板后自动更新
+        </n-tag>
       </div>
       <div class="flex flex-wrap items-center gap-3">
         <n-button
@@ -106,7 +122,8 @@ defineProps<{
   summaryCards: Array<{ label: string; value: string | number; desc: string }>
   isRunning: boolean
   activeTab: string
-  agentStatus: { online: boolean; error?: string }
+  agentStatus: { online: boolean; error?: string; version?: string }
+  agentUpdate?: { needUpdate: boolean; currentVersion?: string; latestVersion?: string }
   ensuringAgent: boolean
 }>()
 

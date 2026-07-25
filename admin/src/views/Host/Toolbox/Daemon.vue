@@ -5,6 +5,7 @@
       :is-running="isRunning"
       :active-tab="activeTab"
       :agent-status="agentStatus"
+      :agent-update="agentUpdate"
       :ensuring-agent="ensuringAgent"
       @daemon-start="handleDaemonStart"
       @daemon-stop="handleDaemonStop"
@@ -191,7 +192,9 @@ const {
 const {
 	ensuringAgent,
 	agentStatus,
+	agentUpdate,
 	fetchAgentStatus,
+	checkAgentUpdate,
 	ensureAgent,
 	handleEnsureFinished
 } = useDaemonAgentStatus(opDialogRef, refreshAll)
@@ -207,6 +210,7 @@ const columns = createDaemonColumns({
 
 onMounted(() => {
 	fetchAgentStatus()
+	checkAgentUpdate()
 	refreshAll()
 })
 </script>
