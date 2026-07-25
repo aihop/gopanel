@@ -31,13 +31,10 @@ func SettingSystemApiTokenUpdate(c fiber.Ctx) error {
 		return c.JSON(e.Result(err))
 	}
 
-	updateConfYamlFile(map[string]interface{}{
-		"system.api_interface_status": req.ApiInterfaceStatus,
-		"system.api_key":              req.ApiKey,
-	})
-
-	global.CONF.System.ApiInterfaceStatus = req.ApiInterfaceStatus
-	global.CONF.System.ApiKey = req.ApiKey
+	// 持久化到数据库（不再写 YAML；DB 为运行期设置的可靠来源）
+	if err := service.NewSetting().SaveApiToken(req.ApiInterfaceStatus, req.ApiKey); err != nil {
+		return c.JSON(e.Fail(fmt.Errorf("持久化 API Token 失败: %w", err)))
+	}
 
 	return c.JSON(e.Succ("API Token settings updated"))
 }

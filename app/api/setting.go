@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"path"
 	"path/filepath"
 	"regexp"
 
 	"github.com/aihop/gopanel/app/dto"
 	"github.com/aihop/gopanel/app/e"
 	"github.com/aihop/gopanel/app/service"
+	"github.com/aihop/gopanel/cmd"
 	"github.com/gofiber/fiber/v3"
 	"github.com/spf13/viper"
 )
@@ -30,9 +30,13 @@ type SettingClearDirReq struct {
 }
 
 func updateConfYamlFile(keys map[string]interface{}) error {
-	workDir, _ := os.Getwd()
-	configFile := path.Join(workDir, "config", "conf.yaml")
-	// configFile := path.Join(global.CONF.System.BaseDir, "config", "config.yaml")
+	// 关键：必须写回「启动时实际加载的」配置文件（cmd.ConfFilePath，默认 ./conf.yaml）。
+	// 之前误写到 ./config/conf.yaml（多了一层目录、文件名也不一致），启动时从 ./conf.yaml 加载读不到，
+	// 导致 API token / 端口 / 入口等设置重启后像被清空。
+	configFile := cmd.ConfFilePath
+	if configFile == "" {
+		configFile = "./conf.yaml"
+	}
 
 	// 使用 viper 更新配置
 	v := viper.New()

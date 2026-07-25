@@ -10,6 +10,34 @@ import (
 	"github.com/aihop/gopanel/utils/common"
 )
 
+// SaveApiToken 将 API Token 配置持久化到数据库（settings 表），并同步内存 CONF。
+// 取代此前写 YAML 的做法——运行期值走 DB 更稳，不受配置文件路径/权限影响。
+func (u *SettingService) SaveApiToken(apiInterfaceStatus, apiKey string) error {
+	if err := settingRepo.UpdateOrCreate("ApiInterfaceStatus", apiInterfaceStatus); err != nil {
+		return err
+	}
+	global.CONF.System.ApiInterfaceStatus = apiInterfaceStatus
+	if err := settingRepo.UpdateOrCreate("ApiKey", apiKey); err != nil {
+		return err
+	}
+	global.CONF.System.ApiKey = apiKey
+	return nil
+}
+
+// LoadApiSettingsFromDB 启动时把 API 相关设置从数据库读回内存 CONF（以 DB 为准）。
+// 键存在即采用其值（含空值=用户清空）；不存在则保留 YAML 里的旧值，兼容尚未迁移的老实例。
+func LoadApiSettingsFromDB() {
+	if s, err := settingRepo.Get(settingRepo.WithByKey("ApiKey")); err == nil {
+		global.CONF.System.ApiKey = s.Value
+	}
+	if s, err := settingRepo.Get(settingRepo.WithByKey("ApiInterfaceStatus")); err == nil {
+		global.CONF.System.ApiInterfaceStatus = s.Value
+	}
+	if s, err := settingRepo.Get(settingRepo.WithByKey("ApiKeyValidityTime")); err == nil && s.Value != "" {
+		global.CONF.System.ApiKeyValidityTime = s.Value
+	}
+}
+
 func (u *SettingService) GenerateApiKey() (string, error) {
 	apiKey := common.RandStr(32)
 	if err := settingRepo.Update("ApiKey", apiKey); err != nil {

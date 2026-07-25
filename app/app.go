@@ -17,6 +17,7 @@ import (
 	"github.com/aihop/gopanel/app/dto"
 	"github.com/aihop/gopanel/app/middleware"
 	"github.com/aihop/gopanel/app/router"
+	"github.com/aihop/gopanel/app/service"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/init/app"
@@ -60,6 +61,8 @@ func (t *App) Init() {
 	conf.Init()
 	db.Init()
 	repo.Init()
+	// 从数据库读回 API Token 等运行期设置到内存 CONF（DB 为准，修复重启后 token 丢失）
+	service.LoadApiSettingsFromDB()
 	app.Init()
 	log.Init()
 	geo.Init()
