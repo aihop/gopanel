@@ -28,6 +28,7 @@ func init() {
 	goPanelCmd.AddCommand(goPanelInfoCmd)
 	goPanelCmd.AddCommand(goPanelUninstallCmd)
 	goPanelCmd.AddCommand(goPanelUserInfoCmd)
+	goPanelCmd.AddCommand(goPanelResetPasswordCmd)
 }
 
 func helperClient() transport.Client {

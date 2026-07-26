@@ -148,6 +148,7 @@ require (
 	go.uber.org/zap v1.27.1
 	golang.org/x/image v0.16.0 // indirect
 	golang.org/x/mod v0.33.0 // indirect
+	golang.org/x/term v0.41.0
 	golang.org/x/time v0.15.0 // indirect
 	golang.org/x/tools v0.42.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260401024825-9d38bb4040a9 // indirect
