@@ -57,6 +57,8 @@ export namespace Disk {
 		/** 非 root 且 gpc 不可用时退回本机权限扫描，结果不完整 */
 		degraded: boolean
 		degradedReason?: string
+		/** 是否有实时进度。走 gpc 时为 false（单请求单响应，扫描期间没有中间输出） */
+		progressLive: boolean
 		progress: Progress
 		result?: ScanResult
 		createdAt: string

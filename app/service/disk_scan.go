@@ -40,15 +40,19 @@ type DiskScanTask struct {
 	Error  string `json:"error,omitempty"`
 	ViaGpc bool   `json:"viaGpc"` // 是否由 gpc 执行（rootless 场景）
 	// Degraded 非 root 且 gpc 不可用时退回本机权限扫描，结果不完整
-	Degraded       bool               `json:"degraded"`
-	DegradedReason string             `json:"degradedReason,omitempty"`
-	GpcScanID      string             `json:"-"` // gpc 侧的授权 ID，删除时必须带上
-	Progress       diskscan.Progress  `json:"progress"`
-	Result         *diskscan.Result   `json:"result,omitempty"`
-	CreatedAt      time.Time          `json:"createdAt"`
-	ExpiresAt      time.Time          `json:"expiresAt"`
-	paths          map[string]int64   // 结果里的路径 -> 体积，删除时做归属校验
-	cancel         context.CancelFunc `json:"-"`
+	Degraded       bool   `json:"degraded"`
+	DegradedReason string `json:"degradedReason,omitempty"`
+	// ProgressLive 是否有实时进度。走 gpc 时为 false——gpc 协议是单请求单响应
+	// （proto.Response 只有一个 Output 字段），扫描期间没有任何中间输出，
+	// Progress 会一直是零值。前端据此改成不确定态提示，别显示"已扫 0 个文件"。
+	ProgressLive bool               `json:"progressLive"`
+	GpcScanID    string             `json:"-"` // gpc 侧的授权 ID，删除时必须带上
+	Progress     diskscan.Progress  `json:"progress"`
+	Result       *diskscan.Result   `json:"result,omitempty"`
+	CreatedAt    time.Time          `json:"createdAt"`
+	ExpiresAt    time.Time          `json:"expiresAt"`
+	paths        map[string]int64   // 结果里的路径 -> 体积，删除时做归属校验
+	cancel       context.CancelFunc `json:"-"`
 }
 
 type diskScanManager struct {
@@ -85,8 +89,10 @@ func StartDiskScan(req DiskScanRequest) (*DiskScanTask, error) {
 		Status:    DiskScanStatusRunning,
 		CreatedAt: time.Now(),
 		ExpiresAt: time.Now().Add(diskTaskTTL),
-		paths:     make(map[string]int64),
-		cancel:    cancel,
+		// root 走本地遍历，有逐步回调；非 root 要过 gpc，全程没有中间输出
+		ProgressLive: os.Geteuid() == 0,
+		paths:        make(map[string]int64),
+		cancel:       cancel,
 	}
 	diskScanMgr.tasks[task.ID] = task
 	diskScanMgr.running = task.ID
@@ -141,6 +147,9 @@ func runDiskScan(ctx context.Context, task *DiskScanTask, req DiskScanRequest) {
 	// 总比整个功能直接不可用强。读不到的目录会计入 Result.Errors，
 	// 前端据此提示「结果可能不完整」。
 	global.LOG.Warnf("[Disk] gpc 不可用，退回本机权限扫描（结果可能不完整）: %v", err)
+	diskScanMgr.mu.Lock()
+	task.ProgressLive = true // 退回本地遍历后又有逐步回调了
+	diskScanMgr.mu.Unlock()
 	nres, nerr := native()
 	finishDiskScan(task, nres, nerr, false, "")
 	if nerr == nil {

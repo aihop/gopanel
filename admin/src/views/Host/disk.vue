@@ -10,6 +10,7 @@ import {
 	NModal,
 	NProgress,
 	NSpace,
+	NSpin,
 	NTag,
 	useMessage,
 	type DataTableColumns
@@ -245,11 +246,10 @@ const dirColumns: DataTableColumns<Disk.DirItem> = [
 	{ title: "文件数", key: "count", width: 100 }
 ]
 
-const progressPercent = computed(() => {
-	// 扫描没有总量可言，用文件数做一个不断增长的示意值，避免假装精确
-	const n = task.value?.progress?.scannedFiles || 0
-	return Math.min(99, Math.floor((n % 10000) / 100))
-})
+// 扫描没有"总量"可言（不预先数一遍文件就不知道分母），所以不显示百分比。
+// 之前用 scannedFiles % 10000 造了个假进度，结果是进度条每 1 万个文件归零一次，
+// 全盘扫描时来回跑好几轮，看着像卡死。真实的计数本身就是最好的进度反馈。
+const hasLiveProgress = computed(() => task.value?.progressLive !== false)
 
 onMounted(fetchOverview)
 onBeforeUnmount(stopStream)
@@ -311,13 +311,22 @@ onBeforeUnmount(stopStream)
 		</n-alert>
 
 		<n-card v-if="scanning" class="mb-4">
-			<div class="mb-2 text-sm">
-				正在扫描：已检查 {{ task?.progress?.scannedFiles || 0 }} 个文件 ·
-				{{ computeSizeFromByte(task?.progress?.scannedBytes || 0) }}
-				<span v-if="task?.progress?.errors" class="text-amber-500"> · 跳过 {{ task.progress.errors }} 个无权限项</span>
+			<n-space align="center" :size="12">
+				<n-spin size="small" />
+				<div v-if="hasLiveProgress" class="text-sm">
+					正在扫描：已检查 {{ task?.progress?.scannedFiles || 0 }} 个文件 ·
+					{{ computeSizeFromByte(task?.progress?.scannedBytes || 0) }}
+					<span v-if="task?.progress?.errors" class="text-amber-500">
+						· 跳过 {{ task.progress.errors }} 个无权限项
+					</span>
+				</div>
+				<div v-else class="text-sm">
+					正在通过 gpc 扫描，该模式下没有实时进度，请耐心等待…
+				</div>
+			</n-space>
+			<div v-if="hasLiveProgress" class="mt-1 truncate text-xs text-slate-400">
+				{{ task?.progress?.currentDir }}
 			</div>
-			<n-progress type="line" :percentage="progressPercent" processing />
-			<div class="mt-1 truncate text-xs text-slate-400">{{ task?.progress?.currentDir }}</div>
 		</n-card>
 
 		<n-card v-if="task?.status === 'success'" title="大文件" class="mb-4">
