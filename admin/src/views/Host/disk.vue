@@ -5,6 +5,8 @@ import {
 	NButton,
 	NCard,
 	NCheckbox,
+	NCollapse,
+	NCollapseItem,
 	NDataTable,
 	NInputNumber,
 	NModal,
@@ -246,6 +248,33 @@ const dirColumns: DataTableColumns<Disk.DirItem> = [
 	{ title: "文件数", key: "count", width: 100 }
 ]
 
+// 选中某块盘 = 把它的挂载点设成扫描根目录。
+// 这跟"默认不跨文件系统"正好配套：扫 /data 就只会扫到 /data 这块盘，
+// 不会顺着目录树串到别的挂载点上去。
+const selectedDisk = computed(() => scanRoots.value.trim())
+
+const selectDisk = (path: string) => {
+	scanRoots.value = path
+	crossDevice.value = false // 选定单盘时跨文件系统没有意义，还会扫串
+}
+
+const scanDisk = (path: string) => {
+	selectDisk(path)
+	void handleScan()
+}
+
+// 折叠时头部要能一眼看出"有没有盘快满了"，否则折叠等于把主信息藏起来
+const diskSummary = computed(() => {
+	if (!disks.value.length) return "暂无数据"
+	const worst = disks.value.reduce((a, b) => (a.usedPercent >= b.usedPercent ? a : b))
+	return `${disks.value.length} 个挂载点 · 最高 ${worst.usedPercent.toFixed(1)}%（${worst.path}）`
+})
+
+const worstPercent = computed(() => {
+	if (!disks.value.length) return 0
+	return Math.max(...disks.value.map(d => d.usedPercent))
+})
+
 // 扫描没有"总量"可言（不预先数一遍文件就不知道分母），所以不显示百分比。
 // 之前用 scannedFiles % 10000 造了个假进度，结果是进度条每 1 万个文件归零一次，
 // 全盘扫描时来回跑好几轮，看着像卡死。真实的计数本身就是最好的进度反馈。
@@ -265,29 +294,61 @@ onBeforeUnmount(stopStream)
 			</n-space>
 		</div>
 
-		<n-card title="磁盘占用" class="mb-4">
-			<div v-if="!disks.length" class="text-sm text-slate-400">暂无数据</div>
-			<div v-else class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-				<div v-for="d in disks" :key="d.path + d.device" class="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-					<div class="mb-1 flex items-center justify-between">
-						<span class="truncate text-sm font-medium" :title="d.path">{{ d.path }}</span>
-						<n-tag size="tiny" :type="d.usedPercent >= 90 ? 'error' : d.usedPercent >= 75 ? 'warning' : 'default'">
-							{{ d.usedPercent.toFixed(1) }}%
+		<n-collapse class="mb-4 rounded-lg border border-slate-200 px-4 py-1 dark:border-slate-700">
+			<n-collapse-item name="disks">
+				<template #header>
+					<div class="flex items-center gap-2 py-2">
+						<span class="text-sm font-medium">磁盘占用</span>
+						<n-tag size="tiny" :type="worstPercent >= 90 ? 'error' : worstPercent >= 75 ? 'warning' : 'default'">
+							{{ diskSummary }}
 						</n-tag>
+						<span class="text-xs text-slate-400">展开可选择只扫描某块盘</span>
 					</div>
-					<n-progress
-						type="line"
-						:percentage="Math.min(100, d.usedPercent)"
-						:status="d.usedPercent >= 90 ? 'error' : d.usedPercent >= 75 ? 'warning' : 'success'"
-						:show-indicator="false"
-					/>
-					<div class="mt-1 text-xs text-slate-500">
-						已用 {{ computeSizeFromByte(d.used) }} / 共 {{ computeSizeFromByte(d.total) }}
-						<span v-if="d.inodesUsedPercent > 0"> · inode {{ d.inodesUsedPercent.toFixed(1) }}%</span>
+				</template>
+				<div v-if="!disks.length" class="pb-3 text-sm text-slate-400">暂无数据</div>
+				<div v-else class="grid grid-cols-1 gap-4 pb-3 md:grid-cols-2 xl:grid-cols-3">
+					<div
+						v-for="d in disks"
+						:key="d.path + d.device"
+						class="cursor-pointer rounded-lg border p-3 transition-colors"
+						:class="
+							selectedDisk === d.path
+								? 'border-primary bg-primary/5'
+								: 'border-slate-200 hover:border-slate-300 dark:border-slate-700'
+						"
+						@click="selectDisk(d.path)"
+					>
+						<div class="mb-1 flex items-center justify-between">
+							<span class="truncate text-sm font-medium" :title="d.path">{{ d.path }}</span>
+							<n-tag size="tiny" :type="d.usedPercent >= 90 ? 'error' : d.usedPercent >= 75 ? 'warning' : 'default'">
+								{{ d.usedPercent.toFixed(1) }}%
+							</n-tag>
+						</div>
+						<n-progress
+							type="line"
+							:percentage="Math.min(100, d.usedPercent)"
+							:status="d.usedPercent >= 90 ? 'error' : d.usedPercent >= 75 ? 'warning' : 'success'"
+							:show-indicator="false"
+						/>
+						<div class="mt-1 flex items-center justify-between">
+							<div class="text-xs text-slate-500">
+								已用 {{ computeSizeFromByte(d.used) }} / 共 {{ computeSizeFromByte(d.total) }}
+								<span v-if="d.inodesUsedPercent > 0"> · inode {{ d.inodesUsedPercent.toFixed(1) }}%</span>
+							</div>
+							<n-button
+								size="tiny"
+								quaternary
+								type="primary"
+								:disabled="scanning"
+								@click.stop="scanDisk(d.path)"
+							>
+								扫描此盘
+							</n-button>
+						</div>
 					</div>
 				</div>
-			</div>
-		</n-card>
+			</n-collapse-item>
+		</n-collapse>
 
 		<n-card title="扫描设置" class="mb-4">
 			<n-space align="center" :wrap="true">
