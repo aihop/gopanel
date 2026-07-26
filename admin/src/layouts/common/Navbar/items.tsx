@@ -220,6 +220,19 @@ export default function getItems(_: { mode: "vertical" | "horizontal"; collapsed
 							RouterLink,
 							{
 								to: {
+									name: "Host-Disk"
+								}
+							},
+							{ default: () => "磁盘管理" }
+						),
+					key: "Host-Disk"
+				},
+				{
+					label: () =>
+						h(
+							RouterLink,
+							{
+								to: {
 									name: "Host-Security"
 								}
 							},

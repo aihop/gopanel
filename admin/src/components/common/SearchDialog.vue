@@ -291,6 +291,17 @@ const groups = ref<Groups>([
 				}
 			},
 			{
+				iconName: "mdi:harddisk",
+				iconImage: null,
+				key: "Host-Disk",
+				title: "磁盘管理",
+				label: "主机",
+				tags: ["disk", "storage", "磁盘", "空间", "大文件", "清理"],
+				action() {
+					router.push({ name: "Host-Disk" })
+				}
+			},
+			{
 				iconName: "mdi:security",
 				iconImage: null,
 				key: "Host-Firewall",

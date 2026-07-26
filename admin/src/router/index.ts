@@ -238,6 +238,12 @@ const router = createRouter({
 					meta: { title: "文件", auth: true, roles: "all" }
 				},
 				{
+					path: "disk",
+					name: "Host-Disk",
+					component: () => import("@/views/Host/disk.vue"),
+					meta: { title: "磁盘管理", auth: true, roles: "all" }
+				},
+				{
 					path: "firewall",
 					name: "Host-Firewall",
 					component: () => import("@/views/Host/firewall.vue"),
