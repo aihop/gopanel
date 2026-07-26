@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -222,6 +223,11 @@ func finishDiskScan(task *DiskScanTask, res *diskscan.Result, err error, viaGpc 
 		}
 		return
 	}
+	// 标注每条结果在当前运行条件下能不能清理。canElevate 表示删除能否以 root 执行：
+	// 面板自己就是 root，或 rootless 下拿到了 gpc 授权。
+	canElevate := os.Geteuid() == 0 || (viaGpc && strings.TrimSpace(gpcScanID) != "")
+	diskscan.AnnotateRemovable(res.Files, global.CONF.System.BaseDir, os.Geteuid(), canElevate)
+
 	task.Result = res
 	task.Status = DiskScanStatusSuccess
 	for _, f := range res.Files {

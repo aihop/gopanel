@@ -6,3 +6,7 @@ package diskscan
 func deviceOf(path string) (uint64, bool) {
 	return 0, false
 }
+
+func ownerUID(path string) (int, bool) {
+	return 0, false
+}

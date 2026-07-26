@@ -21,6 +21,10 @@ export namespace Disk {
 		category: string
 		/** 容器存储目录下的文件，不能直接删，要走 prune */
 		isContainer: boolean
+		/** 当前运行条件下能否清理（只读卷、属主不符、系统路径都会是 false） */
+		removable: boolean
+		/** removable 为 false 时的原因 */
+		reason?: string
 	}
 
 	export interface DirItem {

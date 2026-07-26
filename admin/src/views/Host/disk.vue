@@ -151,7 +151,12 @@ const handleCancel = async () => {
 	}
 }
 
-const files = computed(() => task.value?.result?.files || [])
+const onlyRemovable = ref(true)
+const allFiles = computed(() => task.value?.result?.files || [])
+const blockedCount = computed(() => allFiles.value.filter(f => !f.removable).length)
+// 默认只列可清理的：macOS 上扫 / 出来的大文件几乎全在只读封印卷或 root 属主下，
+// 不过滤的话满屏都是点不动的东西
+const files = computed(() => (onlyRemovable.value ? allFiles.value.filter(f => f.removable) : allFiles.value))
 const dirs = computed(() => task.value?.result?.dirs || [])
 
 const selectedFiles = computed(() => files.value.filter(f => checkedPaths.value.includes(f.path)))
@@ -198,7 +203,7 @@ const doClean = async () => {
 }
 
 const fileColumns: DataTableColumns<Disk.FileItem> = [
-	{ type: "selection", disabled: (row: Disk.FileItem) => row.isContainer },
+	{ type: "selection", disabled: (row: Disk.FileItem) => !row.removable },
 	{
 		title: "路径",
 		key: "path",
@@ -223,11 +228,19 @@ const fileColumns: DataTableColumns<Disk.FileItem> = [
 		}
 	},
 	{
-		title: "建议",
+		title: "建议 / 限制",
 		key: "advice",
-		minWidth: 240,
-		render: (row: Disk.FileItem) =>
-			h("div", { class: "text-xs text-slate-500" }, (categoryMeta[row.category] || categoryMeta.other).advice)
+		minWidth: 260,
+		render: (row: Disk.FileItem) => {
+			// 不可清理的原因比"建议"重要得多：不先告诉用户，他只会一个个点过去然后全部失败
+			if (!row.removable) {
+				return h("div", { class: "flex items-center gap-1 text-xs text-amber-600" }, [
+					h("span", "🔒"),
+					h("span", row.reason || "当前条件下无法清理")
+				])
+			}
+			return h("div", { class: "text-xs text-slate-500" }, (categoryMeta[row.category] || categoryMeta.other).advice)
+		}
 	},
 	{
 		title: "修改时间",
@@ -393,6 +406,12 @@ onBeforeUnmount(stopStream)
 		<n-card v-if="task?.status === 'success'" title="大文件" class="mb-4">
 			<template #header-extra>
 				<n-space align="center">
+					<n-checkbox v-model:checked="onlyRemovable" :disabled="!blockedCount">
+						<span class="text-xs">只看可清理</span>
+					</n-checkbox>
+					<span v-if="blockedCount" class="text-xs text-amber-600">
+						{{ blockedCount }} 项受限
+					</span>
 					<span class="text-xs text-slate-500">
 						已选 {{ checkedPaths.length }} 项 · {{ computeSizeFromByte(selectedSize) }}
 					</span>
@@ -411,7 +430,11 @@ onBeforeUnmount(stopStream)
 				:bordered="false"
 			/>
 			<div v-if="!files.length" class="py-6 text-center text-sm text-slate-400">
-				没有超过 {{ minSizeMB }}MB 的文件
+				<template v-if="onlyRemovable && blockedCount">
+					扫到 {{ blockedCount }} 个大文件，但在当前运行条件下都无法清理（只读挂载、属主不符或系统路径）。
+					取消勾选「只看可清理」可查看它们。
+				</template>
+				<template v-else>没有超过 {{ minSizeMB }}MB 的文件</template>
 			</div>
 		</n-card>
 

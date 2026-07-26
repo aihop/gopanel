@@ -75,6 +75,13 @@ type FileItem struct {
 	ModTime     time.Time `json:"modTime"`
 	Category    string    `json:"category"`
 	IsContainer bool      `json:"isContainer"` // 容器存储目录下的文件，不能直接删
+	// Removable 这个文件在当前运行条件下能不能被清理。
+	// 不能清理的原因五花八门（只读卷、属主不是自己、系统关键路径…），
+	// 必须在列表里提前标出来——否则用户一个个点过去才发现全都失败，
+	// 这正是 macOS 上的实际观感：扫 / 出来的大文件几乎全在只读封印卷上，
+	// 或者属主是 root 而面板跑在普通用户下。
+	Removable bool   `json:"removable"`
+	Reason    string `json:"reason,omitempty"` // Removable 为 false 时说明原因
 }
 
 // DirItem 目录占用聚合（只统计该目录直属文件，不含子目录，避免父目录重复吃掉子目录的量）
