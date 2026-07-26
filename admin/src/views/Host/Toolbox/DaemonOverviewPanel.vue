@@ -56,8 +56,18 @@
           :bordered="false"
           type="warning"
         >
-          有新版 v{{ agentUpdate.latestVersion }} · 重启面板后自动更新
+          有新版 v{{ agentUpdate.latestVersion }}
         </n-tag>
+        <n-button
+          v-if="agentUpdate?.needUpdate && agentStatus.online"
+          size="small"
+          type="warning"
+          round
+          :loading="updatingAgent"
+          @click="emit('update-agent')"
+        >
+          更新 gp-agent
+        </n-button>
       </div>
       <div class="flex flex-wrap items-center gap-3">
         <n-button
@@ -125,6 +135,7 @@ defineProps<{
   agentStatus: { online: boolean; error?: string; version?: string }
   agentUpdate?: { needUpdate: boolean; currentVersion?: string; latestVersion?: string }
   ensuringAgent: boolean
+  updatingAgent?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -133,6 +144,7 @@ const emit = defineEmits<{
   (e: "refresh"): void
   (e: "create"): void
   (e: "ensure-agent"): void
+  (e: "update-agent"): void
 }>()
 </script>
 

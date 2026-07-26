@@ -100,18 +100,47 @@ func AgentUpdateCheck(c fiber.Ctx) error {
 	return c.JSON(e.Succ(resp))
 }
 
-// AgentAutoUpdate 由前端「进入面板后」调用，后台触发 gp-agent 自动更新。
-// 不在后端启动时触发（开发模式频繁重启会反复更新导致崩溃）。内部有防重入+节流。
-func AgentAutoUpdate(c fiber.Ctx) error {
-	go service.AutoUpdateGpAgent()
-	return c.JSON(e.Succ())
+// AgentUpdate 手动更新 gp-agent：用户在面板里点「更新 gp-agent」才会走到这里。
+// 和 AgentEnsure 一样返回日志名，前端用 /agent/ensure/logs?log=xxx 实时看过程。
+//
+// 之前这里是 /agent/auto-update：前端路由守卫在进入面板时自动调，等于运行即升级，
+// 用户完全无法选择时机，所以改为显式手动触发。
+func AgentUpdate(c fiber.Ctx) error {
+	logName := service.NewUpdateLogName("gp_agent_update")
+	logger := service.GetUpdateLogger(logName)
+
+	service.SafeGo("agent-update", func() {
+		defer service.RemoveUpdateLogger(logName)
+		writeLog := func(text string, param interface{}) {
+			logger.Append(text, param)
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancel()
+
+		if err := service.UpdateGpAgent(ctx, writeLog); err != nil {
+			writeLog("update gp-agent error", err)
+			logger.SetStatus("failed")
+			return
+		}
+		logger.SetStatus("success")
+	}, func(err error) {
+		logger.Append("update gp-agent panic", err)
+		logger.SetStatus("failed")
+		service.RemoveUpdateLogger(logName)
+	})
+
+	res := struct {
+		Log string `json:"log"`
+	}{Log: logName}
+	return c.JSON(e.Succ(res))
 }
 
 func AgentEnsure(c fiber.Ctx) error {
-	logName := "gp_agent_ensure_" + time.Now().Format("20060102150405") + ".log"
+	logName := service.NewUpdateLogName("gp_agent_ensure")
 	logger := service.GetUpdateLogger(logName)
 
-	go func() {
+	service.SafeGo("agent-ensure", func() {
 		defer service.RemoveUpdateLogger(logName)
 		writeLog := func(text string, param interface{}) {
 			logger.Append(text, param)
@@ -180,14 +209,17 @@ func AgentEnsure(c fiber.Ctx) error {
 		if err != nil {
 			writeLog("download url", updateInfo.DownloadUrl)
 			writeLog("gpc ensure error", err)
-			if out.Output != "" {
-				writeLog("gpc ensure output", out.Output)
+			// 注意：gpc.Do 失败时以前会返回 nil，这里直接 out.Output 就是 nil 解引用，
+			// 而且这段跑在后台 goroutine 里 —— panic 不会被 fiber 的 recover 兜住，
+			// 整个面板进程会退出。现在 gpc.Do 保证非 nil，这里也不再裸取字段。
+			if output := gpcOutput(out); output != "" {
+				writeLog("gpc ensure output", output)
 			}
 			logger.SetStatus("failed")
 			return
 		}
-		if strings.TrimSpace(out.Output) != "" {
-			writeLog("gpc ensure output", out.Output)
+		if output := gpcOutput(out); output != "" {
+			writeLog("gpc ensure output", output)
 		}
 
 		writeLog("wait gp-agent online", gpagent.SocketPath())
@@ -218,7 +250,11 @@ func AgentEnsure(c fiber.Ctx) error {
 		}
 		writeLog("gp-agent online", "ok")
 		logger.SetStatus("success")
-	}()
+	}, func(err error) {
+		logger.Append("ensure gp-agent panic", err)
+		logger.SetStatus("failed")
+		service.RemoveUpdateLogger(logName)
+	})
 
 	res := struct {
 		Log string `json:"log"`

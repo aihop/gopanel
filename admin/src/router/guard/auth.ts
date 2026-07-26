@@ -1,20 +1,14 @@
 import type { NavigationGuardNext, RouteLocationNormalized, Router } from "vue-router"
 import { useAuthStore } from "@/store/auth"
 import GlobalStore from "@/store/modules/global"
-import { AgentAutoUpdateAPI } from "@/api/modules/agent"
 
 export function checkAuth(router: Router) {
 	router.beforeEach(authCheck)
 }
 
-// 进入面板后触发一次 gp-agent 自动更新（每次页面加载一次；后端还有防重入+节流）。
-// 刻意不在后端启动时触发——开发模式频繁重启会反复更新导致崩溃。
-let agentAutoUpdateTriggered = false
-function maybeTriggerAgentAutoUpdate() {
-	if (agentAutoUpdateTriggered) return
-	agentAutoUpdateTriggered = true
-	AgentAutoUpdateAPI().catch(() => {})
-}
+// 注意：这里曾经在「进入面板」时自动触发 gp-agent 更新（AgentAutoUpdateAPI），
+// 等于一运行就升级，用户无法选择时机。现已改为在
+// 主机 - 工具箱 - 守护进程 页面手动点「更新 gp-agent」触发，见 useDaemonAgentStatus.updateAgent。
 
 function readEntranceCookie(): string {
 	try {
@@ -75,8 +69,6 @@ async function authCheck(
 		if (entranceVal && to.name === "NotFound" && to.path.replace(/\/+$/, "") === "/" + entranceVal) {
 			return next({ path: "/dashboard/index" })
 		}
-		// 已登录 = 真正进入了面板，触发一次 gp-agent 自动更新（非阻塞）
-		maybeTriggerAgentAutoUpdate()
 		// --- 新增：菜单权限拦截 ---
 		// 检查路由对应的顶层模块 key，例如 /ai/xxx 对应 ai，/website/xxx 对应 website
 		const pathParts = to.path.split("/").filter(Boolean)

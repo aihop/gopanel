@@ -12,8 +12,8 @@ export async function AgentUpdateCheckAPI() {
 	return http.get<any>(`/agent/update-check`)
 }
 
-// 进入面板后触发一次 gp-agent 自动更新（后端有防重入+节流）
-export async function AgentAutoUpdateAPI() {
-	return http.post<any>(`/agent/auto-update`, {})
+// 手动更新 gp-agent（用户点按钮才调用）。返回日志名，用 /agent/ensure/logs?log=xxx 看过程
+export async function AgentUpdateAPI() {
+	return http.post<any>(`/agent/update`, {})
 }
 

@@ -40,16 +40,24 @@ func (s *Server) actionGoPanelAgentEnsure(ctx context.Context, params map[string
 		serviceName = "gp-agent.service"
 	}
 
+	// 二进制不在 → 走完整安装（需要 download_url）
 	binPath := filepath.Join(baseDir, "gp-agent")
 	if _, err := os.Stat(binPath); err != nil {
 		downloadURL := strings.TrimSpace(getString(params, "download_url"))
 		if downloadURL == "" {
 			return "", errors.New("gp-agent binary not found, download_url is required")
 		}
-		out, err := s.actionGoPanelAgentInstall(ctx, params)
-		if err != nil {
-			return out, err
-		}
+		return s.actionGoPanelAgentInstall(ctx, params)
+	}
+
+	// 二进制在、但 systemd unit 不在：以前这里直接 systemctl restart，
+	// 必然报 "Unit gp-agent.service not found"，「一键初始化」永远修不好这种机器。
+	// （install.sh 在安装时若还没下载到 gp-agent 二进制，会跳过 unit 配置，
+	//   见 install.sh 的「未检测到 gp-agent 二进制，跳过 gp-agent service 配置」）
+	// 这种情况根本不需要重新下载，补一个 unit 就行。
+	unitCreated, err := ensureGpAgentUnit(ctx, baseDir, serviceName, params)
+	if err != nil {
+		return "", err
 	}
 
 	out, err := systemctl(ctx, "restart", serviceName)
@@ -57,15 +65,60 @@ func (s *Server) actionGoPanelAgentEnsure(ctx context.Context, params map[string
 		return "", err
 	}
 
+	status := "restarted"
+	if unitCreated {
+		status = "unit_created_and_restarted"
+	}
 	res := agentEnsureResult{
-		Status:      "restarted",
+		Status:      status,
 		BaseDir:     baseDir,
 		ServiceName: serviceName,
-		Output:      out,
+		Output:      strings.TrimSpace(unitNote(unitCreated, serviceName) + "\n" + out),
 		AtUnixMs:    time.Now().UnixMilli(),
 	}
 	b, _ := json.Marshal(res)
 	return string(b), nil
+}
+
+func unitNote(created bool, serviceName string) string {
+	if created {
+		return "created missing systemd unit: /etc/systemd/system/" + serviceName
+	}
+	return ""
+}
+
+// ensureGpAgentUnit 保证 systemd unit 存在。
+//
+// 刻意「只在缺失时才写」：已经存在的 unit 可能带着当前这台机器跑起来所必需的
+// 环境（rootless podman 的 XDG_RUNTIME_DIR / DBUS_SESSION_BUS_ADDRESS、
+// install.sh 写的 HOME 等）。以前无条件覆盖，rootless 安装做一次「一键初始化」
+// 就会把这些环境弄丢，agent 起来了却连不上 podman —— 容器/网站功能全挂。
+// 返回 true 表示本次新建了 unit。
+func ensureGpAgentUnit(ctx context.Context, baseDir, serviceName string, params map[string]interface{}) (bool, error) {
+	unitPath := filepath.Join("/etc/systemd/system", serviceName)
+	if st, err := os.Stat(unitPath); err == nil && !st.IsDir() {
+		return false, nil // 已存在：保持原样，不动
+	}
+
+	runtimeUser := strings.TrimSpace(getString(params, "runtime_user"))
+	if runtimeUser == "" {
+		// unit 缺失时读不到自己的 User=，退回面板服务的运行用户
+		runtimeUser = strings.TrimSpace(readSystemdUser("gopanel.service"))
+	}
+	if runtimeUser == "" {
+		runtimeUser = "root"
+	}
+
+	if err := os.WriteFile(unitPath, []byte(buildGpAgentSystemdUnit(baseDir, runtimeUser)), 0o644); err != nil {
+		return false, err
+	}
+	if _, err := systemctl(ctx, "daemon-reload"); err != nil {
+		return true, err
+	}
+	if _, err := systemctl(ctx, "enable", serviceName); err != nil {
+		return true, err
+	}
+	return true, nil
 }
 
 func (s *Server) actionGoPanelAgentInstall(ctx context.Context, params map[string]interface{}) (string, error) {
@@ -135,18 +188,13 @@ func (s *Server) actionGoPanelAgentInstall(ctx context.Context, params map[strin
 		return "", err
 	}
 
-	unitPath := filepath.Join("/etc/systemd/system", serviceName)
-	unitContent := buildGpAgentSystemdUnit(baseDir, runtimeUser)
-	if err := os.WriteFile(unitPath, []byte(unitContent), 0o644); err != nil {
+	// unit 只在缺失时生成：更新二进制不该顺手改写这台机器已经跑通的 unit
+	// （尤其是 rootless podman 依赖的 XDG_RUNTIME_DIR / DBUS_SESSION_BUS_ADDRESS）
+	unitParams := map[string]interface{}{"runtime_user": runtimeUser}
+	if _, err := ensureGpAgentUnit(ctx, baseDir, serviceName, unitParams); err != nil {
 		return "", err
 	}
 
-	if _, err := systemctl(ctx, "daemon-reload"); err != nil {
-		return "", err
-	}
-	if _, err := systemctl(ctx, "enable", serviceName); err != nil {
-		return "", err
-	}
 	out, err := systemctl(ctx, "restart", serviceName)
 	if err != nil {
 		return "", err
@@ -339,31 +387,6 @@ func copyFile(src, dst string, mode os.FileMode) error {
 		return err
 	}
 	return out.Close()
-}
-
-func buildGpAgentSystemdUnit(baseDir, runtimeUser string) string {
-	b := strings.Builder{}
-	b.WriteString("[Unit]\n")
-	b.WriteString("Description=GoPanel Agent (gp-agent)\n")
-	b.WriteString("After=network.target docker.socket podman.socket\n")
-	b.WriteString("Wants=docker.socket podman.socket\n\n")
-	b.WriteString("[Service]\n")
-	b.WriteString("Type=simple\n")
-	b.WriteString("User=" + runtimeUser + "\n")
-	b.WriteString("Group=" + runtimeUser + "\n")
-	b.WriteString("WorkingDirectory=" + baseDir + "\n")
-	b.WriteString("ExecStart=" + filepath.Join(baseDir, "gp-agent") + " service --base-dir " + baseDir + "\n")
-	b.WriteString("Restart=always\n")
-	b.WriteString("RestartSec=2\n\n")
-	b.WriteString(`Environment="HOME=` + baseDir + `"` + "\n")
-	b.WriteString(`Environment="CADDY_DATA_DIR=` + filepath.Join(baseDir, "caddy", "data") + `"` + "\n\n")
-	b.WriteString("AmbientCapabilities=CAP_NET_BIND_SERVICE\n")
-	b.WriteString("CapabilityBoundingSet=CAP_NET_BIND_SERVICE\n\n")
-	b.WriteString("LimitNOFILE=65535\n")
-	b.WriteString("OOMScoreAdjust=-100\n\n")
-	b.WriteString("[Install]\n")
-	b.WriteString("WantedBy=multi-user.target\n")
-	return b.String()
 }
 
 func systemctl(ctx context.Context, args ...string) (string, error) {

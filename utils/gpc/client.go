@@ -54,9 +54,17 @@ func SocketPath() string {
 	}
 }
 
+// Do 调用 gpc helper。
+//
+// 契约：返回的 *Response 永远不为 nil，即使同时返回了 error。
+// 原因：调用方在错误分支里读 resp.Output 打日志是很自然的写法（例如
+// api.AgentEnsure / service.UpdateGpAgent），而这里以前在 socket 连不上等 7 条
+// 失败路径上返回 nil —— 那些代码跑在 fire-and-forget 的 goroutine 里，
+// goroutine 里的 panic 无法被 fiber 的 recover 中间件兜住，
+// 一次 nil 解引用就会让整个面板进程退出。宁可返回空 Response。
 func Do(ctx context.Context, action string, params map[string]interface{}) (*Response, error) {
 	if strings.TrimSpace(action) == "" {
-		return nil, errors.New("gpc action is empty")
+		return &Response{}, errors.New("gpc action is empty")
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -68,13 +76,13 @@ func Do(ctx context.Context, action string, params map[string]interface{}) (*Res
 	}
 
 	if runtime.GOOS == "windows" {
-		return nil, errors.New("gpc helper is not supported on windows yet")
+		return &Response{}, errors.New("gpc helper is not supported on windows yet")
 	}
 
 	socketPath := SocketPath()
 	conn, err := (&net.Dialer{}).DialContext(ctx, "unix", socketPath)
 	if err != nil {
-		return nil, errors.New("需要安装/启用 gpc helper（未能连接到 gpc socket）: " + err.Error())
+		return &Response{}, errors.New("需要安装/启用 gpc helper（未能连接到 gpc socket）: " + err.Error())
 	}
 	defer conn.Close()
 
@@ -86,21 +94,21 @@ func Do(ctx context.Context, action string, params map[string]interface{}) (*Res
 
 	b, err := json.Marshal(req)
 	if err != nil {
-		return nil, err
+		return &Response{}, err
 	}
 	if _, err := conn.Write(append(b, '\n')); err != nil {
-		return nil, err
+		return &Response{}, err
 	}
 
 	br := bufio.NewReader(conn)
 	line, err := br.ReadBytes('\n')
 	if err != nil {
-		return nil, err
+		return &Response{}, err
 	}
 
 	var resp Response
 	if err := json.Unmarshal(bytesTrimNL(line), &resp); err != nil {
-		return nil, err
+		return &Response{}, err
 	}
 	if !resp.OK {
 		if strings.TrimSpace(resp.Error) != "" {

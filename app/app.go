@@ -72,8 +72,9 @@ func (t *App) Init() {
 	gob.Register(psession.SessionUser{})
 	session.Init()
 
-	// 注意：gp-agent 自动更新不在后端启动时触发（开发模式频繁重启会反复更新/崩溃），
-	// 改由前端「进入面板后」调用 /agent/auto-update 触发。见 api.AgentAutoUpdate。
+	// 注意：gp-agent 不做自动更新 —— 既不在后端启动时触发，也不在进入面板时触发。
+	// 只有用户在「主机 - 工具箱 - 守护进程」页面点「更新 gp-agent」才会更新，
+	// 走 POST /agent/update（见 api.AgentUpdate → service.UpdateGpAgent）。
 
 	t.IsInit = true
 }

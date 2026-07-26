@@ -7,11 +7,13 @@
       :agent-status="agentStatus"
       :agent-update="agentUpdate"
       :ensuring-agent="ensuringAgent"
+      :updating-agent="updatingAgent"
       @daemon-start="handleDaemonStart"
       @daemon-stop="handleDaemonStop"
       @refresh="refreshAll"
       @create="openPost()"
       @ensure-agent="ensureAgent"
+      @update-agent="confirmUpdateAgent"
     />
 
     <div class="rounded-[28px] border border-blue-100/80 bg-base-100 p-6 shadow-[0_18px_48px_rgba(15,23,42,0.08)] sm:p-8">
@@ -94,9 +96,12 @@
         @confirm="postConfirm"
       />
       <DaemonProcessLog ref="DaemonProcessLogRef"></DaemonProcessLog>
+      <!-- search = 日志流结束(EOF)，cancel = 用户手动关掉弹窗；
+           两种都要解锁按钮，否则手动关闭后按钮会一直转圈 -->
       <OpDialog
         ref="opDialogRef"
         @search="handleEnsureFinished"
+        @cancel="handleEnsureFinished"
       />
     </div>
   </div>
@@ -191,13 +196,26 @@ const {
 
 const {
 	ensuringAgent,
+	updatingAgent,
 	agentStatus,
 	agentUpdate,
 	fetchAgentStatus,
 	checkAgentUpdate,
 	ensureAgent,
+	updateAgent,
 	handleEnsureFinished
 } = useDaemonAgentStatus(opDialogRef, refreshAll)
+
+// 更新 gp-agent 会替换二进制并重启 agent，先让用户确认再执行
+function confirmUpdateAgent() {
+	dialog.warning({
+		title: "更新 gp-agent",
+		content: `将把 gp-agent 从 v${agentUpdate.value.currentVersion || "?"} 更新到 v${agentUpdate.value.latestVersion || "?"}，更新过程中 agent 会重启，是否继续？`,
+		positiveText: "开始更新",
+		negativeText: "取消",
+		onPositiveClick: () => updateAgent()
+	})
+}
 
 const columns = createDaemonColumns({
 	openPost,

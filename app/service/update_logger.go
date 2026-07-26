@@ -6,9 +6,11 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/aihop/gopanel/global"
+	"github.com/aihop/gopanel/utils/common"
 )
 
 type UpdateLogEvent struct {
@@ -24,7 +26,23 @@ type UpdateLogger struct {
 	status    string
 	mu        sync.RWMutex
 	file      *os.File
+	closed    bool // 已 Remove：listeners 里的 channel 都已 close，不能再往里发
 }
+
+// NewUpdateLogName 生成唯一的日志名。
+//
+// 以前用 "<前缀>_20060102150405.log"，只到秒 —— 同一秒内点两次按钮会拿到同一个
+// UpdateLogger 实例，先跑完的那个 RemoveUpdateLogger 会把 channel 关掉，
+// 另一个还在写日志的任务就会 "send on closed channel" panic，
+// 而它跑在后台 goroutine 里，panic 会直接带走整个面板进程。
+func NewUpdateLogName(prefix string) string {
+	// 进程内用原子自增保证唯一；再拼一段随机串，避免面板重启后计数器归零
+	// 撞上同一秒里已经存在的日志文件
+	seq := updateLogSeq.Add(1)
+	return fmt.Sprintf("%s_%s_%d%s.log", prefix, time.Now().Format("20060102150405"), seq, common.RandStr(4))
+}
+
+var updateLogSeq atomic.Uint64
 
 var (
 	updateLoggers   = make(map[string]*UpdateLogger)
@@ -78,19 +96,22 @@ func RemoveUpdateLogger(name string) {
 		return
 	}
 
+	// 关 channel 和往 channel 里发消息必须在同一把锁内完成：
+	// 否则 Append/SetStatus 拿到 listeners 快照后、发送前被这里 close，
+	// 就是 "send on closed channel" panic（后台 goroutine 里 = 面板进程退出）。
 	logger.mu.Lock()
-	listeners := append([]chan UpdateLogEvent(nil), logger.listeners...)
-	logger.listeners = nil
+	defer logger.mu.Unlock()
+	if logger.closed {
+		return
+	}
+	logger.closed = true
 	if logger.file != nil {
 		_ = logger.file.Close()
 		logger.file = nil
 	}
-	status := logger.status
-	logger.mu.Unlock()
-
-	for _, listener := range listeners {
+	for _, listener := range logger.listeners {
 		select {
-		case listener <- UpdateLogEvent{Type: "status", Status: status}:
+		case listener <- UpdateLogEvent{Type: "status", Status: logger.status}:
 		default:
 		}
 		select {
@@ -99,35 +120,36 @@ func RemoveUpdateLogger(name string) {
 		}
 		close(listener)
 	}
+	logger.listeners = nil
 }
 
 func (l *UpdateLogger) Append(text string, param interface{}) {
 	line := fmt.Sprintf("[%s] %s: %v", nowRFC3339(), text, param)
 	l.mu.Lock()
+	defer l.mu.Unlock()
 	l.logs = append(l.logs, line)
 	if l.file != nil {
 		_, _ = l.file.WriteString(line + "\n")
 	}
-	listeners := append([]chan UpdateLogEvent(nil), l.listeners...)
-	l.mu.Unlock()
-
-	for _, listener := range listeners {
-		select {
-		case listener <- UpdateLogEvent{Type: "log", Message: line}:
-		default:
-		}
-	}
+	l.broadcastLocked(UpdateLogEvent{Type: "log", Message: line})
 }
 
 func (l *UpdateLogger) SetStatus(status string) {
 	l.mu.Lock()
+	defer l.mu.Unlock()
 	l.status = status
-	listeners := append([]chan UpdateLogEvent(nil), l.listeners...)
-	l.mu.Unlock()
+	l.broadcastLocked(UpdateLogEvent{Type: "status", Status: status})
+}
 
-	for _, listener := range listeners {
+// broadcastLocked 必须在持有 l.mu 时调用。
+// channel 都是带缓冲的（cap 100）且这里用非阻塞发送，所以持锁广播不会卡住写日志的一方。
+func (l *UpdateLogger) broadcastLocked(event UpdateLogEvent) {
+	if l.closed {
+		return
+	}
+	for _, listener := range l.listeners {
 		select {
-		case listener <- UpdateLogEvent{Type: "status", Status: status}:
+		case listener <- event:
 		default:
 		}
 	}
@@ -151,6 +173,12 @@ func (l *UpdateLogger) Subscribe() chan UpdateLogEvent {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	ch := make(chan UpdateLogEvent, 100)
+	if l.closed {
+		// 任务已结束：直接给一个已关闭的 channel，订阅方读到 EOF 就退出，
+		// 不能挂进 listeners（那个 channel 永远不会再被 close）
+		close(ch)
+		return ch
+	}
 	l.listeners = append(l.listeners, ch)
 	return ch
 }
