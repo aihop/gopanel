@@ -936,10 +936,39 @@ EOF
   rm -f "${tmp_file}"
 }
 
+# 确保运行用户具备 rootless podman 所需条件：有效可写的家目录 + subuid/subgid。
+# 复用已存在的系统账号时尤其关键——这类账号家目录常是 /nonexistent，会导致
+# podman 建 $HOME/.local/share/containers 时 "mkdir /nonexistent/.local: permission denied"，
+# 用户级 podman.socket 起不来，整个 rootless podman 不可用。
+ensure_rootless_user_ready() {
+  local username="$1"
+  local uhome
+  uhome="$(getent passwd "${username}" 2>/dev/null | cut -d: -f6)"
+  # 家目录无效（空 / /nonexistent / / 等，或目录不存在）→ 改用安装目录作为家目录并修好属主
+  if [ -z "${uhome}" ] || [ "${uhome}" = "/nonexistent" ] || [ "${uhome}" = "/" ] || [ "${uhome}" = "/dev/null" ] || ! run_privileged test -d "${uhome}"; then
+    warn "运行用户 ${username} 家目录无效(${uhome:-空})，rootless podman 需要可写家目录，改为 ${CONFIG_INSTALL_DIR}。"
+    run_privileged mkdir -p "${CONFIG_INSTALL_DIR}"
+    run_privileged usermod -d "${CONFIG_INSTALL_DIR}" "${username}" || warn "设置家目录失败，请手动执行: usermod -d ${CONFIG_INSTALL_DIR} ${username}"
+    run_privileged chown "${username}:${username}" "${CONFIG_INSTALL_DIR}" 2>/dev/null || run_privileged chown "${username}" "${CONFIG_INSTALL_DIR}" 2>/dev/null || true
+  fi
+
+  # Ensure subuid and subgid for rootless podman
+  if ! grep -q "^${username}:" /etc/subuid 2>/dev/null; then
+    log "为用户 ${username} 配置 subuid 映射..."
+    run_privileged usermod --add-subuids 100000-165535 "${username}" || warn "配置 subuid 失败，可能需要手动配置"
+  fi
+  if ! grep -q "^${username}:" /etc/subgid 2>/dev/null; then
+    log "为用户 ${username} 配置 subgid 映射..."
+    run_privileged usermod --add-subgids 100000-165535 "${username}" || warn "配置 subgid 失败，可能需要手动配置"
+  fi
+}
+
 create_linux_user_if_needed() {
   local username="$1"
   if id "$username" >/dev/null 2>&1; then
     log "用户 ${username} 已存在，直接复用。"
+    # 复用用户也要保证家目录/subid 有效，否则 rootless podman 会因 /nonexistent 家目录挂掉
+    ensure_rootless_user_ready "$username"
     return 0
   fi
 
@@ -951,15 +980,7 @@ create_linux_user_if_needed() {
   # Ensure home directory ownership (useradd may skip chown if dir already exists)
   run_privileged chown "${username}:${username}" "${CONFIG_INSTALL_DIR}" 2>/dev/null || true
 
-  # Ensure subuid and subgid for rootless podman
-  if ! grep -q "^${username}:" /etc/subuid 2>/dev/null; then
-    log "为用户 ${username} 配置 subuid 映射..."
-    run_privileged usermod --add-subuids 100000-165535 "${username}" || warn "配置 subuid 失败，可能需要手动配置"
-  fi
-  if ! grep -q "^${username}:" /etc/subgid 2>/dev/null; then
-    log "为用户 ${username} 配置 subgid 映射..."
-    run_privileged usermod --add-subgids 100000-165535 "${username}" || warn "配置 subgid 失败，可能需要手动配置"
-  fi
+  ensure_rootless_user_ready "$username"
 }
 
 create_macos_user_if_needed() {
