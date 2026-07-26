@@ -230,6 +230,10 @@ func (s *Server) doAction(ctx context.Context, req proto.Request) (string, error
 		return s.actionFileChmod(ctx, req.Params)
 	case "FILE_CHOWN":
 		return s.actionFileChown(ctx, req.Params)
+	case "FILE_TRUNCATE":
+		return s.actionFileTruncate(ctx, req.Params)
+	case "DISK_SCAN":
+		return s.actionDiskScan(ctx, req.Params)
 	default:
 		return "", errors.New("unknown action")
 	}
@@ -263,7 +267,7 @@ func lockKeyForAction(action string) string {
 		return "mysql_client_install"
 	case "RESTART_HOST":
 		return "restart_host"
-	case "FILE_WRITE", "FILE_MKDIR", "FILE_CREATE", "FILE_REMOVE", "FILE_CHMOD", "FILE_CHOWN":
+	case "FILE_WRITE", "FILE_MKDIR", "FILE_CREATE", "FILE_REMOVE", "FILE_CHMOD", "FILE_CHOWN", "FILE_TRUNCATE":
 		return "file_mutate"
 	default:
 		return ""

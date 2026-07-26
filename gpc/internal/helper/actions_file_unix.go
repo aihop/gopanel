@@ -279,6 +279,22 @@ func (s *Server) actionFileRemove(ctx context.Context, params map[string]interfa
 	if p == "" {
 		return "", errors.New("invalid params: path is empty")
 	}
+
+	// 带 scanId 时走「扫描结果授权」：豁免 FileRoots 限制，但必须通过
+	// checkScanGrantedPath 的四道校验（在扫描结果内 / 达到体积门槛 / 非保护路径 / 普通文件）。
+	// 这条通路是磁盘清理功能专用的，能删的只可能是扫出来的大文件。
+	if scanID := getString(params, "scanId"); scanID != "" {
+		abs, err := s.checkScanGrantedPath(scanID, p)
+		if err != nil {
+			return "", err
+		}
+		if err := os.Remove(abs); err != nil { // 不用 RemoveAll：授权通路只允许删单个普通文件
+			return "", err
+		}
+		diskScanStore.forget(scanID, abs)
+		return "ok", nil
+	}
+
 	abs, err := s.cleanAndCheckPath(p, false)
 	if err != nil {
 		return "", err

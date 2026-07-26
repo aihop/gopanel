@@ -55,6 +55,58 @@ func getInt(m map[string]interface{}, key string) (int, bool) {
 	}
 }
 
+func getBool(m map[string]interface{}, key string) bool {
+	if m == nil {
+		return false
+	}
+	v, ok := m[key]
+	if !ok || v == nil {
+		return false
+	}
+	switch x := v.(type) {
+	case bool:
+		return x
+	case string:
+		b, err := strconv.ParseBool(x)
+		return err == nil && b
+	case float64:
+		return x != 0
+	case int:
+		return x != 0
+	default:
+		return false
+	}
+}
+
+func getStringSlice(m map[string]interface{}, key string) []string {
+	if m == nil {
+		return nil
+	}
+	v, ok := m[key]
+	if !ok || v == nil {
+		return nil
+	}
+	switch x := v.(type) {
+	case []string:
+		return x
+	case []interface{}:
+		out := make([]string, 0, len(x))
+		for _, it := range x {
+			if s, ok := it.(string); ok && s != "" {
+				out = append(out, s)
+			}
+		}
+		return out
+	case string:
+		if x == "" {
+			return nil
+		}
+		return []string{x}
+	default:
+		return nil
+	}
+}
+
 func getIntSlice(m map[string]interface{}, key string) ([]int, error) {
 	if m == nil {
 		return nil, nil
