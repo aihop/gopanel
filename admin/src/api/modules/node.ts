@@ -48,6 +48,9 @@ export interface NodeItem {
 	tokenLen: number
 	/** 节点签发令牌的标准长度，由后端给出，不写死在前端 */
 	tokenLenExpected: number
+	/** 是否已配置控制令牌。false 表示该节点只能观测，不能代理操作 */
+	hasControlToken: boolean
+	controlTokenLen: number
 }
 
 export interface NodeSaveParams {
@@ -55,6 +58,8 @@ export interface NodeSaveParams {
 	name: string
 	addr: string
 	accessToken: string
+	/** 控制令牌。留空=不修改（编辑态）；"-" = 清除，即关闭该节点的操作能力 */
+	controlToken?: string
 	entrance?: string
 	skipVerify?: boolean
 	isProd?: boolean
@@ -104,4 +109,18 @@ export const nodeLocalTokenIssueAPI = () => {
 
 export const nodeLocalTokenRevokeAPI = () => {
 	return http.post<any>(`/node/local/token/revoke`, {})
+}
+
+/** 本机是否已开启控制接入（可被主控代理执行写操作） */
+export const nodeLocalControlStatusAPI = () => {
+	return http.get<{ enabled: boolean }>(`/node/local/control`)
+}
+
+/** 签发本机控制令牌。该令牌等价于本机管理员，明文仅本次返回 */
+export const nodeLocalControlIssueAPI = () => {
+	return http.post<{ accessToken: string }>(`/node/local/control/issue`, {})
+}
+
+export const nodeLocalControlRevokeAPI = () => {
+	return http.post<any>(`/node/local/control/revoke`, {})
 }

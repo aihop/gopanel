@@ -368,6 +368,7 @@ export default {
 	node: {
 		prod: "生产",
 		openPanel: "打开面板",
+		manage: "管理",
 		listHint: "主控每分钟自动采集一轮节点摘要，也可手动立即刷新",
 		addNode: "添加节点",
 		refreshAll: "立即刷新全部",
@@ -380,6 +381,24 @@ export default {
 		copyFailed: "复制失败",
 		deleteConfirm: "确定删除节点「{name}」？主控将不再采集它的状态，节点本身不受影响。",
 		lastSeen: "最后在线 {time}",
+		workspace: {
+			tabOverview: "概览",
+			noNode: "未选择节点",
+			actingOn: "当前操作对象：{node}（{addr}）",
+			offline: "该节点当前不在线，操作可能失败",
+			noSummary: "暂无摘要数据，请先采集",
+			noControl: "该节点未配置控制令牌，只能查看，不能操作。可在节点上签发控制令牌后填入。",
+			noContainer: "没有容器",
+			searchContainer: "搜索容器名",
+			operating: "执行中…",
+			os: "系统",
+			confirmOperate: "确定在节点「{node}」上{operation}容器 {name}？",
+			op: {
+				start: "启动",
+				stop: "停止",
+				restart: "重启"
+			}
+		},
 		alert: {
 			offlineAndWarn: "{total} 个节点有告警，其中 {offline} 个离线",
 			warnOnly: "{total} 个节点有告警"
@@ -450,7 +469,12 @@ export default {
 			addrRequired: "请填写面板地址",
 			addrScheme: "地址必须以 http:// 或 https:// 开头",
 			tokenRequired: "请填写只读令牌",
-			tokenTip: "令牌只用于读取本机摘要，不能执行任何写操作。令牌不会随请求明文传输。"
+			tokenTip: "只读令牌只能读取本机摘要，不能执行任何写操作。令牌不会随请求明文传输。",
+			controlToken: "控制令牌",
+			controlPlaceholder: "留空表示该节点只观测，不开放操作",
+			controlKeepHint: "留空表示不修改；填 - 表示关闭操作能力",
+			observeOnly: "仅观测",
+			controlTip: "控制令牌等价于该节点的管理员，配置后可在主控里直接操作这台机器。只想看状态就留空。"
 		},
 		local: {
 			title: "本机只读接入",
@@ -467,7 +491,14 @@ export default {
 			loadFailed: "读取状态失败",
 			saveTokenNow: "请立刻复制保存，令牌明文只显示这一次。",
 			reissueConfirm: "重新签发会让正在使用旧令牌的主控立即失效，是否继续？",
-			revokeConfirm: "关闭后所有主控都无法再读取本机状态，是否继续？"
+			revokeConfirm: "关闭后所有主控都无法再读取本机状态，是否继续？",
+			controlTitle: "本机控制接入",
+			controlDesc: "允许主控代理执行本机的管理操作",
+			controlIssue: "签发控制令牌",
+			controlIssueConfirm: "控制令牌等价于本机管理员，持有它的主控可以操作这台机器上的容器、网站、文件等。确认签发？",
+			controlReissueConfirm: "重新签发会让正在使用旧控制令牌的主控立即失去操作能力，是否继续？",
+			controlRevokeConfirm: "关闭后主控只能查看本机状态，不能再执行任何操作，是否继续？",
+			controlRevoked: "已关闭控制接入"
 		}
 	},
 	menu: {

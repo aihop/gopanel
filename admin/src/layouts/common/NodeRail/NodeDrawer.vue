@@ -56,6 +56,16 @@
 								</n-tag>
 								<n-tooltip placement="left">
 									<template #trigger>
+										<n-button quaternary size="tiny" @click="manage(node)">
+											<template #icon>
+												<Icon name="mdi:tune-variant" :size="13" />
+											</template>
+										</n-button>
+									</template>
+									{{ t("node.manage") }}
+								</n-tooltip>
+								<n-tooltip placement="left">
+									<template #trigger>
 										<n-button quaternary size="tiny" @click="openNodePanel(node)">
 											<template #icon>
 												<Icon name="mdi:open-in-new" :size="13" />
@@ -177,6 +187,12 @@ function formatTime(value: string): string {
 function goManage() {
 	nodeStore.closeDrawer()
 	router.push({ name: "Node-Index" })
+}
+
+/** 「管理」跳到多节点页并直接打开该节点的工作区 */
+function manage(node: { id: number }) {
+	nodeStore.closeDrawer()
+	router.push({ name: "Node-Index", query: { workspace: String(node.id) } })
 }
 </script>
 

@@ -376,6 +376,7 @@ export default {
 	node: {
 		prod: "Prod",
 		openPanel: "Open Panel",
+		manage: "Manage",
 		listHint: "The controller collects node summaries every minute; you can also refresh right away",
 		addNode: "Add Node",
 		refreshAll: "Refresh All",
@@ -388,6 +389,24 @@ export default {
 		copyFailed: "Copy failed",
 		deleteConfirm: "Delete node \"{name}\"? The controller will stop collecting its status. The node itself is unaffected.",
 		lastSeen: "Last seen {time}",
+		workspace: {
+			tabOverview: "Overview",
+			noNode: "No node selected",
+			actingOn: "Acting on: {node} ({addr})",
+			offline: "This node is offline; operations may fail",
+			noSummary: "No summary yet, collect first",
+			noControl: "This node has no control token - view only. Issue one on the node and fill it in.",
+			noContainer: "No containers",
+			searchContainer: "Search container name",
+			operating: "Working…",
+			os: "OS",
+			confirmOperate: "{operation} container {name} on node \"{node}\"?",
+			op: {
+				start: "Start",
+				stop: "Stop",
+				restart: "Restart"
+			}
+		},
 		alert: {
 			offlineAndWarn: "{total} node(s) with alerts, {offline} offline",
 			warnOnly: "{total} node(s) with alerts"
@@ -458,7 +477,12 @@ export default {
 			addrRequired: "Panel address is required",
 			addrScheme: "Address must start with http:// or https://",
 			tokenRequired: "Read-only token is required",
-			tokenTip: "The token only reads this machine's summary and cannot perform any write operation. It is never sent in plaintext."
+			tokenTip: "The read-only token can only read this machine's summary and cannot perform any write operation. It is never sent in plaintext.",
+			controlToken: "Control Token",
+			controlPlaceholder: "Leave blank for observe-only",
+			controlKeepHint: "Blank keeps it unchanged; enter - to disable operations",
+			observeOnly: "Observe only",
+			controlTip: "The control token is equivalent to admin on that node and lets you operate it from here. Leave blank if you only want status."
 		},
 		local: {
 			title: "Read-only Access",
@@ -475,7 +499,14 @@ export default {
 			loadFailed: "Failed to load status",
 			saveTokenNow: "Copy it now - the plaintext token is shown only once.",
 			reissueConfirm: "Reissuing immediately invalidates controllers using the old token. Continue?",
-			revokeConfirm: "No controller will be able to read this machine's status. Continue?"
+			revokeConfirm: "No controller will be able to read this machine's status. Continue?",
+			controlTitle: "Control Access",
+			controlDesc: "Allow a controller to perform admin operations on this machine",
+			controlIssue: "Issue Control Token",
+			controlIssueConfirm: "A control token is equivalent to admin on this machine - the holder can operate containers, websites and files here. Issue it?",
+			controlReissueConfirm: "Reissuing immediately revokes operations for controllers using the old control token. Continue?",
+			controlRevokeConfirm: "Controllers will only be able to view status, not operate. Continue?",
+			controlRevoked: "Control access disabled"
 		}
 	},
 	menu: {

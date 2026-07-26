@@ -8,14 +8,20 @@ import { levelDotClass, nodeLevel, openNodePanel, statusText, warningText } from
 import NodeStore from "@/store/modules/node"
 import { useDialog, useMessage } from "naive-ui"
 import { h, onMounted, ref } from "vue"
+import { useRoute, useRouter } from "vue-router"
 import LocalAccessCard from "./components/LocalAccessCard.vue"
 import NodeFormModal from "./components/NodeFormModal.vue"
+import NodeWorkspaceDrawer from "./components/NodeWorkspaceDrawer.vue"
 
 const message = useMessage()
 const dialog = useDialog()
 const nodeStore = NodeStore()
+const route = useRoute()
+const router = useRouter()
 
 const modalVisible = ref(false)
+const workspaceVisible = ref(false)
+const workspaceNode = ref<NodeItem | null>(null)
 const editingNode = ref<NodeItem | null>(null)
 const probingId = ref(0)
 
@@ -66,6 +72,11 @@ const columns = [
 			h("div", { class: "flex gap-2" }, [
 				h(
 					"a",
+					{ class: "cursor-pointer text-primary font-medium", onClick: () => openWorkspace(row) },
+					t("node.manage")
+				),
+				h(
+					"a",
 					{ class: "cursor-pointer text-primary", onClick: () => openNodePanel(row) },
 					t("node.openPanel")
 				),
@@ -93,6 +104,11 @@ async function probe(row: NodeItem) {
 		// 成败都要刷新：失败时状态列和告警要变成最新的失败原因
 		await nodeStore.fetchList()
 	}
+}
+
+function openWorkspace(row: NodeItem) {
+	workspaceNode.value = row
+	workspaceVisible.value = true
 }
 
 function openCreate() {
@@ -128,8 +144,18 @@ async function onSaved() {
 	await nodeStore.fetchList()
 }
 
-onMounted(() => {
-	nodeStore.fetchList()
+onMounted(async () => {
+	await nodeStore.fetchList()
+	// 从状态抽屉的「管理」跳过来时直接展开对应节点的工作区，
+	// 用完就把 query 清掉，免得刷新页面又弹一次
+	const wanted = Number(route.query.workspace || 0)
+	if (wanted > 0) {
+		const target = nodeStore.list.find(item => item.id === wanted)
+		if (target) {
+			openWorkspace(target)
+		}
+		router.replace({ name: "Node-Index" })
+	}
 })
 </script>
 
@@ -160,5 +186,6 @@ onMounted(() => {
 		/>
 
 		<NodeFormModal v-model:show="modalVisible" :node="editingNode" @saved="onSaved" />
+		<NodeWorkspaceDrawer v-model:show="workspaceVisible" :node="workspaceNode" />
 	</CommonPage>
 </template>

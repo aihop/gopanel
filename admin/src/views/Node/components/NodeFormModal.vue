@@ -65,6 +65,7 @@ function emptyForm(): NodeSaveParams {
 		name: "",
 		addr: "",
 		accessToken: "",
+		controlToken: "",
 		entrance: "",
 		skipVerify: false,
 		isProd: false,
@@ -83,6 +84,7 @@ watch(
 				addr: props.node.addr,
 				// 令牌不回显：后端只存密文且不出接口。留空提交表示保留原值
 				accessToken: "",
+				controlToken: "",
 				entrance: props.node.entrance,
 				skipVerify: props.node.skipVerify,
 				isProd: props.node.isProd,
@@ -212,6 +214,28 @@ async function submit() {
 				class="-mt-2 mb-3 text-xs"
 			>
 				{{ t("node.form.tokenStoredLenWarn", { actual: props.node?.tokenLen, expected: expectedLen }) }}
+			</n-alert>
+
+			<n-form-item :required="false">
+				<template #label>
+					<div class="flex items-center gap-2">
+						<span>{{ t("node.form.controlToken") }}</span>
+						<n-tag v-if="isEdit && node?.hasControlToken" size="tiny" type="success" :bordered="false">
+							{{ t("node.form.tokenStored") }} · {{ node?.controlTokenLen }}
+						</n-tag>
+						<n-tag v-else-if="isEdit" size="tiny" :bordered="false">{{ t("node.form.observeOnly") }}</n-tag>
+					</div>
+				</template>
+				<n-input
+					v-model:value="form.controlToken"
+					type="password"
+					show-password-on="click"
+					:placeholder="isEdit ? t('node.form.controlKeepHint') : t('node.form.controlPlaceholder')"
+				/>
+			</n-form-item>
+
+			<n-alert type="warning" :show-icon="false" class="-mt-2 mb-3 text-xs">
+				{{ t("node.form.controlTip") }}
 			</n-alert>
 
 			<n-form-item :label="t('node.form.entrance')">

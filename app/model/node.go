@@ -3,21 +3,22 @@ package model
 import "time"
 
 // Node 受管节点。
-// 当前阶段（观测面）只做只读：主控定时拉取节点摘要用于集中展示，不代理任何写操作。
+// 观测面：主控定时拉取摘要集中展示，用 AccessToken（只读）。
+// 操作面：主控通过 /api/node-proxy 代理执行管理操作，用 ControlToken（等价管理员）。
 // ConnectMode 预留 direct / tunnel 两种取值，当前只实现 direct。
 type Node struct {
 	BaseModel
 	Name        string `json:"name" gorm:"type:varchar(128);not null"`
-	Addr        string `json:"addr" gorm:"type:varchar(255);not null"`        // 面板地址，含协议与端口，如 https://1.2.3.4:5470
+	Addr        string `json:"addr" gorm:"type:varchar(255);not null"`       // 面板地址，含协议与端口，如 https://1.2.3.4:5470
 	Entrance    string `json:"entrance" gorm:"type:varchar(255);default:''"` // 节点安全入口，节点未开启则留空
 	AccessToken string `json:"-" gorm:"type:varchar(512)"`                   // 节点只读令牌，AES 加密后存储，不出接口
 	// ControlToken 节点控制令牌，AES 加密存储。为空表示该节点只观测不可操作。
 	// 与只读令牌分开：它等价于该机管理员，能通过代理执行任意写操作。
 	ControlToken string `json:"-" gorm:"type:varchar(512)"`
-	ConnectMode string `json:"connectMode" gorm:"type:varchar(32);default:'direct'"`
-	SkipVerify  bool   `json:"skipVerify" gorm:"default:false"` // 节点使用自签证书时跳过 TLS 校验
-	IsProd      bool   `json:"isProd" gorm:"default:false"`     // 生产节点，前端高亮标记
-	Sort        int    `json:"sort" gorm:"default:0"`
+	ConnectMode  string `json:"connectMode" gorm:"type:varchar(32);default:'direct'"`
+	SkipVerify   bool   `json:"skipVerify" gorm:"default:false"` // 节点使用自签证书时跳过 TLS 校验
+	IsProd       bool   `json:"isProd" gorm:"default:false"`     // 生产节点，前端高亮标记
+	Sort         int    `json:"sort" gorm:"default:0"`
 
 	// 以下字段由摘要采集任务写入，代表最近一次采集结果
 	Status     string      `json:"status" gorm:"type:varchar(32);default:'unknown'"`
