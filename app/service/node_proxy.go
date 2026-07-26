@@ -100,7 +100,8 @@ func ForwardToNode(req NodeProxyRequest) (NodeProxyResponse, error) {
 	nonce := common.RandStr(24)
 	httpReq.Header.Set("X-Node-Ts", ts)
 	httpReq.Header.Set("X-Node-Nonce", nonce)
-	httpReq.Header.Set("X-Node-Sign", nodesign.SignBody(token, ts, nonce, method, nodePath, nodesign.BodyHash(req.Body)))
+	httpReq.Header.Set("X-Node-Sign",
+		nodesign.SignBody(token, ts, nonce, method, nodePath, req.RawQuery, nodesign.BodyHash(req.Body)))
 	if req.ContentType != "" {
 		httpReq.Header.Set("Content-Type", req.ContentType)
 	}

@@ -20,11 +20,15 @@ func Sign(token, ts, nonce, method, path string) string {
 	return mac(token, ts+"\n"+nonce+"\n"+strings.ToUpper(method)+"\n"+path)
 }
 
-// SignBody 代理接口用的签名：在 Sign 的基础上再覆盖请求体哈希。
-// 代理会执行写操作，节点常跑在明文 HTTP 上（内网），不签请求体的话
-// 中间人可以在签名有效的前提下篡改 body。
-func SignBody(token, ts, nonce, method, path, bodyHash string) string {
-	return mac(token, ts+"\n"+nonce+"\n"+strings.ToUpper(method)+"\n"+path+"\n"+bodyHash)
+// SignBody 代理接口用的签名：在 Sign 的基础上再覆盖查询串与请求体哈希。
+//
+// 代理会执行写操作，节点常跑在明文 HTTP 上（内网）。只签路径的话，
+// 中间人能在签名有效的前提下改 body 或 query——比如把 ?containerID=A 改成 B，
+// 或把 {"operation":"stop"} 改成 {"operation":"remove"}。
+//
+// 主控与节点必须同版本：这里的签名内容一变，旧版节点会全部校验失败。
+func SignBody(token, ts, nonce, method, path, rawQuery, bodyHash string) string {
+	return mac(token, ts+"\n"+nonce+"\n"+strings.ToUpper(method)+"\n"+path+"\n"+rawQuery+"\n"+bodyHash)
 }
 
 // BodyHash 请求体的 sha256 十六进制串，空体固定为空串的哈希

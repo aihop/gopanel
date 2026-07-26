@@ -4,6 +4,7 @@ import (
 	"github.com/aihop/gopanel/app/api"
 	"github.com/aihop/gopanel/app/middleware"
 	"github.com/aihop/gopanel/constant"
+	"github.com/aihop/gopanel/pkg/websocket"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -37,5 +38,13 @@ func NodeRouter(r fiber.Router) {
 		Use(middleware.JWT(constant.UserRoleAdmin))
 	{
 		proxyRouter.All("/:id/*", api.NodeProxy)
+	}
+
+	// WebSocket 代理（远程终端、容器日志）。浏览器用 ?auth=<JWT> 通过主控鉴权，
+	// NodeProxyWsQuery 在升级前算出转发给节点的查询串（剥掉 auth/token，其余透传）
+	wsProxyRouter := r.Group("node-proxy-ws").
+		Use(middleware.JWT(constant.UserRoleAdmin))
+	{
+		wsProxyRouter.Get("/:id/*", middleware.NodeProxyWsQuery, websocket.New(api.NodeProxyWs))
 	}
 }

@@ -383,6 +383,10 @@ export default {
 		lastSeen: "最后在线 {time}",
 		workspace: {
 			tabOverview: "概览",
+			tabTerminal: "终端",
+			pickContainer: "选择运行中的容器",
+			terminalHint: "选择容器后点连接，即可在主控里直接进入远程容器的终端",
+			terminalWarn: "你正在连接节点「{node}」上的容器终端，命令会在远程机器上执行。",
 			noNode: "未选择节点",
 			actingOn: "当前操作对象：{node}（{addr}）",
 			offline: "该节点当前不在线，操作可能失败",

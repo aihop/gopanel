@@ -391,6 +391,10 @@ export default {
 		lastSeen: "Last seen {time}",
 		workspace: {
 			tabOverview: "Overview",
+			tabTerminal: "Terminal",
+			pickContainer: "Pick a running container",
+			terminalHint: "Pick a container and connect to open its shell from here",
+			terminalWarn: "You are connecting to a container shell on node \"{node}\" - commands run on that remote machine.",
 			noNode: "No node selected",
 			actingOn: "Acting on: {node} ({addr})",
 			offline: "This node is offline; operations may fail",

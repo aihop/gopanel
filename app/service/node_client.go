@@ -200,13 +200,19 @@ func fetchNodeHealth(node model.Node) (brand string, version string, err error) 
 	return health.Data.AppBrand, health.Data.AppVersion, nil
 }
 
+// insecureTLSConfig 跳过证书校验的配置。
+// 仅在用户为某个节点显式勾选"跳过 TLS 校验"时使用（自签证书场景），HTTP 与 WebSocket 共用。
+func insecureTLSConfig() *tls.Config {
+	return &tls.Config{InsecureSkipVerify: true}
+}
+
 func newNodeHTTPClient(skipVerify bool) *http.Client {
 	transport := &http.Transport{
 		DisableKeepAlives: true,
 	}
 	if skipVerify {
 		// 节点常用自签证书，由用户在节点配置里显式开启，不做默认跳过
-		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+		transport.TLSClientConfig = insecureTLSConfig()
 	}
 	return &http.Client{
 		Timeout:   nodeRequestTimeout,
