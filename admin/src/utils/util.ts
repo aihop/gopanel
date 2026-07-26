@@ -164,7 +164,8 @@ export function computeSizeFromMB(size: number): string {
 	const num = 1024.0
 	if (size < num) return `${size} MB`
 	if (size < num ** 2) return `${(size / num).toFixed(2)} GB`
-	return `${(size / num ** 3).toFixed(2)} TB`
+	// MB → TB 是除两次 1024（原来写的 num ** 3，结果小 1024 倍）
+	return `${(size / num ** 2).toFixed(2)} TB`
 }
 
 export function computeSizeFromKB(size: number): string {
@@ -179,8 +180,10 @@ export function computeSizeFromByte(size: number): string {
 	if (size < num) return `${size} B`
 	if (size < num ** 2) return `${(size / num).toFixed(2)} KB`
 	if (size < num ** 3) return `${(size / num ** 2).toFixed(2)} MB`
-	if (size < num ** 4) return `${(size / num ** 2).toFixed(2)} GB`
-	return `${(size / num ** 5).toFixed(2)} TB`
+	// 这两行原来的幂次是错的：GB 除的是 num ** 2（结果大 1024 倍，
+	// 3.58 GB 的文件显示成 3666.09 GB），TB 除的是 num ** 5（结果小 1024 倍）
+	if (size < num ** 4) return `${(size / num ** 3).toFixed(2)} GB`
+	return `${(size / num ** 4).toFixed(2)} TB`
 }
 
 export function computeSizeFromKBs(size: number): string {
