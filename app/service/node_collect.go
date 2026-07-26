@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
@@ -47,27 +48,25 @@ func CollectNode(id uint) error {
 	}
 
 	summary, err := FetchNodeSummary(node)
-	fields := map[string]interface{}{}
 	if err != nil {
 		status := NodeStatusOffline
 		if errors.Is(err, ErrNodeUnauthorized) {
 			status = NodeStatusUnauthorized
 		}
-		fields["status"] = status
-		fields["status_msg"] = truncateStatusMsg(err.Error())
 		// 保留上一次的 summary 和 last_seen_at，让前端能显示“最后在线于 X”
-		if updateErr := repo.NewNode().UpdateSummary(node.ID, fields); updateErr != nil {
+		if updateErr := repo.NewNode().UpdateStatus(node.ID, status, truncateStatusMsg(err.Error())); updateErr != nil {
 			global.LOG.Errorf("[Node] 更新节点 %s 状态失败: %v", node.Name, updateErr)
 		}
 		return err
 	}
 
-	fields["status"] = NodeStatusOnline
-	fields["status_msg"] = ""
-	fields["version"] = summary.Version
-	fields["last_seen_at"] = time.Now()
-	fields["summary"] = summary
-	if updateErr := repo.NewNode().UpdateSummary(node.ID, fields); updateErr != nil {
+	if updateErr := repo.NewNode().UpdateSummary(node.ID, model.Node{
+		Status:     NodeStatusOnline,
+		StatusMsg:  "",
+		Version:    summary.Version,
+		LastSeenAt: time.Now(),
+		Summary:    summary,
+	}); updateErr != nil {
 		global.LOG.Errorf("[Node] 更新节点 %s 摘要失败: %v", node.Name, updateErr)
 		return updateErr
 	}
