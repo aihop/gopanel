@@ -28,6 +28,8 @@ func AnnotateRemovable(files []FileItem, baseDir string, euid int, canElevate bo
 			f.Removable, f.Reason = false, "系统关键路径，禁止清理"
 		case f.IsContainer:
 			f.Removable, f.Reason = false, "容器存储层，请到容器页面执行 prune"
+		case IsJournalInternal(f.Path):
+			f.Removable, f.Reason = false, "journald 内部文件，请用 journalctl --vacuum-size 清理"
 		case isRO(f.Path):
 			f.Removable, f.Reason = false, "位于只读挂载点，任何权限都无法删除"
 		default:

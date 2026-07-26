@@ -330,6 +330,10 @@ func CleanDiskPaths(taskID string, paths []string, truncate bool) ([]DiskCleanRe
 			results = append(results, DiskCleanResult{Path: p, Message: "容器存储目录下的文件，请到容器页面执行清理（prune）"})
 			continue
 		}
+		if diskscan.IsJournalInternal(p) {
+			results = append(results, DiskCleanResult{Path: p, Message: "journald 内部文件，请用 journalctl --vacuum-size 清理"})
+			continue
+		}
 
 		var err error
 		if truncate {

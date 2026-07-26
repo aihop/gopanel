@@ -34,6 +34,7 @@ func HostRouter(r fiber.Router) {
 		// 磁盘管理：扫描大文件 + 清理。删除是不可逆操作，保持 ADMIN 权限，
 		// 不像文件管理那样放宽到 SUB_ADMIN。
 		hostRouter.Get("/disk/overview", api.HostDiskOverview)
+		hostRouter.Get("/disk/gpc", api.HostDiskGpcStatus)
 		hostRouter.Post("/disk/scan", api.HostDiskScanStart)
 		hostRouter.Get("/disk/scan/result", api.HostDiskScanResult)
 		hostRouter.Get("/disk/scan/stream", api.HostDiskScanStream)

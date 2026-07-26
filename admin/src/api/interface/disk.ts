@@ -82,4 +82,17 @@ export namespace Disk {
 		freed: number
 		message?: string
 	}
+
+	/** gpc helper 可用性诊断：非 root 面板没有它时扫描/清理只能覆盖当前用户可读的文件 */
+	export interface GpcStatus {
+		/** 面板非 root 才需要 gpc */
+		needed: boolean
+		available: boolean
+		installed: boolean
+		socketPath: string
+		/** 一句话结论，直接展示 */
+		hint: string
+		/** 建议在服务器上以 root 执行的修复命令 */
+		commands?: string[]
+	}
 }

@@ -21,3 +21,7 @@ export const cancelDiskScan = (taskId: string) => {
 export const cleanDiskPaths = (taskId: string, paths: string[], truncate = false) => {
 	return http.post<Disk.CleanResult[]>(`/host/disk/clean`, { taskId, paths, truncate })
 }
+
+export const getGpcStatus = () => {
+	return http.get<Disk.GpcStatus>(`/host/disk/gpc`)
+}

@@ -17,7 +17,7 @@ import {
 	useMessage,
 	type DataTableColumns
 } from "naive-ui"
-import { cancelDiskScan, cleanDiskPaths, getDiskOverview, getDiskScanResult, startDiskScan } from "@/api/modules/disk"
+import { cancelDiskScan, cleanDiskPaths, getDiskOverview, getDiskScanResult, getGpcStatus, startDiskScan } from "@/api/modules/disk"
 import type { Disk } from "@/api/interface/disk"
 import { computeSizeFromByte } from "@/utils/util"
 import { useAuthStore } from "@/store/auth"
@@ -62,6 +62,28 @@ const fetchOverview = async () => {
 		disks.value = res.data || []
 	} catch (error: any) {
 		message.error(error.message || "获取磁盘信息失败")
+	}
+}
+
+// gpc 状态：非 root 面板缺 gpc 时扫描只能覆盖当前用户可读的文件，
+// 必须在扫描前就提示怎么授权，而不是等结果出来才发现残缺
+const gpc = ref<Disk.GpcStatus | null>(null)
+const fetchGpc = async () => {
+	try {
+		const res = await getGpcStatus()
+		gpc.value = res.data
+	} catch (_error) {
+		gpc.value = null // 诊断接口失败不阻塞页面，退化提示由扫描结果兜底
+	}
+}
+const gpcBlocked = computed(() => !!gpc.value && gpc.value.needed && !gpc.value.available)
+
+const copyCommand = async (cmd: string) => {
+	try {
+		await navigator.clipboard.writeText(cmd)
+		message.success("命令已复制，请到服务器上以 root 执行")
+	} catch (_error) {
+		message.warning("复制失败，请手动选中复制")
 	}
 }
 
@@ -110,6 +132,7 @@ const openStream = (taskId: string) => {
 		} else if (task.value?.status === "canceled") {
 			message.warning("扫描已取消")
 		}
+		afterScanSettled()
 	})
 	eventSource.addEventListener("eof", () => {
 		stopStream()
@@ -145,10 +168,22 @@ const refreshTask = async (taskId: string) => {
 			} else if (res.data.status === "canceled") {
 				message.warning("扫描已取消")
 			}
+			afterScanSettled()
 		}
 	} catch (_error) {
 		scanning.value = false
+		logCleanPending.value = false
 		stopStream()
+	}
+}
+
+// 扫描落定后的统一收尾：SSE done 与轮询兜底两条路都会走到这里。
+// 一键清理日志靠 pending 标记接力——标记先清再动作，避免 eof 补拉取时重复触发确认弹窗
+const afterScanSettled = () => {
+	if (!logCleanPending.value) return
+	logCleanPending.value = false
+	if (task.value?.status === "success") {
+		selectLogsAndConfirm()
 	}
 }
 
@@ -174,8 +209,36 @@ const handleScan = async () => {
 		openStream(res.data.id)
 	} catch (error: any) {
 		scanning.value = false
+		logCleanPending.value = false
 		message.error(error.message || "启动扫描失败")
 	}
+}
+
+// ---- 日志一键清理 ----
+// 磁盘满了最常见的元凶就是失控的日志。这里不是独立的清理引擎，而是把
+// 「扫描 -> 勾选 log 分类 -> 清空(truncate)」串成一次点击：
+// 结果列表、三层校验、确认弹窗、审计留痕全部复用现有链路，
+// 用户始终能在确认弹窗里看到要动哪些文件——一键指的是省操作，不是跳过确认。
+const logCleanPending = ref(false)
+
+const selectLogsAndConfirm = () => {
+	const logs = allFiles.value.filter(f => f.category === "log" && f.removable)
+	if (!logs.length) {
+		message.info(`扫描结果中没有可清理的日志文件（≥${minSizeMB.value}MB）。可调小「最小体积」后重扫`)
+		return
+	}
+	checkedPaths.value = logs.map(f => f.path)
+	// 清空而不是删除：日志正被进程写着，删除不会释放空间
+	openConfirm(true)
+}
+
+const handleLogClean = () => {
+	if (task.value?.status === "success" && task.value.result) {
+		selectLogsAndConfirm()
+		return
+	}
+	logCleanPending.value = true
+	void handleScan()
 }
 
 const handleCancel = async () => {
@@ -330,7 +393,10 @@ const worstPercent = computed(() => {
 // 全盘扫描时来回跑好几轮，看着像卡死。真实的计数本身就是最好的进度反馈。
 const hasLiveProgress = computed(() => task.value?.progressLive !== false)
 
-onMounted(fetchOverview)
+onMounted(() => {
+	void fetchOverview()
+	void fetchGpc()
+})
 onBeforeUnmount(stopStream)
 </script>
 
@@ -340,6 +406,7 @@ onBeforeUnmount(stopStream)
 			<div class="page-title text-2xl font-bold text-gray-800 dark:text-gray-200">磁盘管理</div>
 			<n-space>
 				<n-button v-if="scanning" @click="handleCancel">取消扫描</n-button>
+				<n-button type="warning" :disabled="scanning" @click="handleLogClean">一键清理日志</n-button>
 				<n-button type="primary" :loading="scanning" @click="handleScan">开始扫描</n-button>
 			</n-space>
 		</div>
@@ -416,6 +483,17 @@ onBeforeUnmount(stopStream)
 				默认不跨文件系统，避免扫进网络盘和容器 overlay；/proc、/sys、/dev、/run 始终跳过。
 			</div>
 		</n-card>
+
+		<n-alert v-if="gpcBlocked" type="warning" title="gpc helper 未就绪，扫描与清理只能覆盖当前用户可读的文件" class="mb-4" :show-icon="true">
+			<div class="text-sm">{{ gpc?.hint }}</div>
+			<div v-for="cmd in gpc?.commands || []" :key="cmd" class="mt-2 flex items-center gap-2">
+				<code class="flex-1 overflow-x-auto whitespace-nowrap rounded bg-slate-100 px-2 py-1 text-xs dark:bg-slate-800">{{ cmd }}</code>
+				<n-button size="tiny" tertiary @click="copyCommand(cmd)">复制</n-button>
+			</div>
+			<div class="mt-2">
+				<n-button size="tiny" tertiary @click="fetchGpc">执行完成后点此重新检测</n-button>
+			</div>
+		</n-alert>
 
 		<n-alert v-if="task?.degraded" type="warning" class="mb-4" :show-icon="true">
 			{{ task.degradedReason }}

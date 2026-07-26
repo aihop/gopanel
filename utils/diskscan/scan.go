@@ -276,6 +276,15 @@ func InContainerStore(path string) bool {
 	return false
 }
 
+// IsJournalInternal 判断是否为 systemd-journald 的内部文件。
+// 这类文件不能 truncate 也不建议直接 rm：journald 持有打开的 fd 和内部索引，
+// 清空会导致日志库损坏、空间也未必释放。正确姿势是 journalctl --vacuum-size。
+func IsJournalInternal(path string) bool {
+	lower := strings.ToLower(path)
+	return strings.Contains(lower, "/log/journal/") || strings.HasSuffix(lower, ".journal") ||
+		strings.HasSuffix(lower, ".journal~")
+}
+
 // Categorize 给文件分个类，前端据此给出「建议动作」——
 // 只给一列大小的列表用户不敢动手，得告诉他这东西是什么、能不能删。
 func Categorize(path string) string {

@@ -18,6 +18,12 @@ func HostDiskOverview(c fiber.Ctx) error {
 	return c.JSON(e.Succ(service.DiskOverview()))
 }
 
+// HostDiskGpcStatus gpc helper 可用性诊断。
+// 非 root 面板缺了 gpc 只能做退化扫描，这个接口把原因和修复命令直接给到前端。
+func HostDiskGpcStatus(c fiber.Ctx) error {
+	return c.JSON(e.Succ(service.DiagnoseGpc()))
+}
+
 // HostDiskScanStart 启动大文件扫描，立即返回 taskId，进度走 SSE
 func HostDiskScanStart(c fiber.Ctx) error {
 	req, err := e.BodyToStruct[service.DiskScanRequest](c.Body())

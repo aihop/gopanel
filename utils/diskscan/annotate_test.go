@@ -17,6 +17,7 @@ func TestAnnotateRemovable(t *testing.T) {
 		{Path: mine},
 		{Path: "/etc/passwd"},
 		{Path: "/var/lib/docker/overlay2/x/diff/a.bin", IsContainer: true},
+		{Path: "/var/log/journal/abc123/system@0005.journal"},
 	}
 	AnnotateRemovable(files, "/opt/gopanel", os.Geteuid(), false)
 
@@ -28,6 +29,32 @@ func TestAnnotateRemovable(t *testing.T) {
 	}
 	if files[2].Removable || files[2].Reason == "" {
 		t.Errorf("容器层文件必须标为不可清理: %+v", files[2])
+	}
+	if files[3].Removable || files[3].Reason == "" {
+		t.Errorf("journald 内部文件必须标为不可清理: %+v", files[3])
+	}
+}
+
+func TestIsJournalInternal(t *testing.T) {
+	yes := []string{
+		"/var/log/journal/abc/system.journal",
+		"/var/log/journal/abc/user-1000@0006.journal~",
+		"/run/log/journal/x/system.journal",
+	}
+	no := []string{
+		"/var/log/nginx/access.log",
+		"/var/log/syslog",
+		"/home/x/journal.txt",
+	}
+	for _, p := range yes {
+		if !IsJournalInternal(p) {
+			t.Errorf("%s 应识别为 journald 内部文件", p)
+		}
+	}
+	for _, p := range no {
+		if IsJournalInternal(p) {
+			t.Errorf("%s 不应识别为 journald 内部文件", p)
+		}
 	}
 }
 
