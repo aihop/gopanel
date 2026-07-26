@@ -100,7 +100,11 @@ func HostDiskScanStream(c fiber.Ctx) error {
 					return
 				}
 				if task.Status == service.DiskScanStatusRunning {
-					writeEvent("progress", task.Progress)
+					// 推整个任务快照而不是只推 Progress：progressLive / viaGpc / degraded
+					// 这些标记会在扫描过程中变化（比如 gpc 不可用退回本地扫描），
+					// 只推进度数字的话前端永远停在启动时那一份，会显示错误的状态文案。
+					// 运行期间 Result 为 nil，整包很小，不存在带宽问题。
+					writeEvent("progress", task)
 					continue
 				}
 				writeEvent("done", task)

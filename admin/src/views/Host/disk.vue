@@ -77,9 +77,9 @@ const openStream = (taskId: string) => {
 		`${apiUrl}/host/disk/scan/stream?taskId=${encodeURIComponent(taskId)}&token=${safeToken}`
 	)
 	eventSource.addEventListener("progress", (e: MessageEvent) => {
-		if (task.value) {
-			task.value.progress = JSON.parse(e.data)
-		}
+		// 后端推的是整个任务快照：progressLive / degraded 等标记会中途变化
+		// （gpc 不可用退回本地扫描时就会翻转），只取 progress 会让状态文案一直是错的
+		task.value = JSON.parse(e.data)
 	})
 	eventSource.addEventListener("done", (e: MessageEvent) => {
 		task.value = JSON.parse(e.data)

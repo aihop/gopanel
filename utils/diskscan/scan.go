@@ -133,7 +133,10 @@ func Scan(ctx context.Context, opts Options, onProgress func(Progress)) (*Result
 		})
 	}
 
-	skip := append(append([]string{}, alwaysSkipDirs...), opts.SkipDirs...)
+	// alwaysSkip 对根目录也生效（扫 /proc 本身就没意义）；
+	// rootGuardedSkip 只在非根目录时生效——用户显式指定要扫的目录不能被自己的跳过名单干掉
+	alwaysSkip := alwaysSkipDirs
+	rootGuardedSkip := append(append([]string{}, platformSkipDirs...), opts.SkipDirs...)
 
 	for _, root := range opts.Roots {
 		root = strings.TrimSpace(root)
@@ -160,7 +163,10 @@ func Scan(ctx context.Context, opts Options, onProgress func(Progress)) (*Result
 				return nil
 			}
 			if d.IsDir() {
-				if isSkipped(path, skip) {
+				if isSkipped(path, alwaysSkip) {
+					return fs.SkipDir
+				}
+				if path != root && isSkipped(path, rootGuardedSkip) {
 					return fs.SkipDir
 				}
 				if !opts.CrossDevice && devOK && path != root {
