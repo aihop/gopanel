@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -31,10 +32,24 @@ func CollectAllNodes() {
 	}
 	for _, node := range nodes {
 		// 定时轮采里单台失败不影响其他节点，失败原因已写进该节点的 status_msg
-		if err := CollectNode(node.ID); err != nil {
+		if err := collectNodeSafe(node.ID); err != nil {
 			global.LOG.Warnf("[Node] 采集节点 %s 失败: %v", node.Name, err)
 		}
 	}
+}
+
+// collectNodeSafe 带 recover 的单节点采集。
+// 这条链路跑在 cron goroutine 里，fiber 的 recover 中间件罩不住——
+// 任何一个节点的意外 panic 都会杀死整个面板进程（实际发生过：坏令牌
+// 解密 panic 让面板每分钟崩一次，磁盘扫描这类内存态任务全部陪葬）。
+// 单节点的问题只允许表现为这台节点采集失败。
+func collectNodeSafe(id uint) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("采集过程发生意外错误: %v", r)
+		}
+	}()
+	return CollectNode(id)
 }
 
 // CollectNode 采集单个节点。

@@ -186,14 +186,11 @@ func aesDecrypt(ciphertext, key, iv []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := validateLength(ciphertext, aes.BlockSize); err != nil {
+		return nil, err
+	}
 	mode := cipher.NewCBCDecrypter(block, iv)
 	mode.CryptBlocks(ciphertext, ciphertext)
-	ciphertext = pkcs7Unpad(ciphertext)
-	return ciphertext, nil
-}
-
-func pkcs7Unpad(data []byte) []byte {
-	length := len(data)
-	padLength := int(data[length-1])
-	return data[:length-padLength]
+	// 复用带边界校验的实现：坏密文解出的随机末字节会让无校验版切片越界 panic
+	return pkcs7UnPadding(ciphertext)
 }

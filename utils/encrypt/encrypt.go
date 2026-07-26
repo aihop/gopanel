@@ -70,10 +70,20 @@ func padding(plaintext []byte, blockSize int) []byte {
 	return append(plaintext, padtext...)
 }
 
-func unPadding(origData []byte) []byte {
+// unPadding 去除 PKCS#7 填充。
+// 密文用错误的 key 解出来是随机字节，末位可能是任何值——不校验直接切片
+// 会 panic（实际发生过：节点令牌换 key 后残留旧密文，定时采集一解密就把
+// 整个面板进程打崩，每分钟一次）。解密坏数据只允许返回错误，不允许 panic。
+func unPadding(origData []byte) ([]byte, error) {
 	length := len(origData)
+	if length == 0 {
+		return nil, errors.New("解密结果为空，无法去除填充")
+	}
 	unpadding := int(origData[length-1])
-	return origData[:(length - unpadding)]
+	if unpadding <= 0 || unpadding > length {
+		return nil, errors.New("填充字节非法，密文可能已损坏或加密密钥不匹配")
+	}
+	return origData[:(length - unpadding)], nil
 }
 
 func aesEncryptWithSalt(key, plaintext []byte) ([]byte, error) {
@@ -102,10 +112,13 @@ func aesDecryptWithSalt(key, ciphertext []byte) ([]byte, error) {
 	}
 	iv := ciphertext[:aes.BlockSize]
 	ciphertext = ciphertext[aes.BlockSize:]
+	// CryptBlocks 遇到非整块长度会 panic，截断的密文必须在这里挡下
+	if len(ciphertext)%aes.BlockSize != 0 {
+		return nil, errors.New("密文长度不是块大小的整数倍，可能已损坏")
+	}
 	cbc := cipher.NewCBCDecrypter(block, iv)
 	cbc.CryptBlocks(ciphertext, ciphertext)
-	ciphertext = unPadding(ciphertext)
-	return ciphertext, nil
+	return unPadding(ciphertext)
 }
 
 func ParseRSAPrivateKey(privateKeyPEM string) (*rsa.PrivateKey, error) {
@@ -132,16 +145,12 @@ func aesDecrypt(ciphertext, key, iv []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(ciphertext)%aes.BlockSize != 0 {
+		return nil, errors.New("密文长度不是块大小的整数倍，可能已损坏")
+	}
 	mode := cipher.NewCBCDecrypter(block, iv)
 	mode.CryptBlocks(ciphertext, ciphertext)
-	ciphertext = pkcs7Unpad(ciphertext)
-	return ciphertext, nil
-}
-
-func pkcs7Unpad(data []byte) []byte {
-	length := len(data)
-	padLength := int(data[length-1])
-	return data[:length-padLength]
+	return unPadding(ciphertext)
 }
 
 func DecryptPassword(encryptedData string, privateKey *rsa.PrivateKey) (string, error) {
