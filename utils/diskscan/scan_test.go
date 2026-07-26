@@ -168,3 +168,36 @@ func TestAlwaysSkipPseudoFS(t *testing.T) {
 		t.Error("/procession 不应被误判成 /proc")
 	}
 }
+
+// 回归：扫描根本身落在跳过规则内时，整条规则必须对这个根失效。
+// 之前只豁免了根路径本身，子目录照样被跳，扫 /System/Volumes/Data/Users
+// 这种 macOS 数据卷路径只能扫出 1 个文件（根目录里的那几个直属文件）。
+func TestScanRootInsideSkipRuleStillRecurses(t *testing.T) {
+	base := t.TempDir()
+	skipped := filepath.Join(base, "skipme")
+	root := filepath.Join(skipped, "data")
+	writeFile(t, filepath.Join(root, "top.bin"), 100)
+	writeFile(t, filepath.Join(root, "sub", "deep.bin"), 200)
+	writeFile(t, filepath.Join(root, "sub", "sub2", "deeper.bin"), 300)
+
+	res, err := Scan(context.Background(), Options{
+		Roots: []string{root}, MinSize: 1, SkipDirs: []string{skipped},
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.ScannedFiles != 3 {
+		t.Fatalf("跳过规则是扫描根的祖先时应整条失效，期望扫到 3 个文件，实际 %d", res.ScannedFiles)
+	}
+
+	// 反向确认：规则不是根的祖先时照常生效
+	res2, err := Scan(context.Background(), Options{
+		Roots: []string{root}, MinSize: 1, SkipDirs: []string{filepath.Join(root, "sub")},
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res2.ScannedFiles != 1 {
+		t.Fatalf("普通跳过规则应生效，期望 1 个文件，实际 %d", res2.ScannedFiles)
+	}
+}

@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aihop/gopanel/app/dto"
 	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/utils/common"
 	"github.com/aihop/gopanel/utils/diskscan"
@@ -392,9 +391,4 @@ func truncateViaGpcScan(path string, scanID string) error {
 	defer cancel()
 	_, err := gpc.Do(ctx, "FILE_TRUNCATE", map[string]interface{}{"path": path, "scanId": scanID})
 	return err
-}
-
-// DiskOverview 磁盘容量概览，直接复用 dashboard 已有的采集逻辑
-func DiskOverview() []dto.DiskInfo {
-	return loadDiskInfo()
 }

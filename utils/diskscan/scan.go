@@ -133,10 +133,13 @@ func Scan(ctx context.Context, opts Options, onProgress func(Progress)) (*Result
 		})
 	}
 
-	// alwaysSkip 对根目录也生效（扫 /proc 本身就没意义）；
-	// rootGuardedSkip 只在非根目录时生效——用户显式指定要扫的目录不能被自己的跳过名单干掉
+	// alwaysSkip 对根目录也生效（扫 /proc 本身就没意义）。
+	// rootGuarded 是平台跳过 + 调用方指定的跳过：当扫描根本身就落在某条跳过规则
+	// 里面时，整条规则必须对这个根失效——只豁免根路径本身是不够的，
+	// 那样它的每个子目录还是会被跳掉，结果就是扫出个位数文件。
+	// macOS 上数据卷挂在 /System/Volumes/Data，指定它为根时正会踩到这条。
 	alwaysSkip := alwaysSkipDirs
-	rootGuardedSkip := append(append([]string{}, platformSkipDirs...), opts.SkipDirs...)
+	rootGuardedAll := append(append([]string{}, platformSkipDirs...), opts.SkipDirs...)
 
 	for _, root := range opts.Roots {
 		root = strings.TrimSpace(root)
@@ -144,6 +147,18 @@ func Scan(ctx context.Context, opts Options, onProgress func(Progress)) (*Result
 			continue
 		}
 		root = filepath.Clean(root)
+		// 剔除那些「本身是扫描根的祖先或就是扫描根」的跳过规则
+		rootGuardedSkip := make([]string, 0, len(rootGuardedAll))
+		for _, sk := range rootGuardedAll {
+			sk = filepath.Clean(strings.TrimSpace(sk))
+			if sk == "" || sk == "." {
+				continue
+			}
+			if root == sk || strings.HasPrefix(root, sk+string(os.PathSeparator)) {
+				continue // 用户就是要扫这里面，跳过规则对本次根失效
+			}
+			rootGuardedSkip = append(rootGuardedSkip, sk)
+		}
 		rootDev, devOK := deviceOf(root)
 		if !devOK && !opts.CrossDevice {
 			// 拿不到设备号（非 unix 或 stat 失败）时退化为允许跨设备，
@@ -166,7 +181,7 @@ func Scan(ctx context.Context, opts Options, onProgress func(Progress)) (*Result
 				if isSkipped(path, alwaysSkip) {
 					return fs.SkipDir
 				}
-				if path != root && isSkipped(path, rootGuardedSkip) {
+				if isSkipped(path, rootGuardedSkip) {
 					return fs.SkipDir
 				}
 				if !opts.CrossDevice && devOK && path != root {
