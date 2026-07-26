@@ -252,7 +252,7 @@ const fileColumns: DataTableColumns<Disk.FileItem> = [
 		key: "size",
 		width: 110,
 		sorter: (a: Disk.FileItem, b: Disk.FileItem) => a.size - b.size,
-		defaultSortOrder: "descend",
+		defaultSortOrder: "descend" as const,
 		render: (row: Disk.FileItem) => computeSizeFromByte(row.size)
 	},
 	{
