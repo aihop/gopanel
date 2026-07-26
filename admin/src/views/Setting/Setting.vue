@@ -48,6 +48,13 @@
       <cloud-account />
     </n-tab-pane>
     <n-tab-pane
+      v-if="!isSubAdmin"
+      name="notify"
+      tab="邮件通知"
+    >
+      <notify />
+    </n-tab-pane>
+    <n-tab-pane
       name="update"
       tab="版本更新"
     >
@@ -62,6 +69,7 @@ import Update from "./components/Update.vue"
 import Conf from "./components/Conf.vue"
 import CloudAccount from "./components/CloudAccount.vue"
 import SubAdmin from "./components/SubAdmin.vue"
+import Notify from "./components/Notify.vue"
 import { useAuthStore } from "@/store/auth"
 import { computed, ref } from "vue"
 import { settingSystemRestart } from "@/api/modules/setting"

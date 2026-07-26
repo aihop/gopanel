@@ -41,9 +41,11 @@ func Init() {
 		global.LOG.Errorf("[Cron] 添加 Monitor 任务失败: %v", err)
 	}
 
-	// 多节点摘要采集（每分钟一轮）。串行拉取，单节点 5 秒超时，只在配置了节点时才真正发请求
+	// 多节点摘要采集（每分钟一轮）。串行拉取，单节点 5 秒超时，只在配置了节点时才真正发请求。
+	// 采集完立刻评估告警——两者必须同频，否则会拿上一轮的旧数据发新告警。
 	_, err = global.Cron.AddFunc("* * * * *", func() {
 		service.CollectAllNodes()
+		service.EvaluateAlerts()
 	})
 	if err != nil {
 		global.LOG.Errorf("[Cron] 添加节点摘要采集任务失败: %v", err)

@@ -16,7 +16,7 @@ func AnnotateRemovable(files []FileItem, baseDir string, euid int, canElevate bo
 		if v, ok := roCache[dir]; ok {
 			return v
 		}
-		v := isReadOnlyFS(dir)
+		v := IsReadOnlyFS(dir)
 		roCache[dir] = v
 		return v
 	}

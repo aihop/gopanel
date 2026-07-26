@@ -11,6 +11,13 @@ func SettingRouter(r fiber.Router) {
 	settingGroup := r.Group("/setting")
 	settingGroup.Use(middleware.JWT(constant.UserRoleAdmin))
 	{
+		// 邮件通知：磁盘满 / 容器异常 / 节点离线的告警
+		settingGroup.Get("/notify/config", api.NotifyConfigGet)
+		settingGroup.Post("/notify/config", api.NotifyConfigSave)
+		settingGroup.Post("/notify/test", api.NotifyTest)
+		settingGroup.Get("/notify/events", api.NotifyEventPage)
+		settingGroup.Post("/notify/evaluate", api.NotifyEvaluate)
+
 		settingGroup.Post("/system/info", api.SettingSystemInfo)
 		settingGroup.Post("/system/update", api.SettingSystemUpdate)
 

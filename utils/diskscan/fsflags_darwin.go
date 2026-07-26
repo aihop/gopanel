@@ -8,7 +8,7 @@ import "syscall"
 // 上面的文件任何权限都删不掉，必须在结果里标出来。
 const mntRdonly = 0x00000001
 
-func isReadOnlyFS(path string) bool {
+func IsReadOnlyFS(path string) bool {
 	var st syscall.Statfs_t
 	if err := syscall.Statfs(path, &st); err != nil {
 		return false

@@ -8,6 +8,7 @@ import (
 	"github.com/aihop/gopanel/app/repo"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
+	"github.com/aihop/gopanel/utils/diskscan"
 	"github.com/aihop/gopanel/utils/docker"
 	"github.com/shirou/gopsutil/v4/host"
 )
@@ -47,9 +48,15 @@ func LocalNodeSummary() model.NodeSummary {
 	return summary
 }
 
-// fillMaxDisk 只取占用率最高的那块盘——细条上放不下多块盘，而“最满的那块”正是要告警的对象
+// fillMaxDisk 只取占用率最高的那块盘——细条上放不下多块盘，而“最满的那块”正是要告警的对象。
+//
+// 只读挂载必须排除：macOS 的封印系统卷、Linux 的 squashfs / 只读 bind mount
+// 常年接近 100%，但它们既清理不了也不会写满，纳入统计会导致磁盘告警天天误报。
 func fillMaxDisk(summary *model.NodeSummary, disks []dto.DiskInfo) {
 	for _, item := range disks {
+		if diskscan.IsReadOnlyFS(item.Path) {
+			continue
+		}
 		if item.UsedPercent > summary.DiskMaxPercent {
 			summary.DiskMaxPercent = item.UsedPercent
 			summary.DiskMaxPath = item.Path

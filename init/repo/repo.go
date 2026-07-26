@@ -79,6 +79,12 @@ func Init() {
 		return
 	}
 
+	// 邮件通知与告警事件
+	if err := repo.NewNotify().MigrateTable(); err != nil {
+		sysLog.Println("Notify table error", err)
+		return
+	}
+
 	// 流水线
 	if err := repo.NewPipeline(global.DB).MigrateTable(); err != nil {
 		sysLog.Println("Pipeline table error", err)
