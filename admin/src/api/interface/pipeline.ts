@@ -54,6 +54,7 @@ export namespace Pipeline {
     status: string;
     version: string; // 新增版本号
     commitHash?: string;
+    changelog?: string; // 本次构建包含的提交标题，一行一条
     errorMessage: string;
     archiveFile: string;
     imageTag?: string;
@@ -77,6 +78,7 @@ export namespace Pipeline {
     pipelineRecordId: number;
     version: string;
     commitHash?: string;
+    changelog?: string; // 发布时从构建记录复制的更新说明
     sourceType: string;
     imageTag?: string;
     archiveFile?: string;

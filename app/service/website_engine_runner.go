@@ -133,6 +133,17 @@ func asNumberString(v interface{}) string {
 		return ""
 	}
 }
+// isDeployManagedEnvKey 这些键必须以本次部署为准。
+// 复用旧容器配置 / 历史运行模板时，旧 env 会整体合并进来，如果不排除这几个键，
+// 端口会沿用旧值、版本号会永远停在第一次部署的那个版本。
+func isDeployManagedEnvKey(key string) bool {
+	switch key {
+	case "PORT", "HOST", "GOPANEL_PIPELINE_VERSION", "PIPELINE_VERSION", "VERSION":
+		return true
+	}
+	return false
+}
+
 func mergeRunnerEnvs(base []string, rc runnerConfig, containerPort string, pipelineVersion string) []string {
 	envMap := make(map[string]string)
 	for _, e := range base {
@@ -154,8 +165,16 @@ func mergeRunnerEnvs(base []string, rc runnerConfig, containerPort string, pipel
 	if _, ok := envMap["HOST"]; !ok {
 		envMap["HOST"] = "0.0.0.0"
 	}
+	// 版本号三个别名：构建阶段（pipeline_steps.go）给的是 PIPELINE_VERSION / VERSION，
+	// 运行阶段历史上只给 GOPANEL_PIPELINE_VERSION，两头名字对不上很容易踩坑，这里统一都给。
+	// GOPANEL_PIPELINE_VERSION / PIPELINE_VERSION 是面板保留名，始终以本次流水线版本为准；
+	// VERSION 太通用，只在镜像和 Runner 配置都没定义时才补，避免覆盖别人的语义。
 	if version := strings.TrimSpace(pipelineVersion); version != "" {
 		envMap["GOPANEL_PIPELINE_VERSION"] = version
+		envMap["PIPELINE_VERSION"] = version
+		if _, ok := envMap["VERSION"]; !ok {
+			envMap["VERSION"] = version
+		}
 	}
 	out := make([]string, 0, len(envMap))
 	for k, v := range envMap {

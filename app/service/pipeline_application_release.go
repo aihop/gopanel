@@ -109,7 +109,7 @@ func (s *PipelineApplicationService) PublishRecord(recordID uint) (*model.Releas
 	if err != nil {
 		return nil, err
 	}
-	item := &model.Release{PipelineID: pipeline.ID, PipelineRecordID: record.ID, Version: strings.TrimSpace(record.Version), CommitHash: strings.TrimSpace(record.CommitHash), SourceType: sourceType, ImageTag: imageTag, ArchiveFile: archiveFile, ReleaseDir: releaseDir, ArtifactMeta: string(artifactMeta), Status: "ready"}
+	item := &model.Release{PipelineID: pipeline.ID, PipelineRecordID: record.ID, Version: strings.TrimSpace(record.Version), CommitHash: strings.TrimSpace(record.CommitHash), Changelog: strings.TrimSpace(record.Changelog), SourceType: sourceType, ImageTag: imageTag, ArchiveFile: archiveFile, ReleaseDir: releaseDir, ArtifactMeta: string(artifactMeta), Status: "ready"}
 	if err := s.releaseRepo.Create(item); err != nil {
 		if isReleasePipelineRecordDuplicate(err) {
 			existing, findErr := s.releaseRepo.GetByPipelineRecordID(recordID)

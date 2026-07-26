@@ -101,34 +101,61 @@ func SettingSystemRestart(c fiber.Ctx) error {
 // 设置系统运行端口
 // 1. 接收端口参数
 // 2. 验证端口是否被占用
-// 3. 更新配置文件
-// 4. 返回成功消息
-// 4. 然后重启系统
+// 3. 更新配置文件（system.port，格式必须与启动时一致：":5470"）
+// 4. 放行防火墙新端口
+// 5. 安排重启，端口重启后生效
 func SettingSystemPort(c fiber.Ctx) error {
 	req, err := e.BodyToStruct[SettingPortReq](c.Body())
 	if err != nil {
 		return c.JSON(e.Result(err))
 	}
 
-	// 检查端口占用
-	pid, err := processService.CheckProcessPort(req.ServerPort)
-	if err != nil {
+	port := int(req.ServerPort)
+	if port < 1 || port > 65535 {
+		return c.JSON(e.Fail(fmt.Errorf("端口 %d 不合法，取值范围 1-65535", port)))
+	}
+
+	currentPort := common.ParseListenPort(global.CONF.System.Port)
+	if port == currentPort {
+		return c.JSON(e.Succ(fmt.Sprintf("System port is already %d", port)))
+	}
+
+	// 检查端口占用：直接试监听最准；遍历进程连接在非 root（尤其 macOS）下会因权限直接报错，
+	// 只把它当作补充信息用来提示占用者是谁。
+	if common.ScanPort(port) {
+		if pid, perr := processService.CheckProcessPort(uint32(port)); perr == nil && pid != 0 {
+			return c.JSON(e.Fail(fmt.Errorf("端口 %d 已被进程 %d 占用", port, pid)))
+		}
+		return c.JSON(e.Fail(fmt.Errorf("端口 %d 已被占用", port)))
+	}
+
+	// 更新端口配置：启动时读取的是 system.port，且值形如 ":5470"（app.Listen 直接用这个字符串）。
+	// 早期这里写的是纯数字，并额外写了 http.listen / rpc.listen 两个没人读的键，
+	// 结果重启后 net.Listen("5470") 报 missing port in address，面板起不来 —— 表现就是“改端口根本不行”。
+	if err := updateConfYamlFile(map[string]interface{}{
+		"system.port": fmt.Sprintf(":%d", port),
+	}); err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	if pid != 0 {
-		return c.JSON(e.Fail(fmt.Errorf("port %d is already in use by process %d", req.ServerPort, pid)))
+
+	// 放行新端口、回收旧端口（失败不阻断改端口本身）
+	oldPorts := []int{}
+	if currentPort > 0 {
+		oldPorts = append(oldPorts, currentPort)
+	}
+	if err := service.OperateFirewallPort(oldPorts, []int{port}); err != nil {
+		global.LOG.Errorf("update firewall port %d -> %d failed: %v", currentPort, port, err)
 	}
 
-	// 更新端口配置
-	updateConfYamlFile(map[string]interface{}{
-		"system.port": req.ServerPort,
-		"http.listen": fmt.Sprintf(":%d", req.ServerPort),
-		"rpc.listen":  fmt.Sprintf(":%d", req.ServerPort+1),
-	})
+	global.CONF.System.Port = fmt.Sprintf(":%d", port)
 
-	global.CONF.System.Port = fmt.Sprintf("%d", req.ServerPort)
+	// 端口只有重启后才会生效。这里由服务端自己安排重启，避免前端发完请求就跳转、
+	// 导致 /system/restart 请求被浏览器取消，配置改了但进程还在老端口上。
+	if err := cmd.RestartGoPanelWithDelay(2 * time.Second); err != nil {
+		return c.JSON(e.Fail(err))
+	}
 
-	return c.JSON(e.Succ(fmt.Sprintf("System port updated to %d", req.ServerPort)))
+	return c.JSON(e.Succ(fmt.Sprintf("System port updated to %d", port)))
 }
 
 // 获取系统设置
@@ -156,9 +183,11 @@ func SettingSystemEntrance(c fiber.Ctx) error {
 		}
 	}
 
-	updateConfYamlFile(map[string]interface{}{
+	if err := updateConfYamlFile(map[string]interface{}{
 		"system.entrance": req.Entrance,
-	})
+	}); err != nil {
+		return c.JSON(e.Fail(err))
+	}
 	global.CONF.System.Entrance = req.Entrance
 
 	// 返回当前配置

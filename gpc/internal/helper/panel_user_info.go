@@ -42,7 +42,14 @@ func (s *Server) actionGoPanelUserInfo(ctx context.Context, params map[string]in
 	}
 
 	entrance := strings.TrimSpace(cfg.System.Entrance)
-	listen := strings.TrimSpace(cfg.HTTP.Listen)
+	// 面板实际监听的是 system.port，http.listen 只是历史遗留写法
+	listen := strings.TrimSpace(cfg.System.Port)
+	if listen == "" {
+		listen = strings.TrimSpace(cfg.HTTP.Listen)
+	}
+	if listen != "" && !strings.Contains(listen, ":") {
+		listen = ":" + listen
+	}
 
 	dbPath := ""
 	{
@@ -103,6 +110,7 @@ type initInstallSimple struct {
 type goPanelConfSimple struct {
 	System struct {
 		Entrance string
+		Port     string
 	}
 	HTTP struct {
 		Listen string
@@ -144,6 +152,9 @@ func readGoPanelConfigSimple(p string) (goPanelConfSimple, error) {
 		case "system":
 			if k == "entrance" {
 				c.System.Entrance = v
+			}
+			if k == "port" {
+				c.System.Port = v
 			}
 		case "http":
 			if k == "listen" {

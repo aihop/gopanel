@@ -29,6 +29,56 @@ func TestParseRunnerConfigDetectsCustomWorkingDir(t *testing.T) {
 	})
 }
 
+func TestMergeRunnerEnvsInjectsVersionAliases(t *testing.T) {
+	toMap := func(envs []string) map[string]string {
+		m := make(map[string]string, len(envs))
+		for _, e := range envs {
+			parts := strings.SplitN(e, "=", 2)
+			if len(parts) == 2 {
+				m[parts[0]] = parts[1]
+			}
+		}
+		return m
+	}
+
+	t.Run("三个别名都注入", func(t *testing.T) {
+		rc := parseRunnerConfig(nil)
+		got := toMap(mergeRunnerEnvs([]string{"PATH=/usr/bin"}, rc, "3000", "1.4.2"))
+		for _, key := range []string{"GOPANEL_PIPELINE_VERSION", "PIPELINE_VERSION", "VERSION"} {
+			if got[key] != "1.4.2" {
+				t.Fatalf("%s = %q, want 1.4.2", key, got[key])
+			}
+		}
+		if got["PORT"] != "3000" || got["HOST"] != "0.0.0.0" || got["PATH"] != "/usr/bin" {
+			t.Fatalf("原有 env 处理被破坏: %v", got)
+		}
+	})
+
+	t.Run("VERSION 已存在时不覆盖", func(t *testing.T) {
+		rc := parseRunnerConfig(map[string]interface{}{
+			"env": map[string]interface{}{"VERSION": "user-defined"},
+		})
+		got := toMap(mergeRunnerEnvs([]string{"VERSION=from-image"}, rc, "3000", "1.4.2"))
+		if got["VERSION"] != "user-defined" {
+			t.Fatalf("VERSION 被覆盖了: %q", got["VERSION"])
+		}
+		// 保留名仍然以流水线版本为准
+		if got["PIPELINE_VERSION"] != "1.4.2" || got["GOPANEL_PIPELINE_VERSION"] != "1.4.2" {
+			t.Fatalf("保留名没写对: %v", got)
+		}
+	})
+
+	t.Run("版本为空时不注入", func(t *testing.T) {
+		rc := parseRunnerConfig(nil)
+		got := toMap(mergeRunnerEnvs(nil, rc, "3000", "  "))
+		for _, key := range []string{"GOPANEL_PIPELINE_VERSION", "PIPELINE_VERSION", "VERSION"} {
+			if _, ok := got[key]; ok {
+				t.Fatalf("版本为空却注入了 %s", key)
+			}
+		}
+	})
+}
+
 func TestResolveRunnerSourceMountDir(t *testing.T) {
 	defaultRC := parseRunnerConfig(nil)
 	if got := resolveRunnerSourceMountDir(defaultRC, defaultRC.WorkingDir); got != runnerWorkspaceMountPath {

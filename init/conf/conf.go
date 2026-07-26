@@ -150,11 +150,13 @@ func Init() {
 
 func GlobalConfInit(v *viper.Viper) {
 	systemConfig := config.System{
-		BaseDir:            v.GetString("system.base_dir"),
-		ContainerRuntime:   v.GetString("system.container_runtime"),
-		GpAgentSocketPath:  v.GetString("system.gp_agent_socket_path"),
-		GpcSocketPath:      v.GetString("system.gpc_socket_path"),
-		Port:               v.GetString("system.port"),
+		BaseDir:           v.GetString("system.base_dir"),
+		ContainerRuntime:  v.GetString("system.container_runtime"),
+		GpAgentSocketPath: v.GetString("system.gp_agent_socket_path"),
+		GpcSocketPath:     v.GetString("system.gpc_socket_path"),
+		// 统一成 ":5470" 形式：老配置（或旧版接口写入的纯数字）直接交给 net.Listen 会报
+		// "missing port in address"，面板启动即退出
+		Port:               common.NormalizeListenAddr(v.GetString("system.port")),
 		Mode:               v.GetString("system.mode"),
 		Entrance:           v.GetString("system.entrance"),
 		Version:            v.GetString("version"),

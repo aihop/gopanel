@@ -28,6 +28,24 @@ func (r *PipelineRecordRepo) UpdateImageTag(id uint, imageTag string) error {
 func (r *PipelineRecordRepo) UpdateCommitHash(id uint, commitHash string) error {
 	return r.db.Model(&model.PipelineRecord{}).Where("id = ?", id).Update("commit_hash", commitHash).Error
 }
+func (r *PipelineRecordRepo) UpdateChangelog(id uint, changelog string) error {
+	return r.db.Model(&model.PipelineRecord{}).Where("id = ?", id).Update("changelog", changelog).Error
+}
+
+// LatestSuccessCommitHash 取该流水线上一次成功构建的 commit，作为本次更新说明的起点。
+// excludeRecordID 是本次刚创建的记录，必须排除掉。
+func (r *PipelineRecordRepo) LatestSuccessCommitHash(pipelineID uint, excludeRecordID uint) (string, error) {
+	var rec model.PipelineRecord
+	err := r.db.Model(&model.PipelineRecord{}).
+		Where("pipeline_id = ? AND status = ? AND commit_hash <> ''", pipelineID, "success").
+		Where("id <> ?", excludeRecordID).
+		Order("id desc").First(&rec).Error
+	if err != nil {
+		return "", err
+	}
+	return rec.CommitHash, nil
+}
+
 func (r *PipelineRecordRepo) UpdateRunnerResult(id uint, releaseDir, containerID string, hostPort int) error {
 	return r.db.Model(&model.PipelineRecord{}).Where("id = ?", id).Updates(map[string]interface{}{"runner_release_dir": releaseDir, "runner_container_id": containerID, "runner_host_port": hostPort}).Error
 }

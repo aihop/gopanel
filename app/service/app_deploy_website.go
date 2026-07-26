@@ -33,12 +33,13 @@ func deployStaticWebsite(website *model.Website, releaseDir string) error {
 // @param pipelineRecordID 流水线记录ID
 // @param allowPipelineBridge 是否允许流水线桥接
 // @param exposePort 暴露端口
+// @param version 本次部署的版本号，注入容器环境变量供应用读取
 // @return int, string, string, error
 // @return exposePort 暴露端口
 // @return containerID 容器ID
 // @return runtimeDir 运行时目录
 // @return error 错误
-func deployWebAppWebsite(website *model.Website, releaseDir, runtimeDir, imageTag string, pipelineRecordID uint, allowPipelineBridge bool, exposePort int) (int, string, string, error) {
+func deployWebAppWebsite(website *model.Website, releaseDir, runtimeDir, imageTag string, pipelineRecordID uint, allowPipelineBridge bool, exposePort int, version string) (int, string, string, error) {
 	if website.PipelineID > 0 && allowPipelineBridge {
 		if hostPort, containerID, actualRuntimeDir, ok, err := resolvePipelineRunnerBridge(website, pipelineRecordID); err != nil {
 			return 0, "", "", err
@@ -94,7 +95,7 @@ func deployWebAppWebsite(website *model.Website, releaseDir, runtimeDir, imageTa
 			return 0, "", "", fmt.Errorf("读取流水线配置失败: %w", err)
 		}
 	}
-	req := &request.WebsiteCreate{CodeSource: "pipeline", GitRepo: imageRef, CodeDir: preferredRuntimeDir, CodeDirFallback: releaseDir, PreviousContainerID: previousContainerID, Proxy: ""}
+	req := &request.WebsiteCreate{CodeSource: "pipeline", GitRepo: imageRef, CodeDir: preferredRuntimeDir, CodeDirFallback: releaseDir, PreviousContainerID: previousContainerID, Proxy: "", PipelineVersion: strings.TrimSpace(version)}
 	hostPort, containerID, actualRuntimeDir, err := DeployWebsiteEngine(context.Background(), website.Alias, req, func(format string, a ...interface{}) {
 		appendPipelineDeployInfoLog(pipelineRecordID, website.Alias, fmt.Sprintf(format, a...))
 	})

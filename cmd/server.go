@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/constant"
@@ -17,9 +18,9 @@ import (
 var (
 	ConfFilePath  string // 配置文件路径
 	helpFlag      bool
-	versionFlag   bool   // 版本标志
-	showConfig    bool   // 显示安全配置标志
-	resetPassword bool   // 重置密码标志
+	versionFlag   bool // 版本标志
+	showConfig    bool // 显示安全配置标志
+	resetPassword bool // 重置密码标志
 )
 
 func Init() {
@@ -64,9 +65,12 @@ func showSecurityConfig() {
 	if err := viper.ReadInConfig(); err != nil {
 		log.Fatalf("Error reading config file: %s", err)
 	}
-	// 获取安全入口和运行端口
+	// 获取安全入口和运行端口（运行端口的唯一来源是 system.port，http.listen 只是历史遗留写法）
 	securityEntry := viper.GetString("system.entrance")
-	serverPort := viper.GetString("http.listen")
+	serverPort := viper.GetString("system.port")
+	if strings.TrimSpace(serverPort) == "" {
+		serverPort = viper.GetString("http.listen")
+	}
 
 	// 显示配置信息
 	fmt.Printf("Security Entry: %s\n", securityEntry)

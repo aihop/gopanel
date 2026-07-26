@@ -177,7 +177,8 @@ func DeployWebsiteEngine(ctx context.Context, alias string, req *request.Website
 					for _, e := range runtimeTemplate.Env {
 						parts := strings.SplitN(e, "=", 2)
 						if len(parts) == 2 {
-							if parts[0] == "PORT" || parts[0] == "HOST" {
+							// 端口/版本这类键本次部署已经算好，不让历史模板的旧值盖回去
+							if _, ok := envMap[parts[0]]; ok && isDeployManagedEnvKey(parts[0]) {
 								continue
 							}
 							envMap[parts[0]] = parts[1]
@@ -232,7 +233,8 @@ func DeployWebsiteEngine(ctx context.Context, alias string, req *request.Website
 				for _, e := range oldInspect.Config.Env {
 					parts := strings.SplitN(e, "=", 2)
 					if len(parts) == 2 {
-						if parts[0] == "PORT" || parts[0] == "HOST" {
+						// 同上：旧容器的端口/版本不能盖掉本次部署算出来的值
+						if _, ok := envMap[parts[0]]; ok && isDeployManagedEnvKey(parts[0]) {
 							continue
 						}
 						envMap[parts[0]] = parts[1]

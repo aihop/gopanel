@@ -7,6 +7,7 @@ import PipelineLogsModal from "./PipelineLogsModal.vue"
 import { useAuthStore } from "@/store/auth"
 import dayjs from "dayjs"
 import { getRuntimeKindLabel, getRuntimeModeLabel, getRunUserLabel } from "@/utils/runtime"
+import { renderChangelogCell } from "@/utils/changelog"
 const props = defineProps<{ show: boolean; pipelineId: number }>()
 const emit = defineEmits(["update:show"])
 
@@ -166,6 +167,12 @@ const columns: DataTableColumns<Pipeline.ResRecord> = [
         }, "复制")
       ])
     }
+  },
+  {
+    title: "更新内容",
+    key: "changelog",
+    minWidth: 220,
+    render: (row: Pipeline.ResRecord) => renderChangelogCell(row.changelog)
   },
   {
     title: "状态",

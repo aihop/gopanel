@@ -4,6 +4,7 @@ import { NDataTable, NModal, NTag, NPopover, useMessage, type DataTableColumns }
 import { getPipelineReleases } from "@/api/modules/pipeline"
 import { Pipeline } from "@/api/interface/pipeline"
 import { formatTime } from "@/utils/date"
+import { renderChangelogCell } from "@/utils/changelog"
 
 const props = defineProps<{ show: boolean; pipelineId: number }>()
 const emit = defineEmits(["update:show"])
@@ -139,6 +140,12 @@ const columns: DataTableColumns<Pipeline.ResRelease> = [
         }, "复制")
       ])
     }
+  },
+  {
+    title: "更新内容",
+    key: "changelog",
+    minWidth: 240,
+    render: (row: Pipeline.ResRelease) => renderChangelogCell(row.changelog)
   },
   {
     title: "结果来源",

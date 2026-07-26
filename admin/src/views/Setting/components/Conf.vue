@@ -245,12 +245,21 @@ const showEntranceDrawer = ref(false)
 const editPort = ref("")
 const editEntrance = ref("")
 
+// 配置里的 system.port 形如 ":5470"，展示和提交都只用纯端口号
+function normalizePort(raw: string): string {
+	const value = String(raw ?? "").trim()
+	if (!value) return ""
+	const port = value.includes(":") ? value.slice(value.lastIndexOf(":") + 1) : value
+	return port.trim()
+}
+
 async function fetchConfig() {
 	try {
 		const res = await settingSystemConfig()
 		if (res.data && res.data.System) {
 			Object.assign(form.System, res.data.System)
-			editPort.value = res.data.System.Port || ""
+			form.System.Port = normalizePort(res.data.System.Port)
+			editPort.value = form.System.Port
 			editEntrance.value = res.data.System.Entrance || ""
 			if (res.data.LogConfig) form.LogConfig = res.data.LogConfig
 		}
@@ -262,27 +271,37 @@ async function fetchConfig() {
 function jumpToNewUrl(port: string, entrance: string) {
 	let protocol = window.location.protocol
 	let host = window.location.hostname
-	let newUrl = `${protocol}//${host}:${port}/${entrance}`
+	let newUrl = `${protocol}//${host}:${normalizePort(port)}/${entrance}`
 	window.location.href = newUrl
 }
 
 function confirmSetPort() {
+	const port = Number(normalizePort(editPort.value))
+	if (!Number.isInteger(port) || port < 1 || port > 65535) {
+		message.warning("端口需为 1-65535 之间的整数")
+		return
+	}
+	if (port === Number(form.System.Port)) {
+		message.info("端口未发生变化")
+		return
+	}
 	dialog.warning({
 		title: "提示",
-		content: "修改后系统将自动重启，是否继续？",
+		content: `修改后面板将重启并监听 ${port} 端口，是否继续？`,
 		positiveText: "确定",
 		negativeText: "取消",
 		onPositiveClick: async () => {
 			loadingPort.value = true
 			try {
-				await settingSystemPort({ serverPort: Number(editPort.value) })
-				message.success("端口设置成功，系统即将重启")
+				// 端口生效的重启由服务端自己安排（见 SettingSystemPort），
+				// 前端不能再调 restart 后立刻跳转 —— 那个请求会被跳转取消，导致改了配置却没重启
+				await settingSystemPort({ serverPort: port })
+				message.success("端口设置成功，面板正在重启，稍后将跳转到新地址")
 				showPortDrawer.value = false
-				// fetchConfig()
-				settingSystemRestart()
-				jumpToNewUrl(editPort.value, form.System.Entrance)
+				form.System.Port = String(port)
+				setTimeout(() => jumpToNewUrl(String(port), form.System.Entrance), 4000)
 			} catch {
-				// message.error("端口设置失败")
+				// 失败信息由请求拦截器统一提示
 			}
 			loadingPort.value = false
 		}
@@ -312,8 +331,9 @@ function confirmSetEntrance() {
 				message.success("安全入口设置成功，系统即将重启")
 				showEntranceDrawer.value = false
 				clearAllCookies()
-				settingSystemRestart()
-				jumpToNewUrl(form.System.Port, editEntrance.value)
+				form.System.Entrance = editEntrance.value
+				await settingSystemRestart()
+				setTimeout(() => jumpToNewUrl(form.System.Port, editEntrance.value), 4000)
 			} catch {
 				// message.error("安全入口设置失败")
 			}

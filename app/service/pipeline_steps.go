@@ -19,7 +19,140 @@ import (
 	udocker "github.com/aihop/gopanel/utils/docker"
 )
 
-func (s *PipelineService) stepClone(ctx context.Context, logger *PipelineLogger, p *model.Pipeline, workspace string) (string, error) {
+// runEnvInjectMarker 在 docker/podman shim 脚本里占位，Sprintf 之后统一替换成
+// runEnvInjectSnippet，避免把这段 shell 混进本来就有 %% 转义的格式化字符串里。
+const runEnvInjectMarker = "__GOPANEL_RUN_ENV_INJECT__"
+
+// runEnvInjectSnippet 纯脚本流水线里，容器是用户自己的构建脚本起的，面板没法直接写 config.Env。
+// 这里借已经挂在 PATH 上的 docker/podman shim，在 run/create 子命令后面补上版本号环境变量，
+// 让脚本模式和 Runner 模式一样能在容器里读到版本。
+// 注入的 -e 放在最前面，用户脚本里自己写的同名 -e 在后面会覆盖它——用户意图优先。
+const runEnvInjectSnippet = `if [ -n "$PIPELINE_VERSION" ]; then
+	case "$1" in
+		run|create)
+			gopanel_sub="$1"; shift
+			set -- "$gopanel_sub" -e "GOPANEL_PIPELINE_VERSION=$PIPELINE_VERSION" -e "PIPELINE_VERSION=$PIPELINE_VERSION" "$@"
+			;;
+		container)
+			case "$2" in
+				run|create)
+					gopanel_sub1="$1"; gopanel_sub2="$2"; shift 2
+					set -- "$gopanel_sub1" "$gopanel_sub2" -e "GOPANEL_PIPELINE_VERSION=$PIPELINE_VERSION" -e "PIPELINE_VERSION=$PIPELINE_VERSION" "$@"
+					;;
+			esac
+			;;
+	esac
+fi`
+
+// changelogMaxCommits / changelogMaxBytes 更新说明只做展示，超长的没人看，也别把库撑爆
+const (
+	changelogMaxCommits  = 50
+	changelogMaxBytes    = 8000
+	changelogFallbackNum = 10
+)
+
+// collectPipelineChangelog 取「上次成功构建的 commit..HEAD」之间的提交标题，一行一条。
+// sinceCommit 为空（首次构建）或该 commit 在本地不存在（浅克隆截断、强推、变基）时，
+// 退回到最近 changelogFallbackNum 条，保证发布记录里总有内容可看。
+func collectPipelineChangelog(ctx context.Context, logger *PipelineLogger, workspace string, sinceCommit string) string {
+	runGitLog := func(args ...string) (string, bool) {
+		cmd := exec.CommandContext(ctx, "git", append([]string{"log", "--no-merges", "--pretty=format:%s"}, args...)...)
+		cmd.Dir = workspace
+		out, err := cmd.Output()
+		if err != nil {
+			return "", false
+		}
+		return string(out), true
+	}
+
+	since := strings.TrimSpace(sinceCommit)
+	if since != "" {
+		// 先确认这个 commit 本地存在，否则 git log A..HEAD 会直接报错
+		checkCmd := exec.CommandContext(ctx, "git", "cat-file", "-e", since+"^{commit}")
+		checkCmd.Dir = workspace
+		if err := checkCmd.Run(); err != nil {
+			logger.Info("上次构建的提交 %s 在本地历史中不存在（浅克隆或强推），改取最近 %d 条提交", shortCommit(since), changelogFallbackNum)
+			since = ""
+		}
+	}
+
+	var raw string
+	if since != "" {
+		out, ok := runGitLog(fmt.Sprintf("%s..HEAD", since))
+		if !ok {
+			logger.Info("提取提交记录失败，跳过更新说明")
+			return ""
+		}
+		raw = out
+		if strings.TrimSpace(raw) == "" {
+			logger.Info("与上次构建相比没有新提交")
+			return ""
+		}
+	} else {
+		out, ok := runGitLog(fmt.Sprintf("-n%d", changelogFallbackNum))
+		if !ok {
+			logger.Info("提取提交记录失败，跳过更新说明")
+			return ""
+		}
+		raw = out
+	}
+
+	changelog := normalizeChangelog(raw)
+	if changelog == "" {
+		return ""
+	}
+	logger.Info("已提取 %d 条提交作为本次更新说明", len(strings.Split(changelog, "\n")))
+	return changelog
+}
+
+// normalizeChangelog 清掉空行、去重、限制条数与总长度。
+// 截断按 rune 走，避免把中文切成半个字。
+func normalizeChangelog(raw string) string {
+	seen := make(map[string]struct{})
+	lines := make([]string, 0, changelogMaxCommits)
+	total := 0
+	for _, line := range strings.Split(raw, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if _, ok := seen[line]; ok {
+			continue
+		}
+		seen[line] = struct{}{}
+		line = truncateRunes(line, 200)
+		if total+len(line)+1 > changelogMaxBytes {
+			lines = append(lines, "…（更新说明过长，已截断）")
+			break
+		}
+		total += len(line) + 1
+		lines = append(lines, line)
+		if len(lines) >= changelogMaxCommits {
+			lines = append(lines, "…（提交过多，已截断）")
+			break
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+func truncateRunes(s string, max int) string {
+	runes := []rune(s)
+	if len(runes) <= max {
+		return s
+	}
+	return string(runes[:max]) + "…"
+}
+
+func shortCommit(hash string) string {
+	h := strings.TrimSpace(hash)
+	if len(h) > 12 {
+		return h[:12]
+	}
+	return h
+}
+
+// stepClone 拉取代码，返回 HEAD commit 与本次相对 sinceCommit 的提交标题列表
+func (s *PipelineService) stepClone(ctx context.Context, logger *PipelineLogger, p *model.Pipeline, workspace string, sinceCommit string) (string, string, error) {
 	logger.Info("准备代码拉取目录...")
 	_ = os.MkdirAll(workspace, 0755)
 	repoUrl := buildPipelineRepoURL(p.RepoUrl, p.AuthType, p.AuthData)
@@ -46,18 +179,18 @@ func (s *PipelineService) stepClone(ctx context.Context, logger *PipelineLogger,
 		checkoutCmd := exec.CommandContext(ctx, "git", "checkout", p.Branch)
 		checkoutCmd.Dir = workspace
 		if err := runGitCommand(checkoutCmd, "Git checkout"); err != nil {
-			return "", err
+			return "", "", err
 		}
 		pullCmd := exec.CommandContext(ctx, "git", "pull", "origin", p.Branch)
 		pullCmd.Dir = workspace
 		if err := runGitCommand(pullCmd, "Git pull"); err != nil {
-			return "", err
+			return "", "", err
 		}
 	} else {
 		logger.Info("首次执行或缓存丢失，正在执行 git clone (分支: %s)...", p.Branch)
 		cloneCmd := exec.CommandContext(ctx, "git", "clone", "-b", p.Branch, "--single-branch", "--depth", "1", repoUrl, workspace)
 		if err := runGitCommand(cloneCmd, "Git clone"); err != nil {
-			return "", err
+			return "", "", err
 		}
 	}
 	hashCmd := exec.CommandContext(ctx, "git", "rev-parse", "HEAD")
@@ -65,7 +198,8 @@ func (s *PipelineService) stepClone(ctx context.Context, logger *PipelineLogger,
 	if hashBytes, err := hashCmd.Output(); err == nil {
 		commitHash := strings.TrimSpace(string(hashBytes))
 		logger.Info("代码拉取成功, Commit Hash: %s", commitHash)
-		return commitHash, nil
+		changelog := collectPipelineChangelog(ctx, logger, workspace, sinceCommit)
+		return commitHash, changelog, nil
 	} else {
 		safeUrl := repoUrl
 		if idx := strings.Index(safeUrl, "@"); idx > 0 {
@@ -75,7 +209,7 @@ func (s *PipelineService) stepClone(ctx context.Context, logger *PipelineLogger,
 		}
 		logger.Error("注意: 拉取可能失败，当前使用的远端地址: %s", safeUrl)
 	}
-	return "", nil
+	return "", "", nil
 }
 func (s *PipelineService) stepBuild(ctx context.Context, logger *PipelineLogger, p *model.Pipeline, workspace string, releaseDir string, version string) (exposePortInt int, err error) {
 	if p.RunnerMode == constant.PipelineRunnerModeRunner {
@@ -296,6 +430,7 @@ cat > "$GOPANEL_SHIM_DIR/podman" <<'EOF'
 if [ "$1" = "compose" ] && [ "$2" = "up" ]; then
 	"$GOPANEL_SHIM_DIR/gopanel-sync-release"
 fi
+__GOPANEL_RUN_ENV_INJECT__
 if [ -n "$REAL_PODMAN_BIN" ]; then
 	exec "$REAL_PODMAN_BIN" "$@"
 fi
@@ -311,6 +446,7 @@ cat > "$GOPANEL_SHIM_DIR/docker" <<'EOF'
 if [ "$1" = "compose" ] && [ "$2" = "up" ]; then
 	"$GOPANEL_SHIM_DIR/gopanel-sync-release"
 fi
+__GOPANEL_RUN_ENV_INJECT__
 if [ -n "$REAL_DOCKER_BIN" ]; then
 	exec "$REAL_DOCKER_BIN" "$@"
 fi
@@ -341,13 +477,14 @@ EOF
 chmod +x "$GOPANEL_SHIM_DIR/podman-compose"
 echo "--- 使用运行时: $RUNTIME (类型: $CONTAINER_RUNTIME_KIND, 兼容别名: $CONTAINER_CLI) ---"
 `, runtimeCLI, resolvedRuntime.Kind, runtimeCLI)
+		compatHeader = strings.ReplaceAll(compatHeader, runEnvInjectMarker, runEnvInjectSnippet)
 		fullScript := fmt.Sprintf("#!/bin/sh\nset -e\ncd \"%s\"\necho \"Current PWD: $(pwd)\"\n%s\n%s\nif [ ! -f \"$GOPANEL_RELEASE_SYNC_MARKER\" ]; then\n\tgopanel_sync_release\nfi\n", workspace, compatHeader, p.BuildScript)
 		_ = os.WriteFile(scriptPath, []byte(fullScript), 0755)
 		defer os.Remove(scriptPath)
 		cmd := exec.CommandContext(ctx, "sh", scriptPath)
 		cmd.Dir = workspace
 		cmd.Env = os.Environ()
-		cmd.Env = append(cmd.Env, fmt.Sprintf("PIPELINE_VERSION=%s", version), fmt.Sprintf("VERSION=%s", version), fmt.Sprintf("CONTAINER_CLI=%s", runtimeCLI), fmt.Sprintf("PIPELINE_BASE_DIR=%s", filepath.Dir(workspace)), fmt.Sprintf("GOPANEL_BASE_DIR=%s", filepath.Dir(workspace)), fmt.Sprintf("PIPELINE_WORKSPACE_DIR=%s", workspace), fmt.Sprintf("GOPANEL_WORKSPACE_DIR=%s", workspace), fmt.Sprintf("PIPELINE_RELEASE_DIR=%s", releaseDir), fmt.Sprintf("GOPANEL_RELEASE_DIR=%s", releaseDir))
+		cmd.Env = append(cmd.Env, fmt.Sprintf("PIPELINE_VERSION=%s", version), fmt.Sprintf("GOPANEL_PIPELINE_VERSION=%s", version), fmt.Sprintf("VERSION=%s", version), fmt.Sprintf("CONTAINER_CLI=%s", runtimeCLI), fmt.Sprintf("PIPELINE_BASE_DIR=%s", filepath.Dir(workspace)), fmt.Sprintf("GOPANEL_BASE_DIR=%s", filepath.Dir(workspace)), fmt.Sprintf("PIPELINE_WORKSPACE_DIR=%s", workspace), fmt.Sprintf("GOPANEL_WORKSPACE_DIR=%s", workspace), fmt.Sprintf("PIPELINE_RELEASE_DIR=%s", releaseDir), fmt.Sprintf("GOPANEL_RELEASE_DIR=%s", releaseDir))
 		var outBuf, errBuf bytes.Buffer
 		cmd.Stdout = io.MultiWriter(&outBuf, newLogWriter(logger, false))
 		cmd.Stderr = io.MultiWriter(&errBuf, newLogWriter(logger, true))
@@ -392,7 +529,7 @@ echo "--- 使用运行时: $RUNTIME (类型: $CONTAINER_RUNTIME_KIND, 兼容别�
 			cmdArgs = append(cmdArgs, "-v", fmt.Sprintf("%s:/root/.ssh:ro", sshDir))
 		}
 	}
-	cmdArgs = append(cmdArgs, "-e", fmt.Sprintf("PIPELINE_VERSION=%s", version), "-e", fmt.Sprintf("VERSION=%s", version), "-e", fmt.Sprintf("CONTAINER_CLI=%s", runtimeCLI), "-e", "PIPELINE_WORKSPACE_DIR=/source", "-e", "GOPANEL_WORKSPACE_DIR=/source", "-e", "PIPELINE_RELEASE_DIR=/workspace", "-e", "GOPANEL_RELEASE_DIR=/workspace", "-e", "DOCKER_HOST=unix:///var/run/docker.sock", "-w", "/workspace", p.BuildImage, "sh")
+	cmdArgs = append(cmdArgs, "-e", fmt.Sprintf("PIPELINE_VERSION=%s", version), "-e", fmt.Sprintf("GOPANEL_PIPELINE_VERSION=%s", version), "-e", fmt.Sprintf("VERSION=%s", version), "-e", fmt.Sprintf("CONTAINER_CLI=%s", runtimeCLI), "-e", "PIPELINE_WORKSPACE_DIR=/source", "-e", "GOPANEL_WORKSPACE_DIR=/source", "-e", "PIPELINE_RELEASE_DIR=/workspace", "-e", "GOPANEL_RELEASE_DIR=/workspace", "-e", "DOCKER_HOST=unix:///var/run/docker.sock", "-w", "/workspace", p.BuildImage, "sh")
 	cmd, cerr := udocker.RuntimeCommand(ctx, cmdArgs...)
 	if cerr != nil {
 		return exposePortInt, cerr
@@ -402,6 +539,11 @@ CONTAINER_CLI="%s"
 GOPANEL_SHIM_DIR="$PWD/.gopanel_shims"
 export CONTAINER_CLI
 export GOPANEL_SHIM_DIR
+# 真实二进制必须在改 PATH 之前解析，否则 shim 会 exec 到自己
+REAL_DOCKER_BIN="$(command -v docker 2>/dev/null || true)"
+REAL_PODMAN_BIN="$(command -v podman 2>/dev/null || true)"
+export REAL_DOCKER_BIN
+export REAL_PODMAN_BIN
 cleanup_gopanel_shims() {
 	rm -rf "$GOPANEL_SHIM_DIR"
 }
@@ -409,6 +551,23 @@ trap cleanup_gopanel_shims EXIT
 rm -rf "$GOPANEL_SHIM_DIR"
 mkdir -p "$GOPANEL_SHIM_DIR"
 export PATH="$GOPANEL_SHIM_DIR:$PATH"
+# 构建容器里用户脚本起的容器同样自动带上版本号
+if [ -n "$REAL_DOCKER_BIN" ]; then
+	cat > "$GOPANEL_SHIM_DIR/docker" <<'EOF'
+#!/bin/sh
+__GOPANEL_RUN_ENV_INJECT__
+exec "$REAL_DOCKER_BIN" "$@"
+EOF
+	chmod +x "$GOPANEL_SHIM_DIR/docker"
+fi
+if [ -n "$REAL_PODMAN_BIN" ]; then
+	cat > "$GOPANEL_SHIM_DIR/podman" <<'EOF'
+#!/bin/sh
+__GOPANEL_RUN_ENV_INJECT__
+exec "$REAL_PODMAN_BIN" "$@"
+EOF
+	chmod +x "$GOPANEL_SHIM_DIR/podman"
+fi
 if [ "$CONTAINER_CLI" = "docker" ]; then
 	podman() { docker "$@"; }
 	cat > "$GOPANEL_SHIM_DIR/podman-compose" <<'EOF'
@@ -427,6 +586,7 @@ EOF
 	fi
 fi
 `, runtimeCLI)
+	compatHeader = strings.ReplaceAll(compatHeader, runEnvInjectMarker, runEnvInjectSnippet)
 	scriptContent := fmt.Sprintf("set -e\n%s\n%s\n", compatHeader, p.BuildScript)
 	cmd.Stdin = strings.NewReader(scriptContent)
 	cmd.Stdout = newLogWriter(logger, false)

@@ -54,7 +54,7 @@ func runAppDeployment(website *model.Website, deploy *model.AppDeploy, exposePor
 		err = ApplyCaddyFromDB(context.Background())
 	case constant.WebApp, constant.Container:
 		appendLog("容器化应用类型，开始部署...")
-		deploy.Port, deploy.ContainerID, deploy.RuntimeDir, err = deployWebAppWebsite(website, deploy.ReleaseDir, deploy.RuntimeDir, deploy.ImageTag, pipelineRecordID, deploy.ReleaseID == 0, exposePort)
+		deploy.Port, deploy.ContainerID, deploy.RuntimeDir, err = deployWebAppWebsite(website, deploy.ReleaseDir, deploy.RuntimeDir, deploy.ImageTag, pipelineRecordID, deploy.ReleaseID == 0, exposePort, deploy.Version)
 		if err == nil {
 			appendLog(fmt.Sprintf("容器已启动，映射端口: %d", deploy.Port))
 			if deploy.RuntimeDir != "" {

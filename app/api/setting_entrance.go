@@ -28,9 +28,11 @@ func SettingEntranceUpdate(c fiber.Ctx) error {
 		}
 	}
 
-	updateConfYamlFile(map[string]interface{}{
+	if err := updateConfYamlFile(map[string]interface{}{
 		"system.entrance": req.Entrance,
-	})
+	}); err != nil {
+		return c.JSON(e.Fail(err))
+	}
 
 	// 返回当前配置
 	return c.JSON(e.Succ())

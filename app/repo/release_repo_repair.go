@@ -63,7 +63,7 @@ func (r *ReleaseRepo) mergeDuplicatePipelineRecordReleases(recordID uint) error 
 		return duplicateIDs[i] < duplicateIDs[j]
 	})
 	return r.db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(&model.Release{}).Where("id = ?", keeper.ID).Updates(map[string]interface{}{"version": merged.Version, "commit_hash": merged.CommitHash, "source_type": merged.SourceType, "image_tag": merged.ImageTag, "archive_file": merged.ArchiveFile, "release_dir": merged.ReleaseDir, "artifact_meta": merged.ArtifactMeta, "status": merged.Status, "remark": merged.Remark}).Error; err != nil {
+		if err := tx.Model(&model.Release{}).Where("id = ?", keeper.ID).Updates(map[string]interface{}{"version": merged.Version, "commit_hash": merged.CommitHash, "changelog": merged.Changelog, "source_type": merged.SourceType, "image_tag": merged.ImageTag, "archive_file": merged.ArchiveFile, "release_dir": merged.ReleaseDir, "artifact_meta": merged.ArtifactMeta, "status": merged.Status, "remark": merged.Remark}).Error; err != nil {
 			return err
 		}
 		if err := tx.Model(&model.AppDeploy{}).Where("release_id IN ?", duplicateIDs).Update("release_id", keeper.ID).Error; err != nil {
@@ -189,6 +189,9 @@ func mergeReleaseFields(dst, src *model.Release) {
 	}
 	if strings.TrimSpace(dst.CommitHash) == "" && strings.TrimSpace(src.CommitHash) != "" {
 		dst.CommitHash = src.CommitHash
+	}
+	if strings.TrimSpace(dst.Changelog) == "" && strings.TrimSpace(src.Changelog) != "" {
+		dst.Changelog = src.Changelog
 	}
 	if strings.TrimSpace(dst.SourceType) == "" && strings.TrimSpace(src.SourceType) != "" {
 		dst.SourceType = src.SourceType

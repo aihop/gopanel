@@ -44,7 +44,10 @@ type PipelineRecord struct {
 	Status       string    `gorm:"column:status;type:varchar(20);not null;default:'pending'" json:"status"` // pending, cloning, building, deploying, success, failed
 	Version      string    `gorm:"column:version;type:varchar(50)" json:"version"`                          // 记录本次执行的版本号
 	CommitHash   string    `gorm:"column:commit_hash;type:varchar(64)" json:"commitHash"`
-	ErrorMessage string    `gorm:"column:error_message;type:text" json:"errorMessage"`
+	// Changelog 本次构建包含的提交标题，一行一条，来自「上次成功构建的 commit..HEAD」。
+	// 只存纯文本，展示端不要按 HTML 渲染——内容来自仓库提交信息，属于外部输入。
+	Changelog    string `gorm:"column:changelog;type:text" json:"changelog"`
+	ErrorMessage string `gorm:"column:error_message;type:text" json:"errorMessage"`
 	ArchiveFile  string    `gorm:"column:archive_file;type:varchar(255)" json:"archiveFile"` // Path to the zip backup
 	ImageTag     string    `gorm:"column:image_tag;type:varchar(255)" json:"imageTag"`
 
@@ -72,6 +75,7 @@ type Release struct {
 	PipelineRecordID   uint      `gorm:"column:pipeline_record_id;type:integer;not null;uniqueIndex:uniq_release_pipeline_record" json:"pipelineRecordId"`
 	Version            string    `gorm:"column:version;type:varchar(50);not null;index" json:"version"`
 	CommitHash         string    `gorm:"column:commit_hash;type:varchar(64);index" json:"commitHash"`
+	Changelog          string    `gorm:"column:changelog;type:text" json:"changelog"` // 发布时从构建记录复制，一行一条提交标题
 	SourceType         string    `gorm:"column:source_type;type:varchar(32);not null;default:'archive';index" json:"sourceType"`
 	ImageTag           string    `gorm:"column:image_tag;type:varchar(255);index" json:"imageTag"`
 	ArchiveFile        string    `gorm:"column:archive_file;type:varchar(255)" json:"archiveFile"`

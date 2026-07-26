@@ -58,7 +58,7 @@ ensure_curl() {
       die "系统未安装 curl，且未检测到 Homebrew。请先安装 curl 后重试。"
     fi
   elif command -v apt-get >/dev/null 2>&1; then
-    run_privileged env DEBIAN_FRONTEND=noninteractive apt-get update -y
+    apt_update_soft
     run_privileged env DEBIAN_FRONTEND=noninteractive apt-get install -y curl ca-certificates
   elif command -v dnf >/dev/null 2>&1; then
     run_privileged dnf install -y curl ca-certificates
@@ -252,6 +252,34 @@ detect_server_ip() {
   echo "${ip_address}"
 }
 
+# 公网 IP 探测：hostname -I 在云主机（NAT）上拿到的是私网地址，
+# 面板访问地址必须给公网 IP，否则用户拿到 172.x/10.x 根本打不开。
+# 端点顺序与面板内 ResolvePublicIP 一致：先国内可达，最后附一个国际兜底。
+detect_public_ip() {
+  local endpoints="https://myip.ipip.net https://4.ipw.cn https://ip.3322.net https://api.ipify.org"
+  local url body ip
+  for url in ${endpoints}; do
+    body="$(curl -fsSL --max-time 3 "${url}" 2>/dev/null || true)"
+    [ -z "${body}" ] && continue
+    ip="$(printf '%s' "${body}" | grep -Eo '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n 1 || true)"
+    if [ -n "${ip}" ]; then
+      echo "${ip}"
+      return 0
+    fi
+  done
+  echo ""
+}
+
+# 判断是否私网/保留地址（含 CGNAT 100.64/10），用于决定要不要额外显示公网地址
+is_private_ip() {
+  case "${1:-}" in
+    10.*|127.*|192.168.*|169.254.*) return 0 ;;
+    172.1[6-9].*|172.2[0-9].*|172.3[0-1].*) return 0 ;;
+    100.6[4-9].*|100.[7-9][0-9].*|100.1[01][0-9].*|100.12[0-7].*) return 0 ;;
+  esac
+  return 1
+}
+
 detect_distro() {
   if [ "${os_name:-}" != "linux" ]; then
     echo ""
@@ -403,6 +431,26 @@ run_privileged() {
   else
     "$@"
   fi
+}
+
+# apt-get update 的软失败封装。
+# 长期运行的机器上经常有失效的第三方源/已归档的 backports（Debian 11 的
+# bullseye-backports 已移到 archive.debian.org，镜像站直接 404），
+# 只要有一个源报 E: 整条命令就返回非 0。脚本是 set -e，会被这种
+# 与本次安装无关的源拖死。这里降级为警告并把坏源打出来，继续尝试安装——
+# 本地缓存里通常已有可用索引，真正装不上时后面的 apt-get install 会照常报错退出。
+apt_update_soft() {
+  local tmp rc
+  tmp="$(mktemp -t gopanel_apt_update.XXXXXX)"
+  rc=0
+  run_privileged env DEBIAN_FRONTEND=noninteractive apt-get update -y 2>&1 | tee "${tmp}" || rc=$?
+  if [ "${rc}" -ne 0 ]; then
+    warn "apt-get update 未完全成功（退出码 ${rc}），以下软件源不可用："
+    grep -E '^(E:|Err:)' "${tmp}" | head -n 10 | sed 's/^/       /' || true
+    warn "若与本次安装无关可忽略，将继续尝试安装；如果随后安装失败，请先修复或移除上述软件源。"
+  fi
+  rm -f "${tmp}"
+  return 0
 }
 
 detect_local_package() {
@@ -1276,7 +1324,7 @@ install_podman() {
     if command -v gpg >/dev/null 2>&1; then
       return 0
     fi
-    run_privileged apt-get update
+    apt_update_soft
     run_privileged apt-get install -y gnupg ca-certificates
   }
 
@@ -1355,10 +1403,10 @@ install_podman() {
   if command -v apt-get >/dev/null 2>&1; then
     ensure_gnupg_for_apt
     if configure_podman_repo_apt_latest; then
-      run_privileged apt-get update
+      apt_update_soft
       run_privileged apt-get install -y podman
     else
-      run_privileged apt-get update
+      apt_update_soft
       run_privileged apt-get install -y podman
     fi
   elif command -v dnf >/dev/null 2>&1; then
@@ -1503,7 +1551,7 @@ ensure_podman_compose() {
   log "检测到 podman compose 不可用，尝试安装 podman-compose"
 
   if command -v apt-get >/dev/null 2>&1; then
-    run_privileged apt-get update
+    apt_update_soft
     run_privileged apt-get install -y podman-compose
     return 0
   fi
@@ -1567,8 +1615,15 @@ check_container_runtime() {
 }
 
 show_result() {
-  local ip_address
+  local ip_address public_ip
   ip_address="$(detect_server_ip)"
+  public_ip=""
+  if is_private_ip "${ip_address}"; then
+    public_ip="$(detect_public_ip)"
+    if [ "${public_ip}" = "${ip_address}" ]; then
+      public_ip=""
+    fi
+  fi
 
   echo
   echo "GoPanel 安装完成"
@@ -1583,7 +1638,13 @@ show_result() {
   fi
   echo "用户名: ${CONFIG_USER}"
   echo "密码: ${CONFIG_PASSWORD}"
-  echo "访问地址: http://${ip_address}:${CONFIG_PORT}/${CONFIG_SAFE_ENTER}"
+  if [ -n "${public_ip}" ]; then
+    echo "访问地址(公网): http://${public_ip}:${CONFIG_PORT}/${CONFIG_SAFE_ENTER}"
+    echo "访问地址(内网): http://${ip_address}:${CONFIG_PORT}/${CONFIG_SAFE_ENTER}"
+    echo "提示: 公网访问需在云厂商安全组/防火墙放行 ${CONFIG_PORT} 端口"
+  else
+    echo "访问地址: http://${ip_address}:${CONFIG_PORT}/${CONFIG_SAFE_ENTER}"
+  fi
   echo
 }
 

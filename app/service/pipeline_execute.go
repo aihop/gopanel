@@ -52,7 +52,12 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 			return
 		}
 		s.recordRepo.UpdateStatus(recordID, "cloning", "")
-		commitHash, err := s.stepClone(ctx, logger, p, workspaceDir)
+		// 上次成功构建的 commit 作为更新说明的起点；取不到就退化成最近若干条
+		sinceCommit := ""
+		if last, err := s.recordRepo.LatestSuccessCommitHash(p.ID, recordID); err == nil {
+			sinceCommit = last
+		}
+		commitHash, changelog, err := s.stepClone(ctx, logger, p, workspaceDir, sinceCommit)
 		if err != nil {
 			if ctx.Err() != nil {
 				s.recordRepo.UpdateStatus(recordID, "failed", "用户手动终止")
@@ -65,6 +70,10 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 		if strings.TrimSpace(commitHash) != "" {
 			_ = s.recordRepo.UpdateCommitHash(recordID, commitHash)
 			record.CommitHash = commitHash
+		}
+		if strings.TrimSpace(changelog) != "" {
+			_ = s.recordRepo.UpdateChangelog(recordID, changelog)
+			record.Changelog = changelog
 		}
 	} else {
 		logger.Info("未配置 RepoUrl，采用纯脚本模式，跳过自动拉取...")
