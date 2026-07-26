@@ -33,7 +33,9 @@ func JWT(role string) func(fiber.Ctx) error {
 
 		// 允许 SSE 或 WebSocket 请求在建立连接时通过 Query token 兼容鉴权。
 		// EventSource 无法自定义请求头，像 /runtime-logs 这类路径也需要走同一套 JWT 校验。
-		if (strings.HasSuffix(c.Path(), "/logs") || strings.HasSuffix(c.Path(), "/terminal")) && c.Query("token") != "" {
+		// 后缀必须显式列全：新增 SSE 接口时忘了加，表现是连接被静默 401，
+		// 前端只会看到 onerror，很难往鉴权上想（/host/disk/scan/stream 就踩过）。
+		if isQueryTokenAllowedPath(c.Path()) && c.Query("token") != "" {
 			c.Request().Header.Set("x-auth", c.Query("token"))
 		}
 
@@ -117,6 +119,20 @@ func JWT(role string) func(fiber.Ctx) error {
 		}
 		return c.Next()
 	}
+}
+
+// queryTokenAllowedSuffixes 允许用 ?token= 代替请求头做鉴权的路径后缀。
+// 仅限 EventSource / WebSocket 这类无法自定义请求头的场景——
+// URL 里的 token 会进访问日志和 Referer，不能对所有接口开放。
+var queryTokenAllowedSuffixes = []string{"/logs", "/terminal", "/stream"}
+
+func isQueryTokenAllowedPath(path string) bool {
+	for _, suffix := range queryTokenAllowedSuffixes {
+		if strings.HasSuffix(path, suffix) {
+			return true
+		}
+	}
+	return false
 }
 
 func JwtCheck(xAuth, role string) (info *token.CustomClaims, err error) {

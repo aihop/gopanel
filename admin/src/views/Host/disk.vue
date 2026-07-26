@@ -41,6 +41,9 @@ const topN = ref(200)
 const crossDevice = ref(false)
 
 let eventSource: EventSource | null = null
+// SSE 之外再挂一个轮询兜底。SSE 曾因鉴权中间件不放行 /stream 后缀而静默 401，
+// 界面就永远停在"正在扫描"——只靠 SSE 的话，任何一种连接失败都会变成假死。
+let pollTimer: number | null = null
 
 const categoryMeta: Record<string, { label: string; type: "default" | "info" | "success" | "warning" | "error"; advice: string }> = {
 	log: { label: "日志", type: "warning", advice: "建议用「清空」而不是删除：日志正被进程写入时，删除不会释放空间" },
@@ -67,6 +70,23 @@ const stopStream = () => {
 		eventSource.close()
 		eventSource = null
 	}
+	if (pollTimer !== null) {
+		window.clearInterval(pollTimer)
+		pollTimer = null
+	}
+}
+
+// 轮询兜底：只要任务还在跑就每 2 秒拉一次，SSE 正常时这条路只是多一次请求，
+// SSE 挂了时它就是唯一的进度来源
+const startPolling = (taskId: string) => {
+	if (pollTimer !== null) return
+	pollTimer = window.setInterval(() => {
+		if (!scanning.value) {
+			stopStream()
+			return
+		}
+		void refreshTask(taskId)
+	}, 2000)
 }
 
 const openStream = (taskId: string) => {
@@ -100,9 +120,17 @@ const openStream = (taskId: string) => {
 		}
 	})
 	eventSource.onerror = () => {
-		stopStream()
-		if (task.value?.id) void refreshTask(task.value.id)
+		// SSE 断了不代表扫描停了，交给轮询接管，别把界面卡在"扫描中"
+		if (eventSource) {
+			eventSource.close()
+			eventSource = null
+		}
+		if (task.value?.id) {
+			void refreshTask(task.value.id)
+			startPolling(task.value.id)
+		}
 	}
+	startPolling(taskId)
 }
 
 const refreshTask = async (taskId: string) => {
@@ -110,8 +138,17 @@ const refreshTask = async (taskId: string) => {
 		const res = await getDiskScanResult(taskId)
 		task.value = res.data
 		scanning.value = res.data.status === "running"
+		if (!scanning.value) {
+			stopStream()
+			if (res.data.status === "failed") {
+				message.error(res.data.error || "扫描失败")
+			} else if (res.data.status === "canceled") {
+				message.warning("扫描已取消")
+			}
+		}
 	} catch (_error) {
 		scanning.value = false
+		stopStream()
 	}
 }
 
