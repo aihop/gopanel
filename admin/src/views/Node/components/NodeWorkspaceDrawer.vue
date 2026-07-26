@@ -12,7 +12,9 @@ import {
 } from "@/layouts/common/NodeRail/nodeDisplay"
 import { computed, ref, watch } from "vue"
 import RemoteContainerPanel from "./RemoteContainerPanel.vue"
+import RemoteLogPanel from "./RemoteLogPanel.vue"
 import RemoteTerminalPanel from "./RemoteTerminalPanel.vue"
+import RemoteWebsitePanel from "./RemoteWebsitePanel.vue"
 
 const props = defineProps<{
 	show: boolean
@@ -142,12 +144,20 @@ function clamp(percent?: number): number {
 						/>
 					</n-tab-pane>
 
+					<n-tab-pane name="log" :tab="t('node.workspace.tabLog')" display-directive="if">
+						<RemoteLogPanel :node-id="node.id" :node-name="node.name" />
+					</n-tab-pane>
+
 					<n-tab-pane name="terminal" :tab="t('node.workspace.tabTerminal')" display-directive="if">
 						<RemoteTerminalPanel
 							:node-id="node.id"
 							:node-name="node.name"
 							:can-control="canControl"
 						/>
+					</n-tab-pane>
+
+					<n-tab-pane name="website" :tab="t('node.workspace.tabWebsite')" display-directive="if">
+						<RemoteWebsitePanel :node-id="node.id" />
 					</n-tab-pane>
 				</n-tabs>
 			</template>
