@@ -9,7 +9,7 @@ import {
 } from "@/api/modules/node"
 import { t } from "@/i18n"
 import { useDialog, useMessage } from "naive-ui"
-import { onMounted, ref } from "vue"
+import { computed, onMounted, ref } from "vue"
 
 const message = useMessage()
 const dialog = useDialog()
@@ -164,6 +164,40 @@ async function copyControlToken() {
 	}
 }
 
+/**
+ * 两块接入能力结构完全一样（标题/说明/状态/令牌/操作），用一个数组驱动同一套模板，
+ * 避免两边样式各写一遍以后慢慢长歪。
+ * tone 区分语义：只读是安全的，控制等价于本机管理员，开启后要更醒目。
+ */
+const tiles = computed(() => [
+	{
+		key: "readonly",
+		tone: "safe" as const,
+		title: t("node.local.title"),
+		desc: t("node.local.desc"),
+		enabled: enabled.value,
+		loading: loading.value,
+		token: issuedToken.value,
+		issueLabel: enabled.value ? t("node.local.reissue") : t("node.local.issue"),
+		issue: confirmIssue,
+		revoke: confirmRevoke,
+		copy: copyToken
+	},
+	{
+		key: "control",
+		tone: "warn" as const,
+		title: t("node.local.controlTitle"),
+		desc: t("node.local.controlDesc"),
+		enabled: controlEnabled.value,
+		loading: controlLoading.value,
+		token: issuedControlToken.value,
+		issueLabel: controlEnabled.value ? t("node.local.reissue") : t("node.local.controlIssue"),
+		issue: confirmIssueControl,
+		revoke: confirmRevokeControl,
+		copy: copyControlToken
+	}
+])
+
 onMounted(() => {
 	fetchStatus()
 	fetchControlStatus()
@@ -171,61 +205,147 @@ onMounted(() => {
 </script>
 
 <template>
-	<n-card size="small" :title="t('node.local.title')">
-		<div class="flex flex-col gap-3">
-			<div class="flex items-center gap-2 text-sm">
-				<n-tag size="small" :type="enabled ? 'success' : 'default'" :bordered="false">
-					{{ enabled ? t("node.local.enabled") : t("node.local.disabled") }}
-				</n-tag>
-				<span class="opacity-70">{{ t("node.local.desc") }}</span>
-			</div>
+	<!--
+		只读接入 / 控制接入是并列的两种能力，做成一行两块。
+		每块内部压成两行：标题+状态一行，说明+按钮一行——说明和按钮各占一行时
+		单块要 130px，并排后 80px 出头，两块加起来省下近一半竖向空间。
+		窄屏（< md）自动堆成一列；说明文字用 min-w-0 + 省略号收缩，
+		按钮永远不会被挤出去，也不会撑出横向滚动条。
+	-->
+	<div class="local-access grid gap-4 grid-cols-2">
+		<section v-for="tile of tiles" :key="tile.key" class="access-tile bg-base-accent border-base-accent">
+			<header class="tile-head">
+				<h3 class="tile-title">{{ tile.title }}</h3>
+				<span class="tile-state" :class="tile.enabled ? `is-on is-${tile.tone}` : 'is-off'">
+					<i class="state-dot" />
+					{{ tile.enabled ? t("node.local.enabled") : t("node.local.disabled") }}
+				</span>
+			</header>
 
-			<div v-if="issuedToken" class="flex flex-col gap-1">
-				<n-alert type="warning" :show-icon="false">
-					{{ t("node.local.saveTokenNow") }}
-				</n-alert>
-				<div class="flex gap-2">
-					<n-input :value="issuedToken" readonly />
-					<n-button @click="copyToken">{{ t("commons.button.copy") }}</n-button>
+			<!-- 明文令牌只在签发后的这次会话里出现，位置固定在操作区上方 -->
+			<div v-if="tile.token" class="token-box">
+				<div class="token-hint">{{ t("node.local.saveTokenNow") }}</div>
+				<div class="flex flex-wrap items-center gap-2">
+					<n-input :value="tile.token" readonly size="small" class="token-input min-w-0 grow" />
+					<n-button size="small" secondary @click="tile.copy()">
+						{{ t("commons.button.copy") }}
+					</n-button>
 				</div>
 			</div>
 
-			<div class="flex gap-2">
-				<n-button size="small" :loading="loading" @click="confirmIssue">
-					{{ enabled ? t("node.local.reissue") : t("node.local.issue") }}
-				</n-button>
-				<n-button v-if="enabled" size="small" :loading="loading" @click="confirmRevoke">
-					{{ t("node.local.revoke") }}
-				</n-button>
-			</div>
-
-			<n-divider class="!my-1" />
-
-			<!-- 控制接入与只读接入分开：只读只能取摘要，控制等价于本机管理员 -->
-			<div class="flex items-center gap-2 text-sm">
-				<n-tag size="small" :type="controlEnabled ? 'warning' : 'default'" :bordered="false">
-					{{ controlEnabled ? t("node.local.enabled") : t("node.local.disabled") }}
-				</n-tag>
-				<span class="font-medium">{{ t("node.local.controlTitle") }}</span>
-				<span class="opacity-70">{{ t("node.local.controlDesc") }}</span>
-			</div>
-
-			<div v-if="issuedControlToken" class="flex flex-col gap-1">
-				<n-alert type="warning" :show-icon="false">{{ t("node.local.saveTokenNow") }}</n-alert>
-				<div class="flex gap-2">
-					<n-input :value="issuedControlToken" readonly />
-					<n-button @click="copyControlToken">{{ t("commons.button.copy") }}</n-button>
+			<!-- 说明和按钮并排：这两样各占一行是最浪费竖向空间的地方 -->
+			<footer class="tile-foot">
+				<p class="tile-desc" :title="tile.desc">{{ tile.desc }}</p>
+				<div class="tile-actions">
+					<n-button size="small" secondary :loading="tile.loading" @click="tile.issue()">
+						{{ tile.issueLabel }}
+					</n-button>
+					<n-button v-if="tile.enabled" size="small" quaternary :loading="tile.loading" @click="tile.revoke()">
+						{{ t("node.local.revoke") }}
+					</n-button>
 				</div>
-			</div>
-
-			<div class="flex gap-2">
-				<n-button size="small" :loading="controlLoading" @click="confirmIssueControl">
-					{{ controlEnabled ? t("node.local.reissue") : t("node.local.controlIssue") }}
-				</n-button>
-				<n-button v-if="controlEnabled" size="small" :loading="controlLoading" @click="confirmRevokeControl">
-					{{ t("node.local.revoke") }}
-				</n-button>
-			</div>
-		</div>
-	</n-card>
+			</footer>
+		</section>
+	</div>
 </template>
+
+<style lang="scss" scoped>
+.access-tile {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	min-width: 0;
+	padding: 14px 18px;
+	border-radius: 16px;
+	transition: border-color 0.2s var(--bezier-ease);
+}
+
+.tile-head {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
+.tile-foot {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+}
+
+.tile-title {
+	margin: 0;
+	color: var(--fg-default-color);
+	font-size: 15px;
+	font-weight: 500;
+	line-height: 22px;
+}
+
+// 说明是辅助信息，让它收缩让位给按钮；完整文案挂在 title 属性上
+.tile-desc {
+	flex: 1 1 220px;
+	min-width: 0;
+	overflow: hidden;
+	margin: 0;
+	color: var(--fg-secondary-color);
+	font-size: 12px;
+	line-height: 18px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+// 扁平状态：不用填充色标签，一个小圆点 + 文字，安静但看得见
+.tile-state {
+	display: inline-flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 6px;
+	font-size: 12px;
+	line-height: 18px;
+	white-space: nowrap;
+
+	.state-dot {
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+		background-color: currentcolor;
+	}
+
+	&.is-off {
+		color: var(--fg-secondary-color);
+		opacity: 0.65;
+	}
+
+	&.is-on.is-safe {
+		color: var(--success-color);
+	}
+
+	// 控制接入等价于本机管理员，开启后用警告色提示，别做成和只读一样安静
+	&.is-on.is-warn {
+		color: var(--warning-color);
+	}
+}
+
+.token-box {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 12px 14px;
+	border-radius: 14px;
+	background-color: rgba(var(--warning-color-rgb) / 0.1);
+}
+
+.token-hint {
+	color: var(--warning-color);
+	font-size: 12px;
+	line-height: 18px;
+}
+
+.tile-actions {
+	display: flex;
+	flex-shrink: 0;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+</style>
