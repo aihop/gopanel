@@ -5,6 +5,9 @@ gopanel
 /dist
 .air.toml
 
+# macOS
+.DS_Store
+
 # OSS Credentials
 .oss_env
 conf.yaml
