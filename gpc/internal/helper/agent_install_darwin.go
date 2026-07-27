@@ -116,7 +116,9 @@ func (s *Server) actionGoPanelAgentInstall(ctx context.Context, params map[strin
 	if err := os.MkdirAll(baseDir, 0o755); err != nil {
 		return "", err
 	}
-	if err := copyFile(srcBin, dstBin, 0o755); err != nil {
+	// 用 replaceBinary 而不是 copyFile：目标是正在运行的 gp-agent，
+	// 直接覆盖写会 ETXTBSY（text file busy），这是 gp-agent 自更新失败的根因
+	if err := replaceBinary(srcBin, dstBin, 0o755); err != nil {
 		return "", err
 	}
 
