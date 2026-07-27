@@ -51,6 +51,7 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from "vue"
 import { NButton, NTag, NDrawer, NDrawerContent, NInput, useMessage } from "naive-ui"
 import { DaemonProcessLog, DaemonProcessLogClearAPI } from "@/api/modules/daemon"
 import FtEditor from "@/components/FtEditor/index.vue"
