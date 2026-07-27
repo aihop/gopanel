@@ -444,6 +444,10 @@ export default {
 			warnings: "告警",
 			version: "版本"
 		},
+		entry: {
+			count: "{count} 台",
+			enter: "进入多节点管理"
+		},
 		rail: {
 			expand: "展开节点面板",
 			hide: "隐藏节点条",

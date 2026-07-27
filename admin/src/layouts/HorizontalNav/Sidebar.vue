@@ -16,6 +16,8 @@
 					<Navbar :collapsed="sidebarClosed" />
 				</div>
 			</n-scrollbar>
+			<!-- 放在 n-scrollbar 外面：多节点入口要固定在底部，不跟着菜单滚动 -->
+			<NodeEntry :collapsed="sidebarClosed" />
 			<div class="p-2">
 				<SidebarFooter :collapsed="sidebarClosed" />
 			</div>
@@ -25,6 +27,7 @@
 
 <script lang="ts" setup>
 import Navbar from "@/layouts/common/Navbar"
+import NodeEntry from "@/layouts/common/NodeEntry/index.vue"
 import { useThemeStore } from "@/store/theme"
 import { isMobile } from "@/utils"
 import { onClickOutside, useElementHover } from "@vueuse/core"

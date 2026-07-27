@@ -452,6 +452,10 @@ export default {
 			warnings: "Alerts",
 			version: "Version"
 		},
+		entry: {
+			count: "{count} nodes",
+			enter: "Open node management"
+		},
 		rail: {
 			expand: "Open node panel",
 			hide: "Hide node bar",

@@ -12,11 +12,14 @@
 			<div :class="{ 'px-7': !sidebarClosed, 'px-2': sidebarClosed }" class="transition-all">
 				<SidebarHeader :logo-mini="sidebarClosed" />
 			</div>
-			<n-scrollbar>
+			<!-- grow + min-h-0：让菜单区吃掉剩余高度并可滚动，多节点入口才会真的贴在底部 -->
+			<n-scrollbar class="min-h-0 grow">
 				<div :class="{ 'px-2': !sidebarClosed }" class="transition-all">
 					<Navbar :collapsed="sidebarClosed" />
 				</div>
 			</n-scrollbar>
+			<!-- 放在 n-scrollbar 外面：多节点入口要固定在底部，不跟着菜单滚动 -->
+			<NodeEntry :collapsed="sidebarClosed" />
 			<!-- <div class="p-2">
 				<SidebarFooter :collapsed="sidebarClosed" />
 			</div> -->
@@ -26,6 +29,7 @@
 
 <script lang="ts" setup>
 import Navbar from "@/layouts/common/Navbar"
+import NodeEntry from "@/layouts/common/NodeEntry/index.vue"
 import { useThemeStore } from "@/store/theme"
 import { isMobile } from "@/utils"
 import { onClickOutside, useElementHover } from "@vueuse/core"
