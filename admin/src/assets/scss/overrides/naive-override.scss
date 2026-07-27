@@ -7,6 +7,48 @@
 	max-width: 90%;
 	margin: 10vh auto;
 }
+
+// 弹窗高度兜底。
+//
+// preset="card" 的弹窗默认跟着内容长高，屏幕一矮（或表单一长），
+// #action 里的「保存/确认」就被推到视口外，而且弹窗本身不滚，等于按钮点不到。
+// 上面那条 margin: 10vh auto 又先吃掉 20vh，更容易触发。
+//
+// 这里统一：卡片自己限高 → 内容区滚动 → 头部和操作区固定。
+// 放在全局而不是逐个弹窗改，是因为全站 44 个用了 preset="card" 的文件里
+// 有 37 个都没做限高，一个个改既漏又难保持一致。
+.n-card.n-modal[role] {
+	display: flex;
+	flex-direction: column;
+	max-height: 80vh;
+	max-height: calc(100dvh - 20vh); // dvh 让移动端浏览器地址栏收起时也算得准
+
+	> .n-card-header,
+	> .n-card__action,
+	> .n-card__footer {
+		flex: 0 0 auto;
+	}
+
+	> .n-card__content {
+		flex: 1 1 auto;
+		min-height: 0;
+		overflow-y: auto;
+		overscroll-behavior: contain; // 内容滚到底不要把页面一起带滚
+	}
+}
+
+// 视口本来就矮时，10vh 的上下留白太奢侈，收紧让给内容
+@media (max-height: 720px) {
+	.n-modal,
+	.n-card.n-modal[role] {
+		margin: 24px auto;
+	}
+
+	.n-card.n-modal[role] {
+		max-height: calc(100vh - 48px);
+		max-height: calc(100dvh - 48px);
+	}
+}
 .n-card {
 	.n-card-header {
 		flex-wrap: wrap;
