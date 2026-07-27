@@ -34,6 +34,33 @@
 		min-height: 0;
 		overflow-y: auto;
 		overscroll-behavior: contain; // 内容滚到底不要把页面一起带滚
+
+		// 细滚动条：系统原生那条又粗又黑，压在弹窗圆角边上很难看。
+		// 轨道透明、滑块用前景色的低透明度，深浅主题都能自适应；悬停时才加深。
+		scrollbar-width: thin;
+		scrollbar-color: rgba(var(--fg-secondary-color-rgb) / 0.25) transparent;
+
+		&::-webkit-scrollbar {
+			width: 6px;
+			height: 6px;
+		}
+
+		&::-webkit-scrollbar-track {
+			background: transparent;
+		}
+
+		&::-webkit-scrollbar-thumb {
+			border-radius: 999px;
+			background-color: rgba(var(--fg-secondary-color-rgb) / 0.22);
+		}
+
+		&:hover::-webkit-scrollbar-thumb {
+			background-color: rgba(var(--fg-secondary-color-rgb) / 0.38);
+		}
+
+		&::-webkit-scrollbar-corner {
+			background: transparent;
+		}
 	}
 }
 
