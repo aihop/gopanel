@@ -30,6 +30,14 @@ Built for developers, deeply integrated with Podman Rootless to build a solid pr
 - Automatic website and reverse proxy management — common scenarios work out of the box
 - Pipeline (CI/CD) + visual database management — daily maintenance made easy
 
+---
+
+**核心安全 — Podman Rootless**
+
+GoPanel 最核心的安全设计是全面采用 **Podman Rootless** 架构。所有服务与容器默认以非 Root 用户身份运行，每个容器隔离在独立的用户命名空间中，从根本上消除提权攻击路径。这是 GoPanel 区别于传统服务器面板最重要的安全特性。
+
+---
+
 GoPanel is a modern, lightweight server management panel built for developers and small teams. It is also a security-first, Podman-rootless application runtime and website deployment platform. Instead of stuffing every possible feature into one bloated backend, GoPanel focuses on the operational actions you actually do every day and turns them into a cleaner, faster, and easier-to-understand workflow.
 
 GoPanel helps you unify:
