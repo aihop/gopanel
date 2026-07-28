@@ -90,7 +90,7 @@ func (r *aiDevSessionRepo) GetLatestInstructionBySessionID(sessionID uint) (*mod
 func (r *aiDevSessionRepo) GetPendingInstructionsBySessionID(sessionID uint) ([]*model.AIInstruction, error) {
 	var instructions []*model.AIInstruction
 	err := global.DB.
-		Where("session_id = ? AND status IN ?", sessionID, []string{"queued", "running"}).
+		Where("session_id = ? AND status = ?", sessionID, "queued").
 		Order("created_at asc").
 		Find(&instructions).Error
 	return instructions, err

@@ -19,35 +19,9 @@ import (
 	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/utils/common"
 	"github.com/aihop/gopanel/utils/files"
-	"github.com/aihop/gopanel/utils/token"
-	"github.com/gofiber/fiber/v3"
 )
 
-type FileService struct{ c fiber.Ctx }
-
-func checkFilePermission(ctx fiber.Ctx, reqPaths ...string) error {
-	if ctx == nil {
-		return nil
-	}
-	claims, ok := ctx.Locals(constant.AppAuthName).(*token.CustomClaims)
-	if !ok || claims == nil {
-		return errors.New("unauthorized")
-	}
-	if claims.Role == constant.UserRoleSubAdmin {
-		baseDir := filepath.Clean(claims.FileBaseDir)
-		if baseDir == "" || baseDir == "/" || baseDir == "." {
-			return errors.New("sub_admin account is not configured with a valid base directory")
-		}
-		for _, p := range reqPaths {
-			cleanPath := filepath.Clean(p)
-			if !strings.HasPrefix(cleanPath, baseDir) {
-				global.LOG.Errorf("Permission Denied: SubAdmin %d tried to access %s (allowed: %s)", claims.UserId, cleanPath, baseDir)
-				return errors.New("permission denied: you can only access your designated workspace")
-			}
-		}
-	}
-	return nil
-}
+type FileService struct{}
 
 type IFileService interface {
 	GetFileList(op request.FileOption) (response.FileInfo, error)

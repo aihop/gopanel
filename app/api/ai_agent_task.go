@@ -1,6 +1,8 @@
 package api
 
 import (
+	"errors"
+
 	"github.com/aihop/gopanel/app/e"
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
@@ -20,7 +22,7 @@ func GetAITasks(c fiber.Ctx) error {
 	var total int64
 	var err error
 	if projectID > 0 {
-		tasks, total, err = aiRepo.GetTasksByProjectID(uint(projectID), page, limit)
+		tasks, total, err = aiRepo.GetTasksByProjectAndUserID(uint(projectID), claims.UserId, page, limit)
 	} else {
 		tasks, total, err = aiRepo.GetTasksByUserID(claims.UserId, page, limit)
 	}
@@ -38,7 +40,7 @@ func GetAITaskMessages(c fiber.Ctx) error {
 		return c.JSON(e.Fail(err))
 	}
 	if task.UserID != claims.UserId && claims.Role != constant.UserRoleSuper {
-		return c.JSON(e.Fail(err))
+		return c.JSON(e.Fail(errors.New("无权访问该 AI 任务")))
 	}
 	messages, err := aiRepo.GetMessagesByTaskID(uint(taskID))
 	if err != nil {
@@ -61,7 +63,7 @@ func UpdateAITask(c fiber.Ctx) error {
 		return c.JSON(e.Fail(err))
 	}
 	if task.UserID != claims.UserId && claims.Role != constant.UserRoleSuper {
-		return c.JSON(e.Fail(err))
+		return c.JSON(e.Fail(errors.New("无权修改该 AI 任务")))
 	}
 	task.Title = req.Title
 	if err := aiRepo.UpdateTask(task); err != nil {
@@ -78,7 +80,7 @@ func DeleteAITask(c fiber.Ctx) error {
 		return c.JSON(e.Fail(err))
 	}
 	if task.UserID != claims.UserId && claims.Role != constant.UserRoleSuper {
-		return c.JSON(e.Fail(err))
+		return c.JSON(e.Fail(errors.New("无权删除该 AI 任务")))
 	}
 	if err := aiRepo.DeleteTask(uint(taskID)); err != nil {
 		return c.JSON(e.Fail(err))

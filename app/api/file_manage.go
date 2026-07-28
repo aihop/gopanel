@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -14,9 +13,7 @@ import (
 	"github.com/aihop/gopanel/app/service"
 	"github.com/aihop/gopanel/buserr"
 	"github.com/aihop/gopanel/constant"
-	"github.com/aihop/gopanel/utils/common"
 	"github.com/aihop/gopanel/utils/files"
-	"github.com/aihop/gopanel/utils/token"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -25,14 +22,14 @@ func ListFiles(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Result(err))
 	}
-	if claims, ok := c.Locals(constant.AppAuthName).(*token.CustomClaims); ok && (claims.Role == constant.UserRoleSubAdmin || claims.Role == constant.UserRoleDemo) {
-		baseDir := filepath.Clean(claims.FileBaseDir)
+	if baseDir, scoped := fileBaseDir(c); scoped {
+		if baseDir == "" {
+			return c.JSON(e.Fail(errors.New("sub_admin account is not configured with a valid base directory")))
+		}
 		if req.Path == "" || req.Path == "/" || strings.HasSuffix(req.Path, "pipelines") {
 			req.Path = baseDir
-		} else {
-			if !strings.HasPrefix(filepath.Clean(req.Path), baseDir) {
-				req.Path = baseDir
-			}
+		} else if err := requireFileAccess(c, req.Path); err != nil {
+			return c.JSON(e.Fail(err))
 		}
 	}
 	fileList, err := fileService.GetFileList(*req)
@@ -46,11 +43,12 @@ func CreateFile(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	if claims, ok := c.Locals(constant.AppAuthName).(*token.CustomClaims); ok && claims.Role == constant.UserRoleSubAdmin {
-		baseDir := filepath.Clean(claims.FileBaseDir)
-		if !strings.HasPrefix(filepath.Clean(req.Path), baseDir) {
-			return c.JSON(e.Fail(errors.New("permission denied: you can only access your designated workspace")))
-		}
+	paths := []string{req.Path}
+	if req.IsLink {
+		paths = append(paths, req.LinkPath)
+	}
+	if err := requireFileAccess(c, paths...); err != nil {
+		return c.JSON(e.Fail(err))
 	}
 	err = fileService.Create(*req)
 	if err != nil {
@@ -63,11 +61,8 @@ func DeleteFile(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	if claims, ok := c.Locals(constant.AppAuthName).(*token.CustomClaims); ok && claims.Role == constant.UserRoleSubAdmin {
-		baseDir := filepath.Clean(claims.FileBaseDir)
-		if !strings.HasPrefix(filepath.Clean(req.Path), baseDir) {
-			return c.JSON(e.Fail(errors.New("permission denied: you can only access your designated workspace")))
-		}
+	if err := requireFileAccess(c, req.Path); err != nil {
+		return c.JSON(e.Fail(err))
 	}
 	err = fileService.Delete(*req)
 	if err != nil {
@@ -80,13 +75,8 @@ func BatchDeleteFile(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	if claims, ok := c.Locals(constant.AppAuthName).(*token.CustomClaims); ok && claims.Role == constant.UserRoleSubAdmin {
-		baseDir := filepath.Clean(claims.FileBaseDir)
-		for _, p := range req.Paths {
-			if !strings.HasPrefix(filepath.Clean(p), baseDir) {
-				return c.JSON(e.Fail(errors.New("permission denied: you can only access your designated workspace")))
-			}
-		}
+	if err := requireFileAccess(c, req.Paths...); err != nil {
+		return c.JSON(e.Fail(err))
 	}
 	err = fileService.BatchDelete(*req)
 	if err != nil {
@@ -99,6 +89,9 @@ func ChangeFileMode(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
+	if err := requireFileAccess(c, req.Path); err != nil {
+		return c.JSON(e.Fail(err))
+	}
 	err = fileService.ChangeMode(*req)
 	if err != nil {
 		return c.JSON(e.Fail(err))
@@ -108,6 +101,9 @@ func ChangeFileMode(c fiber.Ctx) error {
 func ChangeFileOwner(c fiber.Ctx) error {
 	req, err := e.BodyToStruct[request.FileRoleUpdate](c.Body())
 	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	if err := requireFileAccess(c, req.Path); err != nil {
 		return c.JSON(e.Fail(err))
 	}
 	if err := fileService.ChangeOwner(*req); err != nil {
@@ -122,19 +118,15 @@ func CompressFile(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	if claims, ok := c.Locals(constant.AppAuthName).(*token.CustomClaims); ok && claims.Role == constant.UserRoleSubAdmin {
-		baseDir := filepath.Clean(claims.FileBaseDir)
-		if !strings.HasPrefix(filepath.Clean(req.Dst), baseDir) {
-			return c.JSON(e.Fail(errors.New("permission denied: you can only access your designated workspace")))
-		}
-		for _, f := range req.Files {
-			if !strings.HasPrefix(filepath.Clean(f), baseDir) {
-				return c.JSON(e.Fail(errors.New("permission denied: you can only access your designated workspace")))
-			}
-		}
+	paths := append([]string{req.Dst}, req.Files...)
+	if err := requireFileAccess(c, paths...); err != nil {
+		return c.JSON(e.Fail(err))
 	}
 
-	key := "compress_" + common.RandStrAndNum(20)
+	key, err := newFileTaskKey(c, "compress_")
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
 	logger := service.GetFileCompressLogger(key)
 	logger.Appendf("已提交压缩任务：类型=%s，目标=%s/%s，文件数=%d", req.Type, req.Dst, req.Name, len(req.Files))
 
@@ -154,6 +146,9 @@ func FileCompressLogs(c fiber.Ctx) error {
 	key := strings.TrimSpace(c.Query("key"))
 	if key == "" {
 		return c.JSON(e.Fail(errors.New("key is required")))
+	}
+	if err := requireFileTaskAccess(c, key, "compress_"); err != nil {
+		return c.JSON(e.Fail(err))
 	}
 
 	c.Set("Content-Type", "text/event-stream")
@@ -230,6 +225,9 @@ func DeCompressFile(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
+	if err := requireFileAccess(c, req.Path, req.Dst); err != nil {
+		return c.JSON(e.Fail(err))
+	}
 	err = fileService.DeCompress(*req)
 	if err != nil {
 		return c.JSON(e.Fail(err))
@@ -239,6 +237,9 @@ func DeCompressFile(c fiber.Ctx) error {
 func DirExist(c fiber.Ctx) error {
 	req, err := e.BodyToStruct[request.DirExistReq](c.Body())
 	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	if err := requireFileAccess(c, req.Dir); err != nil {
 		return c.JSON(e.Fail(err))
 	}
 	if _, err := os.Stat(req.Dir); os.IsNotExist(err) {
@@ -251,6 +252,9 @@ func DirExist(c fiber.Ctx) error {
 func CheckFile(c fiber.Ctx) error {
 	req, err := e.BodyToStruct[request.FilePathCheck](c.Body())
 	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	if err := requireFileAccess(c, req.Path); err != nil {
 		return c.JSON(e.Fail(err))
 	}
 	fileOp := files.NewFileOp()
@@ -270,6 +274,9 @@ func BatchCheckFiles(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
+	if err := requireFileAccess(c, req.Paths...); err != nil {
+		return c.JSON(e.Fail(err))
+	}
 	fileList := fileService.BatchCheckFiles(*req)
 	return c.JSON(e.Succ(fileList))
 }
@@ -278,11 +285,8 @@ func ChangeFileName(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	if claims, ok := c.Locals(constant.AppAuthName).(*token.CustomClaims); ok && claims.Role == constant.UserRoleSubAdmin {
-		baseDir := filepath.Clean(claims.FileBaseDir)
-		if !strings.HasPrefix(filepath.Clean(req.OldName), baseDir) || !strings.HasPrefix(filepath.Clean(req.NewName), baseDir) {
-			return c.JSON(e.Fail(errors.New("permission denied: you can only access your designated workspace")))
-		}
+	if err := requireFileAccess(c, req.OldName, req.NewName); err != nil {
+		return c.JSON(e.Fail(err))
 	}
 	if err := fileService.ChangeName(*req); err != nil {
 		return c.JSON(e.Fail(err))
@@ -292,6 +296,10 @@ func ChangeFileName(c fiber.Ctx) error {
 func MoveFile(c fiber.Ctx) error {
 	req, err := e.BodyToStruct[request.FileMove](c.Body())
 	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	paths := append([]string{req.NewPath}, req.OldPaths...)
+	if err := requireFileAccess(c, paths...); err != nil {
 		return c.JSON(e.Fail(err))
 	}
 	if err := fileService.MvFile(*req); err != nil {
@@ -304,6 +312,9 @@ func Size(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
+	if err := requireFileAccess(c, req.Path); err != nil {
+		return c.JSON(e.Fail(err))
+	}
 	res, err := fileService.DirSize(*req)
 	if err != nil {
 		return c.JSON(e.Fail(err))
@@ -314,6 +325,9 @@ func BatchChangeModeAndOwner(c fiber.Ctx) error {
 	req, err := e.BodyToStruct[request.FileRoleReq](c.Body())
 	if err != nil {
 		return c.JSON(e.Result(buserr.Err(err)))
+	}
+	if err := requireFileAccess(c, req.Paths...); err != nil {
+		return c.JSON(e.Fail(err))
 	}
 	if err := fileService.BatchChangeModeAndOwner(*req); err != nil {
 		return c.JSON(e.Error(err))

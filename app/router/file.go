@@ -38,8 +38,9 @@ func FileRouter(r fiber.Router) {
 		fileRouter.Post("/move", api.MoveFile)
 		fileRouter.Post("/chunkDownload", api.DownloadChunkFiles)
 		fileRouter.Post("/size", api.Size)
-		fileRouter.Get("/ws", websocket.New(api.Ws))
-		fileRouter.Get("/keys", api.Keys)
+		// 旧文件 WebSocket 处理器还支持全机进程、SSH、网络查询，只允许管理员使用。
+		fileRouter.Get("/ws", middleware.JWT(constant.UserRoleAdmin), websocket.New(api.Ws))
+		fileRouter.Get("/keys", middleware.JWT(constant.UserRoleAdmin), api.Keys)
 		fileRouter.Post("/read", api.ReadFileByLine)
 		fileRouter.Post("/batch/role", api.BatchChangeModeAndOwner)
 

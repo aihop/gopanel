@@ -58,7 +58,10 @@ func JWT(role string) func(fiber.Ctx) error {
 
 		xAuth := XGetAuth(c)
 		info, err := JwtCheck(xAuth, role)
-		if err != nil && info == nil {
+		if err != nil {
+			if xAuth != "" {
+				return c.JSON(e.Auth(err.Error()))
+			}
 			tokenStr := c.Get(constant.AppToken)
 			if tokenStr == "" {
 				tokenStr = c.Query(constant.AppToken)
@@ -70,11 +73,18 @@ func JWT(role string) func(fiber.Ctx) error {
 					if user.Token != tokenStr {
 						return c.JSON(e.Auth("token invalid"))
 					}
+					if user.Status != constant.UserStatusNormal {
+						return c.JSON(e.Auth("user is disabled"))
+					}
+					if !isRoleAllowed(user.Role, role) {
+						return c.JSON(e.Auth("permission denied"))
+					}
 					// 设置用户信息到上下文
 					c.Locals(constant.AppAuthName, &token.CustomClaims{
-						UserId: user.ID,
-						Role:   user.Role,
-						SaltId: user.Salt,
+						UserId:      user.ID,
+						Role:        user.Role,
+						SaltId:      user.Salt,
+						FileBaseDir: user.FileBaseDir,
 					})
 					c.Locals(constant.AuthMethodName, constant.AuthMethodJWT)
 					if err := checkDemo(user.Role); err != nil {
@@ -147,40 +157,43 @@ func JwtCheck(xAuth, role string) (info *token.CustomClaims, err error) {
 
 	user, err := service.NewUser().Get(info.UserId)
 	if err != nil {
-		// 查询不到用户
-		return info, errors.New("token invalid, user does not exist")
+		return nil, errors.New("token invalid, user does not exist")
+	}
+	if user.Status != constant.UserStatusNormal {
+		return nil, errors.New("user is disabled")
 	}
 	salt := user.Salt
 
 	// 验证盐值是否正确
 	if info.SaltId != salt {
-		return info, errors.New("token Invalid, salt error")
+		return nil, errors.New("token Invalid, salt error")
 	}
 
-	// 如果传入了所需的 role，进行简单校验
-	// SUB_ADMIN 也是后台管理员，如果要求 ADMIN，SUB_ADMIN 也可以放行（通过后续拦截器细化权限）
-	if role != "" {
-		if role == constant.UserRoleAdmin {
-			if info.Role != constant.UserRoleAdmin && info.Role != constant.UserRoleSuper && info.Role != constant.UserRoleSubAdmin {
-				return info, errors.New("permission denied")
-			}
-		} else if role == constant.UserRoleSuper {
-			if info.Role != constant.UserRoleSuper {
-				return info, errors.New("permission denied")
-			}
-		} else {
-			// 如果路由要求特定角色（比如 SUB_ADMIN），则只允许对应角色或更高级别角色（Admin/Super）访问
-			if role == constant.UserRoleSubAdmin {
-				if info.Role != constant.UserRoleSubAdmin && info.Role != constant.UserRoleAdmin && info.Role != constant.UserRoleSuper {
-					return info, errors.New("permission denied")
-				}
-			} else if info.Role != role {
-				return info, errors.New("permission denied")
-			}
-		}
+	// 权限和文件作用域以数据库当前值为准，避免账号降权或目录调整后，
+	// 尚未过期的 JWT 继续携带旧权限。
+	if !isRoleAllowed(user.Role, role) {
+		return nil, errors.New("permission denied")
 	}
+	info.Role = user.Role
+	info.FileBaseDir = user.FileBaseDir
 
 	return info, nil
+}
+
+func isRoleAllowed(actualRole, requiredRole string) bool {
+	if requiredRole == "" {
+		return true
+	}
+	switch requiredRole {
+	case constant.UserRoleAdmin:
+		return actualRole == constant.UserRoleAdmin || actualRole == constant.UserRoleSuper
+	case constant.UserRoleSuper:
+		return actualRole == constant.UserRoleSuper
+	case constant.UserRoleSubAdmin:
+		return actualRole == constant.UserRoleSubAdmin || actualRole == constant.UserRoleAdmin || actualRole == constant.UserRoleSuper
+	default:
+		return actualRole == requiredRole
+	}
 }
 
 func JwtClaims(c fiber.Ctx) (info *token.CustomClaims, err error) {

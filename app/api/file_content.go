@@ -5,10 +5,7 @@ import (
 	"github.com/aihop/gopanel/app/dto/request"
 	"github.com/aihop/gopanel/app/e"
 	"github.com/aihop/gopanel/constant"
-	"github.com/aihop/gopanel/utils/token"
 	"github.com/gofiber/fiber/v3"
-	"path/filepath"
-	"strings"
 )
 
 func GetContent(c fiber.Ctx) error {
@@ -16,11 +13,8 @@ func GetContent(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	if claims, ok := c.Locals(constant.AppAuthName).(*token.CustomClaims); ok && claims.Role == constant.UserRoleSubAdmin {
-		baseDir := filepath.Clean(claims.FileBaseDir)
-		if !strings.HasPrefix(filepath.Clean(req.Path), baseDir) {
-			return c.JSON(e.Fail(errors.New("permission denied: you can only access your designated workspace")))
-		}
+	if err := requireFileAccess(c, req.Path); err != nil {
+		return c.JSON(e.Fail(err))
 	}
 	info, err := fileService.GetContent(*req)
 	if err != nil {
@@ -33,11 +27,8 @@ func SaveContent(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	if claims, ok := c.Locals(constant.AppAuthName).(*token.CustomClaims); ok && claims.Role == constant.UserRoleSubAdmin {
-		baseDir := filepath.Clean(claims.FileBaseDir)
-		if !strings.HasPrefix(filepath.Clean(req.Path), baseDir) {
-			return c.JSON(e.Fail(errors.New("permission denied: you can only access your designated workspace")))
-		}
+	if err := requireFileAccess(c, req.Path); err != nil {
+		return c.JSON(e.Fail(err))
 	}
 	if err := fileService.SaveContent(*req); err != nil {
 		return c.JSON(e.Fail(err))
@@ -48,6 +39,9 @@ func ReadFileByLine(c fiber.Ctx) error {
 	req, err := e.BodyToStruct[request.FileReadByLineReq](c.Body())
 	if err != nil {
 		return c.JSON(e.RetError(constant.CodeErrBadRequest, err.Error()))
+	}
+	if _, scoped := fileBaseDir(c); scoped {
+		return c.JSON(e.Fail(errors.New("sub_admin cannot access global service logs")))
 	}
 	res, err := fileService.ReadLogByLine(*req)
 	if err != nil {

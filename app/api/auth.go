@@ -67,6 +67,9 @@ func Login(c fiber.Ctx) error {
 	if err != nil || user == nil {
 		return failLogin("user not found")
 	}
+	if user.Status != constant.UserStatusNormal {
+		return failLogin("user is disabled")
+	}
 	if !cryptx.ValidatePassword(user.Password, r.Password) {
 		return failLogin("Password verification failed")
 	}

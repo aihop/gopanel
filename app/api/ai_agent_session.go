@@ -2,17 +2,19 @@ package api
 
 import (
 	"errors"
-	"github.com/aihop/gopanel/app/e"
-	"github.com/aihop/gopanel/app/model"
-	"github.com/aihop/gopanel/app/repo"
-	"github.com/aihop/gopanel/constant"
-	"github.com/aihop/gopanel/utils/token"
-	"github.com/gofiber/fiber/v3"
-	"gorm.io/gorm"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/aihop/gopanel/app/e"
+	"github.com/aihop/gopanel/app/model"
+	"github.com/aihop/gopanel/app/repo"
+	"github.com/aihop/gopanel/app/service"
+	"github.com/aihop/gopanel/constant"
+	"github.com/aihop/gopanel/utils/token"
+	"github.com/gofiber/fiber/v3"
+	"gorm.io/gorm"
 )
 
 func getAISessionWithPermission(sessionID uint, claims *token.CustomClaims) (*model.AIDevSession, error) {
@@ -121,13 +123,30 @@ func CreateAISession(c fiber.Ctx) error {
 	}
 	workDir := strings.TrimSpace(req.WorkDir)
 	if workDir == "" {
-		workDir = "."
+		if claims.Role == constant.UserRoleSubAdmin {
+			workDir = strings.TrimSpace(claims.FileBaseDir)
+		} else {
+			workDir = "."
+		}
+	}
+	if claims.Role == constant.UserRoleSubAdmin {
+		if err := service.ValidatePathWithinBase(claims.FileBaseDir, workDir); err != nil {
+			return c.JSON(e.Fail(err))
+		}
+	}
+	agentName := strings.TrimSpace(req.AgentName)
+	if agentName != "" {
+		var err error
+		agentName, err = normalizeAIAgentName(agentName)
+		if err != nil {
+			return c.JSON(e.Fail(err))
+		}
 	}
 	title := strings.TrimSpace(req.Title)
 	if title == "" {
 		title = buildDefaultSessionTitle(workDir, "")
 	}
-	session := &model.AIDevSession{UserID: claims.UserId, ProjectID: req.ProjectID, Title: title, AgentName: strings.TrimSpace(req.AgentName), WorkDir: workDir, Status: "active", CurrentStage: "idle"}
+	session := &model.AIDevSession{UserID: claims.UserId, ProjectID: req.ProjectID, Title: title, AgentName: agentName, WorkDir: workDir, Status: "active", CurrentStage: "idle"}
 	sessionRepo := repo.NewAIDevSessionRepo()
 	if err := sessionRepo.CreateSession(session); err != nil {
 		return c.JSON(e.Fail(err))
@@ -155,26 +174,21 @@ func CreateAISessionInstruction(c fiber.Ctx) error {
 	if content == "" {
 		return c.JSON(e.Fail(errors.New("开发指令不能为空")))
 	}
-	task, err := ensureSessionTask(session, claims, content)
-	if err != nil {
-		return c.JSON(e.Fail(err))
-	}
 	allowCode := true
 	if req.AllowCode != nil {
 		allowCode = *req.AllowCode
 	}
+	if req.AnalysisOnly || !allowCode {
+		return c.JSON(e.Fail(errors.New("当前执行器尚不支持可强制保证的只读分析模式")))
+	}
+	task, err := ensureSessionTask(session, claims, content)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	// 所有可写开发指令都必须经过服务端审批，客户端不能关闭该边界。
 	requireApproval := true
-	if req.RequireApproval != nil {
-		requireApproval = *req.RequireApproval
-	}
-	if req.RequireApproval == nil {
-		requireApproval = false
-	}
-	instructionStatus := "queued"
-	needsApproval := shouldRequireAIApproval(content, requireApproval)
-	if needsApproval {
-		instructionStatus = "pending_approval"
-	}
+	needsApproval := true
+	instructionStatus := "pending_approval"
 	instruction := &model.AIInstruction{SessionID: session.ID, UserID: claims.UserId, ProjectID: session.ProjectID, TaskID: task.ID, Content: content, Status: instructionStatus, AllowCode: allowCode, AutoPreview: req.AutoPreview, RequireApproval: requireApproval, AnalysisOnly: req.AnalysisOnly}
 	sessionRepo := repo.NewAIDevSessionRepo()
 	if err := sessionRepo.CreateInstruction(instruction); err != nil {

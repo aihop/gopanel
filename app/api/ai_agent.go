@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -31,29 +30,34 @@ var previewURLPattern = regexp.MustCompile(`https?://[^\s"'<>]+|(?:localhost|127
 func AIAgentWsSSH(wsConn *websocket.Conn) {
 	defer wsConn.Close()
 	workDir := ""
-	var userID uint
-	var authClaims *token.CustomClaims
-	if claims, ok := wsConn.Locals(constant.AppAuthName).(*token.CustomClaims); ok {
-		authClaims = claims
-		userID = claims.UserId
-		if claims.Role == constant.UserRoleSubAdmin {
-			if claims.FileBaseDir != "" {
-				baseDir := filepath.Clean(claims.FileBaseDir)
-				if !strings.HasPrefix(workDir, baseDir) {
-					workDir = baseDir
-				}
-			} else {
-				workDir = "/"
-			}
+	authClaims, ok := wsConn.Locals(constant.AppAuthName).(*token.CustomClaims)
+	if !ok || authClaims == nil {
+		_ = wsConn.WriteMessage(websocket.TextMessage, []byte("Unauthorized."))
+		return
+	}
+	userID := authClaims.UserId
+	if authClaims.Role == constant.UserRoleSubAdmin {
+		workDir = strings.TrimSpace(authClaims.FileBaseDir)
+		if workDir == "" {
+			_ = wsConn.WriteMessage(websocket.TextMessage, []byte("Sub-admin workspace is not configured."))
+			return
 		}
 	}
 	aiRepo := repo.NewAITaskRepo()
 	sessionRepo := repo.NewAIDevSessionRepo()
-	workDir, reqProjectID, currentTask, currentSession := loadAIAgentSessionState(wsConn, aiRepo, sessionRepo, workDir)
-	workDir = normalizeAIAgentWorkDir(workDir, userID)
+	workDir, reqProjectID, currentTask, currentSession, err := loadAIAgentSessionState(wsConn, aiRepo, sessionRepo, workDir, authClaims)
+	if err != nil {
+		_ = wsConn.WriteMessage(websocket.TextMessage, []byte(err.Error()))
+		return
+	}
+	workDir, err = normalizeAIAgentAuthorizedWorkDir(workDir, userID, authClaims)
+	if err != nil {
+		_ = wsConn.WriteMessage(websocket.TextMessage, []byte(err.Error()))
+		return
+	}
 	cols, _ := strconv.Atoi(wsConn.Query("cols", "80"))
 	rows, _ := strconv.Atoi(wsConn.Query("rows", "24"))
-	containerName, err := ensureAIAgentWorkspaceContainer(wsConn, workDir)
+	containerName, err := ensureAIAgentWorkspaceContainer(wsConn, workDir, authClaims)
 	if err != nil {
 		return
 	}
@@ -63,7 +67,12 @@ func AIAgentWsSSH(wsConn *websocket.Conn) {
 	} else if currentSession != nil && currentSession.AgentName != "" {
 		agentName = currentSession.AgentName
 	}
-	autoStartAI := agentName != ""
+	autoStartAI := strings.TrimSpace(agentName) != ""
+	agentName, err = normalizeAIAgentName(agentName)
+	if err != nil {
+		_ = wsConn.WriteMessage(websocket.TextMessage, []byte(err.Error()))
+		return
+	}
 	welcomeCmd := "echo -e '\\033[32m欢迎回到 GoPanel AI 持久化沙箱。\\033[0m';"
 	if autoStartAI {
 		welcomeCmd += fmt.Sprintf("echo -e '💡 \\033[33m已为您自动拉起 %s 智能体。输入 \"exit\" 可退回普通 Shell。\\033[0m';", agentName)
@@ -169,29 +178,20 @@ func AIAgentWsSSH(wsConn *websocket.Conn) {
 					})
 				}
 				sendWsMsg("\033[36m[AI Agent] 正在思考并执行...\033[0m\r\n")
-				cmdArgs := []string{"exec", "-i", containerName, "sh", "-c"}
-				shellCmd := fmt.Sprintf(`
-								if command -v trae >/dev/null 2>&1; then
-									trae --message "%s"
-								elif command -v aider >/dev/null 2>&1; then
-									aider --message "%s"
-								else
-									echo -e "\033[33m[系统提示] 当前沙箱环境尚未安装 trae 或 aider 工具。\033[0m"
-									echo -e "您可以先输入 'exit' 退回普通终端，然后执行 \033[32mnpm install -g trae\033[0m 进行安装。"
-								fi
-								`, strings.ReplaceAll(req.input, `"`, `\"`), strings.ReplaceAll(req.input, `"`, `\"`))
-				cmdArgs = append(cmdArgs, shellCmd)
-				execCmd, err := docker.RuntimeCommand(context.Background(), cmdArgs...)
+				cmdArgs, err := buildAIAgentExecArgs(containerName, agentName, req.input)
 				out := []byte{}
+				if err == nil {
+					execCmd, cmdErr := docker.RuntimeCommand(context.Background(), cmdArgs...)
+					if cmdErr != nil {
+						err = cmdErr
+					} else {
+						out, err = execCmd.CombinedOutput()
+					}
+				}
 				if err != nil {
-					out = []byte(fmt.Sprintf("执行错误: %v", err))
-				} else {
-					out, err = execCmd.CombinedOutput()
-					if err != nil {
-						global.LOG.Errorf("AI execution error: %v, out: %s", err, string(out))
-						if len(out) == 0 {
-							out = []byte(fmt.Sprintf("执行错误: %v", err))
-						}
+					global.LOG.Errorf("AI execution error: %v, out: %s", err, string(out))
+					if len(out) == 0 {
+						out = []byte(fmt.Sprintf("执行错误: %v", err))
 					}
 				}
 				if req.task != nil {
