@@ -119,6 +119,24 @@
 - DataView v-show 残留 DOM — `ece6439`
 - SQL 导入被注释检查错误跳过 — `b8dd282`
 
+## 发布版本（自动执行，不再询问）
+
+当用户要求"发布一个版本"或"发布到 GitHub/GitCode"时，按以下顺序自动执行，不需要二次确认：
+
+1. 确认版本号：用户未指定时询问一次；指定后直接使用。
+2. 检查环境（不需要等用户确认）：
+   - `gh auth status` 已登录
+   - `jq` 已安装
+   - `GITCODE_TOKEN` 环境变量或 `.env` 中已配置
+   - `GOPANEL_ADMIN_KEY` 在 `.env` 中已配置（用于 `gopanel.cn` changelog 同步）
+3. 执行 `bash build.sh <VERSION>` 生成多平台包（后台运行，等待完成）。
+4. 执行 `PUBLISH_POST=1 bash publish.sh <VERSION>` 发布到 GitHub、GitCode，并同步 changelog 到 `https://gopanel.cn/api/admin/posts`。
+5. 发布完成后，向用户汇报 Release 链接和同步结果。
+
+**默认仓库**：`aihop/gopanel`。
+**默认目标**：GitHub + GitCode 同时发布。
+**changelog 同步**：必须设置 `PUBLISH_POST=1`，否则不会自动调用 `register_changelog`。
+
 ## 文档索引
 
 - `docs/ai/README.md` — 模块入口 + 快速参考
