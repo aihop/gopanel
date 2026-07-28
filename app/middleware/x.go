@@ -7,13 +7,5 @@ import (
 )
 
 func XGetAuth(c fiber.Ctx) string {
-	xAuth := c.Get(constant.AppXAuth)
-	if xAuth != "" {
-		return xAuth
-	}
-	xAuth = c.Query(constant.AppAuth)
-	if xAuth != "" {
-		return xAuth
-	}
-	return ""
+	return c.Get(constant.AppXAuth)
 }

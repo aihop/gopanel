@@ -154,7 +154,7 @@ function initWebSocket(endpoint_: string, args: string = "") {
 
 	const authStore = useAuthStore()
 	const auth = authStore.getAuth() || ""
-	const url = `${protocol}://${host}/api/${endpoint}?cols=${term.value.cols}&rows=${term.value.rows}&${args}&auth=${auth}`
+	const url = `${protocol}://${host}/api/${endpoint}?cols=${term.value.cols}&rows=${term.value.rows}&${args}&token=${encodeURIComponent(auth)}`
 	terminalSocket.value = new WebSocket(url)
 	terminalSocket.value.onopen = runRealTerminal
 	terminalSocket.value.onmessage = onWSReceive

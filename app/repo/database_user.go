@@ -23,22 +23,59 @@ func NewDatabaseUser() *DatabaseUserRepo {
 }
 
 func (r *DatabaseUserRepo) MigrateTable() error {
-	return r.db.AutoMigrate(&model.DatabaseUser{})
+	if err := r.db.AutoMigrate(&model.DatabaseUser{}); err != nil {
+		return err
+	}
+	var users []model.DatabaseUser
+	if err := r.db.Find(&users).Error; err != nil {
+		return err
+	}
+	for _, user := range users {
+		password, err := encryptDatabaseSecret(user.Password)
+		if err != nil {
+			return err
+		}
+		if password != user.Password {
+			if err := r.db.Model(&model.DatabaseUser{}).Where("id = ?", user.ID).Update("password", password).Error; err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func (r *DatabaseUserRepo) Create(item *model.DatabaseUser) (err error) {
-	return r.db.Model(&model.DatabaseUser{}).Create(item).Error
+	stored := *item
+	stored.Password, err = encryptDatabaseSecret(item.Password)
+	if err != nil {
+		return err
+	}
+	if err = r.db.Model(&model.DatabaseUser{}).Create(&stored).Error; err == nil {
+		item.ID = stored.ID
+	}
+	return err
 }
 
 func (r *DatabaseUserRepo) Update(item *model.DatabaseUser) (err error) {
 	if item.ID == 0 {
 		return gorm.ErrMissingWhereClause
 	}
-	return r.db.Model(&model.DatabaseUser{}).Where("id = ?", item.ID).Updates(item).Error
+	stored := *item
+	stored.Password, err = encryptDatabaseSecret(item.Password)
+	if err != nil {
+		return err
+	}
+	return r.db.Model(&model.DatabaseUser{}).Where("id = ?", item.ID).Updates(&stored).Error
 }
 
 func (r *DatabaseUserRepo) Get(id uint) (res *model.DatabaseUser, err error) {
 	err = r.db.Model(&model.DatabaseUser{}).Preload("Server").Where("id = ?", id).First(&res).Error
+	if err == nil {
+		res.Password, err = decryptDatabaseSecret(res.Password)
+	}
+	if err == nil && res.Server != nil {
+		res.Server.Password, err = decryptDatabaseSecret(res.Server.Password)
+	}
 	return
 }
 
@@ -61,6 +98,12 @@ func (r *DatabaseUserRepo) List(ctx *gormx.Contextx) (res []*model.DatabaseUser,
 
 	if err := query.Find(&databaseServer).Error; err != nil {
 		return nil, err
+	}
+	for _, server := range databaseServer {
+		server.Password, err = decryptDatabaseSecret(server.Password)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	serverIDSet := make(map[uint]struct{})
@@ -111,6 +154,10 @@ func (r *DatabaseUserRepo) List(ctx *gormx.Contextx) (res []*model.DatabaseUser,
 	}
 	localMap := make(map[string]model.DatabaseUser, len(localUsers))
 	for _, u := range localUsers {
+		u.Password, err = decryptDatabaseSecret(u.Password)
+		if err != nil {
+			return nil, err
+		}
 		key := fmt.Sprintf("%d|%s|%s", u.ServerID, strings.ToLower(u.Username), strings.ToLower(u.Host))
 		localMap[key] = u
 	}
@@ -140,6 +187,15 @@ func (r *DatabaseUserRepo) List(ctx *gormx.Contextx) (res []*model.DatabaseUser,
 
 func (r *DatabaseUserRepo) ListByServerId(ctx *gormx.Contextx, serverId uint) (res []*model.DatabaseUser, err error) {
 	err = r.db.Model(&model.DatabaseUser{}).Scopes(gormx.Context(ctx)).Where("server_id = ?", serverId).Find(&res).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, user := range res {
+		user.Password, err = decryptDatabaseSecret(user.Password)
+		if err != nil {
+			return nil, err
+		}
+	}
 	return
 }
 
@@ -149,6 +205,9 @@ func (r DatabaseUserRepo) ClearUsers(serverID uint) error {
 
 func (r *DatabaseUserRepo) FirstOrInit(ins, outs *model.DatabaseUser) (err error) {
 	err = r.db.Model(&model.DatabaseUser{}).FirstOrInit(ins, outs).Error
+	if err == nil {
+		outs.Password, err = decryptDatabaseSecret(outs.Password)
+	}
 	return
 }
 
@@ -176,6 +235,12 @@ func (r *DatabaseUserRepo) CountByWhere(where *gormx.Wherex) (res int64, err err
 
 	if err := query.Find(&databaseServer).Error; err != nil {
 		return 0, err
+	}
+	for _, server := range databaseServer {
+		server.Password, err = decryptDatabaseSecret(server.Password)
+		if err != nil {
+			return 0, err
+		}
 	}
 
 	for _, server := range databaseServer {

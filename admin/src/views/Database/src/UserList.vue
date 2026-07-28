@@ -1,12 +1,11 @@
 <script setup lang="ts">
-import { NButton, NFlex, NInput, NInputGroup, NPopconfirm, NTag } from "naive-ui"
+import { NButton, NFlex, NInput, NPopconfirm, NTag } from "naive-ui"
 
 import { formatTime } from "@/utils/date"
 import UpdateUserModal from "./UpdateUserModal.vue"
 import { useI18n } from "vue-i18n"
 import { ref, h, reactive, onMounted, onUnmounted, inject, Ref, watch } from "vue"
 import emitter from "@/utils/emitter"
-import { copyText } from "@/utils/util"
 import {
 	databaseUserListAPI,
 	databaseUserDeleteAPI,
@@ -58,35 +57,6 @@ const columns: any = [
 		ellipsis: { tooltip: true },
 		render(row: any) {
 			return row.username || t("None")
-		}
-	},
-	{
-		title: t("database.password"),
-		key: "password",
-		width: 250,
-		render(row: any) {
-			return h(NInputGroup, null, {
-				default: () => [
-					h(NInput, {
-						value: row.password,
-						type: "password",
-						showPasswordOn: "click",
-						readonly: true,
-						placeholder: t("Not saved")
-					}),
-					h(
-						NButton,
-						{
-							type: "primary",
-							ghost: true,
-							onClick: () => {
-								copyText(row.password)
-							}
-						},
-						{ default: () => t("database.copy") }
-					)
-				]
-			})
 		}
 	},
 	{

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -285,6 +286,9 @@ func ExportDBManagerTable(c fiber.Ctx) error {
 	req, err := e.BodyToStruct[request.ExportTableReq](c.Body())
 	if err != nil {
 		return c.JSON(e.Fail(err))
+	}
+	if strings.TrimSpace(req.Where) != "" {
+		return c.JSON(e.Fail(errors.New("raw WHERE conditions are not supported; use table search filters")))
 	}
 	content, filename, err := service.NewDBManagerService().ExportTable(*req)
 	if err != nil {

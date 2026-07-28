@@ -6,8 +6,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/aihop/gopanel/buserr"
-	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/utils/cmd"
 )
@@ -170,11 +168,11 @@ func (f *Firewall) ListAddress() ([]FireInfo, error) {
 }
 
 func (f *Firewall) Port(port FireInfo, operation string) error {
-	if cmd.CheckIllegal(operation, port.Protocol, port.Port) {
-		return buserr.New(constant.ErrCmdIllegal)
+	if err := validateFireInfo(port, operation); err != nil {
+		return err
 	}
 
-	stdout, err := cmd.Execf("firewall-cmd --zone=public --%s-port=%s/%s --permanent", operation, port.Port, port.Protocol)
+	stdout, err := cmd.ExecWithCheck("firewall-cmd", "--zone=public", fmt.Sprintf("--%s-port=%s/%s", operation, port.Port, port.Protocol), "--permanent")
 	if err != nil {
 		return fmt.Errorf("%s (port: %s/%s strategy: %s) failed, err: %s", operation, port.Port, port.Protocol, port.Strategy, stdout)
 	}
@@ -182,8 +180,8 @@ func (f *Firewall) Port(port FireInfo, operation string) error {
 }
 
 func (f *Firewall) RichRules(rule FireInfo, operation string) error {
-	if cmd.CheckIllegal(operation, rule.Address, rule.Protocol, rule.Port, rule.Strategy) {
-		return buserr.New(constant.ErrCmdIllegal)
+	if err := validateFireInfo(rule, operation); err != nil {
+		return err
 	}
 	ruleStr := "rule family=ipv4 "
 	if strings.Contains(rule.Address, ":") {
@@ -199,12 +197,12 @@ func (f *Firewall) RichRules(rule FireInfo, operation string) error {
 		ruleStr += fmt.Sprintf("protocol=%s ", rule.Protocol)
 	}
 	ruleStr += rule.Strategy
-	stdout, err := cmd.Execf("firewall-cmd --zone=public --%s-rich-rule '%s' --permanent", operation, ruleStr)
+	stdout, err := cmd.ExecWithCheck("firewall-cmd", "--zone=public", fmt.Sprintf("--%s-rich-rule", operation), ruleStr, "--permanent")
 	if err != nil {
 		return fmt.Errorf("%s rich rules (%s) failed, err: %s", operation, ruleStr, stdout)
 	}
 	if len(rule.Address) == 0 {
-		stdout1, err := cmd.Execf("firewall-cmd --zone=public --%s-rich-rule '%s' --permanent", operation, strings.ReplaceAll(ruleStr, "family=ipv4 ", "family=ipv6 "))
+		stdout1, err := cmd.ExecWithCheck("firewall-cmd", "--zone=public", fmt.Sprintf("--%s-rich-rule", operation), strings.ReplaceAll(ruleStr, "family=ipv4 ", "family=ipv6 "), "--permanent")
 		if err != nil {
 			return fmt.Errorf("%s rich rules (%s) failed, err: %s", operation, strings.ReplaceAll(ruleStr, "family=ipv4 ", "family=ipv6 "), stdout1)
 		}
@@ -213,12 +211,15 @@ func (f *Firewall) RichRules(rule FireInfo, operation string) error {
 }
 
 func (f *Firewall) PortForward(info Forward, operation string) error {
-	ruleStr := fmt.Sprintf("firewall-cmd --zone=public --%s-forward-port=port=%s:proto=%s:toport=%s --permanent", operation, info.Port, info.Protocol, info.TargetPort)
+	if err := validateForward(info, operation); err != nil {
+		return err
+	}
+	ruleArg := fmt.Sprintf("--%s-forward-port=port=%s:proto=%s:toport=%s", operation, info.Port, info.Protocol, info.TargetPort)
 	if info.TargetIP != "" && info.TargetIP != "127.0.0.1" && info.TargetIP != "localhost" {
-		ruleStr = fmt.Sprintf("firewall-cmd --zone=public --%s-forward-port=port=%s:proto=%s:toaddr=%s:toport=%s --permanent", operation, info.Port, info.Protocol, info.TargetIP, info.TargetPort)
+		ruleArg = fmt.Sprintf("--%s-forward-port=port=%s:proto=%s:toaddr=%s:toport=%s", operation, info.Port, info.Protocol, info.TargetIP, info.TargetPort)
 	}
 
-	stdout, err := cmd.Exec(ruleStr)
+	stdout, err := cmd.ExecWithCheck("firewall-cmd", "--zone=public", ruleArg, "--permanent")
 	if err != nil {
 		return fmt.Errorf("%s port forward failed, err: %s", operation, stdout)
 	}

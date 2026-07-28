@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/aihop/gopanel/app/dto"
-	"github.com/aihop/gopanel/buserr"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/utils/cmd"
@@ -80,9 +79,6 @@ func (u *ImageRepoService) List() ([]dto.ImageRepoOption, error) {
 }
 
 func (u *ImageRepoService) Create(req dto.ImageRepoCreate) error {
-	if cmd.CheckIllegal(req.Username, req.Password, req.DownloadUrl) {
-		return buserr.New(constant.ErrCmdIllegal)
-	}
 	imageRepo, _ := imageRepoRepo.Get(commonRepo.WithByName(req.Name))
 	if imageRepo.ID != 0 {
 		return constant.ErrRecordExist
@@ -150,9 +146,6 @@ func (u *ImageRepoService) BatchDelete(req dto.ImageRepoDelete) error {
 func (u *ImageRepoService) Update(req dto.ImageRepoUpdate) error {
 	if req.ID == 1 {
 		return errors.New("The default value cannot be edit !")
-	}
-	if cmd.CheckIllegal(req.Username, req.Password, req.DownloadUrl) {
-		return buserr.New(constant.ErrCmdIllegal)
 	}
 	repo, err := imageRepoRepo.Get(commonRepo.WithByID(req.ID))
 	if err != nil {

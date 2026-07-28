@@ -100,7 +100,7 @@ func Login(c fiber.Ctx) error {
 		Value:    entrance,
 		Expires:  time.Now().Add(1 * 24 * time.Hour),
 		Path:     "/",
-		HTTPOnly: false,
+		HTTPOnly: true,
 		SameSite: "Lax",
 		Secure:   c.Scheme() == "https",
 	})
@@ -153,7 +153,11 @@ func ResetPassword(c fiber.Ctx) error {
 		return c.JSON(e.RetError(constant.StatusCodeFullFail, "Old password verification failed"))
 	}
 	// 加密新密码
-	user.Password = cryptx.EncodePassword(req.NewPassword)
+	encodedPassword, err := cryptx.EncodePassword(req.NewPassword)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	user.Password = encodedPassword
 	err = userService.Update(user)
 	if err != nil {
 		return c.JSON(e.Fail(err))

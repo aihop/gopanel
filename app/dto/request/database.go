@@ -38,7 +38,7 @@ type DatabaseServerUpdate struct {
 	Host     string `json:"host" validate:"required"`
 	Port     uint   `json:"port" validate:"required_unless=Type sqlite,gte=0,lte=65535"`
 	Username string `json:"username" validate:"required_unless=Type redis Type sqlite"` // SQL 类型需用户名
-	Password string `json:"password" validate:"required_unless=Type redis Type sqlite"` // SQL 类型需密码
+	Password string `json:"password"`                                                   // 留空表示保留原密码
 	Remark   string `json:"remark"`
 }
 

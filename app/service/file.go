@@ -277,15 +277,13 @@ func (f *FileService) ChangeName(req request.FileRename) error {
 	return fo.Rename(req.OldName, req.NewName)
 }
 func (f *FileService) Wget(w request.FileWget) (string, error) {
-	fo := files.NewFileOp()
 	key := "file-wget-" + common.GetUuid()
-	return key, fo.DownloadFileWithProcess(w.Url, filepath.Join(w.Path, w.Name), key, w.IgnoreCertificate)
+	return key, files.DownloadFileWithProcessSafe(w.Url, filepath.Join(w.Path, w.Name), key, w.IgnoreCertificate)
 }
 
 // WgetStream 通过 DownloadFileLogger 异步下载文件并实时回传进度
 // ctx 用于支持取消下载
 func (f *FileService) WgetStream(ctx context.Context, w request.FileWget, logger *DownloadFileLogger) error {
-	fo := files.NewFileOp()
 	dstPath := filepath.Join(w.Path, w.Name)
 
 	logger.Appendf("开始下载远程文件：%s", w.Url)
@@ -298,7 +296,7 @@ func (f *FileService) WgetStream(ctx context.Context, w request.FileWget, logger
 		logger.SetProgress(written, total)
 	}
 
-	err := fo.DownloadFileWithCallback(ctx, w.Url, dstPath, w.IgnoreCertificate, progressFn)
+	err := files.DownloadFileWithCallbackSafe(ctx, w.Url, dstPath, w.IgnoreCertificate, progressFn)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			logger.AppendLine("下载已取消")

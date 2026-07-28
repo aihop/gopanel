@@ -150,14 +150,13 @@ import {
 	NForm,
 	NFormItem,
 	NInput,
-	NPopconfirm,
 	useDialog
 } from "naive-ui"
 
 import DrawerHeader from "./DrawerHeader.vue"
 import OpDialog from "./OpDialog.vue"
-import { computeSize, dateFormat, downloadFile } from "../utils/util"
-import { formatTime } from "../utils/date"
+import { downloadAuthenticatedFile } from "../utils/fileDownload"
+import { createBackupColumns, createBackupPagination } from "./backupColumns"
 import { renderIcon } from "../utils"
 import { NIcon } from "naive-ui"
 import {
@@ -203,15 +202,7 @@ const modalTitle = computed(() =>
 	isBackup.value ? t("commons.button.backup") : `${t("commons.button.recover")} - ${name.value}`
 )
 
-const paginationOptions = computed(() => ({
-	page: curPage.value,
-	pageSize: pageSize.value,
-	pageCount: Math.max(1, Math.ceil((total.value || 0) / pageSize.value)),
-	showSizePicker: true,
-	pageSizes: [10, 20, 50, 100],
-	showQuickJumper: true,
-	itemCount: total.value
-}))
+const paginationOptions = computed(() => createBackupPagination(curPage.value, pageSize.value, total.value))
 
 const loadBackupDir = async () => {
 	try {
@@ -371,15 +362,7 @@ const params = reactive({
 	}
 })
 
-const {
-	list,
-	curPage,
-	pageSize,
-	loading,
-	getData,
-	getParams,
-	total
-} = useTable(params)
+const { list, curPage, pageSize, loading, getData, getParams, total } = useTable(params)
 
 const refreshBackupRecords = async () => {
 	await getData()
@@ -424,7 +407,7 @@ const onDownload = async (row: Backup.RecordInfo) => {
 		fileName: row.fileName
 	}
 	const res = await backupRecordDownloadAPI(params)
-	downloadFile(res.data as any)
+	await downloadAuthenticatedFile(res.data as any)
 }
 
 const onBatchDelete = async (row: Backup.RecordInfo | null) => {
@@ -467,85 +450,7 @@ const handleBackupClose = () => {
 	open.value = false
 }
 
-const buttons = [
-	{
-		label: t("commons.button.delete"),
-		click: (row: Backup.RecordInfo) => onBatchDelete(row)
-	},
-	{
-		label: t("commons.button.recover"),
-		disabled: (row: any) => row.size === 0,
-		click: (row: Backup.RecordInfo) => onRecover(row)
-	},
-	{
-		label: t("commons.button.download"),
-		disabled: (row: any) => row.size === 0,
-		click: (row: Backup.RecordInfo) => onDownload(row)
-	}
-]
-
-const columns: any = [
-	{
-		type: "selection",
-		width: 48
-	},
-	{
-		title: t("commons.table.name"),
-		key: "fileName",
-		ellipsis: true
-	},
-	{
-		title: t("file.size"),
-		key: "size",
-		width: 100,
-		render(row: any) {
-			if (row.hasLoad) {
-				return row.size ? computeSize(row.size) : "-"
-			}
-			return h(NButton, { quaternary: true, size: "tiny", loading: true })
-		}
-	},
-	{
-		title: t("database.source"),
-		key: "backupType",
-		width: 150,
-		render(row: any) {
-			return row.source ? t("setting." + row.source) : ""
-		}
-	},
-	{
-		title: t("commons.table.date"),
-		key: "createdAt",
-		width: 180,
-		render(row: any) {
-			return formatTime(row.createdAt)
-		}
-	},
-	{
-		title: t("commons.table.operate"),
-		key: "actions",
-		width: 240,
-		render(row: any) {
-			return h("div", { style: "display:flex; gap:8px;" }, [
-				h(
-					NButton,
-					{ size: "small", onClick: () => onBatchDelete(row) },
-					{ default: () => t("commons.button.delete") }
-				),
-				h(
-					NButton,
-					{ size: "small", onClick: () => onRecover(row) },
-					{ default: () => t("commons.button.recover") }
-				),
-				h(
-					NButton,
-					{ size: "small", onClick: () => onDownload(row) },
-					{ default: () => t("commons.button.download") }
-				)
-			])
-		}
-	}
-]
+const columns = createBackupColumns(t, onBatchDelete, onRecover, onDownload)
 
 const acceptParams = (param: { type: string; name: string; detailName: string; status: string; detailId: number }) => {
 	type.value = param.type

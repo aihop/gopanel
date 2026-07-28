@@ -49,9 +49,15 @@ func initFile() {
 	v := viper.New()
 	v.SetConfigFile(initFilePath)
 	v.SetConfigType("yaml")
-	_ = v.ReadInConfig()
-	_ = v.Unmarshal(&InitInstall)
-	fmt.Printf("init install config: %v\n", InitInstall)
+	if err := v.ReadInConfig(); err != nil {
+		fmt.Printf("read init.yaml failed: %v\n", err)
+		return
+	}
+	if err := v.Unmarshal(&InitInstall); err != nil {
+		fmt.Printf("parse init.yaml failed: %v\n", err)
+		return
+	}
+	fmt.Println("init install config loaded")
 	// 删除init.yaml文件
 	_ = os.Remove(initFilePath)
 }
@@ -119,9 +125,10 @@ func Init() {
 	if InitInstall.SafeEnter != "" {
 		p.SetDefault("system.entrance", InitInstall.SafeEnter)
 	}
-	p.SetDefault("system.mode", "dev")
+	p.SetDefault("system.mode", "prod")
 	p.SetDefault("system.version", constant.AppVersion)
 	p.SetDefault("system.encrypt_key", common.RandStr(32))
+	p.SetDefault("system.api_key_validity_time", "5")
 
 	// log
 	p.SetDefault("log.level", "debug")
@@ -163,6 +170,7 @@ func GlobalConfInit(v *viper.Viper) {
 		EncryptKey:         v.GetString("system.encrypt_key"),
 		ApiInterfaceStatus: v.GetString("system.api_interface_status"),
 		ApiKey:             v.GetString("system.api_key"),
+		ApiKeyValidityTime: v.GetString("system.api_key_validity_time"),
 	}
 
 	logConfig := config.LogConfig{

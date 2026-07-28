@@ -122,10 +122,14 @@ func (s *UserService) withTransaction(fn func(tx *gorm.DB) error) error {
 }
 
 func (s *UserService) Create(req request.UserCreate) error {
+	password, err := cryptx.EncodePassword(req.Password)
+	if err != nil {
+		return err
+	}
 	user := &model.User{
 		NickName:    req.NickName,
 		Email:       req.Email,
-		Password:    cryptx.EncodePassword(req.Password),
+		Password:    password,
 		Role:        req.Role,
 		FileBaseDir: req.FileBaseDir,
 		Menus:       req.Menus,
@@ -146,7 +150,11 @@ func (s *UserService) UpdateUser(req request.UserUpdate) error {
 		user.Email = req.Email
 	}
 	if req.Password != "" {
-		user.Password = cryptx.EncodePassword(req.Password)
+		password, err := cryptx.EncodePassword(req.Password)
+		if err != nil {
+			return err
+		}
+		user.Password = password
 	}
 	if req.Role != "" {
 		user.Role = req.Role
@@ -218,11 +226,15 @@ func (s *UserService) ListByIds(ctx *gormx.Contextx, ids []uint) (res []*model.U
 
 // 重置账号
 func (s *UserService) ResetAccount(id uint, email string, password string) (err error) {
+	encodedPassword, err := cryptx.EncodePassword(password)
+	if err != nil {
+		return err
+	}
 	user := &model.User{
 		ID:       id,
 		Email:    email,
 		NickName: email,
-		Password: cryptx.EncodePassword(password),
+		Password: encodedPassword,
 	}
 	if user.ID == 0 {
 		return errors.New(constant.ErrIdRequired)
@@ -233,8 +245,7 @@ func (s *UserService) ResetAccount(id uint, email string, password string) (err 
 	if user.Password == "" {
 		return errors.New("password is required")
 	}
-	s.repo.Update(user)
-	return
+	return s.repo.Update(user)
 }
 
 func (s *UserService) Update(user *model.User) error {

@@ -1,6 +1,7 @@
 package repo
 
 import (
+	"errors"
 	"time"
 
 	"github.com/aihop/gopanel/app/model"
@@ -35,14 +36,19 @@ func (r *UserRepo) WithTx(tx *gorm.DB) *UserRepo {
 
 func (r *UserRepo) MigrateTable() error {
 	if !r.DB.Migrator().HasTable(&model.User{}) {
-		r.DB.AutoMigrate(&model.User{})
-		if conf.InitInstall.User != "" && conf.InitInstall.Password != "" {
-			return r.Create(&model.User{Email: conf.InitInstall.User, Salt: random.RandString(constant.HashDefaultLen), Password: cryptx.EncodePassword(conf.InitInstall.Password), Status: constant.UserStatusNormal, Role: constant.UserRoleSuper, NickName: conf.InitInstall.User, Token: random.RandString(constant.StrLen32)})
+		if conf.InitInstall.User == "" || conf.InitInstall.Password == "" {
+			return errors.New("initial administrator credentials are required; reinstall with a valid init.yaml")
 		}
-		return r.Create(&model.User{Email: "admin", Salt: random.RandString(constant.HashDefaultLen), Password: cryptx.EncodePassword("123456"), Status: constant.UserStatusNormal, Role: constant.UserRoleSuper, NickName: "admin", Token: random.RandString(constant.StrLen32)})
-	} else {
-		return r.DB.AutoMigrate(&model.User{})
+		password, err := cryptx.EncodePassword(conf.InitInstall.Password)
+		if err != nil {
+			return err
+		}
+		if err := r.DB.AutoMigrate(&model.User{}); err != nil {
+			return err
+		}
+		return r.Create(&model.User{Email: conf.InitInstall.User, Salt: random.RandString(constant.HashDefaultLen), Password: password, Status: constant.UserStatusNormal, Role: constant.UserRoleSuper, NickName: conf.InitInstall.User, Token: random.RandString(constant.StrLen32)})
 	}
+	return r.DB.AutoMigrate(&model.User{})
 }
 
 func (r *UserRepo) Create(item *model.User) error {

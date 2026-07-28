@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"crypto/md5"
+	"crypto/subtle"
 	"encoding/hex"
 	"errors"
 	"strconv"
@@ -35,7 +36,7 @@ func JWT(role string) func(fiber.Ctx) error {
 		// EventSource 无法自定义请求头，像 /runtime-logs 这类路径也需要走同一套 JWT 校验。
 		// 后缀必须显式列全：新增 SSE 接口时忘了加，表现是连接被静默 401，
 		// 前端只会看到 onerror，很难往鉴权上想（/host/disk/scan/stream 就踩过）。
-		if isQueryTokenAllowedPath(c.Path()) && c.Query("token") != "" {
+		if isQueryTokenAllowed(c.Method(), c.Path()) && c.Query("token") != "" {
 			c.Request().Header.Set("x-auth", c.Query("token"))
 		}
 
@@ -62,10 +63,7 @@ func JWT(role string) func(fiber.Ctx) error {
 			if xAuth != "" {
 				return c.JSON(e.Auth(err.Error()))
 			}
-			tokenStr := c.Get(constant.AppToken)
-			if tokenStr == "" {
-				tokenStr = c.Query(constant.AppToken)
-			}
+			tokenStr := getUserAccessToken(c)
 			if tokenStr != "" {
 				// 验证token是否合法
 				user, err := service.NewUser().GetByToken(tokenStr)
@@ -134,15 +132,26 @@ func JWT(role string) func(fiber.Ctx) error {
 // queryTokenAllowedSuffixes 允许用 ?token= 代替请求头做鉴权的路径后缀。
 // 仅限 EventSource / WebSocket 这类无法自定义请求头的场景——
 // URL 里的 token 会进访问日志和 Referer，不能对所有接口开放。
-var queryTokenAllowedSuffixes = []string{"/logs", "/terminal", "/stream"}
+var queryTokenAllowedSuffixes = []string{"/logs", "/terminal", "/stream", "/ws"}
 
-func isQueryTokenAllowedPath(path string) bool {
+func isQueryTokenAllowed(method, path string) bool {
+	if method != fiber.MethodGet {
+		return false
+	}
 	for _, suffix := range queryTokenAllowedSuffixes {
 		if strings.HasSuffix(path, suffix) {
 			return true
 		}
 	}
 	return false
+}
+
+func getUserAccessToken(c fiber.Ctx) string {
+	tokenStr := c.Get(constant.AppToken)
+	if tokenStr == "" && isQueryTokenAllowed(c.Method(), c.Path()) {
+		tokenStr = c.Query(constant.AppToken)
+	}
+	return tokenStr
 }
 
 func JwtCheck(xAuth, role string) (info *token.CustomClaims, err error) {
@@ -206,26 +215,26 @@ func JwtClaims(c fiber.Ctx) (info *token.CustomClaims, err error) {
 
 func isValidTimestamp(timestamp string) bool {
 	apiKeyValidityTime := global.CONF.System.ApiKeyValidityTime
-	if apiKeyValidityTime == "" {
-		apiKeyValidityTime = "0"
-	}
 	apiTime, err := strconv.Atoi(apiKeyValidityTime)
-	if err != nil || apiTime < 0 {
-		global.LOG.Errorf("apiTime %s, err: %v", apiKeyValidityTime, err)
+	if err != nil || apiTime <= 0 {
+		if global.LOG != nil {
+			global.LOG.Errorf("apiTime %s, err: %v", apiKeyValidityTime, err)
+		}
 		return false
-	}
-	if apiTime == 0 {
-		return true
 	}
 	panelTime, err := strconv.ParseInt(timestamp, 10, 64)
 	if err != nil {
-		global.LOG.Errorf("timestamp %s, panelTime %d, apiTime %d, err: %v", timestamp, apiTime, panelTime, err)
+		if global.LOG != nil {
+			global.LOG.Errorf("timestamp %s, panelTime %d, apiTime %d, err: %v", timestamp, apiTime, panelTime, err)
+		}
 		return false
 	}
 	nowTime := time.Now().Unix()
 	tolerance := int64(60)
 	if panelTime > nowTime+tolerance {
-		global.LOG.Errorf("Valid Panel Timestamp, apiTime %d, panelTime %d, nowTime %d, err: %v", apiTime, panelTime, nowTime, err)
+		if global.LOG != nil {
+			global.LOG.Errorf("Valid Panel Timestamp, apiTime %d, panelTime %d, nowTime %d, err: %v", apiTime, panelTime, nowTime, err)
+		}
 		return false
 	}
 	return nowTime-panelTime <= int64(apiTime)*60+tolerance
@@ -234,7 +243,7 @@ func isValidTimestamp(timestamp string) bool {
 func isValidApiKEY(requestKey string, timestamp string) bool {
 	serverKey := global.CONF.System.ApiKey
 	expectedKey := GenerateMD5("gopanel_" + serverKey + "_" + timestamp)
-	return requestKey == expectedKey
+	return subtle.ConstantTimeCompare([]byte(requestKey), []byte(expectedKey)) == 1
 }
 
 func GenerateMD5(param string) string {

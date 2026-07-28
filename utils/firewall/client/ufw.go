@@ -4,13 +4,19 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/aihop/gopanel/buserr"
-	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/utils/cmd"
 )
 
 type Ufw struct {
 	CmdStr string
+}
+
+func (f *Ufw) run(args ...string) (string, error) {
+	command := []string{"LANGUAGE=en_US:en", "ufw"}
+	if strings.Contains(f.CmdStr, "sudo") {
+		command = []string{"LANGUAGE=en_US:en", "sudo", "ufw"}
+	}
+	return cmd.ExecWithCheck("env", append(command, args...)...)
 }
 
 func NewUfw() (*Ufw, error) {
@@ -171,20 +177,19 @@ func (f *Ufw) Port(port FireInfo, operation string) error {
 	default:
 		return fmt.Errorf("unsupported strategy %s", port.Strategy)
 	}
-	if cmd.CheckIllegal(port.Protocol, port.Port) {
-		return buserr.New(constant.ErrCmdIllegal)
+	if err := validateFireInfo(port, operation); err != nil {
+		return err
 	}
-
-	command := fmt.Sprintf("%s %s %s", f.CmdStr, port.Strategy, port.Port)
+	args := []string{port.Strategy, port.Port}
 	if operation == "remove" {
-		command = fmt.Sprintf("%s delete %s %s", f.CmdStr, port.Strategy, port.Port)
+		args = append([]string{"delete"}, args...)
 	}
 	if len(port.Protocol) != 0 {
-		command += fmt.Sprintf("/%s", port.Protocol)
+		args[len(args)-1] += "/" + port.Protocol
 	}
-	stdout, err := cmd.Exec(command)
+	stdout, err := f.run(args...)
 	if err != nil {
-		return fmt.Errorf("%s (%s) failed, err: %s", operation, command, stdout)
+		return fmt.Errorf("%s ufw port rule failed, err: %s", operation, stdout)
 	}
 	return nil
 }
@@ -219,36 +224,35 @@ func (f *Ufw) RichRules(rule FireInfo, operation string) error {
 		}, operation)
 	}
 
-	if cmd.CheckIllegal(operation, rule.Protocol, rule.Address, rule.Port) {
-		return buserr.New(constant.ErrCmdIllegal)
+	if err := validateFireInfo(FireInfo{Address: rule.Address, Port: rule.Port, Protocol: rule.Protocol, Strategy: map[string]string{"allow": "accept", "deny": "drop"}[rule.Strategy]}, operation); err != nil {
+		return err
 	}
-
-	ruleStr := fmt.Sprintf("%s insert 1 %s ", f.CmdStr, rule.Strategy)
+	args := []string{"insert", "1", rule.Strategy}
 	if operation == "remove" {
-		ruleStr = fmt.Sprintf("%s delete %s ", f.CmdStr, rule.Strategy)
+		args = []string{"delete", rule.Strategy}
 	}
 	if len(rule.Protocol) != 0 {
-		ruleStr += fmt.Sprintf("proto %s ", rule.Protocol)
+		args = append(args, "proto", rule.Protocol)
 	}
 	if strings.Contains(rule.Address, "-") {
-		ruleStr += fmt.Sprintf("from %s to %s ", strings.Split(rule.Address, "-")[0], strings.Split(rule.Address, "-")[1])
+		args = append(args, "from", strings.Split(rule.Address, "-")[0], "to", strings.Split(rule.Address, "-")[1])
 	} else {
-		ruleStr += fmt.Sprintf("from %s ", rule.Address)
+		args = append(args, "from", rule.Address)
 	}
 	if len(rule.Port) != 0 {
-		ruleStr += fmt.Sprintf("to any port %s ", rule.Port)
+		args = append(args, "to", "any", "port", rule.Port)
 	}
 
-	stdout, err := cmd.Exec(ruleStr)
+	stdout, err := f.run(args...)
 	if err != nil {
 		if strings.Contains(stdout, "ERROR: Invalid position") || strings.Contains(stdout, "ERROR: 无效位置") {
-			stdout, err := cmd.Exec(strings.ReplaceAll(ruleStr, "insert 1 ", ""))
+			stdout, err := f.run(args[2:]...)
 			if err != nil {
-				return fmt.Errorf("%s rich rules (%s), failed, err: %s", operation, ruleStr, stdout)
+				return fmt.Errorf("%s rich rule failed, err: %s", operation, stdout)
 			}
 			return nil
 		}
-		return fmt.Errorf("%s rich rules (%s), failed, err: %s", operation, ruleStr, stdout)
+		return fmt.Errorf("%s rich rule failed, err: %s", operation, stdout)
 	}
 	return nil
 }

@@ -1,8 +1,6 @@
 package cryptx
 
 import (
-	"fmt"
-
 	"github.com/aihop/gopanel/utils/convertor"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -12,13 +10,13 @@ import (
  * @param 加密的字符串
  * @return {*}
  */
-func EncodePassword(rawPassword string) string {
+func EncodePassword(rawPassword string) (string, error) {
 	bytePassword, _ := convertor.ToBytes(rawPassword)
 	hash, err := bcrypt.GenerateFromPassword(bytePassword, bcrypt.DefaultCost)
 	if err != nil {
-		fmt.Println(err)
+		return "", err
 	}
-	return convertor.ToString(hash)
+	return convertor.ToString(hash), nil
 }
 
 /**

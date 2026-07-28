@@ -23,15 +23,12 @@ func (w *safeBuffer) Write(p []byte) (int, error) {
 	defer w.mu.Unlock()
 	return w.buffer.Write(p)
 }
-func (w *safeBuffer) Bytes() []byte {
+func (w *safeBuffer) Take() []byte {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	return w.buffer.Bytes()
-}
-func (w *safeBuffer) Reset() {
-	w.mu.Lock()
-	defer w.mu.Unlock()
+	data := append([]byte(nil), w.buffer.Bytes()...)
 	w.buffer.Reset()
+	return data
 }
 
 const (
@@ -55,8 +52,15 @@ type LogicSshWsSession struct {
 	inputFilterBuff *safeBuffer
 	session         *ssh.Session
 	wsConn          *websocket.Conn
+	writeMutex      sync.Mutex
 	isAdmin         bool
 	IsFlagged       bool
+}
+
+func (sws *LogicSshWsSession) writeMessage(messageType int, data []byte) error {
+	sws.writeMutex.Lock()
+	defer sws.writeMutex.Unlock()
+	return sws.wsConn.WriteMessage(messageType, data)
 }
 
 func NewLogicSshWsSession(cols, rows int, isAdmin bool, sshClient *ssh.Client, wsConn *websocket.Conn) (*LogicSshWsSession, error) {
@@ -103,12 +107,6 @@ func (sws *LogicSshWsSession) Close() {
 	if sws.session != nil {
 		sws.session.Close()
 	}
-	if sws.logBuff != nil {
-		sws.logBuff = nil
-	}
-	if sws.comboOutput != nil {
-		sws.comboOutput = nil
-	}
 }
 func (sws *LogicSshWsSession) Start(quitChan chan bool) {
 	go sws.receiveWsMsg(quitChan)
@@ -149,7 +147,7 @@ func (sws *LogicSshWsSession) receiveWsMsg(exitCh chan bool) {
 				sws.sendWebsocketInputCommandToSshSessionStdinPipe(decodeBytes)
 			case WsMsgHeartbeat:
 				// 接收到心跳包后将心跳包原样返回，可以用于网络延迟检测等情况
-				err = wsConn.WriteMessage(websocket.TextMessage, wsData)
+				err = sws.writeMessage(websocket.TextMessage, wsData)
 				if err != nil {
 					global.LOG.Errorf("ssh sending heartbeat to webSocket failed, err: %v", err)
 				}
@@ -165,7 +163,6 @@ func (sws *LogicSshWsSession) sendWebsocketInputCommandToSshSessionStdinPipe(cmd
 }
 
 func (sws *LogicSshWsSession) sendComboOutput(exitCh chan bool) {
-	wsConn := sws.wsConn
 	defer setQuit(exitCh)
 
 	tick := time.NewTicker(time.Millisecond * time.Duration(60))
@@ -176,7 +173,7 @@ func (sws *LogicSshWsSession) sendComboOutput(exitCh chan bool) {
 			if sws.comboOutput == nil {
 				return
 			}
-			bs := sws.comboOutput.Bytes()
+			bs := sws.comboOutput.Take()
 			if len(bs) > 0 {
 				wsData, err := json.Marshal(WsMsg{
 					Type: WsMsgCmd,
@@ -186,7 +183,7 @@ func (sws *LogicSshWsSession) sendComboOutput(exitCh chan bool) {
 					global.LOG.Errorf("encoding combo output to json failed, err: %v", err)
 					continue
 				}
-				err = wsConn.WriteMessage(websocket.TextMessage, wsData)
+				err = sws.writeMessage(websocket.TextMessage, wsData)
 				if err != nil {
 					global.LOG.Errorf("ssh sending combo output to webSocket failed, err: %v", err)
 				}
@@ -194,7 +191,6 @@ func (sws *LogicSshWsSession) sendComboOutput(exitCh chan bool) {
 				if err != nil {
 					global.LOG.Errorf("combo output to log buffer failed, err: %v", err)
 				}
-				sws.comboOutput.buffer.Reset()
 			}
 			if string(bs) == string([]byte{13, 10, 108, 111, 103, 111, 117, 116, 13, 10}) {
 				sws.Close()

@@ -221,7 +221,7 @@ func setEntranceCookie(c fiber.Ctx, entrance string) {
 		Value:    base64.StdEncoding.EncodeToString([]byte(entrance)),
 		Expires:  time.Now().Add(24 * time.Hour),
 		Path:     "/",
-		HTTPOnly: false,
+		HTTPOnly: true,
 		SameSite: "Lax",
 		Secure:   c.Scheme() == "https",
 	})

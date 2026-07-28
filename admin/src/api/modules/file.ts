@@ -91,7 +91,7 @@ export function MoveFile(params: File.FileMove) {
 }
 
 export function DownloadFile(params: File.FileDownload) {
-	return http.download<BlobPart>("/file/download", params, { responseType: "blob", timeout: TimeoutEnum.T_40S })
+	return http.get<BlobPart>("/file/download", params, { responseType: "blob", timeout: TimeoutEnum.T_40S }) as unknown as Promise<BlobPart>
 }
 
 export function ComputeDirSize(params: File.DirSizeReq) {

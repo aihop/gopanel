@@ -65,7 +65,7 @@ function open() {
 	const url =
 		`${protocol}://${window.location.host}/api/node-proxy-ws/${props.nodeId}/container/logs` +
 		`?container=${encodeURIComponent(selected.value)}&since=all&tail=${tail.value}` +
-		`&follow=${follow.value}&runtimeHost=&auth=${encodeURIComponent(auth)}`
+		`&follow=${follow.value}&runtimeHost=&token=${encodeURIComponent(auth)}`
 
 	socket = new WebSocket(url)
 	connected.value = true

@@ -204,7 +204,7 @@ async function searchLogs() {
 	const authStore = useAuthStore()
 	const auth = authStore.getAuth() || ""
 
-	const url = `${protocol}://${host}/api/container/logs?container=${logSearch.containerID}&since=${logSearch.mode}&tail=${logSearch.tail}&follow=${logSearch.isWatch}&runtimeHost=${encodeURIComponent(logSearch.runtimeHost || "")}&auth=${auth}`
+	const url = `${protocol}://${host}/api/container/logs?container=${logSearch.containerID}&since=${logSearch.mode}&tail=${logSearch.tail}&follow=${logSearch.isWatch}&runtimeHost=${encodeURIComponent(logSearch.runtimeHost || "")}&token=${encodeURIComponent(auth)}`
 	terminalSocket.value = new WebSocket(url)
 
 	terminalSocket.value.onmessage = event => {

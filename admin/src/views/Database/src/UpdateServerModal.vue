@@ -37,7 +37,7 @@ watch(
 				updateModel.value.host = data.host
 				updateModel.value.port = data.port
 				updateModel.value.username = data.username
-				updateModel.value.password = data.password
+				updateModel.value.password = ""
 				updateModel.value.remark = data.remark
 				updateModel.value.id = data.id
 				updateModel.value.type = data.type
@@ -121,7 +121,7 @@ watch(
         :label="$t('database.password')"
       >
         <n-input
-          :value="updateModel.password"
+          v-model:value="updateModel.password"
           type="password"
           show-password-on="click"
           @keydown.enter.prevent

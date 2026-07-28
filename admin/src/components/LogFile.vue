@@ -46,7 +46,7 @@
 
 <script lang="ts" setup>
 import { ReadByLine } from "@/api/modules/file"
-import { downloadFile } from "@/utils/util"
+import { downloadAuthenticatedFile } from "@/utils/fileDownload"
 import { NButton, NCheckbox, NIcon } from "naive-ui"
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue"
 
@@ -144,7 +144,7 @@ function changeLoading() {
 
 async function onDownload() {
 	changeLoading()
-	downloadFile(logPath.value)
+	await downloadAuthenticatedFile(logPath.value)
 	changeLoading()
 }
 

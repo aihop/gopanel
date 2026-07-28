@@ -44,7 +44,7 @@ type DatabaseServer struct {
 	Host      string               `gorm:"not null;default:''" json:"host"`
 	Port      uint                 `gorm:"not null;default:0" json:"port"`
 	Username  string               `gorm:"not null;default:''" json:"username"`
-	Password  string               `gorm:"not null;default:''" json:"password"`
+	Password  string               `gorm:"not null;default:''" json:"-"`
 	Status    DatabaseServerStatus `gorm:"-:all" json:"status"`
 	Remark    string               `gorm:"not null;default:''" json:"remark"`
 	Mode      DatabaseMode         `gorm:"not null;default:''" json:"mode"`
@@ -63,7 +63,7 @@ type DatabaseUser struct {
 	ID         uint               `gorm:"primaryKey" json:"id"`
 	ServerID   uint               `gorm:"not null;default:0" json:"serverId"`
 	Username   string             `gorm:"not null;default:''" json:"username"`
-	Password   string             `gorm:"not null;default:''" json:"password"`
+	Password   string             `gorm:"not null;default:''" json:"-"`
 	Host       string             `gorm:"not null;default:''" json:"host"` // 仅 mysql
 	Status     DatabaseUserStatus `gorm:"-:all" json:"status"`             // 仅显示
 	Privileges []string           `gorm:"-:all" json:"privileges"`         // 仅显示

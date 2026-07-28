@@ -125,11 +125,9 @@ func resetSuperUserPassword() {
 		log.Fatalf("%v", err)
 	}
 
-	encoded := cryptx.EncodePassword(newPassword)
-	// EncodePassword 内部把 bcrypt 的错误吞掉了（只打印），失败时会返回空串。
-	// 空串写进库 = 账号彻底登不上，所以这里先自校验一遍再落库。
-	if encoded == "" || !cryptx.ValidatePassword(encoded, newPassword) {
-		log.Fatalf("密码加密失败，未做任何修改")
+	encoded, err := cryptx.EncodePassword(newPassword)
+	if err != nil {
+		log.Fatalf("密码加密失败，未做任何修改: %v", err)
 	}
 
 	if err := db.Table("user").Where("id = ?", user.ID).Update("password", encoded).Error; err != nil {

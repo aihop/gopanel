@@ -1,10 +1,10 @@
 import type { File } from "@/api/interface/file"
 import type { DataTableColumns } from "naive-ui"
-import { userTokenAPI } from "@/api/modules/user"
 import { ComputeDirSize } from "@/api/modules/file"
 import { Mimetypes } from "@/global/mimetype"
 import { formatTime } from "@/utils/date"
-import { computeSize, copyText, downloadFile } from "@/utils/util"
+import { computeSize, copyText } from "@/utils/util"
+import { downloadAuthenticatedFile } from "@/utils/fileDownload"
 import { h, reactive } from "vue"
 import { NButton, NDropdown, NSpace } from "naive-ui"
 
@@ -42,37 +42,17 @@ export const createFileTableColumns = (options: FileTableColumnOptions): DataTab
   // 正在计算中的目录 { [path]: true }
   const dirSizeLoadingMap = reactive({} as Record<string, boolean>)
 
-  const copyAuthorizedDownloadLink = async (row: File.File) => {
-    if (!row?.path) return
-    try {
-      const res = await userTokenAPI({ path: row.path, timestamp: Date.now() })
-      if (res.code !== 0) {
-        onError(res.msg || t("file.downloadError"))
-        return
-      }
-      const token = res.data
-      if (!token) {
-        onError(t("file.downloadError"))
-        return
-      }
-      const href = window.location.href
-      const protocol = href.split("//")[0]
-      const host = href.split("//")[1].split("/")[0]
-      const url = `${protocol}//${host}/api/file/download?token=${token}&path=${encodeURIComponent(row.path)}`
-      await copyText(url)
-    } catch (error) {
-      onError(t("file.downloadError"))
-    }
-  }
-
-  const handleDownload = (row: File.File) => {
+  const handleDownload = async (row: File.File) => {
     if (row.isDir || !row.path) return
-    const auth = getAuth()
-    if (!auth) {
+    if (!getAuth()) {
       onError(t("file.downloadError"))
       return
     }
-    downloadFile(row.path, auth)
+    try {
+      await downloadAuthenticatedFile(row.path)
+    } catch {
+      onError(t("file.downloadError"))
+    }
   }
 
   const handleDirSize = async (row: File.File) => {
@@ -219,8 +199,7 @@ export const createFileTableColumns = (options: FileTableColumnOptions): DataTab
                       key: "decompress",
                       disabled: Mimetypes.get(row.mimeType) === undefined || row.isDir
                     },
-                    { label: t("commons.button.delete"), key: "delete" },
-                    { label: "授权下载链接", key: "copyAuthDownload" }
+                    { label: t("commons.button.delete"), key: "delete" }
                   ],
                   onSelect: async (key) => {
                     switch (key) {
@@ -243,9 +222,6 @@ export const createFileTableColumns = (options: FileTableColumnOptions): DataTab
                         break
                       case "rename":
                         onRename(row)
-                        break
-                      case "copyAuthDownload":
-                        await copyAuthorizedDownloadLink(row)
                         break
                     }
                   }

@@ -165,7 +165,7 @@ function initProcess() {
 	const href = window.location.href
 	const protocol = href.split("//")[0] === "http:" ? "ws" : "wss"
 	const ipLocal = href.split("//")[1].split("/")[0]
-	const url = `${protocol}://${ipLocal}/api/process/ws?auth=${auth}`
+	const url = `${protocol}://${ipLocal}/api/process/ws?token=${encodeURIComponent(auth)}`
 	processSocket.value = new WebSocket(url)
 
 	processSocket.value.onopen = () => {
@@ -320,7 +320,7 @@ function initNetwork() {
 	const href = window.location.href
 	const protocol = href.split("//")[0] === "http:" ? "ws" : "wss"
 	const ipLocal = href.split("//")[1].split("/")[0]
-	const url = `${protocol}://${ipLocal}/api/process/ws?auth=${auth}`
+	const url = `${protocol}://${ipLocal}/api/process/ws?token=${encodeURIComponent(auth)}`
 	networkSocket.value = new WebSocket(url)
 
 	networkSocket.value.onopen = () => {

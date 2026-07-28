@@ -5,6 +5,9 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
+	"strconv"
+
 	"github.com/aihop/gopanel/app/dto"
 	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/utils/common"
@@ -47,6 +50,10 @@ func (u *SettingService) GenerateApiKey() (string, error) {
 	return apiKey, nil
 }
 func (u *SettingService) UpdateApiConfig(req dto.ApiInterfaceConfig) error {
+	validityMinutes, err := strconv.Atoi(req.ApiKeyValidityTime)
+	if err != nil || validityMinutes <= 0 {
+		return errors.New("API key validity time must be a positive number of minutes")
+	}
 	if err := settingRepo.Update("ApiInterfaceStatus", req.ApiInterfaceStatus); err != nil {
 		return err
 	}

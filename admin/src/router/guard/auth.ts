@@ -10,24 +10,6 @@ export function checkAuth(router: Router) {
 // 等于一运行就升级，用户无法选择时机。现已改为在
 // 主机 - 工具箱 - 守护进程 页面手动点「更新 gp-agent」触发，见 useDaemonAgentStatus.updateAgent。
 
-function readEntranceCookie(): string {
-	try {
-		const entranceCookie = document.cookie
-			.split("; ")
-			.find(row => row.startsWith("Entrance="))
-			?.split("=")[1]
-
-		if (!entranceCookie) {
-			return ""
-		}
-
-		return atob(entranceCookie)
-	} catch (error) {
-		console.warn("Invalid entrance cookie:", error)
-		return ""
-	}
-}
-
 async function authCheck(
 	to: RouteLocationNormalized,
 	from: RouteLocationNormalized,
@@ -36,36 +18,16 @@ async function authCheck(
 	const authStore = useAuthStore()
 	const globalStore = GlobalStore()
 	const routeEntrance = typeof to.query.entrance === "string" ? to.query.entrance.trim() : ""
-	const cookieEntrance = readEntranceCookie()
 
 	if (routeEntrance) {
 		globalStore.setEntrance(routeEntrance)
-	} else if (cookieEntrance) {
-		globalStore.setEntrance(cookieEntrance)
-	}
-
-	const hasValidEntrance = !!routeEntrance || !!cookieEntrance
-
-	if (!hasValidEntrance) {
-		// 清除可能存在的登录状态
-		if (authStore.isLogged) {
-			authStore.setLogout()
-		}
-
-		// 如果当前要访问的就是登录页面，允许访问
-		if (to.path === "/login") {
-			return next()
-		}
-
-		// 否则重定向到登录页面
-		return next({ path: "/login" })
 	}
 
 	// 第二步：检查是否已登录
 	if (authStore.isLogged) {
 		// 登录后再次访问「安全入口」路径本身：前端没有对应路由，会命中 NotFound 显示 404。
 		// 此时直接进首页（入口的使命是放行进入面板，登录后不该再停在入口路径）。
-		const entranceVal = (globalStore.entrance || cookieEntrance || "").replace(/^\/+/, "").replace(/\/+$/, "")
+		const entranceVal = (globalStore.entrance || "").replace(/^\/+/, "").replace(/\/+$/, "")
 		if (entranceVal && to.name === "NotFound" && to.path.replace(/\/+$/, "") === "/" + entranceVal) {
 			return next({ path: "/dashboard/index" })
 		}

@@ -3,6 +3,7 @@ package client
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/aihop/gopanel/app/model"
@@ -119,6 +120,9 @@ func (iptables *Iptables) NatList(chain ...string) ([]IptablesNatInfo, error) {
 }
 
 func (iptables *Iptables) NatAdd(protocol, srcPort, dest, destPort string, save bool) error {
+	if err := validateForward(Forward{Protocol: protocol, Port: srcPort, TargetIP: dest, TargetPort: destPort}, "add"); err != nil {
+		return err
+	}
 	if dest != "" && dest != "127.0.0.1" && dest != "localhost" {
 		if err := iptables.runf(NatTab,
 			"-A %s -p %s --dport %s -j DNAT --to-destination %s:%s",
@@ -185,6 +189,13 @@ func (iptables *Iptables) NatAdd(protocol, srcPort, dest, destPort string, save 
 }
 
 func (iptables *Iptables) NatRemove(num string, protocol, srcPort, dest, destPort string) error {
+	ruleNumber, err := strconv.Atoi(num)
+	if err != nil || ruleNumber < 1 {
+		return fmt.Errorf("invalid firewall rule number %q", num)
+	}
+	if err := validateForward(Forward{Num: num, Protocol: protocol, Port: srcPort, TargetIP: dest, TargetPort: destPort}, "remove"); err != nil {
+		return err
+	}
 	if err := iptables.runf(NatTab, "-D %s %s", PreRoutingChain, num); err != nil {
 		return err
 	}

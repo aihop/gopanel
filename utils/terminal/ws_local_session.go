@@ -59,8 +59,6 @@ func (sws *LocalWsSession) masterWrite(data []byte) error {
 			global.LOG.Errorf("A panic occurred during write ws message to master, error message: %v", r)
 		}
 	}()
-	sws.writeMutex.Lock()
-	defer sws.writeMutex.Unlock()
 	wsData, err := json.Marshal(WsMsg{
 		Type: WsMsgCmd,
 		Data: base64.StdEncoding.EncodeToString(data),
@@ -68,11 +66,17 @@ func (sws *LocalWsSession) masterWrite(data []byte) error {
 	if err != nil {
 		return fmt.Errorf("failed to encoding to json: %w", err)
 	}
-	err = sws.wsConn.WriteMessage(websocket.TextMessage, wsData)
+	err = sws.writeMessage(websocket.TextMessage, wsData)
 	if err != nil {
 		return fmt.Errorf("failed to write to master: %w", err)
 	}
 	return nil
+}
+
+func (sws *LocalWsSession) writeMessage(messageType int, data []byte) error {
+	sws.writeMutex.Lock()
+	defer sws.writeMutex.Unlock()
+	return sws.wsConn.WriteMessage(messageType, data)
 }
 
 func (sws *LocalWsSession) receiveWsMsg(exitCh chan bool) {
@@ -113,7 +117,7 @@ func (sws *LocalWsSession) receiveWsMsg(exitCh chan bool) {
 					sws.sendWebsocketInputCommandToSshSessionStdinPipe(decodeBytes)
 				}
 			case WsMsgHeartbeat:
-				err = wsConn.WriteMessage(websocket.TextMessage, wsData)
+				err = sws.writeMessage(websocket.TextMessage, wsData)
 				if err != nil {
 					global.LOG.Errorf("ssh sending heartbeat to webSocket failed, err: %v", err)
 				}

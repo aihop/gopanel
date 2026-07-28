@@ -130,9 +130,7 @@ export namespace File {
 	}
 
 	export interface FileDownload {
-		paths: string[]
-		name: string
-		url: string
+		path: string
 	}
 
 	export interface FileChunkDownload {

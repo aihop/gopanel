@@ -163,7 +163,7 @@ watch(
 				updateModel.value.username = data.username || username.value || ""
 				updateModel.value.host = data.host || host.value || ""
 				serverName.value = data.server?.name || ""
-				updateModel.value.password = data.password
+				updateModel.value.password = ""
 				updateModel.value.privileges = data.privileges
 				updateModel.value.remark = data.remark
 				void loadPrivilegeOptions(updateModel.value.serverId)

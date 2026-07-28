@@ -59,7 +59,9 @@ func (s DatabaseServerService) Update(req *request.DatabaseServerUpdate) error {
 	server.Host = req.Host
 	server.Port = req.Port
 	server.Username = req.Username
-	server.Password = req.Password
+	if req.Password != "" {
+		server.Password = req.Password
+	}
 	server.Remark = req.Remark
 
 	if !checkServer(server) {

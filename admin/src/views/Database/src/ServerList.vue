@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { NButton, NInput, NInputGroup, NPopconfirm, NTag } from "naive-ui"
+import { NButton, NInput, NPopconfirm, NTag } from "naive-ui"
 
 import { formatTime } from "@/utils/date"
 import UpdateServerModal from "./UpdateServerModal.vue"
@@ -13,7 +13,6 @@ import {
 	databaseServerDeleteAPI,
 	databaseServerSyncAPI
 } from "@/api/modules/database"
-import { copyText } from "@/utils/util"
 import { MsgSuccess, MsgError } from "@/utils/message"
 import { isSucc } from "@/utils/is"
 
@@ -61,35 +60,6 @@ const columns: any = [
 		ellipsis: { tooltip: true },
 		render(row: any) {
 			return row.username || t("None")
-		}
-	},
-	{
-		title: t("database.password"),
-		key: "password",
-		width: 200,
-		render(row: any) {
-			return h(NInputGroup, null, {
-				default: () => [
-					h(NInput, {
-						value: row.password,
-						type: "password",
-						showPasswordOn: "click",
-						readonly: true,
-						placeholder: t("None")
-					}),
-					h(
-						NButton,
-						{
-							type: "primary",
-							ghost: true,
-							onClick: () => {
-								copyText(row.password)
-							}
-						},
-						{ default: () => t("database.copy") }
-					)
-				]
-			})
 		}
 	},
 	{

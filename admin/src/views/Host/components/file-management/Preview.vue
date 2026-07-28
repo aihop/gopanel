@@ -61,9 +61,9 @@
 </template>
 
 <script setup lang="ts">
-import { useAuthStore } from "@/store/auth"
+import { DownloadFile } from "@/api/modules/file"
 import { MsgError } from "@/utils/message"
-import { computed, ref } from "vue"
+import { computed, onBeforeUnmount, ref } from "vue"
 import { useI18n } from "vue-i18n"
 
 const emit = defineEmits(["close"])
@@ -85,9 +85,16 @@ const fileType = ref("")
 const fileUrl = ref("")
 const fileExtension = ref("")
 const isFullscreen = ref(false)
-const authStore = useAuthStore()
+
+function revokeFileUrl() {
+	if (fileUrl.value) {
+		URL.revokeObjectURL(fileUrl.value)
+		fileUrl.value = ""
+	}
+}
 
 function handleClose() {
+	revokeFileUrl()
 	open.value = false
 	emit("close", open.value)
 }
@@ -109,20 +116,25 @@ function toggleFullscreen() {
 	isFullscreen.value = !isFullscreen.value
 }
 
-function acceptParams(props: EditProps) {
+async function acceptParams(props: EditProps) {
 	fileExtension.value = props.extension
 	fileName.value = props.name
 	filePath.value = props.path
 	fileType.value = props.fileType
 
 	loading.value = true
-	const base = ((import.meta.env.VITE_API_URL as string) || "/api").replace(/\/$/, "")
-	const auth = authStore.auth || ""
-	fileUrl.value = `${base}/file/download?path=${encodeURIComponent(props.path)}&auth=${encodeURIComponent(auth)}&timestamp=${Date.now()}`
 	open.value = true
+	revokeFileUrl()
+	try {
+		const data = await DownloadFile({ path: props.path })
+		fileUrl.value = URL.createObjectURL(new Blob([data]))
+	} catch {
+		errorHandler()
+	}
 }
 
 defineExpose({ acceptParams })
+onBeforeUnmount(revokeFileUrl)
 
 // 布局样式辅助
 const contentStyle = computed(() => {
