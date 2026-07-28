@@ -4,7 +4,33 @@ _[简体中文 (Simplified Chinese)](./README_zh.md)_
 
 Official website: https://gopanel.cn/
 
-GoPanel is a modern, lightweight server management panel built for developers and small teams. It is also a Docker-first application runtime and website deployment platform. Instead of stuffing every possible feature into one bloated backend, GoPanel focuses on the operational actions you actually do every day and turns them into a cleaner, faster, and easier-to-understand workflow.
+> **Note**: This repository is GoPanel **v1.0**, derived from 1Panel. **v2.0** is undergoing a complete rewrite with features gradually evolving.
+
+<div align="center">
+
+## A Secure, Developer-Friendly Panel
+
+Built for developers, deeply integrated with Podman Rootless to build a solid privilege boundary in a non-root environment. We've redefined the ops workflow — development, testing, and deployment, all within one click.
+
+[Quick Install](https://gopanel.run) · Live Demo · [GitHub](https://github.com/aihop/gopanel)
+
+</div>
+
+### More Secure
+
+- **Powered by Podman Rootless**: Run services and containers as non-root by default, locking risks inside the privilege boundary — safer for production environments.
+- Non-root execution breaks the "one vulnerability = entire machine compromised" chain
+- Clearer isolation and least-privilege mindset reduce system-level risks from misoperations
+- Higher security baseline by default, suitable for long-running public-facing services
+
+### Easier to Use
+
+- Led by "胡说代码的可乐" (Hugh), backed by 20 years of R&D/ops experience — turning real-world high-frequency operations into one-click actions.
+- Automatic SSL certificate issuance and renewal — hassle-free domain and site go-live
+- Automatic website and reverse proxy management — common scenarios work out of the box
+- Pipeline (CI/CD) + visual database management — daily maintenance made easy
+
+GoPanel is a modern, lightweight server management panel built for developers and small teams. It is also a security-first, Podman-rootless application runtime and website deployment platform. Instead of stuffing every possible feature into one bloated backend, GoPanel focuses on the operational actions you actually do every day and turns them into a cleaner, faster, and easier-to-understand workflow.
 
 GoPanel helps you unify:
 
@@ -42,7 +68,8 @@ The screenshot above reflects the current GoPanel product direction: consistent 
 Compared with traditional server panels, GoPanel puts much more emphasis on the following:
 
 - **Lower cognitive overhead**: GoPanel keeps the focus on the modules that matter most in real operations work: websites, containers, apps, databases, pipelines, logs, and security settings.
-- **Docker-first runtime model**: Databases, middleware, web apps, and service environments are naturally isolated, making migration, rollback, backup, and multi-environment management more predictable.
+- **Podman-rootless runtime model**: Databases, middleware, web apps, and service environments run under unprivileged user namespaces with Podman, providing strong container isolation without requiring root daemons — making migration, rollback, backup, and multi-environment management more predictable and secure.
+- **Security by default with rootless architecture**: Unlike traditional panels that run containers with root privileges, GoPanel v2.0 eliminates the need for a privileged daemon entirely. Each container operates within its own unprivileged user namespace, drastically reducing the attack surface and removing common privilege-escalation vectors.
 - **Built-in HTTP service and unified access entry**: The panel can serve itself without requiring an external web server just to get started. Combined with website management, reverse proxying, and entry routing, it can naturally take over traffic for static sites, web apps, and domains.
 - **Process guarding for long-running stability**: GoPanel includes a long-running service mindset out of the box, with support for `systemd`, runtime guarding, and restart-friendly operation, so it behaves like a real production panel rather than a disposable script.
 - **Automatic CDN and certificate lifecycle**: It goes beyond basic HTTPS by connecting domain resolution, certificate issuance, renewal, and CDN push workflows into a more complete production delivery path.
@@ -60,7 +87,7 @@ With GoPanel, you get a workspace designed around deployment efficiency and oper
 - **AI Assistant**: Organize AI sessions by workspace group and keep commands, troubleshooting, collaboration, and context inside the panel.
 - **Website system**: Manage static sites, reverse proxies, containerized apps, and pipeline-driven publishing in one place.
 - **HTTP and access entry control**: Use the built-in HTTP service, unified entry configuration, and domain integration without having to wrap the panel in another external web server first.
-- **Database and container management**: Inspect runtime status, ports, versions, logs, and resource usage, while keeping database operations inside the same control plane.
+- **Database and container management**: Inspect runtime status, ports, versions, logs, and resource usage under Podman rootless, while keeping database operations inside the same control plane — without granting the container runtime any root access.
 - **Certificate / CDN / domain workflow**: Manage domain access, certificate issuance, renewal, DNS flow, and CDN push as one continuous operational workflow.
 - **Process guarding and runtime management**: Keep long-running services and the panel itself in a more stable, production-friendly state.
 - **Pipeline workspace**: Fetch code, build artifacts, review execution history, inspect logs, and publish versions through a lightweight CI/CD path.
@@ -103,3 +130,5 @@ cd gopanel
 
 go run main.go
 ```
+
+![Visits](https://svgstat.com/svg/gopanel/counter/visits.svg?label=Visits)
