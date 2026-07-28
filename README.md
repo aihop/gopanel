@@ -1,16 +1,23 @@
+<div align="center">
+  <img src="resource/gopanel-logo.svg" width="140">
+</div>
+
 # GoPanel
 
+[![GoPanel](https://img.shields.io/badge/GoPanel-%E5%AE%98%E6%96%B9%E7%BD%91%E7%AB%99-blue.svg)](https://gopanel.cn/)
 _[简体中文 (Simplified Chinese)](./README_zh.md)_
 
-Official website: https://gopanel.cn/
+**[官方网站](https://gopanel.cn/)** · 本地管理数据库 · 可视化管理 Docker · Podman Rootless 安全运行模型
+
+```bash
+$ bash <(curl -fsSL https://gopanel.run)
+```
 
 > **Note**: This repository is GoPanel **v1.0**, derived from 1Panel. **v2.0** is undergoing a complete rewrite with features gradually evolving.
 
 <div align="center">
 
 ## A Secure, Developer-Friendly Panel
-
-Built for developers, deeply integrated with Podman Rootless to build a solid privilege boundary in a non-root environment. We've redefined the ops workflow — development, testing, and deployment, all within one click.
 
 [Quick Install](https://gopanel.run) · Live Demo · [GitHub](https://github.com/aihop/gopanel)
 
