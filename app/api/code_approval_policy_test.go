@@ -49,3 +49,18 @@ func TestCodeSessionRequiresRiskApproval(t *testing.T) {
 		t.Fatal("full auto session should skip high-risk approval")
 	}
 }
+
+func TestUpdateCodeApprovalPolicy(t *testing.T) {
+	session := &model.AIDevSession{ApprovalPolicy: codeApprovalPolicySafeAuto}
+	changed, err := updateCodeApprovalPolicy(session, codeApprovalPolicyFullAuto)
+	if err != nil || !changed || session.ApprovalPolicy != codeApprovalPolicyFullAuto {
+		t.Fatalf("unexpected policy update: changed=%v policy=%q err=%v", changed, session.ApprovalPolicy, err)
+	}
+	changed, err = updateCodeApprovalPolicy(session, codeApprovalPolicyFullAuto)
+	if err != nil || changed {
+		t.Fatalf("unchanged policy should be a no-op: changed=%v err=%v", changed, err)
+	}
+	if _, err = updateCodeApprovalPolicy(session, "unknown"); err == nil {
+		t.Fatal("expected invalid policy to be rejected")
+	}
+}

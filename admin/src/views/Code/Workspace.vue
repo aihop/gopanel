@@ -137,7 +137,8 @@
 								}}
 							</div>
 						</div>
-						<div class="flex items-center gap-2">
+						<div class="flex flex-wrap items-center justify-end gap-2">
+							<SessionApprovalPolicy v-if="currentSessionId !== null" :session-id="currentSessionId" />
 							<n-button-group v-if="currentSessionId !== null">
 								<n-button size="small" :type="workMode === 'conversation' ? 'primary' : 'default'" @click="workMode = 'conversation'">
 									{{ $t("code.conversationMode") }}
@@ -231,6 +232,7 @@ import { useMessage, useDialog } from "naive-ui"
 import CodeTerminal from "./components/CodeTerminal.vue"
 import ConversationPanel from "./components/ConversationPanel.vue"
 import NewSessionModal from "./components/NewSessionModal.vue"
+import SessionApprovalPolicy from "./components/SessionApprovalPolicy.vue"
 import SessionHistoryDrawer from "./components/SessionHistoryDrawer.vue"
 import { getAITasks, updateAITask, deleteAITask, getAIGroups } from "@/api/modules/code"
 import type { AITask, AIGroup, CodeSession } from "@/api/interface/code"

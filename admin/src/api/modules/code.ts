@@ -48,6 +48,14 @@ export function createCodeSession(data: {
 	return http.post<CodeSession>("/code/sessions", data)
 }
 
+export function getCodeSession(sessionId: number) {
+	return http.get<{ session: CodeSession }>(`/code/sessions/${sessionId}`)
+}
+
+export function updateCodeSessionApprovalPolicy(sessionId: number, approvalPolicy: CodeApprovalPolicy) {
+	return http.put<CodeSession>(`/code/sessions/${sessionId}/approval-policy`, { approvalPolicy })
+}
+
 export function getCodeSessionHistory(sessionId: number) {
 	return http.get<CodeSessionHistory>(`/code/sessions/${sessionId}/history`)
 }

@@ -40,3 +40,15 @@ func codexApprovalPolicy(value string) string {
 func codeSessionRequiresRiskApproval(session *model.AIDevSession) bool {
 	return session == nil || session.ApprovalPolicy != codeApprovalPolicyFullAuto
 }
+
+func updateCodeApprovalPolicy(session *model.AIDevSession, value string) (bool, error) {
+	approvalPolicy, err := normalizeCodeApprovalPolicy(value)
+	if err != nil {
+		return false, err
+	}
+	if session.ApprovalPolicy == approvalPolicy {
+		return false, nil
+	}
+	session.ApprovalPolicy = approvalPolicy
+	return true, nil
+}
