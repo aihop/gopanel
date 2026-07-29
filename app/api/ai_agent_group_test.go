@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/utils/token"
 )
@@ -44,5 +45,18 @@ func TestNormalizeAIProjectWorkDirRejectsInvalidPaths(t *testing.T) {
 	}
 	if _, err := normalizeAIProjectWorkDir(filePath, claims); err == nil {
 		t.Fatal("expected a file path to be rejected")
+	}
+}
+
+func TestCanManageAIProject(t *testing.T) {
+	project := &model.AIGroup{CreatorID: 7}
+	if !canManageAIProject(project, &token.CustomClaims{UserId: 7, Role: constant.UserRoleSubAdmin}) {
+		t.Fatal("expected the project creator to manage the project")
+	}
+	if !canManageAIProject(project, &token.CustomClaims{UserId: 9, Role: constant.UserRoleSuper}) {
+		t.Fatal("expected a super admin to manage the project")
+	}
+	if canManageAIProject(project, &token.CustomClaims{UserId: 9, Role: constant.UserRoleAdmin}) {
+		t.Fatal("expected another admin to be denied")
 	}
 }

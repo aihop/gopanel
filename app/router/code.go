@@ -20,6 +20,7 @@ func CodeRouter(r fiber.Router) {
 		// Groups APIs
 		group.Get("/groups", api.GetAIGroups)
 		group.Post("/groups", api.CreateAIGroup)
+		group.Put("/groups/:id", api.UpdateAIGroup)
 
 		// Dev Sessions APIs
 		group.Get("/sessions", api.GetAISessions)

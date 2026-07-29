@@ -19,6 +19,10 @@ export function createAIGroup(data: { name: string; description: string; workDir
 	return http.post<AIGroup>("/code/groups", data)
 }
 
+export function updateAIGroup(id: number, data: { name: string; description: string; workDir: string }) {
+	return http.put<AIGroup>(`/code/groups/${id}`, data)
+}
+
 export function getCodeExecutors() {
 	return http.get<CodeExecutor[]>("/code/executors")
 }

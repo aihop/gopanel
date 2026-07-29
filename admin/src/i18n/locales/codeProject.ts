@@ -2,6 +2,7 @@ export const codeProjectMessages = {
 	zh: {
 		code: {
 			createProject: "新建项目",
+			editProject: "编辑项目",
 			noProject: "暂无项目，请先新建一个",
 			projectName: "项目名称",
 			projectNameRequired: "请输入项目名称",
@@ -19,6 +20,9 @@ export const codeProjectMessages = {
 			projectLoadFailed: "项目列表加载失败，请重试",
 			projectCreateSuccess: "项目创建成功",
 			projectCreateFailed: "项目创建失败",
+			projectUpdateSuccess: "项目修改成功",
+			projectUpdateFailed: "项目修改失败",
+			saveChanges: "保存修改",
 			projectPath: "项目路径",
 			project: "项目",
 			projectFallback: "项目",
@@ -30,6 +34,7 @@ export const codeProjectMessages = {
 	en: {
 		code: {
 			createProject: "Create Project",
+			editProject: "Edit Project",
 			noProject: "No projects yet. Create one to get started.",
 			projectName: "Project name",
 			projectNameRequired: "Enter a project name",
@@ -47,6 +52,9 @@ export const codeProjectMessages = {
 			projectLoadFailed: "Failed to load projects. Please retry.",
 			projectCreateSuccess: "Project created",
 			projectCreateFailed: "Failed to create project",
+			projectUpdateSuccess: "Project updated",
+			projectUpdateFailed: "Failed to update project",
+			saveChanges: "Save changes",
 			projectPath: "Project path",
 			project: "Project",
 			projectFallback: "Project",

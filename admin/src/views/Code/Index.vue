@@ -66,7 +66,12 @@
             <div class="group-card__avatar w-12 h-12 rounded-2xl flex items-center justify-center text-xl font-bold">
               {{ group.name.substring(0, 1).toUpperCase() }}
             </div>
-            <n-tag size="small" type="info" round>{{ t("code.project") }}</n-tag>
+            <div class="relative z-[2] flex items-center gap-2" @click.stop>
+              <n-button quaternary circle size="small" @click="openEditProjectModal(group)">
+                <template #icon><Icon name="mdi:pencil-outline" :size="16" /></template>
+              </n-button>
+              <n-tag size="small" type="info" round>{{ t("code.project") }}</n-tag>
+            </div>
           </div>
           <h3 class="group-card__title text-lg font-semibold mb-2">{{ group.name }}</h3>
           <p class="group-card__desc text-sm line-clamp-2 mb-5">{{ group.description || $t('code.noDesc') }}</p>
@@ -83,16 +88,16 @@
       <n-modal
         v-model:show="showCreateProjectModal"
         preset="dialog"
-        :title="t('code.createProject')"
+        :title="editingProjectId ? t('code.editProject') : t('code.createProject')"
       >
         <div class="flex flex-col gap-4 mt-4">
           <n-input
-            v-model:value="newProjectForm.name"
+            v-model:value="projectForm.name"
             :placeholder="t('code.projectName')"
             placeholder-class="text-[var(--n-text-color-3)]"
           />
           <n-input
-            v-model:value="newProjectForm.desc"
+            v-model:value="projectForm.desc"
             type="textarea"
             :placeholder="t('code.projectDesc')"
           />
@@ -100,7 +105,7 @@
             <div class="mb-2 text-sm font-medium text-[var(--n-text-color)]">{{ t("code.projectDirectory") }}</div>
             <n-input-group>
               <n-input
-                :value="newProjectForm.workDir"
+                :value="projectForm.workDir"
                 readonly
                 :placeholder="t('code.projectDirectoryRequired')"
               />
@@ -117,13 +122,13 @@
           <n-button
             type="primary"
             :loading="creatingProject"
-            @click="submitCreateProject"
-          >{{ $t('commons.button.confirm') }}</n-button>
+            @click="submitProject"
+          >{{ editingProjectId ? t("code.saveChanges") : $t('commons.button.confirm') }}</n-button>
         </template>
       </n-modal>
       <ProjectDirectoryPicker
         v-model:show="showDirectoryPicker"
-        @select="newProjectForm.workDir = $event"
+        @select="projectForm.workDir = $event"
       />
     </div>
   </div>
@@ -134,7 +139,7 @@ import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
-import { getAIGroups, createAIGroup } from '@/api/modules/code'
+import { getAIGroups, createAIGroup, updateAIGroup } from '@/api/modules/code'
 import type { AIGroup } from '@/api/interface/code'
 import Icon from '@/components/common/Icon.vue'
 import ProjectDirectoryPicker from './components/ProjectDirectoryPicker.vue'
@@ -149,7 +154,8 @@ const { t } = useI18n({ messages: codeProjectMessages })
 const showCreateProjectModal = ref(false)
 const showDirectoryPicker = ref(false)
 const creatingProject = ref(false)
-const newProjectForm = ref({ name: '', desc: '', workDir: '' })
+const editingProjectId = ref<number | null>(null)
+const projectForm = ref({ name: '', desc: '', workDir: '' })
 
 const groups = ref<AIGroup[]>([])
 const groupsLoading = ref(false)
@@ -176,33 +182,43 @@ onMounted(() => {
 })
 
 const openCreateProjectModal = () => {
-  newProjectForm.value = { name: '', desc: '', workDir: '' }
+  editingProjectId.value = null
+  projectForm.value = { name: '', desc: '', workDir: '' }
   showCreateProjectModal.value = true
 }
 
-const submitCreateProject = async () => {
-  if (!newProjectForm.value.name.trim()) {
+const openEditProjectModal = (project: AIGroup) => {
+  editingProjectId.value = project.id
+  projectForm.value = { name: project.name, desc: project.description || '', workDir: project.workDir || '' }
+  showCreateProjectModal.value = true
+}
+
+const submitProject = async () => {
+  if (!projectForm.value.name.trim()) {
     message.warning(t('code.projectNameRequired'))
     return
   }
-  if (!newProjectForm.value.workDir) {
+  if (!projectForm.value.workDir) {
     message.warning(t('code.projectDirectoryRequired'))
     return
   }
   creatingProject.value = true
   try {
-    const res = await createAIGroup({
-      name: newProjectForm.value.name.trim(),
-      description: newProjectForm.value.desc.trim(),
-      workDir: newProjectForm.value.workDir
-    })
+    const payload = {
+      name: projectForm.value.name.trim(),
+      description: projectForm.value.desc.trim(),
+      workDir: projectForm.value.workDir
+    }
+    const res = editingProjectId.value
+      ? await updateAIGroup(editingProjectId.value, payload)
+      : await createAIGroup(payload)
     if (res.code === 0) {
       showCreateProjectModal.value = false
-      message.success(t('code.projectCreateSuccess'))
+      message.success(t(editingProjectId.value ? 'code.projectUpdateSuccess' : 'code.projectCreateSuccess'))
       await fetchGroups()
     }
   } catch {
-    message.error(t('code.projectCreateFailed'))
+    message.error(t(editingProjectId.value ? 'code.projectUpdateFailed' : 'code.projectCreateFailed'))
   } finally {
     creatingProject.value = false
   }

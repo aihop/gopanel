@@ -41,4 +41,12 @@ func TestAIGroupRepositoryFiltersProjectsByCreator(t *testing.T) {
 	if total != 2 || len(projects) != 2 {
 		t.Fatalf("unexpected super-admin projects: total=%d projects=%#v", total, projects)
 	}
+	projects[0].Name = "updated"
+	if err := repository.UpdateGroup(projects[0]); err != nil {
+		t.Fatal(err)
+	}
+	updated, err := repository.GetGroupByID(projects[0].ID)
+	if err != nil || updated.Name != "updated" {
+		t.Fatalf("unexpected updated project: %#v, %v", updated, err)
+	}
 }
