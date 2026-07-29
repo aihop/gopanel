@@ -34,6 +34,8 @@ export interface CodeExecutor {
 	capabilities: string[]
 }
 
+export type CodeApprovalPolicy = "manual" | "safe_auto" | "full_auto"
+
 export interface CodeSession {
 	id: number
 	createdAt: string
@@ -43,6 +45,7 @@ export interface CodeSession {
 	workDir: string
 	status: string
 	currentStage: string
+	approvalPolicy: CodeApprovalPolicy
 }
 
 export interface AIMessage {

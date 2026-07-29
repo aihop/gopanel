@@ -8,6 +8,7 @@ import (
 
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
+	"github.com/aihop/gopanel/app/service"
 	"github.com/aihop/gopanel/global"
 )
 
@@ -114,4 +115,9 @@ func finishCodeInstruction(
 	_ = taskRepo.UpdateTask(task)
 	_ = sessionRepo.UpdateInstruction(instruction)
 	_ = sessionRepo.UpdateSession(session)
+	notifyState := service.CodeNotifyCompleted
+	if stage == "failed" || stage == "cancelled" {
+		notifyState = service.CodeNotifyFailed
+	}
+	go service.NotifyCodeSession(session, task, notifyState, summarizeAIRecentOutput(output))
 }

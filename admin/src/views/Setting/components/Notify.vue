@@ -26,8 +26,11 @@ import {
 } from "@/api/modules/notify_alert"
 import type { Notify } from "@/api/interface/notify"
 import { formatTime } from "@/utils/date"
+import { useI18n } from "vue-i18n"
+import { notifyMessages } from "@/i18n/locales/notify"
 
 const message = useMessage()
+const { t } = useI18n({ messages: notifyMessages })
 const loading = ref(false)
 const saving = ref(false)
 const testing = ref(false)
@@ -52,7 +55,8 @@ const form = ref<Notify.Config>({
 	enableDisk: true,
 	enableContainer: true,
 	enableOffline: true,
-	enableCert: false
+	enableCert: false,
+	enableCode: true
 })
 
 const tlsOptions = [
@@ -251,6 +255,7 @@ onMounted(() => {
 						<n-checkbox v-model:checked="form.enableContainer">容器异常</n-checkbox>
 						<n-checkbox v-model:checked="form.enableOffline">节点离线 / 令牌失效</n-checkbox>
 						<n-checkbox v-model:checked="form.enableCert">证书即将到期</n-checkbox>
+						<n-checkbox v-model:checked="form.enableCode">{{ t("notify.codeTasks") }}</n-checkbox>
 						<n-checkbox v-model:checked="form.notifyResolved">恢复时也通知</n-checkbox>
 					</n-space>
 				</n-form-item>

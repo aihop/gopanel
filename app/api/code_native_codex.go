@@ -18,7 +18,7 @@ func buildNativeCodexCommand(session *model.AIDevSession) (*exec.Cmd, error) {
 		return nil, err
 	}
 	args := []string{
-		"--ask-for-approval", "on-request",
+		"--ask-for-approval", codexApprovalPolicy(session.ApprovalPolicy),
 		"--sandbox", "workspace-write",
 		"--no-alt-screen",
 		"--cd", session.WorkDir,

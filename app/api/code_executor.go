@@ -150,10 +150,10 @@ func validateCodeExecutorAvailable(executorID, role string) (string, error) {
 	return definition.ID, nil
 }
 
-func buildCodeExecutorArgs(executorID, prompt, nativeSessionID string, sessionID uint) ([]string, string, error) {
+func buildCodeExecutorArgs(executorID, prompt, nativeSessionID string, sessionID uint, approvalPolicy string) ([]string, string, error) {
 	switch executorID {
 	case "codex":
-		prefix := []string{"--ask-for-approval", "never", "--sandbox", "workspace-write", "exec"}
+		prefix := []string{"--ask-for-approval", codexApprovalPolicy(approvalPolicy), "--sandbox", "workspace-write", "exec"}
 		if nativeSessionID != "" {
 			return append(prefix, "resume", "--json", "--skip-git-repo-check", nativeSessionID, prompt), nativeSessionID, nil
 		}
@@ -215,7 +215,11 @@ func buildCodeExecutorCommand(ctx context.Context, executorID, workDir, prompt, 
 	if err != nil {
 		return nil, "", err
 	}
-	args, preparedSessionID, err := buildCodeExecutorArgs(definition.ID, prompt, nativeSessionID, sessionID)
+	approvalPolicy := ""
+	if session != nil {
+		approvalPolicy = session.ApprovalPolicy
+	}
+	args, preparedSessionID, err := buildCodeExecutorArgs(definition.ID, prompt, nativeSessionID, sessionID, approvalPolicy)
 	if err != nil {
 		return nil, "", err
 	}

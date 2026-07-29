@@ -46,6 +46,7 @@ type NotifyConfig struct {
 	EnableContainer bool `json:"enableContainer"`
 	EnableOffline   bool `json:"enableOffline"`
 	EnableCert      bool `json:"enableCert"`
+	EnableCode      bool `json:"enableCode"`
 }
 
 func (NotifyConfig) TableName() string {

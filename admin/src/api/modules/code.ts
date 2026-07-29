@@ -7,6 +7,7 @@ import type {
 	CodeExecutionRun,
 	CodeInstruction,
 	CodeInstructionResponse,
+	CodeApprovalPolicy,
 	CodeSession,
 	CodeSessionHistory,
 	CodeSessionState,
@@ -31,7 +32,13 @@ export function getCodeExecutors() {
 	return http.get<CodeExecutor[]>("/code/executors")
 }
 
-export function createCodeSession(data: { title: string; workDir: string; projectId: number; executorId: string }) {
+export function createCodeSession(data: {
+	title: string
+	workDir: string
+	projectId: number
+	executorId: string
+	approvalPolicy: CodeApprovalPolicy
+}) {
 	return http.post<CodeSession>("/code/sessions", data)
 }
 

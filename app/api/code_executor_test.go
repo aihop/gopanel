@@ -59,12 +59,12 @@ func TestSubAdminCannotUseHostExecutor(t *testing.T) {
 func TestBuildCodeExecutorArgsPreservesPrompt(t *testing.T) {
 	prompt := `"; touch /tmp/PWNED; echo "`
 	tests := map[string][]string{
-		"codex":    {"--ask-for-approval", "never", "--sandbox", "workspace-write", "exec", "--json", "--skip-git-repo-check", prompt},
+		"codex":    {"--ask-for-approval", "on-request", "--sandbox", "workspace-write", "exec", "--json", "--skip-git-repo-check", prompt},
 		"opencode": {"run", "--format", "json", prompt},
 	}
 	for executorID, expected := range tests {
 		t.Run(executorID, func(t *testing.T) {
-			args, _, err := buildCodeExecutorArgs(executorID, prompt, "", 42)
+			args, _, err := buildCodeExecutorArgs(executorID, prompt, "", 42, codeApprovalPolicySafeAuto)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -83,13 +83,13 @@ func TestBuildCodeExecutorArgsPreservesPrompt(t *testing.T) {
 func TestBuildCodeExecutorArgsResumesNativeSession(t *testing.T) {
 	prompt := "continue"
 	tests := map[string][]string{
-		"codex":    {"--ask-for-approval", "never", "--sandbox", "workspace-write", "exec", "resume", "--json", "--skip-git-repo-check", "native-1", prompt},
+		"codex":    {"--ask-for-approval", "on-request", "--sandbox", "workspace-write", "exec", "resume", "--json", "--skip-git-repo-check", "native-1", prompt},
 		"claude":   {"--print", "--permission-mode", "acceptEdits", "--output-format", "json", "--resume", "native-1", prompt},
 		"opencode": {"run", "--format", "json", "--session", "native-1", prompt},
 	}
 	for executorID, expected := range tests {
 		t.Run(executorID, func(t *testing.T) {
-			args, nativeSessionID, err := buildCodeExecutorArgs(executorID, prompt, "native-1", 42)
+			args, nativeSessionID, err := buildCodeExecutorArgs(executorID, prompt, "native-1", 42, codeApprovalPolicySafeAuto)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -102,7 +102,7 @@ func TestBuildCodeExecutorArgsResumesNativeSession(t *testing.T) {
 
 func TestBuildAiderExecutorArgsUsesSessionHistory(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	args, nativeSessionID, err := buildCodeExecutorArgs("aider", "continue", "", 42)
+	args, nativeSessionID, err := buildCodeExecutorArgs("aider", "continue", "", 42, codeApprovalPolicySafeAuto)
 	if err != nil {
 		t.Fatal(err)
 	}

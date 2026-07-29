@@ -69,6 +69,7 @@ func (manager *nativeCodeTerminalManager) attach(
 	go terminal.readOutput()
 	go terminal.wait(manager)
 	go discoverNativeCodexSession(session, command.Process.Pid, time.Now())
+	go watchNativeCodeNotifications(session.ID, terminal.done)
 	return terminal, true, nil
 }
 

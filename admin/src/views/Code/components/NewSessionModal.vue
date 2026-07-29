@@ -3,7 +3,7 @@ import { computed, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 import { useMessage } from "naive-ui"
 import { createCodeSession, getCodeExecutors } from "@/api/modules/code"
-import type { CodeExecutor, CodeSession } from "@/api/interface/code"
+import type { CodeApprovalPolicy, CodeExecutor, CodeSession } from "@/api/interface/code"
 import { codeProjectMessages } from "@/i18n/locales/codeProject"
 
 const props = defineProps<{
@@ -20,6 +20,7 @@ const { t } = useI18n({ messages: codeProjectMessages })
 const message = useMessage()
 const executors = ref<CodeExecutor[]>([])
 const selectedExecutorId = ref("")
+const approvalPolicy = ref<CodeApprovalPolicy>("safe_auto")
 const title = ref("")
 const loading = ref(false)
 const submitting = ref(false)
@@ -50,6 +51,7 @@ watch(
 	show => {
 		if (show) {
 			title.value = ""
+			approvalPolicy.value = "safe_auto"
 			void loadExecutors()
 		}
 	}
@@ -68,7 +70,8 @@ const submit = async () => {
 			title: title.value.trim(),
 			workDir: "",
 			projectId: props.projectId,
-			executorId: selectedExecutorId.value
+			executorId: selectedExecutorId.value,
+			approvalPolicy: approvalPolicy.value
 		})
 		emit("created", response.data)
 		close()
@@ -148,6 +151,32 @@ const submit = async () => {
 						<n-form-item :label="t('code.sessionTitle')">
 							<n-input v-model:value="title" :placeholder="t('code.sessionTitlePlaceholder')" />
 						</n-form-item>
+						<n-form-item :label="t('code.approvalPolicy')">
+							<div class="grid w-full gap-3 sm:grid-cols-3">
+								<button
+									v-for="policy in (['manual', 'safe_auto', 'full_auto'] as CodeApprovalPolicy[])"
+									:key="policy"
+									type="button"
+									class="rounded-xl border p-3 text-left transition-all"
+									:class="
+										approvalPolicy === policy
+											? 'border-blue-500 bg-blue-50 shadow-sm'
+											: 'border-slate-200 bg-white hover:border-blue-200'
+									"
+									@click="approvalPolicy = policy"
+								>
+									<div class="text-sm font-semibold text-slate-800">
+										{{ t(`code.approvalPolicy_${policy}`) }}
+									</div>
+									<div class="mt-1 text-xs leading-5 text-slate-500">
+										{{ t(`code.approvalPolicyDesc_${policy}`) }}
+									</div>
+								</button>
+							</div>
+						</n-form-item>
+						<n-alert v-if="approvalPolicy === 'full_auto'" type="warning">
+							{{ t("code.fullAutoWarning") }}
+						</n-alert>
 						<n-alert type="info" :show-icon="false">{{ t("code.sessionUsesProjectDirectory") }}</n-alert>
 					</n-form>
 				</template>

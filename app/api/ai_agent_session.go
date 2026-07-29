@@ -10,6 +10,7 @@ import (
 	"github.com/aihop/gopanel/app/e"
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
+	"github.com/aihop/gopanel/app/service"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/utils/token"
 	"github.com/gofiber/fiber/v3"
@@ -296,6 +297,8 @@ func CreateAISessionInstruction(c fiber.Ctx) error {
 	}
 	if !needsApproval {
 		enqueueCodeInstruction(instruction.ID)
+	} else {
+		go service.NotifyCodeSession(session, task, service.CodeNotifyApproval, buildTimelineContent(content))
 	}
 	return c.JSON(e.Succ(fiber.Map{"session": session, "instruction": instruction, "task": task, "approval": approval}))
 }

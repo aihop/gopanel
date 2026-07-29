@@ -14,7 +14,7 @@ import (
 
 func TestBuildNativeCodexCommandStartsAndResumesInteractiveSession(t *testing.T) {
 	workDir := t.TempDir()
-	newSession := &model.AIDevSession{WorkDir: workDir}
+	newSession := &model.AIDevSession{WorkDir: workDir, ApprovalPolicy: codeApprovalPolicySafeAuto}
 	command, err := buildNativeCodexCommand(newSession)
 	if err != nil {
 		t.Skipf("codex is not installed: %v", err)
