@@ -2,6 +2,7 @@
 import {
 	decideMobileApproval,
 	getMobileOverview,
+	getMobileProjects,
 	getMobileSessionState,
 	getMobileSessions,
 	logoutMobileDevice,
@@ -10,7 +11,8 @@ import {
 	stopMobileSession,
 	type MobileOverview
 } from "@/api/modules/mobile"
-import type { CodeSession, CodeSessionState } from "@/api/interface/code"
+import type { AIGroup, CodeSession, CodeSessionState } from "@/api/interface/code"
+import Icon from "@/components/common/Icon.vue"
 import { mobileMessages } from "@/i18n/locales/mobile"
 import MobileFileBrowser from "./components/MobileFileBrowser.vue"
 import MobileSessionCreator from "./components/MobileSessionCreator.vue"
@@ -27,6 +29,7 @@ const router = useRouter()
 const isHttp = window.location.protocol === "http:"
 const activeTab = ref<"overview" | "code">("overview")
 const overview = ref<MobileOverview | null>(null)
+const projects = ref<AIGroup[]>([])
 const sessions = ref<CodeSession[]>([])
 const selectedSessionId = ref(0)
 const sessionState = ref<CodeSessionState | null>(null)
@@ -43,6 +46,51 @@ const isTaskDetail = computed(() => activeTab.value === "code" && Boolean(select
 const isRunning = computed(() => sessionState.value?.currentStage === "executing" || sessionState.value?.latestRun?.status === "running")
 const memoryPercent = computed(() => Math.round(overview.value?.system.memoryUsedPercent || 0))
 const cpuPercent = computed(() => Math.round(overview.value?.system.cpuUsedPercent || 0))
+
+function sessionStageLabel(session: CodeSession) {
+	const knownStages = ["idle", "interactive", "task_ready", "instruction_queued", "awaiting_approval", "executing", "completed", "preview_ready", "failed", "cancelled", "approval_rejected"]
+	const stage = knownStages.includes(session.currentStage) ? session.currentStage : "unknown"
+	return t(`mobile.stage_${stage}`)
+}
+
+function sessionStageType(session: CodeSession) {
+	if (session.currentStage === "failed") return "error"
+	if (["awaiting_approval", "approval_rejected", "cancelled"].includes(session.currentStage)) return "warning"
+	if (["completed", "preview_ready"].includes(session.currentStage)) return "success"
+	if (["executing", "instruction_queued", "interactive"].includes(session.currentStage)) return "info"
+	return "default"
+}
+
+function sessionApprovalLabel(session: CodeSession) {
+	const labels = {
+		manual: "mobile.approvalManual",
+		safe_auto: "mobile.approvalSafe",
+		full_auto: "mobile.approvalFull"
+	} as const
+	return t(labels[session.approvalPolicy])
+}
+
+function formatSessionTime(value: string) {
+	return new Date(value).toLocaleString(undefined, { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })
+}
+
+function sessionProjectName(session: CodeSession) {
+	const project = projects.value.find(item => item.id === session.projectId)
+	if (project) return project.name
+	if (session.projectId) return `${t("mobile.project")} #${session.projectId}`
+	const segments = session.workDir.split(/[\\/]/).filter(Boolean)
+	return segments.at(-1) || session.workDir
+}
+
+async function loadProjects() {
+	try {
+		const result = await getMobileProjects()
+		projects.value = result.items
+	} catch (error) {
+		loadError.value = error instanceof Error ? error.message : t("mobile.loadFailed")
+		if (loadError.value.includes("手机授权已失效")) await router.replace("/mobile/auth")
+	}
+}
 
 async function loadOverview(silent = false) {
 	if (!silent) loading.value = true
@@ -180,7 +228,7 @@ function startRefresh() {
 }
 
 onMounted(async () => {
-	await Promise.all([loadOverview(), loadSessions()])
+	await Promise.all([loadOverview(), loadProjects(), loadSessions()])
 	startRefresh()
 })
 
@@ -235,16 +283,40 @@ onBeforeUnmount(() => {
 							<div class="mt-2 text-2xl font-bold">{{ overview?.pendingApprovals.length || 0 }}</div>
 						</div>
 					</div>
-					<section class="rounded-2xl bg-white p-4 shadow-sm">
+					<section>
 						<div class="mb-3 flex items-center justify-between">
 							<h2 class="font-semibold">{{ t("mobile.sessions") }}</h2>
 							<n-button size="small" text type="primary" @click="activeTab = 'code'">{{ t("mobile.code") }}</n-button>
 						</div>
 						<n-empty v-if="!overview?.sessions.length" size="small" :description="t('mobile.noSessions')" />
-						<button v-for="session in overview?.sessions || []" :key="session.id" class="mb-2 flex w-full items-center justify-between rounded-xl border-0 bg-slate-50 px-3 py-3 text-left" @click="activeTab = 'code'; selectSession(session)">
-							<span class="min-w-0 truncate text-sm font-medium">{{ session.title }}</span>
-							<n-tag size="small" :bordered="false">{{ session.currentStage }}</n-tag>
-						</button>
+						<div v-else class="space-y-3">
+							<button v-for="session in overview?.sessions || []" :key="session.id" class="w-full rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition active:scale-[0.99]" @click="activeTab = 'code'; selectSession(session)">
+								<div class="flex items-start justify-between gap-3">
+									<div class="min-w-0 flex-1">
+										<div class="truncate font-semibold text-slate-900">{{ session.title }}</div>
+										<div class="mt-1.5 flex items-center gap-1.5 text-sm font-medium text-blue-600">
+											<Icon name="mdi:folder-outline" :size="16" />
+											<span class="truncate">{{ sessionProjectName(session) }}</span>
+										</div>
+										<div class="mt-1 flex items-center gap-1.5 text-xs text-slate-500">
+											<Icon name="mdi:robot-outline" :size="14" />
+											<span>{{ session.agentName }}</span>
+											<span v-if="session.providerModel" class="truncate">· {{ session.providerModel }}</span>
+										</div>
+									</div>
+									<n-tag size="small" :type="sessionStageType(session)" :bordered="false" round>{{ sessionStageLabel(session) }}</n-tag>
+								</div>
+								<div class="mt-3 flex items-center gap-2 text-xs text-slate-500">
+									<Icon name="mdi:source-branch" :size="15" class="shrink-0" />
+									<span class="min-w-0 flex-1 truncate">{{ session.workDir }}</span>
+								</div>
+								<div class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-slate-100 pt-3 text-xs text-slate-400">
+									<span>{{ sessionApprovalLabel(session) }}</span>
+									<span v-if="session.worktreeBranch" class="max-w-full truncate">{{ session.worktreeBranch }}</span>
+									<span class="ml-auto">{{ formatSessionTime(session.createdAt) }}</span>
+								</div>
+							</button>
+						</div>
 					</section>
 				</div>
 
@@ -282,14 +354,20 @@ onBeforeUnmount(() => {
 			</n-spin>
 		</main>
 
-		<nav v-if="!isTaskDetail" class="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-2">
-			<div class="mx-auto grid max-w-2xl grid-cols-2 gap-2">
-				<n-button size="large" :type="activeTab === 'overview' ? 'primary' : 'default'" :secondary="activeTab !== 'overview'" @click="activeTab = 'overview'; loadOverview()">{{ t("mobile.overview") }}</n-button>
-				<n-button size="large" :type="activeTab === 'code' ? 'primary' : 'default'" :secondary="activeTab !== 'code'" @click="activeTab = 'code'; loadSessions()">{{ t("mobile.code") }}</n-button>
+		<nav v-if="!isTaskDetail" class="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 pb-[max(8px,env(safe-area-inset-bottom))] pt-1 backdrop-blur">
+			<div class="mx-auto grid max-w-2xl grid-cols-2">
+				<button class="flex min-h-14 flex-col items-center justify-center gap-0.5 text-xs transition-colors" :class="activeTab === 'overview' ? 'text-blue-600' : 'text-slate-400'" @click="activeTab = 'overview'; loadOverview()">
+					<Icon :name="activeTab === 'overview' ? 'mdi:view-dashboard' : 'mdi:view-dashboard-outline'" :size="23" />
+					<span>{{ t("mobile.overview") }}</span>
+				</button>
+				<button class="flex min-h-14 flex-col items-center justify-center gap-0.5 text-xs transition-colors" :class="activeTab === 'code' ? 'text-blue-600' : 'text-slate-400'" @click="activeTab = 'code'; loadSessions()">
+					<Icon name="mdi:console-line" :size="23" />
+					<span>{{ t("mobile.code") }}</span>
+				</button>
 			</div>
-			</nav>
+		</nav>
 
-			<MobileSessionCreator v-model:show="showSessionCreator" @created="handleSessionCreated" />
-			<MobileFileBrowser v-if="selectedSessionId" v-model:show="showFiles" :session-id="selectedSessionId" />
-		</div>
+		<MobileSessionCreator v-model:show="showSessionCreator" @created="handleSessionCreated" />
+		<MobileFileBrowser v-if="selectedSessionId" v-model:show="showFiles" :session-id="selectedSessionId" />
+	</div>
 </template>
