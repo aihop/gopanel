@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { decideMobileApproval, getMobileOverview, getMobileProjects, getMobileSessionState, getMobileSessions, logoutMobileDevice, retryMobileInstruction, sendMobileInstruction, stopMobileSession, type MobileOverview } from "@/api/modules/mobile"
+import { decideMobileApproval, getMobileOverview, getMobileProjects, getMobileSessionState, getMobileSessions, logoutMobileDevice, retryMobileInstruction, stopMobileSession, type MobileOverview } from "@/api/modules/mobile"
 import type { AIGroup, CodeSession, CodeSessionState } from "@/api/interface/code"
 import Icon from "@/components/common/Icon.vue"
 import { mobileMessages } from "@/i18n/locales/mobile"
@@ -24,7 +24,6 @@ const projects = ref<AIGroup[]>([])
 const sessions = ref<CodeSession[]>([])
 const selectedSessionId = ref(0)
 const sessionState = ref<CodeSessionState | null>(null)
-const prompt = ref("")
 const loading = ref(false)
 const actionLoading = ref(false)
 const loadError = ref("")
@@ -162,22 +161,6 @@ async function handleSessionCreated(session: CodeSession) {
 	await loadSessionState()
 }
 
-async function sendInstruction() {
-	const content = prompt.value.trim()
-	if (!content || !selectedSessionId.value || actionLoading.value) return
-	actionLoading.value = true
-	try {
-		await sendMobileInstruction(selectedSessionId.value, content)
-		prompt.value = ""
-		message.success(t("mobile.instructionQueued"))
-		await loadSessionState(true)
-	} catch (error) {
-		message.error(error instanceof Error ? error.message : t("mobile.loadFailed"))
-	} finally {
-		actionLoading.value = false
-	}
-}
-
 async function decideApproval(approved: boolean) {
 	const approvalId = sessionState.value?.pendingApproval?.id
 	if (!approvalId) return
@@ -249,7 +232,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-	<div class="min-h-dvh bg-slate-100 pb-24 text-slate-900">
+	<div class="min-h-dvh bg-slate-100 text-slate-900" :class="isTaskDetail ? 'pb-0' : 'pb-24'">
 		<header class="sticky top-0 z-20 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur">
 			<div v-if="isTaskDetail" class="mx-auto grid max-w-2xl grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3">
 				<n-button size="small" quaternary @click="leaveTaskDetail">
@@ -389,14 +372,6 @@ onBeforeUnmount(() => {
 							<n-button v-if="['failed', 'cancelled'].includes(sessionState?.latestInstruction?.status || '')" secondary :loading="actionLoading" @click="retryExecution">
 								{{ t("mobile.retryExecution") }}
 							</n-button>
-						</div>
-						<div class="fixed inset-x-0 bottom-0 z-30 px-3 pb-[max(12px,env(safe-area-inset-bottom))]">
-							<div class="mx-auto flex max-w-2xl items-end gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
-								<n-input v-model:value="prompt" class="min-w-0 flex-1" type="textarea" :placeholder="t('mobile.instructionPlaceholder')" :autosize="{ minRows: 1, maxRows: 4 }" :disabled="actionLoading" />
-								<n-button type="primary" :loading="actionLoading" :disabled="!prompt.trim()" @click="sendInstruction">
-									{{ t("mobile.send") }}
-								</n-button>
-							</div>
 						</div>
 					</template>
 				</div>

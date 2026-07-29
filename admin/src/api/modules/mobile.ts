@@ -212,16 +212,6 @@ export function saveMobileSessionFile(sessionId: number, path: string, content: 
 	)
 }
 
-export function sendMobileInstruction(sessionId: number, content: string) {
-	return mobileRequest(
-		mobileHttp.post<ResultData<void>>(`/mobile/app/sessions/${sessionId}/instructions`, {
-			content,
-			allowCode: true,
-			autoPreview: true
-		})
-	)
-}
-
 export function decideMobileApproval(approvalId: number, approved: boolean) {
 	const decision = approved ? "approve" : "reject"
 	return mobileRequest(mobileHttp.post<ResultData<void>>(`/mobile/app/approvals/${approvalId}/${decision}`, {}))
