@@ -1,6 +1,5 @@
 import type { NodeItem } from "@/api/modules/node"
 import { nodeListAPI, nodeRefreshAPI } from "@/api/modules/node"
-import piniaPersistConfig from "@/config/pinia-persist"
 import { defineStore } from "pinia"
 
 /** 列表自动刷新间隔。后端 cron 每分钟采集一轮，前端跟着这个节奏读库即可，不需要更密 */
@@ -14,10 +13,8 @@ interface NodeState {
 	loaded: boolean
 	error: string
 	drawerVisible: boolean
-	/** 从细条点进来时要高亮的节点，0 表示没有指定 */
+	/** 打开抽屉时要高亮的节点，0 表示没有指定 */
 	focusId: number
-	/** 细条是否隐藏。默认常驻——细条上的状态灯就是这个功能的价值所在 */
-	railHidden: boolean
 }
 
 const NodeStore = defineStore("NodeState", {
@@ -27,18 +24,17 @@ const NodeStore = defineStore("NodeState", {
 		loaded: false,
 		error: "",
 		drawerVisible: false,
-		focusId: 0,
-		railHidden: false
+		focusId: 0
 	}),
 	getters: {
-		/** 有节点才需要展示细条，一台都没配时不占用横向空间 */
+		/** 是否已经配置节点 */
 		hasNodes(state): boolean {
 			return state.list.length > 0
 		},
 		offlineCount(state): number {
 			return state.list.filter(item => item.status === "offline" || item.status === "unauthorized").length
 		},
-		/** 存在 danger 级告警的节点数，用于细条上的角标 */
+		/** 存在 danger 级告警的节点数 */
 		dangerCount(state): number {
 			return state.list.filter(item => item.warnings?.some(w => w.level === "danger")).length
 		},
@@ -101,9 +97,6 @@ const NodeStore = defineStore("NodeState", {
 				this.openDrawer()
 			}
 		},
-		setRailHidden(hidden: boolean) {
-			this.railHidden = hidden
-		},
 		startAutoRefresh(): number {
 			return window.setInterval(() => {
 				// 抽屉打开时用户正在看，仍然刷新；只在请求进行中跳过，避免堆叠
@@ -112,12 +105,6 @@ const NodeStore = defineStore("NodeState", {
 				}
 			}, AUTO_REFRESH_MS)
 		}
-	},
-	// 只持久化用户的显示偏好。节点列表和 loading 是服务端状态，缓存到 localStorage
-	// 会让刷新页面后先闪一遍过期数据（比如已经恢复的节点仍显示离线）
-	persist: {
-		...piniaPersistConfig("NodeState"),
-		pick: ["railHidden"]
 	}
 })
 

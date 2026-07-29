@@ -1,8 +1,7 @@
 <template>
 	<!--
 		顶栏告警入口：只在真的有节点异常时出现。
-		存在的理由是细条可以被用户隐藏（railHidden），隐藏后就完全没有感知通道了——
-		这个入口保证"有节点出问题"这件事在任何布局状态下都能看到。
+		这个入口保证用户在任何页面都能感知异常，并直接打开节点抽屉。
 	-->
 	<n-tooltip v-if="visible" placement="bottom">
 		<template #trigger>

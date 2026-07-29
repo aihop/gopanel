@@ -1,7 +1,7 @@
 import type { NodeItem, NodeWarning } from "@/api/modules/node"
 import { t } from "@/i18n"
 
-/** 细条与抽屉共用的状态色。danger 优先于 warn，warn 优先于正常 */
+/** 节点状态级别。danger 优先于 warn，warn 优先于正常 */
 export type NodeLevel = "online" | "warn" | "danger" | "offline" | "unknown"
 
 export function nodeLevel(node: NodeItem): NodeLevel {
@@ -12,7 +12,7 @@ export function nodeLevel(node: NodeItem): NodeLevel {
 	return "online"
 }
 
-/** Tailwind 文本色类，用于细条圆点 */
+/** Tailwind 文本色类，用于节点状态圆点 */
 export const levelDotClass: Record<NodeLevel, string> = {
 	online: "text-green-500",
 	warn: "text-amber-500",
@@ -28,15 +28,6 @@ export const levelTagType: Record<NodeLevel, "success" | "warning" | "error" | "
 	danger: "error",
 	offline: "default",
 	unknown: "default"
-}
-
-/** 细条上的节点简称：取名字首字，中文取 1 个字，英文取前 2 个字母 */
-export function nodeInitials(name: string): string {
-	const value = (name || "").trim()
-	if (!value) return "?"
-	// eslint-disable-next-line regexp/no-obscure-range
-	if (/[一-龥]/.test(value[0])) return value[0]
-	return value.slice(0, 2).toUpperCase()
 }
 
 /** 把后端返回的告警折算成展示文案。阈值判断在后端，这里只做 i18n */

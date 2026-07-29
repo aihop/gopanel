@@ -4,7 +4,6 @@
 		<MainContainer class="grow">
 			<slot />
 		</MainContainer>
-		<NodeRail />
 		<NodeDrawer />
 	</div>
 </template>
@@ -12,7 +11,6 @@
 <script lang="ts" setup>
 import { useMessage } from "naive-ui"
 import NodeDrawer from "../common/NodeRail/NodeDrawer.vue"
-import NodeRail from "../common/NodeRail/index.vue"
 import MainContainer from "./MainContainer.vue"
 import Sidebar from "./Sidebar.vue"
 import "./main.scss"
