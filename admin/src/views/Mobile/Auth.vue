@@ -103,7 +103,7 @@ onMounted(authorizePairing)
 						<n-input v-model:value="password" size="large" type="password" show-password-on="click" autocomplete="current-password" :placeholder="t('mobile.loginPasswordPlaceholder')" @keydown.enter="signIn" />
 					</n-form-item>
 					<n-alert v-if="captchaRequired" type="warning" :show-icon="false" class="mb-5">{{ t("mobile.captchaRequired") }}</n-alert>
-					<n-button attr-type="submit" type="primary" size="large" block :disabled="!canSubmit" :loading="status === 'loading'">{{ t("mobile.login") }}</n-button>
+					<n-button attr-type="submit" type="primary" size="large" block :disabled="!canSubmit">{{ t("mobile.login") }}</n-button>
 				</n-form>
 				<div class="mt-5 text-center text-xs leading-5 text-slate-400">{{ t("mobile.loginSecurityHint") }}</div>
 			</div>
