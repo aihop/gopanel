@@ -232,19 +232,9 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-	<div class="min-h-dvh bg-slate-100 text-slate-900" :class="isTaskDetail ? 'pb-0' : 'pb-24'">
-		<header class="sticky top-0 z-20 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur">
-			<div v-if="isTaskDetail" class="mx-auto grid max-w-2xl grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3">
-				<n-button size="small" quaternary @click="leaveTaskDetail">
-					<template #icon><Icon name="mdi:arrow-left" /></template>
-					{{ t("commons.button.back") }}
-				</n-button>
-				<div class="truncate text-center text-sm font-semibold">{{ selectedSession?.title }}</div>
-				<n-button size="small" type="primary" secondary @click="showFiles = true">
-					{{ t("mobile.files") }}
-				</n-button>
-			</div>
-			<div v-else class="mx-auto flex max-w-2xl items-center justify-between">
+	<div class="min-h-dvh text-slate-900" :class="isTaskDetail ? 'bg-[#0b1020] pb-0' : 'bg-slate-100 pb-24'">
+		<header v-if="!isTaskDetail" class="sticky top-0 z-20 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur">
+			<div class="mx-auto flex max-w-2xl items-center justify-between">
 				<Logo :dark="false" class="shrink-0" />
 				<div class="flex shrink-0 items-center gap-1">
 					<n-button size="small" quaternary circle :title="t('mobile.logout')" :aria-label="t('mobile.logout')" @click="confirmLogout">
@@ -349,7 +339,7 @@ onBeforeUnmount(() => {
 						</template>
 					</n-empty>
 					<template v-else-if="selectedSession">
-						<MobileTerminal :session-id="selectedSessionId" />
+						<MobileTerminal :session-id="selectedSessionId" :title="selectedSession.title" @back="leaveTaskDetail" @open-files="showFiles = true" />
 						<n-alert v-if="sessionState?.pendingApproval" type="warning" :title="sessionState.pendingApproval.title">
 							<div class="whitespace-pre-wrap text-sm">{{ sessionState.pendingApproval.content }}</div>
 							<div class="mt-3 flex gap-2">

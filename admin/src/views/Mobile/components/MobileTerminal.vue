@@ -3,10 +3,12 @@ import { nextTick, onBeforeUnmount, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 import { Terminal } from "xterm"
 import { FitAddon } from "xterm-addon-fit"
+import Icon from "@/components/common/Icon.vue"
 import { mobileMessages } from "@/i18n/locales/mobile"
 import "xterm/css/xterm.css"
 
-const props = defineProps<{ sessionId: number }>()
+const props = defineProps<{ sessionId: number; title: string }>()
+const emit = defineEmits<{ back: []; openFiles: [] }>()
 const { t } = useI18n({ messages: mobileMessages })
 const terminalElement = ref<HTMLElement | null>(null)
 const connected = ref(false)
@@ -157,23 +159,29 @@ onBeforeUnmount(closeTerminal)
 </script>
 
 <template>
-	<section class="flex h-[calc(100dvh-53px)] w-full flex-col overflow-hidden bg-[#0b1020]">
-		<header class="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 px-3 py-2 text-white">
-			<div class="min-w-0">
-				<div class="text-sm font-semibold">{{ t("mobile.sharedTerminal") }}</div>
-				<div class="mt-0.5 text-xs text-slate-400">
-					{{ hasControl ? t("mobile.terminalControlling") : t("mobile.terminalReadOnly") }}
+	<section class="flex h-dvh w-full flex-col overflow-hidden bg-[#0b1020] text-white">
+		<header class="flex shrink-0 items-center gap-2 border-b border-white/10 bg-slate-950/80 px-2 pb-2 pt-[max(8px,env(safe-area-inset-top))] backdrop-blur">
+			<n-button size="small" quaternary circle text-color="#cbd5e1" :title="t('commons.button.back')" :aria-label="t('commons.button.back')" @click="emit('back')">
+				<template #icon><Icon name="mdi:arrow-left" :size="20" /></template>
+			</n-button>
+			<div class="min-w-0 flex-1">
+				<div class="truncate text-sm font-semibold">{{ title }}</div>
+				<div class="mt-0.5 truncate text-[11px] text-slate-400">
+					{{ t("mobile.sharedTerminal") }} · {{ hasControl ? t("mobile.terminalControlling") : t("mobile.terminalReadOnly") }}
 				</div>
 			</div>
-			<div class="flex shrink-0 items-center gap-2">
+			<div class="flex shrink-0 items-center gap-1.5">
 				<n-tag size="small" :type="connected ? 'success' : reconnecting ? 'warning' : 'default'" :bordered="false" round>
 					{{ connected ? t("mobile.connected") : reconnecting ? t("mobile.reconnecting") : t("mobile.disconnected") }}
 				</n-tag>
 				<n-button v-if="connected && !hasControl" size="tiny" type="primary" @click="takeControl">
 					{{ t("mobile.takeTerminalControl") }}
 				</n-button>
-				<n-button v-else-if="connected" size="tiny" secondary @click="releaseControl">
+				<n-button v-else-if="connected" size="tiny" quaternary text-color="#cbd5e1" @click="releaseControl">
 					{{ t("mobile.releaseTerminalControl") }}
+				</n-button>
+				<n-button size="small" quaternary circle text-color="#cbd5e1" :title="t('mobile.files')" :aria-label="t('mobile.files')" @click="emit('openFiles')">
+					<template #icon><Icon name="mdi:folder-outline" :size="19" /></template>
 				</n-button>
 			</div>
 		</header>
