@@ -36,7 +36,17 @@ export const codeProjectMessages = {
 			projectFallback: "项目",
 			noProjectHistory: "该项目暂无对话历史",
 			enterProject: "进入项目",
-			sessionUsesProjectDirectory: "本次会话将使用项目绑定的工作目录。"
+			sessionUsesProjectDirectory: "本次会话将使用项目绑定的工作目录。",
+			codexState_idle: "等待指令",
+			codexState_responding: "Codex 正在处理",
+			codexState_needsInput: "等待你的确认",
+			codexState_completed: "本轮已完成",
+			codexState_failed: "本轮已中断",
+			codexRuntimeStarting: "正在读取 Codex 状态",
+			codexRuntimeUnavailable: "Codex 状态暂不可用",
+			codexApprovalHint: "Codex 正等待终端中的审批，请确认后继续",
+			codexTokenUsage: "Token {count}",
+			codexCachedTokens: "缓存 {count}"
 		}
 	},
 	en: {
@@ -76,7 +86,17 @@ export const codeProjectMessages = {
 			projectFallback: "Project",
 			noProjectHistory: "No conversation history for this project",
 			enterProject: "Open Project",
-			sessionUsesProjectDirectory: "This session uses the working directory configured for the project."
+			sessionUsesProjectDirectory: "This session uses the working directory configured for the project.",
+			codexState_idle: "Waiting for instructions",
+			codexState_responding: "Codex is working",
+			codexState_needsInput: "Waiting for your approval",
+			codexState_completed: "Turn completed",
+			codexState_failed: "Turn interrupted",
+			codexRuntimeStarting: "Reading Codex status",
+			codexRuntimeUnavailable: "Codex status unavailable",
+			codexApprovalHint: "Codex is waiting for approval in the terminal",
+			codexTokenUsage: "{count} tokens",
+			codexCachedTokens: "{count} cached"
 		}
 	}
 } as const

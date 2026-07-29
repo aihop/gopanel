@@ -117,8 +117,24 @@ export interface CodeTimelineEvent {
 	status: string
 }
 
+export interface CodexRuntimeState {
+	responseState: "idle" | "responding" | "needsInput" | "completed" | "failed"
+	needsInput: boolean
+	awaitingApproval: boolean
+	model: string
+	inputTokens: number
+	outputTokens: number
+	cachedInputTokens: number
+	reasoningTokens: number
+	totalTokens: number
+	lastAssistantPreview: string
+	updatedAt: string
+	wasInterrupted: boolean
+}
+
 export interface CodeSessionState {
 	session: CodeSession
+	codexRuntime: CodexRuntimeState | null
 	currentTask: AITask | null
 	latestInstruction: CodeInstruction | null
 	currentStage: string

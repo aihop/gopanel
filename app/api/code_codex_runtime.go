@@ -7,10 +7,15 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/aihop/gopanel/app/e"
 	"github.com/aihop/gopanel/app/model"
+	"github.com/aihop/gopanel/constant"
+	"github.com/aihop/gopanel/utils/token"
+	"github.com/gofiber/fiber/v3"
 )
 
 const (
@@ -61,6 +66,19 @@ type codexTokenUsage struct {
 	OutputTokens          int64 `json:"output_tokens"`
 	ReasoningOutputTokens int64 `json:"reasoning_output_tokens"`
 	TotalTokens           int64 `json:"total_tokens"`
+}
+
+func GetCodexRuntimeState(c fiber.Ctx) error {
+	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
+	sessionID, err := strconv.Atoi(c.Params("id"))
+	if err != nil || sessionID <= 0 {
+		return c.JSON(e.Fail(errors.New("开发会话参数无效")))
+	}
+	session, err := getAISessionWithPermission(uint(sessionID), claims)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	return c.JSON(e.Succ(getCodexRuntimeState(session)))
 }
 
 func getCodexRuntimeState(session *model.AIDevSession) *codexRuntimeState {
@@ -267,7 +285,7 @@ func codexUnixTime(value float64, fallback time.Time) time.Time {
 func codexRawString(value json.RawMessage) string {
 	var text string
 	_ = json.Unmarshal(value, &text)
-	return strings.TrimSpace(text)
+	return buildTimelineContent(text)
 }
 
 func codexContentText(value json.RawMessage) string {
@@ -280,7 +298,7 @@ func codexContentText(value json.RawMessage) string {
 	}
 	for index := len(content) - 1; index >= 0; index-- {
 		if content[index].Type == "output_text" && strings.TrimSpace(content[index].Text) != "" {
-			return strings.TrimSpace(content[index].Text)
+			return buildTimelineContent(content[index].Text)
 		}
 	}
 	return ""

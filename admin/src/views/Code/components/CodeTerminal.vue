@@ -1,13 +1,16 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, nextTick } from "vue"
+import { computed, ref, onMounted, onBeforeUnmount, nextTick } from "vue"
 import { Terminal } from "xterm"
 import { FitAddon } from "xterm-addon-fit"
 import "xterm/css/xterm.css"
 import { useAuthStore } from "@/store/auth"
 import { useI18n } from "vue-i18n"
+import { getCodexRuntimeState } from "@/api/modules/code"
+import type { CodexRuntimeState } from "@/api/interface/code"
+import { codeProjectMessages } from "@/i18n/locales/codeProject"
 
 const authStore = useAuthStore()
-const { t } = useI18n()
+const { t } = useI18n({ messages: codeProjectMessages })
 
 const props = defineProps<{
 	taskId: number | null
@@ -26,6 +29,35 @@ let pingInterval: any
 let resizeObserver: ResizeObserver | null = null
 let intentionalClose = false
 let serverErrorShown = false
+const runtimeState = ref<CodexRuntimeState | null>(null)
+const runtimeLoading = ref(false)
+const runtimeError = ref(false)
+const runtimeSupported = ref(true)
+let runtimePollInterval: ReturnType<typeof setInterval> | null = null
+
+const runtimeTagType = computed(() => {
+	if (runtimeState.value?.responseState === "failed") return "error"
+	if (runtimeState.value?.responseState === "needsInput") return "warning"
+	if (runtimeState.value?.responseState === "completed") return "success"
+	return "info"
+})
+
+const formatTokens = (count: number) => new Intl.NumberFormat().format(count)
+
+const loadRuntimeState = async () => {
+	if (!props.sessionId || runtimeLoading.value || !runtimeSupported.value) return
+	runtimeLoading.value = true
+	try {
+		const response = await getCodexRuntimeState(props.sessionId)
+		runtimeState.value = response.data
+		runtimeSupported.value = response.data !== null
+		runtimeError.value = false
+	} catch {
+		runtimeError.value = true
+	} finally {
+		runtimeLoading.value = false
+	}
+}
 
 const initTerminal = () => {
 	if (!terminalRef.value) return
@@ -136,6 +168,8 @@ const handleResize = () => {
 
 onMounted(() => {
 	initTerminal()
+	void loadRuntimeState()
+	runtimePollInterval = setInterval(() => void loadRuntimeState(), 3000)
 	window.addEventListener("resize", handleResize)
 	if (terminalRef.value && typeof ResizeObserver !== "undefined") {
 		resizeObserver = new ResizeObserver(() => {
@@ -149,6 +183,7 @@ onBeforeUnmount(() => {
 	window.removeEventListener("resize", handleResize)
 	resizeObserver?.disconnect()
 	if (pingInterval) clearInterval(pingInterval)
+	if (runtimePollInterval) clearInterval(runtimePollInterval)
 	intentionalClose = true
 	if (ws) ws.close()
 	if (term) term.dispose()
@@ -156,8 +191,31 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-	<div class="h-[calc(100vh-220px)] min-h-0 w-full">
-		<div ref="terminalRef" class="h-[calc(100vh-220px)] min-h-0 w-full"></div>
+	<div class="flex h-[calc(100vh-220px)] min-h-0 w-full flex-col bg-[#1e1e1e]">
+		<div v-if="sessionId && runtimeSupported" class="flex min-h-12 items-center justify-between gap-3 border-b border-slate-700 bg-slate-900 px-4 py-2 text-slate-300">
+			<div class="flex min-w-0 items-center gap-3">
+				<n-tag v-if="runtimeState" :type="runtimeTagType" size="small" round :bordered="false">
+					{{ t(`code.codexState_${runtimeState.responseState}`) }}
+				</n-tag>
+				<span v-else class="text-xs text-slate-400">
+					{{ t(runtimeError ? "code.codexRuntimeUnavailable" : "code.codexRuntimeStarting") }}
+				</span>
+				<span v-if="runtimeState?.awaitingApproval" class="truncate text-xs font-medium text-amber-300">
+					{{ t("code.codexApprovalHint") }}
+				</span>
+				<span v-else-if="runtimeState?.lastAssistantPreview" class="truncate text-xs text-slate-400">
+					{{ runtimeState.lastAssistantPreview }}
+				</span>
+			</div>
+			<div v-if="runtimeState" class="flex shrink-0 items-center gap-3 text-xs text-slate-400">
+				<span v-if="runtimeState.model">{{ runtimeState.model }}</span>
+				<span v-if="runtimeState.totalTokens">{{ t("code.codexTokenUsage", { count: formatTokens(runtimeState.totalTokens) }) }}</span>
+				<span v-if="runtimeState.cachedInputTokens" class="hidden md:inline">
+					{{ t("code.codexCachedTokens", { count: formatTokens(runtimeState.cachedInputTokens) }) }}
+				</span>
+			</div>
+		</div>
+		<div ref="terminalRef" class="min-h-0 w-full flex-1"></div>
 	</div>
 </template>
 

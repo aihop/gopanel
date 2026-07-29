@@ -9,7 +9,8 @@ import type {
 	CodeInstructionResponse,
 	CodeSession,
 	CodeSessionHistory,
-	CodeSessionState
+	CodeSessionState,
+	CodexRuntimeState
 } from "../interface/code"
 
 // === Group APIs ===
@@ -44,6 +45,10 @@ export function getCodeExecutionRun(runId: number) {
 
 export function getCodeSessionState(sessionId: number) {
 	return http.get<CodeSessionState>(`/code/sessions/${sessionId}/state`, undefined, { timeout: 10000 })
+}
+
+export function getCodexRuntimeState(sessionId: number) {
+	return http.get<CodexRuntimeState | null>(`/code/sessions/${sessionId}/codex-runtime`, undefined, { timeout: 10000 })
 }
 
 export function createCodeInstruction(sessionId: number, content: string) {
