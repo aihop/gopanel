@@ -47,37 +47,36 @@
 								</n-button>
 							</div>
 						</div>
+					</div>
 
-						<div class="flex items-center justify-between px-5 pt-5">
+					<div class="mt-3 flex min-h-0 flex-1 flex-col overflow-hidden">
+						<div class="flex items-center justify-between px-5 pb-2 pt-1">
 							<div class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">历史任务</div>
 							<div class="text-xs text-slate-400">{{ tasks.length }} 条</div>
 						</div>
 
-						<n-scrollbar class="flex-1 px-4 pb-4 pt-4">
+						<n-scrollbar class="ai-workspace-task-scrollbar min-h-0 flex-1">
+							<div class="px-3 pb-4 pr-5">
 							<div
 								v-if="tasks.length === 0"
-								class="ai-workspace-task-empty flex min-h-[240px] items-center justify-center rounded-[22px] border border-dashed border-slate-200 bg-white/70"
+								class="flex min-h-[240px] items-center justify-center"
 							>
 								<n-empty :description="t('code.noProjectHistory')" />
 							</div>
 
-							<div v-else class="space-y-3">
+							<div v-else class="space-y-1">
 								<div
 									v-for="task in tasks"
 									:key="task.id"
-									class="ai-workspace-task-card group/task relative flex cursor-pointer items-start justify-between gap-3 rounded-[22px] border border-slate-200/80 bg-white/90 p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-[0_16px_30px_rgba(15,23,42,0.08)]"
-									:class="
-										currentTaskId === task.id
-											? 'ai-workspace-task-card--active !border-blue-200 !bg-[linear-gradient(180deg,rgba(239,246,255,0.95),rgba(255,255,255,0.96))] shadow-[0_18px_34px_rgba(37,99,235,0.12)]'
-											: ''
-									"
+									class="ai-workspace-task-row group/task relative flex cursor-pointer items-start justify-between gap-3 rounded-xl px-3 py-2.5 transition-colors duration-200 hover:bg-slate-200/45"
+									:class="currentTaskId === task.id ? 'ai-workspace-task-row--active bg-blue-50/80' : ''"
 									@click="selectTask(task)"
 								>
 									<div class="min-w-0 flex-1">
 										<div class="truncate text-sm font-semibold text-slate-800" :title="task.title">
 											{{ task.title }}
 										</div>
-										<div class="mt-3 flex items-center gap-2">
+										<div class="mt-1.5 flex items-center gap-2">
 											<n-tag size="small" type="success" round :bordered="false">
 												{{ task.agentName || "terminal" }}
 											</n-tag>
@@ -100,7 +99,7 @@
 												quaternary
 												circle
 												size="small"
-												class="ai-workspace-task-btn !bg-slate-100"
+												class="ai-workspace-task-btn !bg-transparent"
 											>
 												<template #icon>
 													<MoreIcon />
@@ -109,6 +108,7 @@
 										</n-dropdown>
 									</div>
 								</div>
+							</div>
 							</div>
 						</n-scrollbar>
 					</div>
@@ -121,20 +121,11 @@
 					class="ai-workspace-content-panel flex h-full min-h-0 flex-1 flex-col bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.08),transparent_28%)] p-4 md:p-5"
 				>
 					<div
-						class="ai-workspace-session-bar mb-4 flex items-center justify-between rounded-[22px] border border-slate-200/80 bg-white/85 px-4 py-3 shadow-sm"
+						class="ai-workspace-session-bar mb-3 flex items-center justify-between px-2 py-1"
 					>
 						<div class="min-w-0">
-							<div class="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600">
-								Current Session
-							</div>
 							<div class="truncate text-sm font-semibold text-slate-800">
-								{{
-									currentSessionId !== null
-										? $t("code.newSessionReady")
-										: currentTaskId !== null
-											? "正在查看历史任务"
-											: "请选择一个任务开始协作"
-								}}
+								{{ sessionLabel }}
 							</div>
 						</div>
 						<div class="flex flex-wrap items-center justify-end gap-2">
@@ -278,6 +269,12 @@ const showHistoryDrawer = ref(false)
 const terminalKey = ref(0)
 const terminalTakeoverRequested = ref(false)
 const workMode = ref<"conversation" | "terminal">("conversation")
+const currentTask = computed(() => tasks.value.find(task => task.id === currentTaskId.value) || null)
+const sessionLabel = computed(() => {
+	if (currentTask.value?.title) return currentTask.value.title
+	if (currentSessionId.value !== null) return t("code.newSession")
+	return t("code.selectTaskToStart")
+})
 
 const fetchTasks = async () => {
 	if (!currentGroupId.value) return
@@ -432,23 +429,26 @@ const submitRename = async () => {
 	background-color: color-mix(in srgb, var(--bg-default-color) 90%, transparent);
 }
 
-.theme-dark .ai-workspace-task-empty {
-	border-color: color-mix(in srgb, var(--border-color) 60%, transparent) !important;
-	background-color: color-mix(in srgb, var(--bg-default-color) 70%, transparent) !important;
+.ai-workspace-task-scrollbar :deep(.n-scrollbar-rail.n-scrollbar-rail--vertical) {
+	right: 4px !important;
+	width: 3px !important;
 }
 
-.theme-dark .ai-workspace-task-card {
-	border-color: color-mix(in srgb, var(--border-color) 80%, transparent) !important;
-	background-color: color-mix(in srgb, var(--bg-default-color) 90%, transparent) !important;
+.ai-workspace-task-scrollbar :deep(.n-scrollbar-rail__scrollbar) {
+	width: 3px !important;
+	background-color: rgba(148, 163, 184, 0.24) !important;
 }
 
-.theme-dark .ai-workspace-task-card--active {
-	border-color: color-mix(in srgb, var(--primary-color) 50%, transparent) !important;
-	background: linear-gradient(
-		180deg,
-		color-mix(in srgb, var(--primary-color) 18%, var(--bg-default-color)),
-		color-mix(in srgb, var(--bg-default-color) 96%, transparent)
-	) !important;
+.ai-workspace-task-scrollbar :deep(.n-scrollbar-rail__scrollbar:hover) {
+	background-color: rgba(148, 163, 184, 0.4) !important;
+}
+
+.theme-dark .ai-workspace-task-row:hover {
+	background-color: color-mix(in srgb, var(--fg-secondary-color) 10%, transparent) !important;
+}
+
+.theme-dark .ai-workspace-task-row--active {
+	background-color: color-mix(in srgb, var(--primary-color) 14%, transparent) !important;
 }
 
 .theme-dark .ai-workspace-task-btn {
@@ -461,11 +461,6 @@ const submitRename = async () => {
 		color-mix(in srgb, var(--primary-color) 8%, transparent),
 		transparent 28%
 	);
-}
-
-.theme-dark .ai-workspace-session-bar {
-	border-color: color-mix(in srgb, var(--border-color) 80%, transparent);
-	background-color: color-mix(in srgb, var(--bg-default-color) 85%, transparent);
 }
 
 .theme-dark .ai-workspace-terminal-wrap {
