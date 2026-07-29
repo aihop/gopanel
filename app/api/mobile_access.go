@@ -31,11 +31,22 @@ const maxMobilePairingAttemptEntries = 4096
 
 func IssueMobilePairing(c fiber.Ctx) error {
 	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
-	code, expiresAt, err := service.IssueMobilePairing(claims.UserId)
+	var req struct {
+		DeviceTTLDays int `json:"deviceTtlDays"`
+	}
+	if len(c.Body()) > 0 {
+		if err := c.Bind().JSON(&req); err != nil {
+			return c.JSON(e.Fail(err))
+		}
+	}
+	if req.DeviceTTLDays == 0 {
+		req.DeviceTTLDays = service.DefaultMobileDeviceTTLDays
+	}
+	code, expiresAt, err := service.IssueMobilePairing(claims.UserId, req.DeviceTTLDays)
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	return c.JSON(e.Succ(fiber.Map{"code": code, "expiresAt": expiresAt}))
+	return c.JSON(e.Succ(fiber.Map{"code": code, "expiresAt": expiresAt, "deviceTtlDays": req.DeviceTTLDays}))
 }
 
 func ExchangeMobilePairing(c fiber.Ctx) error {

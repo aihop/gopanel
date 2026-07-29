@@ -48,8 +48,8 @@ export interface MobileOverview {
 	serverTime: string
 }
 
-export function issueMobilePairing() {
-	return managementRequest(http.post<{ code: string; expiresAt: string }>("/mobile/management/pair/issue"))
+export function issueMobilePairing(deviceTtlDays: number) {
+	return managementRequest(http.post<{ code: string; expiresAt: string; deviceTtlDays: number }>("/mobile/management/pair/issue", { deviceTtlDays }))
 }
 
 export function getMobileDevices() {

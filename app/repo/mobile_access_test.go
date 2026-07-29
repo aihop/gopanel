@@ -13,9 +13,13 @@ import (
 
 func TestMobilePairingCanOnlyBeConsumedOnce(t *testing.T) {
 	repository, database := setupMobileAccessRepo(t)
-	pairing := &model.MobilePairing{UserID: 7, CodeHash: "pair-hash", ExpiresAt: time.Now().Add(time.Minute)}
+	pairing := &model.MobilePairing{UserID: 7, CodeHash: "pair-hash", DeviceTTLDays: 90, ExpiresAt: time.Now().Add(time.Minute)}
 	if err := repository.CreatePairing(pairing); err != nil {
 		t.Fatal(err)
+	}
+	storedPairing, err := repository.FindPairing("pair-hash")
+	if err != nil || storedPairing.DeviceTTLDays != 90 {
+		t.Fatalf("stored pairing duration = %d, err = %v", storedPairing.DeviceTTLDays, err)
 	}
 	device := &model.MobileDevice{Name: "phone", TokenHash: "token-hash", ExpiresAt: time.Now().Add(time.Hour)}
 	if err := repository.ConsumePairing("pair-hash", device); err != nil {

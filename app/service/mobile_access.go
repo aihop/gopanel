@@ -14,18 +14,26 @@ import (
 )
 
 const (
-	MobilePairingTTL = 2 * time.Minute
-	MobileDeviceTTL  = 7 * 24 * time.Hour
+	MobilePairingTTL           = 2 * time.Minute
+	DefaultMobileDeviceTTLDays = 30
 )
 
-func IssueMobilePairing(userID uint) (string, time.Time, error) {
+var allowedMobileDeviceTTLDays = map[int]struct{}{
+	1: {}, 7: {}, 30: {}, 90: {}, 365: {},
+}
+
+func IssueMobilePairing(userID uint, requestedTTLDays int) (string, time.Time, error) {
+	deviceTTLDays, err := normalizeMobileDeviceTTLDays(requestedTTLDays)
+	if err != nil {
+		return "", time.Time{}, err
+	}
 	code, err := randomMobileSecret()
 	if err != nil {
 		return "", time.Time{}, err
 	}
 	expiresAt := time.Now().Add(MobilePairingTTL)
 	err = repo.NewMobileAccessRepo().CreatePairing(&model.MobilePairing{
-		UserID: userID, CodeHash: hashMobileSecret(code), ExpiresAt: expiresAt,
+		UserID: userID, CodeHash: hashMobileSecret(code), DeviceTTLDays: deviceTTLDays, ExpiresAt: expiresAt,
 	})
 	return code, expiresAt, err
 }
@@ -39,18 +47,37 @@ func ExchangeMobilePairing(code, deviceName, ip, agent string) (string, *model.M
 	if err != nil {
 		return "", nil, err
 	}
+	codeHash := hashMobileSecret(code)
+	pairing, err := repo.NewMobileAccessRepo().FindPairing(codeHash)
+	if err != nil {
+		return "", nil, errors.New("配对码无效、已过期或已使用")
+	}
+	deviceTTLDays, err := normalizeMobileDeviceTTLDays(pairing.DeviceTTLDays)
+	if err != nil {
+		return "", nil, errors.New("配对码授权期限无效")
+	}
 	device := &model.MobileDevice{
 		Name:       normalizeMobileDeviceName(deviceName),
 		TokenHash:  hashMobileSecret(token),
-		ExpiresAt:  time.Now().Add(MobileDeviceTTL),
+		ExpiresAt:  time.Now().Add(time.Duration(deviceTTLDays) * 24 * time.Hour),
 		LastIP:     ip,
 		LastAgent:  truncateMobileValue(agent, 255),
 		LastSeenAt: mobileTimePointer(time.Now()),
 	}
-	if err := repo.NewMobileAccessRepo().ConsumePairing(hashMobileSecret(code), device); err != nil {
+	if err := repo.NewMobileAccessRepo().ConsumePairing(codeHash, device); err != nil {
 		return "", nil, errors.New("配对码无效、已过期或已使用")
 	}
 	return token, device, nil
+}
+
+func normalizeMobileDeviceTTLDays(requested int) (int, error) {
+	if requested == 0 {
+		return DefaultMobileDeviceTTLDays, nil
+	}
+	if _, allowed := allowedMobileDeviceTTLDays[requested]; !allowed {
+		return 0, errors.New("手机授权期限无效")
+	}
+	return requested, nil
 }
 
 func AuthenticateMobileDevice(token, ip, agent string) (*model.MobileDevice, error) {
