@@ -118,10 +118,13 @@ export interface CodeInstruction {
 
 export interface CodeApproval {
 	id: number
+	sessionId: number
+	taskId: number
 	title: string
 	content: string
 	riskLevel: string
 	status: string
+	createdAt: string
 }
 
 export interface CodePreview {

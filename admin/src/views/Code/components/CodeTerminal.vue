@@ -15,6 +15,7 @@ const { t } = useI18n({ messages: codeProjectMessages })
 const props = defineProps<{
 	taskId: number | null
 	sessionId?: number | null
+	autoTakeControl?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -26,9 +27,15 @@ let term: Terminal
 let fitAddon: FitAddon
 let ws: WebSocket
 let pingInterval: any
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let resizeObserver: ResizeObserver | null = null
 let intentionalClose = false
 let serverErrorShown = false
+let lastSequence = 0
+let autoTakeControlPending = Boolean(props.autoTakeControl)
+const nativeProtocol = ref(false)
+const hasTerminalControl = ref(true)
+const reconnecting = ref(false)
 const runtimeState = ref<CodexRuntimeState | null>(null)
 const runtimeLoading = ref(false)
 const runtimeError = ref(false)
@@ -84,7 +91,22 @@ const initTerminal = () => {
 		}
 	})
 
-	// 建立 WebSocket 连接
+	connectWebSocket()
+
+	term.onData(data => {
+		if (ws && ws.readyState === WebSocket.OPEN && hasTerminalControl.value) {
+			ws.send(JSON.stringify({ type: "cmd", data }))
+		}
+	})
+
+	pingInterval = setInterval(() => {
+		if (ws && ws.readyState === WebSocket.OPEN) {
+			ws.send(JSON.stringify({ type: "ping" }))
+		}
+	}, 15000)
+}
+
+const connectWebSocket = () => {
 	const protocol = window.location.protocol === "https:" ? "wss:" : "ws:"
 	const token = authStore.auth || ""
 
@@ -92,6 +114,11 @@ const initTerminal = () => {
 
 	if (props.sessionId) {
 		wsUrl += `&session_id=${props.sessionId}`
+		if (lastSequence > 0) wsUrl += `&after_sequence=${lastSequence}`
+		if (autoTakeControlPending) {
+			wsUrl += "&take_control=1"
+			autoTakeControlPending = false
+		}
 	} else if (props.taskId) {
 		wsUrl += `&task_id=${props.taskId}`
 	}
@@ -99,6 +126,7 @@ const initTerminal = () => {
 	ws = new WebSocket(wsUrl)
 
 	ws.onopen = () => {
+		reconnecting.value = false
 		if (props.sessionId) {
 			term.writeln(`\x1b[32m[GoPanel] ${t("code.openingSession", { id: props.sessionId })}\x1b[0m\r\n`)
 		} else if (props.taskId) {
@@ -112,7 +140,18 @@ const initTerminal = () => {
 		}
 		try {
 			const msg = JSON.parse(event.data)
-			if (msg.type === "cmd") {
+			if (msg.type === "baseline" || msg.type === "output") {
+				nativeProtocol.value = true
+				const sequence = Number(msg.sequence) || 0
+				lastSequence = msg.type === "baseline" ? sequence : Math.max(lastSequence, sequence)
+				if (msg.type === "baseline") hasTerminalControl.value = Boolean(msg.hasControl)
+				if (msg.data) term.write(msg.data)
+			} else if (msg.type === "control") {
+				hasTerminalControl.value = Boolean(msg.hasControl)
+			} else if (msg.type === "closed") {
+				intentionalClose = true
+				hasTerminalControl.value = false
+			} else if (msg.type === "cmd") {
 				term.write(msg.data)
 			} else if (msg.type === "meta" && msg.task_id) {
 				// 后端通知前端：新任务已创建，请更新 URL 或左侧列表
@@ -138,19 +177,21 @@ const initTerminal = () => {
 		if (!serverErrorShown) {
 			term.writeln("\r\n\x1b[33m[系统] 终端连接已断开。\x1b[0m")
 		}
+		if (nativeProtocol.value && !reconnectTimer) {
+			reconnecting.value = true
+			reconnectTimer = setTimeout(() => {
+				reconnectTimer = null
+				connectWebSocket()
+			}, 1500)
+		}
 	}
+}
 
-	term.onData(data => {
-		if (ws && ws.readyState === WebSocket.OPEN) {
-			ws.send(JSON.stringify({ type: "cmd", data }))
-		}
-	})
-
-	pingInterval = setInterval(() => {
-		if (ws && ws.readyState === WebSocket.OPEN) {
-			ws.send(JSON.stringify({ type: "ping" }))
-		}
-	}, 15000)
+const takeTerminalControl = () => {
+	if (ws && ws.readyState === WebSocket.OPEN) {
+		ws.send(JSON.stringify({ type: "take_control", data: "" }))
+		term.focus()
+	}
 }
 
 const handleResize = () => {
@@ -184,6 +225,7 @@ onBeforeUnmount(() => {
 	resizeObserver?.disconnect()
 	if (pingInterval) clearInterval(pingInterval)
 	if (runtimePollInterval) clearInterval(runtimePollInterval)
+	if (reconnectTimer) clearTimeout(reconnectTimer)
 	intentionalClose = true
 	if (ws) ws.close()
 	if (term) term.dispose()
@@ -207,12 +249,21 @@ onBeforeUnmount(() => {
 					{{ runtimeState.lastAssistantPreview }}
 				</span>
 			</div>
-			<div v-if="runtimeState" class="flex shrink-0 items-center gap-3 text-xs text-slate-400">
+			<div class="flex shrink-0 items-center gap-3 text-xs text-slate-400">
+				<n-tag v-if="reconnecting" size="small" type="warning" :bordered="false">{{ t("code.terminalReconnecting") }}</n-tag>
+				<n-tag v-else-if="nativeProtocol && hasTerminalControl" size="small" type="success" :bordered="false">
+					{{ t("code.terminalControlling") }}
+				</n-tag>
+				<n-button v-else-if="nativeProtocol" size="tiny" type="warning" @click="takeTerminalControl">
+					{{ t("code.takeTerminalControl") }}
+				</n-button>
+				<template v-if="runtimeState">
 				<span v-if="runtimeState.model">{{ runtimeState.model }}</span>
 				<span v-if="runtimeState.totalTokens">{{ t("code.codexTokenUsage", { count: formatTokens(runtimeState.totalTokens) }) }}</span>
 				<span v-if="runtimeState.cachedInputTokens" class="hidden md:inline">
 					{{ t("code.codexCachedTokens", { count: formatTokens(runtimeState.cachedInputTokens) }) }}
 				</span>
+				</template>
 			</div>
 		</div>
 		<div ref="terminalRef" class="min-h-0 w-full flex-1"></div>

@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strconv"
 	"sync"
 	"time"
 
@@ -20,13 +21,16 @@ import (
 const nativeTerminalHistoryLimit = 1024 * 1024
 
 type nativeCodeTerminal struct {
-	mu          sync.Mutex
-	sessionID   uint
-	command     *exec.Cmd
-	ptmx        *os.File
-	history     []byte
-	subscribers map[chan []byte]struct{}
-	done        chan struct{}
+	mu           sync.Mutex
+	sessionID    uint
+	command      *exec.Cmd
+	ptmx         *os.File
+	sequence     uint64
+	history      []nativeTerminalChunk
+	historySize  int
+	subscribers  map[string]chan nativeTerminalEvent
+	controllerID string
+	done         chan struct{}
 }
 
 type nativeCodeTerminalManager struct {
@@ -62,7 +66,7 @@ func (manager *nativeCodeTerminalManager) attach(
 		sessionID:   session.ID,
 		command:     command,
 		ptmx:        ptmx,
-		subscribers: make(map[chan []byte]struct{}),
+		subscribers: make(map[string]chan nativeTerminalEvent),
 		done:        make(chan struct{}),
 	}
 	manager.sessions[session.ID] = terminal
@@ -92,40 +96,35 @@ func (terminal *nativeCodeTerminal) readOutput() {
 func (terminal *nativeCodeTerminal) publish(output []byte) {
 	chunk := append([]byte(nil), output...)
 	terminal.mu.Lock()
-	terminal.history = append(terminal.history, chunk...)
-	if len(terminal.history) > nativeTerminalHistoryLimit {
-		terminal.history = append([]byte(nil), terminal.history[len(terminal.history)-nativeTerminalHistoryLimit:]...)
+	terminal.sequence++
+	terminal.history = append(terminal.history, nativeTerminalChunk{Sequence: terminal.sequence, Data: chunk})
+	terminal.historySize += len(chunk)
+	for terminal.historySize > nativeTerminalHistoryLimit {
+		excess := terminal.historySize - nativeTerminalHistoryLimit
+		if len(terminal.history) > 1 && len(terminal.history[0].Data) <= excess {
+			terminal.historySize -= len(terminal.history[0].Data)
+			terminal.history = terminal.history[1:]
+			continue
+		}
+		terminal.history[0].Data = append([]byte(nil), terminal.history[0].Data[excess:]...)
+		terminal.historySize -= excess
 	}
-	for subscriber := range terminal.subscribers {
+	event := nativeTerminalEvent{Type: "output", Sequence: terminal.sequence, Data: chunk}
+	for _, subscriber := range terminal.subscribers {
 		select {
-		case subscriber <- chunk:
+		case subscriber <- event:
 		default:
 		}
 	}
 	terminal.mu.Unlock()
 }
 
-func (terminal *nativeCodeTerminal) subscribe() (chan []byte, []byte) {
-	subscriber := make(chan []byte, 128)
-	terminal.mu.Lock()
-	terminal.subscribers[subscriber] = struct{}{}
-	history := append([]byte(nil), terminal.history...)
-	terminal.mu.Unlock()
-	return subscriber, history
-}
-
-func (terminal *nativeCodeTerminal) unsubscribe(subscriber chan []byte) {
-	terminal.mu.Lock()
-	if _, exists := terminal.subscribers[subscriber]; exists {
-		delete(terminal.subscribers, subscriber)
-		close(subscriber)
-	}
-	terminal.mu.Unlock()
-}
-
-func (terminal *nativeCodeTerminal) write(data []byte) error {
+func (terminal *nativeCodeTerminal) write(subscriptionID string, data []byte) error {
 	terminal.mu.Lock()
 	defer terminal.mu.Unlock()
+	if terminal.controllerID != subscriptionID {
+		return errors.New("当前连接没有终端输入权")
+	}
 	_, err := terminal.ptmx.Write(data)
 	return err
 }
@@ -139,8 +138,13 @@ func (terminal *nativeCodeTerminal) wait(manager *nativeCodeTerminalManager) {
 	_ = terminal.ptmx.Close()
 	terminal.publish([]byte(fmt.Sprintf("\r\n\x1b[33m[GoPanel] Codex 会话已退出: %v\x1b[0m\r\n", err)))
 	terminal.mu.Lock()
-	for subscriber := range terminal.subscribers {
-		delete(terminal.subscribers, subscriber)
+	closedEvent := nativeTerminalEvent{Type: "closed", Sequence: terminal.sequence}
+	for subscriptionID, subscriber := range terminal.subscribers {
+		select {
+		case subscriber <- closedEvent:
+		default:
+		}
+		delete(terminal.subscribers, subscriptionID)
 		close(subscriber)
 	}
 	terminal.mu.Unlock()
@@ -169,21 +173,29 @@ func serveNativeCodeTerminal(
 		session.CurrentStage = "interactive"
 		_ = sessionRepo.UpdateSession(session)
 	}
-	subscriber, history := terminal.subscribe()
-	defer terminal.unsubscribe(subscriber)
+	afterSequence, _ := strconv.ParseUint(wsConn.Query("after_sequence", "0"), 10, 64)
+	subscription, baseline := terminal.subscribe(afterSequence)
+	if wsConn.Query("take_control") == "1" {
+		terminal.takeControl(subscription.ID)
+		baseline.HasControl = true
+	}
+	defer terminal.unsubscribe(subscription)
 	var writeMu sync.Mutex
-	writeCommand := func(data []byte) error {
-		payload, _ := json.Marshal(WsMsg{Type: "cmd", Data: string(data)})
+	writeEvent := func(event nativeTerminalEvent) error {
+		payload, _ := json.Marshal(struct {
+			Type       string `json:"type"`
+			Sequence   uint64 `json:"sequence"`
+			Data       string `json:"data,omitempty"`
+			HasControl bool   `json:"hasControl"`
+		}{Type: event.Type, Sequence: event.Sequence, Data: string(event.Data), HasControl: event.HasControl})
 		writeMu.Lock()
 		defer writeMu.Unlock()
 		return wsConn.WriteMessage(websocket.TextMessage, payload)
 	}
-	if len(history) > 0 {
-		_ = writeCommand(history)
-	}
+	_ = writeEvent(baseline)
 	go func() {
-		for output := range subscriber {
-			if writeCommand(output) != nil {
+		for event := range subscription.Events {
+			if writeEvent(event) != nil {
 				_ = wsConn.Close()
 				return
 			}
@@ -204,15 +216,17 @@ func serveNativeCodeTerminal(
 		}
 		switch message.Type {
 		case "cmd":
-			if terminal.write([]byte(message.Data)) != nil {
-				return
+			if writeErr := terminal.write(subscription.ID, []byte(message.Data)); writeErr != nil {
+				_ = writeEvent(nativeTerminalEvent{Type: "control", HasControl: false})
 			}
+		case "take_control":
+			terminal.takeControl(subscription.ID)
 		case "resize":
 			var size struct {
 				Cols uint16 `json:"cols"`
 				Rows uint16 `json:"rows"`
 			}
-			if json.Unmarshal([]byte(message.Data), &size) == nil {
+			if json.Unmarshal([]byte(message.Data), &size) == nil && terminal.hasControl(subscription.ID) {
 				_ = terminal.resize(size.Cols, size.Rows)
 			}
 		case "ping":

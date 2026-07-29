@@ -37,6 +37,7 @@ func AppRegister(r fiber.Router) {
 	AgentRouter(apiRouter)     // gp-agent
 	CronjobRouter(apiRouter)   // 计划任务
 	NodeRouter(apiRouter)      // 多节点观测
+	MobileRouter(apiRouter)    // 手机免登录控制台
 
 	staticRouter(r) // 静态资源文件
 }

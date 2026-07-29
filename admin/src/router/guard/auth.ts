@@ -23,6 +23,11 @@ async function authCheck(
 		globalStore.setEntrance(routeEntrance)
 	}
 
+	// 手机控制台始终使用独立设备令牌，不能被桌面账号状态或菜单权限影响。
+	if (to.path === "/mobile" || to.path.startsWith("/mobile/")) {
+		return next()
+	}
+
 	// 第二步：检查是否已登录
 	if (authStore.isLogged) {
 		// 登录后再次访问「安全入口」路径本身：前端没有对应路由，会命中 NotFound 显示 404。

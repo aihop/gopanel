@@ -7,6 +7,7 @@ import type {
 	CodeExecutionRun,
 	CodeInstruction,
 	CodeInstructionResponse,
+	CodeApproval,
 	CodeApprovalPolicy,
 	CodeWorktreeCapability,
 	CodeSession,
@@ -48,6 +49,14 @@ export function createCodeSession(data: {
 	return http.post<CodeSession>("/code/sessions", data)
 }
 
+export function getCodeSession(sessionId: number) {
+	return http.get<{ session: CodeSession }>(`/code/sessions/${sessionId}`)
+}
+
+export function updateCodeSessionApprovalPolicy(sessionId: number, approvalPolicy: CodeApprovalPolicy) {
+	return http.put<CodeSession>(`/code/sessions/${sessionId}/approval-policy`, { approvalPolicy })
+}
+
 export function getCodeSessionHistory(sessionId: number) {
 	return http.get<CodeSessionHistory>(`/code/sessions/${sessionId}/history`)
 }
@@ -74,6 +83,10 @@ export function createCodeInstruction(sessionId: number, content: string) {
 
 export function approveCodeInstruction(approvalId: number) {
 	return http.post(`/code/approvals/${approvalId}/approve`, {})
+}
+
+export function getCodeApprovals(status = "pending") {
+	return http.get<{ items: CodeApproval[]; total: number }>("/code/approvals", { status, limit: 50 })
 }
 
 export function rejectCodeInstruction(approvalId: number) {

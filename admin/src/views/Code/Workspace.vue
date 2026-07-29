@@ -137,7 +137,9 @@
 								}}
 							</div>
 						</div>
-						<div class="flex items-center gap-2">
+						<div class="flex flex-wrap items-center justify-end gap-2">
+							<CodeApprovalCenter :session-id="currentSessionId" @take-terminal="takeOverTerminal" />
+							<SessionApprovalPolicy v-if="currentSessionId !== null" :session-id="currentSessionId" />
 							<n-button-group v-if="currentSessionId !== null">
 								<n-button size="small" :type="workMode === 'conversation' ? 'primary' : 'default'" @click="workMode = 'conversation'">
 									{{ $t("code.conversationMode") }}
@@ -173,6 +175,7 @@
 							:key="terminalKey"
 							:task-id="currentTaskId"
 							:session-id="currentSessionId"
+							:auto-take-control="terminalTakeoverRequested"
 							@task-created="handleTaskCreated"
 						/>
 						<div
@@ -231,6 +234,8 @@ import { useMessage, useDialog } from "naive-ui"
 import CodeTerminal from "./components/CodeTerminal.vue"
 import ConversationPanel from "./components/ConversationPanel.vue"
 import NewSessionModal from "./components/NewSessionModal.vue"
+import SessionApprovalPolicy from "./components/SessionApprovalPolicy.vue"
+import CodeApprovalCenter from "./components/CodeApprovalCenter.vue"
 import SessionHistoryDrawer from "./components/SessionHistoryDrawer.vue"
 import { getAITasks, updateAITask, deleteAITask, getAIGroups } from "@/api/modules/code"
 import type { AITask, AIGroup, CodeSession } from "@/api/interface/code"
@@ -271,6 +276,7 @@ const currentSessionId = ref<number | null>(null)
 const showNewSessionModal = ref(false)
 const showHistoryDrawer = ref(false)
 const terminalKey = ref(0)
+const terminalTakeoverRequested = ref(false)
 const workMode = ref<"conversation" | "terminal">("conversation")
 
 const fetchTasks = async () => {
@@ -305,10 +311,19 @@ watch(
 )
 
 const createNewTask = () => {
+	terminalTakeoverRequested.value = false
 	showNewSessionModal.value = true
 }
 
+const takeOverTerminal = () => {
+	if (currentSessionId.value === null) return
+	terminalTakeoverRequested.value = true
+	workMode.value = "terminal"
+	terminalKey.value++
+}
+
 const handleSessionCreated = (session: CodeSession) => {
+	terminalTakeoverRequested.value = false
 	currentTaskId.value = null
 	currentSessionId.value = session.id
 	workMode.value = session.agentName === "codex" || session.agentName === "terminal" ? "terminal" : "conversation"
@@ -320,6 +335,7 @@ const selectTask = (task: AITask) => {
 	if (currentTaskId.value === task.id && currentSessionId.value === null) return
 	currentTaskId.value = task.id
 	currentSessionId.value = task.sessionId || null
+	terminalTakeoverRequested.value = false
 	workMode.value = task.sessionId && !["terminal", "codex"].includes(task.agentName) ? "conversation" : "terminal"
 	terminalKey.value++
 

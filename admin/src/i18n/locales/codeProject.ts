@@ -52,6 +52,10 @@ export const codeProjectMessages = {
 			approvalPolicyDesc_safe_auto: "安全操作自动执行，高风险操作需要确认。",
 			approvalPolicyDesc_full_auto: "不再请求人工确认，但仍限制在工作区沙箱中。",
 			fullAutoWarning: "完全自动会跳过高风险指令和执行器操作审批，请仅在可信项目中使用。",
+			approvalPolicyAppliesNext: "修改后对后续指令生效；已运行的终端进程会在下次启动时采用。",
+			approvalPolicyLoadFailed: "确认方式加载失败",
+			approvalPolicyUpdated: "确认方式已更新，后续操作将采用新设置",
+			approvalPolicyUpdateFailed: "确认方式更新失败",
 			worktreeIsolation: "会话隔离",
 			worktreeIsolationTitle: "使用 Git Worktree 独立工作区",
 			worktreeIsolationDesc: "为本次会话创建独立分支和目录，避免多个 AI 会话互相覆盖文件。",
@@ -70,7 +74,19 @@ export const codeProjectMessages = {
 			codexRuntimeUnavailable: "Codex 状态暂不可用",
 			codexApprovalHint: "Codex 正等待终端中的审批，请确认后继续",
 			codexTokenUsage: "Token {count}",
-			codexCachedTokens: "缓存 {count}"
+			codexCachedTokens: "缓存 {count}",
+			terminalReconnecting: "正在增量重连",
+			terminalControlling: "当前设备可输入",
+			takeTerminalControl: "接管终端",
+			approvalCenter: "待审批",
+			approvalLoadFailed: "待审批任务加载失败",
+			approvalApproved: "已允许执行",
+			approvalRejected: "已拒绝执行",
+			approvalDecisionFailed: "审批处理失败",
+			nativeApproval: "原生 Codex 确认",
+			approveApproval: "允许执行",
+			rejectApproval: "拒绝",
+			noPendingApprovals: "当前没有待审批任务"
 		}
 	},
 	en: {
@@ -126,6 +142,11 @@ export const codeProjectMessages = {
 			approvalPolicyDesc_safe_auto: "Safe actions run automatically; high-risk actions require approval.",
 			approvalPolicyDesc_full_auto: "Skips manual approval while remaining inside the workspace sandbox.",
 			fullAutoWarning: "Fully automatic mode skips GoPanel high-risk and executor action approvals. Use it only with trusted projects.",
+			approvalPolicyAppliesNext:
+				"Changes apply to future instructions. A running terminal adopts them on its next start.",
+			approvalPolicyLoadFailed: "Failed to load the approval policy",
+			approvalPolicyUpdated: "Approval policy updated for future actions",
+			approvalPolicyUpdateFailed: "Failed to update the approval policy",
 			worktreeIsolation: "Session isolation",
 			worktreeIsolationTitle: "Use an isolated Git worktree",
 			worktreeIsolationDesc: "Creates a dedicated branch and directory so concurrent AI sessions cannot overwrite each other.",
@@ -144,7 +165,19 @@ export const codeProjectMessages = {
 			codexRuntimeUnavailable: "Codex status unavailable",
 			codexApprovalHint: "Codex is waiting for approval in the terminal",
 			codexTokenUsage: "{count} tokens",
-			codexCachedTokens: "{count} cached"
+			codexCachedTokens: "{count} cached",
+			terminalReconnecting: "Reconnecting incrementally",
+			terminalControlling: "This device controls input",
+			takeTerminalControl: "Take control",
+			approvalCenter: "Approvals",
+			approvalLoadFailed: "Failed to load pending approvals",
+			approvalApproved: "Execution approved",
+			approvalRejected: "Execution rejected",
+			approvalDecisionFailed: "Failed to process approval",
+			nativeApproval: "Native Codex approval",
+			approveApproval: "Approve",
+			rejectApproval: "Reject",
+			noPendingApprovals: "No pending approvals"
 		}
 	}
 } as const
