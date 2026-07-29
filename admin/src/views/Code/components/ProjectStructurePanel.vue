@@ -149,35 +149,39 @@ watch(
 		</div>
 
 		<div class="relative min-h-0 flex-1 overflow-hidden">
-			<n-spin :show="loading" class="structure-spin h-full">
-				<div class="structure-scroll h-full overflow-y-auto px-2 py-3">
-					<div
-						v-if="loadError"
-						class="flex h-full min-h-48 flex-col items-center justify-center gap-3 px-4 text-center"
-					>
-						<span class="text-sm text-slate-500">{{ t("code.structureLoadFailed") }}</span>
-						<n-button size="small" @click="loadRoot">{{ t("code.retry") }}</n-button>
-					</div>
-					<n-empty
-						v-else-if="!loading && nodes.length === 0"
-						size="small"
-						:description="t('code.structureEmpty')"
-						class="py-16"
-					/>
-					<n-tree
-						v-else
-						block-line
-						:data="nodes"
-						:pattern="pattern"
-						:show-irrelevant-nodes="false"
-						:on-load="loadChildren"
-						:render-prefix="renderPrefix"
-						:render-label="renderLabel"
-						:node-props="nodeProps"
-						:selected-keys="selectedPath ? [selectedPath] : []"
-					/>
+			<div class="structure-scroll absolute inset-0 overflow-auto px-2 py-3">
+				<div
+					v-if="loadError"
+					class="flex h-full min-h-48 flex-col items-center justify-center gap-3 px-4 text-center"
+				>
+					<span class="text-sm text-slate-500">{{ t("code.structureLoadFailed") }}</span>
+					<n-button size="small" @click="loadRoot">{{ t("code.retry") }}</n-button>
 				</div>
-			</n-spin>
+				<n-empty
+					v-else-if="!loading && nodes.length === 0"
+					size="small"
+					:description="t('code.structureEmpty')"
+					class="py-16"
+				/>
+				<n-tree
+					v-else
+					block-line
+					:data="nodes"
+					:pattern="pattern"
+					:show-irrelevant-nodes="false"
+					:on-load="loadChildren"
+					:render-prefix="renderPrefix"
+					:render-label="renderLabel"
+					:node-props="nodeProps"
+					:selected-keys="selectedPath ? [selectedPath] : []"
+				/>
+			</div>
+			<div
+				v-if="loading"
+				class="absolute inset-0 z-10 flex items-center justify-center bg-white/70 backdrop-blur-[1px]"
+			>
+				<n-spin />
+			</div>
 		</div>
 
 		<div v-if="truncated || changedFiles.length" class="border-t border-slate-200 px-3 py-2 text-xs text-slate-400">
@@ -192,13 +196,10 @@ watch(
 	background-color: var(--bg-default-color);
 }
 
-:deep(.structure-spin > .n-spin-container),
-:deep(.structure-spin > .n-spin-container > .n-spin-content) {
-	height: 100%;
-}
-
 .structure-scroll {
 	scrollbar-gutter: stable;
+	scrollbar-color: rgba(100, 116, 139, 0.65) rgba(226, 232, 240, 0.55);
+	scrollbar-width: thin;
 }
 
 .structure-scroll::-webkit-scrollbar {
@@ -207,6 +208,10 @@ watch(
 
 .structure-scroll::-webkit-scrollbar-thumb {
 	border-radius: 999px;
-	background: rgba(148, 163, 184, 0.45);
+	background: rgba(100, 116, 139, 0.65);
+}
+
+.structure-scroll::-webkit-scrollbar-track {
+	background: rgba(226, 232, 240, 0.55);
 }
 </style>
