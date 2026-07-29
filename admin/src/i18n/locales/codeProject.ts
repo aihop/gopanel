@@ -63,7 +63,10 @@ export const codeProjectMessages = {
 			codexRuntimeUnavailable: "Codex 状态暂不可用",
 			codexApprovalHint: "Codex 正等待终端中的审批，请确认后继续",
 			codexTokenUsage: "Token {count}",
-			codexCachedTokens: "缓存 {count}"
+			codexCachedTokens: "缓存 {count}",
+			terminalReconnecting: "正在增量重连",
+			terminalControlling: "当前设备可输入",
+			takeTerminalControl: "接管终端"
 		}
 	},
 	en: {
@@ -130,7 +133,10 @@ export const codeProjectMessages = {
 			codexRuntimeUnavailable: "Codex status unavailable",
 			codexApprovalHint: "Codex is waiting for approval in the terminal",
 			codexTokenUsage: "{count} tokens",
-			codexCachedTokens: "{count} cached"
+			codexCachedTokens: "{count} cached",
+			terminalReconnecting: "Reconnecting incrementally",
+			terminalControlling: "This device controls input",
+			takeTerminalControl: "Take control"
 		}
 	}
 } as const

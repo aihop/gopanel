@@ -70,19 +70,19 @@ func TestFindNativeCodexSessionIDMatchesWorkingDirectory(t *testing.T) {
 }
 
 func TestNativeCodeTerminalKeepsBoundedReconnectHistory(t *testing.T) {
-	terminal := &nativeCodeTerminal{subscribers: make(map[chan []byte]struct{})}
+	terminal := newNativeTerminalProtocolTestSubject()
 	terminal.publish([]byte(strings.Repeat("a", nativeTerminalHistoryLimit)))
 	terminal.publish([]byte("tail"))
-	subscriber, history := terminal.subscribe()
-	defer terminal.unsubscribe(subscriber)
-	if len(history) != nativeTerminalHistoryLimit || string(history[len(history)-4:]) != "tail" {
-		t.Fatalf("unexpected reconnect history: len=%d tail=%q", len(history), history[len(history)-4:])
+	subscription, baseline := terminal.subscribe(0)
+	defer terminal.unsubscribe(subscription)
+	if len(baseline.Data) != nativeTerminalHistoryLimit || string(baseline.Data[len(baseline.Data)-4:]) != "tail" {
+		t.Fatalf("unexpected reconnect history: len=%d tail=%q", len(baseline.Data), baseline.Data[len(baseline.Data)-4:])
 	}
 	terminal.publish([]byte("live"))
 	select {
-	case output := <-subscriber:
-		if string(output) != "live" {
-			t.Fatalf("unexpected live output: %q", output)
+	case event := <-subscription.Events:
+		if event.Type != "output" || string(event.Data) != "live" {
+			t.Fatalf("unexpected live output: %#v", event)
 		}
 	case <-time.After(time.Second):
 		t.Fatal("expected live terminal output")
