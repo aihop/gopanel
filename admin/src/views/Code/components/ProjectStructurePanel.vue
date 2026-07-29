@@ -107,9 +107,13 @@ const selectFile = (node: StructureTreeOption) => {
 	emit("select-file", { path: node.key, extension: node.label.split(".").pop() || "" })
 }
 
-const nodeProps = ({ option }: { option: TreeOption }) => ({
-	onClick: () => selectFile(option as StructureTreeOption)
-})
+const handleSelectedKeys = (
+	_keys: Array<string | number>,
+	_options: Array<TreeOption | null>,
+	meta: { node: TreeOption | null; action: "select" | "unselect" }
+) => {
+	if (meta.action === "select" && meta.node) selectFile(meta.node as StructureTreeOption)
+}
 
 watch(
 	() => props.sessionId,
@@ -166,14 +170,15 @@ watch(
 				<n-tree
 					v-else
 					block-line
+					:cancelable="false"
 					:data="nodes"
 					:pattern="pattern"
 					:show-irrelevant-nodes="false"
 					:on-load="loadChildren"
 					:render-prefix="renderPrefix"
 					:render-label="renderLabel"
-					:node-props="nodeProps"
 					:selected-keys="selectedPath ? [selectedPath] : []"
+					@update:selected-keys="handleSelectedKeys"
 				/>
 			</div>
 			<div
