@@ -119,6 +119,7 @@
 			<n-layout-content content-style="padding: 0; display: flex; flex-direction: column; height: 100%;">
 				<div
 					class="ai-workspace-content-panel flex h-full min-h-0 flex-1 flex-col bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.08),transparent_28%)] p-4 md:p-5"
+					:class="isWorkspaceFullscreen ? 'fixed inset-0 z-[1000] bg-slate-50' : ''"
 				>
 					<div
 						class="ai-workspace-session-bar mb-3 flex items-center justify-between px-2 py-1"
@@ -147,8 +148,10 @@
 							>
 								{{ $t("code.conversationHistory") }}
 							</n-button>
-							<n-button type="primary" secondary class="!rounded-[14px]" @click="createNewTask">
-								新对话
+							<n-button circle secondary :aria-label="fullscreenLabel" :title="fullscreenLabel" @click="toggleWorkspaceFullscreen">
+								<template #icon>
+									<Icon :name="isWorkspaceFullscreen ? 'fluent:full-screen-minimize-24-regular' : 'fluent:full-screen-maximize-24-regular'" />
+								</template>
 							</n-button>
 						</div>
 					</div>
@@ -222,6 +225,7 @@ import { ref, onMounted, computed, watch } from "vue"
 import { useRoute, useRouter } from "vue-router"
 import { useI18n } from "vue-i18n"
 import { useMessage, useDialog } from "naive-ui"
+import { useEventListener } from "@vueuse/core"
 import CodeTerminal from "./components/CodeTerminal.vue"
 import ConversationPanel from "./components/ConversationPanel.vue"
 import NewSessionModal from "./components/NewSessionModal.vue"
@@ -275,6 +279,13 @@ const sessionLabel = computed(() => {
 	if (currentSessionId.value !== null) return t("code.newSession")
 	return t("code.selectTaskToStart")
 })
+const isWorkspaceFullscreen = ref(false)
+const fullscreenLabel = computed(() => t(isWorkspaceFullscreen.value ? "code.exitWorkspaceFullscreen" : "code.enterWorkspaceFullscreen"))
+const toggleWorkspaceFullscreen = () => (isWorkspaceFullscreen.value = !isWorkspaceFullscreen.value)
+
+useEventListener(window, "keydown", event => {
+	if (event.key === "Escape") isWorkspaceFullscreen.value = false
+})
 
 const fetchTasks = async () => {
 	if (!currentGroupId.value) return
@@ -301,6 +312,7 @@ watch(
 			currentSessionId.value = null
 			showNewSessionModal.value = false
 			showHistoryDrawer.value = false
+			isWorkspaceFullscreen.value = false
 			fetchGroupInfo()
 			fetchTasks()
 		}
