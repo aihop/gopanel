@@ -5,6 +5,7 @@ import { defineStore } from "pinia"
 
 /** 列表自动刷新间隔。后端 cron 每分钟采集一轮，前端跟着这个节奏读库即可，不需要更密 */
 const AUTO_REFRESH_MS = 60_000
+let listRequest: Promise<void> | null = null
 
 interface NodeState {
 	list: NodeItem[]
@@ -49,16 +50,26 @@ const NodeStore = defineStore("NodeState", {
 	},
 	actions: {
 		async fetchList() {
-			this.loading = true
-			this.error = ""
+			if (listRequest) return listRequest
+
+			const request = (async () => {
+				this.loading = true
+				this.error = ""
+				try {
+					const res = await nodeListAPI()
+					this.list = res.data || []
+				} catch (e: any) {
+					this.error = e?.message || "加载节点列表失败"
+				} finally {
+					this.loading = false
+					this.loaded = true
+				}
+			})()
+			listRequest = request
 			try {
-				const res = await nodeListAPI()
-				this.list = res.data || []
-			} catch (e: any) {
-				this.error = e?.message || "加载节点列表失败"
+				await request
 			} finally {
-				this.loading = false
-				this.loaded = true
+				if (listRequest === request) listRequest = null
 			}
 		},
 		/** 手动刷新：让后端立刻采集一轮再返回，比等 cron 更快看到结果 */
