@@ -16,7 +16,6 @@ type IAIGroupRepo interface {
 type aiGroupRepo struct{}
 
 func NewAIGroupRepo() IAIGroupRepo {
-	_ = global.DB.AutoMigrate(&model.AIGroup{})
 	return &aiGroupRepo{}
 }
 

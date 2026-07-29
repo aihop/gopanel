@@ -120,7 +120,22 @@ func Init() {
 		return
 	}
 
-	if err := global.DB.AutoMigrate(&model.Firewall{}, &model.Forward{}, &model.AITask{}, &model.AIMessage{}, &model.OperationLog{}, &model.LoginLog{}, &model.LegacyWebsiteDeploy{}); err != nil {
+	if err := global.DB.AutoMigrate(
+		&model.Firewall{},
+		&model.Forward{},
+		&model.AIGroup{},
+		&model.AITask{},
+		&model.AIMessage{},
+		&model.AIDevSession{},
+		&model.AIExecutionRun{},
+		&model.AIInstruction{},
+		&model.AIPreview{},
+		&model.AITimelineEvent{},
+		&model.AIApproval{},
+		&model.OperationLog{},
+		&model.LoginLog{},
+		&model.LegacyWebsiteDeploy{},
+	); err != nil {
 		sysLog.Println("AutoMigrate additional tables error", err)
 		return
 	}

@@ -16,6 +16,9 @@ func TestAIGroupRepositoryFiltersProjectsByCreator(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := db.AutoMigrate(&model.AIGroup{}); err != nil {
+		t.Fatal(err)
+	}
 	global.DB = db
 	repository := NewAIGroupRepo()
 	for _, project := range []*model.AIGroup{

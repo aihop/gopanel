@@ -43,7 +43,6 @@ type IAIDevSessionRepo interface {
 type aiDevSessionRepo struct{}
 
 func NewAIDevSessionRepo() IAIDevSessionRepo {
-	_ = global.DB.AutoMigrate(&model.AIDevSession{}, &model.AIExecutionRun{}, &model.AIInstruction{}, &model.AIPreview{}, &model.AITimelineEvent{}, &model.AIApproval{})
 	return &aiDevSessionRepo{}
 }
 

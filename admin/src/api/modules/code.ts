@@ -43,7 +43,7 @@ export function getCodeExecutionRun(runId: number) {
 }
 
 export function getCodeSessionState(sessionId: number) {
-	return http.get<CodeSessionState>(`/code/sessions/${sessionId}/state`)
+	return http.get<CodeSessionState>(`/code/sessions/${sessionId}/state`, undefined, { timeout: 10000 })
 }
 
 export function createCodeInstruction(sessionId: number, content: string) {

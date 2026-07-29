@@ -21,7 +21,6 @@ type IAITaskRepo interface {
 type aiTaskRepo struct{}
 
 func NewAITaskRepo() IAITaskRepo {
-	_ = global.DB.AutoMigrate(&model.AITask{}, &model.AIMessage{})
 	return &aiTaskRepo{}
 }
 

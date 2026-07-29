@@ -26,6 +26,7 @@ const actionLoading = ref(false)
 const loadError = ref("")
 const prompt = ref("")
 let pollTimer: ReturnType<typeof setInterval> | null = null
+let loadingSessionId: number | null = null
 
 const isRunning = computed(
 	() => state.value?.currentStage === "executing" || state.value?.latestRun?.status === "running"
@@ -39,16 +40,22 @@ const stageType = computed(() => {
 })
 
 const loadState = async (silent = false) => {
+	const sessionId = props.sessionId
+	if (loadingSessionId === sessionId) return
+	loadingSessionId = sessionId
 	if (!silent) loading.value = true
 	try {
-		const response = await getCodeSessionState(props.sessionId)
+		const response = await getCodeSessionState(sessionId)
+		if (props.sessionId !== sessionId) return
 		state.value = response.data
 		loadError.value = ""
 		if (response.data.currentTask?.id) emit("task-created", response.data.currentTask.id)
 	} catch (error) {
+		if (props.sessionId !== sessionId) return
 		loadError.value = error instanceof Error ? error.message : t("code.stateLoadFailed")
 	} finally {
-		if (!silent) loading.value = false
+		if (loadingSessionId === sessionId) loadingSessionId = null
+		if (!silent && props.sessionId === sessionId) loading.value = false
 	}
 }
 

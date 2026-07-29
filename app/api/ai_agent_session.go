@@ -304,7 +304,6 @@ func GetAISessionState(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	previews = refreshPreviewStatuses(sessionRepo, previews)
 	pendingApproval := getPendingApprovalForSession(sessionRepo, session.ID)
 	timelineEvents, err := sessionRepo.GetTimelineEventsBySessionID(session.ID, 20)
 	if err != nil {
@@ -327,8 +326,9 @@ func GetAISessionState(c fiber.Ctx) error {
 		latestRun.RawOutput = ""
 	}
 	if session.LastTaskID > 0 {
-		currentTask, _ = repo.NewAITaskRepo().GetTaskByID(session.LastTaskID)
-		messages, msgErr := repo.NewAITaskRepo().GetMessagesByTaskID(session.LastTaskID)
+		taskRepo := repo.NewAITaskRepo()
+		currentTask, _ = taskRepo.GetTaskByID(session.LastTaskID)
+		messages, msgErr := taskRepo.GetMessagesByTaskID(session.LastTaskID)
 		if msgErr != nil {
 			return c.JSON(e.Fail(msgErr))
 		}
