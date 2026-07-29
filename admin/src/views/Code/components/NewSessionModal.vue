@@ -4,7 +4,9 @@ import { useI18n } from "vue-i18n"
 import { useMessage } from "naive-ui"
 import { createCodeSession, getCodeExecutors, getCodeWorktreeCapability } from "@/api/modules/code"
 import type { CodeApprovalPolicy, CodeExecutor, CodeSession, CodeWorktreeCapability } from "@/api/interface/code"
-import { codeProjectMessages } from "@/i18n/locales/codeProject"
+import { newCodeSessionMessages } from "../newCodeSessionMessages"
+
+type CodexWireAPI = "responses"
 
 const props = defineProps<{
 	show: boolean
@@ -16,11 +18,15 @@ const emit = defineEmits<{
 	(event: "created", session: CodeSession): void
 }>()
 
-const { t } = useI18n({ messages: codeProjectMessages })
+const { t } = useI18n({ messages: newCodeSessionMessages })
 const message = useMessage()
 const executors = ref<CodeExecutor[]>([])
 const selectedExecutorId = ref("")
 const approvalPolicy = ref<CodeApprovalPolicy>("safe_auto")
+const codexProviderMode = ref<"default" | "custom">("default")
+const codexBaseUrl = ref("")
+const codexApiKey = ref("")
+const codexWireApi = ref<CodexWireAPI>("responses")
 const isolated = ref(false)
 const worktreeCapability = ref<CodeWorktreeCapability | null>(null)
 const title = ref("")
@@ -29,6 +35,11 @@ const submitting = ref(false)
 const loadError = ref("")
 
 const availableExecutors = computed(() => executors.value.filter(executor => executor.available))
+const showCodexProvider = computed(() => selectedExecutorId.value === "codex")
+const codexWireApiOptions = computed(() => [
+	{ label: t("code.codexWireApiResponses"), value: "responses" },
+	{ label: t("code.codexWireApiChatUnsupported"), value: "chat", disabled: true }
+])
 
 const loadExecutors = async () => {
 	loading.value = true
@@ -66,6 +77,10 @@ watch(
 		if (show) {
 			title.value = ""
 			approvalPolicy.value = "safe_auto"
+			codexProviderMode.value = "default"
+			codexBaseUrl.value = ""
+			codexApiKey.value = ""
+			codexWireApi.value = "responses"
 			void Promise.all([loadExecutors(), loadWorktreeCapability()])
 		}
 	}
@@ -78,16 +93,35 @@ const submit = async () => {
 		message.warning(t("code.selectExecutorRequired"))
 		return
 	}
+	if (showCodexProvider.value && codexProviderMode.value === "custom") {
+		if (!codexBaseUrl.value.trim()) {
+			message.warning(t("code.codexBaseUrlRequired"))
+			return
+		}
+		if (!codexApiKey.value.trim()) {
+			message.warning(t("code.codexApiKeyRequired"))
+			return
+		}
+	}
 	submitting.value = true
 	try {
-		const response = await createCodeSession({
+		const sessionRequest = {
 			title: title.value.trim(),
 			workDir: "",
 			projectId: props.projectId,
 			executorId: selectedExecutorId.value,
 			approvalPolicy: approvalPolicy.value,
-			isolated: isolated.value
-		})
+			isolated: isolated.value,
+			codexProvider:
+				showCodexProvider.value && codexProviderMode.value === "custom"
+					? {
+							baseUrl: codexBaseUrl.value.trim(),
+							apiKey: codexApiKey.value.trim(),
+							wireApi: codexWireApi.value
+						}
+					: undefined
+		}
+		const response = await createCodeSession(sessionRequest)
 		emit("created", response.data)
 		close()
 		message.success(t("code.sessionCreated"))
@@ -166,10 +200,53 @@ const submit = async () => {
 						<n-form-item :label="t('code.sessionTitle')">
 							<n-input v-model:value="title" :placeholder="t('code.sessionTitlePlaceholder')" />
 						</n-form-item>
+						<n-form-item v-if="showCodexProvider" :label="t('code.codexProvider')">
+							<div class="w-full space-y-3">
+								<n-radio-group v-model:value="codexProviderMode">
+									<n-space>
+										<n-radio value="default">{{ t("code.codexProviderDefault") }}</n-radio>
+										<n-radio value="custom">{{ t("code.codexProviderCustom") }}</n-radio>
+									</n-space>
+								</n-radio-group>
+								<n-alert type="info" :show-icon="false">
+									{{
+										codexProviderMode === "default"
+											? t("code.codexProviderDefaultHint")
+											: t("code.codexProviderCustomHint")
+									}}
+								</n-alert>
+								<div
+									v-if="codexProviderMode === 'custom'"
+									class="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:grid-cols-2"
+								>
+									<n-form-item :label="t('code.codexBaseUrl')" :show-feedback="false">
+										<n-input
+											v-model:value="codexBaseUrl"
+											:placeholder="t('code.codexBaseUrlPlaceholder')"
+										/>
+									</n-form-item>
+									<n-form-item :label="t('code.codexWireApi')" :show-feedback="false">
+										<n-select v-model:value="codexWireApi" :options="codexWireApiOptions" />
+									</n-form-item>
+									<n-form-item
+										class="sm:col-span-2"
+										:label="t('code.codexApiKey')"
+										:show-feedback="false"
+									>
+										<n-input
+											v-model:value="codexApiKey"
+											type="password"
+											show-password-on="click"
+											:placeholder="t('code.codexApiKeyPlaceholder')"
+										/>
+									</n-form-item>
+								</div>
+							</div>
+						</n-form-item>
 						<n-form-item :label="t('code.approvalPolicy')">
 							<div class="grid w-full gap-3 sm:grid-cols-3">
 								<button
-									v-for="policy in (['manual', 'safe_auto', 'full_auto'] as CodeApprovalPolicy[])"
+									v-for="policy in ['manual', 'safe_auto', 'full_auto'] as CodeApprovalPolicy[]"
 									:key="policy"
 									type="button"
 									class="rounded-xl border p-3 text-left transition-all"
@@ -196,12 +273,16 @@ const submit = async () => {
 							<div class="w-full rounded-xl border border-slate-200 bg-slate-50 p-3">
 								<div class="flex items-center justify-between gap-4">
 									<div>
-										<div class="text-sm font-semibold text-slate-800">{{ t("code.worktreeIsolationTitle") }}</div>
+										<div class="text-sm font-semibold text-slate-800">
+											{{ t("code.worktreeIsolationTitle") }}
+										</div>
 										<div class="mt-1 text-xs leading-5 text-slate-500">
 											{{
 												worktreeCapability?.available
 													? t("code.worktreeIsolationDesc")
-													: t(`code.worktreeReason_${worktreeCapability?.reason || "loading"}`)
+													: t(
+															`code.worktreeReason_${worktreeCapability?.reason || "loading"}`
+														)
 											}}
 										</div>
 									</div>
