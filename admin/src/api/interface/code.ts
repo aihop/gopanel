@@ -4,6 +4,7 @@ export interface AIGroup {
 	name: string
 	description: string
 	workDir: string
+	sourceDirs: string[]
 	creatorId: number
 	memberCount?: number
 	taskCount?: number

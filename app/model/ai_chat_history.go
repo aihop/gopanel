@@ -10,6 +10,7 @@ type AIGroup struct {
 	Name        string    `gorm:"column:name;type:varchar(255);not null" json:"name"`
 	Description string    `gorm:"column:description;type:text" json:"description"`
 	WorkDir     string    `gorm:"column:work_dir;type:varchar(1024);not null;default:''" json:"workDir"`
+	SourceDirs  []string  `gorm:"column:source_dirs;serializer:json;type:text" json:"sourceDirs"`
 	CreatorID   uint      `gorm:"column:creator_id;type:integer;not null;index" json:"creatorId"`
 }
 

@@ -18,11 +18,11 @@ export function getAIGroups(params: { page: number; limit: number }) {
 	return http.get<{ items: AIGroup[]; total: number }>("/code/groups", params)
 }
 
-export function createAIGroup(data: { name: string; description: string; workDir: string }) {
+export function createAIGroup(data: { name: string; description: string; sourceDirs: string[] }) {
 	return http.post<AIGroup>("/code/groups", data)
 }
 
-export function updateAIGroup(id: number, data: { name: string; description: string; workDir: string }) {
+export function updateAIGroup(id: number, data: { name: string; description: string; sourceDirs: string[] }) {
 	return http.put<AIGroup>(`/code/groups/${id}`, data)
 }
 

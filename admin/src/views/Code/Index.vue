@@ -75,9 +75,14 @@
           </div>
           <h3 class="group-card__title text-lg font-semibold mb-2">{{ group.name }}</h3>
           <p class="group-card__desc text-sm line-clamp-2 mb-5">{{ group.description || $t('code.noDesc') }}</p>
-          <div class="group-card__path mb-4 flex items-center gap-2 text-xs" :title="group.workDir">
+          <div
+            class="group-card__path mb-4 flex items-center gap-2 text-xs"
+            :title="group.sourceDirs?.join('\n') || group.workDir"
+          >
             <Icon name="mdi:folder-outline" :size="16" />
-            <span class="truncate">{{ group.workDir || t("code.projectDirectoryRequired") }}</span>
+            <span class="truncate">
+              {{ group.sourceDirs?.length ? t("code.projectDirectoryCount", { count: group.sourceDirs.length }) : group.workDir || t("code.projectDirectoryRequired") }}
+            </span>
           </div>
           <div class="group-card__footer flex justify-between items-center text-xs pt-4">
             <span>{{ group.taskCount || 0 }} {{ $t('code.task') }}</span>
@@ -102,17 +107,23 @@
             :placeholder="t('code.projectDesc')"
           />
           <div>
-            <div class="mb-2 text-sm font-medium text-[var(--n-text-color)]">{{ t("code.projectDirectory") }}</div>
-            <n-input-group>
-              <n-input
-                :value="projectForm.workDir"
-                readonly
-                :placeholder="t('code.projectDirectoryRequired')"
-              />
-              <n-button type="primary" secondary @click="showDirectoryPicker = true">
+            <div class="mb-2 flex items-center justify-between gap-3">
+              <div class="text-sm font-medium text-[var(--n-text-color)]">{{ t("code.projectDirectories") }}</div>
+              <n-button type="primary" secondary size="small" @click="showDirectoryPicker = true">
                 {{ t("code.browseDirectory") }}
               </n-button>
-            </n-input-group>
+            </div>
+            <div v-if="projectForm.sourceDirs.length" class="flex flex-wrap gap-2 rounded-xl bg-[var(--n-color-embedded)] p-3">
+              <n-tag
+                v-for="sourceDir in projectForm.sourceDirs"
+                :key="sourceDir"
+                closable
+                :title="sourceDir"
+                @close="removeSourceDir(sourceDir)"
+              >{{ sourceDir }}</n-tag>
+            </div>
+            <n-empty v-else size="small" :description="t('code.projectDirectoryRequired')" />
+            <div class="mt-2 text-xs text-[var(--n-text-color-3)]">{{ t("code.projectDirectoriesHint") }}</div>
           </div>
         </div>
         <template #action>
@@ -130,7 +141,8 @@
         v-model:show="showDirectoryPicker"
 		:initial-path="projectForm.workDir || defaultWorkDir"
 		:root-path="directoryRoot"
-        @select="projectForm.workDir = $event"
+		:selected-paths="projectForm.sourceDirs"
+		@select="projectForm.sourceDirs = $event"
       />
     </div>
   </div>
@@ -157,7 +169,7 @@ const showCreateProjectModal = ref(false)
 const showDirectoryPicker = ref(false)
 const creatingProject = ref(false)
 const editingProjectId = ref<number | null>(null)
-const projectForm = ref({ name: '', desc: '', workDir: '' })
+const projectForm = ref({ name: '', desc: '', workDir: '', sourceDirs: [] as string[] })
 
 const groups = ref<AIGroup[]>([])
 const groupsLoading = ref(false)
@@ -190,14 +202,19 @@ onMounted(() => {
 
 const openCreateProjectModal = () => {
   editingProjectId.value = null
-  projectForm.value = { name: '', desc: '', workDir: defaultWorkDir.value }
+  projectForm.value = { name: '', desc: '', workDir: defaultWorkDir.value, sourceDirs: [] }
   showCreateProjectModal.value = true
 }
 
 const openEditProjectModal = (project: AIGroup) => {
   editingProjectId.value = project.id
-  projectForm.value = { name: project.name, desc: project.description || '', workDir: project.workDir || '' }
+  const sourceDirs = project.sourceDirs?.length ? project.sourceDirs : project.workDir ? [project.workDir] : []
+  projectForm.value = { name: project.name, desc: project.description || '', workDir: sourceDirs[0] || defaultWorkDir.value, sourceDirs }
   showCreateProjectModal.value = true
+}
+
+const removeSourceDir = (sourceDir: string) => {
+  projectForm.value.sourceDirs = projectForm.value.sourceDirs.filter(path => path !== sourceDir)
 }
 
 const submitProject = async () => {
@@ -205,7 +222,7 @@ const submitProject = async () => {
     message.warning(t('code.projectNameRequired'))
     return
   }
-  if (!projectForm.value.workDir) {
+  if (projectForm.value.sourceDirs.length === 0) {
     message.warning(t('code.projectDirectoryRequired'))
     return
   }
@@ -214,7 +231,7 @@ const submitProject = async () => {
     const payload = {
       name: projectForm.value.name.trim(),
       description: projectForm.value.desc.trim(),
-      workDir: projectForm.value.workDir
+      sourceDirs: projectForm.value.sourceDirs
     }
     const res = editingProjectId.value
       ? await updateAIGroup(editingProjectId.value, payload)

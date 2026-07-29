@@ -10,7 +10,6 @@ import (
 	"github.com/aihop/gopanel/app/e"
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
-	"github.com/aihop/gopanel/app/service"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/utils/token"
 	"github.com/gofiber/fiber/v3"
@@ -159,7 +158,7 @@ func CreateAISession(c fiber.Ctx) error {
 		}
 	}
 	if claims.Role == constant.UserRoleSubAdmin {
-		if err := service.ValidatePathWithinBase(claims.FileBaseDir, workDir); err != nil {
+		if err := validateAIProjectWorkDirForClaims(workDir, claims); err != nil {
 			return c.JSON(e.Fail(err))
 		}
 	}

@@ -11,7 +11,6 @@ import (
 
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
-	"github.com/aihop/gopanel/app/service"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/pkg/websocket"
@@ -20,6 +19,14 @@ import (
 )
 
 const aiAgentWorkspaceImage = "node:18-alpine"
+
+func aiAgentWorkspaceContainerName(workDir string, userID uint) string {
+	containerKey := fmt.Sprintf("%d:%s", userID, workDir)
+	if isAnyManagedAIProjectWorkDir(workDir) {
+		containerKey += ":" + strings.Join(aiProjectWorkspaceSourceDirs(workDir), "\x00")
+	}
+	return fmt.Sprintf("cx_agent_%x", md5.Sum([]byte(containerKey)))
+}
 
 func loadAIAgentSessionState(
 	wsConn *websocket.Conn,
@@ -71,7 +78,7 @@ func loadAIAgentSessionState(
 		workDir = filepath.Clean(reqCwd)
 	}
 	if claims.Role == constant.UserRoleSubAdmin {
-		if err := service.ValidatePathWithinBase(claims.FileBaseDir, workDir); err != nil {
+		if err := validateAIProjectWorkDirForClaims(workDir, claims); err != nil {
 			return "", 0, nil, nil, err
 		}
 	}
@@ -86,15 +93,14 @@ func normalizeAIAgentAuthorizedWorkDir(workDir string, userID uint, claims *toke
 		return normalizeAIAgentWorkDir(workDir, userID), nil
 	}
 	workDir = filepath.Clean(strings.TrimSpace(workDir))
-	if err := service.ValidatePathWithinBase(claims.FileBaseDir, workDir); err != nil {
+	if err := validateAIProjectWorkDirForClaims(workDir, claims); err != nil {
 		return "", err
 	}
 	return workDir, nil
 }
 
 func ensureAIAgentWorkspaceContainer(wsConn *websocket.Conn, workDir string, claims *token.CustomClaims) (string, error) {
-	containerKey := fmt.Sprintf("%d:%s", claims.UserId, workDir)
-	containerName := fmt.Sprintf("cx_agent_%x", md5.Sum([]byte(containerKey)))
+	containerName := aiAgentWorkspaceContainerName(workDir, claims.UserId)
 	isRunning, exists, err := docker.InspectContainerRunning(context.Background(), containerName)
 	if err != nil {
 		global.LOG.Errorf("Failed to inspect workspace container %s: %v", containerName, err)
@@ -107,6 +113,14 @@ func ensureAIAgentWorkspaceContainer(wsConn *websocket.Conn, workDir string, cla
 			"run", "-d", "--name", containerName,
 			"-v", fmt.Sprintf("%s:/workspace", workDir),
 			"-w", "/workspace",
+		}
+		if isAnyManagedAIProjectWorkDir(workDir) {
+			for _, sourceDir := range aiProjectWorkspaceSourceDirs(workDir) {
+				if _, sourceErr := normalizeAIProjectSourceDir(sourceDir, claims); sourceErr != nil {
+					return "", sourceErr
+				}
+				runArgs = append(runArgs, "-v", fmt.Sprintf("%s:%s", sourceDir, sourceDir))
+			}
 		}
 
 		if claims.Role == constant.UserRoleAdmin || claims.Role == constant.UserRoleSuper {

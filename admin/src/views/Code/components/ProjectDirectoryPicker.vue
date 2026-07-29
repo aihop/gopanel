@@ -11,21 +11,23 @@ const props = defineProps<{
 	show: boolean
 	initialPath: string
 	rootPath: string
+	selectedPaths: string[]
 }>()
 
 const emit = defineEmits<{
 	(event: "update:show", value: boolean): void
-	(event: "select", value: string): void
+	(event: "select", value: string[]): void
 }>()
 
 const { t } = useI18n({ messages: codeProjectMessages })
 const message = useMessage()
 const currentPath = ref("/")
 const rootPath = ref("/")
-const selectedPath = ref("")
+const selectedPaths = ref<string[]>([])
 const directories = ref<File.File[]>([])
 const loading = ref(false)
 const loadError = ref(false)
+let directoryClickTimer: ReturnType<typeof setTimeout> | null = null
 
 const canGoParent = computed(() => currentPath.value !== rootPath.value)
 
@@ -44,7 +46,6 @@ const loadDirectories = async (path: string, fallbackPath = "") => {
 			sortOrder: "ascending"
 		})
 		currentPath.value = response.data?.path || path
-		selectedPath.value = currentPath.value
 		directories.value = (response.data?.items || []).filter(item => item.isDir)
 	} catch {
 		if (fallbackPath && fallbackPath !== path) {
@@ -69,26 +70,46 @@ const goParent = () => {
 	void loadDirectories(parentPath || rootPath.value)
 }
 
-const selectDirectory = (path: string) => {
-	selectedPath.value = path
+const isSelected = (path: string) => selectedPaths.value.includes(path)
+
+const toggleDirectory = (path: string) => {
+	selectedPaths.value = isSelected(path)
+		? selectedPaths.value.filter(selectedPath => selectedPath !== path)
+		: [...selectedPaths.value, path]
+}
+
+const selectDirectoryAfterClick = (path: string) => {
+	if (directoryClickTimer) clearTimeout(directoryClickTimer)
+	directoryClickTimer = setTimeout(() => {
+		toggleDirectory(path)
+		directoryClickTimer = null
+	}, 220)
 }
 
 const enterDirectory = (path: string) => {
-	selectedPath.value = path
+	if (directoryClickTimer) {
+		clearTimeout(directoryClickTimer)
+		directoryClickTimer = null
+	}
 	void loadDirectories(path)
 }
 
 const confirmSelection = () => {
-	if (!selectedPath.value) return
-	emit("select", selectedPath.value)
+	if (selectedPaths.value.length === 0) return
+	emit("select", [...selectedPaths.value])
 	emit("update:show", false)
 }
 
 watch(
 	() => props.show,
 	show => {
+		if (!show && directoryClickTimer) {
+			clearTimeout(directoryClickTimer)
+			directoryClickTimer = null
+		}
 		if (show) {
 			rootPath.value = props.rootPath || "/"
+			selectedPaths.value = [...props.selectedPaths]
 			void loadDirectories(props.initialPath || rootPath.value, rootPath.value)
 		}
 	}
@@ -134,15 +155,16 @@ watch(
 						:key="directory.path"
 						class="flex items-center gap-2 rounded-xl border p-2 transition-colors"
 						:class="
-							selectedPath === directory.path
+							isSelected(directory.path)
 								? 'border-[var(--n-primary-color)] bg-[var(--n-color-hover)] ring-1 ring-[var(--n-primary-color)]'
 								: 'border-[var(--n-border-color)] hover:border-[var(--n-primary-color)]'
 						"
 					>
+						<n-checkbox :checked="isSelected(directory.path)" @update:checked="toggleDirectory(directory.path)" />
 						<button
 							type="button"
 							class="flex min-w-0 flex-1 items-center gap-3 p-1 text-left"
-							@click="selectDirectory(directory.path)"
+							@click="selectDirectoryAfterClick(directory.path)"
 							@dblclick="enterDirectory(directory.path)"
 						>
 							<Icon name="mdi:folder-outline" :size="22" class="shrink-0 text-amber-500" />
@@ -158,15 +180,15 @@ watch(
 
 		<template #footer>
 			<div class="flex items-center justify-between gap-3">
-				<span class="min-w-0 truncate text-xs text-[var(--n-text-color-3)]" :title="selectedPath">
-					{{ t("code.selectedDirectory") }}：{{ selectedPath }}
+				<span class="min-w-0 truncate text-xs text-[var(--n-text-color-3)]">
+					{{ t("code.selectedDirectoryCount", { count: selectedPaths.length }) }}
 				</span>
 				<div class="flex shrink-0 gap-3">
 					<n-button @click="emit('update:show', false)">{{ t("code.cancel") }}</n-button>
-					<n-button :disabled="loading || loadError" @click="selectDirectory(currentPath)">
-						{{ t("code.selectThisDirectory") }}
+					<n-button :disabled="loading || loadError" @click="toggleDirectory(currentPath)">
+						{{ isSelected(currentPath) ? t("code.removeCurrentDirectory") : t("code.addCurrentDirectory") }}
 					</n-button>
-					<n-button type="primary" :disabled="loading || loadError || !selectedPath" @click="confirmSelection">
+					<n-button type="primary" :disabled="loading || loadError || selectedPaths.length === 0" @click="confirmSelection">
 						{{ t("code.confirmSelection") }}
 					</n-button>
 				</div>

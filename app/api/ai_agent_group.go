@@ -10,7 +10,6 @@ import (
 	"github.com/aihop/gopanel/app/e"
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
-	"github.com/aihop/gopanel/app/service"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/utils/token"
 	"github.com/gofiber/fiber/v3"
@@ -30,7 +29,7 @@ func normalizeAIProjectWorkDir(workDir string, claims *token.CustomClaims) (stri
 		return "", errors.New("项目路径必须是可访问的目录")
 	}
 	if claims.Role == constant.UserRoleSubAdmin {
-		if err := service.ValidatePathWithinBase(claims.FileBaseDir, resolvedPath); err != nil {
+		if err := validateAIProjectWorkDirForClaims(resolvedPath, claims); err != nil {
 			return "", err
 		}
 	}
@@ -104,9 +103,10 @@ func GetAIGroups(c fiber.Ctx) error {
 func CreateAIGroup(c fiber.Ctx) error {
 	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
 	var req struct {
-		Name        string `json:"name"`
-		Description string `json:"description"`
-		WorkDir     string `json:"workDir"`
+		Name        string   `json:"name"`
+		Description string   `json:"description"`
+		WorkDir     string   `json:"workDir"`
+		SourceDirs  []string `json:"sourceDirs"`
 	}
 	if bindErr := c.Bind().JSON(&req); bindErr != nil {
 		return c.JSON(e.Fail(bindErr))
@@ -115,13 +115,29 @@ func CreateAIGroup(c fiber.Ctx) error {
 	if name == "" {
 		return c.JSON(e.Fail(errors.New("项目名称不能为空")))
 	}
-	workDir, err := normalizeAIProjectWorkDir(req.WorkDir, claims)
+	requestedDirs := req.SourceDirs
+	if len(requestedDirs) == 0 && strings.TrimSpace(req.WorkDir) != "" {
+		requestedDirs = []string{req.WorkDir}
+	}
+	sourceDirs, err := normalizeAIProjectSourceDirs(requestedDirs, claims)
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	group := &model.AIGroup{Name: name, Description: strings.TrimSpace(req.Description), WorkDir: workDir, CreatorID: claims.UserId}
+	group := &model.AIGroup{Name: name, Description: strings.TrimSpace(req.Description), SourceDirs: sourceDirs, CreatorID: claims.UserId}
 	groupRepo := repo.NewAIGroupRepo()
 	if err := groupRepo.CreateGroup(group); err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	workDir, err := syncAIProjectWorkspace(group, sourceDirs)
+	if err != nil {
+		_ = groupRepo.DeleteGroup(group.ID)
+		_ = os.RemoveAll(aiProjectWorkspaceDir(group.CreatorID, group.ID))
+		return c.JSON(e.Fail(err))
+	}
+	group.WorkDir = workDir
+	if err := groupRepo.UpdateGroup(group); err != nil {
+		_ = groupRepo.DeleteGroup(group.ID)
+		_ = os.RemoveAll(aiProjectWorkspaceDir(group.CreatorID, group.ID))
 		return c.JSON(e.Fail(err))
 	}
 	return c.JSON(e.Succ(group))
@@ -142,9 +158,10 @@ func UpdateAIGroup(c fiber.Ctx) error {
 		return c.JSON(e.Fail(errors.New("无权修改该项目")))
 	}
 	var req struct {
-		Name        string `json:"name"`
-		Description string `json:"description"`
-		WorkDir     string `json:"workDir"`
+		Name        string   `json:"name"`
+		Description string   `json:"description"`
+		WorkDir     string   `json:"workDir"`
+		SourceDirs  []string `json:"sourceDirs"`
 	}
 	if bindErr := c.Bind().JSON(&req); bindErr != nil {
 		return c.JSON(e.Fail(bindErr))
@@ -153,13 +170,22 @@ func UpdateAIGroup(c fiber.Ctx) error {
 	if name == "" {
 		return c.JSON(e.Fail(errors.New("项目名称不能为空")))
 	}
-	workDir, err := normalizeAIProjectWorkDir(req.WorkDir, claims)
+	requestedDirs := req.SourceDirs
+	if len(requestedDirs) == 0 && strings.TrimSpace(req.WorkDir) != "" {
+		requestedDirs = []string{req.WorkDir}
+	}
+	sourceDirs, err := normalizeAIProjectSourceDirs(requestedDirs, claims)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	workDir, err := syncAIProjectWorkspace(project, sourceDirs)
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
 	project.Name = name
 	project.Description = strings.TrimSpace(req.Description)
 	project.WorkDir = workDir
+	project.SourceDirs = sourceDirs
 	if err := groupRepo.UpdateGroup(project); err != nil {
 		return c.JSON(e.Fail(err))
 	}
