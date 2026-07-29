@@ -81,3 +81,59 @@ export interface CodeSessionHistory {
 	page: number
 	limit: number
 }
+
+export interface CodeInstruction {
+	id: number
+	createdAt: string
+	sessionId: number
+	taskId: number
+	content: string
+	status: string
+	autoPreview: boolean
+}
+
+export interface CodeApproval {
+	id: number
+	title: string
+	content: string
+	riskLevel: string
+	status: string
+}
+
+export interface CodePreview {
+	id: number
+	title: string
+	url: string
+	status: string
+}
+
+export interface CodeTimelineEvent {
+	id: number
+	createdAt: string
+	title: string
+	content: string
+	stage: string
+	status: string
+}
+
+export interface CodeSessionState {
+	session: CodeSession
+	currentTask: AITask | null
+	latestInstruction: CodeInstruction | null
+	currentStage: string
+	recentOutput: string
+	recentMessages: AIMessage[]
+	previews: CodePreview[]
+	pendingApproval: CodeApproval | null
+	timelineEvents: CodeTimelineEvent[]
+	errorSummary: string
+	changedFiles: string[]
+	latestRun: CodeExecutionRun | null
+}
+
+export interface CodeInstructionResponse {
+	session: CodeSession
+	instruction: CodeInstruction
+	task: AITask
+	approval: CodeApproval | null
+}

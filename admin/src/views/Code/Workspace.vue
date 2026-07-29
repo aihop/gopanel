@@ -138,6 +138,14 @@
 							</div>
 						</div>
 						<div class="flex items-center gap-2">
+							<n-button-group v-if="currentSessionId !== null">
+								<n-button size="small" :type="workMode === 'conversation' ? 'primary' : 'default'" @click="workMode = 'conversation'">
+									{{ $t("code.conversationMode") }}
+								</n-button>
+								<n-button size="small" :type="workMode === 'terminal' ? 'primary' : 'default'" @click="workMode = 'terminal'">
+									{{ $t("code.advancedTerminal") }}
+								</n-button>
+							</n-button-group>
 							<n-button
 								v-if="currentSessionId !== null || currentTaskId !== null"
 								secondary
@@ -152,11 +160,16 @@
 						</div>
 					</div>
 
-					<div
-						class="ai-workspace-terminal-wrap min-h-0 flex-1 overflow-hidden rounded-[26px] border border-slate-200/80 bg-[#0f172a] shadow-[0_24px_50px_rgba(15,23,42,0.18)]"
-					>
+					<div class="ai-workspace-terminal-wrap min-h-0 flex-1 overflow-hidden rounded-[26px] border border-slate-200/80 shadow-[0_24px_50px_rgba(15,23,42,0.18)]">
+						<ConversationPanel
+							v-if="currentSessionId !== null && workMode === 'conversation'"
+							:key="`conversation-${currentSessionId}`"
+							:session-id="currentSessionId"
+							@task-created="handleTaskCreated"
+							@show-history="showHistoryDrawer = true"
+						/>
 						<CodeTerminal
-							v-if="currentTaskId !== null || currentSessionId !== null"
+							v-else-if="currentTaskId !== null || currentSessionId !== null"
 							:key="terminalKey"
 							:task-id="currentTaskId"
 							:session-id="currentSessionId"
@@ -216,6 +229,7 @@ import { useRoute, useRouter } from "vue-router"
 import { useI18n } from "vue-i18n"
 import { useMessage, useDialog } from "naive-ui"
 import CodeTerminal from "./components/CodeTerminal.vue"
+import ConversationPanel from "./components/ConversationPanel.vue"
 import NewSessionModal from "./components/NewSessionModal.vue"
 import SessionHistoryDrawer from "./components/SessionHistoryDrawer.vue"
 import { getAITasks, updateAITask, deleteAITask, getAIGroups } from "@/api/modules/code"
@@ -257,6 +271,7 @@ const currentSessionId = ref<number | null>(null)
 const showNewSessionModal = ref(false)
 const showHistoryDrawer = ref(false)
 const terminalKey = ref(0)
+const workMode = ref<"conversation" | "terminal">("conversation")
 
 const fetchTasks = async () => {
 	if (!currentGroupId.value) return
@@ -296,6 +311,7 @@ const createNewTask = () => {
 const handleSessionCreated = (session: CodeSession) => {
 	currentTaskId.value = null
 	currentSessionId.value = session.id
+	workMode.value = session.agentName === "terminal" ? "terminal" : "conversation"
 	terminalKey.value++
 }
 
@@ -303,6 +319,7 @@ const selectTask = (task: AITask) => {
 	if (currentTaskId.value === task.id && currentSessionId.value === null) return
 	currentTaskId.value = task.id
 	currentSessionId.value = task.sessionId || null
+	workMode.value = task.sessionId && task.agentName !== "terminal" ? "conversation" : "terminal"
 	terminalKey.value++
 
 	// 可以考虑在这里把 task_id 同步到 URL query 中以便分享更深的一层，

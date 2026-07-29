@@ -85,6 +85,9 @@ func executeCodeAgentRun(
 	run.NativeSessionID = parsed.NativeSessionID
 	if execErr != nil {
 		run.Status = "failed"
+		if ctx.Err() != nil {
+			run.Status = "cancelled"
+		}
 		run.ExitCode = executionExitCode(execErr)
 		run.ErrorMessage = execErr.Error()
 		if strings.TrimSpace(run.Output) == "" {

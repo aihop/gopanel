@@ -154,9 +154,10 @@ func decideAIApproval(c fiber.Ctx, decision string) error {
 				task.Status = "failed"
 				_ = taskRepo.UpdateTask(task)
 				_ = taskRepo.CreateMessage(&model.AIMessage{
-					TaskID:  task.ID,
-					Role:    "system",
-					Content: "该开发指令已被人工拒绝执行。",
+					SessionID: approval.SessionID,
+					TaskID:    task.ID,
+					Role:      "system",
+					Content:   "该开发指令已被人工拒绝执行。",
 				})
 			}
 		}
@@ -167,6 +168,9 @@ func decideAIApproval(c fiber.Ctx, decision string) error {
 	}
 	if err := sessionRepo.UpdateSession(session); err != nil {
 		return c.JSON(e.Fail(err))
+	}
+	if decision == "approved" {
+		enqueueCodeInstruction(instruction.ID)
 	}
 
 	return c.JSON(e.Succ(fiber.Map{

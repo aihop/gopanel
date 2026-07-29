@@ -5,8 +5,11 @@ import type {
 	AIMessage,
 	CodeExecutor,
 	CodeExecutionRun,
+	CodeInstruction,
+	CodeInstructionResponse,
 	CodeSession,
-	CodeSessionHistory
+	CodeSessionHistory,
+	CodeSessionState
 } from "../interface/code"
 
 // === Group APIs ===
@@ -37,6 +40,34 @@ export function getCodeSessionHistory(sessionId: number) {
 
 export function getCodeExecutionRun(runId: number) {
 	return http.get<CodeExecutionRun>(`/code/runs/${runId}`)
+}
+
+export function getCodeSessionState(sessionId: number) {
+	return http.get<CodeSessionState>(`/code/sessions/${sessionId}/state`)
+}
+
+export function createCodeInstruction(sessionId: number, content: string) {
+	return http.post<CodeInstructionResponse>(`/code/sessions/${sessionId}/instructions`, {
+		content,
+		allowCode: true,
+		autoPreview: true
+	})
+}
+
+export function approveCodeInstruction(approvalId: number) {
+	return http.post(`/code/approvals/${approvalId}/approve`, {})
+}
+
+export function rejectCodeInstruction(approvalId: number) {
+	return http.post(`/code/approvals/${approvalId}/reject`, {})
+}
+
+export function stopCodeSession(sessionId: number) {
+	return http.post(`/code/sessions/${sessionId}/stop`, {})
+}
+
+export function retryCodeInstruction(instructionId: number) {
+	return http.post<CodeInstruction>(`/code/instructions/${instructionId}/retry`, {})
 }
 
 // === Task APIs ===

@@ -31,6 +31,8 @@ func CodeRouter(r fiber.Router) {
 		group.Post("/sessions", api.CreateAISession)
 		group.Post("/sessions/:id/instructions", api.CreateAISessionInstruction)
 		group.Get("/sessions/:id/state", api.GetAISessionState)
+		group.Post("/sessions/:id/stop", api.StopCodeSessionExecution)
+		group.Post("/instructions/:id/retry", api.RetryCodeInstruction)
 		group.Get("/approvals", api.GetAIApprovals)
 		group.Post("/approvals/:id/approve", api.ApproveAIApproval)
 		group.Post("/approvals/:id/reject", api.RejectAIApproval)

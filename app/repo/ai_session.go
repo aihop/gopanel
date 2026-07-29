@@ -14,11 +14,15 @@ type IAIDevSessionRepo interface {
 	UpdateExecutionRun(run *model.AIExecutionRun) error
 	GetExecutionRunsBySessionID(sessionID uint, page, limit int) ([]*model.AIExecutionRun, int64, error)
 	GetExecutionRunByID(id uint) (*model.AIExecutionRun, error)
+	GetLatestExecutionRunBySessionID(sessionID uint) (*model.AIExecutionRun, error)
 
 	CreateInstruction(instruction *model.AIInstruction) error
+	GetInstructionByID(id uint) (*model.AIInstruction, error)
 	GetInstructionsBySessionID(sessionID uint, page, limit int) ([]*model.AIInstruction, int64, error)
 	GetLatestInstructionBySessionID(sessionID uint) (*model.AIInstruction, error)
 	GetPendingInstructionsBySessionID(sessionID uint) ([]*model.AIInstruction, error)
+	ClaimInstruction(id uint) (bool, error)
+	CancelQueuedInstructions(sessionID uint) error
 	UpdateInstruction(instruction *model.AIInstruction) error
 
 	CreatePreview(preview *model.AIPreview) error
@@ -97,8 +101,20 @@ func (r *aiDevSessionRepo) GetExecutionRunByID(id uint) (*model.AIExecutionRun, 
 	return &run, err
 }
 
+func (r *aiDevSessionRepo) GetLatestExecutionRunBySessionID(sessionID uint) (*model.AIExecutionRun, error) {
+	var run model.AIExecutionRun
+	err := global.DB.Where("session_id = ?", sessionID).Order("created_at desc").First(&run).Error
+	return &run, err
+}
+
 func (r *aiDevSessionRepo) CreateInstruction(instruction *model.AIInstruction) error {
 	return global.DB.Create(instruction).Error
+}
+
+func (r *aiDevSessionRepo) GetInstructionByID(id uint) (*model.AIInstruction, error) {
+	var instruction model.AIInstruction
+	err := global.DB.Where("id = ?", id).First(&instruction).Error
+	return &instruction, err
 }
 
 func (r *aiDevSessionRepo) GetInstructionsBySessionID(sessionID uint, page, limit int) ([]*model.AIInstruction, int64, error) {
@@ -124,6 +140,19 @@ func (r *aiDevSessionRepo) GetPendingInstructionsBySessionID(sessionID uint) ([]
 		Order("created_at asc").
 		Find(&instructions).Error
 	return instructions, err
+}
+
+func (r *aiDevSessionRepo) ClaimInstruction(id uint) (bool, error) {
+	result := global.DB.Model(&model.AIInstruction{}).
+		Where("id = ? AND status = ?", id, "queued").
+		Update("status", "running")
+	return result.RowsAffected == 1, result.Error
+}
+
+func (r *aiDevSessionRepo) CancelQueuedInstructions(sessionID uint) error {
+	return global.DB.Model(&model.AIInstruction{}).
+		Where("session_id = ? AND status = ?", sessionID, "queued").
+		Update("status", "cancelled").Error
 }
 
 func (r *aiDevSessionRepo) UpdateInstruction(instruction *model.AIInstruction) error {

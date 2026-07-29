@@ -142,6 +142,20 @@ func AIAgentWsSSH(wsConn *websocket.Conn) {
 				if strings.TrimSpace(req.input) == "" {
 					continue
 				}
+				if req.instruction != nil && currentSession != nil && req.task != nil {
+					sendWsMsg(fmt.Sprintf("\033[36m[%s] 正在思考并执行...\033[0m\r\n", executorID))
+					result := executeCodeInstruction(context.Background(), sessionRepo, aiRepo, currentSession, req.task, req.instruction, true)
+					if result.Err != nil {
+						global.LOG.Errorf("AI execution error: %v, out: %s", result.Err, result.Output)
+					}
+					formattedOut := strings.ReplaceAll(result.Output, "\n", "\r\n")
+					if !strings.HasSuffix(formattedOut, "\r\n") {
+						formattedOut += "\r\n"
+					}
+					sendWsMsg(formattedOut)
+					sendWsMsg(fmt.Sprintf("\033[32m[%s] > \033[0m", executorID))
+					continue
+				}
 				if req.task != nil {
 					req.task.Status = "running"
 					_ = aiRepo.UpdateTask(req.task)

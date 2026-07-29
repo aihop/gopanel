@@ -206,14 +206,19 @@ func CreateAISessionInstruction(c fiber.Ctx) error {
 	if req.AnalysisOnly || !allowCode {
 		return c.JSON(e.Fail(errors.New("当前执行器尚不支持可强制保证的只读分析模式")))
 	}
+	if session.AgentName == "terminal" {
+		return c.JSON(e.Fail(errors.New("纯终端会话不支持后台对话执行，请切换到高级终端")))
+	}
 	task, err := ensureSessionTask(session, claims, content)
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	// 所有可写开发指令都必须经过服务端审批，客户端不能关闭该边界。
 	requireApproval := true
-	needsApproval := true
-	instructionStatus := "pending_approval"
+	needsApproval := shouldRequireAIApproval(content, requireApproval)
+	instructionStatus := "queued"
+	if needsApproval {
+		instructionStatus = "pending_approval"
+	}
 	instruction := &model.AIInstruction{SessionID: session.ID, UserID: claims.UserId, ProjectID: session.ProjectID, TaskID: task.ID, Content: content, Status: instructionStatus, AllowCode: allowCode, AutoPreview: req.AutoPreview, RequireApproval: requireApproval, AnalysisOnly: req.AnalysisOnly}
 	sessionRepo := repo.NewAIDevSessionRepo()
 	if err := sessionRepo.CreateInstruction(instruction); err != nil {
@@ -252,7 +257,7 @@ func CreateAISessionInstruction(c fiber.Ctx) error {
 	session.Status = "active"
 	if needsApproval {
 		session.CurrentStage = "awaiting_approval"
-	} else {
+	} else if session.CurrentStage != "executing" {
 		session.CurrentStage = "instruction_queued"
 	}
 	session.LastTaskID = task.ID
@@ -265,11 +270,14 @@ func CreateAISessionInstruction(c fiber.Ctx) error {
 	}
 	if needsApproval {
 		task.Status = "pending_approval"
-	} else {
+	} else if task.Status != "running" {
 		task.Status = "queued"
 	}
 	if err := repo.NewAITaskRepo().UpdateTask(task); err != nil {
 		return c.JSON(e.Fail(err))
+	}
+	if !needsApproval {
+		enqueueCodeInstruction(instruction.ID)
 	}
 	return c.JSON(e.Succ(fiber.Map{"session": session, "instruction": instruction, "task": task, "approval": approval}))
 }
@@ -289,6 +297,9 @@ func GetAISessionState(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
+	if latestInstruction != nil && latestInstruction.Status == "queued" {
+		enqueueCodeInstruction(latestInstruction.ID)
+	}
 	previews, err := sessionRepo.GetPreviewsBySessionID(session.ID, 20)
 	if err != nil {
 		return c.JSON(e.Fail(err))
@@ -304,6 +315,17 @@ func GetAISessionState(c fiber.Ctx) error {
 	var errorSummary string
 	var changedFiles []string
 	var recentMessages []*model.AIMessage
+	latestRun, err := sessionRepo.GetLatestExecutionRunBySessionID(session.ID)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		latestRun = nil
+		err = nil
+	}
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	if latestRun != nil {
+		latestRun.RawOutput = ""
+	}
 	if session.LastTaskID > 0 {
 		currentTask, _ = repo.NewAITaskRepo().GetTaskByID(session.LastTaskID)
 		messages, msgErr := repo.NewAITaskRepo().GetMessagesByTaskID(session.LastTaskID)
@@ -340,5 +362,6 @@ func GetAISessionState(c fiber.Ctx) error {
 		"timelineEvents":    timelineEvents,
 		"errorSummary":      errorSummary,
 		"changedFiles":      changedFiles,
+		"latestRun":         latestRun,
 	}))
 }
