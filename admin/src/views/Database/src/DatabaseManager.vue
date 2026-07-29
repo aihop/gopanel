@@ -19,6 +19,7 @@ import { useDatabaseManager } from './useDatabaseManager'
 const props = defineProps<{
   defaultServerId?: number | null
   defaultDatabaseName?: string | null
+  fillHeight?: boolean
 }>()
 
 const message = useMessage()
@@ -133,7 +134,10 @@ const handleDropDatabase = async () => {
 </script>
 
 <template>
-  <div class="db-manager flex h-[650px] gap-3 p-2 bg-[#eef2f7] rounded-lg">
+  <div
+    class="db-manager flex gap-3 p-2 bg-[#eef2f7] rounded-lg"
+    :class="fillHeight ? 'h-full min-h-0' : 'h-[650px]'"
+  >
     <DatabaseManagerSidebar
       :selected-server-id="selectedServerId"
       :selected-database="selectedDatabase"

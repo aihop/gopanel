@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { NButton, NInput, NPopconfirm, NTag, NModal } from "naive-ui"
+import { NButton, NInput, NPopconfirm, NTag } from "naive-ui"
 import { useI18n } from "vue-i18n"
 import { useTable } from "@/composables/useTable"
 import { databaseListAPI, databaseCountAPI, databaseCommentAPI, databaseDeleteAPI } from "@/api/modules/database"
 import { reactive, h, onMounted, onUnmounted, ref, watch, inject, Ref } from "vue"
 import emitter from "@/utils/emitter"
 import Backup from "@/components/Backup.vue"
+import FullModal from "@/components/FullModal.vue"
 import UploadDialog from "@/components/UploadDialog.vue"
 import DatabaseManager from "./DatabaseManager.vue"
 import { MsgSuccess } from "@/utils/message"
@@ -286,17 +287,17 @@ onUnmounted(() => {
       </n-button>
     </template>
   </UploadDialog>
-  <n-modal
+  <FullModal
     v-model:show="managerModalShow"
-    preset="card"
-    title="数据库管理"
-    size="small"
-    style="height: 1080px; height: 100%; border-radius: 20px; padding: 10px; min-width: 870px;"
-    :bordered="false"
+    :title="t('database.workspace')"
+    width="min(1200px, calc(100vw - 48px))"
+    height="min(860px, calc(100vh - 48px))"
+    body-padding="10px"
   >
     <DatabaseManager
+      fill-height
       :default-server-id="managerServerId"
       :default-database-name="managerDatabaseName"
     />
-  </n-modal>
+  </FullModal>
 </template>
