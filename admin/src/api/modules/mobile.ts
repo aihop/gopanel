@@ -1,7 +1,14 @@
 import axios from "axios"
 import http from "@/api"
 import type { ResultData } from "@/api/interface"
-import type { CodeApproval, CodeSession, CodeSessionState } from "@/api/interface/code"
+import type {
+	AIGroup,
+	CodeApproval,
+	CodeApprovalPolicy,
+	CodeExecutor,
+	CodeSession,
+	CodeSessionState
+} from "@/api/interface/code"
 import type { Dashboard } from "@/api/interface/dashboard"
 
 const mobileHttp = axios.create({
@@ -48,6 +55,26 @@ export interface MobileOverview {
 	serverTime: string
 }
 
+export interface MobileCodeStructureEntry {
+	name: string
+	path: string
+	isDir: boolean
+	extension: string
+}
+
+export interface MobileCodeStructureResult {
+	path: string
+	entries: MobileCodeStructureEntry[]
+	truncated: boolean
+}
+
+export interface MobileCodeSessionFile {
+	path: string
+	content: string
+	extension: string
+	size: number
+}
+
 export function issueMobilePairing(deviceTtlDays: number) {
 	return managementRequest(http.post<{ code: string; expiresAt: string; deviceTtlDays: number }>("/mobile/management/pair/issue", { deviceTtlDays }))
 }
@@ -79,6 +106,29 @@ export function getMobileSessions(page = 1, limit = 20) {
 	}))
 }
 
+export function getMobileProjects() {
+	return mobileRequest(mobileHttp.get<ResultData<{ items: AIGroup[]; total: number }>>("/mobile/app/projects", {
+		params: { page: 1, limit: 100 }
+	})).then(result => ({ ...result, items: result.items || [] }))
+}
+
+export function getMobileExecutors() {
+	return mobileRequest(mobileHttp.get<ResultData<CodeExecutor[]>>("/mobile/app/executors"))
+}
+
+export function createMobileSession(data: {
+	title: string
+	projectId: number
+	executorId: string
+	approvalPolicy: CodeApprovalPolicy
+}) {
+	return mobileRequest(mobileHttp.post<ResultData<CodeSession>>("/mobile/app/sessions", {
+		...data,
+		workDir: "",
+		isolated: false
+	}))
+}
+
 export function getMobileSessionState(sessionId: number) {
 	return mobileRequest(mobileHttp.get<ResultData<CodeSessionState>>(`/mobile/app/sessions/${sessionId}/state`)).then(result => ({
 		...result,
@@ -87,6 +137,27 @@ export function getMobileSessionState(sessionId: number) {
 		timelineEvents: result.timelineEvents || [],
 		changedFiles: result.changedFiles || []
 	}))
+}
+
+export function getMobileSessionStructure(sessionId: number, path = "") {
+	return mobileRequest(mobileHttp.get<ResultData<MobileCodeStructureResult>>(
+		`/mobile/app/sessions/${sessionId}/structure`,
+		{ params: { path } }
+	))
+}
+
+export function getMobileSessionFile(sessionId: number, path: string) {
+	return mobileRequest(mobileHttp.get<ResultData<MobileCodeSessionFile>>(
+		`/mobile/app/sessions/${sessionId}/file`,
+		{ params: { path } }
+	))
+}
+
+export function saveMobileSessionFile(sessionId: number, path: string, content: string) {
+	return mobileRequest(mobileHttp.put<ResultData<{ path: string; size: number }>>(
+		`/mobile/app/sessions/${sessionId}/file`,
+		{ path, content }
+	))
 }
 
 export function sendMobileInstruction(sessionId: number, content: string) {

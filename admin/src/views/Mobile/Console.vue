@@ -12,6 +12,8 @@ import {
 } from "@/api/modules/mobile"
 import type { CodeSession, CodeSessionState } from "@/api/interface/code"
 import { mobileMessages } from "@/i18n/locales/mobile"
+import MobileFileBrowser from "./components/MobileFileBrowser.vue"
+import MobileSessionCreator from "./components/MobileSessionCreator.vue"
 import { useI18n } from "vue-i18n"
 import { computed, onBeforeUnmount, onMounted, ref } from "vue"
 import { useDialog, useMessage } from "naive-ui"
@@ -31,6 +33,8 @@ const prompt = ref("")
 const loading = ref(false)
 const actionLoading = ref(false)
 const loadError = ref("")
+const showSessionCreator = ref(false)
+const showFiles = ref(false)
 let refreshTimer: ReturnType<typeof setInterval> | null = null
 
 const selectedSession = computed(() => sessions.value.find(item => item.id === selectedSessionId.value) || null)
@@ -82,6 +86,13 @@ async function loadSessionState(silent = false) {
 
 async function selectSession(session: CodeSession) {
 	selectedSessionId.value = session.id
+	await loadSessionState()
+}
+
+async function handleSessionCreated(session: CodeSession) {
+	activeTab.value = "code"
+	selectedSessionId.value = session.id
+	await loadSessions()
 	await loadSessionState()
 }
 
@@ -179,7 +190,10 @@ onBeforeUnmount(() => {
 					<div class="text-lg font-bold">GoPanel</div>
 					<div class="text-xs text-slate-500">{{ t("mobile.title") }}</div>
 				</div>
-				<n-button size="small" quaternary @click="confirmLogout">{{ t("mobile.logout") }}</n-button>
+				<div class="flex items-center gap-1">
+					<n-button size="small" type="primary" secondary @click="showSessionCreator = true">{{ t("mobile.newSession") }}</n-button>
+					<n-button size="small" quaternary @click="confirmLogout">{{ t("mobile.logout") }}</n-button>
+				</div>
 			</div>
 		</header>
 
@@ -223,10 +237,13 @@ onBeforeUnmount(() => {
 				</div>
 
 				<div v-else class="space-y-4">
-					<div class="flex gap-2 overflow-x-auto pb-1">
+					<div class="flex items-center gap-2 overflow-x-auto pb-1">
+						<n-button size="small" round type="primary" secondary class="shrink-0" @click="showSessionCreator = true">+ {{ t("mobile.newSession") }}</n-button>
 						<n-button v-for="session in sessions" :key="session.id" size="small" round :type="selectedSessionId === session.id ? 'primary' : 'default'" @click="selectSession(session)">{{ session.title }}</n-button>
 					</div>
-					<n-empty v-if="sessions.length === 0" :description="t('mobile.noSessions')" class="rounded-2xl bg-white py-16" />
+					<n-empty v-if="sessions.length === 0" :description="t('mobile.noSessions')" class="rounded-2xl bg-white py-16">
+						<template #extra><n-button type="primary" @click="showSessionCreator = true">{{ t("mobile.newSession") }}</n-button></template>
+					</n-empty>
 					<template v-else-if="selectedSession">
 						<section class="rounded-2xl bg-white p-4 shadow-sm">
 							<div class="flex items-center justify-between gap-3">
@@ -234,7 +251,10 @@ onBeforeUnmount(() => {
 									<h2 class="truncate font-semibold">{{ selectedSession.title }}</h2>
 									<div class="mt-1 truncate text-xs text-slate-500">{{ selectedSession.workDir }}</div>
 								</div>
-								<n-tag :type="sessionState?.currentStage === 'failed' ? 'error' : isRunning ? 'info' : 'success'">{{ sessionState?.currentStage || selectedSession.currentStage }}</n-tag>
+								<div class="flex shrink-0 items-center gap-2">
+									<n-button size="small" secondary @click="showFiles = true">{{ t("mobile.files") }}</n-button>
+									<n-tag :type="sessionState?.currentStage === 'failed' ? 'error' : isRunning ? 'info' : 'success'">{{ sessionState?.currentStage || selectedSession.currentStage }}</n-tag>
+								</div>
 							</div>
 							<div class="mt-4 max-h-[42dvh] space-y-3 overflow-y-auto">
 								<div v-for="item in sessionState?.recentMessages || []" :key="item.id" class="flex" :class="item.role === 'user' ? 'justify-end' : 'justify-start'">
@@ -278,6 +298,9 @@ onBeforeUnmount(() => {
 				<n-button size="large" :type="activeTab === 'overview' ? 'primary' : 'default'" :secondary="activeTab !== 'overview'" @click="activeTab = 'overview'; loadOverview()">{{ t("mobile.overview") }}</n-button>
 				<n-button size="large" :type="activeTab === 'code' ? 'primary' : 'default'" :secondary="activeTab !== 'code'" @click="activeTab = 'code'; loadSessions()">{{ t("mobile.code") }}</n-button>
 			</div>
-		</nav>
-	</div>
+			</nav>
+
+			<MobileSessionCreator v-model:show="showSessionCreator" @created="handleSessionCreated" />
+			<MobileFileBrowser v-if="selectedSessionId" v-model:show="showFiles" :session-id="selectedSessionId" />
+		</div>
 </template>
