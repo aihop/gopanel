@@ -1,0 +1,73 @@
+.theme-dark .ai-workspace-root {
+	border-color: color-mix(in srgb, var(--border-color) 70%, transparent);
+	background: linear-gradient(
+		180deg,
+		color-mix(in srgb, var(--bg-default-color) 98%, white),
+		color-mix(in srgb, var(--bg-secondary-color) 92%, transparent)
+	);
+	box-shadow: 0 18px 45px rgba(0, 0, 0, 0.25);
+}
+
+.theme-dark .ai-workspace-sider {
+	background: color-mix(in srgb, var(--bg-secondary-color) 75%, transparent) !important;
+}
+
+.theme-dark .ai-workspace-sider-inner {
+	border-right-color: color-mix(in srgb, var(--border-color) 80%, transparent);
+}
+
+.theme-dark .ai-workspace-sider-header {
+	border-bottom-color: color-mix(in srgb, var(--border-color) 80%, transparent);
+}
+
+.theme-dark .ai-workspace-sider-card {
+	border-color: color-mix(in srgb, var(--border-color) 80%, transparent);
+	background-color: color-mix(in srgb, var(--bg-default-color) 90%, transparent);
+}
+
+.ai-workspace-task-scrollbar :deep(.n-scrollbar-rail.n-scrollbar-rail--vertical) {
+	right: 4px !important;
+	width: 3px !important;
+}
+
+.ai-workspace-task-scrollbar :deep(.n-scrollbar-rail__scrollbar) {
+	width: 3px !important;
+	background-color: rgba(148, 163, 184, 0.24) !important;
+}
+
+.ai-workspace-task-scrollbar :deep(.n-scrollbar-rail__scrollbar:hover) {
+	background-color: rgba(148, 163, 184, 0.4) !important;
+}
+
+.theme-dark .ai-workspace-task-row:hover {
+	background-color: color-mix(in srgb, var(--fg-secondary-color) 10%, transparent) !important;
+}
+
+.theme-dark .ai-workspace-task-row--active {
+	background-color: color-mix(in srgb, var(--primary-color) 14%, transparent) !important;
+}
+
+.theme-dark .ai-workspace-task-btn {
+	background-color: color-mix(in srgb, var(--fg-secondary-color) 15%, transparent) !important;
+}
+
+.theme-dark .ai-workspace-content-panel {
+	background: radial-gradient(
+		circle at top right,
+		color-mix(in srgb, var(--primary-color) 8%, transparent),
+		transparent 28%
+	);
+}
+
+.theme-dark .ai-workspace-terminal-wrap {
+	border-color: color-mix(in srgb, var(--border-color) 80%, transparent);
+}
+
+.theme-dark .ai-workspace-editor-shell {
+	border-color: color-mix(in srgb, var(--border-color) 80%, transparent);
+	background-color: var(--bg-default-color);
+}
+
+.theme-dark .ai-workspace-empty-bg {
+	background: linear-gradient(180deg, var(--bg-default-color), var(--bg-secondary-color));
+}
