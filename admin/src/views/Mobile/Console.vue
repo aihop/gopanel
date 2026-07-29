@@ -36,7 +36,6 @@ const actionLoading = ref(false)
 const loadError = ref("")
 const showSessionCreator = ref(false)
 const showFiles = ref(false)
-const showTerminal = ref(false)
 let refreshTimer: ReturnType<typeof setInterval> | null = null
 
 const selectedSession = computed(() => sessions.value.find(item => item.id === selectedSessionId.value) || null)
@@ -248,23 +247,23 @@ onBeforeUnmount(() => {
 					</n-empty>
 					<template v-else-if="selectedSession">
 						<section class="rounded-2xl bg-white p-4 shadow-sm">
-							<div class="flex items-center justify-between gap-3">
+							<div class="flex flex-wrap items-center justify-between gap-3">
 								<div class="min-w-0">
 									<h2 class="truncate font-semibold">{{ selectedSession.title }}</h2>
 									<div class="mt-1 truncate text-xs text-slate-500">{{ selectedSession.workDir }}</div>
 								</div>
 								<div class="flex shrink-0 items-center gap-2">
-									<n-button v-if="selectedSession.agentName === 'codex'" size="small" type="primary" secondary @click="showTerminal = true">{{ t("mobile.terminal") }}</n-button>
 									<n-button size="small" secondary @click="showFiles = true">{{ t("mobile.files") }}</n-button>
 									<n-tag :type="sessionState?.currentStage === 'failed' ? 'error' : isRunning ? 'info' : 'success'">{{ sessionState?.currentStage || selectedSession.currentStage }}</n-tag>
 								</div>
 							</div>
-							<div class="mt-4 max-h-[42dvh] space-y-3 overflow-y-auto">
-								<div v-for="item in sessionState?.recentMessages || []" :key="item.id" class="flex" :class="item.role === 'user' ? 'justify-end' : 'justify-start'">
-									<pre class="max-w-[90%] whitespace-pre-wrap break-words rounded-2xl px-3 py-2 font-sans text-sm" :class="item.role === 'user' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700'">{{ item.content }}</pre>
-								</div>
-							</div>
 						</section>
+						<MobileTerminal :session-id="selectedSessionId" />
+						<div v-if="sessionState?.recentMessages.length" class="max-h-[42dvh] space-y-3 overflow-y-auto px-1">
+							<div v-for="item in sessionState.recentMessages" :key="item.id" class="flex" :class="item.role === 'user' ? 'justify-end' : 'justify-start'">
+								<pre class="max-w-[90%] whitespace-pre-wrap break-words rounded-2xl px-3 py-2 font-sans text-sm" :class="item.role === 'user' ? 'bg-blue-600 text-white' : 'bg-white text-slate-700'">{{ item.content }}</pre>
+							</div>
+						</div>
 						<n-alert v-if="sessionState?.pendingApproval" type="warning" :title="sessionState.pendingApproval.title">
 							<div class="whitespace-pre-wrap text-sm">{{ sessionState.pendingApproval.content }}</div>
 							<div class="mt-3 flex gap-2">
@@ -304,6 +303,5 @@ onBeforeUnmount(() => {
 
 			<MobileSessionCreator v-model:show="showSessionCreator" @created="handleSessionCreated" />
 			<MobileFileBrowser v-if="selectedSessionId" v-model:show="showFiles" :session-id="selectedSessionId" />
-			<MobileTerminal v-if="selectedSessionId" v-model:show="showTerminal" :session-id="selectedSessionId" />
 		</div>
 </template>

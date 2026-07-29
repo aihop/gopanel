@@ -362,6 +362,16 @@ const router = createRouter({
 	]
 })
 
+const viewportMeta = document.querySelector<HTMLMetaElement>('meta[name="viewport"]')
+const defaultViewport = viewportMeta?.content || "initial-scale=1, minimum-scale=1, width=device-width, height=device-height"
+
+router.afterEach(route => {
+	if (!viewportMeta) return
+	viewportMeta.content = route.path === "/mobile" || route.path.startsWith("/mobile/")
+		? "width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no"
+		: defaultViewport
+})
+
 checkAuth(router)
 
 export default router
