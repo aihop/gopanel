@@ -35,19 +35,21 @@ func loadAIAgentSessionState(
 	var currentTask *model.AITask
 	var currentSession *model.AIDevSession
 	if reqSessionID > 0 {
-		if session, err := sessionRepo.GetSessionByID(uint(reqSessionID)); err == nil {
-			if session.UserID != claims.UserId && claims.Role != constant.UserRoleSuper {
-				return "", 0, nil, nil, fmt.Errorf("无权访问该开发会话")
-			}
-			currentSession = session
-			workDir = session.WorkDir
-			if reqProjectID == 0 {
-				reqProjectID = int(session.ProjectID)
-			}
-			if session.LastTaskID > 0 {
-				if task, taskErr := aiRepo.GetTaskByID(session.LastTaskID); taskErr == nil {
-					currentTask = task
-				}
+		session, err := sessionRepo.GetSessionByID(uint(reqSessionID))
+		if err != nil {
+			return "", 0, nil, nil, fmt.Errorf("开发会话不存在")
+		}
+		if session.UserID != claims.UserId && claims.Role != constant.UserRoleSuper {
+			return "", 0, nil, nil, fmt.Errorf("无权访问该开发会话")
+		}
+		currentSession = session
+		workDir = session.WorkDir
+		if reqProjectID == 0 {
+			reqProjectID = int(session.ProjectID)
+		}
+		if session.LastTaskID > 0 {
+			if task, taskErr := aiRepo.GetTaskByID(session.LastTaskID); taskErr == nil {
+				currentTask = task
 			}
 		}
 	}

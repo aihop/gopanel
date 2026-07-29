@@ -113,10 +113,10 @@ func GetAISession(c fiber.Ctx) error {
 func CreateAISession(c fiber.Ctx) error {
 	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
 	var req struct {
-		Title     string `json:"title"`
-		WorkDir   string `json:"workDir"`
-		ProjectID uint   `json:"projectId"`
-		AgentName string `json:"agentName"`
+		Title      string `json:"title"`
+		WorkDir    string `json:"workDir"`
+		ProjectID  uint   `json:"projectId"`
+		ExecutorID string `json:"executorId"`
 	}
 	if bindErr := c.Bind().JSON(&req); bindErr != nil {
 		return c.JSON(e.Fail(bindErr))
@@ -134,19 +134,15 @@ func CreateAISession(c fiber.Ctx) error {
 			return c.JSON(e.Fail(err))
 		}
 	}
-	agentName := strings.TrimSpace(req.AgentName)
-	if agentName != "" {
-		var err error
-		agentName, err = normalizeAIAgentName(agentName)
-		if err != nil {
-			return c.JSON(e.Fail(err))
-		}
+	executorID, err := validateCodeExecutorAvailable(req.ExecutorID, claims.Role)
+	if err != nil {
+		return c.JSON(e.Fail(err))
 	}
 	title := strings.TrimSpace(req.Title)
 	if title == "" {
 		title = buildDefaultSessionTitle(workDir, "")
 	}
-	session := &model.AIDevSession{UserID: claims.UserId, ProjectID: req.ProjectID, Title: title, AgentName: agentName, WorkDir: workDir, Status: "active", CurrentStage: "idle"}
+	session := &model.AIDevSession{UserID: claims.UserId, ProjectID: req.ProjectID, Title: title, AgentName: executorID, WorkDir: workDir, Status: "active", CurrentStage: "idle"}
 	sessionRepo := repo.NewAIDevSessionRepo()
 	if err := sessionRepo.CreateSession(session); err != nil {
 		return c.JSON(e.Fail(err))

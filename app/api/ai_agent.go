@@ -61,24 +61,27 @@ func AIAgentWsSSH(wsConn *websocket.Conn) {
 	if err != nil {
 		return
 	}
-	agentName := wsConn.Query("agent")
+	executorID := wsConn.Query("agent")
 	if currentTask != nil && currentTask.AgentName != "" {
-		agentName = currentTask.AgentName
+		executorID = currentTask.AgentName
 	} else if currentSession != nil && currentSession.AgentName != "" {
-		agentName = currentSession.AgentName
+		executorID = currentSession.AgentName
 	}
-	autoStartAI := strings.TrimSpace(agentName) != ""
-	agentName, err = normalizeAIAgentName(agentName)
+	if strings.TrimSpace(executorID) == "" {
+		executorID = "terminal"
+	}
+	executorID, err = validateCodeExecutorAvailable(executorID, authClaims.Role)
 	if err != nil {
 		_ = wsConn.WriteMessage(websocket.TextMessage, []byte(err.Error()))
 		return
 	}
-	welcomeCmd := "echo -e '\\033[32m欢迎回到 GoPanel AI 持久化沙箱。\\033[0m';"
+	autoStartAI := executorID != "terminal"
+	welcomeCmd := "echo -e '\\033[32m欢迎回到 GoPanel Code 持久化工作区。\\033[0m';"
 	if autoStartAI {
-		welcomeCmd += fmt.Sprintf("echo -e '💡 \\033[33m已为您自动拉起 %s 智能体。输入 \"exit\" 可退回普通 Shell。\\033[0m';", agentName)
+		welcomeCmd += fmt.Sprintf("echo -e '💡 \\033[33m当前执行器：%s。输入 \"exit\" 可退回普通 Shell。\\033[0m';", executorID)
 		welcomeCmd += "echo -e '\\033[36m[CX-AI-HOOK:START-INTERACTIVE]\\033[0m';"
 	} else {
-		welcomeCmd += "echo -e '💡 \\033[33m提示: 直接输入 \"@trae\" 或 \"@ai\" 即可唤起智能体！\\033[0m';"
+		welcomeCmd += "echo -e '💡 \\033[33m当前会话使用纯终端模式。\\033[0m';"
 	}
 	execArgs := []string{"exec", "-it", "-e", "TERM=xterm-256color", "-e", "COLORTERM=truecolor", "-e", fmt.Sprintf("COLUMNS=%d", cols), "-e", fmt.Sprintf("LINES=%d", rows), containerName, "sh", "-c", welcomeCmd + " /bin/sh"}
 	cmd, err := docker.RuntimeCommand(context.Background(), execArgs...)
@@ -177,16 +180,11 @@ func AIAgentWsSSH(wsConn *websocket.Conn) {
 						Status:    "running",
 					})
 				}
-				sendWsMsg("\033[36m[AI Agent] 正在思考并执行...\033[0m\r\n")
-				cmdArgs, err := buildAIAgentExecArgs(containerName, agentName, req.input)
+				sendWsMsg(fmt.Sprintf("\033[36m[%s] 正在思考并执行...\033[0m\r\n", executorID))
 				out := []byte{}
+				execCmd, err := buildCodeExecutorCommand(context.Background(), executorID, workDir, req.input)
 				if err == nil {
-					execCmd, cmdErr := docker.RuntimeCommand(context.Background(), cmdArgs...)
-					if cmdErr != nil {
-						err = cmdErr
-					} else {
-						out, err = execCmd.CombinedOutput()
-					}
+					out, err = execCmd.CombinedOutput()
 				}
 				if err != nil {
 					global.LOG.Errorf("AI execution error: %v, out: %s", err, string(out))
@@ -286,7 +284,7 @@ func AIAgentWsSSH(wsConn *websocket.Conn) {
 					formattedOut += "\r\n"
 				}
 				sendWsMsg(formattedOut)
-				sendWsMsg("\033[32m[AI Agent] > \033[0m")
+				sendWsMsg(fmt.Sprintf("\033[32m[%s] > \033[0m", executorID))
 			}
 		}
 	}()
@@ -341,10 +339,7 @@ func AIAgentWsSSH(wsConn *websocket.Conn) {
 								if len([]rune(title)) > 20 {
 									title = string([]rune(title)[:20]) + "..."
 								}
-								if agentName == "" {
-									agentName = "trae"
-								}
-								newTask := &model.AITask{UserID: userID, ProjectID: uint(reqProjectID), Title: title, AgentName: agentName, WorkDir: workDir, Status: "active"}
+								newTask := &model.AITask{UserID: userID, ProjectID: uint(reqProjectID), Title: title, AgentName: executorID, WorkDir: workDir, Status: "active"}
 								if err := aiRepo.CreateTask(newTask); err == nil {
 									currentTask = newTask
 									if currentSession != nil {

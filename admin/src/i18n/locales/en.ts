@@ -387,7 +387,8 @@ export default {
 		saveFailed: "Save failed",
 		deleteFailed: "Delete failed",
 		copyFailed: "Copy failed",
-		deleteConfirm: "Delete node \"{name}\"? The controller will stop collecting its status. The node itself is unaffected.",
+		deleteConfirm:
+			'Delete node "{name}"? The controller will stop collecting its status. The node itself is unaffected.',
 		lastSeen: "Last seen {time}",
 		workspace: {
 			tabOverview: "Overview",
@@ -402,7 +403,8 @@ export default {
 			noWebsite: "No websites on this node",
 			pickContainer: "Pick a running container",
 			terminalHint: "Pick a container and connect to open its shell from here",
-			terminalWarn: "You are connecting to a container shell on node \"{node}\" - commands run on that remote machine.",
+			terminalWarn:
+				'You are connecting to a container shell on node "{node}" - commands run on that remote machine.',
 			noNode: "No node selected",
 			actingOn: "Acting on: {node} ({addr})",
 			offline: "This node is offline; operations may fail",
@@ -412,7 +414,7 @@ export default {
 			searchContainer: "Search container name",
 			operating: "Working…",
 			os: "OS",
-			confirmOperate: "{operation} container {name} on node \"{node}\"?",
+			confirmOperate: '{operation} container {name} on node "{node}"?',
 			op: {
 				start: "Start",
 				stop: "Stop",
@@ -476,9 +478,12 @@ export default {
 			tokenPlaceholder: "Issue it on the target node's Nodes page",
 			tokenKeepHint: "Leave blank to keep unchanged",
 			tokenStored: "Configured",
-			tokenLenWarn: "You entered {actual} characters, but node-issued tokens are {expected}. Make sure you copied the full string from the node's Issue Token button.",
-			tokenStoredLenWarn: "The stored token is {actual} characters but node-issued tokens are {expected} - it likely was not issued by the node. Reissue on the node and paste it again.",
-			testAfterSave: "Connection settings changed. Re-enter the token to test, or save first and collect from the list.",
+			tokenLenWarn:
+				"You entered {actual} characters, but node-issued tokens are {expected}. Make sure you copied the full string from the node's Issue Token button.",
+			tokenStoredLenWarn:
+				"The stored token is {actual} characters but node-issued tokens are {expected} - it likely was not issued by the node. Reissue on the node and paste it again.",
+			testAfterSave:
+				"Connection settings changed. Re-enter the token to test, or save first and collect from the list.",
 			entrance: "Security Entrance",
 			entrancePlaceholder: "Leave blank if the target node has none",
 			skipVerify: "Skip TLS verification",
@@ -493,12 +498,14 @@ export default {
 			addrRequired: "Panel address is required",
 			addrScheme: "Address must start with http:// or https://",
 			tokenRequired: "Read-only token is required",
-			tokenTip: "The read-only token can only read this machine's summary and cannot perform any write operation. It is never sent in plaintext.",
+			tokenTip:
+				"The read-only token can only read this machine's summary and cannot perform any write operation. It is never sent in plaintext.",
 			controlToken: "Control Token",
 			controlPlaceholder: "Leave blank for observe-only",
 			controlKeepHint: "Blank keeps it unchanged; enter - to disable operations",
 			observeOnly: "Observe only",
-			controlTip: "The control token is equivalent to admin on that node and lets you operate it from here. Leave blank if you only want status."
+			controlTip:
+				"The control token is equivalent to admin on that node and lets you operate it from here. Leave blank if you only want status."
 		},
 		local: {
 			title: "Read-only Access",
@@ -519,8 +526,10 @@ export default {
 			controlTitle: "Control Access",
 			controlDesc: "Allow a controller to perform admin operations on this machine",
 			controlIssue: "Issue Control Token",
-			controlIssueConfirm: "A control token is equivalent to admin on this machine - the holder can operate containers, websites and files here. Issue it?",
-			controlReissueConfirm: "Reissuing immediately revokes operations for controllers using the old control token. Continue?",
+			controlIssueConfirm:
+				"A control token is equivalent to admin on this machine - the holder can operate containers, websites and files here. Issue it?",
+			controlReissueConfirm:
+				"Reissuing immediately revokes operations for controllers using the old control token. Continue?",
 			controlRevokeConfirm: "Controllers will only be able to view status, not operate. Continue?",
 			controlRevoked: "Control access disabled"
 		}
@@ -624,7 +633,35 @@ export default {
 		enterWorkspace: "Enter Workspace",
 		noDesc: "No description available",
 		groupName: "Group Name",
-		groupDesc: "Group Description"
+		groupDesc: "Group Description",
+		newSession: "Start Code Session",
+		newSessionReady: "New Code session",
+		chooseExecutor: "Choose an execution tool",
+		executorLoadFailed: "Failed to load execution tools",
+		noExecutors: "No execution tools available",
+		selectExecutorRequired: "Select an available execution tool",
+		available: "Available",
+		unavailable: "Unavailable",
+		sessionTitle: "Session name",
+		sessionTitlePlaceholder: "Optional; defaults to the working directory name",
+		workDir: "Working directory",
+		workDirPlaceholder: "Optional; defaults to the account workspace",
+		createAndOpen: "Create and open",
+		cancel: "Cancel",
+		retry: "Retry",
+		sessionCreated: "Code session created",
+		sessionCreateFailed: "Failed to create Code session",
+		executorReason_not_installed: "This tool is not installed on the host",
+		executorReason_automation_unsupported: "The current CLI does not support automation",
+		executorReason_role_restricted: "Sub-admins can only use the isolated terminal",
+		executorReason_unavailable: "This execution tool is currently unavailable",
+		openingSession: "Opening Code session #{id}...",
+		executorDesc_terminal: "Use a standard terminal in an isolated workspace",
+		executorDesc_codex: "Run development tasks with OpenAI Codex",
+		executorDesc_claude: "Run development tasks with Claude Code",
+		executorDesc_opencode: "Run development tasks with OpenCode",
+		executorDesc_aider: "Run development tasks with Aider",
+		executorDesc_trae: "The current Trae CLI only launches the editor"
 	},
 	tabs: {
 		more: "More",
