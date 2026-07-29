@@ -111,6 +111,15 @@ export function exchangeMobilePairing(code: string, deviceName: string) {
 	return mobileRequest(mobileHttp.post<ResultData<{ device: MobileDevice }>>("/mobile/pair/exchange", { code, deviceName }))
 }
 
+export function loginMobileDevice(data: {
+	email: string
+	password: string
+	captchaToken?: string
+	deviceName: string
+}) {
+	return mobileRequest(mobileHttp.post<ResultData<{ device: MobileDevice }>>("/mobile/login", data))
+}
+
 export function getMobileOverview() {
 	return mobileRequest(mobileHttp.get<ResultData<MobileOverview>>("/mobile/app/overview")).then(result => ({
 		...result,

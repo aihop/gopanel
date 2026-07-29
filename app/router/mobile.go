@@ -12,6 +12,7 @@ func MobileRouter(r fiber.Router) {
 	mobile := r.Group("mobile")
 	mobile.Get("/health", api.MobileHealth)
 	mobile.Post("/pair/exchange", api.ExchangeMobilePairing)
+	mobile.Post("/login", api.LoginMobileDevice)
 
 	management := mobile.Group("/management").Use(middleware.JWT(constant.UserRoleAdmin))
 	management.Post("/pair/issue", api.IssueMobilePairing)

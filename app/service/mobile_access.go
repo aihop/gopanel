@@ -70,6 +70,30 @@ func ExchangeMobilePairing(code, deviceName, ip, agent string) (string, *model.M
 	return token, device, nil
 }
 
+func AuthorizeMobileDevice(userID uint, deviceName, ip, agent string, requestedTTLDays int) (string, *model.MobileDevice, error) {
+	deviceTTLDays, err := normalizeMobileDeviceTTLDays(requestedTTLDays)
+	if err != nil {
+		return "", nil, err
+	}
+	deviceToken, err := randomMobileSecret()
+	if err != nil {
+		return "", nil, err
+	}
+	device := &model.MobileDevice{
+		UserID:     userID,
+		Name:       normalizeMobileDeviceName(deviceName),
+		TokenHash:  hashMobileSecret(deviceToken),
+		ExpiresAt:  time.Now().Add(time.Duration(deviceTTLDays) * 24 * time.Hour),
+		LastIP:     ip,
+		LastAgent:  truncateMobileValue(agent, 255),
+		LastSeenAt: mobileTimePointer(time.Now()),
+	}
+	if err := repo.NewMobileAccessRepo().CreateDevice(device); err != nil {
+		return "", nil, err
+	}
+	return deviceToken, device, nil
+}
+
 func normalizeMobileDeviceTTLDays(requested int) (int, error) {
 	if requested == 0 {
 		return DefaultMobileDeviceTTLDays, nil

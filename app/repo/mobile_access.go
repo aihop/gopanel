@@ -19,6 +19,10 @@ func (r *MobileAccessRepo) CreatePairing(pairing *model.MobilePairing) error {
 	return global.DB.Create(pairing).Error
 }
 
+func (r *MobileAccessRepo) CreateDevice(device *model.MobileDevice) error {
+	return global.DB.Create(device).Error
+}
+
 func (r *MobileAccessRepo) FindPairing(codeHash string) (*model.MobilePairing, error) {
 	var pairing model.MobilePairing
 	err := global.DB.Where("code_hash = ? AND used_at IS NULL AND expires_at > ?", codeHash, time.Now()).First(&pairing).Error

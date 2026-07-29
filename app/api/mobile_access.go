@@ -9,9 +9,13 @@ import (
 
 	"github.com/aihop/gopanel/app/dto"
 	"github.com/aihop/gopanel/app/e"
+	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
 	"github.com/aihop/gopanel/app/service"
+	"github.com/aihop/gopanel/buserr"
 	"github.com/aihop/gopanel/constant"
+	"github.com/aihop/gopanel/init/geo"
+	"github.com/aihop/gopanel/utils/cryptx"
 	"github.com/aihop/gopanel/utils/token"
 	"github.com/gofiber/fiber/v3"
 )
@@ -66,16 +70,89 @@ func ExchangeMobilePairing(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	c.Cookie(&fiber.Cookie{
-		Name:     "gopanel_mobile",
-		Value:    deviceToken,
-		Path:     "/api/mobile/app",
-		Expires:  device.ExpiresAt,
-		HTTPOnly: true,
-		SameSite: "Lax",
-		Secure:   c.Scheme() == "https",
-	})
+	setMobileDeviceCookie(c, deviceToken, device.ExpiresAt)
 	return c.JSON(e.Succ(fiber.Map{"device": device}))
+}
+
+func LoginMobileDevice(c fiber.Ctx) error {
+	var req struct {
+		Email        string `json:"email"`
+		Mobile       string `json:"mobile"`
+		Password     string `json:"password"`
+		CaptchaToken string `json:"captchaToken"`
+		DeviceName   string `json:"deviceName"`
+	}
+	if err := c.Bind().JSON(&req); err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	authReq := &dto.AuthSignin{
+		Email: strings.TrimSpace(req.Email), Mobile: strings.TrimSpace(req.Mobile),
+		Password: req.Password, CaptchaToken: req.CaptchaToken,
+	}
+	loginLog := model.LoginLog{
+		IP: c.IP(), Agent: string(c.Request().Header.UserAgent()), Address: geo.Region(c.IP()),
+	}
+	logService := service.NewLogService()
+	if message, blocked := defaultLoginAttemptGuard.Check(c.IP(), authReq); blocked {
+		loginLog.Status = constant.StatusFailed
+		loginLog.Message = "mobile login blocked by rate limiter"
+		_ = logService.CreateLoginLog(loginLog)
+		return c.JSON(e.RetError(constant.StatusCodeFullFail, message))
+	}
+	if defaultLoginAttemptGuard.RequiresCaptcha(c.IP(), authReq) {
+		if err := consumeVerifiedLoginCaptchaToken(authReq.CaptchaToken); err != nil {
+			loginLog.Status = constant.StatusFailed
+			loginLog.Message = "mobile login captcha verification required"
+			_ = logService.CreateLoginLog(loginLog)
+			return c.JSON(e.RetError(constant.StatusCodeFullFail, "请先完成滑块验证"))
+		}
+	}
+
+	failLogin := func(logMessage string) error {
+		loginLog.Status = constant.StatusFailed
+		loginLog.Message = logMessage
+		defaultLoginAttemptGuard.RegisterFailure(c.IP(), authReq)
+		time.Sleep(loginAttemptDelay)
+		_ = logService.CreateLoginLog(loginLog)
+		return c.JSON(e.Fail(buserr.WithDetail("ErrLoginFailed", logMessage)))
+	}
+	userService := service.NewUser()
+	var user *model.User
+	var err error
+	if authReq.Email != "" {
+		user, err = userService.GetByEmail(authReq.Email)
+	} else if authReq.Mobile != "" {
+		user, err = userService.GetByMobile(authReq.Mobile)
+	}
+	if err != nil || user == nil {
+		return failLogin("user not found")
+	}
+	if user.Status != constant.UserStatusNormal || user.Role != constant.UserRoleAdmin {
+		return failLogin("user is not an active administrator")
+	}
+	if !cryptx.ValidatePassword(user.Password, authReq.Password) {
+		return failLogin("password verification failed")
+	}
+	deviceToken, device, err := service.AuthorizeMobileDevice(
+		user.ID, req.DeviceName, c.IP(), string(c.Request().Header.UserAgent()), service.DefaultMobileDeviceTTLDays,
+	)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	defaultLoginAttemptGuard.RegisterSuccess(c.IP(), authReq)
+	loginLog.Status = constant.StatusSuccess
+	loginLog.Message = "Mobile login success"
+	_ = logService.CreateLoginLog(loginLog)
+	_ = userService.Update(&model.User{ID: user.ID, LoginAt: time.Now()})
+	setMobileDeviceCookie(c, deviceToken, device.ExpiresAt)
+	return c.JSON(e.Succ(fiber.Map{"device": device}))
+}
+
+func setMobileDeviceCookie(c fiber.Ctx, deviceToken string, expiresAt time.Time) {
+	c.Cookie(&fiber.Cookie{
+		Name: "gopanel_mobile", Value: deviceToken, Path: "/api/mobile/app", Expires: expiresAt,
+		HTTPOnly: true, SameSite: "Lax", Secure: c.Scheme() == "https",
+	})
 }
 
 func allowMobilePairingAttempt(ip string, now time.Time) bool {

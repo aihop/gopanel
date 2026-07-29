@@ -54,6 +54,23 @@ func TestMobileDeviceCanBeRevoked(t *testing.T) {
 	}
 }
 
+func TestMobileDeviceCanBeCreatedDirectly(t *testing.T) {
+	repository, _ := setupMobileAccessRepo(t)
+	device := &model.MobileDevice{
+		UserID: 12, Name: "mobile login", TokenHash: "direct-token", ExpiresAt: time.Now().Add(time.Hour),
+	}
+	if err := repository.CreateDevice(device); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := repository.FindDevice("direct-token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.UserID != device.UserID || stored.Name != device.Name {
+		t.Fatalf("stored device = %#v", stored)
+	}
+}
+
 func TestExpiredMobilePairingIsRejected(t *testing.T) {
 	repository, _ := setupMobileAccessRepo(t)
 	pairing := &model.MobilePairing{UserID: 7, CodeHash: "expired", ExpiresAt: time.Now().Add(-time.Minute)}
