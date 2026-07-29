@@ -69,12 +69,26 @@ function formatSessionTime(value: string) {
 	})
 }
 
+function normalizedProjectPath(value?: string) {
+	return (value || "").replace(/\\/g, "/").replace(/\/+$/, "")
+}
+
+function sessionProject(session: CodeSession) {
+	const projectById = projects.value.find(item => item.id === session.projectId)
+	if (projectById) return projectById
+	const sessionPaths = [session.sourceWorkDir, session.workDir].map(normalizedProjectPath).filter(Boolean)
+	return projects.value.find(project => {
+		const projectPaths = [project.workDir, ...(project.sourceDirs || [])].map(normalizedProjectPath).filter(Boolean)
+		return projectPaths.some(path => sessionPaths.includes(path))
+	})
+}
+
 function sessionProjectName(session: CodeSession) {
-	const project = projects.value.find(item => item.id === session.projectId)
-	if (project) return project.name
-	if (session.projectId) return `${t("mobile.project")} #${session.projectId}`
-	const segments = session.workDir.split(/[\\/]/).filter(Boolean)
-	return segments.at(-1) || session.workDir
+	return sessionProject(session)?.name || t("mobile.unlinkedProject")
+}
+
+function sessionProjectDescription(session: CodeSession) {
+	return sessionProject(session)?.description || ""
 }
 
 async function loadProjects() {
@@ -337,7 +351,7 @@ onBeforeUnmount(() => {
 						</template>
 					</n-empty>
 					<template v-else-if="selectedSession">
-						<MobileTerminal :session-id="selectedSessionId" :title="selectedSession.title" :project-name="sessionProjectName(selectedSession)" @back="leaveTaskDetail" @open-files="showFiles = true" />
+						<MobileTerminal :session-id="selectedSessionId" :project-name="sessionProjectName(selectedSession)" :project-description="sessionProjectDescription(selectedSession)" @back="leaveTaskDetail" @open-files="showFiles = true" />
 						<n-alert v-if="sessionState?.pendingApproval" type="warning" :title="sessionState.pendingApproval.title">
 							<div class="whitespace-pre-wrap text-sm">{{ sessionState.pendingApproval.content }}</div>
 							<div class="mt-3 flex gap-2">

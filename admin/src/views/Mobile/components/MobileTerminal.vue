@@ -7,7 +7,7 @@ import Icon from "@/components/common/Icon.vue"
 import { mobileMessages } from "@/i18n/locales/mobile"
 import "xterm/css/xterm.css"
 
-const props = defineProps<{ sessionId: number; title: string; projectName: string }>()
+const props = defineProps<{ sessionId: number; projectName: string; projectDescription: string }>()
 const emit = defineEmits<{ back: []; openFiles: [] }>()
 const { t } = useI18n({ messages: mobileMessages })
 const terminalElement = ref<HTMLElement | null>(null)
@@ -169,7 +169,7 @@ onBeforeUnmount(closeTerminal)
 			</button>
 			<div class="min-w-0 flex-1">
 				<div class="truncate text-sm font-semibold">{{ projectName }}</div>
-				<div class="mt-0.5 truncate text-[11px] text-slate-400">{{ title }}</div>
+				<div v-if="projectDescription" class="mt-0.5 truncate text-[11px] text-slate-400">{{ projectDescription }}</div>
 			</div>
 			<div class="flex shrink-0 items-center gap-1.5">
 				<n-tag size="small" :type="connected ? 'success' : reconnecting ? 'warning' : 'default'" :bordered="false" round>
