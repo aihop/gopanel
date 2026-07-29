@@ -132,6 +132,8 @@ func Init() {
 		&model.AIPreview{},
 		&model.AITimelineEvent{},
 		&model.AIApproval{},
+		&model.MobilePairing{},
+		&model.MobileDevice{},
 		&model.OperationLog{},
 		&model.LoginLog{},
 		&model.LegacyWebsiteDeploy{},

@@ -165,10 +165,14 @@ func isDevMode() bool {
 
 func shouldBypassEntrance(path string) bool {
 	switch path {
-	case "/health":
+	case "/health", "/api/mobile/health", "/api/mobile/pair/exchange":
 		return true
 	default:
-		return false
+		return path == "/mobile" || strings.HasPrefix(path, "/mobile/") ||
+			strings.HasPrefix(path, "/api/mobile/app/") ||
+			strings.HasPrefix(path, "/assets/") ||
+			strings.HasPrefix(path, "/images/") ||
+			path == "/favicon.svg" || path == "/favicon.ico"
 	}
 }
 

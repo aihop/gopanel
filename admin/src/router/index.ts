@@ -290,11 +290,22 @@ const router = createRouter({
 			}
 		},
 		{
+			path: "/mobile",
+			name: "MobileConsole",
+			component: () => import("@/views/Mobile/Console.vue"),
+			meta: {
+				title: "GoPanel",
+				theme: { layout: Layout.Blank, boxed: { enabled: false }, padded: { enabled: false } },
+				checkAuth: false,
+				skipPin: true
+			}
+		},
+		{
 			path: "/mobile/auth",
 			name: "MobileAuth",
 			component: () => import("@/views/Mobile/Auth.vue"),
 			meta: {
-				title: "手机授权",
+				title: "GoPanel",
 				theme: { layout: Layout.Blank, boxed: { enabled: false }, padded: { enabled: false } },
 				checkAuth: false,
 				skipPin: true
