@@ -14,6 +14,7 @@ import {
 import type { AIGroup, CodeSession, CodeSessionState } from "@/api/interface/code"
 import Icon from "@/components/common/Icon.vue"
 import { mobileMessages } from "@/i18n/locales/mobile"
+import Logo from "@/layouts/common/Logo.vue"
 import MobileFileBrowser from "./components/MobileFileBrowser.vue"
 import MobileSessionCreator from "./components/MobileSessionCreator.vue"
 import MobileTerminal from "./components/MobileTerminal.vue"
@@ -249,13 +250,12 @@ onBeforeUnmount(() => {
 				<n-button size="small" type="primary" secondary @click="showFiles = true">{{ t("mobile.files") }}</n-button>
 			</div>
 			<div v-else class="mx-auto flex max-w-2xl items-center justify-between">
-				<div>
-					<div class="text-lg font-bold">GoPanel</div>
-					<div class="text-xs text-slate-500">{{ t("mobile.title") }}</div>
-				</div>
-				<div class="flex items-center gap-1">
+				<Logo :dark="false" class="shrink-0" />
+				<div class="flex shrink-0 items-center gap-1">
+					<n-button size="small" quaternary circle :title="t('mobile.logout')" :aria-label="t('mobile.logout')" @click="confirmLogout">
+						<template #icon><Icon name="mdi:logout" /></template>
+					</n-button>
 					<n-button size="small" type="primary" secondary @click="showSessionCreator = true">{{ t("mobile.newSession") }}</n-button>
-					<n-button size="small" quaternary @click="confirmLogout">{{ t("mobile.logout") }}</n-button>
 				</div>
 			</div>
 		</header>
