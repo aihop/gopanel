@@ -157,7 +157,7 @@ onBeforeUnmount(closeTerminal)
 </script>
 
 <template>
-	<section class="overflow-hidden rounded-2xl bg-[#0b1020] shadow-sm">
+	<section class="flex h-[calc(100dvh-53px)] w-full flex-col overflow-hidden bg-[#0b1020]">
 		<header class="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 px-3 py-2 text-white">
 			<div class="min-w-0">
 				<div class="text-sm font-semibold">{{ t("mobile.sharedTerminal") }}</div>
@@ -177,7 +177,7 @@ onBeforeUnmount(closeTerminal)
 				</n-button>
 			</div>
 		</header>
-		<div ref="terminalElement" class="h-[calc(100dvh-138px)] min-h-80 w-full bg-[#0b1020]" />
+		<div ref="terminalElement" class="min-h-0 w-full flex-1 bg-[#0b1020] pb-[env(safe-area-inset-bottom)]" />
 	</section>
 </template>
 

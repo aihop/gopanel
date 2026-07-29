@@ -257,7 +257,7 @@ onBeforeUnmount(() => {
 			</div>
 		</header>
 
-		<main class="mx-auto max-w-2xl" :class="isTaskDetail ? 'p-2' : 'p-4'">
+		<main :class="isTaskDetail ? 'w-full p-0' : 'mx-auto max-w-2xl p-4'">
 			<n-alert v-if="isHttp && !isTaskDetail" type="warning" :show-icon="false" class="mb-4">
 				{{ t("mobile.httpWarning") }}
 			</n-alert>
@@ -334,7 +334,7 @@ onBeforeUnmount(() => {
 
 				<MobileContainerPanel v-else-if="activeTab === 'containers'" />
 
-				<div v-else :class="isTaskDetail ? 'space-y-2' : 'space-y-4'">
+				<div v-else :class="isTaskDetail ? '' : 'space-y-4'">
 					<div v-if="!isTaskDetail" class="flex items-center gap-2 overflow-x-auto pb-1">
 						<n-button size="small" round type="primary" secondary class="shrink-0" @click="showSessionCreator = true">+ {{ t("mobile.newSession") }}</n-button>
 						<n-button v-for="session in sessions" :key="session.id" size="small" round :type="selectedSessionId === session.id ? 'primary' : 'default'" @click="selectSession(session)">
