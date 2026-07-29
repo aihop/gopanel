@@ -181,21 +181,11 @@ func AIAgentWsSSH(wsConn *websocket.Conn) {
 					})
 				}
 				sendWsMsg(fmt.Sprintf("\033[36m[%s] 正在思考并执行...\033[0m\r\n", executorID))
-				out := []byte{}
-				execCmd, err := buildCodeExecutorCommand(context.Background(), executorID, workDir, req.input)
-				if err == nil {
-					out, err = execCmd.CombinedOutput()
-				}
+				_, output, err := executeCodeAgentRun(context.Background(), sessionRepo, aiRepo, currentSession, req.task, req.instruction, executorID, workDir, req.input)
 				if err != nil {
-					global.LOG.Errorf("AI execution error: %v, out: %s", err, string(out))
-					if len(out) == 0 {
-						out = []byte(fmt.Sprintf("执行错误: %v", err))
-					}
+					global.LOG.Errorf("AI execution error: %v, out: %s", err, output)
 				}
-				if req.task != nil {
-					_ = aiRepo.CreateMessage(&model.AIMessage{TaskID: req.task.ID, Role: "agent", Content: string(out)})
-				}
-				previews, previewErr := upsertAIPreviews(sessionRepo, currentSession, req.task, req.instruction, string(out))
+				previews, previewErr := upsertAIPreviews(sessionRepo, currentSession, req.task, req.instruction, output)
 				if previewErr != nil {
 					global.LOG.Errorf("Failed to upsert AI previews: %v", previewErr)
 				}
@@ -229,7 +219,7 @@ func AIAgentWsSSH(wsConn *websocket.Conn) {
 						EventType: "execution_result",
 						Stage:     resultStage,
 						Title:     resultTitle,
-						Content:   summarizeAIRecentOutput(string(out)),
+						Content:   summarizeAIRecentOutput(output),
 						Status:    resultStatus,
 					})
 					for _, preview := range previews {
@@ -279,7 +269,7 @@ func AIAgentWsSSH(wsConn *websocket.Conn) {
 					}
 					_ = sessionRepo.UpdateSession(currentSession)
 				}
-				formattedOut := strings.ReplaceAll(string(out), "\n", "\r\n")
+				formattedOut := strings.ReplaceAll(output, "\n", "\r\n")
 				if !strings.HasSuffix(formattedOut, "\r\n") {
 					formattedOut += "\r\n"
 				}
@@ -340,18 +330,22 @@ func AIAgentWsSSH(wsConn *websocket.Conn) {
 									title = string([]rune(title)[:20]) + "..."
 								}
 								newTask := &model.AITask{UserID: userID, ProjectID: uint(reqProjectID), Title: title, AgentName: executorID, WorkDir: workDir, Status: "active"}
-								if err := aiRepo.CreateTask(newTask); err == nil {
-									currentTask = newTask
-									if currentSession != nil {
-										currentSession.LastTaskID = currentTask.ID
-										currentSession.CurrentStage = "interactive"
-										_ = sessionRepo.UpdateSession(currentSession)
-									}
-									sendWsRaw(fmt.Sprintf(`{"type":"meta","task_id":%d}`, currentTask.ID))
+								if currentSession != nil {
+									newTask.SessionID = currentSession.ID
+									newTask.NativeSessionID = currentSession.NativeSessionID
 								}
-							}
-							if currentTask != nil {
-								_ = aiRepo.CreateMessage(&model.AIMessage{TaskID: currentTask.ID, Role: "user", Content: userInput})
+								if err := aiRepo.CreateTask(newTask); err != nil {
+									global.LOG.Errorf("Failed to create AI task: %v", err)
+									sendWsMsg("\033[31m[系统] 创建任务失败，本次指令未执行。\033[0m\r\n")
+									continue
+								}
+								currentTask = newTask
+								if currentSession != nil {
+									currentSession.LastTaskID = currentTask.ID
+									currentSession.CurrentStage = "interactive"
+									_ = sessionRepo.UpdateSession(currentSession)
+								}
+								sendWsRaw(fmt.Sprintf(`{"type":"meta","task_id":%d}`, currentTask.ID))
 							}
 							enqueueAIExecution(aiExecRequest{input: userInput, task: currentTask})
 							continue

@@ -661,7 +661,19 @@ export default {
 		executorDesc_claude: "Run development tasks with Claude Code",
 		executorDesc_opencode: "Run development tasks with OpenCode",
 		executorDesc_aider: "Run development tasks with Aider",
-		executorDesc_trae: "The current Trae CLI only launches the editor"
+		executorDesc_trae: "The current Trae CLI only launches the editor",
+		conversationHistory: "Full conversation",
+		noConversationHistory: "No conversation history yet",
+		historyLoadFailed: "Failed to load conversation history",
+		userMessage: "User",
+		executorMessage: "Executor",
+		viewRawOutput: "View raw output",
+		rawOutput: "Raw execution output",
+		noRawOutput: "No raw execution output",
+		runStatus_running: "Running",
+		runStatus_completed: "Completed",
+		runStatus_failed: "Failed",
+		runDuration: "{duration} ms"
 	},
 	tabs: {
 		more: "More",

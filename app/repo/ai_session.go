@@ -10,6 +10,10 @@ type IAIDevSessionRepo interface {
 	GetSessionByID(id uint) (*model.AIDevSession, error)
 	GetSessionsByUserID(userID, projectID uint, page, limit int) ([]*model.AIDevSession, int64, error)
 	UpdateSession(session *model.AIDevSession) error
+	CreateExecutionRun(run *model.AIExecutionRun) error
+	UpdateExecutionRun(run *model.AIExecutionRun) error
+	GetExecutionRunsBySessionID(sessionID uint, page, limit int) ([]*model.AIExecutionRun, int64, error)
+	GetExecutionRunByID(id uint) (*model.AIExecutionRun, error)
 
 	CreateInstruction(instruction *model.AIInstruction) error
 	GetInstructionsBySessionID(sessionID uint, page, limit int) ([]*model.AIInstruction, int64, error)
@@ -35,7 +39,7 @@ type IAIDevSessionRepo interface {
 type aiDevSessionRepo struct{}
 
 func NewAIDevSessionRepo() IAIDevSessionRepo {
-	_ = global.DB.AutoMigrate(&model.AIDevSession{}, &model.AIInstruction{}, &model.AIPreview{}, &model.AITimelineEvent{}, &model.AIApproval{})
+	_ = global.DB.AutoMigrate(&model.AIDevSession{}, &model.AIExecutionRun{}, &model.AIInstruction{}, &model.AIPreview{}, &model.AITimelineEvent{}, &model.AIApproval{})
 	return &aiDevSessionRepo{}
 }
 
@@ -65,6 +69,32 @@ func (r *aiDevSessionRepo) GetSessionsByUserID(userID, projectID uint, page, lim
 
 func (r *aiDevSessionRepo) UpdateSession(session *model.AIDevSession) error {
 	return global.DB.Save(session).Error
+}
+
+func (r *aiDevSessionRepo) CreateExecutionRun(run *model.AIExecutionRun) error {
+	return global.DB.Create(run).Error
+}
+
+func (r *aiDevSessionRepo) UpdateExecutionRun(run *model.AIExecutionRun) error {
+	return global.DB.Save(run).Error
+}
+
+func (r *aiDevSessionRepo) GetExecutionRunsBySessionID(sessionID uint, page, limit int) ([]*model.AIExecutionRun, int64, error) {
+	var runs []*model.AIExecutionRun
+	var total int64
+	db := global.DB.Model(&model.AIExecutionRun{}).Where("session_id = ?", sessionID)
+	db.Count(&total)
+	if limit > 0 {
+		db = db.Offset((page - 1) * limit).Limit(limit)
+	}
+	err := db.Order("created_at asc").Find(&runs).Error
+	return runs, total, err
+}
+
+func (r *aiDevSessionRepo) GetExecutionRunByID(id uint) (*model.AIExecutionRun, error) {
+	var run model.AIExecutionRun
+	err := global.DB.Where("id = ?", id).First(&run).Error
+	return &run, err
 }
 
 func (r *aiDevSessionRepo) CreateInstruction(instruction *model.AIInstruction) error {

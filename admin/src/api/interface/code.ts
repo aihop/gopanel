@@ -11,6 +11,7 @@ export interface AIGroup {
 export interface AITask {
 	id: number
 	createdAt: string
+	sessionId: number
 	projectId: number
 	title: string
 	agentName: string
@@ -45,7 +46,37 @@ export interface CodeSession {
 export interface AIMessage {
 	id: number
 	createdAt: string
+	sessionId: number
 	taskId: number
+	runId: number
 	role: string
 	content: string
+}
+
+export interface CodeExecutionRun {
+	id: number
+	createdAt: string
+	sessionId: number
+	taskId: number
+	instructionId: number
+	executorId: string
+	nativeSessionId: string
+	prompt: string
+	output: string
+	rawOutput?: string
+	status: string
+	exitCode: number
+	durationMs: number
+	errorMessage: string
+	startedAt: string
+	completedAt?: string
+}
+
+export interface CodeSessionHistory {
+	session: CodeSession
+	messages: AIMessage[]
+	runs: CodeExecutionRun[]
+	total: number
+	page: number
+	limit: number
 }

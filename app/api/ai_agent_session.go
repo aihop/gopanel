@@ -51,6 +51,20 @@ func ensureSessionTask(session *model.AIDevSession, claims *token.CustomClaims, 
 	if session.LastTaskID > 0 {
 		task, err := aiRepo.GetTaskByID(session.LastTaskID)
 		if err == nil {
+			changed := false
+			if task.SessionID == 0 {
+				task.SessionID = session.ID
+				changed = true
+			}
+			if task.NativeSessionID == "" && session.NativeSessionID != "" {
+				task.NativeSessionID = session.NativeSessionID
+				changed = true
+			}
+			if changed {
+				if err := aiRepo.UpdateTask(task); err != nil {
+					return nil, err
+				}
+			}
 			return task, nil
 		}
 	}
@@ -58,7 +72,7 @@ func ensureSessionTask(session *model.AIDevSession, claims *token.CustomClaims, 
 	if title == "" {
 		title = buildDefaultSessionTitle(session.WorkDir, hint)
 	}
-	task := &model.AITask{UserID: claims.UserId, ProjectID: session.ProjectID, Title: title, AgentName: session.AgentName, WorkDir: session.WorkDir, Status: "queued"}
+	task := &model.AITask{UserID: claims.UserId, SessionID: session.ID, ProjectID: session.ProjectID, Title: title, AgentName: session.AgentName, NativeSessionID: session.NativeSessionID, WorkDir: session.WorkDir, Status: "queued"}
 	if err := aiRepo.CreateTask(task); err != nil {
 		return nil, err
 	}
@@ -216,7 +230,7 @@ func CreateAISessionInstruction(c fiber.Ctx) error {
 			return c.JSON(e.Fail(err))
 		}
 	}
-	if err := repo.NewAITaskRepo().CreateMessage(&model.AIMessage{TaskID: task.ID, Role: "user", Content: content}); err != nil {
+	if err := repo.NewAITaskRepo().CreateMessage(&model.AIMessage{SessionID: session.ID, TaskID: task.ID, Role: "user", Content: content}); err != nil {
 		return c.JSON(e.Fail(err))
 	}
 	now := time.Now()

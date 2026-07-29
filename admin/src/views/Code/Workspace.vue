@@ -137,9 +137,19 @@
 								}}
 							</div>
 						</div>
-						<n-button type="primary" secondary class="!rounded-[14px]" @click="createNewTask">
-							新对话
-						</n-button>
+						<div class="flex items-center gap-2">
+							<n-button
+								v-if="currentSessionId !== null || currentTaskId !== null"
+								secondary
+								class="!rounded-[14px]"
+								@click="showHistoryDrawer = true"
+							>
+								{{ $t("code.conversationHistory") }}
+							</n-button>
+							<n-button type="primary" secondary class="!rounded-[14px]" @click="createNewTask">
+								新对话
+							</n-button>
+						</div>
 					</div>
 
 					<div
@@ -192,6 +202,11 @@
 			:project-id="currentGroupId"
 			@created="handleSessionCreated"
 		/>
+		<SessionHistoryDrawer
+			v-model:show="showHistoryDrawer"
+			:session-id="currentSessionId"
+			:task-id="currentTaskId"
+		/>
 	</div>
 </template>
 
@@ -201,6 +216,7 @@ import { useRoute, useRouter } from "vue-router"
 import { useMessage, useDialog } from "naive-ui"
 import CodeTerminal from "./components/CodeTerminal.vue"
 import NewSessionModal from "./components/NewSessionModal.vue"
+import SessionHistoryDrawer from "./components/SessionHistoryDrawer.vue"
 import { getAITasks, updateAITask, deleteAITask, getAIGroups } from "@/api/modules/code"
 import type { AITask, AIGroup, CodeSession } from "@/api/interface/code"
 
@@ -236,6 +252,7 @@ const tasks = ref<AITask[]>([])
 const currentTaskId = ref<number | null>(null)
 const currentSessionId = ref<number | null>(null)
 const showNewSessionModal = ref(false)
+const showHistoryDrawer = ref(false)
 const terminalKey = ref(0)
 
 const fetchTasks = async () => {
@@ -262,6 +279,7 @@ watch(
 			currentTaskId.value = null
 			currentSessionId.value = null
 			showNewSessionModal.value = false
+			showHistoryDrawer.value = false
 			fetchGroupInfo()
 			fetchTasks()
 		}
@@ -281,7 +299,7 @@ const handleSessionCreated = (session: CodeSession) => {
 const selectTask = (task: AITask) => {
 	if (currentTaskId.value === task.id && currentSessionId.value === null) return
 	currentTaskId.value = task.id
-	currentSessionId.value = null
+	currentSessionId.value = task.sessionId || null
 	terminalKey.value++
 
 	// 可以考虑在这里把 task_id 同步到 URL query 中以便分享更深的一层，

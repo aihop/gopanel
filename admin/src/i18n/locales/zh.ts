@@ -644,7 +644,19 @@ export default {
 		executorDesc_claude: "使用 Claude Code 执行开发任务",
 		executorDesc_opencode: "使用 OpenCode 执行开发任务",
 		executorDesc_aider: "使用 Aider 执行开发任务",
-		executorDesc_trae: "当前 Trae CLI 仅用于启动编辑器"
+		executorDesc_trae: "当前 Trae CLI 仅用于启动编辑器",
+		conversationHistory: "完整对话",
+		noConversationHistory: "暂无对话历史",
+		historyLoadFailed: "对话历史加载失败",
+		userMessage: "用户",
+		executorMessage: "执行器",
+		viewRawOutput: "查看原始日志",
+		rawOutput: "原始运行日志",
+		noRawOutput: "暂无原始运行日志",
+		runStatus_running: "运行中",
+		runStatus_completed: "已完成",
+		runStatus_failed: "执行失败",
+		runDuration: "耗时 {duration} 毫秒"
 	},
 	tabs: {
 		more: "更多",

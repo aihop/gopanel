@@ -60,6 +60,12 @@ func loadAIAgentSessionState(
 			}
 			currentTask = task
 			workDir = task.WorkDir
+			if task.SessionID > 0 && currentSession == nil {
+				session, sessionErr := sessionRepo.GetSessionByID(task.SessionID)
+				if sessionErr == nil && (session.UserID == claims.UserId || claims.Role == constant.UserRoleSuper) {
+					currentSession = session
+				}
+			}
 		}
 	} else if reqCwd := wsConn.Query("cwd"); reqCwd != "" {
 		workDir = filepath.Clean(reqCwd)

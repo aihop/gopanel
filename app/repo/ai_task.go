@@ -15,6 +15,7 @@ type IAITaskRepo interface {
 
 	CreateMessage(msg *model.AIMessage) error
 	GetMessagesByTaskID(taskID uint) ([]*model.AIMessage, error)
+	GetMessagesBySessionID(sessionID uint) ([]*model.AIMessage, error)
 }
 
 type aiTaskRepo struct{}
@@ -69,5 +70,11 @@ func (r *aiTaskRepo) CreateMessage(msg *model.AIMessage) error {
 func (r *aiTaskRepo) GetMessagesByTaskID(taskID uint) ([]*model.AIMessage, error) {
 	var messages []*model.AIMessage
 	err := global.DB.Where("task_id = ?", taskID).Order("created_at asc").Find(&messages).Error
+	return messages, err
+}
+
+func (r *aiTaskRepo) GetMessagesBySessionID(sessionID uint) ([]*model.AIMessage, error) {
+	var messages []*model.AIMessage
+	err := global.DB.Where("session_id = ?", sessionID).Order("created_at asc").Find(&messages).Error
 	return messages, err
 }

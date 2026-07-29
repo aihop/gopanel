@@ -24,6 +24,8 @@ func CodeRouter(r fiber.Router) {
 		// Dev Sessions APIs
 		group.Get("/sessions", api.GetAISessions)
 		group.Get("/sessions/:id", api.GetAISession)
+		group.Get("/sessions/:id/history", api.GetCodeSessionHistory)
+		group.Get("/runs/:id", api.GetCodeExecutionRun)
 		group.Get("/sessions/:id/previews", api.GetAISessionPreviews)
 		group.Post("/sessions", api.CreateAISession)
 		group.Post("/sessions/:id/instructions", api.CreateAISessionInstruction)

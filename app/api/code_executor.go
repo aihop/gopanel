@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/utils/token"
 	"github.com/gofiber/fiber/v3"
+	"github.com/google/uuid"
 )
 
 type codeExecutorDefinition struct {
@@ -147,40 +149,78 @@ func validateCodeExecutorAvailable(executorID, role string) (string, error) {
 	return definition.ID, nil
 }
 
-func buildCodeExecutorArgs(executorID, prompt string) ([]string, error) {
+func buildCodeExecutorArgs(executorID, prompt, nativeSessionID string, sessionID uint) ([]string, string, error) {
 	switch executorID {
 	case "codex":
-		return []string{"--ask-for-approval", "never", "--sandbox", "workspace-write", "exec", "--skip-git-repo-check", prompt}, nil
+		prefix := []string{"--ask-for-approval", "never", "--sandbox", "workspace-write", "exec"}
+		if nativeSessionID != "" {
+			return append(prefix, "resume", "--json", "--skip-git-repo-check", nativeSessionID, prompt), nativeSessionID, nil
+		}
+		return append(prefix, "--json", "--skip-git-repo-check", prompt), "", nil
 	case "claude":
-		return []string{"--print", "--permission-mode", "acceptEdits", prompt}, nil
+		prefix := []string{"--print", "--permission-mode", "acceptEdits", "--output-format", "json"}
+		if nativeSessionID != "" {
+			return append(prefix, "--resume", nativeSessionID, prompt), nativeSessionID, nil
+		}
+		nativeSessionID = uuid.NewString()
+		return append(prefix, "--session-id", nativeSessionID, prompt), nativeSessionID, nil
 	case "opencode":
-		return []string{"run", prompt}, nil
+		args := []string{"run", "--format", "json"}
+		if nativeSessionID != "" {
+			args = append(args, "--session", nativeSessionID)
+		}
+		return append(args, prompt), nativeSessionID, nil
 	case "aider":
-		return []string{"--yes-always", "--message", prompt}, nil
+		if nativeSessionID == "" {
+			nativeSessionID = "gopanel-" + strconv.FormatUint(uint64(sessionID), 10)
+		}
+		historyDir, err := ensureAiderHistoryDir()
+		if err != nil {
+			return nil, "", err
+		}
+		chatHistory := filepath.Join(historyDir, nativeSessionID+".chat.md")
+		llmHistory := filepath.Join(historyDir, nativeSessionID+".llm.log")
+		args := []string{"--yes-always", "--chat-history-file", chatHistory, "--llm-history-file", llmHistory}
+		if _, statErr := os.Stat(chatHistory); statErr == nil {
+			args = append(args, "--restore-chat-history")
+		}
+		return append(args, "--message", prompt), nativeSessionID, nil
 	default:
-		return nil, errors.New("该执行器不支持 AI 指令")
+		return nil, "", errors.New("该执行器不支持 AI 指令")
 	}
 }
 
-func buildCodeExecutorCommand(ctx context.Context, executorID, workDir, prompt string) (*exec.Cmd, error) {
+func ensureAiderHistoryDir() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	historyDir := filepath.Join(homeDir, ".gopanel", "code", "aider")
+	if err := os.MkdirAll(historyDir, 0700); err != nil {
+		return "", err
+	}
+	return historyDir, nil
+}
+
+func buildCodeExecutorCommand(ctx context.Context, executorID, workDir, prompt, nativeSessionID string, sessionID uint) (*exec.Cmd, string, error) {
 	definition, err := getCodeExecutorDefinition(executorID)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if !definition.AutomationSupported || definition.Command == "" {
-		return nil, errors.New("该执行器不支持 AI 指令")
+		return nil, "", errors.New("该执行器不支持 AI 指令")
 	}
 	commandPath, err := exec.LookPath(definition.Command)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	args, err := buildCodeExecutorArgs(definition.ID, prompt)
+	args, preparedSessionID, err := buildCodeExecutorArgs(definition.ID, prompt, nativeSessionID, sessionID)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	command := exec.CommandContext(ctx, commandPath, args...)
 	command.Dir = workDir
-	return command, nil
+	return command, preparedSessionID, nil
 }
 
 func GetCodeExecutors(c fiber.Ctx) error {

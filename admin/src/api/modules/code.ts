@@ -1,5 +1,13 @@
 import http from "@/api"
-import type { AIGroup, AITask, AIMessage, CodeExecutor, CodeSession } from "../interface/code"
+import type {
+	AIGroup,
+	AITask,
+	AIMessage,
+	CodeExecutor,
+	CodeExecutionRun,
+	CodeSession,
+	CodeSessionHistory
+} from "../interface/code"
 
 // === Group APIs ===
 
@@ -17,6 +25,14 @@ export function getCodeExecutors() {
 
 export function createCodeSession(data: { title: string; workDir: string; projectId: number; executorId: string }) {
 	return http.post<CodeSession>("/code/sessions", data)
+}
+
+export function getCodeSessionHistory(sessionId: number) {
+	return http.get<CodeSessionHistory>(`/code/sessions/${sessionId}/history`)
+}
+
+export function getCodeExecutionRun(runId: number) {
+	return http.get<CodeExecutionRun>(`/code/runs/${runId}`)
 }
 
 // === Task APIs ===

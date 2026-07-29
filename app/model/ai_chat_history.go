@@ -19,15 +19,17 @@ func (AIGroup) TableName() string {
 
 // AITask 记录一次 AI 终端的会话/任务，允许用户后续根据 ID 恢复任务
 type AITask struct {
-	ID        uint      `gorm:"primaryKey" json:"id"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
-	UserID    uint      `gorm:"column:user_id;type:integer;not null;index" json:"userId"`
-	ProjectID uint      `gorm:"column:project_id;type:integer;index;comment:所属项目/团队组ID，用于未来的团队共享记忆库" json:"projectId"`
-	Title     string    `gorm:"column:title;type:varchar(255);not null" json:"title"`
-	AgentName string    `gorm:"column:agent_name;type:varchar(64)" json:"agentName"`
-	WorkDir   string    `gorm:"column:work_dir;type:varchar(255);not null" json:"workDir"`
-	Status    string    `gorm:"column:status;type:varchar(32);default:'active'" json:"status"`
+	ID              uint      `gorm:"primaryKey" json:"id"`
+	CreatedAt       time.Time `json:"createdAt"`
+	UpdatedAt       time.Time `json:"updatedAt"`
+	UserID          uint      `gorm:"column:user_id;type:integer;not null;index" json:"userId"`
+	SessionID       uint      `gorm:"column:session_id;type:integer;index" json:"sessionId"`
+	ProjectID       uint      `gorm:"column:project_id;type:integer;index;comment:所属项目/团队组ID，用于未来的团队共享记忆库" json:"projectId"`
+	Title           string    `gorm:"column:title;type:varchar(255);not null" json:"title"`
+	AgentName       string    `gorm:"column:agent_name;type:varchar(64)" json:"agentName"`
+	NativeSessionID string    `gorm:"column:native_session_id;type:varchar(255)" json:"nativeSessionId"`
+	WorkDir         string    `gorm:"column:work_dir;type:varchar(255);not null" json:"workDir"`
+	Status          string    `gorm:"column:status;type:varchar(32);default:'active'" json:"status"`
 }
 
 func (AITask) TableName() string {
@@ -38,7 +40,9 @@ func (AITask) TableName() string {
 type AIMessage struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
 	CreatedAt time.Time `json:"createdAt"`
+	SessionID uint      `gorm:"column:session_id;type:integer;index" json:"sessionId"`
 	TaskID    uint      `gorm:"column:task_id;type:integer;not null;index" json:"taskId"`
+	RunID     uint      `gorm:"column:run_id;type:integer;index" json:"runId"`
 	Role      string    `gorm:"column:role;type:varchar(32);not null" json:"role"` // user / agent
 	Content   string    `gorm:"column:content;type:text;not null" json:"content"`
 }
@@ -61,11 +65,37 @@ type AIDevSession struct {
 	Status            string     `gorm:"column:status;type:varchar(32);default:'active'" json:"status"`
 	CurrentStage      string     `gorm:"column:current_stage;type:varchar(64);default:'idle'" json:"currentStage"`
 	LastTaskID        uint       `gorm:"column:last_task_id;type:integer;index" json:"lastTaskId"`
+	NativeSessionID   string     `gorm:"column:native_session_id;type:varchar(255)" json:"nativeSessionId"`
 	LastInstructionAt *time.Time `gorm:"column:last_instruction_at" json:"lastInstructionAt,omitempty"`
 }
 
 func (AIDevSession) TableName() string {
 	return "ai_dev_sessions"
+}
+
+// AIExecutionRun 保存每轮执行的原始层数据，消息表仅承载适合界面展示的对话内容。
+type AIExecutionRun struct {
+	ID              uint       `gorm:"primaryKey" json:"id"`
+	CreatedAt       time.Time  `json:"createdAt"`
+	UpdatedAt       time.Time  `json:"updatedAt"`
+	SessionID       uint       `gorm:"column:session_id;type:integer;not null;index" json:"sessionId"`
+	TaskID          uint       `gorm:"column:task_id;type:integer;index" json:"taskId"`
+	InstructionID   uint       `gorm:"column:instruction_id;type:integer;index" json:"instructionId"`
+	ExecutorID      string     `gorm:"column:executor_id;type:varchar(64);not null;index" json:"executorId"`
+	NativeSessionID string     `gorm:"column:native_session_id;type:varchar(255)" json:"nativeSessionId"`
+	Prompt          string     `gorm:"column:prompt;type:text;not null" json:"prompt"`
+	Output          string     `gorm:"column:output;type:text" json:"output"`
+	RawOutput       string     `gorm:"column:raw_output;type:text" json:"rawOutput,omitempty"`
+	Status          string     `gorm:"column:status;type:varchar(32);not null;index" json:"status"`
+	ExitCode        int        `gorm:"column:exit_code;default:0" json:"exitCode"`
+	DurationMS      int64      `gorm:"column:duration_ms;default:0" json:"durationMs"`
+	ErrorMessage    string     `gorm:"column:error_message;type:text" json:"errorMessage"`
+	StartedAt       time.Time  `gorm:"column:started_at;not null" json:"startedAt"`
+	CompletedAt     *time.Time `gorm:"column:completed_at" json:"completedAt,omitempty"`
+}
+
+func (AIExecutionRun) TableName() string {
+	return "ai_execution_runs"
 }
 
 // AIInstruction 记录会话中的一条开发指令。
