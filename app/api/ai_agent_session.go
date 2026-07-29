@@ -176,6 +176,17 @@ func CreateAISession(c fiber.Ctx) error {
 	if err := sessionRepo.CreateSession(session); err != nil {
 		return c.JSON(e.Fail(err))
 	}
+	task := &model.AITask{
+		UserID: claims.UserId, SessionID: session.ID, ProjectID: session.ProjectID,
+		Title: session.Title, AgentName: session.AgentName, WorkDir: session.WorkDir, Status: "active",
+	}
+	if err := repo.NewAITaskRepo().CreateTask(task); err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	session.LastTaskID = task.ID
+	if err := sessionRepo.UpdateSession(session); err != nil {
+		return c.JSON(e.Fail(err))
+	}
 	return c.JSON(e.Succ(session))
 }
 func CreateAISessionInstruction(c fiber.Ctx) error {

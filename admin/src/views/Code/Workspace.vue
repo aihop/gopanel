@@ -311,15 +311,16 @@ const createNewTask = () => {
 const handleSessionCreated = (session: CodeSession) => {
 	currentTaskId.value = null
 	currentSessionId.value = session.id
-	workMode.value = session.agentName === "terminal" ? "terminal" : "conversation"
+	workMode.value = session.agentName === "codex" || session.agentName === "terminal" ? "terminal" : "conversation"
 	terminalKey.value++
+	void fetchTasks()
 }
 
 const selectTask = (task: AITask) => {
 	if (currentTaskId.value === task.id && currentSessionId.value === null) return
 	currentTaskId.value = task.id
 	currentSessionId.value = task.sessionId || null
-	workMode.value = task.sessionId && task.agentName !== "terminal" ? "conversation" : "terminal"
+	workMode.value = task.sessionId && !["terminal", "codex"].includes(task.agentName) ? "conversation" : "terminal"
 	terminalKey.value++
 
 	// 可以考虑在这里把 task_id 同步到 URL query 中以便分享更深的一层，

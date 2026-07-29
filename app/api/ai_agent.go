@@ -57,10 +57,6 @@ func AIAgentWsSSH(wsConn *websocket.Conn) {
 	}
 	cols, _ := strconv.Atoi(wsConn.Query("cols", "80"))
 	rows, _ := strconv.Atoi(wsConn.Query("rows", "24"))
-	containerName, err := ensureAIAgentWorkspaceContainer(wsConn, workDir, authClaims)
-	if err != nil {
-		return
-	}
 	executorID := wsConn.Query("agent")
 	if currentTask != nil && currentTask.AgentName != "" {
 		executorID = currentTask.AgentName
@@ -73,6 +69,14 @@ func AIAgentWsSSH(wsConn *websocket.Conn) {
 	executorID, err = validateCodeExecutorAvailable(executorID, authClaims.Role)
 	if err != nil {
 		_ = wsConn.WriteMessage(websocket.TextMessage, []byte(err.Error()))
+		return
+	}
+	if currentSession != nil && supportsNativeCodeTerminal(executorID) {
+		serveNativeCodeTerminal(wsConn, sessionRepo, currentSession, uint16(cols), uint16(rows))
+		return
+	}
+	containerName, err := ensureAIAgentWorkspaceContainer(wsConn, workDir, authClaims)
+	if err != nil {
 		return
 	}
 	autoStartAI := executorID != "terminal"
