@@ -91,6 +91,25 @@ export interface MobileCodeSessionFile {
 	size: number
 }
 
+export interface MobileVersionInfo {
+	versionName: string
+	versionCode: number
+	buildTime: string
+	installPath: string
+}
+
+export interface MobileUpdateInfo {
+	needUpdate: boolean
+	curVersion: string
+	latestVersionName: string
+	latestVersionCode: number
+	downloadUrl: string
+	createAt: string
+	content: string
+	title: string
+	description: string
+}
+
 export function issueMobilePairing(deviceTtlDays: number) {
 	return managementRequest(
 		http.post<{ code: string; expiresAt: string; deviceTtlDays: number }>("/mobile/management/pair/issue", {
@@ -126,6 +145,29 @@ export function getMobileOverview() {
 		sessions: result.sessions || [],
 		pendingApprovals: result.pendingApprovals || []
 	}))
+}
+
+export function getMobileSystemVersion() {
+	return mobileRequest(mobileHttp.get<ResultData<MobileVersionInfo>>("/mobile/app/system/version"))
+}
+
+export function checkMobileSystemUpdate(lang: string, appBrand: string) {
+	return mobileRequest(
+		mobileHttp.get<ResultData<MobileUpdateInfo>>("/mobile/app/system/check", {
+			params: { lang, appBrand }
+		})
+	)
+}
+
+export function startMobileSystemUpgrade(currentVersion: string, targetVersion: string, lang: string) {
+	return mobileRequest(
+		mobileHttp.post<ResultData<{ log: string }>>("/mobile/app/system/upgrade", {
+			containerName: "gopanel",
+			currentVersion,
+			targetVersion,
+			lang
+		})
+	)
 }
 
 export function getMobileContainers() {

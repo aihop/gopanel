@@ -7,6 +7,7 @@ import Logo from "@/layouts/common/Logo.vue"
 import MobileContainerPanel from "./components/MobileContainerPanel.vue"
 import MobileFileBrowser from "./components/MobileFileBrowser.vue"
 import MobileSessionCreator from "./components/MobileSessionCreator.vue"
+import MobileSystemUpdate from "./components/MobileSystemUpdate.vue"
 import MobileTerminal from "./components/MobileTerminal.vue"
 import { useI18n } from "vue-i18n"
 import { computed, onBeforeUnmount, onMounted, ref } from "vue"
@@ -17,7 +18,6 @@ const { t } = useI18n({ messages: mobileMessages })
 const message = useMessage()
 const dialog = useDialog()
 const router = useRouter()
-const isHttp = window.location.protocol === "http:"
 const activeTab = ref<"overview" | "containers" | "code">("overview")
 const overview = ref<MobileOverview | null>(null)
 const projects = ref<AIGroup[]>([])
@@ -248,9 +248,7 @@ onBeforeUnmount(() => {
 		</header>
 
 		<main :class="isTaskDetail ? 'w-full p-0' : 'mx-auto max-w-2xl p-4'">
-			<n-alert v-if="isHttp && !isTaskDetail" type="warning" :show-icon="false" class="mb-4">
-				{{ t("mobile.httpWarning") }}
-			</n-alert>
+			<MobileSystemUpdate v-if="activeTab === 'overview'" />
 			<n-alert v-if="loadError && activeTab !== 'containers'" type="error" class="mb-4" :title="t('mobile.loadFailed')">
 				{{ loadError }}
 			</n-alert>
