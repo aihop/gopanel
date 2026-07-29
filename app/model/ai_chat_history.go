@@ -4,14 +4,27 @@ import "time"
 
 // AIGroup 记录 Code 项目。保留原表名以兼容已有数据。
 type AIGroup struct {
-	ID          uint      `gorm:"primaryKey" json:"id"`
-	CreatedAt   time.Time `json:"createdAt"`
-	UpdatedAt   time.Time `json:"updatedAt"`
-	Name        string    `gorm:"column:name;type:varchar(255);not null" json:"name"`
-	Description string    `gorm:"column:description;type:text" json:"description"`
-	WorkDir     string    `gorm:"column:work_dir;type:varchar(1024);not null;default:''" json:"workDir"`
-	SourceDirs  []string  `gorm:"column:source_dirs;serializer:json;type:text" json:"sourceDirs"`
-	CreatorID   uint      `gorm:"column:creator_id;type:integer;not null;index" json:"creatorId"`
+	ID               uint                       `gorm:"primaryKey" json:"id"`
+	CreatedAt        time.Time                  `json:"createdAt"`
+	UpdatedAt        time.Time                  `json:"updatedAt"`
+	Name             string                     `gorm:"column:name;type:varchar(255);not null" json:"name"`
+	Description      string                     `gorm:"column:description;type:text" json:"description"`
+	WorkDir          string                     `gorm:"column:work_dir;type:varchar(1024);not null;default:''" json:"workDir"`
+	SourceDirs       []string                   `gorm:"column:source_dirs;serializer:json;type:text" json:"sourceDirs"`
+	CreatorID        uint                       `gorm:"column:creator_id;type:integer;not null;index" json:"creatorId"`
+	TaskCount        int64                      `gorm:"-" json:"taskCount"`
+	ExecutionSummary *AIProjectExecutionSummary `gorm:"-" json:"executionSummary"`
+}
+
+type AIProjectExecutionSummary struct {
+	Status               string     `json:"status"`
+	ActiveTaskCount      int64      `json:"activeTaskCount"`
+	PendingApprovalCount int64      `json:"pendingApprovalCount"`
+	CurrentSessionID     uint       `json:"currentSessionId"`
+	CurrentTaskID        uint       `json:"currentTaskId"`
+	CurrentTaskTitle     string     `json:"currentTaskTitle"`
+	CurrentStage         string     `json:"currentStage"`
+	UpdatedAt            *time.Time `json:"updatedAt,omitempty"`
 }
 
 func (AIGroup) TableName() string {

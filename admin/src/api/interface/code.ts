@@ -8,6 +8,18 @@ export interface AIGroup {
 	creatorId: number
 	memberCount?: number
 	taskCount?: number
+	executionSummary: AIProjectExecutionSummary
+}
+
+export interface AIProjectExecutionSummary {
+	status: "idle" | "queued" | "running" | "pending_approval"
+	activeTaskCount: number
+	pendingApprovalCount: number
+	currentSessionId: number
+	currentTaskId: number
+	currentTaskTitle: string
+	currentStage: string
+	updatedAt?: string
 }
 
 export interface AITask {

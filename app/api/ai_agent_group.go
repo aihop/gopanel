@@ -88,6 +88,9 @@ func GetAIGroups(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
+	if err := groupRepo.LoadExecutionSummaries(groups, claims.UserId, claims.Role == constant.UserRoleSuper); err != nil {
+		return c.JSON(e.Fail(err))
+	}
 	userHome, _ := os.UserHomeDir()
 	defaultWorkDir, directoryRoot, err := aiProjectDirectoryDefaults(claims, userHome)
 	if err != nil {

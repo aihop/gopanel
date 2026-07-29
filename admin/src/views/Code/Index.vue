@@ -84,6 +84,31 @@
               {{ group.sourceDirs?.length ? t("code.projectDirectoryCount", { count: group.sourceDirs.length }) : group.workDir || t("code.projectDirectoryRequired") }}
             </span>
           </div>
+          <div class="group-card__status mb-4 rounded-2xl border border-[var(--n-border-color)] bg-[var(--n-color-embedded)] p-3">
+            <div class="flex items-center justify-between gap-3">
+              <div class="flex min-w-0 items-center gap-2">
+                <span
+                  class="h-2 w-2 shrink-0 rounded-full"
+                  :class="projectStatusMeta(group).dotClass"
+                ></span>
+                <span class="truncate text-sm font-semibold text-[var(--n-text-color)]">
+                  {{ t(projectStatusMeta(group).labelKey) }}
+                </span>
+              </div>
+              <span v-if="group.executionSummary.updatedAt" class="shrink-0 text-[11px] text-[var(--n-text-color-3)]">
+                {{ formatUpdatedAt(group.executionSummary.updatedAt) }}
+              </span>
+            </div>
+            <div class="mt-2 truncate text-xs text-[var(--n-text-color-2)]" :title="group.executionSummary.currentTaskTitle">
+              {{ group.executionSummary.currentTaskTitle || t("code.projectIdleHint") }}
+            </div>
+            <div v-if="group.executionSummary.activeTaskCount" class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-[var(--n-text-color-3)]">
+              <span>{{ t("code.activeTaskCount", { count: group.executionSummary.activeTaskCount }) }}</span>
+              <span v-if="group.executionSummary.pendingApprovalCount" class="text-orange-500">
+                {{ t("code.pendingApprovalCount", { count: group.executionSummary.pendingApprovalCount }) }}
+              </span>
+            </div>
+          </div>
           <div class="group-card__footer flex justify-between items-center text-xs pt-4">
             <span>{{ group.taskCount || 0 }} {{ $t('code.task') }}</span>
             <span class="group-card__action">{{ t("code.enterProject") }}</span>
@@ -149,7 +174,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
@@ -174,12 +199,18 @@ const projectForm = ref({ name: '', desc: '', workDir: '', sourceDirs: [] as str
 const groups = ref<AIGroup[]>([])
 const groupsLoading = ref(false)
 const groupsLoadError = ref(false)
+const groupsRefreshing = ref(false)
 const defaultWorkDir = ref("/")
 const directoryRoot = ref("/")
+let refreshTimer: ReturnType<typeof setInterval> | undefined
 
-const fetchGroups = async () => {
-  groupsLoading.value = true
-  groupsLoadError.value = false
+const fetchGroups = async (silent = false) => {
+  if (groupsRefreshing.value) return
+  groupsRefreshing.value = true
+  if (!silent) {
+    groupsLoading.value = true
+    groupsLoadError.value = false
+  }
   try {
     const res = await getAIGroups({ page: 1, limit: 50 })
     if (res.code === 0) {
@@ -189,15 +220,40 @@ const fetchGroups = async () => {
       directoryRoot.value = directoryDefaults.directoryRoot || "/"
     }
   } catch {
-    groupsLoadError.value = true
-    groups.value = []
+    if (!silent) {
+      groupsLoadError.value = true
+      groups.value = []
+    }
   } finally {
-    groupsLoading.value = false
+    if (!silent) groupsLoading.value = false
+    groupsRefreshing.value = false
   }
 }
 
 onMounted(() => {
   fetchGroups()
+  refreshTimer = setInterval(() => fetchGroups(true), 10000)
+})
+
+onUnmounted(() => {
+  if (refreshTimer) clearInterval(refreshTimer)
+})
+
+const projectStatusMeta = (group: AIGroup) => {
+  const status = group.executionSummary.pendingApprovalCount > 0 ? "pending_approval" : group.executionSummary.status
+  return {
+    idle: { labelKey: "code.projectStatus_idle", dotClass: "bg-slate-400" },
+    queued: { labelKey: "code.projectStatus_queued", dotClass: "bg-blue-400 animate-pulse" },
+    running: { labelKey: "code.projectStatus_running", dotClass: "bg-emerald-500 animate-pulse" },
+    pending_approval: { labelKey: "code.projectStatus_pendingApproval", dotClass: "bg-orange-500 animate-pulse" }
+  }[status] || { labelKey: "code.projectStatus_idle", dotClass: "bg-slate-400" }
+}
+
+const formatUpdatedAt = (value: string) => new Date(value).toLocaleString(undefined, {
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit"
 })
 
 const openCreateProjectModal = () => {
@@ -334,6 +390,11 @@ const enterGroup = (id: number) => {
 
 .group-card__path {
   color: var(--n-text-color-3);
+}
+
+.group-card__status {
+  position: relative;
+  z-index: 1;
 }
 
 .group-card__footer {
