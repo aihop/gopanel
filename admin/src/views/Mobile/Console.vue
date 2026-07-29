@@ -39,6 +39,7 @@ const showFiles = ref(false)
 let refreshTimer: ReturnType<typeof setInterval> | null = null
 
 const selectedSession = computed(() => sessions.value.find(item => item.id === selectedSessionId.value) || null)
+const isTaskDetail = computed(() => activeTab.value === "code" && Boolean(selectedSession.value))
 const isRunning = computed(() => sessionState.value?.currentStage === "executing" || sessionState.value?.latestRun?.status === "running")
 const memoryPercent = computed(() => Math.round(overview.value?.system.memoryUsedPercent || 0))
 const cpuPercent = computed(() => Math.round(overview.value?.system.cpuUsedPercent || 0))
@@ -184,7 +185,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-	<div class="min-h-dvh bg-slate-100 pb-24 text-slate-900">
+	<div class="min-h-dvh bg-slate-100 text-slate-900" :class="isTaskDetail ? 'pb-44' : 'pb-24'">
 		<header class="sticky top-0 z-20 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur">
 			<div class="mx-auto flex max-w-2xl items-center justify-between">
 				<div>
@@ -192,6 +193,7 @@ onBeforeUnmount(() => {
 					<div class="text-xs text-slate-500">{{ t("mobile.title") }}</div>
 				</div>
 				<div class="flex items-center gap-1">
+					<n-button v-if="isTaskDetail" size="small" quaternary @click="activeTab = 'overview'; loadOverview()">{{ t("mobile.overview") }}</n-button>
 					<n-button size="small" type="primary" secondary @click="showSessionCreator = true">{{ t("mobile.newSession") }}</n-button>
 					<n-button size="small" quaternary @click="confirmLogout">{{ t("mobile.logout") }}</n-button>
 				</div>
@@ -285,16 +287,18 @@ onBeforeUnmount(() => {
 							<n-button v-if="isRunning" type="error" secondary :loading="actionLoading" @click="stopExecution">{{ t("mobile.stop") }}</n-button>
 							<n-button v-if="['failed', 'cancelled'].includes(sessionState?.latestInstruction?.status || '')" secondary :loading="actionLoading" @click="retryExecution">{{ t("mobile.retryExecution") }}</n-button>
 						</div>
-						<div class="sticky bottom-20 rounded-2xl border border-slate-200 bg-white p-3 shadow-lg">
-							<n-input v-model:value="prompt" type="textarea" :placeholder="t('mobile.instructionPlaceholder')" :autosize="{ minRows: 2, maxRows: 5 }" :disabled="actionLoading" />
-							<n-button type="primary" block class="mt-2" :loading="actionLoading" :disabled="!prompt.trim()" @click="sendInstruction">{{ t("mobile.send") }}</n-button>
+						<div class="fixed inset-x-0 bottom-0 z-30 px-3 pb-[max(12px,env(safe-area-inset-bottom))]">
+							<div class="mx-auto max-w-2xl rounded-2xl border border-slate-200 bg-white p-3 shadow-xl">
+								<n-input v-model:value="prompt" type="textarea" :placeholder="t('mobile.instructionPlaceholder')" :autosize="{ minRows: 2, maxRows: 5 }" :disabled="actionLoading" />
+								<n-button type="primary" block class="mt-2" :loading="actionLoading" :disabled="!prompt.trim()" @click="sendInstruction">{{ t("mobile.send") }}</n-button>
+							</div>
 						</div>
 					</template>
 				</div>
 			</n-spin>
 		</main>
 
-		<nav class="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-2">
+		<nav v-if="!isTaskDetail" class="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-2">
 			<div class="mx-auto grid max-w-2xl grid-cols-2 gap-2">
 				<n-button size="large" :type="activeTab === 'overview' ? 'primary' : 'default'" :secondary="activeTab !== 'overview'" @click="activeTab = 'overview'; loadOverview()">{{ t("mobile.overview") }}</n-button>
 				<n-button size="large" :type="activeTab === 'code' ? 'primary' : 'default'" :secondary="activeTab !== 'code'" @click="activeTab = 'code'; loadSessions()">{{ t("mobile.code") }}</n-button>
