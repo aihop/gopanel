@@ -241,7 +241,10 @@ onBeforeUnmount(() => {
 	<div class="min-h-dvh bg-slate-100 pb-24 text-slate-900">
 		<header class="sticky top-0 z-20 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur">
 			<div v-if="isTaskDetail" class="mx-auto grid max-w-2xl grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3">
-				<n-button size="small" quaternary @click="leaveTaskDetail">{{ t("commons.button.back") }}</n-button>
+				<n-button size="small" quaternary @click="leaveTaskDetail">
+					<template #icon><Icon name="mdi:arrow-left" /></template>
+					{{ t("commons.button.back") }}
+				</n-button>
 				<div class="truncate text-center text-sm font-semibold">{{ selectedSession?.title }}</div>
 				<n-button size="small" type="primary" secondary @click="showFiles = true">{{ t("mobile.files") }}</n-button>
 			</div>
