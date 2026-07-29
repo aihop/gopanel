@@ -79,3 +79,24 @@ func TestLegacyDatabaseSecretRemainsReadable(t *testing.T) {
 		t.Fatalf("legacy credential should remain readable: %q, %v", plaintext, err)
 	}
 }
+
+func TestDecryptDatabaseServerPasswords(t *testing.T) {
+	oldKey := global.CONF.System.EncryptKey
+	global.CONF.System.EncryptKey = "0123456789abcdef0123456789abcdef"
+	t.Cleanup(func() { global.CONF.System.EncryptKey = oldKey })
+
+	ciphertext, err := encryptDatabaseSecret("database-password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	servers := []*model.DatabaseServer{
+		{Password: ciphertext},
+		{Password: "legacy-password"},
+	}
+	if err := decryptDatabaseServerPasswords(servers); err != nil {
+		t.Fatal(err)
+	}
+	if servers[0].Password != "database-password" || servers[1].Password != "legacy-password" {
+		t.Fatalf("unexpected decrypted passwords: %#v", servers)
+	}
+}

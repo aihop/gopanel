@@ -44,17 +44,20 @@ func (r *DatabaseRepo) List(ctx *gormx.Contextx) ([]*model.Database, error) {
 	if err := query.Find(&databaseServer).Error; err != nil {
 		return nil, err
 	}
+	if err := decryptDatabaseServerPasswords(databaseServer); err != nil {
+		return nil, err
+	}
 
 	database := make([]*model.Database, 0)
 	for _, server := range databaseServer {
 		switch server.Type {
-		case model.DatabaseTypeMysql:
+		case model.DatabaseTypeMysql, model.DatabaseTypeMariaDB:
 			mysql, err := db.NewMySQL(server.Username, server.Password, fmt.Sprintf("%s:%d", server.Host, server.Port))
 			if err == nil {
 				if databases, err := mysql.Databases(); err == nil {
 					for item := range slices.Values(databases) {
 						database = append(database, &model.Database{
-							Type:     model.DatabaseTypeMysql,
+							Type:     server.Type,
 							Name:     item.Name,
 							Server:   server.Name,
 							ServerID: server.ID,
@@ -121,11 +124,14 @@ func (r *DatabaseRepo) CountByWhere(where *gormx.Wherex) (int64, error) {
 	if err := query.Find(&databaseServer).Error; err != nil {
 		return 0, err
 	}
+	if err := decryptDatabaseServerPasswords(databaseServer); err != nil {
+		return 0, err
+	}
 
 	var res int64
 	for _, server := range databaseServer {
 		switch server.Type {
-		case model.DatabaseTypeMysql:
+		case model.DatabaseTypeMysql, model.DatabaseTypeMariaDB:
 			mysql, err := db.NewMySQL(server.Username, server.Password, fmt.Sprintf("%s:%d", server.Host, server.Port))
 			if err == nil {
 				if dbs, err := mysql.Databases(); err == nil {
@@ -146,6 +152,17 @@ func (r *DatabaseRepo) CountByWhere(where *gormx.Wherex) (int64, error) {
 		}
 	}
 	return res, nil
+}
+
+func decryptDatabaseServerPasswords(servers []*model.DatabaseServer) error {
+	for _, server := range servers {
+		password, err := decryptDatabaseSecret(server.Password)
+		if err != nil {
+			return err
+		}
+		server.Password = password
+	}
+	return nil
 }
 
 // 删除
