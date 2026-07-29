@@ -70,7 +70,16 @@ export const codeProjectMessages = {
 			codexCachedTokens: "缓存 {count}",
 			terminalReconnecting: "正在增量重连",
 			terminalControlling: "当前设备可输入",
-			takeTerminalControl: "接管终端"
+			takeTerminalControl: "接管终端",
+			approvalCenter: "待审批",
+			approvalLoadFailed: "待审批任务加载失败",
+			approvalApproved: "已允许执行",
+			approvalRejected: "已拒绝执行",
+			approvalDecisionFailed: "审批处理失败",
+			nativeApproval: "原生 Codex 确认",
+			approveApproval: "允许执行",
+			rejectApproval: "拒绝",
+			noPendingApprovals: "当前没有待审批任务"
 		}
 	},
 	en: {
@@ -145,7 +154,16 @@ export const codeProjectMessages = {
 			codexCachedTokens: "{count} cached",
 			terminalReconnecting: "Reconnecting incrementally",
 			terminalControlling: "This device controls input",
-			takeTerminalControl: "Take control"
+			takeTerminalControl: "Take control",
+			approvalCenter: "Approvals",
+			approvalLoadFailed: "Failed to load pending approvals",
+			approvalApproved: "Execution approved",
+			approvalRejected: "Execution rejected",
+			approvalDecisionFailed: "Failed to process approval",
+			nativeApproval: "Native Codex approval",
+			approveApproval: "Approve",
+			rejectApproval: "Reject",
+			noPendingApprovals: "No pending approvals"
 		}
 	}
 } as const

@@ -15,6 +15,7 @@ const { t } = useI18n({ messages: codeProjectMessages })
 const props = defineProps<{
 	taskId: number | null
 	sessionId?: number | null
+	autoTakeControl?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -31,6 +32,7 @@ let resizeObserver: ResizeObserver | null = null
 let intentionalClose = false
 let serverErrorShown = false
 let lastSequence = 0
+let autoTakeControlPending = Boolean(props.autoTakeControl)
 const nativeProtocol = ref(false)
 const hasTerminalControl = ref(true)
 const reconnecting = ref(false)
@@ -113,6 +115,10 @@ const connectWebSocket = () => {
 	if (props.sessionId) {
 		wsUrl += `&session_id=${props.sessionId}`
 		if (lastSequence > 0) wsUrl += `&after_sequence=${lastSequence}`
+		if (autoTakeControlPending) {
+			wsUrl += "&take_control=1"
+			autoTakeControlPending = false
+		}
 	} else if (props.taskId) {
 		wsUrl += `&task_id=${props.taskId}`
 	}

@@ -175,6 +175,10 @@ func serveNativeCodeTerminal(
 	}
 	afterSequence, _ := strconv.ParseUint(wsConn.Query("after_sequence", "0"), 10, 64)
 	subscription, baseline := terminal.subscribe(afterSequence)
+	if wsConn.Query("take_control") == "1" {
+		terminal.takeControl(subscription.ID)
+		baseline.HasControl = true
+	}
 	defer terminal.unsubscribe(subscription)
 	var writeMu sync.Mutex
 	writeEvent := func(event nativeTerminalEvent) error {

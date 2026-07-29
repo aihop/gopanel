@@ -7,6 +7,7 @@ import type {
 	CodeExecutionRun,
 	CodeInstruction,
 	CodeInstructionResponse,
+	CodeApproval,
 	CodeApprovalPolicy,
 	CodeWorktreeCapability,
 	CodeSession,
@@ -82,6 +83,10 @@ export function createCodeInstruction(sessionId: number, content: string) {
 
 export function approveCodeInstruction(approvalId: number) {
 	return http.post(`/code/approvals/${approvalId}/approve`, {})
+}
+
+export function getCodeApprovals(status = "pending") {
+	return http.get<{ items: CodeApproval[]; total: number }>("/code/approvals", { status, limit: 50 })
 }
 
 export function rejectCodeInstruction(approvalId: number) {
