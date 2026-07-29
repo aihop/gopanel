@@ -65,15 +65,28 @@ export function exchangeMobilePairing(code: string, deviceName: string) {
 }
 
 export function getMobileOverview() {
-	return mobileRequest(mobileHttp.get<ResultData<MobileOverview>>("/mobile/app/overview"))
+	return mobileRequest(mobileHttp.get<ResultData<MobileOverview>>("/mobile/app/overview")).then(result => ({
+		...result,
+		sessions: result.sessions || [],
+		pendingApprovals: result.pendingApprovals || []
+	}))
 }
 
 export function getMobileSessions(page = 1, limit = 20) {
-	return mobileRequest(mobileHttp.get<ResultData<{ items: CodeSession[]; total: number }>>("/mobile/app/sessions", { params: { page, limit } }))
+	return mobileRequest(mobileHttp.get<ResultData<{ items: CodeSession[]; total: number }>>("/mobile/app/sessions", { params: { page, limit } })).then(result => ({
+		...result,
+		items: result.items || []
+	}))
 }
 
 export function getMobileSessionState(sessionId: number) {
-	return mobileRequest(mobileHttp.get<ResultData<CodeSessionState>>(`/mobile/app/sessions/${sessionId}/state`))
+	return mobileRequest(mobileHttp.get<ResultData<CodeSessionState>>(`/mobile/app/sessions/${sessionId}/state`)).then(result => ({
+		...result,
+		recentMessages: result.recentMessages || [],
+		previews: result.previews || [],
+		timelineEvents: result.timelineEvents || [],
+		changedFiles: result.changedFiles || []
+	}))
 }
 
 export function sendMobileInstruction(sessionId: number, content: string) {
