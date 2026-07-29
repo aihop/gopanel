@@ -17,6 +17,8 @@ func UserRouter(r fiber.Router) {
 		userRouter.Post("/editPassword", api.ResetPassword)
 		userRouter.Post("/editInfo", api.UserEditInfo)
 		userRouter.Post("/token", api.UserToken)
+		userRouter.Get("/note", api.UserNoteGet)
+		userRouter.Post("/note", api.UserNoteSave)
 
 		// SubAdmin 账号管理 (只有 SUPER 或 ADMIN 可以操作)
 		adminOnlyGroup := userRouter.Group("", middleware.JWT(constant.UserRoleAdmin))

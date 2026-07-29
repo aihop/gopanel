@@ -15,6 +15,10 @@ func Init() {
 		sysLog.Println("AutoMigrate table error", err)
 		return
 	}
+	if err := repo.NewUserNote(global.DB).MigrateTable(); err != nil {
+		sysLog.Println("UserNote table error", err)
+		return
+	}
 	if err := repo.NewImageRepo(global.DB).MigrateTable(); err != nil {
 		sysLog.Println("ImageRepo table error", err)
 		return
