@@ -13,7 +13,7 @@ import (
 )
 
 func buildNativeCodexCommand(session *model.AIDevSession) (*exec.Cmd, error) {
-	commandPath, err := exec.LookPath("codex")
+	commandPath, commandEnv, err := resolveCodeExecutorCommand("codex")
 	if err != nil {
 		return nil, err
 	}
@@ -28,6 +28,7 @@ func buildNativeCodexCommand(session *model.AIDevSession) (*exec.Cmd, error) {
 	}
 	command := exec.Command(commandPath, args...)
 	command.Dir = session.WorkDir
+	command.Env = commandEnv
 	if err := configureCodexCommand(command, session); err != nil {
 		return nil, err
 	}

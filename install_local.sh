@@ -1069,6 +1069,7 @@ ExecStart=${CONFIG_INSTALL_DIR}/gopanel
 Restart=always
 RestartSec=2
 Environment="HOME=${runtime_home}"
+Environment="PATH=/opt/homebrew/bin:/usr/local/bin:/home/linuxbrew/.linuxbrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 EOF
   if [ "${RUNTIME_USER}" != "root" ] && [ -n "${runtime_dir}" ]; then
     cat >>"${tmp_service}" <<EOF
@@ -1197,7 +1198,8 @@ EOF
 
 install_service_gopanel_macos() {
   local plist="/Library/LaunchDaemons/io.aihop.gopanel.plist"
-  local tmp_plist
+  local tmp_plist runtime_home
+  runtime_home="$(user_home_dir "${RUNTIME_USER}")"
   tmp_plist="$(mktemp -t io.aihop.gopanel.XXXXXX)"
   cat >"${tmp_plist}" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -1214,6 +1216,13 @@ install_service_gopanel_macos() {
   <string>${RUNTIME_USER}</string>
   <key>WorkingDirectory</key>
   <string>${CONFIG_INSTALL_DIR}</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HOME</key>
+    <string>${runtime_home}</string>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/home/linuxbrew/.linuxbrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>

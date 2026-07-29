@@ -79,6 +79,10 @@ func configureCodexCommand(command *exec.Cmd, session *model.AIDevSession) error
 		"-c", "model_providers.gopanel_session.wire_api=" + strconv.Quote(session.CodexWireAPI),
 	}
 	command.Args = append([]string{command.Path}, append(providerArgs, command.Args[1:]...)...)
-	command.Env = append(os.Environ(), codexSessionAPIKeyEnv+"="+apiKey)
+	commandEnv := command.Env
+	if len(commandEnv) == 0 {
+		commandEnv = os.Environ()
+	}
+	command.Env = upsertEnvironment(commandEnv, codexSessionAPIKeyEnv, apiKey)
 	return nil
 }

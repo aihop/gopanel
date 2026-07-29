@@ -83,7 +83,7 @@ func detectCodeExecutor(definition codeExecutorDefinition) codeExecutorStatus {
 		status.Version = "built-in"
 		return status
 	}
-	commandPath, err := exec.LookPath(definition.Command)
+	commandPath, commandEnv, err := resolveCodeExecutorCommand(definition.Command)
 	if err != nil {
 		status.Reason = "未找到 " + definition.Command + " 命令"
 		status.ReasonCode = "not_installed"
@@ -91,7 +91,7 @@ func detectCodeExecutor(definition codeExecutorDefinition) codeExecutorStatus {
 	}
 	status.Installed = true
 	status.Configured = hasCodeExecutorConfig(definition.ConfigPaths)
-	status.Version = detectCodeExecutorVersion(commandPath, definition.VersionArgs)
+	status.Version = detectCodeExecutorVersion(commandPath, definition.VersionArgs, commandEnv)
 	if !definition.AutomationSupported {
 		status.Reason = "当前 CLI 不支持非交互自动执行"
 		status.ReasonCode = "automation_unsupported"
@@ -114,10 +114,12 @@ func hasCodeExecutorConfig(configPaths []string) bool {
 	return false
 }
 
-func detectCodeExecutorVersion(commandPath string, versionArgs []string) string {
+func detectCodeExecutorVersion(commandPath string, versionArgs, commandEnv []string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	output, err := exec.CommandContext(ctx, commandPath, versionArgs...).CombinedOutput()
+	command := exec.CommandContext(ctx, commandPath, versionArgs...)
+	command.Env = commandEnv
+	output, err := command.CombinedOutput()
 	if err != nil && len(output) == 0 {
 		return ""
 	}
@@ -211,7 +213,7 @@ func buildCodeExecutorCommand(ctx context.Context, executorID, workDir, prompt, 
 	if !definition.AutomationSupported || definition.Command == "" {
 		return nil, "", errors.New("该执行器不支持 AI 指令")
 	}
-	commandPath, err := exec.LookPath(definition.Command)
+	commandPath, commandEnv, err := resolveCodeExecutorCommand(definition.Command)
 	if err != nil {
 		return nil, "", err
 	}
@@ -225,6 +227,7 @@ func buildCodeExecutorCommand(ctx context.Context, executorID, workDir, prompt, 
 	}
 	command := exec.CommandContext(ctx, commandPath, args...)
 	command.Dir = workDir
+	command.Env = commandEnv
 	if definition.ID == "codex" {
 		if err := configureCodexCommand(command, session); err != nil {
 			return nil, "", err
