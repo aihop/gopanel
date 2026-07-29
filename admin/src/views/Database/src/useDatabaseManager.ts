@@ -230,12 +230,14 @@ export const useDatabaseManager = (
 
     loadingStructure.value = true
     let sql = ''
-    if (server.type === 'mysql') {
-      sql = `SHOW FULL COLUMNS FROM \`${selectedTable.value}\``
+    const escapedStringTable = selectedTable.value.replace(/'/g, "''")
+    if (server.type === 'mysql' || server.type === 'mariadb') {
+      const escapedIdentifierTable = selectedTable.value.replace(/`/g, '``')
+      sql = `SHOW FULL COLUMNS FROM \`${escapedIdentifierTable}\``
     } else if (server.type === 'sqlite') {
-      sql = `SELECT name AS "Field", type AS "Type", "notnull" AS "Null", dflt_value AS "Default", CASE WHEN pk > 0 THEN 'PRI' ELSE '' END AS "Key" FROM pragma_table_info('${selectedTable.value}')`
+      sql = `SELECT name AS "Field", type AS "Type", "notnull" AS "Null", dflt_value AS "Default", CASE WHEN pk > 0 THEN 'PRI' ELSE '' END AS "Key" FROM pragma_table_info('${escapedStringTable}')`
     } else {
-      sql = `SELECT column_name as "Field", data_type as "Type", is_nullable as "Null", column_default as "Default" FROM information_schema.columns WHERE table_name = '${selectedTable.value}'`
+      sql = `SELECT column_name AS "Field", data_type AS "Type", is_nullable AS "Null", column_default AS "Default" FROM information_schema.columns WHERE table_schema = (SELECT n.nspname FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace WHERE c.relname = '${escapedStringTable}' AND c.relkind IN ('r', 'p') AND pg_catalog.pg_table_is_visible(c.oid) LIMIT 1) AND table_name = '${escapedStringTable}' ORDER BY ordinal_position`
     }
 
     try {
