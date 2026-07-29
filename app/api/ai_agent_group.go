@@ -41,6 +41,45 @@ func canManageAIProject(project *model.AIGroup, claims *token.CustomClaims) bool
 	return project != nil && claims != nil && (project.CreatorID == claims.UserId || claims.Role == constant.UserRoleSuper)
 }
 
+func existingAIProjectDirectory(path string) (string, error) {
+	path = strings.TrimSpace(path)
+	if path == "" || !filepath.IsAbs(path) {
+		return "", errors.New("默认项目目录无效")
+	}
+	resolvedPath, err := filepath.EvalSymlinks(filepath.Clean(path))
+	if err != nil {
+		return "", err
+	}
+	info, err := os.Stat(resolvedPath)
+	if err != nil || !info.IsDir() {
+		return "", errors.New("默认项目目录不可访问")
+	}
+	return resolvedPath, nil
+}
+
+func aiProjectDirectoryDefaults(claims *token.CustomClaims, userHome string) (string, string, error) {
+	if claims != nil && claims.Role == constant.UserRoleSubAdmin {
+		baseDir, err := existingAIProjectDirectory(claims.FileBaseDir)
+		if err != nil {
+			return "", "", errors.New("当前账号未配置有效的工作目录")
+		}
+		return baseDir, baseDir, nil
+	}
+	rootDir := string(filepath.Separator)
+	if volume := filepath.VolumeName(userHome); volume != "" {
+		rootDir = volume + string(filepath.Separator)
+	}
+	resolvedRoot, err := existingAIProjectDirectory(rootDir)
+	if err != nil {
+		return "", "", err
+	}
+	defaultDir, err := existingAIProjectDirectory(userHome)
+	if err != nil {
+		defaultDir = resolvedRoot
+	}
+	return defaultDir, resolvedRoot, nil
+}
+
 func GetAIGroups(c fiber.Ctx) error {
 	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
 	page, _ := strconv.Atoi(c.Query("page", "1"))
@@ -50,7 +89,17 @@ func GetAIGroups(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	return c.JSON(e.Succ(fiber.Map{"items": groups, "total": total}))
+	userHome, _ := os.UserHomeDir()
+	defaultWorkDir, directoryRoot, err := aiProjectDirectoryDefaults(claims, userHome)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	return c.JSON(e.Succ(fiber.Map{
+		"items":          groups,
+		"total":          total,
+		"defaultWorkDir": defaultWorkDir,
+		"directoryRoot":  directoryRoot,
+	}))
 }
 func CreateAIGroup(c fiber.Ctx) error {
 	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)

@@ -128,6 +128,8 @@
       </n-modal>
       <ProjectDirectoryPicker
         v-model:show="showDirectoryPicker"
+		:initial-path="projectForm.workDir || defaultWorkDir"
+		:root-path="directoryRoot"
         @select="projectForm.workDir = $event"
       />
     </div>
@@ -160,6 +162,8 @@ const projectForm = ref({ name: '', desc: '', workDir: '' })
 const groups = ref<AIGroup[]>([])
 const groupsLoading = ref(false)
 const groupsLoadError = ref(false)
+const defaultWorkDir = ref("/")
+const directoryRoot = ref("/")
 
 const fetchGroups = async () => {
   groupsLoading.value = true
@@ -168,6 +172,9 @@ const fetchGroups = async () => {
     const res = await getAIGroups({ page: 1, limit: 50 })
     if (res.code === 0) {
       groups.value = res.data.items || []
+      const directoryDefaults = res.data as typeof res.data & { defaultWorkDir?: string; directoryRoot?: string }
+      defaultWorkDir.value = directoryDefaults.defaultWorkDir || "/"
+      directoryRoot.value = directoryDefaults.directoryRoot || "/"
     }
   } catch {
     groupsLoadError.value = true
@@ -183,7 +190,7 @@ onMounted(() => {
 
 const openCreateProjectModal = () => {
   editingProjectId.value = null
-  projectForm.value = { name: '', desc: '', workDir: '' }
+  projectForm.value = { name: '', desc: '', workDir: defaultWorkDir.value }
   showCreateProjectModal.value = true
 }
 

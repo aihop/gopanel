@@ -60,3 +60,45 @@ func TestCanManageAIProject(t *testing.T) {
 		t.Fatal("expected another admin to be denied")
 	}
 }
+
+func TestAIProjectDirectoryDefaults(t *testing.T) {
+	baseDir := t.TempDir()
+	defaultDir, rootDir, err := aiProjectDirectoryDefaults(&token.CustomClaims{
+		Role:        constant.UserRoleSubAdmin,
+		FileBaseDir: baseDir,
+	}, "/ignored")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := filepath.EvalSymlinks(baseDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if defaultDir != want || rootDir != want {
+		t.Fatalf("sub-admin defaults = (%q, %q), want %q", defaultDir, rootDir, want)
+	}
+
+	homeDir := t.TempDir()
+	defaultDir, rootDir, err = aiProjectDirectoryDefaults(&token.CustomClaims{Role: constant.UserRoleAdmin}, homeDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantHome, err := filepath.EvalSymlinks(homeDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantRoot := string(filepath.Separator)
+	if volume := filepath.VolumeName(homeDir); volume != "" {
+		wantRoot = volume + string(filepath.Separator)
+	}
+	if defaultDir != wantHome || rootDir != wantRoot {
+		t.Fatalf("admin defaults = (%q, %q), want (%q, %q)", defaultDir, rootDir, wantHome, wantRoot)
+	}
+}
+
+func TestAIProjectDirectoryDefaultsRejectsInvalidSubAdminBase(t *testing.T) {
+	_, _, err := aiProjectDirectoryDefaults(&token.CustomClaims{Role: constant.UserRoleSubAdmin}, t.TempDir())
+	if err == nil {
+		t.Fatal("expected an invalid sub-admin base directory to be rejected")
+	}
+}

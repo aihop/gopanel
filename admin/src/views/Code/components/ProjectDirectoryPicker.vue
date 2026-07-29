@@ -7,7 +7,11 @@ import type { File } from "@/api/interface/file"
 import Icon from "@/components/common/Icon.vue"
 import { codeProjectMessages } from "@/i18n/locales/codeProject"
 
-const props = defineProps<{ show: boolean }>()
+const props = defineProps<{
+	show: boolean
+	initialPath: string
+	rootPath: string
+}>()
 
 const emit = defineEmits<{
 	(event: "update:show", value: boolean): void
@@ -24,7 +28,7 @@ const loadError = ref(false)
 
 const canGoParent = computed(() => currentPath.value !== rootPath.value)
 
-const loadDirectories = async (path: string, initializeRoot = false) => {
+const loadDirectories = async (path: string, fallbackPath = "") => {
 	loading.value = true
 	loadError.value = false
 	try {
@@ -39,9 +43,12 @@ const loadDirectories = async (path: string, initializeRoot = false) => {
 			sortOrder: "ascending"
 		})
 		currentPath.value = response.data?.path || path
-		if (initializeRoot) rootPath.value = currentPath.value
 		directories.value = (response.data?.items || []).filter(item => item.isDir)
 	} catch {
+		if (fallbackPath && fallbackPath !== path) {
+			await loadDirectories(fallbackPath)
+			return
+		}
 		loadError.value = true
 		directories.value = []
 		message.error(t("code.directoryLoadFailed"))
@@ -52,8 +59,12 @@ const loadDirectories = async (path: string, initializeRoot = false) => {
 
 const goParent = () => {
 	if (!canGoParent.value) return
-	const separatorIndex = currentPath.value.lastIndexOf("/")
-	void loadDirectories(separatorIndex > 0 ? currentPath.value.slice(0, separatorIndex) : "/")
+	const slashIndex = currentPath.value.lastIndexOf("/")
+	const backslashIndex = currentPath.value.lastIndexOf("\\")
+	const separatorIndex = Math.max(slashIndex, backslashIndex)
+	const candidate = separatorIndex > 0 ? currentPath.value.slice(0, separatorIndex) : rootPath.value
+	const parentPath = candidate.length >= rootPath.value.length ? candidate : rootPath.value
+	void loadDirectories(parentPath || rootPath.value)
 }
 
 const selectCurrent = () => {
@@ -64,7 +75,10 @@ const selectCurrent = () => {
 watch(
 	() => props.show,
 	show => {
-		if (show) void loadDirectories("/", true)
+		if (show) {
+			rootPath.value = props.rootPath || "/"
+			void loadDirectories(props.initialPath || rootPath.value, rootPath.value)
+		}
 	}
 )
 </script>
