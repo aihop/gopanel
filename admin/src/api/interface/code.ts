@@ -43,9 +43,17 @@ export interface CodeSession {
 	title: string
 	agentName: string
 	workDir: string
+	sourceWorkDir?: string
+	worktreeBranch?: string
 	status: string
 	currentStage: string
 	approvalPolicy: CodeApprovalPolicy
+}
+
+export interface CodeWorktreeCapability {
+	available: boolean
+	reason: "" | "multi_source" | "source_unavailable" | "not_git" | "not_git_root"
+	sourceDir?: string
 }
 
 export interface AIMessage {

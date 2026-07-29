@@ -132,14 +132,17 @@ func CreateAISession(c fiber.Ctx) error {
 		ProjectID      uint                  `json:"projectId"`
 		ExecutorID     string                `json:"executorId"`
 		ApprovalPolicy string                `json:"approvalPolicy"`
+		Isolated       bool                  `json:"isolated"`
 		CodexProvider  *codexProviderRequest `json:"codexProvider"`
 	}
 	if bindErr := c.Bind().JSON(&req); bindErr != nil {
 		return c.JSON(e.Fail(bindErr))
 	}
 	workDir := strings.TrimSpace(req.WorkDir)
+	var project *model.AIGroup
+	var err error
 	if req.ProjectID > 0 {
-		project, err := repo.NewAIGroupRepo().GetGroupByID(req.ProjectID)
+		project, err = repo.NewAIGroupRepo().GetGroupByID(req.ProjectID)
 		if err != nil {
 			return c.JSON(e.Fail(errors.New("项目不存在")))
 		}
@@ -189,15 +192,35 @@ func CreateAISession(c fiber.Ctx) error {
 	if err := sessionRepo.CreateSession(session); err != nil {
 		return c.JSON(e.Fail(err))
 	}
+	if req.Isolated {
+		if project == nil {
+			_ = sessionRepo.DeleteSession(session.ID)
+			return c.JSON(e.Fail(errors.New("Git Worktree 隔离仅支持项目会话")))
+		}
+		if err := createCodeSessionWorktree(session, project); err != nil {
+			_ = sessionRepo.DeleteSession(session.ID)
+			return c.JSON(e.Fail(err))
+		}
+		if err := sessionRepo.UpdateSession(session); err != nil {
+			rollbackCodeSessionWorktree(session)
+			_ = sessionRepo.DeleteSession(session.ID)
+			return c.JSON(e.Fail(err))
+		}
+	}
 	task := &model.AITask{
 		UserID: claims.UserId, SessionID: session.ID, ProjectID: session.ProjectID,
 		Title: session.Title, AgentName: session.AgentName, WorkDir: session.WorkDir, Status: "active",
 	}
 	if err := repo.NewAITaskRepo().CreateTask(task); err != nil {
+		rollbackCodeSessionWorktree(session)
+		_ = sessionRepo.DeleteSession(session.ID)
 		return c.JSON(e.Fail(err))
 	}
 	session.LastTaskID = task.ID
 	if err := sessionRepo.UpdateSession(session); err != nil {
+		_ = repo.NewAITaskRepo().DeleteTask(task.ID)
+		rollbackCodeSessionWorktree(session)
+		_ = sessionRepo.DeleteSession(session.ID)
 		return c.JSON(e.Fail(err))
 	}
 	return c.JSON(e.Succ(session))

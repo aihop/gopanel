@@ -7,6 +7,7 @@ import (
 
 type IAIDevSessionRepo interface {
 	CreateSession(session *model.AIDevSession) error
+	DeleteSession(id uint) error
 	GetSessionByID(id uint) (*model.AIDevSession, error)
 	GetSessionsByUserID(userID, projectID uint, page, limit int) ([]*model.AIDevSession, int64, error)
 	UpdateSession(session *model.AIDevSession) error
@@ -48,6 +49,10 @@ func NewAIDevSessionRepo() IAIDevSessionRepo {
 
 func (r *aiDevSessionRepo) CreateSession(session *model.AIDevSession) error {
 	return global.DB.Create(session).Error
+}
+
+func (r *aiDevSessionRepo) DeleteSession(id uint) error {
+	return global.DB.Delete(&model.AIDevSession{}, id).Error
 }
 
 func (r *aiDevSessionRepo) GetSessionByID(id uint) (*model.AIDevSession, error) {

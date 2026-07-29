@@ -8,6 +8,7 @@ import type {
 	CodeInstruction,
 	CodeInstructionResponse,
 	CodeApprovalPolicy,
+	CodeWorktreeCapability,
 	CodeSession,
 	CodeSessionHistory,
 	CodeSessionState,
@@ -32,12 +33,17 @@ export function getCodeExecutors() {
 	return http.get<CodeExecutor[]>("/code/executors")
 }
 
+export function getCodeWorktreeCapability(projectId: number) {
+	return http.get<CodeWorktreeCapability>(`/code/groups/${projectId}/worktree-capability`)
+}
+
 export function createCodeSession(data: {
 	title: string
 	workDir: string
 	projectId: number
 	executorId: string
 	approvalPolicy: CodeApprovalPolicy
+	isolated: boolean
 }) {
 	return http.post<CodeSession>("/code/sessions", data)
 }

@@ -2,8 +2,8 @@
 import { computed, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 import { useMessage } from "naive-ui"
-import { createCodeSession, getCodeExecutors } from "@/api/modules/code"
-import type { CodeApprovalPolicy, CodeExecutor, CodeSession } from "@/api/interface/code"
+import { createCodeSession, getCodeExecutors, getCodeWorktreeCapability } from "@/api/modules/code"
+import type { CodeApprovalPolicy, CodeExecutor, CodeSession, CodeWorktreeCapability } from "@/api/interface/code"
 import { codeProjectMessages } from "@/i18n/locales/codeProject"
 
 const props = defineProps<{
@@ -21,6 +21,8 @@ const message = useMessage()
 const executors = ref<CodeExecutor[]>([])
 const selectedExecutorId = ref("")
 const approvalPolicy = ref<CodeApprovalPolicy>("safe_auto")
+const isolated = ref(false)
+const worktreeCapability = ref<CodeWorktreeCapability | null>(null)
 const title = ref("")
 const loading = ref(false)
 const submitting = ref(false)
@@ -46,13 +48,25 @@ const loadExecutors = async () => {
 	}
 }
 
+const loadWorktreeCapability = async () => {
+	worktreeCapability.value = null
+	isolated.value = false
+	try {
+		const response = await getCodeWorktreeCapability(props.projectId)
+		worktreeCapability.value = response.data
+		isolated.value = response.data.available
+	} catch (error) {
+		message.error(error instanceof Error ? error.message : t("code.worktreeCapabilityFailed"))
+	}
+}
+
 watch(
 	() => props.show,
 	show => {
 		if (show) {
 			title.value = ""
 			approvalPolicy.value = "safe_auto"
-			void loadExecutors()
+			void Promise.all([loadExecutors(), loadWorktreeCapability()])
 		}
 	}
 )
@@ -71,7 +85,8 @@ const submit = async () => {
 			workDir: "",
 			projectId: props.projectId,
 			executorId: selectedExecutorId.value,
-			approvalPolicy: approvalPolicy.value
+			approvalPolicy: approvalPolicy.value,
+			isolated: isolated.value
 		})
 		emit("created", response.data)
 		close()
@@ -177,6 +192,23 @@ const submit = async () => {
 						<n-alert v-if="approvalPolicy === 'full_auto'" type="warning">
 							{{ t("code.fullAutoWarning") }}
 						</n-alert>
+						<n-form-item :label="t('code.worktreeIsolation')">
+							<div class="w-full rounded-xl border border-slate-200 bg-slate-50 p-3">
+								<div class="flex items-center justify-between gap-4">
+									<div>
+										<div class="text-sm font-semibold text-slate-800">{{ t("code.worktreeIsolationTitle") }}</div>
+										<div class="mt-1 text-xs leading-5 text-slate-500">
+											{{
+												worktreeCapability?.available
+													? t("code.worktreeIsolationDesc")
+													: t(`code.worktreeReason_${worktreeCapability?.reason || "loading"}`)
+											}}
+										</div>
+									</div>
+									<n-switch v-model:value="isolated" :disabled="!worktreeCapability?.available" />
+								</div>
+							</div>
+						</n-form-item>
 						<n-alert type="info" :show-icon="false">{{ t("code.sessionUsesProjectDirectory") }}</n-alert>
 					</n-form>
 				</template>

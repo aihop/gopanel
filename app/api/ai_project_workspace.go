@@ -84,7 +84,7 @@ func validateAIProjectWorkDirForClaims(workDir string, claims *token.CustomClaim
 	if claims == nil {
 		return errors.New("未授权访问项目目录")
 	}
-	if claims.Role != constant.UserRoleSubAdmin || isManagedAIProjectWorkDir(workDir, claims.UserId) {
+	if claims.Role != constant.UserRoleSubAdmin || isManagedAIProjectWorkDir(workDir, claims.UserId) || isManagedAISessionWorkDir(workDir, claims.UserId) {
 		return nil
 	}
 	return service.ValidatePathWithinBase(claims.FileBaseDir, workDir)
