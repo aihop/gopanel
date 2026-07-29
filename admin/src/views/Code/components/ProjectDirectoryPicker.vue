@@ -22,6 +22,7 @@ const { t } = useI18n({ messages: codeProjectMessages })
 const message = useMessage()
 const currentPath = ref("/")
 const rootPath = ref("/")
+const selectedPath = ref("")
 const directories = ref<File.File[]>([])
 const loading = ref(false)
 const loadError = ref(false)
@@ -43,6 +44,7 @@ const loadDirectories = async (path: string, fallbackPath = "") => {
 			sortOrder: "ascending"
 		})
 		currentPath.value = response.data?.path || path
+		selectedPath.value = currentPath.value
 		directories.value = (response.data?.items || []).filter(item => item.isDir)
 	} catch {
 		if (fallbackPath && fallbackPath !== path) {
@@ -67,8 +69,18 @@ const goParent = () => {
 	void loadDirectories(parentPath || rootPath.value)
 }
 
-const selectCurrent = () => {
-	emit("select", currentPath.value)
+const selectDirectory = (path: string) => {
+	selectedPath.value = path
+}
+
+const enterDirectory = (path: string) => {
+	selectedPath.value = path
+	void loadDirectories(path)
+}
+
+const confirmSelection = () => {
+	if (!selectedPath.value) return
+	emit("select", selectedPath.value)
 	emit("update:show", false)
 }
 
@@ -113,30 +125,49 @@ watch(
 			</n-alert>
 			<n-empty v-else-if="directories.length === 0" class="flex-1" :description="t('code.noSubdirectories')" />
 			<n-scrollbar v-else class="min-h-0 flex-1">
+				<div class="mb-2 text-xs text-[var(--n-text-color-3)]">
+					{{ t("code.directorySelectionHint") }}
+				</div>
 				<div class="grid gap-2 sm:grid-cols-2">
-					<button
+					<div
 						v-for="directory in directories"
 						:key="directory.path"
-						type="button"
-						class="flex items-center gap-3 rounded-xl border border-[var(--n-border-color)] p-3 text-left transition-colors hover:border-[var(--n-primary-color)] hover:bg-[var(--n-color-hover)]"
-						@click="loadDirectories(directory.path)"
+						class="flex items-center gap-2 rounded-xl border p-2 transition-colors"
+						:class="
+							selectedPath === directory.path
+								? 'border-[var(--n-primary-color)] bg-[var(--n-color-hover)] ring-1 ring-[var(--n-primary-color)]'
+								: 'border-[var(--n-border-color)] hover:border-[var(--n-primary-color)]'
+						"
 					>
-						<Icon name="mdi:folder-outline" :size="22" class="text-amber-500" />
-						<span class="min-w-0 flex-1 truncate text-sm">{{ directory.name }}</span>
-					</button>
+						<button
+							type="button"
+							class="flex min-w-0 flex-1 items-center gap-3 p-1 text-left"
+							@click="selectDirectory(directory.path)"
+							@dblclick="enterDirectory(directory.path)"
+						>
+							<Icon name="mdi:folder-outline" :size="22" class="shrink-0 text-amber-500" />
+							<span class="min-w-0 flex-1 truncate text-sm">{{ directory.name }}</span>
+						</button>
+						<n-button size="tiny" text type="primary" @click="enterDirectory(directory.path)">
+							{{ t("code.openDirectory") }}
+						</n-button>
+					</div>
 				</div>
 			</n-scrollbar>
 		</div>
 
 		<template #footer>
 			<div class="flex items-center justify-between gap-3">
-				<span class="min-w-0 truncate text-xs text-[var(--n-text-color-3)]" :title="currentPath">
-					{{ t("code.currentDirectory") }}：{{ currentPath }}
+				<span class="min-w-0 truncate text-xs text-[var(--n-text-color-3)]" :title="selectedPath">
+					{{ t("code.selectedDirectory") }}：{{ selectedPath }}
 				</span>
 				<div class="flex shrink-0 gap-3">
 					<n-button @click="emit('update:show', false)">{{ t("code.cancel") }}</n-button>
-					<n-button type="primary" :disabled="loading || loadError" @click="selectCurrent">
+					<n-button :disabled="loading || loadError" @click="selectDirectory(currentPath)">
 						{{ t("code.selectThisDirectory") }}
+					</n-button>
+					<n-button type="primary" :disabled="loading || loadError || !selectedPath" @click="confirmSelection">
+						{{ t("code.confirmSelection") }}
 					</n-button>
 				</div>
 			</div>
