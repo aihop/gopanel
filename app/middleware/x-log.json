@@ -231,6 +231,16 @@
 		"formatZH": "容器 [names] 执行 [operation]",
 		"formatEN": "container [operation] [names]"
 	},
+	"/mobile/app/containers/operate": {
+		"bodyKeys": [
+			"containerID",
+			"operation"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "手机端容器 [containerID] 执行 [operation]",
+		"formatEN": "mobile container [containerID] [operation]"
+	},
 	"/container/prune": {
 		"bodyKeys": [
 			"pruneType"

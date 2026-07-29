@@ -21,6 +21,8 @@ func MobileRouter(r fiber.Router) {
 	app := mobile.Group("/app").Use(middleware.MobileDeviceAuth)
 	app.Get("/overview", api.GetMobileOverview)
 	app.Post("/logout", api.LogoutMobileDevice)
+	app.Get("/containers", api.GetMobileContainers)
+	app.Post("/containers/operate", api.OperateMobileContainer)
 	app.Get("/projects", api.GetAIGroups)
 	app.Get("/executors", api.GetCodeExecutors)
 	app.Get("/terminal", websocket.New(api.AIAgentWsSSH))
