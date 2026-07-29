@@ -97,6 +97,18 @@ func (terminal *nativeCodeTerminal) takeControl(subscriptionID string) bool {
 	return true
 }
 
+func (terminal *nativeCodeTerminal) releaseControl(subscriptionID string) bool {
+	terminal.mu.Lock()
+	if terminal.controllerID != subscriptionID {
+		terminal.mu.Unlock()
+		return false
+	}
+	terminal.controllerID = ""
+	terminal.mu.Unlock()
+	terminal.broadcastControl()
+	return true
+}
+
 func (terminal *nativeCodeTerminal) hasControl(subscriptionID string) bool {
 	terminal.mu.Lock()
 	defer terminal.mu.Unlock()

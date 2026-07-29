@@ -14,6 +14,7 @@ import type { CodeSession, CodeSessionState } from "@/api/interface/code"
 import { mobileMessages } from "@/i18n/locales/mobile"
 import MobileFileBrowser from "./components/MobileFileBrowser.vue"
 import MobileSessionCreator from "./components/MobileSessionCreator.vue"
+import MobileTerminal from "./components/MobileTerminal.vue"
 import { useI18n } from "vue-i18n"
 import { computed, onBeforeUnmount, onMounted, ref } from "vue"
 import { useDialog, useMessage } from "naive-ui"
@@ -35,6 +36,7 @@ const actionLoading = ref(false)
 const loadError = ref("")
 const showSessionCreator = ref(false)
 const showFiles = ref(false)
+const showTerminal = ref(false)
 let refreshTimer: ReturnType<typeof setInterval> | null = null
 
 const selectedSession = computed(() => sessions.value.find(item => item.id === selectedSessionId.value) || null)
@@ -252,6 +254,7 @@ onBeforeUnmount(() => {
 									<div class="mt-1 truncate text-xs text-slate-500">{{ selectedSession.workDir }}</div>
 								</div>
 								<div class="flex shrink-0 items-center gap-2">
+									<n-button v-if="selectedSession.agentName === 'codex'" size="small" type="primary" secondary @click="showTerminal = true">{{ t("mobile.terminal") }}</n-button>
 									<n-button size="small" secondary @click="showFiles = true">{{ t("mobile.files") }}</n-button>
 									<n-tag :type="sessionState?.currentStage === 'failed' ? 'error' : isRunning ? 'info' : 'success'">{{ sessionState?.currentStage || selectedSession.currentStage }}</n-tag>
 								</div>
@@ -262,7 +265,6 @@ onBeforeUnmount(() => {
 								</div>
 							</div>
 						</section>
-
 						<n-alert v-if="sessionState?.pendingApproval" type="warning" :title="sessionState.pendingApproval.title">
 							<div class="whitespace-pre-wrap text-sm">{{ sessionState.pendingApproval.content }}</div>
 							<div class="mt-3 flex gap-2">
@@ -302,5 +304,6 @@ onBeforeUnmount(() => {
 
 			<MobileSessionCreator v-model:show="showSessionCreator" @created="handleSessionCreated" />
 			<MobileFileBrowser v-if="selectedSessionId" v-model:show="showFiles" :session-id="selectedSessionId" />
+			<MobileTerminal v-if="selectedSessionId" v-model:show="showTerminal" :session-id="selectedSessionId" />
 		</div>
 </template>

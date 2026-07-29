@@ -4,6 +4,7 @@ import (
 	"github.com/aihop/gopanel/app/api"
 	"github.com/aihop/gopanel/app/middleware"
 	"github.com/aihop/gopanel/constant"
+	"github.com/aihop/gopanel/pkg/websocket"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -22,6 +23,7 @@ func MobileRouter(r fiber.Router) {
 	app.Post("/logout", api.LogoutMobileDevice)
 	app.Get("/projects", api.GetAIGroups)
 	app.Get("/executors", api.GetCodeExecutors)
+	app.Get("/terminal", websocket.New(api.AIAgentWsSSH))
 	app.Get("/sessions", api.GetAISessions)
 	app.Post("/sessions", api.CreateAISession)
 	app.Get("/sessions/:id/state", api.GetAISessionState)
