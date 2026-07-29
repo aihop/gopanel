@@ -1,6 +1,8 @@
 package repo
 
 import (
+	"strings"
+
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/pkg/gormx"
@@ -77,6 +79,39 @@ func (r *DatabaseServerRepo) GetByNameType(name string, types model.DatabaseType
 		res.Password, err = decryptDatabaseSecret(res.Password)
 	}
 	return
+}
+
+func (r *DatabaseServerRepo) GetByName(name string) (res model.DatabaseServer, err error) {
+	err = r.db.Model(&model.DatabaseServer{}).Where("name = ?", name).First(&res).Error
+	if err == nil {
+		res.Password, err = decryptDatabaseSecret(res.Password)
+	}
+	return
+}
+
+func (r *DatabaseServerRepo) GetByEndpoint(types model.DatabaseType, host string, port uint) (res model.DatabaseServer, err error) {
+	databaseTypes := []model.DatabaseType{types}
+	if types == model.DatabaseTypeMysql || types == model.DatabaseTypeMariaDB {
+		databaseTypes = []model.DatabaseType{model.DatabaseTypeMysql, model.DatabaseTypeMariaDB}
+	}
+	hosts := []string{host}
+	if isLocalDatabaseEndpointHost(host) {
+		hosts = []string{"127.0.0.1", "localhost", "0.0.0.0", "::", "::1"}
+	}
+	err = r.db.Model(&model.DatabaseServer{}).Where("type IN ? AND host IN ? AND port = ?", databaseTypes, hosts, port).First(&res).Error
+	if err == nil {
+		res.Password, err = decryptDatabaseSecret(res.Password)
+	}
+	return
+}
+
+func isLocalDatabaseEndpointHost(host string) bool {
+	switch strings.ToLower(strings.TrimSpace(host)) {
+	case "127.0.0.1", "localhost", "0.0.0.0", "::", "::1":
+		return true
+	default:
+		return false
+	}
 }
 
 func (r *DatabaseServerRepo) Delete(id uint) (err error) {

@@ -20,6 +20,7 @@ func DatabaseRouter(r fiber.Router) {
 		databaseRouter.Post("/server/update", api.DatabaseServerUpdate)
 		databaseRouter.Post("/server/delete", api.DatabaseServerDelete)
 		databaseRouter.Post("/server/sync", api.DatabaseServerSync)
+		databaseRouter.Post("/server/sync-containers", api.DatabaseServerSyncContainers)
 		databaseRouter.Post("/server/get", api.DatabaseServerGet)
 
 		databaseRouter.Post("/user/list", api.DatabaseUserList)

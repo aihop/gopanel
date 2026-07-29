@@ -71,6 +71,14 @@ func DatabaseServerSync(c fiber.Ctx) error {
 	return c.JSON(e.Succ())
 }
 
+func DatabaseServerSyncContainers(c fiber.Ctx) error {
+	result, err := service.NewDatabaseServer().SyncRunningContainers(c.Context())
+	if err != nil {
+		return c.JSON(e.Fail(buserr.Err(err)))
+	}
+	return c.JSON(e.Succ(result))
+}
+
 func DatabaseServerGet(c fiber.Ctx) error {
 	R, err := e.BodyToStruct[request.ID](c.Body())
 	if err != nil {

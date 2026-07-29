@@ -5,6 +5,21 @@ type DBManagerImportResult = {
 	imported: number
 }
 
+export type DatabaseContainerSyncResult = {
+	scanned: number
+	detected: number
+	created: number
+	updated: number
+	skipped: number
+	failed: number
+	items: Array<{
+		container: string
+		type: string
+		status: "created" | "updated" | "skipped" | "failed"
+		reason?: string
+	}>
+}
+
 export const databaseListAPI = (params: any) => {
 	return http.post(`/database/list`, params)
 }
@@ -51,6 +66,10 @@ export const databaseServerDeleteAPI = (params: any) => {
 
 export const databaseServerSyncAPI = (params: any) => {
 	return http.post(`/database/server/sync`, params)
+}
+
+export const databaseServerSyncContainersAPI = () => {
+	return http.post<DatabaseContainerSyncResult>(`/database/server/sync-containers`)
 }
 
 export const databaseUserListAPI = (params: any) => {

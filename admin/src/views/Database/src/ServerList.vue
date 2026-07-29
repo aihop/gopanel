@@ -11,9 +11,11 @@ import {
 	databaseServerListAPI,
 	databaseServerCountAPI,
 	databaseServerDeleteAPI,
-	databaseServerSyncAPI
+	databaseServerSyncAPI,
+	databaseServerSyncContainersAPI,
+	type DatabaseContainerSyncResult
 } from "@/api/modules/database"
-import { MsgSuccess, MsgError } from "@/utils/message"
+import { MsgSuccess, MsgError, MsgWarning } from "@/utils/message"
 import { isSucc } from "@/utils/is"
 
 const { t } = useI18n()
@@ -21,6 +23,7 @@ const updateModal = ref(false)
 const updateID = ref(0)
 const pageCount = ref(0)
 const page = ref(0)
+const containerSyncing = ref(false)
 
 const columns: any = [
 	{
@@ -230,6 +233,35 @@ const handleDelete = (id: number) => {
 	})
 }
 
+const handleContainerSync = async () => {
+	if (containerSyncing.value) return
+	containerSyncing.value = true
+	try {
+		const res = await databaseServerSyncContainersAPI()
+		if (!isSucc(res.code)) {
+			MsgError(res.msg || t("commons.res.commonError"))
+			return
+		}
+		const result = res.data as DatabaseContainerSyncResult
+		await getData()
+		const message = [
+			`${t("commons.status.created")} ${result.created}`,
+			`${t("commons.operate.update")} ${result.updated}`,
+			`${t("commons.button.skip")} ${result.skipped}`,
+			`${t("commons.status.failed")} ${result.failed}`
+		].join(" / ")
+		if (result.failed > 0) {
+			MsgWarning(message, 5000)
+		} else {
+			MsgSuccess(message, 5000)
+		}
+	} catch {
+		MsgError(t("commons.res.commonError"))
+	} finally {
+		containerSyncing.value = false
+	}
+}
+
 getData()
 
 const handleRemark = (row: any) => {}
@@ -246,6 +278,14 @@ onUnmounted(() => {
 </script>
 
 <template>
+	<div class="mb-4 flex justify-end">
+		<n-button type="primary" :loading="containerSyncing" :disabled="containerSyncing" @click="handleContainerSync">
+			<template #icon>
+				<Icon name="mdi:database-sync" />
+			</template>
+			{{ `${$t("container.containerList")} · ${$t("commons.button.sync")}` }}
+		</n-button>
+	</div>
 	<n-data-table
 		striped
 		remote
