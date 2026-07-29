@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue"
+import { computed, onBeforeUnmount, reactive, ref, watch } from "vue"
 import { useDialog, useMessage } from "naive-ui"
 import { useI18n } from "vue-i18n"
 import FtEditor from "@/components/FtEditor/index.vue"
@@ -77,14 +77,14 @@ const openFile = async () => {
 		activateTab(existing.path)
 		return
 	}
-	const tab: EditorTab = {
+	const tab = reactive<EditorTab>({
 		path: props.path,
 		extension: props.extension,
 		content: "",
 		originalContent: "",
 		loading: false,
 		error: ""
-	}
+	})
 	tabs.value.push(tab)
 	activateTab(tab.path)
 	await loadTab(tab)
