@@ -100,20 +100,6 @@ export default function getItems(_: { mode: "vertical" | "horizontal"; collapsed
 			key: "database",
 			icon: renderIcon("mdi:database")
 		},
-		{
-			label: () =>
-				h(
-					RouterLink,
-					{
-						to: {
-							name: "Cronjob-Index"
-						}
-					},
-					{ default: () => t("menu.cronjob") }
-				),
-			key: "cronjob",
-			icon: renderIcon("mdi:calendar-clock")
-		},
 		// 「多节点」不在这个菜单里：它是"换一台机器操作"的场景切换，
 		// 层级和网站/数据库这些业务菜单不同，已单独放到侧栏底部的固定入口
 		// （layouts/common/NodeEntry），悬停出节点状态浮层。
@@ -254,6 +240,19 @@ export default function getItems(_: { mode: "vertical" | "horizontal"; collapsed
 							{ default: () => t("menu.monitor") }
 						),
 					key: "Host-Monitor"
+				},
+				{
+					label: () =>
+						h(
+							RouterLink,
+							{
+								to: {
+									name: "Cronjob-Index"
+								}
+							},
+							{ default: () => t("menu.cronjob") }
+						),
+					key: "Cronjob-Index"
 				}
 			]
 		},
