@@ -126,10 +126,11 @@ func GetAISession(c fiber.Ctx) error {
 func CreateAISession(c fiber.Ctx) error {
 	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
 	var req struct {
-		Title      string `json:"title"`
-		WorkDir    string `json:"workDir"`
-		ProjectID  uint   `json:"projectId"`
-		ExecutorID string `json:"executorId"`
+		Title         string                `json:"title"`
+		WorkDir       string                `json:"workDir"`
+		ProjectID     uint                  `json:"projectId"`
+		ExecutorID    string                `json:"executorId"`
+		CodexProvider *codexProviderRequest `json:"codexProvider"`
 	}
 	if bindErr := c.Bind().JSON(&req); bindErr != nil {
 		return c.JSON(e.Fail(bindErr))
@@ -166,11 +167,18 @@ func CreateAISession(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
+	codexProvider, err := normalizeCodexProviderRequest(executorID, req.CodexProvider)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
 	title := strings.TrimSpace(req.Title)
 	if title == "" {
 		title = buildDefaultSessionTitle(workDir, "")
 	}
 	session := &model.AIDevSession{UserID: claims.UserId, ProjectID: req.ProjectID, Title: title, AgentName: executorID, WorkDir: workDir, Status: "active", CurrentStage: "idle"}
+	if err := setCodexProviderOnSession(session, codexProvider); err != nil {
+		return c.JSON(e.Fail(err))
+	}
 	sessionRepo := repo.NewAIDevSessionRepo()
 	if err := sessionRepo.CreateSession(session); err != nil {
 		return c.JSON(e.Fail(err))
@@ -362,6 +370,7 @@ func GetAISessionState(c fiber.Ctx) error {
 	}
 	return c.JSON(e.Succ(fiber.Map{
 		"session":           session,
+		"codexRuntime":      getCodexRuntimeState(session),
 		"currentTask":       currentTask,
 		"latestInstruction": latestInstruction,
 		"currentStage":      session.CurrentStage,

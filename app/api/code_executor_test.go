@@ -120,7 +120,7 @@ func TestBuildAiderExecutorArgsUsesSessionHistory(t *testing.T) {
 }
 
 func TestBuildCodeExecutorCommandUsesWorkDir(t *testing.T) {
-	command, _, err := buildCodeExecutorCommand(context.Background(), "codex", t.TempDir(), "inspect only", "", 1)
+	command, _, err := buildCodeExecutorCommand(context.Background(), "codex", t.TempDir(), "inspect only", "", 1, nil)
 	if err != nil {
 		t.Skipf("codex is not installed: %v", err)
 	}

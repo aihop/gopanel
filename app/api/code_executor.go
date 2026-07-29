@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/aihop/gopanel/app/e"
+	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/utils/token"
 	"github.com/gofiber/fiber/v3"
@@ -202,7 +203,7 @@ func ensureAiderHistoryDir() (string, error) {
 	return historyDir, nil
 }
 
-func buildCodeExecutorCommand(ctx context.Context, executorID, workDir, prompt, nativeSessionID string, sessionID uint) (*exec.Cmd, string, error) {
+func buildCodeExecutorCommand(ctx context.Context, executorID, workDir, prompt, nativeSessionID string, sessionID uint, session *model.AIDevSession) (*exec.Cmd, string, error) {
 	definition, err := getCodeExecutorDefinition(executorID)
 	if err != nil {
 		return nil, "", err
@@ -220,6 +221,11 @@ func buildCodeExecutorCommand(ctx context.Context, executorID, workDir, prompt, 
 	}
 	command := exec.CommandContext(ctx, commandPath, args...)
 	command.Dir = workDir
+	if definition.ID == "codex" {
+		if err := configureCodexCommand(command, session); err != nil {
+			return nil, "", err
+		}
+	}
 	return command, preparedSessionID, nil
 }
 

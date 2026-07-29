@@ -28,6 +28,9 @@ func buildNativeCodexCommand(session *model.AIDevSession) (*exec.Cmd, error) {
 	}
 	command := exec.Command(commandPath, args...)
 	command.Dir = session.WorkDir
+	if err := configureCodexCommand(command, session); err != nil {
+		return nil, err
+	}
 	return command, nil
 }
 
