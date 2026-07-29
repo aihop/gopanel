@@ -91,6 +91,11 @@ async function selectSession(session: CodeSession) {
 	await loadSessionState()
 }
 
+async function leaveTaskDetail() {
+	activeTab.value = "overview"
+	await loadOverview()
+}
+
 async function handleSessionCreated(session: CodeSession) {
 	activeTab.value = "code"
 	selectedSessionId.value = session.id
@@ -185,23 +190,27 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-	<div class="min-h-dvh bg-slate-100 text-slate-900" :class="isTaskDetail ? 'pb-44' : 'pb-24'">
+	<div class="min-h-dvh bg-slate-100 pb-24 text-slate-900">
 		<header class="sticky top-0 z-20 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur">
-			<div class="mx-auto flex max-w-2xl items-center justify-between">
+			<div v-if="isTaskDetail" class="mx-auto grid max-w-2xl grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3">
+				<n-button size="small" quaternary @click="leaveTaskDetail">{{ t("commons.button.back") }}</n-button>
+				<div class="truncate text-center text-sm font-semibold">{{ selectedSession?.title }}</div>
+				<n-button size="small" type="primary" secondary @click="showFiles = true">{{ t("mobile.files") }}</n-button>
+			</div>
+			<div v-else class="mx-auto flex max-w-2xl items-center justify-between">
 				<div>
 					<div class="text-lg font-bold">GoPanel</div>
 					<div class="text-xs text-slate-500">{{ t("mobile.title") }}</div>
 				</div>
 				<div class="flex items-center gap-1">
-					<n-button v-if="isTaskDetail" size="small" quaternary @click="activeTab = 'overview'; loadOverview()">{{ t("mobile.overview") }}</n-button>
 					<n-button size="small" type="primary" secondary @click="showSessionCreator = true">{{ t("mobile.newSession") }}</n-button>
 					<n-button size="small" quaternary @click="confirmLogout">{{ t("mobile.logout") }}</n-button>
 				</div>
 			</div>
 		</header>
 
-		<main class="mx-auto max-w-2xl p-4">
-			<n-alert v-if="isHttp" type="warning" :show-icon="false" class="mb-4">{{ t("mobile.httpWarning") }}</n-alert>
+		<main class="mx-auto max-w-2xl" :class="isTaskDetail ? 'p-2' : 'p-4'">
+			<n-alert v-if="isHttp && !isTaskDetail" type="warning" :show-icon="false" class="mb-4">{{ t("mobile.httpWarning") }}</n-alert>
 			<n-alert v-if="loadError" type="error" class="mb-4" :title="t('mobile.loadFailed')">{{ loadError }}</n-alert>
 
 			<n-spin :show="loading">
@@ -239,8 +248,8 @@ onBeforeUnmount(() => {
 					</section>
 				</div>
 
-				<div v-else class="space-y-4">
-					<div class="flex items-center gap-2 overflow-x-auto pb-1">
+				<div v-else :class="isTaskDetail ? 'space-y-2' : 'space-y-4'">
+					<div v-if="!isTaskDetail" class="flex items-center gap-2 overflow-x-auto pb-1">
 						<n-button size="small" round type="primary" secondary class="shrink-0" @click="showSessionCreator = true">+ {{ t("mobile.newSession") }}</n-button>
 						<n-button v-for="session in sessions" :key="session.id" size="small" round :type="selectedSessionId === session.id ? 'primary' : 'default'" @click="selectSession(session)">{{ session.title }}</n-button>
 					</div>
@@ -248,24 +257,7 @@ onBeforeUnmount(() => {
 						<template #extra><n-button type="primary" @click="showSessionCreator = true">{{ t("mobile.newSession") }}</n-button></template>
 					</n-empty>
 					<template v-else-if="selectedSession">
-						<section class="rounded-2xl bg-white p-4 shadow-sm">
-							<div class="flex flex-wrap items-center justify-between gap-3">
-								<div class="min-w-0">
-									<h2 class="truncate font-semibold">{{ selectedSession.title }}</h2>
-									<div class="mt-1 truncate text-xs text-slate-500">{{ selectedSession.workDir }}</div>
-								</div>
-								<div class="flex shrink-0 items-center gap-2">
-									<n-button size="small" secondary @click="showFiles = true">{{ t("mobile.files") }}</n-button>
-									<n-tag :type="sessionState?.currentStage === 'failed' ? 'error' : isRunning ? 'info' : 'success'">{{ sessionState?.currentStage || selectedSession.currentStage }}</n-tag>
-								</div>
-							</div>
-						</section>
 						<MobileTerminal :session-id="selectedSessionId" />
-						<div v-if="sessionState?.recentMessages.length" class="max-h-[42dvh] space-y-3 overflow-y-auto px-1">
-							<div v-for="item in sessionState.recentMessages" :key="item.id" class="flex" :class="item.role === 'user' ? 'justify-end' : 'justify-start'">
-								<pre class="max-w-[90%] whitespace-pre-wrap break-words rounded-2xl px-3 py-2 font-sans text-sm" :class="item.role === 'user' ? 'bg-blue-600 text-white' : 'bg-white text-slate-700'">{{ item.content }}</pre>
-							</div>
-						</div>
 						<n-alert v-if="sessionState?.pendingApproval" type="warning" :title="sessionState.pendingApproval.title">
 							<div class="whitespace-pre-wrap text-sm">{{ sessionState.pendingApproval.content }}</div>
 							<div class="mt-3 flex gap-2">
@@ -275,22 +267,14 @@ onBeforeUnmount(() => {
 						</n-alert>
 
 						<n-alert v-if="sessionState?.errorSummary" type="error">{{ sessionState.errorSummary }}</n-alert>
-						<section v-if="sessionState?.changedFiles.length" class="rounded-2xl bg-white p-4 shadow-sm">
-							<div class="mb-2 text-sm font-semibold">{{ t("mobile.changedFiles") }}</div>
-							<div class="flex flex-wrap gap-2"><n-tag v-for="file in sessionState.changedFiles" :key="file" size="small">{{ file }}</n-tag></div>
-						</section>
-						<section v-if="sessionState?.previews.length" class="rounded-2xl bg-white p-4 shadow-sm">
-							<div class="mb-2 text-sm font-semibold">{{ t("mobile.previews") }}</div>
-							<a v-for="preview in sessionState.previews" :key="preview.id" :href="preview.url" target="_blank" class="mr-3 text-sm text-blue-600">{{ preview.title }}</a>
-						</section>
 						<div class="flex gap-2">
 							<n-button v-if="isRunning" type="error" secondary :loading="actionLoading" @click="stopExecution">{{ t("mobile.stop") }}</n-button>
 							<n-button v-if="['failed', 'cancelled'].includes(sessionState?.latestInstruction?.status || '')" secondary :loading="actionLoading" @click="retryExecution">{{ t("mobile.retryExecution") }}</n-button>
 						</div>
 						<div class="fixed inset-x-0 bottom-0 z-30 px-3 pb-[max(12px,env(safe-area-inset-bottom))]">
-							<div class="mx-auto max-w-2xl rounded-2xl border border-slate-200 bg-white p-3 shadow-xl">
-								<n-input v-model:value="prompt" type="textarea" :placeholder="t('mobile.instructionPlaceholder')" :autosize="{ minRows: 2, maxRows: 5 }" :disabled="actionLoading" />
-								<n-button type="primary" block class="mt-2" :loading="actionLoading" :disabled="!prompt.trim()" @click="sendInstruction">{{ t("mobile.send") }}</n-button>
+							<div class="mx-auto flex max-w-2xl items-end gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
+								<n-input v-model:value="prompt" class="min-w-0 flex-1" type="textarea" :placeholder="t('mobile.instructionPlaceholder')" :autosize="{ minRows: 1, maxRows: 4 }" :disabled="actionLoading" />
+								<n-button type="primary" :loading="actionLoading" :disabled="!prompt.trim()" @click="sendInstruction">{{ t("mobile.send") }}</n-button>
 							</div>
 						</div>
 					</template>

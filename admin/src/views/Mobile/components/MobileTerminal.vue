@@ -177,7 +177,7 @@ onBeforeUnmount(closeTerminal)
 				</n-button>
 			</div>
 		</header>
-		<div ref="terminalElement" class="h-[52dvh] min-h-80 w-full bg-[#0b1020]" />
+		<div ref="terminalElement" class="h-[calc(100dvh-210px)] min-h-80 w-full bg-[#0b1020]" />
 	</section>
 </template>
 
