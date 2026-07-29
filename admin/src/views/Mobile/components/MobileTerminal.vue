@@ -7,7 +7,7 @@ import Icon from "@/components/common/Icon.vue"
 import { mobileMessages } from "@/i18n/locales/mobile"
 import "xterm/css/xterm.css"
 
-const props = defineProps<{ sessionId: number; title: string }>()
+const props = defineProps<{ sessionId: number; title: string; projectName: string }>()
 const emit = defineEmits<{ back: []; openFiles: [] }>()
 const { t } = useI18n({ messages: mobileMessages })
 const terminalElement = ref<HTMLElement | null>(null)
@@ -161,14 +161,15 @@ onBeforeUnmount(closeTerminal)
 <template>
 	<section class="flex h-dvh w-full flex-col overflow-hidden bg-[#0b1020] text-white">
 		<header class="flex shrink-0 items-center gap-2 border-b border-white/10 bg-slate-950/80 px-2 pb-2 pt-[max(8px,env(safe-area-inset-top))] backdrop-blur">
-			<n-button size="small" quaternary circle text-color="#cbd5e1" :title="t('commons.button.back')" :aria-label="t('commons.button.back')" @click="emit('back')">
-				<template #icon><Icon name="mdi:arrow-left" :size="20" /></template>
-			</n-button>
+			<button class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-200 transition-colors active:bg-white/10" type="button" :title="t('commons.button.back')" :aria-label="t('commons.button.back')" @click="emit('back')">
+				<svg viewBox="0 0 24 24" aria-hidden="true" class="h-6 w-6 fill-none stroke-current" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+					<path d="M19 12H5" />
+					<path d="m12 19-7-7 7-7" />
+				</svg>
+			</button>
 			<div class="min-w-0 flex-1">
-				<div class="truncate text-sm font-semibold">{{ title }}</div>
-				<div class="mt-0.5 truncate text-[11px] text-slate-400">
-					{{ t("mobile.sharedTerminal") }} · {{ hasControl ? t("mobile.terminalControlling") : t("mobile.terminalReadOnly") }}
-				</div>
+				<div class="truncate text-sm font-semibold">{{ projectName }}</div>
+				<div class="mt-0.5 truncate text-[11px] text-slate-400">{{ title }}</div>
 			</div>
 			<div class="flex shrink-0 items-center gap-1.5">
 				<n-tag size="small" :type="connected ? 'success' : reconnecting ? 'warning' : 'default'" :bordered="false" round>

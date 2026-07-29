@@ -337,7 +337,7 @@ onBeforeUnmount(() => {
 						</template>
 					</n-empty>
 					<template v-else-if="selectedSession">
-						<MobileTerminal :session-id="selectedSessionId" :title="selectedSession.title" @back="leaveTaskDetail" @open-files="showFiles = true" />
+						<MobileTerminal :session-id="selectedSessionId" :title="selectedSession.title" :project-name="sessionProjectName(selectedSession)" @back="leaveTaskDetail" @open-files="showFiles = true" />
 						<n-alert v-if="sessionState?.pendingApproval" type="warning" :title="sessionState.pendingApproval.title">
 							<div class="whitespace-pre-wrap text-sm">{{ sessionState.pendingApproval.content }}</div>
 							<div class="mt-3 flex gap-2">
