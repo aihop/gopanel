@@ -50,13 +50,13 @@ export default function getItems(_: { mode: "vertical" | "horizontal"; collapsed
 					RouterLink,
 					{
 						to: {
-							name: "AIAgent-Index"
+							name: "Code-Index"
 						}
 					},
-					{ default: () => t("menu.ai_tools") }
+					{ default: () => t("menu.code") }
 				),
-			key: "ai",
-			icon: renderIcon("mdi:robot-outline")
+			key: "code",
+			icon: renderIcon("mdi:code-braces")
 		},
 		{
 			label: () =>

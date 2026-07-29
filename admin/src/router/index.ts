@@ -65,22 +65,22 @@ const router = createRouter({
 			]
 		},
 		{
-			path: "/ai",
-			name: "AIAgent",
-			redirect: "/ai/index",
-			meta: { title: "AI助手", titleKey: "menu.aiAssistant", auth: true, roles: "all" },
+			path: "/code",
+			name: "Code",
+			redirect: "/code/index",
+			meta: { title: t("menu.code"), titleKey: "menu.code", auth: true, roles: "all" },
 			children: [
 				{
 					path: "index",
-					name: "AIAgent-Index",
-					component: () => import("@/views/AIAgent/Index.vue"),
-					meta: { title: "终端与智能体", titleKey: "ai.agentHub", auth: true, roles: "all" }
+					name: "Code-Index",
+					component: () => import("@/views/Code/Index.vue"),
+					meta: { title: t("code.workspace"), titleKey: "code.workspace", auth: true, roles: "all" }
 				},
 				{
 					path: "group/:id",
-					name: "AIAgent-Group",
-					component: () => import("@/views/AIAgent/Workspace.vue"),
-					meta: { title: "团队协作区", titleKey: "ai.teamWorkspace", auth: true, roles: "all" }
+					name: "Code-Group",
+					component: () => import("@/views/Code/Workspace.vue"),
+					meta: { title: t("code.teamWorkspace"), titleKey: "code.teamWorkspace", auth: true, roles: "all" }
 				}
 			]
 		},

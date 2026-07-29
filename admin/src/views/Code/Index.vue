@@ -6,8 +6,8 @@
     <div class="group-lobby flex-1 overflow-y-auto p-6 md:p-10">
       <div class="lobby-header mb-10 flex justify-between items-center">
         <div>
-          <h1 class="text-2xl font-bold text-[var(--n-text-color)] mb-2">{{ $t('ai.workspace') }}</h1>
-          <p class="text-[var(--n-text-color-3)] text-sm">{{ $t('ai.workspaceDesc') }}</p>
+          <h1 class="text-2xl font-bold text-[var(--n-text-color)] mb-2">{{ $t('code.workspace') }}</h1>
+          <p class="text-[var(--n-text-color-3)] text-sm">{{ $t('code.workspaceDesc') }}</p>
         </div>
         <n-button
           type="primary"
@@ -18,7 +18,7 @@
           <template #icon>
             <AddIcon />
           </template>
-          {{ $t('ai.createGroup') }}
+          {{ $t('code.createGroup') }}
         </n-button>
       </div>
 
@@ -27,7 +27,7 @@
         class="flex justify-center items-center h-64"
       >
         <n-empty
-          :description="$t('ai.noGroup')"
+          :description="$t('code.noGroup')"
           size="huge"
         />
       </div>
@@ -52,31 +52,31 @@
               size="small"
               type="info"
               round
-            >{{ group.memberCount || 1 }} {{ $t('ai.member') }}</n-tag>
+            >{{ group.memberCount || 1 }} {{ $t('code.member') }}</n-tag>
           </div>
           <h3 class="group-card__title text-lg font-semibold mb-2">{{ group.name }}</h3>
-          <p class="group-card__desc text-sm line-clamp-2 mb-5">{{ group.description || $t('ai.noDesc') }}</p>
+          <p class="group-card__desc text-sm line-clamp-2 mb-5">{{ group.description || $t('code.noDesc') }}</p>
           <div class="group-card__footer flex justify-between items-center text-xs pt-4">
-            <span>{{ group.taskCount || 0 }} {{ $t('ai.task') }}</span>
-            <span class="group-card__action">{{ $t('ai.enterWorkspace') }}</span>
+            <span>{{ group.taskCount || 0 }} {{ $t('code.task') }}</span>
+            <span class="group-card__action">{{ $t('code.enterWorkspace') }}</span>
           </div>
         </div>
       </div>
       <n-modal
         v-model:show="showCreateGroupModal"
         preset="dialog"
-        :title="$t('ai.createGroup')"
+        :title="$t('code.createGroup')"
       >
         <div class="flex flex-col gap-4 mt-4">
           <n-input
             v-model:value="newGroupForm.name"
-            :placeholder="$t('ai.groupName')"
+            :placeholder="$t('code.groupName')"
             placeholder-class="text-[var(--n-text-color-3)]"
           />
           <n-input
             v-model:value="newGroupForm.desc"
             type="textarea"
-            :placeholder="$t('ai.groupDesc')"
+            :placeholder="$t('code.groupDesc')"
           />
         </div>
         <template #action>
@@ -95,8 +95,8 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
-import { getAIGroups, createAIGroup } from '@/api/modules/ai_agent'
-import type { AIGroup } from '@/api/interface/ai_agent'
+import { getAIGroups, createAIGroup } from '@/api/modules/code'
+import type { AIGroup } from '@/api/interface/code'
 
 const AddIcon = () => '+'
 
@@ -145,7 +145,7 @@ const submitCreateGroup = async () => {
 }
 
 const enterGroup = (id: number) => {
-  router.push(`/ai/group/${id}`)
+  router.push(`/code/group/${id}`)
 }
 </script>
 

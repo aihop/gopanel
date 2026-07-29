@@ -8,9 +8,9 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
-func AIAgentRouter(r fiber.Router) {
-	group := r.Group("ai")
-	// 注意这里使用了 SUB_ADMIN 权限，因为 AI 助手也需要受到目录沙箱的限制
+func CodeRouter(r fiber.Router) {
+	group := r.Group("code")
+	// Code 工作区使用 SUB_ADMIN 权限，确保普通管理员仍受目录沙箱限制。
 	group.Use(middleware.JWT(constant.UserRoleSubAdmin))
 	{
 		// WebSocket 端点

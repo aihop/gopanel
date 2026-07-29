@@ -14,7 +14,7 @@ func TestIsQueryTokenAllowed(t *testing.T) {
 	allowed := []string{
 		"/api/pipeline/logs",
 		"/api/file/compress/logs",
-		"/api/ai/terminal",
+		"/api/code/terminal",
 		"/api/host/disk/scan/stream",
 	}
 	for _, p := range allowed {

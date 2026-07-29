@@ -31,7 +31,7 @@
                     <template #icon>←</template>
                   </n-button>
                   <div class="min-w-0">
-                    <div class="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">AI Workspace</div>
+                    <div class="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">{{ $t('code.workspace') }}</div>
                     <div class="truncate text-sm font-semibold text-[var(--n-text-color)]">{{ groupInfo ? groupInfo.name : '项目组' }}</div>
                   </div>
                 </div>
@@ -146,7 +146,7 @@
           </div>
 
           <div class="ai-workspace-terminal-wrap min-h-0 flex-1 overflow-hidden rounded-[26px] border border-slate-200/80 bg-[#0f172a] shadow-[0_24px_50px_rgba(15,23,42,0.18)]">
-            <AgentTerminal
+            <CodeTerminal
               v-if="currentTaskId !== null || isNewTask"
               :key="terminalKey"
               :task-id="currentTaskId"
@@ -204,9 +204,9 @@
 import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useMessage, useDialog } from 'naive-ui'
-import AgentTerminal from './components/AgentTerminal.vue'
-import { getAITasks, updateAITask, deleteAITask, getAIGroups } from '@/api/modules/ai_agent'
-import type { AITask, AIGroup } from '@/api/interface/ai_agent'
+import CodeTerminal from './components/CodeTerminal.vue'
+import { getAITasks, updateAITask, deleteAITask, getAIGroups } from '@/api/modules/code'
+import type { AITask, AIGroup } from '@/api/interface/code'
 
 const route = useRoute()
 const router = useRouter()
@@ -232,7 +232,7 @@ const fetchGroupInfo = async () => {
 }
 
 const backToLobby = () => {
-  router.push('/ai/index')
+  router.push('/code/index')
 }
 
 // === 任务与终端逻辑 ===
@@ -261,7 +261,7 @@ onMounted(() => {
 watch(
   () => route.params.id,
   (newId) => {
-    if (newId && route.name === 'AIAgent-Group') {
+    if (newId && route.name === 'Code-Group') {
       currentTaskId.value = null
       isNewTask.value = false
       fetchGroupInfo()

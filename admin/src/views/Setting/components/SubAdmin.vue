@@ -179,7 +179,7 @@ const roleOptions = [
 ]
 
 const menuOptions = [
-	{ label: t("menu.ai_tools"), key: "ai" },
+	{ label: t("menu.code"), key: "code" },
 	{ label: t("menu.dashboard"), key: "dashboard" },
 	{ label: t("menu.website"), key: "website" },
 	{ label: t("menu.ssl"), key: "ssl" },

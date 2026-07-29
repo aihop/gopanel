@@ -177,14 +177,14 @@ const groups = ref<Groups>([
 				}
 			},
 			{
-				iconName: "mdi:robot-outline",
+				iconName: "mdi:code-braces",
 				iconImage: null,
-				key: "ai",
-				title: "AI 助手",
+				key: "code",
+				title: t("code.workspace"),
 				label: "快捷",
-				tags: ["ai", "agent", "terminal", "终端", "智能体"],
+				tags: ["code", "ai", "agent", "terminal", "开发", "终端", "智能体"],
 				action() {
-					router.push({ name: "AIAgent-Index" })
+					router.push({ name: "Code-Index" })
 				}
 			},
 			{

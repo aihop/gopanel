@@ -32,7 +32,7 @@ async function authCheck(
 			return next({ path: "/dashboard/index" })
 		}
 		// --- 新增：菜单权限拦截 ---
-		// 检查路由对应的顶层模块 key，例如 /ai/xxx 对应 ai，/website/xxx 对应 website
+		// 检查路由对应的顶层模块 key，例如 /code/xxx 对应 code，/website/xxx 对应 website
 		const pathParts = to.path.split("/").filter(Boolean)
 		if (pathParts.length > 0 && to.path !== "/profile" && to.path !== "/setting" && to.path !== "/dashboard/index") {
 			const topModule = pathParts[0]

@@ -55,7 +55,7 @@ const initTerminal = () => {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:"
   const token = authStore.auth || ""
   
-  let wsUrl = `${protocol}//${window.location.host}/api/ai/terminal?token=${token}&cols=${term.cols}&rows=${term.rows}`
+  let wsUrl = `${protocol}//${window.location.host}/api/code/terminal?token=${token}&cols=${term.cols}&rows=${term.rows}`
   
   if (props.taskId) {
     wsUrl += `&task_id=${props.taskId}`
