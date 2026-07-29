@@ -3,10 +3,14 @@ import { computed, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 import { useMessage } from "naive-ui"
 import { createCodeSession, getCodeExecutors, getCodeWorktreeCapability } from "@/api/modules/code"
-import type { CodeApprovalPolicy, CodeExecutor, CodeSession, CodeWorktreeCapability } from "@/api/interface/code"
+import type {
+	CodeApprovalPolicy,
+	CodeExecutor,
+	CodeExecutorConfig,
+	CodeSession,
+	CodeWorktreeCapability
+} from "@/api/interface/code"
 import { newCodeSessionMessages } from "../newCodeSessionMessages"
-
-type CodexWireAPI = "responses"
 
 const props = defineProps<{
 	show: boolean
@@ -23,10 +27,8 @@ const message = useMessage()
 const executors = ref<CodeExecutor[]>([])
 const selectedExecutorId = ref("")
 const approvalPolicy = ref<CodeApprovalPolicy>("safe_auto")
-const codexProviderMode = ref<"default" | "custom">("default")
-const codexBaseUrl = ref("")
-const codexApiKey = ref("")
-const codexWireApi = ref<CodexWireAPI>("responses")
+const providerMode = ref<"default" | "custom">("default")
+const providerConfig = ref<CodeExecutorConfig>({ baseUrl: "", apiKey: "", model: "" })
 const isolated = ref(false)
 const worktreeCapability = ref<CodeWorktreeCapability | null>(null)
 const title = ref("")
@@ -35,11 +37,11 @@ const submitting = ref(false)
 const loadError = ref("")
 
 const availableExecutors = computed(() => executors.value.filter(executor => executor.available))
-const showCodexProvider = computed(() => selectedExecutorId.value === "codex")
-const codexWireApiOptions = computed(() => [
-	{ label: t("code.codexWireApiResponses"), value: "responses" },
-	{ label: t("code.codexWireApiChatUnsupported"), value: "chat", disabled: true }
-])
+const selectedExecutor = computed(() => executors.value.find(executor => executor.id === selectedExecutorId.value))
+const providerFields = computed(() => selectedExecutor.value?.configSchema?.fields || [])
+const showProviderConfig = computed(() => providerFields.value.length > 0)
+const providerFieldLabel = (key: keyof CodeExecutorConfig) => t(`code.providerField_${key}`)
+const providerFieldPlaceholder = (key: keyof CodeExecutorConfig) => t(`code.providerPlaceholder_${key}`)
 
 const loadExecutors = async () => {
 	loading.value = true
@@ -77,10 +79,8 @@ watch(
 		if (show) {
 			title.value = ""
 			approvalPolicy.value = "safe_auto"
-			codexProviderMode.value = "default"
-			codexBaseUrl.value = ""
-			codexApiKey.value = ""
-			codexWireApi.value = "responses"
+			providerMode.value = "default"
+			providerConfig.value = { baseUrl: "", apiKey: "", model: "" }
 			void Promise.all([loadExecutors(), loadWorktreeCapability()])
 		}
 	}
@@ -93,13 +93,12 @@ const submit = async () => {
 		message.warning(t("code.selectExecutorRequired"))
 		return
 	}
-	if (showCodexProvider.value && codexProviderMode.value === "custom") {
-		if (!codexBaseUrl.value.trim()) {
-			message.warning(t("code.codexBaseUrlRequired"))
-			return
-		}
-		if (!codexApiKey.value.trim()) {
-			message.warning(t("code.codexApiKeyRequired"))
+	if (showProviderConfig.value && providerMode.value === "custom") {
+		const missingField = providerFields.value.find(
+			field => field.required && !providerConfig.value[field.key].trim()
+		)
+		if (missingField) {
+			message.warning(t("code.providerFieldRequired", { field: providerFieldLabel(missingField.key) }))
 			return
 		}
 	}
@@ -112,13 +111,11 @@ const submit = async () => {
 			executorId: selectedExecutorId.value,
 			approvalPolicy: approvalPolicy.value,
 			isolated: isolated.value,
-			codexProvider:
-				showCodexProvider.value && codexProviderMode.value === "custom"
-					? {
-							baseUrl: codexBaseUrl.value.trim(),
-							apiKey: codexApiKey.value.trim(),
-							wireApi: codexWireApi.value
-						}
+			provider:
+				showProviderConfig.value && providerMode.value === "custom"
+					? (Object.fromEntries(
+							providerFields.value.map(field => [field.key, providerConfig.value[field.key].trim()])
+						) as unknown as CodeExecutorConfig)
 					: undefined
 		}
 		const response = await createCodeSession(sessionRequest)
@@ -200,44 +197,37 @@ const submit = async () => {
 						<n-form-item :label="t('code.sessionTitle')">
 							<n-input v-model:value="title" :placeholder="t('code.sessionTitlePlaceholder')" />
 						</n-form-item>
-						<n-form-item v-if="showCodexProvider" :label="t('code.codexProvider')">
+						<n-form-item v-if="showProviderConfig" :label="t('code.provider')">
 							<div class="w-full space-y-3">
-								<n-radio-group v-model:value="codexProviderMode">
+								<n-radio-group v-model:value="providerMode">
 									<n-space>
-										<n-radio value="default">{{ t("code.codexProviderDefault") }}</n-radio>
-										<n-radio value="custom">{{ t("code.codexProviderCustom") }}</n-radio>
+										<n-radio value="default">{{ t("code.providerDefault") }}</n-radio>
+										<n-radio value="custom">{{ t("code.providerCustom") }}</n-radio>
 									</n-space>
 								</n-radio-group>
 								<n-alert type="info" :show-icon="false">
 									{{
-										codexProviderMode === "default"
-											? t("code.codexProviderDefaultHint")
-											: t("code.codexProviderCustomHint")
+										providerMode === "default"
+											? t("code.providerDefaultHint", { executor: selectedExecutor?.name || "" })
+											: t("code.providerCustomHint")
 									}}
 								</n-alert>
 								<div
-									v-if="codexProviderMode === 'custom'"
+									v-if="providerMode === 'custom'"
 									class="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:grid-cols-2"
 								>
-									<n-form-item :label="t('code.codexBaseUrl')" :show-feedback="false">
-										<n-input
-											v-model:value="codexBaseUrl"
-											:placeholder="t('code.codexBaseUrlPlaceholder')"
-										/>
-									</n-form-item>
-									<n-form-item :label="t('code.codexWireApi')" :show-feedback="false">
-										<n-select v-model:value="codexWireApi" :options="codexWireApiOptions" />
-									</n-form-item>
 									<n-form-item
-										class="sm:col-span-2"
-										:label="t('code.codexApiKey')"
+										v-for="field in providerFields"
+										:key="field.key"
+										:class="field.key === 'apiKey' ? 'sm:col-span-2' : ''"
+										:label="providerFieldLabel(field.key)"
 										:show-feedback="false"
 									>
 										<n-input
-											v-model:value="codexApiKey"
-											type="password"
-											show-password-on="click"
-											:placeholder="t('code.codexApiKeyPlaceholder')"
+											v-model:value="providerConfig[field.key]"
+											:type="field.type === 'password' ? 'password' : 'text'"
+											:show-password-on="field.type === 'password' ? 'click' : undefined"
+											:placeholder="providerFieldPlaceholder(field.key)"
 										/>
 									</n-form-item>
 								</div>

@@ -127,13 +127,14 @@ func GetAISession(c fiber.Ctx) error {
 func CreateAISession(c fiber.Ctx) error {
 	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
 	var req struct {
-		Title          string                `json:"title"`
-		WorkDir        string                `json:"workDir"`
-		ProjectID      uint                  `json:"projectId"`
-		ExecutorID     string                `json:"executorId"`
-		ApprovalPolicy string                `json:"approvalPolicy"`
-		Isolated       bool                  `json:"isolated"`
-		CodexProvider  *codexProviderRequest `json:"codexProvider"`
+		Title          string               `json:"title"`
+		WorkDir        string               `json:"workDir"`
+		ProjectID      uint                 `json:"projectId"`
+		ExecutorID     string               `json:"executorId"`
+		ApprovalPolicy string               `json:"approvalPolicy"`
+		Isolated       bool                 `json:"isolated"`
+		Provider       *codeProviderRequest `json:"provider"`
+		CodexProvider  *codeProviderRequest `json:"codexProvider"`
 	}
 	if bindErr := c.Bind().JSON(&req); bindErr != nil {
 		return c.JSON(e.Fail(bindErr))
@@ -172,7 +173,11 @@ func CreateAISession(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	codexProvider, err := normalizeCodexProviderRequest(executorID, req.CodexProvider)
+	providerRequest := req.Provider
+	if providerRequest == nil {
+		providerRequest = req.CodexProvider
+	}
+	provider, err := normalizeCodeProviderRequest(executorID, providerRequest)
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
@@ -185,7 +190,7 @@ func CreateAISession(c fiber.Ctx) error {
 		title = buildDefaultSessionTitle(workDir, "")
 	}
 	session := &model.AIDevSession{UserID: claims.UserId, ProjectID: req.ProjectID, Title: title, AgentName: executorID, WorkDir: workDir, Status: "active", CurrentStage: "idle", ApprovalPolicy: approvalPolicy}
-	if err := setCodexProviderOnSession(session, codexProvider); err != nil {
+	if err := setCodeProviderOnSession(session, provider); err != nil {
 		return c.JSON(e.Fail(err))
 	}
 	sessionRepo := repo.NewAIDevSessionRepo()

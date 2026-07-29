@@ -140,15 +140,11 @@
 							</n-button>
 							<CodeApprovalCenter :session-id="currentSessionId" @take-terminal="takeOverTerminal" />
 							<SessionApprovalPolicy v-if="currentSessionId !== null" :session-id="currentSessionId" />
-							<n-radio-group
+							<WorkspaceModeSwitch
 								v-if="currentSessionId !== null || currentTaskId !== null"
 								:value="workspaceMode"
-								size="small"
 								@update:value="switchWorkspaceMode"
-							>
-								<n-radio-button value="editor">{{ t("code.editorMode") }}</n-radio-button>
-								<n-radio-button value="terminal">{{ t("code.terminalMode") }}</n-radio-button>
-							</n-radio-group>
+							/>
 							<n-button
 								v-if="currentSessionId !== null || currentTaskId !== null"
 								size="small"
@@ -176,7 +172,17 @@
 							</n-button>
 						</div>
 					</div>
-
+					<div
+						v-if="currentSessionId !== null"
+						v-show="workspaceMode === 'changes'"
+						class="ai-workspace-editor-shell min-h-0 flex-1 overflow-hidden rounded-[20px] border border-slate-200/80 bg-white shadow-[0_24px_50px_rgba(15,23,42,0.14)]"
+					>
+						<CodeGitReview
+							:session-id="currentSessionId"
+							:active="workspaceMode === 'changes'"
+							@open-file="openFile"
+						/>
+					</div>
 					<div
 						v-show="workspaceMode === 'editor'"
 						class="ai-workspace-editor-shell flex min-h-0 flex-1 overflow-hidden rounded-[20px] border border-slate-200/80 bg-white shadow-[0_24px_50px_rgba(15,23,42,0.14)]"
@@ -261,7 +267,6 @@
 import { computed, nextTick, onMounted, ref, watch } from "vue"
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from "vue-router"
 import { useDialog, useMessage } from "naive-ui"
-import { useEventListener } from "@vueuse/core"
 import { useI18n } from "vue-i18n"
 import { useHideLayoutFooter } from "@/composables/useHideLayoutFooter"
 import Icon from "@/components/common/Icon.vue"
@@ -273,7 +278,10 @@ import SessionHistoryDrawer from "./components/SessionHistoryDrawer.vue"
 import ProjectStructurePanel from "./components/ProjectStructurePanel.vue"
 import SessionFileEditor from "./components/SessionFileEditor.vue"
 import TaskStatusBadge from "./components/TaskStatusBadge.vue"
+import CodeGitReview from "./components/CodeGitReview.vue"
+import WorkspaceModeSwitch, { type CodeWorkspaceMode } from "./components/WorkspaceModeSwitch.vue"
 import { useCodeTaskPolling } from "./useCodeTaskPolling"
+import { useCodeWorkspaceFullscreen } from "./useCodeWorkspaceFullscreen"
 import { deleteAITask, getAIGroups, updateAITask } from "@/api/modules/code"
 import type { AIGroup, AITask, CodeSession } from "@/api/interface/code"
 import { codeWorkspaceMessages } from "./codeWorkspaceMessages"
@@ -293,11 +301,11 @@ const showNewSessionModal = ref(false)
 const showHistoryDrawer = ref(false)
 const showProjectStructure = ref(false)
 const showRenameModal = ref(false)
-const workspaceMode = ref<"editor" | "terminal">("editor")
+const workspaceMode = ref<CodeWorkspaceMode>("editor")
 const terminalMounted = ref(false)
 const terminalKey = ref(0)
 const terminalTakeoverRequested = ref(false)
-const isWorkspaceFullscreen = ref(false)
+const { isWorkspaceFullscreen, fullscreenLabel, toggleWorkspaceFullscreen } = useCodeWorkspaceFullscreen(t)
 const selectedFile = ref({ path: "", extension: "" })
 const activeFilePath = ref("")
 const fileEditorRef = ref<{ hasUnsavedChanges: boolean } | null>(null)
@@ -308,9 +316,6 @@ const renaming = ref(false)
 const currentTask = computed(() => tasks.value.find(task => task.id === currentTaskId.value) || null)
 const sessionLabel = computed(
 	() => currentTask.value?.title || (currentSessionId.value ? t("code.newSession") : t("code.selectTaskToStart"))
-)
-const fullscreenLabel = computed(() =>
-	t(isWorkspaceFullscreen.value ? "code.exitWorkspaceFullscreen" : "code.enterWorkspaceFullscreen")
 )
 const taskActionOptions = computed(() => [
 	{ label: t("code.renameTask"), key: "rename" },
@@ -402,7 +407,7 @@ const takeOverTerminal = () => {
 	terminalKey.value++
 }
 
-const switchWorkspaceMode = (mode: "editor" | "terminal") => {
+const switchWorkspaceMode = (mode: CodeWorkspaceMode) => {
 	workspaceMode.value = mode
 	if (mode === "terminal") terminalMounted.value = true
 }
@@ -471,14 +476,10 @@ const resetWorkspace = () => {
 }
 
 const backToLobby = () => router.push("/code/index")
-const toggleWorkspaceFullscreen = () => (isWorkspaceFullscreen.value = !isWorkspaceFullscreen.value)
 const confirmLeaveWorkspace = () =>
 	!fileEditorRef.value?.hasUnsavedChanges || window.confirm(t("code.switchSessionUnsavedHint"))
 onBeforeRouteLeave(confirmLeaveWorkspace)
 onBeforeRouteUpdate(confirmLeaveWorkspace)
-useEventListener(window, "keydown", event => {
-	if (event.key === "Escape") isWorkspaceFullscreen.value = false
-})
 
 onMounted(() => {
 	void fetchGroupInfo()
