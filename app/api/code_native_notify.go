@@ -3,6 +3,7 @@ package api
 import (
 	"time"
 
+	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
 	"github.com/aihop/gopanel/app/service"
 )
@@ -13,6 +14,8 @@ type nativeCodeNotifyTracker struct {
 	initialized bool
 	activeTurn  bool
 	lastState   string
+	taskStatus  string
+	lastTaskID  uint
 }
 
 func (tracker *nativeCodeNotifyTracker) observe(state *codexRuntimeState) string {
@@ -60,6 +63,12 @@ func watchNativeCodeNotifications(sessionID uint, done <-chan struct{}) {
 			return
 		}
 		state := getCodexRuntimeState(session)
+		status := nativeCodeTaskStatus(state)
+		if status != "" && (session.LastTaskID != tracker.lastTaskID || status != tracker.taskStatus) {
+			syncNativeCodeTaskStatus(session, status)
+			tracker.lastTaskID = session.LastTaskID
+			tracker.taskStatus = status
+		}
 		notifyState := tracker.observe(state)
 		if notifyState == "" {
 			return
@@ -78,6 +87,40 @@ func watchNativeCodeNotifications(sessionID uint, done <-chan struct{}) {
 			return
 		}
 	}
+}
+
+func nativeCodeTaskStatus(state *codexRuntimeState) string {
+	if state == nil {
+		return ""
+	}
+	switch state.ResponseState {
+	case "responding":
+		return "running"
+	case "needsInput":
+		return "pending_approval"
+	case "completed":
+		return "completed"
+	case "failed":
+		return "failed"
+	default:
+		return ""
+	}
+}
+
+func syncNativeCodeTaskStatus(session *model.AIDevSession, status string) {
+	if session == nil || session.LastTaskID == 0 {
+		return
+	}
+	if status == "" {
+		return
+	}
+	taskRepo := repo.NewAITaskRepo()
+	task, err := taskRepo.GetTaskByID(session.LastTaskID)
+	if err != nil || task.Status == status {
+		return
+	}
+	task.Status = status
+	_ = taskRepo.UpdateTask(task)
 }
 
 func codeRuntimeNotifySummary(state *codexRuntimeState) string {

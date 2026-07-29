@@ -32,3 +32,19 @@ func TestNativeCodeNotifyTrackerRequiresActiveTurn(t *testing.T) {
 		t.Fatalf("failed notification = %q", got)
 	}
 }
+
+func TestNativeCodeTaskStatus(t *testing.T) {
+	tests := map[string]string{
+		"idle":       "",
+		"responding": "running",
+		"needsInput": "pending_approval",
+		"completed":  "completed",
+		"failed":     "failed",
+	}
+	for responseState, expected := range tests {
+		actual := nativeCodeTaskStatus(&codexRuntimeState{ResponseState: responseState})
+		if actual != expected {
+			t.Fatalf("runtime state %q = task status %q, want %q", responseState, actual, expected)
+		}
+	}
+}

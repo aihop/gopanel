@@ -81,9 +81,7 @@
 												{{ task.title }}
 											</div>
 											<div class="mt-1.5 flex items-center gap-2">
-												<n-tag size="small" type="success" round :bordered="false">
-													{{ task.agentName || "terminal" }}
-												</n-tag>
+												<TaskStatusBadge :status="task.status" />
 												<span class="text-xs text-slate-400">
 													{{ new Date(task.createdAt).toLocaleDateString() }}
 												</span>
@@ -274,7 +272,9 @@ import CodeApprovalCenter from "./components/CodeApprovalCenter.vue"
 import SessionHistoryDrawer from "./components/SessionHistoryDrawer.vue"
 import ProjectStructurePanel from "./components/ProjectStructurePanel.vue"
 import SessionFileEditor from "./components/SessionFileEditor.vue"
-import { deleteAITask, getAIGroups, getAITasks, updateAITask } from "@/api/modules/code"
+import TaskStatusBadge from "./components/TaskStatusBadge.vue"
+import { useCodeTaskPolling } from "./useCodeTaskPolling"
+import { deleteAITask, getAIGroups, updateAITask } from "@/api/modules/code"
 import type { AIGroup, AITask, CodeSession } from "@/api/interface/code"
 import { codeWorkspaceMessages } from "./codeWorkspaceMessages"
 
@@ -327,15 +327,9 @@ const fetchGroupInfo = async () => {
 	}
 }
 
-const fetchTasks = async () => {
-	if (!currentGroupId.value) return
-	try {
-		const response = await getAITasks({ page: 1, limit: 50, projectId: currentGroupId.value })
-		if (response.code === 0) tasks.value = response.data.items || []
-	} catch (error) {
-		message.error(error instanceof Error ? error.message : t("code.taskLoadFailed"))
-	}
-}
+const { fetchTasks } = useCodeTaskPolling(currentGroupId, tasks, error => {
+	message.error(error instanceof Error ? error.message : t("code.taskLoadFailed"))
+})
 
 const resetSelectedFile = () => {
 	selectedFile.value = { path: "", extension: "" }
