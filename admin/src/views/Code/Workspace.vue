@@ -259,7 +259,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from "vue"
-import { useRoute, useRouter } from "vue-router"
+import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from "vue-router"
 import { useDialog, useMessage } from "naive-ui"
 import { useEventListener } from "@vueuse/core"
 import { useI18n } from "vue-i18n"
@@ -472,6 +472,10 @@ const resetWorkspace = () => {
 
 const backToLobby = () => router.push("/code/index")
 const toggleWorkspaceFullscreen = () => (isWorkspaceFullscreen.value = !isWorkspaceFullscreen.value)
+const confirmLeaveWorkspace = () =>
+	!fileEditorRef.value?.hasUnsavedChanges || window.confirm(t("code.switchSessionUnsavedHint"))
+onBeforeRouteLeave(confirmLeaveWorkspace)
+onBeforeRouteUpdate(confirmLeaveWorkspace)
 useEventListener(window, "keydown", event => {
 	if (event.key === "Escape") isWorkspaceFullscreen.value = false
 })

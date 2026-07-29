@@ -65,9 +65,10 @@ func watchNativeCodeNotifications(sessionID uint, done <-chan struct{}) {
 		state := getCodexRuntimeState(session)
 		status := nativeCodeTaskStatus(state)
 		if status != "" && (session.LastTaskID != tracker.lastTaskID || status != tracker.taskStatus) {
-			syncNativeCodeTaskStatus(session, status)
-			tracker.lastTaskID = session.LastTaskID
-			tracker.taskStatus = status
+			if syncNativeCodeTaskStatus(session, state, status) {
+				tracker.lastTaskID = session.LastTaskID
+				tracker.taskStatus = status
+			}
 		}
 		notifyState := tracker.observe(state)
 		if notifyState == "" {
@@ -107,20 +108,37 @@ func nativeCodeTaskStatus(state *codexRuntimeState) string {
 	}
 }
 
-func syncNativeCodeTaskStatus(session *model.AIDevSession, status string) {
+func syncNativeCodeTaskStatus(session *model.AIDevSession, state *codexRuntimeState, status string) bool {
 	if session == nil || session.LastTaskID == 0 {
-		return
+		return false
 	}
-	if status == "" {
-		return
+	if state == nil || state.UpdatedAt.IsZero() || status == "" {
+		return false
 	}
 	taskRepo := repo.NewAITaskRepo()
 	task, err := taskRepo.GetTaskByID(session.LastTaskID)
-	if err != nil || task.Status == status {
-		return
+	if err != nil {
+		return false
+	}
+	if !nativeCodeRuntimeIsFresh(session, task, state) {
+		return false
+	}
+	if task.Status == status {
+		return true
 	}
 	task.Status = status
-	_ = taskRepo.UpdateTask(task)
+	return taskRepo.UpdateTask(task) == nil
+}
+
+func nativeCodeRuntimeIsFresh(session *model.AIDevSession, task *model.AITask, state *codexRuntimeState) bool {
+	if session == nil || task == nil || state == nil || state.UpdatedAt.IsZero() {
+		return false
+	}
+	freshAfter := task.CreatedAt
+	if session.LastInstructionAt != nil && session.LastInstructionAt.After(freshAfter) {
+		freshAfter = *session.LastInstructionAt
+	}
+	return !state.UpdatedAt.Before(freshAfter.Add(-time.Second))
 }
 
 func codeRuntimeNotifySummary(state *codexRuntimeState) string {

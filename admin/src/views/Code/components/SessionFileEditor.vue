@@ -139,6 +139,12 @@ const handleKeydown = (event: KeyboardEvent) => {
 	void saveTab()
 }
 
+const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+	if (!hasUnsavedChanges.value) return
+	event.preventDefault()
+	event.returnValue = ""
+}
+
 watch(
 	() => props.sessionId,
 	() => {
@@ -151,7 +157,11 @@ watch(
 	() => void openFile()
 )
 window.addEventListener("keydown", handleKeydown)
-onBeforeUnmount(() => window.removeEventListener("keydown", handleKeydown))
+window.addEventListener("beforeunload", handleBeforeUnload)
+onBeforeUnmount(() => {
+	window.removeEventListener("keydown", handleKeydown)
+	window.removeEventListener("beforeunload", handleBeforeUnload)
+})
 defineExpose({ hasUnsavedChanges })
 </script>
 

@@ -2,7 +2,9 @@ package api
 
 import (
 	"testing"
+	"time"
 
+	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/service"
 )
 
@@ -46,5 +48,18 @@ func TestNativeCodeTaskStatus(t *testing.T) {
 		if actual != expected {
 			t.Fatalf("runtime state %q = task status %q, want %q", responseState, actual, expected)
 		}
+	}
+}
+
+func TestNativeCodeRuntimeFreshnessUsesLatestInstruction(t *testing.T) {
+	taskCreatedAt := time.Date(2026, 7, 30, 1, 0, 0, 0, time.UTC)
+	instructionAt := taskCreatedAt.Add(time.Minute)
+	session := &model.AIDevSession{LastInstructionAt: &instructionAt}
+	task := &model.AITask{CreatedAt: taskCreatedAt}
+	if nativeCodeRuntimeIsFresh(session, task, &codexRuntimeState{UpdatedAt: taskCreatedAt.Add(30 * time.Second)}) {
+		t.Fatal("runtime state from the previous turn should be stale")
+	}
+	if !nativeCodeRuntimeIsFresh(session, task, &codexRuntimeState{UpdatedAt: instructionAt}) {
+		t.Fatal("runtime state from the latest instruction should be accepted")
 	}
 }
