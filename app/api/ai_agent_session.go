@@ -127,11 +127,12 @@ func GetAISession(c fiber.Ctx) error {
 func CreateAISession(c fiber.Ctx) error {
 	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
 	var req struct {
-		Title         string                `json:"title"`
-		WorkDir       string                `json:"workDir"`
-		ProjectID     uint                  `json:"projectId"`
-		ExecutorID    string                `json:"executorId"`
-		CodexProvider *codexProviderRequest `json:"codexProvider"`
+		Title          string                `json:"title"`
+		WorkDir        string                `json:"workDir"`
+		ProjectID      uint                  `json:"projectId"`
+		ExecutorID     string                `json:"executorId"`
+		ApprovalPolicy string                `json:"approvalPolicy"`
+		CodexProvider  *codexProviderRequest `json:"codexProvider"`
 	}
 	if bindErr := c.Bind().JSON(&req); bindErr != nil {
 		return c.JSON(e.Fail(bindErr))
@@ -172,11 +173,15 @@ func CreateAISession(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
+	approvalPolicy, err := normalizeCodeApprovalPolicy(req.ApprovalPolicy)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
 	title := strings.TrimSpace(req.Title)
 	if title == "" {
 		title = buildDefaultSessionTitle(workDir, "")
 	}
-	session := &model.AIDevSession{UserID: claims.UserId, ProjectID: req.ProjectID, Title: title, AgentName: executorID, WorkDir: workDir, Status: "active", CurrentStage: "idle"}
+	session := &model.AIDevSession{UserID: claims.UserId, ProjectID: req.ProjectID, Title: title, AgentName: executorID, WorkDir: workDir, Status: "active", CurrentStage: "idle", ApprovalPolicy: approvalPolicy}
 	if err := setCodexProviderOnSession(session, codexProvider); err != nil {
 		return c.JSON(e.Fail(err))
 	}
@@ -232,7 +237,7 @@ func CreateAISessionInstruction(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	requireApproval := true
+	requireApproval := codeSessionRequiresRiskApproval(session)
 	needsApproval := shouldRequireAIApproval(content, requireApproval)
 	instructionStatus := "queued"
 	if needsApproval {
