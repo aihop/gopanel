@@ -2,15 +2,15 @@ package model
 
 import "time"
 
-// AIGroup 记录团队项目组，实现 GoPanel 的团队级 AI 协作与共享记忆
+// AIGroup 记录 Code 项目。保留原表名以兼容已有数据。
 type AIGroup struct {
 	ID          uint      `gorm:"primaryKey" json:"id"`
 	CreatedAt   time.Time `json:"createdAt"`
 	UpdatedAt   time.Time `json:"updatedAt"`
 	Name        string    `gorm:"column:name;type:varchar(255);not null" json:"name"`
 	Description string    `gorm:"column:description;type:text" json:"description"`
+	WorkDir     string    `gorm:"column:work_dir;type:varchar(1024);not null;default:''" json:"workDir"`
 	CreatorID   uint      `gorm:"column:creator_id;type:integer;not null;index" json:"creatorId"`
-	// 以下字段可通过统计任务数和组成员表获取，为简单起见，目前通过 SQL 连表查询返回
 }
 
 func (AIGroup) TableName() string {

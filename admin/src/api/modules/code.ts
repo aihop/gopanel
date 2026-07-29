@@ -15,7 +15,7 @@ export function getAIGroups(params: { page: number; limit: number }) {
 	return http.get<{ items: AIGroup[]; total: number }>("/code/groups", params)
 }
 
-export function createAIGroup(data: { name: string; description: string }) {
+export function createAIGroup(data: { name: string; description: string; workDir: string }) {
 	return http.post<AIGroup>("/code/groups", data)
 }
 

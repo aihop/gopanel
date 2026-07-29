@@ -12,22 +12,40 @@
         <n-button
           type="primary"
           size="large"
-          @click="showCreateGroupModal = true"
+          @click="openCreateProjectModal"
           round
         >
           <template #icon>
             <AddIcon />
           </template>
-          {{ $t('code.createGroup') }}
+          {{ t("code.createProject") }}
         </n-button>
       </div>
 
       <div
-        v-if="groups.length === 0"
+        v-if="groupsLoading"
+        class="flex justify-center items-center h-64"
+      >
+        <n-spin size="large" />
+      </div>
+
+      <n-alert
+        v-else-if="groupsLoadError"
+        type="error"
+        :show-icon="false"
+      >
+        <div class="flex items-center justify-between gap-3">
+          <span>{{ t("code.projectLoadFailed") }}</span>
+          <n-button text type="primary" @click="fetchGroups">{{ t("code.retry") }}</n-button>
+        </div>
+      </n-alert>
+
+      <div
+        v-else-if="groups.length === 0"
         class="flex justify-center items-center h-64"
       >
         <n-empty
-          :description="$t('code.noGroup')"
+          :description="t('code.noProject')"
           size="huge"
         />
       </div>
@@ -48,74 +66,108 @@
             <div class="group-card__avatar w-12 h-12 rounded-2xl flex items-center justify-center text-xl font-bold">
               {{ group.name.substring(0, 1).toUpperCase() }}
             </div>
-            <n-tag
-              size="small"
-              type="info"
-              round
-            >{{ group.memberCount || 1 }} {{ $t('code.member') }}</n-tag>
+            <n-tag size="small" type="info" round>{{ t("code.project") }}</n-tag>
           </div>
           <h3 class="group-card__title text-lg font-semibold mb-2">{{ group.name }}</h3>
           <p class="group-card__desc text-sm line-clamp-2 mb-5">{{ group.description || $t('code.noDesc') }}</p>
+          <div class="group-card__path mb-4 flex items-center gap-2 text-xs" :title="group.workDir">
+            <Icon name="mdi:folder-outline" :size="16" />
+            <span class="truncate">{{ group.workDir || t("code.projectDirectoryRequired") }}</span>
+          </div>
           <div class="group-card__footer flex justify-between items-center text-xs pt-4">
             <span>{{ group.taskCount || 0 }} {{ $t('code.task') }}</span>
-            <span class="group-card__action">{{ $t('code.enterWorkspace') }}</span>
+            <span class="group-card__action">{{ t("code.enterProject") }}</span>
           </div>
         </div>
       </div>
       <n-modal
-        v-model:show="showCreateGroupModal"
+        v-model:show="showCreateProjectModal"
         preset="dialog"
-        :title="$t('code.createGroup')"
+        :title="t('code.createProject')"
       >
         <div class="flex flex-col gap-4 mt-4">
           <n-input
-            v-model:value="newGroupForm.name"
-            :placeholder="$t('code.groupName')"
+            v-model:value="newProjectForm.name"
+            :placeholder="t('code.projectName')"
             placeholder-class="text-[var(--n-text-color-3)]"
           />
           <n-input
-            v-model:value="newGroupForm.desc"
+            v-model:value="newProjectForm.desc"
             type="textarea"
-            :placeholder="$t('code.groupDesc')"
+            :placeholder="t('code.projectDesc')"
           />
+          <div>
+            <div class="mb-2 text-sm font-medium text-[var(--n-text-color)]">{{ t("code.projectDirectory") }}</div>
+            <n-input-group>
+              <n-input
+                :value="newProjectForm.workDir"
+                readonly
+                :placeholder="t('code.projectDirectoryRequired')"
+              />
+              <n-button type="primary" secondary @click="showDirectoryPicker = true">
+                {{ t("code.browseDirectory") }}
+              </n-button>
+            </n-input-group>
+          </div>
         </div>
         <template #action>
-          <n-button @click="showCreateGroupModal = false">{{ $t('commons.button.cancel') }}</n-button>
+          <n-button :disabled="creatingProject" @click="showCreateProjectModal = false">
+            {{ $t('commons.button.cancel') }}
+          </n-button>
           <n-button
             type="primary"
-            @click="submitCreateGroup"
+            :loading="creatingProject"
+            @click="submitCreateProject"
           >{{ $t('commons.button.confirm') }}</n-button>
         </template>
       </n-modal>
+      <ProjectDirectoryPicker
+        v-model:show="showDirectoryPicker"
+        @select="newProjectForm.workDir = $event"
+      />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import { getAIGroups, createAIGroup } from '@/api/modules/code'
 import type { AIGroup } from '@/api/interface/code'
+import Icon from '@/components/common/Icon.vue'
+import ProjectDirectoryPicker from './components/ProjectDirectoryPicker.vue'
+import { codeProjectMessages } from '@/i18n/locales/codeProject'
 
 const AddIcon = () => '+'
 
 const message = useMessage()
 const router = useRouter()
+const { t } = useI18n({ messages: codeProjectMessages })
 
-const showCreateGroupModal = ref(false)
-const newGroupForm = ref({ name: '', desc: '' })
+const showCreateProjectModal = ref(false)
+const showDirectoryPicker = ref(false)
+const creatingProject = ref(false)
+const newProjectForm = ref({ name: '', desc: '', workDir: '' })
 
 const groups = ref<AIGroup[]>([])
+const groupsLoading = ref(false)
+const groupsLoadError = ref(false)
 
 const fetchGroups = async () => {
+  groupsLoading.value = true
+  groupsLoadError.value = false
   try {
     const res = await getAIGroups({ page: 1, limit: 50 })
     if (res.code === 0) {
       groups.value = res.data.items || []
     }
-  } catch (error) {
-    console.error('获取项目组失败:', error)
+  } catch {
+    groupsLoadError.value = true
+    groups.value = []
+  } finally {
+    groupsLoading.value = false
   }
 }
 
@@ -123,24 +175,36 @@ onMounted(() => {
   fetchGroups()
 })
 
-const submitCreateGroup = async () => {
-  if (!newGroupForm.value.name.trim()) {
-    message.warning('组名称不能为空')
+const openCreateProjectModal = () => {
+  newProjectForm.value = { name: '', desc: '', workDir: '' }
+  showCreateProjectModal.value = true
+}
+
+const submitCreateProject = async () => {
+  if (!newProjectForm.value.name.trim()) {
+    message.warning(t('code.projectNameRequired'))
     return
   }
+  if (!newProjectForm.value.workDir) {
+    message.warning(t('code.projectDirectoryRequired'))
+    return
+  }
+  creatingProject.value = true
   try {
     const res = await createAIGroup({
-      name: newGroupForm.value.name,
-      description: newGroupForm.value.desc
+      name: newProjectForm.value.name.trim(),
+      description: newProjectForm.value.desc.trim(),
+      workDir: newProjectForm.value.workDir
     })
     if (res.code === 0) {
-      showCreateGroupModal.value = false
-      newGroupForm.value = { name: '', desc: '' }
-      message.success('创建成功，可以邀请组员加入了！')
-      fetchGroups()
+      showCreateProjectModal.value = false
+      message.success(t('code.projectCreateSuccess'))
+      await fetchGroups()
     }
-  } catch (error) {
-    message.error('创建项目组失败')
+  } catch {
+    message.error(t('code.projectCreateFailed'))
+  } finally {
+    creatingProject.value = false
   }
 }
 
@@ -201,6 +265,7 @@ const enterGroup = (id: number) => {
 .group-card__avatar,
 .group-card__title,
 .group-card__desc,
+.group-card__path,
 .group-card__footer {
   position: relative;
   z-index: 1;
@@ -225,6 +290,10 @@ const enterGroup = (id: number) => {
   color: var(--n-text-color-3);
   line-height: 1.65;
   min-height: 48px;
+}
+
+.group-card__path {
+  color: var(--n-text-color-3);
 }
 
 .group-card__footer {

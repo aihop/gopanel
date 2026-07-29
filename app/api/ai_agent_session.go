@@ -136,6 +136,21 @@ func CreateAISession(c fiber.Ctx) error {
 		return c.JSON(e.Fail(bindErr))
 	}
 	workDir := strings.TrimSpace(req.WorkDir)
+	if req.ProjectID > 0 {
+		project, err := repo.NewAIGroupRepo().GetGroupByID(req.ProjectID)
+		if err != nil {
+			return c.JSON(e.Fail(errors.New("项目不存在")))
+		}
+		if project.CreatorID != claims.UserId && claims.Role != constant.UserRoleSuper {
+			return c.JSON(e.Fail(errors.New("无权访问该项目")))
+		}
+		if strings.TrimSpace(project.WorkDir) != "" {
+			workDir, err = normalizeAIProjectWorkDir(project.WorkDir, claims)
+			if err != nil {
+				return c.JSON(e.Fail(err))
+			}
+		}
+	}
 	if workDir == "" {
 		if claims.Role == constant.UserRoleSubAdmin {
 			workDir = strings.TrimSpace(claims.FileBaseDir)

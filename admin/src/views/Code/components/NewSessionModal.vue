@@ -4,6 +4,7 @@ import { useI18n } from "vue-i18n"
 import { useMessage } from "naive-ui"
 import { createCodeSession, getCodeExecutors } from "@/api/modules/code"
 import type { CodeExecutor, CodeSession } from "@/api/interface/code"
+import { codeProjectMessages } from "@/i18n/locales/codeProject"
 
 const props = defineProps<{
 	show: boolean
@@ -15,12 +16,11 @@ const emit = defineEmits<{
 	(event: "created", session: CodeSession): void
 }>()
 
-const { t } = useI18n()
+const { t } = useI18n({ messages: codeProjectMessages })
 const message = useMessage()
 const executors = ref<CodeExecutor[]>([])
 const selectedExecutorId = ref("")
 const title = ref("")
-const workDir = ref("")
 const loading = ref(false)
 const submitting = ref(false)
 const loadError = ref("")
@@ -50,7 +50,6 @@ watch(
 	show => {
 		if (show) {
 			title.value = ""
-			workDir.value = ""
 			void loadExecutors()
 		}
 	}
@@ -67,7 +66,7 @@ const submit = async () => {
 	try {
 		const response = await createCodeSession({
 			title: title.value.trim(),
-			workDir: workDir.value.trim(),
+			workDir: "",
 			projectId: props.projectId,
 			executorId: selectedExecutorId.value
 		})
@@ -149,9 +148,7 @@ const submit = async () => {
 						<n-form-item :label="t('code.sessionTitle')">
 							<n-input v-model:value="title" :placeholder="t('code.sessionTitlePlaceholder')" />
 						</n-form-item>
-						<n-form-item :label="t('code.workDir')">
-							<n-input v-model:value="workDir" :placeholder="t('code.workDirPlaceholder')" />
-						</n-form-item>
+						<n-alert type="info" :show-icon="false">{{ t("code.sessionUsesProjectDirectory") }}</n-alert>
 					</n-form>
 				</template>
 			</div>

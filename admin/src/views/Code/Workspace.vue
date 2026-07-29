@@ -3,7 +3,7 @@
 		class="ai-workspace-root relative flex h-full min-h-[calc(100vh-130px)] w-full flex-col overflow-hidden rounded-[28px] border border-slate-200/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.92))] shadow-[0_18px_45px_rgba(15,23,42,0.08)]"
 	>
 		<n-layout has-sider class="h-full flex-1 !bg-transparent" style="width: 100%">
-			<!-- 左侧边栏：该组内的历史任务 -->
+			<!-- 左侧边栏：该项目内的历史任务 -->
 			<n-layout-sider
 				collapse-mode="width"
 				:collapsed-width="0"
@@ -30,7 +30,7 @@
 											{{ $t("code.workspace") }}
 										</div>
 										<div class="truncate text-sm font-semibold text-[var(--n-text-color)]">
-											{{ groupInfo ? groupInfo.name : "项目组" }}
+											{{ groupInfo ? groupInfo.name : t("code.projectFallback") }}
 										</div>
 									</div>
 								</div>
@@ -58,7 +58,7 @@
 								v-if="tasks.length === 0"
 								class="ai-workspace-task-empty flex min-h-[240px] items-center justify-center rounded-[22px] border border-dashed border-slate-200 bg-white/70"
 							>
-								<n-empty description="该组暂无对话历史" />
+								<n-empty :description="t('code.noProjectHistory')" />
 							</div>
 
 							<div v-else class="space-y-3">
@@ -213,17 +213,20 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from "vue"
 import { useRoute, useRouter } from "vue-router"
+import { useI18n } from "vue-i18n"
 import { useMessage, useDialog } from "naive-ui"
 import CodeTerminal from "./components/CodeTerminal.vue"
 import NewSessionModal from "./components/NewSessionModal.vue"
 import SessionHistoryDrawer from "./components/SessionHistoryDrawer.vue"
 import { getAITasks, updateAITask, deleteAITask, getAIGroups } from "@/api/modules/code"
 import type { AITask, AIGroup, CodeSession } from "@/api/interface/code"
+import { codeProjectMessages } from "@/i18n/locales/codeProject"
 
 const route = useRoute()
 const router = useRouter()
 const message = useMessage()
 const dialog = useDialog()
+const { t } = useI18n({ messages: codeProjectMessages })
 
 const AddIcon = () => "+"
 const MoreIcon = () => "..."

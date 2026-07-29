@@ -8,7 +8,7 @@ import (
 type IAIGroupRepo interface {
 	CreateGroup(group *model.AIGroup) error
 	GetGroupByID(id uint) (*model.AIGroup, error)
-	GetGroups(page, limit int) ([]*model.AIGroup, int64, error)
+	GetGroups(userID uint, includeAll bool, page, limit int) ([]*model.AIGroup, int64, error)
 	UpdateGroup(group *model.AIGroup) error
 	DeleteGroup(id uint) error
 }
@@ -30,10 +30,13 @@ func (r *aiGroupRepo) GetGroupByID(id uint) (*model.AIGroup, error) {
 	return &group, err
 }
 
-func (r *aiGroupRepo) GetGroups(page, limit int) ([]*model.AIGroup, int64, error) {
+func (r *aiGroupRepo) GetGroups(userID uint, includeAll bool, page, limit int) ([]*model.AIGroup, int64, error) {
 	var groups []*model.AIGroup
 	var total int64
 	db := global.DB.Model(&model.AIGroup{})
+	if !includeAll {
+		db = db.Where("creator_id = ?", userID)
+	}
 	db.Count(&total)
 	err := db.Order("created_at desc").Offset((page - 1) * limit).Limit(limit).Find(&groups).Error
 	return groups, total, err
