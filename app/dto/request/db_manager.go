@@ -30,6 +30,8 @@ type GetTableDataReq struct {
 	SearchColumn   string            `json:"searchColumn"`
 	SearchValue    string            `json:"searchValue"`
 	AdvancedSearch []SearchCondition `json:"advancedSearch"`
+	SortField      string            `json:"sortField"`
+	SortOrder      string            `json:"sortOrder"`
 }
 
 type ExecSqlReq struct {

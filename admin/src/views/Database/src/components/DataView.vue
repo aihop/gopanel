@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref } from 'vue'
 import { useMessage, NEmpty, NIcon, NButton, NDataTable, NPagination, NInput, NSelect, NInputGroup, NDropdown, NModal, NSwitch, NRadio, NRadioGroup } from 'naive-ui'
 import { renderIcon } from '@/utils'
 import { useDataView } from './useDataView'
+import { useDataViewImport } from './useDataViewImport'
 
 const props = defineProps<{
   selectedServerId: number | null
@@ -18,92 +18,6 @@ const emit = defineEmits<{
 }>()
 
 const message = useMessage()
-
-// Import state
-const showImportModal = ref(false)
-const importFormat = ref('csv')
-const importContent = ref('')
-const importing = ref(false)
-const importFilename = ref('')
-const selectedFile = ref<File | null>(null)
-
-const formatFileSize = (bytes: number) => {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
-
-const handleFileSelected = (e: Event) => {
-  const target = e.target as HTMLInputElement
-  if (!target.files || target.files.length === 0) return
-  const file = target.files[0]
-  importFilename.value = file.name
-  selectedFile.value = file
-  // Auto-detect format from extension
-  if (file.name.endsWith('.sql')) {
-    importFormat.value = 'sql'
-  } else {
-    importFormat.value = 'csv'
-  }
-  // Clear pasted content when a file is selected
-  importContent.value = ''
-}
-
-const clearFileSelection = () => {
-  selectedFile.value = null
-  importFilename.value = ''
-}
-
-const handleImport = async () => {
-  if (!props.selectedServerId || !props.selectedDatabase || !props.selectedTable) return
-  if (!importContent.value.trim() && !selectedFile.value) {
-    message.warning('请选择文件或粘贴内容')
-    return
-  }
-
-  importing.value = true
-  try {
-    let res: any
-
-    if (selectedFile.value) {
-      // File upload path: multipart upload
-      const { uploadDBManagerImportAPI } = await import('@/api/modules/database')
-      res = await uploadDBManagerImportAPI({
-        serverId: props.selectedServerId,
-        databaseName: props.selectedDatabase,
-        tableName: props.selectedTable,
-        format: importFormat.value,
-        file: selectedFile.value
-      })
-    } else {
-      // Paste path: JSON with content string
-      const { importDBManagerTableAPI } = await import('@/api/modules/database')
-      res = await importDBManagerTableAPI({
-        serverId: props.selectedServerId,
-        databaseName: props.selectedDatabase,
-        tableName: props.selectedTable,
-        format: importFormat.value,
-        content: importContent.value
-      })
-    }
-
-    if (res.code === 0) {
-      const imported = (res.data as any)?.imported || 0
-      message.success(`导入成功，共 ${imported} 条记录`)
-      showImportModal.value = false
-      importContent.value = ''
-      importFilename.value = ''
-      selectedFile.value = null
-      fetchTableData()
-    } else {
-      message.error(res.message || '导入失败')
-    }
-  } catch (error: any) {
-    message.error(error?.message || '导入请求失败')
-  } finally {
-    importing.value = false
-  }
-}
 
 const {
   applyTableSearch,
@@ -128,6 +42,7 @@ const {
   handleExportSQL,
   handleExportWithOptions,
   handleOpenExportModal,
+  handleDataSorterChange,
   handleReset,
   handleSearch,
   handleTableListPageChange,
@@ -161,6 +76,11 @@ const {
   copyRecord: (row: any) => emit('copyRecord', row),
   selectTable: (tableName: string) => emit('selectTable', tableName)
 }, message)
+
+const {
+  clearFileSelection, formatFileSize, handleFileSelected, handleImport, importContent,
+  importFilename, importFormat, importing, selectedFile, showImportModal
+} = useDataViewImport(props, message, fetchTableData)
 
 defineExpose({ fetchTableData, setAdvancedSearch, handleCellEditCancel })
 </script>
@@ -379,6 +299,7 @@ defineExpose({ fetchTableData, setAdvancedSearch, handleCellEditCancel })
           :scroll-x="Math.max(tableColumns.reduce((s, c) => s + (c.width || 150), 0), 600)"
           class="h-full text-xs"
           flex-height
+          @update:sorter="handleDataSorterChange"
         />
       </div>
       <div class="p-2 border-t border-slate-200 flex justify-end bg-[#f8f9fa] z-10">

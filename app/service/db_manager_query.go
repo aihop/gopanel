@@ -63,9 +63,22 @@ func (s *DBManagerService) GetTableData(req request.GetTableDataReq) (map[string
 		selectCols = "rowid AS \"__rowid__\", *"
 	}
 	whereClause, args := buildTableSearchClause(server.Type, req.SearchColumn, req.SearchValue, req.AdvancedSearch)
+	orderClause := ""
+	if req.SortField != "" && req.SortOrder != "" {
+		columnRows, queryErr := db.Query(fmt.Sprintf("SELECT * FROM %s LIMIT 0", quoteTable(server.Type, tableName)))
+		if queryErr != nil {
+			return nil, queryErr
+		}
+		columns, columnsErr := columnRows.Columns()
+		columnRows.Close()
+		if columnsErr != nil {
+			return nil, columnsErr
+		}
+		orderClause = buildTableDataOrderClause(server.Type, req.SortField, req.SortOrder, columns)
+	}
 	offset := (req.Page - 1) * req.Limit
 	countSQL := fmt.Sprintf("SELECT COUNT(*) FROM %s%s", quoteTable(server.Type, tableName), whereClause)
-	dataSQL := fmt.Sprintf("SELECT %s FROM %s%s LIMIT %d OFFSET %d", selectCols, quoteTable(server.Type, tableName), whereClause, req.Limit, offset)
+	dataSQL := fmt.Sprintf("SELECT %s FROM %s%s%s LIMIT %d OFFSET %d", selectCols, quoteTable(server.Type, tableName), whereClause, orderClause, req.Limit, offset)
 
 	var total int64
 	if err := db.QueryRow(countSQL, args...).Scan(&total); err != nil {
@@ -85,6 +98,34 @@ func (s *DBManagerService) GetTableData(req request.GetTableDataReq) (map[string
 		return nil, err
 	}
 	return map[string]interface{}{"type": "query", "columns": columns, "rows": tableData, "total": total}, nil
+}
+
+func buildTableDataOrderClause(dbType model.DatabaseType, sortField, sortOrder string, columns []string) string {
+	field := sanitizeIdent(sortField)
+	if field == "" {
+		return ""
+	}
+	found := false
+	for _, column := range columns {
+		if field == column {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return ""
+	}
+
+	direction := ""
+	switch strings.ToLower(strings.TrimSpace(sortOrder)) {
+	case "asc", "ascend":
+		direction = "ASC"
+	case "desc", "descend":
+		direction = "DESC"
+	default:
+		return ""
+	}
+	return fmt.Sprintf(" ORDER BY %s %s", quoteIdent(dbType, field), direction)
 }
 
 func buildTableSearchClause(dbType model.DatabaseType, searchColumn, searchValue string, advancedSearch []request.SearchCondition) (string, []interface{}) {

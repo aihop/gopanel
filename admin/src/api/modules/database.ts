@@ -111,7 +111,7 @@ export const getDBManagerTableListAPI = (data: { serverId: number; databaseName:
 	return p
 }
 
-export const getDBManagerTableDataAPI = (data: { serverId: number; databaseName: string; tableName: string; page: number; limit: number; searchColumn?: string; searchValue?: string; advancedSearch?: any[] }) => {
+export const getDBManagerTableDataAPI = (data: { serverId: number; databaseName: string; tableName: string; page: number; limit: number; searchColumn?: string; searchValue?: string; advancedSearch?: any[]; sortField?: string; sortOrder?: string }) => {
 	return http.post<any>(`/database/manager/data`, data)
 }
 

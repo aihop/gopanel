@@ -66,3 +66,28 @@ func TestBuildTableSearchClauseSkipsEmptyColumns(t *testing.T) {
 		t.Fatalf("empty columns should not produce filters: clause=%q args=%#v", whereClause, args)
 	}
 }
+
+func TestBuildTableDataOrderClause(t *testing.T) {
+	tests := []struct {
+		name     string
+		dbType   model.DatabaseType
+		field    string
+		order    string
+		expected string
+	}{
+		{name: "mysql ascending", dbType: model.DatabaseTypeMysql, field: "created_at", order: "ascend", expected: " ORDER BY `created_at` ASC"},
+		{name: "postgres descending", dbType: model.DatabaseTypePostgresql, field: "display_name", order: "descend", expected: ` ORDER BY "display_name" DESC`},
+		{name: "sqlite short order", dbType: model.DatabaseSQLite, field: "id", order: "desc", expected: ` ORDER BY "id" DESC`},
+		{name: "invalid direction", dbType: model.DatabaseTypeMysql, field: "id", order: "sideways", expected: ""},
+		{name: "empty field", dbType: model.DatabaseTypeMysql, field: "", order: "ascend", expected: ""},
+		{name: "unknown field", dbType: model.DatabaseTypeMysql, field: "missing", order: "ascend", expected: ""},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := buildTableDataOrderClause(test.dbType, test.field, test.order, []string{"id", "created_at", "display_name"}); got != test.expected {
+				t.Fatalf("unexpected ORDER BY clause: got %q, want %q", got, test.expected)
+			}
+		})
+	}
+}
