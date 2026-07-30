@@ -1,64 +1,83 @@
 <template>
-  <div
-    v-if="validate"
-    class="mt-3 rounded-[20px] bg-base-100 p-4 px-6 shadow"
-  >
-    <div class="flex flex-wrap items-center justify-between gap-3">
-      <div class="flex items-center gap-3">
-        <n-tag
-          class="uppercase"
-          :type="validate.runtimeKind === 'docker' ? 'success' : validate.runtimeKind === 'podman' ? 'warning' : 'default'"
-        >
-          {{ runtimeBadgeText }}
-        </n-tag>
-        <n-tag
-          size="small"
-          :type="validate.hostPinned ? 'success' : 'default'"
-        >
-          {{ validate.hostPinned ? '固定 Socket' : '自动探测' }}
-        </n-tag>
-        <span class="text-sm text-gray-500">Current: {{ currentRuntimeHost }}</span>
-        <span class="text-sm text-gray-500">Configured: {{ validate.configuredHost || '-' }}</span>
-        <span class="text-sm text-gray-500">OS: {{ validate.os }}/{{ validate.arch }}</span>
-      </div>
-      <div class="flex flex-wrap items-center gap-2">
-        <n-tag
-          size="small"
-          :type="validate.compose?.ok ? 'success' : 'error'"
-        >
-          Compose: {{ validate.compose?.ok ? `${validate.compose.bin} ${validate.compose.prefix}` : '不可用' }}
-        </n-tag>
-        <n-tag
-          size="small"
-          :type="validate.gpc?.reachable ? 'success' : 'warning'"
-        >
-          GPC: {{ validate.gpc?.reachable ? 'OK' : '未连接' }}
-        </n-tag>
-      </div>
-    </div>
-    <div
-      v-if="validate.notes?.length"
-      class="mt-3 space-y-1 text-xs text-orange-600"
-    >
-      <div
-        v-for="(n, i) in validate.notes"
-        :key="i"
-      >- {{ n }}</div>
-    </div>
-    <div
-      v-if="dockerOnly"
-      class="mt-3 rounded-lg bg-orange-50 p-3 text-xs text-orange-700"
-    >
-      当前运行时为 {{ validate.runtimeKind }}，此页面的 daemon.json/iptables 等配置主要针对 Docker。Podman 模式下仅支持镜像加速（Linux 需连接 GPC；macOS 需 podman machine 可用）。
-    </div>
-  </div>
+	<div v-if="validate" class="bg-base-100 mt-3 rounded-[20px] p-4 px-6 shadow">
+		<div class="flex flex-wrap items-center justify-between gap-3">
+			<div class="flex items-center gap-3">
+				<n-tag :type="summaryTagType">{{ summaryText }}</n-tag>
+				<span v-if="validate.summary?.runtimeInstalled" class="text-sm text-gray-500">
+					{{ runtimeBadgeText }}
+				</span>
+				<span v-else class="text-sm text-gray-500">{{ t("containerRuntime.notInstalledDesc") }}</span>
+			</div>
+			<n-button quaternary size="small" @click="showDiagnostics = !showDiagnostics">
+				{{ t("containerRuntime.diagnostics") }}
+			</n-button>
+		</div>
+
+		<n-collapse-transition :show="showDiagnostics">
+			<div class="mt-4 space-y-3 border-t border-gray-100 pt-4 text-xs text-gray-500">
+				<div class="flex flex-wrap gap-x-5 gap-y-2">
+					<span>
+						{{
+							validate.hostPinned ? t("containerRuntime.pinnedSocket") : t("containerRuntime.autoDetect")
+						}}
+					</span>
+					<span>{{ t("containerRuntime.current") }}: {{ currentRuntimeHost }}</span>
+					<span>{{ t("containerRuntime.configured") }}: {{ validate.configuredHost || "-" }}</span>
+					<span>OS: {{ validate.os }}/{{ validate.arch }}</span>
+					<span>
+						{{ t("containerRuntime.compose") }}:
+						{{ validate.compose?.ok ? t("containerRuntime.available") : t("containerRuntime.unavailable") }}
+					</span>
+					<span>
+						GPC:
+						{{
+							validate.gpc?.reachable
+								? t("containerRuntime.connected")
+								: t("containerRuntime.disconnected")
+						}}
+					</span>
+				</div>
+				<div v-if="validate.notes?.length" class="space-y-1 text-orange-600">
+					<div v-for="(note, index) in validate.notes" :key="index">- {{ diagnosticNote(note) }}</div>
+				</div>
+			</div>
+		</n-collapse-transition>
+
+		<div
+			v-if="dockerOnly && validate.summary?.runtimeInstalled"
+			class="mt-3 rounded-lg bg-orange-50 p-3 text-xs text-orange-700"
+		>
+			{{ t("containerRuntime.podmanSettingsNotice", { runtime: validate.runtimeKind }) }}
+		</div>
+	</div>
 </template>
 
 <script setup lang="ts">
-defineProps<{
-  validate: any
-  runtimeBadgeText: string
-  currentRuntimeHost: string
-  dockerOnly: boolean
+import { computed, ref } from "vue"
+import { useI18n } from "vue-i18n"
+import { containerRuntimeMessages } from "../../../i18n/locales/containerRuntime"
+
+const props = defineProps<{
+	validate: any
+	runtimeBadgeText: string
+	currentRuntimeHost: string
+	dockerOnly: boolean
 }>()
+
+const { t } = useI18n({ messages: containerRuntimeMessages })
+const showDiagnostics = ref(false)
+const diagnosticNote = (note: string) => t(`containerRuntime.note_${note}`)
+const summaryText = computed(() => {
+	const state = props.validate?.summary?.state
+	if (state === "notInstalled") return t("containerRuntime.notInstalled")
+	if (state === "notReady") return t("containerRuntime.notReady")
+	if (state === "composeMissing") return t("containerRuntime.composeMissing")
+	return t("containerRuntime.ready")
+})
+const summaryTagType = computed(() => {
+	const state = props.validate?.summary?.state
+	if (state === "ready") return "success"
+	if (state === "notInstalled") return "error"
+	return "warning"
+})
 </script>

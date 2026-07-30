@@ -11,6 +11,15 @@
 		"formatZH": "从 [file] 恢复 [type] 数据 [name][detailName]",
 		"formatEN": "recover [type] data [name][detailName] from [file]"
 	},
+	"/container/engine/install": {
+		"bodyKeys": [
+			"runtime"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "安装容器运行时 [runtime]",
+		"formatEN": "Install container runtime [runtime]"
+	},
 	"/container/clean/log": {
 		"bodyKeys": [
 			"name"

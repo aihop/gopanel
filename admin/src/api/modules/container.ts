@@ -179,7 +179,7 @@ export const composeUpdate = (params: Container.ComposeUpdate) => {
 export const dockerOperate = (operation: string) => {
 	return http.post(`/container/docker/operate`, { operation: operation })
 }
- 
+
 export const loadDaemonFile = () => {
 	return http.get<string>(`/container/engine/file`)
 }
@@ -189,6 +189,14 @@ export const loadInstanceStatus = () => {
 
 export const containerValidateAPI = () => {
 	return http.get<any>(`/container/engine/validate`)
+}
+
+export const installContainerRuntimeAPI = (runtime: "docker" | "podman") => {
+	return http.post(`/container/engine/install`, { runtime })
+}
+
+export const containerRuntimeInstallStatusAPI = (taskId: string) => {
+	return http.get<any>(`/container/engine/install/${encodeURIComponent(taskId)}`)
 }
 
 export const repairPodmanSocketAPI = (group?: string) => {
@@ -218,7 +226,6 @@ export const updateDaemonByfile = (params: Container.DaemonJsonUpdateByFile) => 
 export const containerDaemonConfigAPI = () => {
 	return http.get<Response<any>>(`/container/engine/config`)
 }
- 
 
 export async function containerInstanceOperateAPI(data: any) {
 	return http.post<Response<any>>(`/container/engine/operate`, data)

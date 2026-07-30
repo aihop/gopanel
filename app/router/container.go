@@ -77,6 +77,8 @@ func ContainerRouter(r fiber.Router) {
 		containerRouter.Post("/repair/linger", api.ContainerRepairSystemdLinger)
 		containerRouter.Get("/engine/status", api.ContainerEngineStatus)
 		containerRouter.Get("/engine/validate", api.ContainerEngineValidate)
+		containerRouter.Post("/engine/install", api.ContainerRuntimeInstall)
+		containerRouter.Get("/engine/install/:id", api.ContainerRuntimeInstallStatus)
 		containerRouter.Post("/engine/operate", api.ContainerEngineOperate)
 		// Docker 配置
 		containerRouter.Get("/engine/config", api.ContainerEngineConfig)

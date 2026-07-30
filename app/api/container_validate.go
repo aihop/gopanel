@@ -19,11 +19,20 @@ import (
 )
 
 type containerValidateResult struct {
-	RuntimeKind string `json:"runtimeKind"`
-	RuntimeHost string `json:"runtimeHost"`
-	OS          string `json:"os"`
-	Arch        string `json:"arch"`
-	Runtime     struct {
+	RuntimeKind    string `json:"runtimeKind"`
+	RuntimeHost    string `json:"runtimeHost"`
+	ConfiguredHost string `json:"configuredHost"`
+	HostPinned     bool   `json:"hostPinned"`
+	OS             string `json:"os"`
+	Arch           string `json:"arch"`
+	Summary        struct {
+		State            string   `json:"state"`
+		RuntimeInstalled bool     `json:"runtimeInstalled"`
+		InstallSupported bool     `json:"installSupported"`
+		InstallOptions   []string `json:"installOptions"`
+		Recommended      string   `json:"recommended,omitempty"`
+	} `json:"summary"`
+	Runtime struct {
 		ServiceActive       bool `json:"serviceActive"`
 		UserServiceActive   bool `json:"userServiceActive"`
 		SystemServiceActive bool `json:"systemServiceActive"`
@@ -59,6 +68,25 @@ func ContainerEngineValidate(c fiber.Ctx) error {
 	resolved := udocker.ResolveRuntime(context.Background())
 	res.RuntimeKind = string(resolved.Kind)
 	res.RuntimeHost = resolved.Host
+	res.ConfiguredHost = udocker.ConfiguredDockerSockPath()
+	res.HostPinned = udocker.RuntimeHostPinned()
+	_, err := exec.LookPath("docker")
+	res.CLI.Docker = err == nil
+	_, err = exec.LookPath("podman")
+	res.CLI.Podman = err == nil
+	_, err = exec.LookPath("docker-compose")
+	res.CLI.DockerCompose = err == nil
+	_, err = exec.LookPath("podman-compose")
+	res.CLI.PodmanCompose = err == nil
+	res.Summary.RuntimeInstalled = res.CLI.Docker || res.CLI.Podman
+	res.Summary.InstallSupported = runtime.GOOS == "linux" || runtime.GOOS == "darwin"
+	if !res.Summary.RuntimeInstalled && res.Summary.InstallSupported {
+		res.Summary.InstallOptions = []string{"podman", "docker"}
+		res.Summary.Recommended = "podman"
+		if runtime.GOOS == "linux" && os.Geteuid() == 0 {
+			res.Summary.Recommended = "docker"
+		}
+	}
 	if res.RuntimeKind == "podman" && runtime.GOOS == "linux" {
 		res.Runtime.Rootless = udocker.IsRootlessPodmanHost(resolved.Host)
 		res.Runtime.SystemServiceActive = systemctlServiceActive(context.Background(), false, "podman.socket")
@@ -78,17 +106,8 @@ func ContainerEngineValidate(c fiber.Ctx) error {
 		res.Runtime.ServiceActive = res.Runtime.ApiReady
 	} else if res.RuntimeKind == "podman" && runtime.GOOS == "darwin" {
 		res.Runtime.ServiceActive = res.CLI.Podman
-		res.Runtime.ApiReady = false
+		res.Runtime.ApiReady = commandSucceeds(1200*time.Millisecond, "podman", "info")
 	}
-
-	_, err := exec.LookPath("docker")
-	res.CLI.Docker = err == nil
-	_, err = exec.LookPath("podman")
-	res.CLI.Podman = err == nil
-	_, err = exec.LookPath("docker-compose")
-	res.CLI.DockerCompose = err == nil
-	_, err = exec.LookPath("podman-compose")
-	res.CLI.PodmanCompose = err == nil
 
 	if bin, prefix, err := compose.ResolveCommand(); err != nil {
 		res.Compose.OK = false
@@ -116,26 +135,40 @@ func ContainerEngineValidate(c fiber.Ctx) error {
 			res.GPC.Error = err.Error()
 		}
 	}
+	res.Summary.State = "ready"
+	if !res.Summary.RuntimeInstalled {
+		res.Summary.State = "notInstalled"
+	} else if !res.Runtime.ApiReady {
+		res.Summary.State = "notReady"
+	} else if !res.Compose.OK {
+		res.Summary.State = "composeMissing"
+	}
 
 	if res.RuntimeKind == "podman" && runtime.GOOS == "darwin" {
 		if !res.CLI.PodmanCompose && !res.CLI.DockerCompose {
-			res.Notes = append(res.Notes, "podman compose provider 未就绪：建议安装 podman-compose 或启用 podman compose provider")
+			res.Notes = append(res.Notes, "podmanComposeMissing")
 		}
 	}
 	if res.RuntimeKind == "podman" && runtime.GOOS == "linux" {
 		if res.Runtime.ServiceActive && !res.Runtime.ApiReady {
-			res.Notes = append(res.Notes, "podman.socket 已启动但 Docker API 不可用：通常是 socket 权限/组不匹配或 rootless user session 未就绪")
+			res.Notes = append(res.Notes, "podmanApiUnavailable")
 			if res.Runtime.Rootless {
-				res.Notes = append(res.Notes, "当前是 rootless Podman：优先检查 linger、user session、systemctl --user podman.socket 和 /run/user/<uid>/podman/podman.sock")
+				res.Notes = append(res.Notes, "podmanRootlessSession")
 			} else if os.Getuid() != 0 {
-				res.Notes = append(res.Notes, "可尝试：修复 podman.socket 权限（SocketGroup）或启用 linger（loginctl enable-linger）")
+				res.Notes = append(res.Notes, "podmanSocketPermission")
 			}
 		}
 	}
-	if !res.GPC.Reachable && res.GPC.SocketPath != "" && runtime.GOOS != "windows" {
-		res.Notes = append(res.Notes, "gpc helper 未连接：需要 sudo 启动 gpc helper 并配置 --file-roots")
-	}
 	return c.JSON(e.Succ(res))
+}
+
+func commandSucceeds(timeout time.Duration, name string, args ...string) bool {
+	if _, err := exec.LookPath(name); err != nil {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return exec.CommandContext(ctx, name, args...).Run() == nil
 }
 
 func systemctlServiceActive(ctx context.Context, user bool, unit string) bool {

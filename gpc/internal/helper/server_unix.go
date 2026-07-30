@@ -96,7 +96,9 @@ func (s *Server) handleConn(c net.Conn) {
 
 	uc, ok := c.(*net.UnixConn)
 	if ok {
-		_ = s.authorize(uc)
+		if err := s.authorize(uc); err != nil {
+			return
+		}
 	}
 
 	r := bufio.NewReader(c)
@@ -125,7 +127,11 @@ func (s *Server) authorize(c *net.UnixConn) error {
 }
 
 func (s *Server) dispatch(req proto.Request) proto.Response {
-	ctx, cancel := context.WithTimeout(context.Background(), s.cfg.ActionTimeout)
+	timeout := s.cfg.ActionTimeout
+	if req.Action == "CONTAINER_RUNTIME_INSTALL" && timeout < 20*time.Minute {
+		timeout = 20 * time.Minute
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	lockKey := lockKeyForAction(req.Action)
@@ -134,14 +140,14 @@ func (s *Server) dispatch(req proto.Request) proto.Response {
 			return s.doAction(ctx, req)
 		})
 		if err != nil {
-			return proto.Response{ID: req.ID, OK: false, Code: codeFromErr(err), Error: err.Error()}
+			return proto.Response{ID: req.ID, OK: false, Code: codeFromErr(err), Output: out, Error: err.Error()}
 		}
 		return proto.Response{ID: req.ID, OK: true, Code: proto.CodeOK, Output: out}
 	}
 
 	out, err := s.doAction(ctx, req)
 	if err != nil {
-		return proto.Response{ID: req.ID, OK: false, Code: codeFromErr(err), Error: err.Error()}
+		return proto.Response{ID: req.ID, OK: false, Code: codeFromErr(err), Output: out, Error: err.Error()}
 	}
 	return proto.Response{ID: req.ID, OK: true, Code: proto.CodeOK, Output: out}
 }
@@ -198,6 +204,9 @@ func (s *Server) doAction(ctx context.Context, req proto.Request) (string, error
 		return out, err
 	case "COMPOSE_INSTALL":
 		out, err := s.actionComposeInstall(ctx, req.Params)
+		return out, err
+	case "CONTAINER_RUNTIME_INSTALL":
+		out, err := s.actionContainerRuntimeInstall(ctx, req.Params)
 		return out, err
 	case "MYSQL_CLIENT_INSTALL":
 		out, err := s.actionMysqlClientInstall(ctx, req.Params)
@@ -263,6 +272,8 @@ func lockKeyForAction(action string) string {
 		return "systemd_enable_linger"
 	case "COMPOSE_INSTALL":
 		return "compose_install"
+	case "CONTAINER_RUNTIME_INSTALL":
+		return "container_runtime_install"
 	case "MYSQL_CLIENT_INSTALL":
 		return "mysql_client_install"
 	case "RESTART_HOST":
