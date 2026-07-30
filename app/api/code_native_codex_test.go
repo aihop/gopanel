@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -11,6 +12,28 @@ import (
 
 	"github.com/aihop/gopanel/app/model"
 )
+
+func TestConfigureNativeTerminalEnvironmentPreservesSessionProvider(t *testing.T) {
+	command := exec.Command("codex")
+	command.Env = []string{
+		"PATH=/managed/bin",
+		codexSessionAPIKeyEnv + "=session-secret",
+		"TERM=dumb",
+	}
+	configureNativeTerminalEnvironment(command)
+	if got := environmentValue(command.Env, codexSessionAPIKeyEnv); got != "session-secret" {
+		t.Fatalf("session API key was lost: %q", got)
+	}
+	if got := environmentValue(command.Env, "PATH"); got != "/managed/bin" {
+		t.Fatalf("managed PATH was replaced: %q", got)
+	}
+	if got := environmentValue(command.Env, "TERM"); got != "xterm-256color" {
+		t.Fatalf("TERM = %q", got)
+	}
+	if got := environmentValue(command.Env, "COLORTERM"); got != "truecolor" {
+		t.Fatalf("COLORTERM = %q", got)
+	}
+}
 
 func TestBuildNativeCodexCommandStartsAndResumesInteractiveSession(t *testing.T) {
 	workDir := t.TempDir()

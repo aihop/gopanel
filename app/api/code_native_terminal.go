@@ -64,7 +64,7 @@ func (manager *nativeCodeTerminalManager) attach(
 		lease.Release()
 		return nil, false, err
 	}
-	command.Env = append(os.Environ(), "TERM=xterm-256color", "COLORTERM=truecolor")
+	configureNativeTerminalEnvironment(command)
 	ptmx, err := pty.StartWithSize(command, &pty.Winsize{Cols: cols, Rows: rows})
 	if err != nil {
 		lease.Release()
@@ -96,6 +96,15 @@ func (manager *nativeCodeTerminalManager) attach(
 	go discoverNativeCodexSession(session, command.Process.Pid, time.Now())
 	go watchNativeCodeNotifications(session.ID, terminal.done)
 	return terminal, true, nil
+}
+
+func configureNativeTerminalEnvironment(command *exec.Cmd) {
+	commandEnv := command.Env
+	if len(commandEnv) == 0 {
+		commandEnv = os.Environ()
+	}
+	commandEnv = upsertEnvironment(commandEnv, "TERM", "xterm-256color")
+	command.Env = upsertEnvironment(commandEnv, "COLORTERM", "truecolor")
 }
 
 func (terminal *nativeCodeTerminal) readOutput() {
