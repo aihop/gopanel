@@ -327,8 +327,7 @@ const openQuickPanel = (project: AIGroup) => quickPanelsRef.value?.open(project)
 
 <style scoped>
 .group-card {
-  --project-accent: #94a3b8;
-  --project-soft: rgba(148, 163, 184, 0.09);
+  --status-accent: #94a3b8;
   background: color-mix(in srgb, var(--n-color) 97%, transparent);
   border: 1px solid color-mix(in srgb, var(--n-border-color) 92%, transparent);
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.045);
@@ -343,35 +342,32 @@ const openQuickPanel = (project: AIGroup) => quickPanelsRef.value?.open(project)
   inset: 24px auto 24px 0;
   width: 3px;
   border-radius: 0 999px 999px 0;
-  background: var(--project-accent);
+  background: var(--n-primary-color);
   content: "";
 }
 
 .group-card--queued {
-  --project-accent: #3b82f6;
-  --project-soft: rgba(59, 130, 246, 0.09);
+  --status-accent: #3b82f6;
 }
 
 .group-card--running {
-  --project-accent: #10b981;
-  --project-soft: rgba(16, 185, 129, 0.09);
+  --status-accent: #10b981;
 }
 
 .group-card--pending-approval {
-  --project-accent: #f59e0b;
-  --project-soft: rgba(245, 158, 11, 0.11);
+  --status-accent: #f59e0b;
 }
 
 .group-card:hover {
   transform: translateY(-3px);
-  border-color: color-mix(in srgb, var(--project-accent) 36%, var(--n-border-color));
+  border-color: color-mix(in srgb, var(--n-primary-color) 34%, var(--n-border-color));
   box-shadow: 0 14px 34px rgba(15, 23, 42, 0.085);
 }
 
 .group-card__avatar {
-  color: var(--project-accent);
-  background: var(--project-soft);
-  border: 1px solid color-mix(in srgb, var(--project-accent) 24%, transparent);
+  color: var(--n-primary-color);
+  background: color-mix(in srgb, var(--n-primary-color) 10%, var(--n-color));
+  border: 1px solid color-mix(in srgb, var(--n-primary-color) 20%, transparent);
 }
 
 .group-card__title {
@@ -385,15 +381,15 @@ const openQuickPanel = (project: AIGroup) => quickPanelsRef.value?.open(project)
 }
 
 .group-card__status {
-  color: color-mix(in srgb, var(--project-accent) 88%, var(--n-text-color));
-  background: var(--project-soft);
-  border: 1px solid color-mix(in srgb, var(--project-accent) 20%, transparent);
+  color: var(--status-accent);
+  background: color-mix(in srgb, var(--n-color-embedded) 92%, var(--n-color));
+  border: 1px solid color-mix(in srgb, var(--n-border-color) 82%, transparent);
 }
 
 .group-card__status-icon {
-  color: var(--project-accent);
-  background: color-mix(in srgb, var(--project-accent) 12%, var(--n-color));
-  border: 1px solid color-mix(in srgb, var(--project-accent) 18%, transparent);
+  color: var(--status-accent);
+  background: color-mix(in srgb, var(--status-accent) 10%, var(--n-color));
+  border: 1px solid color-mix(in srgb, var(--status-accent) 16%, transparent);
 }
 
 .group-card__footer {
