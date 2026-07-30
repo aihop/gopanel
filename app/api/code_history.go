@@ -31,10 +31,14 @@ func GetCodeSessionHistory(c fiber.Ctx) error {
 		return c.JSON(e.Fail(err))
 	}
 	if session.AgentName == "codex" {
-		nativeMessages, nativeErr := getNativeCodexMessages(session)
-		if nativeErr == nil {
-			messages = mergeCodeHistoryMessages(messages, nativeMessages)
+		if err := repairNativeCodexSessionBinding(session); err != nil {
+			return c.JSON(e.Fail(err))
 		}
+		nativeMessages, nativeErr := getNativeCodexMessages(session)
+		if nativeErr != nil {
+			return c.JSON(e.Fail(nativeErr))
+		}
+		messages = mergeCodeHistoryMessages(messages, nativeMessages)
 	}
 	runs, total, err := repo.NewAIDevSessionRepo().GetExecutionRunsBySessionID(session.ID, page, limit)
 	if err != nil {

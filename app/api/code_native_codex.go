@@ -9,8 +9,20 @@ import (
 	"time"
 
 	"github.com/aihop/gopanel/app/model"
-	"github.com/aihop/gopanel/app/repo"
+	"github.com/aihop/gopanel/global"
 )
+
+const (
+	nativeCodexDiscoveryAttempts = 240
+	nativeCodexStartTolerance    = 5 * time.Second
+)
+
+type nativeCodexSessionMeta struct {
+	ID        string
+	WorkDir   string
+	ProcessID int
+	StartedAt time.Time
+}
 
 func buildNativeCodexCommand(session *model.AIDevSession) (*exec.Cmd, error) {
 	commandPath, commandEnv, err := resolveCodeExecutorCommand("codex")
@@ -41,17 +53,42 @@ func buildNativeCodexCommand(session *model.AIDevSession) (*exec.Cmd, error) {
 }
 
 func discoverNativeCodexSession(session *model.AIDevSession, processID int, startedAt time.Time) {
-	for attempt := 0; attempt < 20; attempt++ {
+	for attempt := 0; attempt < nativeCodexDiscoveryAttempts; attempt++ {
 		if nativeSessionID := findNativeCodexSessionID(session.WorkDir, processID, startedAt); nativeSessionID != "" {
-			current, err := repo.NewAIDevSessionRepo().GetSessionByID(session.ID)
-			if err == nil && current.NativeSessionID != nativeSessionID {
-				current.NativeSessionID = nativeSessionID
-				_ = repo.NewAIDevSessionRepo().UpdateSession(current)
-			}
+			_ = bindNativeCodexSession(session, nativeSessionID)
 			return
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
+}
+
+func repairNativeCodexSessionBinding(session *model.AIDevSession) error {
+	if session == nil || strings.TrimSpace(session.NativeSessionID) != "" || session.CreatedAt.IsZero() {
+		return nil
+	}
+	nativeSessionID := findNativeCodexSessionID(session.WorkDir, 0, session.CreatedAt)
+	if nativeSessionID == "" {
+		return nil
+	}
+	return bindNativeCodexSession(session, nativeSessionID)
+}
+
+func bindNativeCodexSession(session *model.AIDevSession, nativeSessionID string) error {
+	if session == nil || session.ID == 0 || strings.TrimSpace(nativeSessionID) == "" {
+		return nil
+	}
+	result := global.DB.Model(&model.AIDevSession{}).
+		Where("id = ? AND (native_session_id = '' OR native_session_id IS NULL)", session.ID).
+		Update("native_session_id", nativeSessionID)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected > 0 {
+		session.NativeSessionID = nativeSessionID
+		return nil
+	}
+	return global.DB.Model(&model.AIDevSession{}).Where("id = ?", session.ID).
+		Pluck("native_session_id", &session.NativeSessionID).Error
 }
 
 func findNativeCodexSessionID(workDir string, processID int, startedAt time.Time) string {
@@ -66,41 +103,60 @@ func findNativeCodexSessionID(workDir string, processID int, startedAt time.Time
 	}
 	cleanWorkDir := filepath.Clean(workDir)
 	var latestID string
-	var latestTime time.Time
+	var closestDifference time.Duration
 	for _, path := range paths {
 		info, statErr := os.Stat(path)
-		if statErr != nil || info.ModTime().Before(startedAt.Add(-2*time.Second)) || info.ModTime().Before(latestTime) {
+		if statErr != nil {
 			continue
 		}
-		sessionID, cwd, originPID := readCodexSessionMeta(path)
-		if sessionID == "" || filepath.Clean(cwd) != cleanWorkDir {
+		meta := readCodexSessionMeta(path)
+		if meta.ID == "" || filepath.Clean(meta.WorkDir) != cleanWorkDir {
 			continue
 		}
-		if originPID > 0 && processID > 0 && originPID != processID {
+		if meta.ProcessID > 0 && processID > 0 && meta.ProcessID != processID {
 			continue
 		}
-		latestID = sessionID
-		latestTime = info.ModTime()
+		candidateTime := meta.StartedAt
+		if candidateTime.IsZero() {
+			candidateTime = info.ModTime()
+		}
+		difference := candidateTime.Sub(startedAt)
+		if difference < 0 {
+			difference = -difference
+		}
+		if difference > nativeCodexStartTolerance || latestID != "" && difference >= closestDifference {
+			continue
+		}
+		latestID = meta.ID
+		closestDifference = difference
 	}
 	return latestID
 }
 
-func readCodexSessionMeta(path string) (string, string, int) {
+func readCodexSessionMeta(path string) nativeCodexSessionMeta {
 	file, err := os.Open(path)
 	if err != nil {
-		return "", "", 0
+		return nativeCodexSessionMeta{}
 	}
 	defer file.Close()
 	var event struct {
-		Type    string `json:"type"`
+		Type    string    `json:"type"`
+		Time    time.Time `json:"timestamp"`
 		Payload struct {
-			SessionID string `json:"session_id"`
-			Cwd       string `json:"cwd"`
-			OriginPID int    `json:"originator_pid"`
+			SessionID string    `json:"session_id"`
+			Cwd       string    `json:"cwd"`
+			OriginPID int       `json:"originator_pid"`
+			Timestamp time.Time `json:"timestamp"`
 		} `json:"payload"`
 	}
 	if json.NewDecoder(file).Decode(&event) != nil || event.Type != "session_meta" {
-		return "", "", 0
+		return nativeCodexSessionMeta{}
 	}
-	return event.Payload.SessionID, event.Payload.Cwd, event.Payload.OriginPID
+	startedAt := event.Payload.Timestamp
+	if startedAt.IsZero() {
+		startedAt = event.Time
+	}
+	return nativeCodexSessionMeta{
+		ID: event.Payload.SessionID, WorkDir: event.Payload.Cwd, ProcessID: event.Payload.OriginPID, StartedAt: startedAt,
+	}
 }

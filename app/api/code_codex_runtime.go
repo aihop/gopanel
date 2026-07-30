@@ -117,11 +117,11 @@ func findCodexRuntimePath(session *model.AIDevSession) string {
 		if statErr != nil || info.ModTime().Before(session.CreatedAt.Add(-5*time.Second)) || info.ModTime().Before(latestTime) {
 			continue
 		}
-		nativeID, cwd, _ := readCodexSessionMeta(path)
-		if session.NativeSessionID != "" && nativeID != session.NativeSessionID {
+		meta := readCodexSessionMeta(path)
+		if session.NativeSessionID != "" && meta.ID != session.NativeSessionID {
 			continue
 		}
-		if session.NativeSessionID == "" && filepath.Clean(cwd) != cleanWorkDir {
+		if session.NativeSessionID == "" && filepath.Clean(meta.WorkDir) != cleanWorkDir {
 			continue
 		}
 		latestPath = path

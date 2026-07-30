@@ -149,10 +149,12 @@ func TestFindNativeCodexSessionIDMatchesWorkingDirectory(t *testing.T) {
 	}
 	path := filepath.Join(sessionDir, "rollout.jsonl")
 	payload := map[string]any{
-		"type": "session_meta",
+		"timestamp": startedAt.Add(time.Minute),
+		"type":      "session_meta",
 		"payload": map[string]any{
 			"session_id": "native-session",
 			"cwd":        workDir,
+			"timestamp":  startedAt,
 		},
 	}
 	data, err := json.Marshal(payload)
@@ -162,8 +164,92 @@ func TestFindNativeCodexSessionIDMatchesWorkingDirectory(t *testing.T) {
 	if err := os.WriteFile(path, append(data, '\n'), 0600); err != nil {
 		t.Fatal(err)
 	}
+	delayedWrite := startedAt.Add(time.Minute)
+	if err := os.Chtimes(path, delayedWrite, delayedWrite); err != nil {
+		t.Fatal(err)
+	}
 	if got := findNativeCodexSessionID(workDir, 0, startedAt); got != "native-session" {
 		t.Fatalf("native session ID = %q", got)
+	}
+}
+
+func TestFindNativeCodexSessionIDChoosesClosestStartTime(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	workDir := t.TempDir()
+	startedAt := time.Now().Add(-time.Minute)
+	sessionDir := filepath.Join(homeDir, ".codex", "sessions", "2026", "07", "30")
+	if err := os.MkdirAll(sessionDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	for name, sessionStart := range map[string]time.Time{
+		"expected": startedAt.Add(time.Second),
+		"later":    startedAt.Add(30 * time.Second),
+	} {
+		payload := map[string]any{
+			"type":    "session_meta",
+			"payload": map[string]any{"session_id": name, "cwd": workDir, "timestamp": sessionStart},
+		}
+		data, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(sessionDir, name+".jsonl"), append(data, '\n'), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := findNativeCodexSessionID(workDir, 0, startedAt); got != "expected" {
+		t.Fatalf("native session ID = %q", got)
+	}
+}
+
+func TestRepairNativeCodexSessionBindingPersistsDiscoveredID(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	workDir := t.TempDir()
+	startedAt := time.Now().Add(-time.Minute)
+	sessionDir := filepath.Join(homeDir, ".codex", "sessions", "2026", "07", "30")
+	if err := os.MkdirAll(sessionDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	payload := map[string]any{
+		"type":    "session_meta",
+		"payload": map[string]any{"session_id": "recovered-session", "cwd": workDir, "timestamp": startedAt},
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sessionDir, "recovered.jsonl"), append(data, '\n'), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	oldDB := global.DB
+	t.Cleanup(func() { global.DB = oldDB })
+	database, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "native-session.db")), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := database.AutoMigrate(&model.AIDevSession{}); err != nil {
+		t.Fatal(err)
+	}
+	session := &model.AIDevSession{UserID: 1, Title: "session", AgentName: "codex", WorkDir: workDir, CreatedAt: startedAt}
+	if err := database.Create(session).Error; err != nil {
+		t.Fatal(err)
+	}
+	global.DB = database
+	if err := repairNativeCodexSessionBinding(session); err != nil {
+		t.Fatal(err)
+	}
+	if session.NativeSessionID != "recovered-session" {
+		t.Fatalf("native session ID = %q", session.NativeSessionID)
+	}
+	var persisted model.AIDevSession
+	if err := database.First(&persisted, session.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if persisted.NativeSessionID != "recovered-session" {
+		t.Fatalf("persisted native session ID = %q", persisted.NativeSessionID)
 	}
 }
 
