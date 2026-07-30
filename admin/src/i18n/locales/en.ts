@@ -2261,6 +2261,7 @@ export default {
 		createDnsAccount: "DNS account",
 		aliyun: "Aliyun",
 		volcengine: "Volcengine",
+		rainyun: "RainYun",
 		manual: "Manual parsing",
 		key: "Key",
 		check: "View",
@@ -2472,6 +2473,22 @@ export default {
 			"When the reverse proxy backend is HTTPS, you might need to set the origin SNI. Please refer to the CDN service provider's documentation for details.",
 		huaweicloud: "Huawei Cloud",
 		restart: "Restart"
+	},
+	xpack: {
+		waf: {
+			contain: "Contains",
+			equal: "Equals",
+			regex: "Regular expression",
+			notEqual: "Does not equal",
+			badReq: "Bad Request",
+			forbidden: "Forbidden",
+			noRes: "No Response",
+			serverErr: "Internal Server Error",
+			actionAllow: "Allow",
+			deny: "Deny",
+			captcha: "CAPTCHA",
+			fiveSeconds: "Five-second challenge"
+		}
 	},
 	ssl: {
 		create: "Request",

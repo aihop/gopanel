@@ -2135,6 +2135,7 @@ export default {
 		createDnsAccount: "DNS账户",
 		aliyun: "阿里云",
 		volcengine: "火山引擎",
+		rainyun: "雨云",
 		manual: "手动解析",
 		key: "密钥",
 		check: "查看",
@@ -2336,6 +2337,22 @@ export default {
 		sniHelper: "反代后端为 https 的时候可能需要设置回源 SNI，具体需要看 CDN 服务商文档",
 		huaweicloud: "华为云",
 		restart: "重启"
+	},
+	xpack: {
+		waf: {
+			contain: "包含",
+			equal: "等于",
+			regex: "正则匹配",
+			notEqual: "不等于",
+			badReq: "错误请求",
+			forbidden: "禁止访问",
+			noRes: "无响应",
+			serverErr: "服务器错误",
+			actionAllow: "放行",
+			deny: "拒绝",
+			captcha: "人机验证",
+			fiveSeconds: "五秒验证"
+		}
 	},
 	ssl: {
 		create: "申请证书",
