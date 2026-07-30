@@ -40,6 +40,8 @@ func CodeRouter(r fiber.Router) {
 		group.Get("/sessions/:id/git/status", api.GetCodeGitStatus)
 		group.Get("/sessions/:id/git/diff", api.GetCodeGitDiff)
 		group.Put("/sessions/:id/git/stage", api.UpdateCodeGitStage)
+		group.Get("/sessions/:id/quality-checks", api.GetCodeQualityChecks)
+		group.Post("/sessions/:id/quality-checks/run", api.RunCodeQualityCheck)
 		group.Post("/sessions/:id/stop", api.StopCodeSessionExecution)
 		group.Post("/instructions/:id/retry", api.RetryCodeInstruction)
 		group.Get("/approvals", api.GetAIApprovals)

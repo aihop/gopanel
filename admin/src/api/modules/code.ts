@@ -10,6 +10,8 @@ import type {
 	CodeInstructionResponse,
 	CodeApproval,
 	CodeApprovalPolicy,
+	CodeQualityCheck,
+	CodeQualityCheckResult,
 	CodeWorktreeCapability,
 	CodeSession,
 	CodeSessionFile,
@@ -89,6 +91,16 @@ export function getCodexRuntimeState(sessionId: number) {
 	return http.get<CodexRuntimeState | null>(`/code/sessions/${sessionId}/codex-runtime`, undefined, {
 		timeout: 10000
 	})
+}
+
+export function getCodeQualityChecks(sessionId: number) {
+	return http.get<{ items: CodeQualityCheck[] }>(`/code/sessions/${sessionId}/quality-checks`, undefined, {
+		timeout: 15000
+	})
+}
+
+export function runCodeQualityCheck(sessionId: number, checkId: string) {
+	return http.post<CodeQualityCheckResult>(`/code/sessions/${sessionId}/quality-checks/run`, { checkId }, 630000)
 }
 
 export function createCodeInstruction(sessionId: number, content: string) {

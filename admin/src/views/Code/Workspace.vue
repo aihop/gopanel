@@ -140,6 +140,7 @@
 								{{ t("code.projectStructure") }}
 							</n-button>
 							<CodeApprovalCenter :session-id="currentSessionId" @take-terminal="takeOverTerminal" />
+							<CodeDeliveryPanel v-if="currentSessionId !== null" :session-id="currentSessionId" @open-file="openFile" />
 							<SessionApprovalPolicy v-if="currentSessionId !== null" :session-id="currentSessionId" />
 							<WorkspaceModeSwitch
 								v-if="currentSessionId !== null || currentTaskId !== null"
@@ -276,6 +277,7 @@ import CodeTerminal from "./components/CodeTerminal.vue"
 import NewSessionModal from "./components/NewSessionModal.vue"
 import SessionApprovalPolicy from "./components/SessionApprovalPolicy.vue"
 import CodeApprovalCenter from "./components/CodeApprovalCenter.vue"
+import CodeDeliveryPanel from "./components/CodeDeliveryPanel.vue"
 import SessionHistoryDrawer from "./components/SessionHistoryDrawer.vue"
 import ProjectStructurePanel from "./components/ProjectStructurePanel.vue"
 import SessionFileEditor from "./components/SessionFileEditor.vue"
@@ -298,8 +300,7 @@ const { t } = useI18n({ messages: codeWorkspaceMessages })
 if (!props.embedded) useHideLayoutFooter()
 const currentGroupId = computed(() => props.projectId ?? Number(route.params.id))
 const groupInfo = ref<AIGroup | null>(null), tasks = ref<AITask[]>([])
-const currentTaskId = ref<number | null>(null)
-const currentSessionId = ref<number | null>(null)
+const currentTaskId = ref<number | null>(null), currentSessionId = ref<number | null>(null)
 const showNewSessionModal = ref(false), showHistoryDrawer = ref(false)
 const showProjectStructure = ref(false), showRenameModal = ref(false)
 const workspaceMode = ref<CodeWorkspaceMode>("terminal")
@@ -311,7 +312,6 @@ const activeFilePath = ref("")
 const fileEditorRef = ref<{ hasUnsavedChanges: boolean } | null>(null)
 const editingTaskId = ref<number | null>(null), editingTaskTitle = ref("")
 const renaming = ref(false)
-
 const currentTask = computed(() => tasks.value.find(task => task.id === currentTaskId.value) || null)
 const sessionLabel = computed(
 	() => currentTask.value?.title || (currentSessionId.value ? t("code.newSession") : t("code.selectTaskToStart"))

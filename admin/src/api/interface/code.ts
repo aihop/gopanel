@@ -196,6 +196,29 @@ export interface CodeSessionState {
 	latestRun: CodeExecutionRun | null
 }
 
+export type CodeQualityKind = "test" | "lint" | "typecheck" | "build"
+export type CodeQualityStatus = "passed" | "failed" | "timed_out"
+
+export interface CodeQualityCheckResult {
+	checkId: string
+	status: CodeQualityStatus
+	exitCode: number
+	durationMs: number
+	output: string
+	outputTruncated: boolean
+	startedAt: string
+	completedAt: string
+}
+
+export interface CodeQualityCheck {
+	id: string
+	kind: CodeQualityKind
+	label: string
+	command: string
+	workDir: string
+	lastResult?: CodeQualityCheckResult
+}
+
 export interface CodeInstructionResponse {
 	session: CodeSession
 	instruction: CodeInstruction
