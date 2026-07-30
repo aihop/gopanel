@@ -213,6 +213,13 @@ func buildCodeExecutorCommand(ctx context.Context, executorID, workDir, prompt, 
 	if err != nil {
 		return nil, "", err
 	}
+	if definition.ID == "codex" {
+		writableDirs, writableErr := codexWritableDirsForSession(session)
+		if writableErr != nil {
+			return nil, "", writableErr
+		}
+		args = addCodexWritableDirArgs(args, writableDirs)
+	}
 	command := exec.CommandContext(ctx, commandPath, args...)
 	command.Dir = workDir
 	command.Env = commandEnv

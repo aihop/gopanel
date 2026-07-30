@@ -23,6 +23,11 @@ func buildNativeCodexCommand(session *model.AIDevSession) (*exec.Cmd, error) {
 		"--no-alt-screen",
 		"--cd", session.WorkDir,
 	}
+	writableDirs, err := codexWritableDirsForSession(session)
+	if err != nil {
+		return nil, err
+	}
+	args = addCodexWritableDirArgs(args, writableDirs)
 	if strings.TrimSpace(session.NativeSessionID) != "" {
 		args = append(args, "resume", session.NativeSessionID)
 	}

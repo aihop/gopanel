@@ -301,7 +301,7 @@ const showNewSessionModal = ref(false)
 const showHistoryDrawer = ref(false)
 const showProjectStructure = ref(false)
 const showRenameModal = ref(false)
-const workspaceMode = ref<CodeWorkspaceMode>("editor")
+const workspaceMode = ref<CodeWorkspaceMode>("terminal")
 const terminalMounted = ref(false)
 const terminalKey = ref(0)
 const terminalTakeoverRequested = ref(false)
@@ -393,8 +393,8 @@ const selectTask = (task: AITask) => {
 		currentTaskId.value = task.id
 		currentSessionId.value = task.sessionId || null
 		terminalTakeoverRequested.value = false
-		workspaceMode.value = "editor"
-		terminalMounted.value = false
+		workspaceMode.value = "terminal"
+		terminalMounted.value = true
 		terminalKey.value++
 	})
 }
@@ -437,7 +437,8 @@ const handleTaskAction = (key: string, task: AITask) => {
 				if (currentTaskId.value === task.id) {
 					currentTaskId.value = null
 					currentSessionId.value = null
-					workspaceMode.value = "editor"
+					workspaceMode.value = "terminal"
+					terminalMounted.value = false
 					resetSelectedFile()
 				}
 				await fetchTasks()
@@ -469,7 +470,7 @@ const resetWorkspace = () => {
 	showNewSessionModal.value = false
 	showHistoryDrawer.value = false
 	showProjectStructure.value = false
-	workspaceMode.value = "editor"
+	workspaceMode.value = "terminal"
 	terminalMounted.value = false
 	isWorkspaceFullscreen.value = false
 	resetSelectedFile()
