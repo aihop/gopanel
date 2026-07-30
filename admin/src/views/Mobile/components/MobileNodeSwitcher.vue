@@ -54,7 +54,8 @@ function selectNode(node: MobileNode) {
 									<n-tag v-if="node.isLocal" size="tiny" :bordered="false">{{ t("mobile.controllerNode") }}</n-tag>
 									<n-tag v-if="node.isProd" size="tiny" type="error" :bordered="false">{{ t("mobile.productionNode") }}</n-tag>
 								</div>
-								<div class="mt-1 truncate text-xs text-slate-500">{{ node.summary.hostname || node.version || t("mobile.nodeDetailsUnavailable") }}</div>
+								<div v-if="node.status === 'online'" class="mt-1 truncate text-xs text-slate-500">{{ node.summary.hostname || node.version || t("mobile.nodeDetailsUnavailable") }}</div>
+								<div v-else-if="node.lastSeenAt" class="mt-1 truncate text-xs text-slate-500">{{ t("mobile.lastSeen", { time: new Date(node.lastSeenAt).toLocaleString() }) }}</div>
 							</div>
 							<n-tag size="small" :type="statusType(node.status)" :bordered="false">{{ statusText(node.status) }}</n-tag>
 						</div>

@@ -225,7 +225,10 @@ func SettingSystemUpgrade(c fiber.Ctx) error {
 		}
 	}
 
-	currentVersionInfo, _ := appVersionService.GoPanelVersion()
+	currentVersionInfo, err := appVersionService.GoPanelVersion()
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
 	// 获取最新版本信息
 	updateInfo, err := appVersionService.GetUpdateInfo(constant.UpgradeUrl, &dto.SettingUpgradeVersion{
 		VersionName: req.CurrentVersion,
@@ -238,6 +241,9 @@ func SettingSystemUpgrade(c fiber.Ctx) error {
 	})
 	if err != nil {
 		return c.JSON(e.Fail(err))
+	}
+	if updateInfo == nil {
+		return c.JSON(e.Fail(fmt.Errorf("failed to retrieve update information")))
 	}
 
 	// 创建日志文件记录安装过程
@@ -412,6 +418,9 @@ func SettingSystemCheck(c fiber.Ctx) error {
 	})
 	if err != nil {
 		return c.JSON(e.Fail(err))
+	}
+	if updateInfo == nil {
+		return c.JSON(e.Fail(fmt.Errorf("failed to retrieve update information")))
 	}
 	return c.JSON(e.Succ(updateInfo))
 }

@@ -82,9 +82,9 @@ type AIDevSession struct {
 	CurrentStage      string     `gorm:"column:current_stage;type:varchar(64);default:'idle'" json:"currentStage"`
 	LastTaskID        uint       `gorm:"column:last_task_id;type:integer;index" json:"lastTaskId"`
 	NativeSessionID   string     `gorm:"column:native_session_id;type:varchar(255)" json:"nativeSessionId"`
-	CodexBaseURL      string     `gorm:"column:codex_base_url;type:varchar(1024)" json:"codexBaseUrl,omitempty"`
-	CodexWireAPI      string     `gorm:"column:codex_wire_api;type:varchar(32)" json:"codexWireApi,omitempty"`
-	CodexAPIKey       string     `gorm:"column:codex_api_key;type:text" json:"-"`
+	ProviderBaseURL   string     `gorm:"column:codex_base_url;type:varchar(1024)" json:"providerBaseUrl,omitempty"`
+	ProviderModel     string     `gorm:"column:provider_model;type:varchar(255)" json:"providerModel,omitempty"`
+	ProviderAPIKey    string     `gorm:"column:codex_api_key;type:text" json:"-"`
 	ApprovalPolicy    string     `gorm:"column:approval_policy;type:varchar(32);not null;default:'safe_auto'" json:"approvalPolicy"`
 	LastInstructionAt *time.Time `gorm:"column:last_instruction_at" json:"lastInstructionAt,omitempty"`
 }

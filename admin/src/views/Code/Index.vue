@@ -36,7 +36,7 @@
       >
         <div class="flex items-center justify-between gap-3">
           <span>{{ t("code.projectLoadFailed") }}</span>
-          <n-button text type="primary" @click="fetchGroups">{{ t("code.retry") }}</n-button>
+          <n-button text type="primary" @click="fetchGroups()">{{ t("code.retry") }}</n-button>
         </div>
       </n-alert>
 

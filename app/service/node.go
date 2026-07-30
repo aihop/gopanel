@@ -249,6 +249,10 @@ func toMobileNodeRes(node model.Node, isLocal bool) dto.MobileNodeRes {
 		value := node.LastSeenAt
 		lastSeenAt = &value
 	}
+	summary := node.Summary
+	if node.Status != NodeStatusOnline {
+		summary = model.NodeSummary{}
+	}
 	return dto.MobileNodeRes{
 		ID:         node.ID,
 		Name:       node.Name,
@@ -257,7 +261,7 @@ func toMobileNodeRes(node model.Node, isLocal bool) dto.MobileNodeRes {
 		Status:     node.Status,
 		Version:    node.Version,
 		LastSeenAt: lastSeenAt,
-		Summary:    node.Summary,
+		Summary:    summary,
 		Warnings:   buildNodeWarnings(node),
 	}
 }

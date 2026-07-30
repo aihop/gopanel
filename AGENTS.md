@@ -121,17 +121,35 @@
 
 ## 发布版本（自动执行，不再询问）
 
-当用户要求"发布一个版本"或"发布到 GitHub/GitCode"时，按以下顺序自动执行，不需要二次确认：
+**固定触发提示词：`发布新版本`。**
 
-1. 确认版本号：用户未指定时询问一次；指定后直接使用。
-2. 检查环境（不需要等用户确认）：
-   - `gh auth status` 已登录
-   - `jq` 已安装
-   - `GITCODE_TOKEN` 环境变量或 `.env` 中已配置
-   - `GOPANEL_ADMIN_KEY` 在 `.env` 中已配置（用于 `gopanel.cn` changelog 同步）
-3. 执行 `bash build.sh <VERSION>` 生成多平台包（后台运行，等待完成）。
-4. 执行 `PUBLISH_POST=1 bash publish.sh <VERSION>` 发布到 GitHub、GitCode，并同步 changelog 到 `https://gopanel.cn/api/admin/posts`。
-5. 发布完成后，向用户汇报 Release 链接和同步结果。
+当用户说“发布新版本”“发布一个版本”或“发布到 GitHub/GitCode”时，直接完成整个官方发布流程，不询问版本号，不做二次确认：
+
+1. 确定版本号：
+   - 用户明确指定版本号时直接使用。
+   - 用户未指定时，通过 GitHub Release/远程 Tag 获取最新正式语义化版本，默认递增补丁号，例如 `1.3.2 → 1.3.3`。
+   - 忽略草稿、预发布版本和非语义化 Tag；不得仅依赖本地 Tag，因为本地可能尚未同步。
+2. 检查发布基线：
+   - 确认当前分支、最新提交、远程同步状态和工作区状态。
+   - 若存在待发布的任务相关代码，先验证、提交并推送；不得把无关改动混入发布提交。
+   - 确认目标版本在 GitHub/GitCode 尚未正式发布；如已存在则按脚本的幂等更新逻辑继续，不重复创建冲突记录。
+3. 检查环境（不等待用户确认）：
+   - `jq` 已安装。
+   - `GITCODE_TOKEN` 环境变量或 `.env` 中已配置。
+   - `GOPANEL_ADMIN_KEY` 在 `.env` 中已配置，用于同步 `gopanel.cn` changelog。
+   - 优先使用有效的 `GH_TOKEN`/`GITHUB_TOKEN`；若 `gh auth status` 失效，则从系统 Git credential helper 读取 `github.com` 凭据并仅在当前命令中注入 `GH_TOKEN`，不得输出或写入密钥。
+4. 执行 `bash build.sh <VERSION>` 生成全部默认平台包，并等待完整结束：
+   - macOS ARM64 / AMD64
+   - Linux ARM64 / AMD64
+   - Windows AMD64
+   - 若构建被本次代码的明确错误阻断，做最小修复、验证、提交、推送后自动重新构建；依赖审计警告不等于构建失败，不在发布过程中擅自升级依赖。
+5. 非交互执行 `PUBLISH_POST=1 bash publish.sh <VERSION>`，自动回答脚本确认提示，同时发布到 GitHub、GitCode，并同步 changelog 到 `https://gopanel.cn/api/admin/posts`。
+6. 发布后必须核验：
+   - GitHub Release 为非草稿、非预发布，Tag 和全部平台附件正确。
+   - GitCode Release Tag 和全部平台附件正确。
+   - 官网 changelog 返回 2xx 且记录 key 为 `v<VERSION>`。
+   - 仓库远程 URL 已恢复为无凭据地址，发布提交已推送。
+7. 最终只向用户汇报版本号、GitHub/GitCode Release 链接、官网 changelog 同步结果和必要警告。
 
 **默认仓库**：`aihop/gopanel`。
 **默认目标**：GitHub + GitCode 同时发布。

@@ -49,6 +49,22 @@ func TestNativeTerminalProtocolTransfersAndReleasesControl(t *testing.T) {
 	terminal.unsubscribe(first)
 }
 
+func TestNativeTerminalProtocolCanReleaseReadOnlySubscriberControl(t *testing.T) {
+	terminal := newNativeTerminalProtocolTestSubject()
+	subscription, baseline := terminal.subscribe(0)
+	if !baseline.HasControl {
+		t.Fatal("first subscriber should initially receive control")
+	}
+	if !terminal.releaseControl(subscription.ID) || terminal.controllerID != "" {
+		t.Fatal("read-only subscriber should release terminal control")
+	}
+	control := <-subscription.Events
+	if control.HasControl {
+		t.Fatalf("unexpected control event after release: %#v", control)
+	}
+	terminal.unsubscribe(subscription)
+}
+
 func TestNativeTerminalProtocolResetsStaleSequence(t *testing.T) {
 	terminal := newNativeTerminalProtocolTestSubject()
 	terminal.publish([]byte("fresh"))

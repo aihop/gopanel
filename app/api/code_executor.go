@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -15,7 +14,6 @@ import (
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/utils/token"
 	"github.com/gofiber/fiber/v3"
-	"github.com/google/uuid"
 )
 
 type codeExecutorDefinition struct {
@@ -27,28 +25,42 @@ type codeExecutorDefinition struct {
 	ConfigPaths         []string
 	Capabilities        []string
 	AutomationSupported bool
+	Factory             codeExecutorFactory
 }
 
 type codeExecutorStatus struct {
-	ID           string   `json:"id"`
-	Name         string   `json:"name"`
-	Description  string   `json:"description"`
-	Installed    bool     `json:"installed"`
-	Available    bool     `json:"available"`
-	Version      string   `json:"version"`
-	Configured   bool     `json:"configured"`
-	Reason       string   `json:"reason"`
-	ReasonCode   string   `json:"reasonCode"`
-	Capabilities []string `json:"capabilities"`
+	ID                         string                    `json:"id"`
+	Name                       string                    `json:"name"`
+	Description                string                    `json:"description"`
+	Installed                  bool                      `json:"installed"`
+	Available                  bool                      `json:"available"`
+	Version                    string                    `json:"version"`
+	Configured                 bool                      `json:"configured"`
+	CustomProviderConfigurable bool                      `json:"customProviderConfigurable"`
+	Reason                     string                    `json:"reason"`
+	ReasonCode                 string                    `json:"reasonCode"`
+	Capabilities               []string                  `json:"capabilities"`
+	ConfigSchema               *codeExecutorConfigSchema `json:"configSchema,omitempty"`
 }
 
 var codeExecutorDefinitions = []codeExecutorDefinition{
 	{ID: "terminal", Name: "Terminal", Description: "在隔离工作区中使用普通终端", Capabilities: []string{"shell"}, AutomationSupported: true},
-	{ID: "codex", Name: "Codex", Description: "使用 OpenAI Codex 执行开发任务", Command: "codex", VersionArgs: []string{"--version"}, ConfigPaths: []string{".codex"}, Capabilities: []string{"code", "automation"}, AutomationSupported: true},
-	{ID: "claude", Name: "Claude Code", Description: "使用 Claude Code 执行开发任务", Command: "claude", VersionArgs: []string{"--version"}, ConfigPaths: []string{".claude", ".claude.json"}, Capabilities: []string{"code", "automation"}, AutomationSupported: true},
-	{ID: "opencode", Name: "OpenCode", Description: "使用 OpenCode 执行开发任务", Command: "opencode", VersionArgs: []string{"--version"}, ConfigPaths: []string{".config/opencode"}, Capabilities: []string{"code", "automation"}, AutomationSupported: true},
-	{ID: "aider", Name: "Aider", Description: "使用 Aider 执行开发任务", Command: "aider", VersionArgs: []string{"--version"}, ConfigPaths: []string{".aider.conf.yml"}, Capabilities: []string{"code", "automation"}, AutomationSupported: true},
+	{ID: "codex", Name: "Codex", Description: "使用 OpenAI Codex 执行开发任务", Command: "codex", VersionArgs: []string{"--version"}, ConfigPaths: []string{".codex"}, Capabilities: []string{"code", "automation"}, AutomationSupported: true, Factory: codexExecutorFactory{}},
+	{ID: "claude", Name: "Claude Code", Description: "使用 Claude Code 执行开发任务", Command: "claude", VersionArgs: []string{"--version"}, ConfigPaths: []string{".claude", ".claude.json"}, Capabilities: []string{"code", "automation"}, AutomationSupported: true, Factory: claudeExecutorFactory{}},
+	{ID: "opencode", Name: "OpenCode", Description: "使用 OpenCode 执行开发任务", Command: "opencode", VersionArgs: []string{"--version"}, ConfigPaths: []string{".config/opencode"}, Capabilities: []string{"code", "automation"}, AutomationSupported: true, Factory: openCodeExecutorFactory{}},
+	{ID: "aider", Name: "Aider", Description: "使用 Aider 执行开发任务", Command: "aider", VersionArgs: []string{"--version"}, ConfigPaths: []string{".aider.conf.yml"}, Capabilities: []string{"code", "automation"}, AutomationSupported: true, Factory: aiderExecutorFactory{}},
 	{ID: "trae", Name: "Trae", Description: "当前 Trae CLI 仅用于启动编辑器", Command: "trae", VersionArgs: []string{"--version"}, ConfigPaths: []string{".trae"}, Capabilities: []string{"editor"}, AutomationSupported: false},
+}
+
+func getCodeExecutorFactory(executorID string) (codeExecutorFactory, error) {
+	definition, err := getCodeExecutorDefinition(executorID)
+	if err != nil {
+		return nil, err
+	}
+	if definition.Factory == nil {
+		return nil, errors.New("该执行器不支持 AI 指令")
+	}
+	return definition.Factory, nil
 }
 
 func normalizeCodeExecutorID(executorID string) (string, error) {
@@ -75,7 +87,16 @@ func getCodeExecutorDefinition(executorID string) (codeExecutorDefinition, error
 }
 
 func detectCodeExecutor(definition codeExecutorDefinition) codeExecutorStatus {
-	status := codeExecutorStatus{ID: definition.ID, Name: definition.Name, Description: definition.Description, Capabilities: definition.Capabilities}
+	status := codeExecutorStatus{
+		ID:                         definition.ID,
+		Name:                       definition.Name,
+		Description:                definition.Description,
+		Capabilities:               definition.Capabilities,
+		CustomProviderConfigurable: supportsCustomCodeProvider(definition.ID),
+	}
+	if definition.Factory != nil {
+		status.ConfigSchema = definition.Factory.ConfigSchema()
+	}
 	if definition.ID == "terminal" {
 		status.Installed = true
 		status.Available = true
@@ -153,44 +174,11 @@ func validateCodeExecutorAvailable(executorID, role string) (string, error) {
 }
 
 func buildCodeExecutorArgs(executorID, prompt, nativeSessionID string, sessionID uint, approvalPolicy string) ([]string, string, error) {
-	switch executorID {
-	case "codex":
-		prefix := []string{"--ask-for-approval", codexApprovalPolicy(approvalPolicy), "--sandbox", "workspace-write", "exec"}
-		if nativeSessionID != "" {
-			return append(prefix, "resume", "--json", "--skip-git-repo-check", nativeSessionID, prompt), nativeSessionID, nil
-		}
-		return append(prefix, "--json", "--skip-git-repo-check", prompt), "", nil
-	case "claude":
-		prefix := []string{"--print", "--permission-mode", "acceptEdits", "--output-format", "json"}
-		if nativeSessionID != "" {
-			return append(prefix, "--resume", nativeSessionID, prompt), nativeSessionID, nil
-		}
-		nativeSessionID = uuid.NewString()
-		return append(prefix, "--session-id", nativeSessionID, prompt), nativeSessionID, nil
-	case "opencode":
-		args := []string{"run", "--format", "json"}
-		if nativeSessionID != "" {
-			args = append(args, "--session", nativeSessionID)
-		}
-		return append(args, prompt), nativeSessionID, nil
-	case "aider":
-		if nativeSessionID == "" {
-			nativeSessionID = "gopanel-" + strconv.FormatUint(uint64(sessionID), 10)
-		}
-		historyDir, err := ensureAiderHistoryDir()
-		if err != nil {
-			return nil, "", err
-		}
-		chatHistory := filepath.Join(historyDir, nativeSessionID+".chat.md")
-		llmHistory := filepath.Join(historyDir, nativeSessionID+".llm.log")
-		args := []string{"--yes-always", "--chat-history-file", chatHistory, "--llm-history-file", llmHistory}
-		if _, statErr := os.Stat(chatHistory); statErr == nil {
-			args = append(args, "--restore-chat-history")
-		}
-		return append(args, "--message", prompt), nativeSessionID, nil
-	default:
-		return nil, "", errors.New("该执行器不支持 AI 指令")
+	factory, err := getCodeExecutorFactory(executorID)
+	if err != nil {
+		return nil, "", err
 	}
+	return factory.BuildArgs(prompt, nativeSessionID, sessionID, approvalPolicy)
 }
 
 func ensureAiderHistoryDir() (string, error) {
@@ -228,10 +216,8 @@ func buildCodeExecutorCommand(ctx context.Context, executorID, workDir, prompt, 
 	command := exec.CommandContext(ctx, commandPath, args...)
 	command.Dir = workDir
 	command.Env = commandEnv
-	if definition.ID == "codex" {
-		if err := configureCodexCommand(command, session); err != nil {
-			return nil, "", err
-		}
+	if err := configureCodeProviderCommand(definition.ID, command, session); err != nil {
+		return nil, "", err
 	}
 	return command, preparedSessionID, nil
 }

@@ -23,8 +23,11 @@ func TestMobileNodeSnapshotKeepsMonitoringFields(t *testing.T) {
 	}
 
 	got := toMobileNodeRes(node, false)
-	if got.Name != node.Name || got.Status != NodeStatusOffline || got.Summary.CPUPercent != 42 {
+	if got.Name != node.Name || got.Status != NodeStatusOffline {
 		t.Fatalf("unexpected mobile node snapshot: %#v", got)
+	}
+	if got.Summary.CPUPercent != 0 || got.Summary.MemPercent != 0 {
+		t.Fatalf("offline mobile node retained stale usage: %#v", got.Summary)
 	}
 	if got.LastSeenAt == nil || !got.LastSeenAt.Equal(lastSeenAt) {
 		t.Fatalf("unexpected last seen time: %#v", got.LastSeenAt)

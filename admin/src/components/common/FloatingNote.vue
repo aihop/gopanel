@@ -79,7 +79,7 @@ const SCREEN_GAP = 16
 const authStore = useAuthStore()
 const message = useMessage()
 const { t } = useI18n({ messages: floatingNoteMessages })
-const visible = ref(true)
+const visible = ref(false)
 const loading = ref(false)
 const saving = ref(false)
 const loadError = ref(false)
@@ -110,7 +110,7 @@ function clampPosition(x: number, y: number) {
 }
 
 function persistWindowState() {
-	localStorage.setItem(storageKey.value, JSON.stringify({ visible: visible.value, ...position.value }))
+	localStorage.setItem(storageKey.value, JSON.stringify(position.value))
 }
 
 function restoreWindowState() {
@@ -118,7 +118,6 @@ function restoreWindowState() {
 	try {
 		const state = JSON.parse(localStorage.getItem(storageKey.value) || "null")
 		if (state && typeof state === "object") {
-			visible.value = state.visible !== false
 			position.value = clampPosition(Number(state.x), Number(state.y))
 		}
 	} catch {

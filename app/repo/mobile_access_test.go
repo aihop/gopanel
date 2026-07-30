@@ -13,9 +13,13 @@ import (
 
 func TestMobilePairingCanOnlyBeConsumedOnce(t *testing.T) {
 	repository, database := setupMobileAccessRepo(t)
-	pairing := &model.MobilePairing{UserID: 7, CodeHash: "pair-hash", ExpiresAt: time.Now().Add(time.Minute)}
+	pairing := &model.MobilePairing{UserID: 7, CodeHash: "pair-hash", DeviceTTLDays: 90, ExpiresAt: time.Now().Add(time.Minute)}
 	if err := repository.CreatePairing(pairing); err != nil {
 		t.Fatal(err)
+	}
+	storedPairing, err := repository.FindPairing("pair-hash")
+	if err != nil || storedPairing.DeviceTTLDays != 90 {
+		t.Fatalf("stored pairing duration = %d, err = %v", storedPairing.DeviceTTLDays, err)
 	}
 	device := &model.MobileDevice{Name: "phone", TokenHash: "token-hash", ExpiresAt: time.Now().Add(time.Hour)}
 	if err := repository.ConsumePairing("pair-hash", device); err != nil {
@@ -47,6 +51,23 @@ func TestMobileDeviceCanBeRevoked(t *testing.T) {
 	}
 	if _, err := repository.FindDevice("stored-hash"); err == nil {
 		t.Fatal("expected revoked device to be rejected")
+	}
+}
+
+func TestMobileDeviceCanBeCreatedDirectly(t *testing.T) {
+	repository, _ := setupMobileAccessRepo(t)
+	device := &model.MobileDevice{
+		UserID: 12, Name: "mobile login", TokenHash: "direct-token", ExpiresAt: time.Now().Add(time.Hour),
+	}
+	if err := repository.CreateDevice(device); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := repository.FindDevice("direct-token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.UserID != device.UserID || stored.Name != device.Name {
+		t.Fatalf("stored device = %#v", stored)
 	}
 }
 

@@ -44,6 +44,26 @@ export interface CodeExecutor {
 	reason: string
 	reasonCode: string
 	capabilities: string[]
+	customProviderConfigurable: boolean
+	configSchema?: CodeExecutorConfigSchema
+}
+
+export interface CodeExecutorConfig {
+	baseUrl: string
+	apiKey: string
+	model: string
+}
+
+export interface CodeExecutorConfigField {
+	key: keyof CodeExecutorConfig
+	type: "url" | "password" | "text"
+	label: string
+	placeholder: string
+	required: boolean
+}
+
+export interface CodeExecutorConfigSchema {
+	fields: CodeExecutorConfigField[]
 }
 
 export type CodeApprovalPolicy = "manual" | "safe_auto" | "full_auto"
@@ -60,6 +80,8 @@ export interface CodeSession {
 	status: string
 	currentStage: string
 	approvalPolicy: CodeApprovalPolicy
+	providerBaseUrl?: string
+	providerModel?: string
 }
 
 export interface CodeWorktreeCapability {
@@ -179,4 +201,24 @@ export interface CodeInstructionResponse {
 	instruction: CodeInstruction
 	task: AITask
 	approval: CodeApproval | null
+}
+
+export interface CodeStructureEntry {
+	name: string
+	path: string
+	isDir: boolean
+	extension: string
+}
+
+export interface CodeStructureResult {
+	path: string
+	entries: CodeStructureEntry[]
+	truncated: boolean
+}
+
+export interface CodeSessionFile {
+	path: string
+	content: string
+	extension: string
+	size: number
 }

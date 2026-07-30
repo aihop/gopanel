@@ -212,7 +212,7 @@ onMounted(() => {
 		窄屏（< md）自动堆成一列；说明文字用 min-w-0 + 省略号收缩，
 		按钮永远不会被挤出去，也不会撑出横向滚动条。
 	-->
-	<div class="local-access grid gap-4 grid-cols-2">
+	<div class="local-access grid gap-4 md:grid-cols-2">
 		<section v-for="tile of tiles" :key="tile.key" class="access-tile bg-base-accent border-base-accent">
 			<header class="tile-head">
 				<h3 class="tile-title">{{ tile.title }}</h3>

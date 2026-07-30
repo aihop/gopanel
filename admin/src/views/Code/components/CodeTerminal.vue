@@ -32,6 +32,8 @@ let resizeObserver: ResizeObserver | null = null
 let intentionalClose = false
 let serverErrorShown = false
 let lastSequence = 0
+let receivedServerMessage = false
+let initialReconnectAttempts = 0
 let autoTakeControlPending = Boolean(props.autoTakeControl)
 const nativeProtocol = ref(false)
 const hasTerminalControl = ref(true)
@@ -117,7 +119,6 @@ const connectWebSocket = () => {
 		if (lastSequence > 0) wsUrl += `&after_sequence=${lastSequence}`
 		if (autoTakeControlPending) {
 			wsUrl += "&take_control=1"
-			autoTakeControlPending = false
 		}
 	} else if (props.taskId) {
 		wsUrl += `&task_id=${props.taskId}`
@@ -135,6 +136,8 @@ const connectWebSocket = () => {
 	}
 
 	ws.onmessage = event => {
+		receivedServerMessage = true
+		initialReconnectAttempts = 0
 		if (typeof event.data === "string" && (event.data.includes("失败") || event.data.includes("错误"))) {
 			serverErrorShown = true
 		}
@@ -142,6 +145,7 @@ const connectWebSocket = () => {
 			const msg = JSON.parse(event.data)
 			if (msg.type === "baseline" || msg.type === "output") {
 				nativeProtocol.value = true
+				if (msg.type === "baseline") autoTakeControlPending = false
 				const sequence = Number(msg.sequence) || 0
 				lastSequence = msg.type === "baseline" ? sequence : Math.max(lastSequence, sequence)
 				if (msg.type === "baseline") hasTerminalControl.value = Boolean(msg.hasControl)
@@ -177,7 +181,9 @@ const connectWebSocket = () => {
 		if (!serverErrorShown) {
 			term.writeln("\r\n\x1b[33m[系统] 终端连接已断开。\x1b[0m")
 		}
-		if (nativeProtocol.value && !reconnectTimer) {
+		const canRetryInitialConnection = !receivedServerMessage && initialReconnectAttempts < 3
+		if ((nativeProtocol.value || canRetryInitialConnection) && !reconnectTimer) {
+			initialReconnectAttempts++
 			reconnecting.value = true
 			reconnectTimer = setTimeout(() => {
 				reconnectTimer = null
@@ -233,8 +239,11 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-	<div class="flex h-[calc(100vh-220px)] min-h-0 w-full flex-col bg-[#1e1e1e]">
-		<div v-if="sessionId && runtimeSupported" class="flex min-h-12 items-center justify-between gap-3 border-b border-slate-700 bg-slate-900 px-4 py-2 text-slate-300">
+	<div class="flex h-full min-h-0 w-full flex-col bg-[#1e1e1e]">
+		<div
+			v-if="sessionId && runtimeSupported"
+			class="flex min-h-12 items-center justify-between gap-3 border-b border-slate-700 bg-slate-900 px-4 py-2 text-slate-300"
+		>
 			<div class="flex min-w-0 items-center gap-3">
 				<n-tag v-if="runtimeState" :type="runtimeTagType" size="small" round :bordered="false">
 					{{ t(`code.codexState_${runtimeState.responseState}`) }}
@@ -250,7 +259,9 @@ onBeforeUnmount(() => {
 				</span>
 			</div>
 			<div class="flex shrink-0 items-center gap-3 text-xs text-slate-400">
-				<n-tag v-if="reconnecting" size="small" type="warning" :bordered="false">{{ t("code.terminalReconnecting") }}</n-tag>
+				<n-tag v-if="reconnecting" size="small" type="warning" :bordered="false">
+					{{ t("code.terminalReconnecting") }}
+				</n-tag>
 				<n-tag v-else-if="nativeProtocol && hasTerminalControl" size="small" type="success" :bordered="false">
 					{{ t("code.terminalControlling") }}
 				</n-tag>
@@ -258,11 +269,13 @@ onBeforeUnmount(() => {
 					{{ t("code.takeTerminalControl") }}
 				</n-button>
 				<template v-if="runtimeState">
-				<span v-if="runtimeState.model">{{ runtimeState.model }}</span>
-				<span v-if="runtimeState.totalTokens">{{ t("code.codexTokenUsage", { count: formatTokens(runtimeState.totalTokens) }) }}</span>
-				<span v-if="runtimeState.cachedInputTokens" class="hidden md:inline">
-					{{ t("code.codexCachedTokens", { count: formatTokens(runtimeState.cachedInputTokens) }) }}
-				</span>
+					<span v-if="runtimeState.model">{{ runtimeState.model }}</span>
+					<span v-if="runtimeState.totalTokens">
+						{{ t("code.codexTokenUsage", { count: formatTokens(runtimeState.totalTokens) }) }}
+					</span>
+					<span v-if="runtimeState.cachedInputTokens" class="hidden md:inline">
+						{{ t("code.codexCachedTokens", { count: formatTokens(runtimeState.cachedInputTokens) }) }}
+					</span>
 				</template>
 			</div>
 		</div>

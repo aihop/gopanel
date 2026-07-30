@@ -4,6 +4,7 @@ import (
 	"github.com/aihop/gopanel/app/api"
 	"github.com/aihop/gopanel/app/middleware"
 	"github.com/aihop/gopanel/constant"
+	"github.com/aihop/gopanel/pkg/websocket"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -11,6 +12,7 @@ func MobileRouter(r fiber.Router) {
 	mobile := r.Group("mobile")
 	mobile.Get("/health", api.MobileHealth)
 	mobile.Post("/pair/exchange", api.ExchangeMobilePairing)
+	mobile.Post("/login", api.LoginMobileDevice)
 
 	management := mobile.Group("/management").Use(middleware.JWT(constant.UserRoleAdmin))
 	management.Post("/pair/issue", api.IssueMobilePairing)
@@ -21,8 +23,21 @@ func MobileRouter(r fiber.Router) {
 	app.Get("/overview", api.GetMobileOverview)
 	app.Get("/nodes", api.GetMobileNodes)
 	app.Post("/logout", api.LogoutMobileDevice)
+	app.Get("/system/version", api.SettingSystemVersion)
+	app.Get("/system/check", api.SettingSystemCheck)
+	app.Post("/system/upgrade", api.SettingSystemUpgrade)
+	app.Get("/system/upgrade/logs", api.SettingSystemUpgradeLogs)
+	app.Get("/containers", api.GetMobileContainers)
+	app.Post("/containers/operate", api.OperateMobileContainer)
+	app.Get("/projects", api.GetAIGroups)
+	app.Get("/executors", api.GetCodeExecutors)
+	app.Get("/terminal", websocket.New(api.AIAgentWsSSH))
 	app.Get("/sessions", api.GetAISessions)
+	app.Post("/sessions", api.CreateAISession)
 	app.Get("/sessions/:id/state", api.GetAISessionState)
+	app.Get("/sessions/:id/structure", api.GetAISessionStructure)
+	app.Get("/sessions/:id/file", api.GetAISessionFile)
+	app.Put("/sessions/:id/file", api.SaveAISessionFile)
 	app.Post("/sessions/:id/instructions", api.CreateAISessionInstruction)
 	app.Post("/sessions/:id/stop", api.StopCodeSessionExecution)
 	app.Post("/instructions/:id/retry", api.RetryCodeInstruction)

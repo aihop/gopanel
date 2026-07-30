@@ -4,6 +4,7 @@ import type {
 	AITask,
 	AIMessage,
 	CodeExecutor,
+	CodeExecutorConfig,
 	CodeExecutionRun,
 	CodeInstruction,
 	CodeInstructionResponse,
@@ -11,8 +12,10 @@ import type {
 	CodeApprovalPolicy,
 	CodeWorktreeCapability,
 	CodeSession,
+	CodeSessionFile,
 	CodeSessionHistory,
 	CodeSessionState,
+	CodeStructureResult,
 	CodexRuntimeState
 } from "../interface/code"
 
@@ -45,6 +48,7 @@ export function createCodeSession(data: {
 	executorId: string
 	approvalPolicy: CodeApprovalPolicy
 	isolated: boolean
+	provider?: CodeExecutorConfig
 }) {
 	return http.post<CodeSession>("/code/sessions", data)
 }
@@ -69,8 +73,22 @@ export function getCodeSessionState(sessionId: number) {
 	return http.get<CodeSessionState>(`/code/sessions/${sessionId}/state`, undefined, { timeout: 10000 })
 }
 
+export function getCodeSessionStructure(sessionId: number, path = "") {
+	return http.get<CodeStructureResult>(`/code/sessions/${sessionId}/structure`, { path }, { timeout: 10000 })
+}
+
+export function getCodeSessionFile(sessionId: number, path: string) {
+	return http.get<CodeSessionFile>(`/code/sessions/${sessionId}/file`, { path }, { timeout: 10000 })
+}
+
+export function saveCodeSessionFile(sessionId: number, path: string, content: string) {
+	return http.put<{ path: string; size: number }>(`/code/sessions/${sessionId}/file`, { path, content })
+}
+
 export function getCodexRuntimeState(sessionId: number) {
-	return http.get<CodexRuntimeState | null>(`/code/sessions/${sessionId}/codex-runtime`, undefined, { timeout: 10000 })
+	return http.get<CodexRuntimeState | null>(`/code/sessions/${sessionId}/codex-runtime`, undefined, {
+		timeout: 10000
+	})
 }
 
 export function createCodeInstruction(sessionId: number, content: string) {

@@ -1,112 +1,111 @@
 <template>
 	<div
-		class="ai-workspace-root relative flex h-full min-h-[calc(100vh-130px)] w-full flex-col overflow-hidden rounded-[28px] border border-slate-200/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.92))] shadow-[0_18px_45px_rgba(15,23,42,0.08)]"
+		class="ai-workspace-root page page-wrapped page-mobile-full page-without-footer relative flex w-full flex-col overflow-hidden rounded-[24px] border border-slate-200/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.92))] shadow-[0_18px_45px_rgba(15,23,42,0.08)]"
 	>
 		<n-layout has-sider class="h-full flex-1 !bg-transparent" style="width: 100%">
-			<!-- 左侧边栏：该项目内的历史任务 -->
 			<n-layout-sider
 				collapse-mode="width"
 				:collapsed-width="0"
-				:width="320"
+				:width="280"
 				show-trigger="bar"
 				class="ai-workspace-sider !bg-[rgba(248,250,252,0.75)] backdrop-blur-sm"
 				style="height: 100%"
 			>
 				<div class="ai-workspace-sider-inner flex h-full flex-col border-r border-slate-200/80">
-					<div class="ai-workspace-sider-header border-b border-slate-200/80 p-5">
+					<div class="ai-workspace-sider-header border-b border-slate-200/80 p-3">
 						<div
-							class="ai-workspace-sider-card rounded-[24px] border border-slate-200/80 bg-white/90 p-4 shadow-sm"
+							class="ai-workspace-sider-card rounded-[18px] border border-slate-200/80 bg-white/90 p-3 shadow-sm"
 						>
-							<div class="flex flex-col gap-4">
+							<div class="flex flex-col gap-3">
 								<div
 									class="flex cursor-pointer items-center gap-3 rounded-2xl px-1 py-1 transition-opacity hover:opacity-80"
 									@click="backToLobby"
 								>
 									<n-button quaternary circle size="small" class="!bg-slate-100">
-										<template #icon>←</template>
+										<template #icon><Icon name="mdi:arrow-left" /></template>
 									</n-button>
 									<div class="min-w-0">
 										<div class="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">
-											{{ $t("code.workspace") }}
+											{{ t("code.workspace") }}
 										</div>
 										<div class="truncate text-sm font-semibold text-[var(--n-text-color)]">
-											{{ groupInfo ? groupInfo.name : t("code.projectFallback") }}
+											{{ groupInfo?.name || t("code.projectFallback") }}
 										</div>
 									</div>
 								</div>
 								<n-button
 									type="primary"
 									block
+									class="!h-10 !rounded-[14px] shadow-[0_12px_28px_rgba(37,99,235,0.18)]"
 									@click="createNewTask"
-									class="!h-11 !rounded-[16px] shadow-[0_12px_28px_rgba(37,99,235,0.18)]"
 								>
-									<template #icon>
-										<AddIcon />
-									</template>
-									发起新对话
+									<template #icon><Icon name="mdi:plus" /></template>
+									{{ t("code.newSession") }}
 								</n-button>
 							</div>
 						</div>
+					</div>
 
-						<div class="flex items-center justify-between px-5 pt-5">
-							<div class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">历史任务</div>
-							<div class="text-xs text-slate-400">{{ tasks.length }} 条</div>
-						</div>
-
-						<n-scrollbar class="flex-1 px-4 pb-4 pt-4">
-							<div
-								v-if="tasks.length === 0"
-								class="ai-workspace-task-empty flex min-h-[240px] items-center justify-center rounded-[22px] border border-dashed border-slate-200 bg-white/70"
-							>
-								<n-empty :description="t('code.noProjectHistory')" />
+					<div class="ai-workspace-task-history mt-3 flex min-h-0 flex-1 flex-col overflow-hidden">
+						<div class="flex items-center justify-between px-4 pb-2 pt-1">
+							<div class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+								{{ t("code.taskHistory") }}
 							</div>
-
-							<div v-else class="space-y-3">
+							<div class="text-xs text-slate-400">{{ t("code.taskCount", { count: tasks.length }) }}</div>
+						</div>
+						<n-scrollbar class="ai-workspace-task-scrollbar min-h-0 flex-1">
+							<div class="px-2.5 pb-3 pr-3.5">
 								<div
-									v-for="task in tasks"
-									:key="task.id"
-									class="ai-workspace-task-card group/task relative flex cursor-pointer items-start justify-between gap-3 rounded-[22px] border border-slate-200/80 bg-white/90 p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-[0_16px_30px_rgba(15,23,42,0.08)]"
-									:class="
-										currentTaskId === task.id
-											? 'ai-workspace-task-card--active !border-blue-200 !bg-[linear-gradient(180deg,rgba(239,246,255,0.95),rgba(255,255,255,0.96))] shadow-[0_18px_34px_rgba(37,99,235,0.12)]'
-											: ''
-									"
-									@click="selectTask(task)"
+									v-if="tasks.length === 0"
+									class="ai-workspace-task-empty flex min-h-[180px] items-center justify-center"
 								>
-									<div class="min-w-0 flex-1">
-										<div class="truncate text-sm font-semibold text-slate-800" :title="task.title">
-											{{ task.title }}
-										</div>
-										<div class="mt-3 flex items-center gap-2">
-											<n-tag size="small" type="success" round :bordered="false">
-												{{ task.agentName || "terminal" }}
-											</n-tag>
-											<span class="text-xs text-slate-400">
-												{{ new Date(task.createdAt).toLocaleDateString() }}
-											</span>
-										</div>
-									</div>
-
+									<n-empty :description="t('code.noProjectHistory')" />
+								</div>
+								<div v-else class="space-y-1">
 									<div
-										class="opacity-100 transition-opacity md:opacity-0 md:group-hover/task:opacity-100"
-										@click.stop
+										v-for="task in tasks"
+										:key="task.id"
+										class="ai-workspace-task-row group/task relative flex cursor-pointer items-start justify-between gap-3 rounded-xl px-3 py-2.5 transition-colors duration-200 hover:bg-slate-200/45"
+										:class="
+											currentTaskId === task.id
+												? 'ai-workspace-task-row--active bg-blue-50/80'
+												: ''
+										"
+										@click="selectTask(task)"
 									>
-										<n-dropdown
-											trigger="click"
-											:options="taskActionOptions"
-											@select="key => handleTaskAction(key, task)"
-										>
-											<n-button
-												quaternary
-												circle
-												size="small"
-												class="ai-workspace-task-btn !bg-slate-100"
+										<div class="min-w-0 flex-1">
+											<div
+												class="truncate text-sm font-semibold text-slate-800"
+												:title="task.title"
 											>
-												<template #icon>
-													<MoreIcon />
-												</template>
-											</n-button>
-										</n-dropdown>
+												{{ task.title }}
+											</div>
+											<div class="mt-1.5 flex items-center gap-2">
+												<TaskStatusBadge :status="task.status" />
+												<span class="text-xs text-slate-400">
+													{{ new Date(task.createdAt).toLocaleDateString() }}
+												</span>
+											</div>
+										</div>
+										<div
+											class="opacity-100 transition-opacity md:opacity-0 md:group-hover/task:opacity-100"
+											@click.stop
+										>
+											<n-dropdown
+												trigger="click"
+												:options="taskActionOptions"
+												@select="key => handleTaskAction(key, task)"
+											>
+												<n-button
+													quaternary
+													circle
+													size="small"
+													class="ai-workspace-task-btn !bg-transparent"
+												>
+													<template #icon><Icon name="mdi:dots-horizontal" /></template>
+												</n-button>
+											</n-dropdown>
+										</div>
 									</div>
 								</div>
 							</div>
@@ -115,101 +114,129 @@
 				</div>
 			</n-layout-sider>
 
-			<!-- 右侧：终端工作区 -->
 			<n-layout-content content-style="padding: 0; display: flex; flex-direction: column; height: 100%;">
 				<div
-					class="ai-workspace-content-panel flex h-full min-h-0 flex-1 flex-col bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.08),transparent_28%)] p-4 md:p-5"
+					class="ai-workspace-content-panel flex h-full min-h-0 flex-1 flex-col bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.08),transparent_28%)] p-2 md:p-3"
+					:class="isWorkspaceFullscreen ? 'fixed inset-0 z-[1000] bg-slate-50' : ''"
 				>
 					<div
-						class="ai-workspace-session-bar mb-4 flex items-center justify-between rounded-[22px] border border-slate-200/80 bg-white/85 px-4 py-3 shadow-sm"
+						class="ai-workspace-session-bar mb-2 flex shrink-0 items-center justify-between gap-3 px-2 py-1"
 					>
 						<div class="min-w-0">
-							<div class="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600">
-								Current Session
-							</div>
-							<div class="truncate text-sm font-semibold text-slate-800">
-								{{
-									currentSessionId !== null
-										? $t("code.newSessionReady")
-										: currentTaskId !== null
-											? "正在查看历史任务"
-											: "请选择一个任务开始协作"
-								}}
+							<div class="truncate text-sm font-semibold text-slate-800">{{ sessionLabel }}</div>
+							<div class="truncate text-xs text-slate-400">
+								{{ activeFilePath || t("code.selectFileToEdit") }}
 							</div>
 						</div>
 						<div class="flex flex-wrap items-center justify-end gap-2">
+							<n-button
+								v-if="currentSessionId !== null && workspaceMode === 'editor'"
+								size="small"
+								quaternary
+								class="xl:hidden"
+								@click="showProjectStructure = true"
+							>
+								{{ t("code.projectStructure") }}
+							</n-button>
 							<CodeApprovalCenter :session-id="currentSessionId" @take-terminal="takeOverTerminal" />
 							<SessionApprovalPolicy v-if="currentSessionId !== null" :session-id="currentSessionId" />
-							<n-button-group v-if="currentSessionId !== null">
-								<n-button size="small" :type="workMode === 'conversation' ? 'primary' : 'default'" @click="workMode = 'conversation'">
-									{{ $t("code.conversationMode") }}
-								</n-button>
-								<n-button size="small" :type="workMode === 'terminal' ? 'primary' : 'default'" @click="workMode = 'terminal'">
-									{{ $t("code.advancedTerminal") }}
-								</n-button>
-							</n-button-group>
+							<WorkspaceModeSwitch
+								v-if="currentSessionId !== null || currentTaskId !== null"
+								:value="workspaceMode"
+								@update:value="switchWorkspaceMode"
+							/>
 							<n-button
 								v-if="currentSessionId !== null || currentTaskId !== null"
+								size="small"
 								secondary
-								class="!rounded-[14px]"
 								@click="showHistoryDrawer = true"
 							>
-								{{ $t("code.conversationHistory") }}
+								{{ t("code.conversationHistory") }}
 							</n-button>
-							<n-button type="primary" secondary class="!rounded-[14px]" @click="createNewTask">
-								新对话
+							<n-button
+								circle
+								secondary
+								:aria-label="fullscreenLabel"
+								:title="fullscreenLabel"
+								@click="toggleWorkspaceFullscreen"
+							>
+								<template #icon>
+									<Icon
+										:name="
+											isWorkspaceFullscreen
+												? 'fluent:full-screen-minimize-24-regular'
+												: 'fluent:full-screen-maximize-24-regular'
+										"
+									/>
+								</template>
 							</n-button>
 						</div>
 					</div>
-
-					<div class="ai-workspace-terminal-wrap min-h-0 flex-1 overflow-hidden rounded-[26px] border border-slate-200/80 shadow-[0_24px_50px_rgba(15,23,42,0.18)]">
-						<ConversationPanel
-							v-if="currentSessionId !== null && workMode === 'conversation'"
-							:key="`conversation-${currentSessionId}`"
+					<div
+						v-if="currentSessionId !== null"
+						v-show="workspaceMode === 'changes'"
+						class="ai-workspace-editor-shell min-h-0 flex-1 overflow-hidden rounded-[20px] border border-slate-200/80 bg-white shadow-[0_24px_50px_rgba(15,23,42,0.14)]"
+					>
+						<CodeGitReview
 							:session-id="currentSessionId"
-							@task-created="handleTaskCreated"
-							@show-history="showHistoryDrawer = true"
+							:active="workspaceMode === 'changes'"
+							@open-file="openFile"
 						/>
+					</div>
+					<div
+						v-show="workspaceMode === 'editor'"
+						class="ai-workspace-editor-shell flex min-h-0 flex-1 overflow-hidden rounded-[20px] border border-slate-200/80 bg-white shadow-[0_24px_50px_rgba(15,23,42,0.14)]"
+					>
+						<div class="min-w-0 flex-1">
+							<SessionFileEditor
+								ref="fileEditorRef"
+								:session-id="currentSessionId"
+								:path="selectedFile.path"
+								:extension="selectedFile.extension"
+								@active-path="activeFilePath = $event"
+							/>
+						</div>
+						<aside
+							v-if="currentSessionId !== null"
+							class="hidden h-full w-80 shrink-0 border-l border-slate-200 xl:block"
+						>
+							<ProjectStructurePanel
+								:key="currentSessionId"
+								:session-id="currentSessionId"
+								:selected-path="activeFilePath"
+								@select-file="openFile"
+							/>
+						</aside>
+					</div>
+
+					<div
+						v-if="terminalMounted && (currentTaskId !== null || currentSessionId !== null)"
+						v-show="workspaceMode === 'terminal'"
+						class="ai-workspace-terminal-panel min-h-0 flex-1 overflow-hidden rounded-[20px] border border-slate-700 bg-[#1e1e1e] shadow-lg"
+					>
 						<CodeTerminal
-							v-else-if="currentTaskId !== null || currentSessionId !== null"
 							:key="terminalKey"
 							:task-id="currentTaskId"
 							:session-id="currentSessionId"
 							:auto-take-control="terminalTakeoverRequested"
 							@task-created="handleTaskCreated"
 						/>
-						<div
-							v-else
-							class="ai-workspace-empty-bg flex h-full flex-1 items-center justify-center bg-[linear-gradient(180deg,#ffffff,#f8fafc)]"
-						>
-							<n-empty description="请在左侧选择一个历史任务，或发起新对话" size="large">
-								<template #extra>
-									<n-button
-										type="primary"
-										class="!rounded-[16px] shadow-[0_12px_28px_rgba(37,99,235,0.18)]"
-										@click="createNewTask"
-									>
-										发起新对话
-									</n-button>
-								</template>
-							</n-empty>
-						</div>
 					</div>
 				</div>
 			</n-layout-content>
 		</n-layout>
-
-		<!-- 弹窗：重命名任务 -->
-		<n-modal v-model:show="showRenameModal" preset="dialog" title="重命名任务">
+		<n-modal v-model:show="showRenameModal" preset="dialog" :title="t('code.renameTask')">
 			<n-input
 				v-model:value="editingTaskTitle"
-				placeholder="请输入新的任务名称"
-				@keyup.enter="submitRename"
+				:placeholder="t('code.taskNamePlaceholder')"
 				class="mt-4"
+				@keyup.enter="submitRename"
 			/>
 			<template #action>
-				<n-button @click="showRenameModal = false">取消</n-button>
-				<n-button type="primary" @click="submitRename" :loading="renaming">确定</n-button>
+				<n-button @click="showRenameModal = false">{{ t("code.cancel") }}</n-button>
+				<n-button type="primary" :loading="renaming" @click="submitRename">
+					{{ t("code.saveChanges") }}
+				</n-button>
 			</template>
 		</n-modal>
 
@@ -223,256 +250,250 @@
 			:session-id="currentSessionId"
 			:task-id="currentTaskId"
 		/>
+		<n-drawer v-model:show="showProjectStructure" placement="right" style="width: min(420px, 92vw)">
+			<n-drawer-content :title="t('code.projectStructure')" closable body-content-style="padding: 0;">
+				<ProjectStructurePanel
+					v-if="showProjectStructure && currentSessionId !== null"
+					:session-id="currentSessionId"
+					:selected-path="activeFilePath"
+					@select-file="openFileFromDrawer"
+				/>
+			</n-drawer-content>
+		</n-drawer>
 	</div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from "vue"
-import { useRoute, useRouter } from "vue-router"
+import { computed, nextTick, onMounted, ref, watch } from "vue"
+import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from "vue-router"
+import { useDialog, useMessage } from "naive-ui"
 import { useI18n } from "vue-i18n"
-import { useMessage, useDialog } from "naive-ui"
+import { useHideLayoutFooter } from "@/composables/useHideLayoutFooter"
+import Icon from "@/components/common/Icon.vue"
 import CodeTerminal from "./components/CodeTerminal.vue"
-import ConversationPanel from "./components/ConversationPanel.vue"
 import NewSessionModal from "./components/NewSessionModal.vue"
 import SessionApprovalPolicy from "./components/SessionApprovalPolicy.vue"
 import CodeApprovalCenter from "./components/CodeApprovalCenter.vue"
 import SessionHistoryDrawer from "./components/SessionHistoryDrawer.vue"
-import { getAITasks, updateAITask, deleteAITask, getAIGroups } from "@/api/modules/code"
-import type { AITask, AIGroup, CodeSession } from "@/api/interface/code"
-import { codeProjectMessages } from "@/i18n/locales/codeProject"
+import ProjectStructurePanel from "./components/ProjectStructurePanel.vue"
+import SessionFileEditor from "./components/SessionFileEditor.vue"
+import TaskStatusBadge from "./components/TaskStatusBadge.vue"
+import CodeGitReview from "./components/CodeGitReview.vue"
+import WorkspaceModeSwitch, { type CodeWorkspaceMode } from "./components/WorkspaceModeSwitch.vue"
+import { useCodeTaskPolling } from "./useCodeTaskPolling"
+import { useCodeWorkspaceFullscreen } from "./useCodeWorkspaceFullscreen"
+import { deleteAITask, getAIGroups, updateAITask } from "@/api/modules/code"
+import type { AIGroup, AITask, CodeSession } from "@/api/interface/code"
+import { codeWorkspaceMessages } from "./codeWorkspaceMessages"
 
 const route = useRoute()
 const router = useRouter()
 const message = useMessage()
 const dialog = useDialog()
-const { t } = useI18n({ messages: codeProjectMessages })
-
-const AddIcon = () => "+"
-const MoreIcon = () => "..."
-
+const { t } = useI18n({ messages: codeWorkspaceMessages })
+useHideLayoutFooter()
 const currentGroupId = computed(() => Number(route.params.id))
 const groupInfo = ref<AIGroup | null>(null)
-
-// 拉取当前组的信息
-const fetchGroupInfo = async () => {
-	try {
-		const res = await getAIGroups({ page: 1, limit: 50 })
-		if (res.code === 0) {
-			groupInfo.value = res.data.items.find(g => g.id === currentGroupId.value) || null
-		}
-	} catch (error) {
-		console.error("获取组信息失败:", error)
-	}
-}
-
-const backToLobby = () => {
-	router.push("/code/index")
-}
-
-// === 任务与终端逻辑 ===
 const tasks = ref<AITask[]>([])
 const currentTaskId = ref<number | null>(null)
 const currentSessionId = ref<number | null>(null)
 const showNewSessionModal = ref(false)
 const showHistoryDrawer = ref(false)
+const showProjectStructure = ref(false)
+const showRenameModal = ref(false)
+const workspaceMode = ref<CodeWorkspaceMode>("editor")
+const terminalMounted = ref(false)
 const terminalKey = ref(0)
 const terminalTakeoverRequested = ref(false)
-const workMode = ref<"conversation" | "terminal">("conversation")
+const { isWorkspaceFullscreen, fullscreenLabel, toggleWorkspaceFullscreen } = useCodeWorkspaceFullscreen(t)
+const selectedFile = ref({ path: "", extension: "" })
+const activeFilePath = ref("")
+const fileEditorRef = ref<{ hasUnsavedChanges: boolean } | null>(null)
+const editingTaskId = ref<number | null>(null)
+const editingTaskTitle = ref("")
+const renaming = ref(false)
 
-const fetchTasks = async () => {
-	if (!currentGroupId.value) return
+const currentTask = computed(() => tasks.value.find(task => task.id === currentTaskId.value) || null)
+const sessionLabel = computed(
+	() => currentTask.value?.title || (currentSessionId.value ? t("code.newSession") : t("code.selectTaskToStart"))
+)
+const taskActionOptions = computed(() => [
+	{ label: t("code.renameTask"), key: "rename" },
+	{ label: t("code.deleteTask"), key: "delete", style: "color: red;" }
+])
+
+const fetchGroupInfo = async () => {
 	try {
-		const res = await getAITasks({ page: 1, limit: 50, projectId: currentGroupId.value })
-		if (res.code === 0) {
-			tasks.value = res.data.items || []
-		}
+		const response = await getAIGroups({ page: 1, limit: 50 })
+		groupInfo.value =
+			response.code === 0 ? response.data.items.find(group => group.id === currentGroupId.value) || null : null
 	} catch (error) {
-		console.error("获取历史任务失败:", error)
+		message.error(error instanceof Error ? error.message : t("code.projectLoadFailed"))
 	}
 }
 
-onMounted(() => {
-	fetchGroupInfo()
-	fetchTasks()
+const { fetchTasks } = useCodeTaskPolling(currentGroupId, tasks, error => {
+	message.error(error instanceof Error ? error.message : t("code.taskLoadFailed"))
 })
 
-watch(
-	() => route.params.id,
-	newId => {
-		if (newId && route.name === "Code-Group") {
-			currentTaskId.value = null
-			currentSessionId.value = null
-			showNewSessionModal.value = false
-			showHistoryDrawer.value = false
-			fetchGroupInfo()
-			fetchTasks()
-		}
+const resetSelectedFile = () => {
+	selectedFile.value = { path: "", extension: "" }
+	activeFilePath.value = ""
+}
+
+const openFile = async (file: { path: string; extension: string }) => {
+	workspaceMode.value = "editor"
+	if (selectedFile.value.path === file.path) {
+		selectedFile.value = { path: "", extension: "" }
+		await nextTick()
 	}
-)
-
-const createNewTask = () => {
-	terminalTakeoverRequested.value = false
-	showNewSessionModal.value = true
+	selectedFile.value = file
 }
 
-const takeOverTerminal = () => {
-	if (currentSessionId.value === null) return
-	terminalTakeoverRequested.value = true
-	workMode.value = "terminal"
-	terminalKey.value++
+const openFileFromDrawer = async (file: { path: string; extension: string }) => {
+	await openFile(file)
+	showProjectStructure.value = false
 }
+
+const confirmDiscardEditorChanges = (action: () => void) => {
+	if (!fileEditorRef.value?.hasUnsavedChanges) {
+		action()
+		return
+	}
+	dialog.warning({
+		title: t("code.unsavedChanges"),
+		content: t("code.switchSessionUnsavedHint"),
+		positiveText: t("code.discardAndContinue"),
+		negativeText: t("code.cancel"),
+		onPositiveClick: action
+	})
+}
+
+const createNewTask = () =>
+	confirmDiscardEditorChanges(() => {
+		terminalTakeoverRequested.value = false
+		showNewSessionModal.value = true
+	})
 
 const handleSessionCreated = (session: CodeSession) => {
-	terminalTakeoverRequested.value = false
+	resetSelectedFile()
 	currentTaskId.value = null
 	currentSessionId.value = session.id
-	workMode.value = session.agentName === "codex" || session.agentName === "terminal" ? "terminal" : "conversation"
+	terminalTakeoverRequested.value = false
+	workspaceMode.value = "terminal"
+	terminalMounted.value = true
 	terminalKey.value++
 	void fetchTasks()
 }
 
 const selectTask = (task: AITask) => {
-	if (currentTaskId.value === task.id && currentSessionId.value === null) return
-	currentTaskId.value = task.id
-	currentSessionId.value = task.sessionId || null
-	terminalTakeoverRequested.value = false
-	workMode.value = task.sessionId && !["terminal", "codex"].includes(task.agentName) ? "conversation" : "terminal"
-	terminalKey.value++
+	if (currentTaskId.value === task.id && currentSessionId.value === task.sessionId) return
+	confirmDiscardEditorChanges(() => {
+		resetSelectedFile()
+		currentTaskId.value = task.id
+		currentSessionId.value = task.sessionId || null
+		terminalTakeoverRequested.value = false
+		workspaceMode.value = "editor"
+		terminalMounted.value = false
+		terminalKey.value++
+	})
+}
 
-	// 可以考虑在这里把 task_id 同步到 URL query 中以便分享更深的一层，
-	// 例如：router.replace({ query: { task_id: task.id } })
+const takeOverTerminal = () => {
+	if (currentSessionId.value === null) return
+	terminalTakeoverRequested.value = true
+	workspaceMode.value = "terminal"
+	terminalMounted.value = true
+	terminalKey.value++
+}
+
+const switchWorkspaceMode = (mode: CodeWorkspaceMode) => {
+	workspaceMode.value = mode
+	if (mode === "terminal") terminalMounted.value = true
 }
 
 const handleTaskCreated = (taskId: number) => {
 	currentTaskId.value = taskId
-	fetchTasks()
+	void fetchTasks()
 }
-
-const taskActionOptions = [
-	{ label: "重命名", key: "rename" },
-	{ label: "删除", key: "delete", style: "color: red;" }
-]
-
-const showRenameModal = ref(false)
-const editingTaskId = ref<number | null>(null)
-const editingTaskTitle = ref("")
-const renaming = ref(false)
 
 const handleTaskAction = (key: string, task: AITask) => {
 	if (key === "rename") {
 		editingTaskId.value = task.id
 		editingTaskTitle.value = task.title
 		showRenameModal.value = true
-	} else if (key === "delete") {
-		dialog.warning({
-			title: "删除任务",
-			content: `确定要删除任务 "${task.title}" 吗？此操作将同时删除所有历史对话记录且无法恢复。`,
-			positiveText: "确定删除",
-			negativeText: "取消",
-			onPositiveClick: async () => {
-				try {
-					const res = await deleteAITask(task.id)
-					if (res.code === 0) {
-						message.success("删除成功")
-						if (currentTaskId.value === task.id) {
-							currentTaskId.value = null
-							currentSessionId.value = null
-						}
-						fetchTasks()
-					}
-				} catch (error) {
-					message.error("删除失败")
-				}
-			}
-		})
+		return
 	}
+	if (key !== "delete") return
+	dialog.warning({
+		title: t("code.deleteTask"),
+		content: t("code.deleteTaskConfirm", { name: task.title }),
+		positiveText: t("code.confirmDelete"),
+		negativeText: t("code.cancel"),
+		onPositiveClick: async () => {
+			try {
+				await deleteAITask(task.id)
+				message.success(t("code.taskDeleted"))
+				if (currentTaskId.value === task.id) {
+					currentTaskId.value = null
+					currentSessionId.value = null
+					workspaceMode.value = "editor"
+					resetSelectedFile()
+				}
+				await fetchTasks()
+			} catch (error) {
+				message.error(error instanceof Error ? error.message : t("code.taskDeleteFailed"))
+			}
+		}
+	})
 }
 
 const submitRename = async () => {
 	if (!editingTaskTitle.value.trim() || !editingTaskId.value) return
 	renaming.value = true
 	try {
-		const res = await updateAITask(editingTaskId.value, editingTaskTitle.value)
-		if (res.code === 0) {
-			message.success("重命名成功")
-			showRenameModal.value = false
-			fetchTasks()
-		}
+		await updateAITask(editingTaskId.value, editingTaskTitle.value.trim())
+		message.success(t("code.taskRenamed"))
+		showRenameModal.value = false
+		await fetchTasks()
+	} catch (error) {
+		message.error(error instanceof Error ? error.message : t("code.taskRenameFailed"))
 	} finally {
 		renaming.value = false
 	}
 }
+
+const resetWorkspace = () => {
+	currentTaskId.value = null
+	currentSessionId.value = null
+	showNewSessionModal.value = false
+	showHistoryDrawer.value = false
+	showProjectStructure.value = false
+	workspaceMode.value = "editor"
+	terminalMounted.value = false
+	isWorkspaceFullscreen.value = false
+	resetSelectedFile()
+}
+
+const backToLobby = () => router.push("/code/index")
+const confirmLeaveWorkspace = () =>
+	!fileEditorRef.value?.hasUnsavedChanges || window.confirm(t("code.switchSessionUnsavedHint"))
+onBeforeRouteLeave(confirmLeaveWorkspace)
+onBeforeRouteUpdate(confirmLeaveWorkspace)
+
+onMounted(() => {
+	void fetchGroupInfo()
+	void fetchTasks()
+})
+watch(
+	() => route.params.id,
+	newId => {
+		if (!newId || route.name !== "Code-Group") return
+		resetWorkspace()
+		void fetchGroupInfo()
+		void fetchTasks()
+	}
+)
 </script>
 
-<style scoped>
-.theme-dark .ai-workspace-root {
-	border-color: color-mix(in srgb, var(--border-color) 70%, transparent);
-	background: linear-gradient(
-		180deg,
-		color-mix(in srgb, var(--bg-default-color) 98%, white),
-		color-mix(in srgb, var(--bg-secondary-color) 92%, transparent)
-	);
-	box-shadow: 0 18px 45px rgba(0, 0, 0, 0.25);
-}
-
-.theme-dark .ai-workspace-sider {
-	background: color-mix(in srgb, var(--bg-secondary-color) 75%, transparent) !important;
-}
-
-.theme-dark .ai-workspace-sider-inner {
-	border-right-color: color-mix(in srgb, var(--border-color) 80%, transparent);
-}
-
-.theme-dark .ai-workspace-sider-header {
-	border-bottom-color: color-mix(in srgb, var(--border-color) 80%, transparent);
-}
-
-.theme-dark .ai-workspace-sider-card {
-	border-color: color-mix(in srgb, var(--border-color) 80%, transparent);
-	background-color: color-mix(in srgb, var(--bg-default-color) 90%, transparent);
-}
-
-.theme-dark .ai-workspace-task-empty {
-	border-color: color-mix(in srgb, var(--border-color) 60%, transparent) !important;
-	background-color: color-mix(in srgb, var(--bg-default-color) 70%, transparent) !important;
-}
-
-.theme-dark .ai-workspace-task-card {
-	border-color: color-mix(in srgb, var(--border-color) 80%, transparent) !important;
-	background-color: color-mix(in srgb, var(--bg-default-color) 90%, transparent) !important;
-}
-
-.theme-dark .ai-workspace-task-card--active {
-	border-color: color-mix(in srgb, var(--primary-color) 50%, transparent) !important;
-	background: linear-gradient(
-		180deg,
-		color-mix(in srgb, var(--primary-color) 18%, var(--bg-default-color)),
-		color-mix(in srgb, var(--bg-default-color) 96%, transparent)
-	) !important;
-}
-
-.theme-dark .ai-workspace-task-btn {
-	background-color: color-mix(in srgb, var(--fg-secondary-color) 15%, transparent) !important;
-}
-
-.theme-dark .ai-workspace-content-panel {
-	background: radial-gradient(
-		circle at top right,
-		color-mix(in srgb, var(--primary-color) 8%, transparent),
-		transparent 28%
-	);
-}
-
-.theme-dark .ai-workspace-session-bar {
-	border-color: color-mix(in srgb, var(--border-color) 80%, transparent);
-	background-color: color-mix(in srgb, var(--bg-default-color) 85%, transparent);
-}
-
-.theme-dark .ai-workspace-terminal-wrap {
-	border-color: color-mix(in srgb, var(--border-color) 80%, transparent);
-}
-
-.theme-dark .ai-workspace-empty-bg {
-	background: linear-gradient(180deg, var(--bg-default-color), var(--bg-secondary-color));
-}
-</style>
+<style scoped src="./workspace.css"></style>

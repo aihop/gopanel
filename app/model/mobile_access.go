@@ -4,10 +4,11 @@ import "time"
 
 type MobilePairing struct {
 	BaseModel
-	UserID    uint       `gorm:"not null;index" json:"userId"`
-	CodeHash  string     `gorm:"type:char(64);not null;uniqueIndex" json:"-"`
-	ExpiresAt time.Time  `gorm:"not null;index" json:"expiresAt"`
-	UsedAt    *time.Time `gorm:"index" json:"usedAt,omitempty"`
+	UserID        uint       `gorm:"not null;index" json:"userId"`
+	CodeHash      string     `gorm:"type:char(64);not null;uniqueIndex" json:"-"`
+	DeviceTTLDays int        `gorm:"not null;default:30" json:"deviceTtlDays"`
+	ExpiresAt     time.Time  `gorm:"not null;index" json:"expiresAt"`
+	UsedAt        *time.Time `gorm:"index" json:"usedAt,omitempty"`
 }
 
 func (MobilePairing) TableName() string {

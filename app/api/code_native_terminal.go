@@ -175,7 +175,10 @@ func serveNativeCodeTerminal(
 	}
 	afterSequence, _ := strconv.ParseUint(wsConn.Query("after_sequence", "0"), 10, 64)
 	subscription, baseline := terminal.subscribe(afterSequence)
-	if wsConn.Query("take_control") == "1" {
+	if wsConn.Query("read_only") == "1" && baseline.HasControl {
+		terminal.releaseControl(subscription.ID)
+		baseline.HasControl = false
+	} else if wsConn.Query("take_control") == "1" {
 		terminal.takeControl(subscription.ID)
 		baseline.HasControl = true
 	}
@@ -221,6 +224,8 @@ func serveNativeCodeTerminal(
 			}
 		case "take_control":
 			terminal.takeControl(subscription.ID)
+		case "release_control":
+			terminal.releaseControl(subscription.ID)
 		case "resize":
 			var size struct {
 				Cols uint16 `json:"cols"`
