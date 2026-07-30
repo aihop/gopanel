@@ -111,7 +111,13 @@
           </div>
           <div class="group-card__footer flex justify-between items-center text-xs pt-4">
             <span>{{ group.taskCount || 0 }} {{ $t('code.task') }}</span>
-            <span class="group-card__action">{{ t("code.enterProject") }}</span>
+            <div class="relative z-[2] flex items-center gap-3" @click.stop>
+              <n-button text type="primary" size="small" @click="openQuickPanel(group)">
+                <template #icon><Icon name="mdi:dock-window" :size="16" /></template>
+                {{ t("code.quickPanel") }}
+              </n-button>
+              <span class="group-card__action cursor-pointer" @click="enterGroup(group.id)">{{ t("code.enterProject") }}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -169,6 +175,7 @@
 		:selected-paths="projectForm.sourceDirs"
 		@select="projectForm.sourceDirs = $event"
       />
+      <ProjectQuickPanels ref="quickPanelsRef" />
     </div>
   </div>
 </template>
@@ -182,6 +189,7 @@ import { getAIGroups, createAIGroup, updateAIGroup } from '@/api/modules/code'
 import type { AIGroup } from '@/api/interface/code'
 import Icon from '@/components/common/Icon.vue'
 import ProjectDirectoryPicker from './components/ProjectDirectoryPicker.vue'
+import ProjectQuickPanels from './components/ProjectQuickPanels.vue'
 import { codeProjectMessages } from '@/i18n/locales/codeProject'
 
 const AddIcon = () => '+'
@@ -202,6 +210,7 @@ const groupsLoadError = ref(false)
 const groupsRefreshing = ref(false)
 const defaultWorkDir = ref("/")
 const directoryRoot = ref("/")
+const quickPanelsRef = ref<InstanceType<typeof ProjectQuickPanels> | null>(null)
 let refreshTimer: ReturnType<typeof setInterval> | undefined
 
 const fetchGroups = async (silent = false) => {
@@ -307,6 +316,8 @@ const submitProject = async () => {
 const enterGroup = (id: number) => {
   router.push(`/code/group/${id}`)
 }
+
+const openQuickPanel = (project: AIGroup) => quickPanelsRef.value?.open(project)
 </script>
 
 <style scoped>

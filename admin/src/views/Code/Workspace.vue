@@ -1,6 +1,7 @@
 <template>
 	<div
 		class="ai-workspace-root page page-wrapped page-mobile-full page-without-footer relative flex w-full flex-col overflow-hidden rounded-[24px] border border-slate-200/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.92))] shadow-[0_18px_45px_rgba(15,23,42,0.08)]"
+		:class="{ 'ai-workspace-root--embedded': embedded }"
 	>
 		<n-layout has-sider class="h-full flex-1 !bg-transparent" style="width: 100%">
 			<n-layout-sider
@@ -154,6 +155,7 @@
 								{{ t("code.conversationHistory") }}
 							</n-button>
 							<n-button
+								v-if="!embedded"
 								circle
 								secondary
 								:aria-label="fullscreenLabel"
@@ -286,31 +288,28 @@ import { deleteAITask, getAIGroups, updateAITask } from "@/api/modules/code"
 import type { AIGroup, AITask, CodeSession } from "@/api/interface/code"
 import { codeWorkspaceMessages } from "./codeWorkspaceMessages"
 
+const props = withDefaults(defineProps<{ projectId?: number; embedded?: boolean }>(), { embedded: false })
+const emit = defineEmits<{ close: [] }>()
 const route = useRoute()
 const router = useRouter()
 const message = useMessage()
 const dialog = useDialog()
 const { t } = useI18n({ messages: codeWorkspaceMessages })
-useHideLayoutFooter()
-const currentGroupId = computed(() => Number(route.params.id))
-const groupInfo = ref<AIGroup | null>(null)
-const tasks = ref<AITask[]>([])
+if (!props.embedded) useHideLayoutFooter()
+const currentGroupId = computed(() => props.projectId ?? Number(route.params.id))
+const groupInfo = ref<AIGroup | null>(null), tasks = ref<AITask[]>([])
 const currentTaskId = ref<number | null>(null)
 const currentSessionId = ref<number | null>(null)
-const showNewSessionModal = ref(false)
-const showHistoryDrawer = ref(false)
-const showProjectStructure = ref(false)
-const showRenameModal = ref(false)
+const showNewSessionModal = ref(false), showHistoryDrawer = ref(false)
+const showProjectStructure = ref(false), showRenameModal = ref(false)
 const workspaceMode = ref<CodeWorkspaceMode>("terminal")
-const terminalMounted = ref(false)
-const terminalKey = ref(0)
+const terminalMounted = ref(false), terminalKey = ref(0)
 const terminalTakeoverRequested = ref(false)
 const { isWorkspaceFullscreen, fullscreenLabel, toggleWorkspaceFullscreen } = useCodeWorkspaceFullscreen(t)
 const selectedFile = ref({ path: "", extension: "" })
 const activeFilePath = ref("")
 const fileEditorRef = ref<{ hasUnsavedChanges: boolean } | null>(null)
-const editingTaskId = ref<number | null>(null)
-const editingTaskTitle = ref("")
+const editingTaskId = ref<number | null>(null), editingTaskTitle = ref("")
 const renaming = ref(false)
 
 const currentTask = computed(() => tasks.value.find(task => task.id === currentTaskId.value) || null)
@@ -476,20 +475,21 @@ const resetWorkspace = () => {
 	resetSelectedFile()
 }
 
-const backToLobby = () => router.push("/code/index")
+const backToLobby = () => props.embedded ? emit("close") : router.push("/code/index")
 const confirmLeaveWorkspace = () =>
 	!fileEditorRef.value?.hasUnsavedChanges || window.confirm(t("code.switchSessionUnsavedHint"))
-onBeforeRouteLeave(confirmLeaveWorkspace)
-onBeforeRouteUpdate(confirmLeaveWorkspace)
+defineExpose({ confirmClose: confirmLeaveWorkspace })
+onBeforeRouteLeave(() => props.embedded || confirmLeaveWorkspace())
+onBeforeRouteUpdate(() => props.embedded || confirmLeaveWorkspace())
 
 onMounted(() => {
 	void fetchGroupInfo()
 	void fetchTasks()
 })
 watch(
-	() => route.params.id,
+	currentGroupId,
 	newId => {
-		if (!newId || route.name !== "Code-Group") return
+		if (!newId) return
 		resetWorkspace()
 		void fetchGroupInfo()
 		void fetchTasks()
