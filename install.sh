@@ -12,8 +12,8 @@ CONFIG_INSTALL_DIR="${CONFIG_INSTALL_DIR:-}"
 CONFIG_PORT="${CONFIG_PORT:-5470}"
 CONFIG_INSTALL_GPAGENT="${CONFIG_INSTALL_GPAGENT:-true}"
 CONFIG_USER="${CONFIG_USER:-admin}"
-CONFIG_PASSWORD="${CONFIG_PASSWORD:-$(openssl rand -hex 8)}"
-CONFIG_SAFE_ENTER="${CONFIG_SAFE_ENTER:-$(openssl rand -hex 8)}"
+CONFIG_PASSWORD="${CONFIG_PASSWORD:-}"
+CONFIG_SAFE_ENTER="${CONFIG_SAFE_ENTER:-}"
 CONFIG_CHANNEL="${CONFIG_CHANNEL:-${CHANNEL:-}}"
 CONFIG_INSTALL_ID="${CONFIG_INSTALL_ID:-${INSTALL_ID:-}}"
 RUNTIME_USER=""
@@ -36,6 +36,7 @@ GPAGENT_FETCH_ERROR=""
 SUDO_CMD=""
 WORK_DIR=""
 GPAGENT_WORK_DIR=""
+DOWNLOAD_WORK_DIR=""
 BIN_GPC_PATH=""
 BIN_GOPANEL_PATH=""
 BIN_GPAGENT_PATH=""
@@ -86,6 +87,9 @@ cleanup() {
   if [ -n "${GPAGENT_WORK_DIR}" ] && [ -d "${GPAGENT_WORK_DIR}" ]; then
     rm -rf "${GPAGENT_WORK_DIR}"
   fi
+  if [ -n "${DOWNLOAD_WORK_DIR}" ] && [ -d "${DOWNLOAD_WORK_DIR}" ]; then
+    rm -rf "${DOWNLOAD_WORK_DIR}"
+  fi
 }
 trap cleanup EXIT
 
@@ -111,6 +115,15 @@ gpagent_service_name() {
 json_get() {
   local key="$1"
   local json="$2"
+
+  if command -v jq >/dev/null 2>&1; then
+    local jq_value
+    if jq_value="$(printf '%s' "${json}" | jq -er --arg key "${key}" '.[$key] // empty' 2>/dev/null)"; then
+      printf '%s\n' "${jq_value}"
+      return 0
+    fi
+    return 1
+  fi
 
   # 使用 awk 提取简单的顶层 JSON 字段 (支持跨行和包含转义引号的字符串)
   # 匹配模式: "key"\s*:\s*"value" 或 "key"\s*:\s*123
@@ -143,12 +156,6 @@ json_get() {
     return 0
   fi
   
-  # 如果 awk 没有提取到，且有 jq，则回退到 jq
-  if command -v jq >/dev/null 2>&1; then
-    echo "$json" | jq -r ".${key} // empty"
-    return 0
-  fi
-
   return 1
 }
 
@@ -165,6 +172,22 @@ require_cmds() {
   fi
 }
 
+init_generated_credentials() {
+  if [ -z "${CONFIG_PASSWORD}" ]; then
+    CONFIG_PASSWORD="$(openssl rand -hex 8)"
+  fi
+  if [ -z "${CONFIG_SAFE_ENTER}" ]; then
+    CONFIG_SAFE_ENTER="$(openssl rand -hex 8)"
+  fi
+}
+
+yaml_double_quoted() {
+  local value="$1"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  printf '"%s"' "${value}"
+}
+
 init_invoking_user() {
   if [ -n "${SUDO_USER:-}" ] && [ "${SUDO_USER}" != "root" ]; then
     INVOKING_USER="${SUDO_USER}"
@@ -175,8 +198,8 @@ init_invoking_user() {
 
 user_home_dir() {
   local username="$1"
+  local home_dir=""
   if [ "$os_name" = "darwin" ]; then
-    local home_dir
     home_dir="$(dscl . -read "/Users/${username}" NFSHomeDirectory 2>/dev/null | awk '{print $2}' || true)"
     if [ -n "${home_dir}" ]; then
       echo "${home_dir}"
@@ -185,7 +208,18 @@ user_home_dir() {
     fi
     return 0
   fi
-  eval echo "~${username}"
+  if command -v getent >/dev/null 2>&1; then
+    home_dir="$(getent passwd "${username}" 2>/dev/null | awk -F: 'NR == 1 { print $6 }' || true)"
+  elif [ -r /etc/passwd ]; then
+    home_dir="$(awk -F: -v user="${username}" '$1 == user { print $6; exit }' /etc/passwd 2>/dev/null || true)"
+  fi
+  if [ -n "${home_dir}" ]; then
+    echo "${home_dir}"
+  elif [ "${username}" = "root" ]; then
+    echo "/root"
+  else
+    echo "/home/${username}"
+  fi
 }
 
 detect_platform() {
@@ -218,6 +252,11 @@ detect_platform() {
 runtime_user_uid() {
   local username="$1"
   id -u "${username}" 2>/dev/null || true
+}
+
+runtime_user_group() {
+  local username="$1"
+  id -gn "${username}" 2>/dev/null || echo "${username}"
 }
 
 runtime_user_runtime_dir() {
@@ -320,6 +359,23 @@ detect_runtime() {
     return 0
   fi
   echo ""
+}
+
+port_is_in_use() {
+  local port="$1"
+  if command -v lsof >/dev/null 2>&1; then
+    run_privileged lsof -nP -iTCP:"${port}" -sTCP:LISTEN >/dev/null 2>&1
+    return $?
+  fi
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltn 2>/dev/null | awk -v port=":${port}" '$4 ~ port "$" { found = 1 } END { exit found ? 0 : 1 }'
+    return $?
+  fi
+  if command -v netstat >/dev/null 2>&1; then
+    netstat -an 2>/dev/null | awk -v port=".${port}" '$0 ~ /LISTEN/ && $4 ~ port "$" { found = 1 } END { exit found ? 0 : 1 }'
+    return $?
+  fi
+  return 1
 }
 
 ensure_install_id() {
@@ -477,19 +533,29 @@ detect_local_package() {
     warn "已设置 LOCAL_PACKAGE，但文件不存在: ${LOCAL_PACKAGE}"
   fi
 
-  local script_dir
-  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
   local candidates=()
+  local search_dirs=("$PWD")
+  local script_path="${BASH_SOURCE[0]:-}"
+  case "${script_path}" in
+    ""|/dev/fd/*|/proc/self/fd/*) ;;
+    *)
+      if [ -f "${script_path}" ]; then
+        local script_dir
+        script_dir="$(cd "$(dirname "${script_path}")" && pwd)"
+        if [ "${script_dir}" != "$PWD" ]; then
+          search_dirs+=("${script_dir}")
+        fi
+      fi
+      ;;
+  esac
+
   local d
-  for d in "$PWD" "$script_dir"; do
+  for d in "${search_dirs[@]}"; do
     if [ -d "$d" ]; then
       shopt -s nullglob
       candidates+=(
-        "$d"/gopanel*"$os_name"*"$arch_name"*.tar.gz
-        "$d"/gopanel*"$os_name"*"$arch_name"*.tgz
-        "$d"/gopanel*.tar.gz
-        "$d"/gopanel*.tgz
+        "$d"/gopanel-"$os_name"-"$arch_name"*.tar.gz
+        "$d"/gopanel-"$os_name"-"$arch_name"*.tgz
       )
       shopt -u nullglob
     fi
@@ -497,13 +563,15 @@ detect_local_package() {
 
   local newest=""
   local f
-  for f in "${candidates[@]}"; do
-    if [ -f "$f" ]; then
-      if [ -z "$newest" ] || [ "$f" -nt "$newest" ]; then
-        newest="$f"
+  if [ "${#candidates[@]}" -gt 0 ]; then
+    for f in "${candidates[@]}"; do
+      if [ -f "$f" ]; then
+        if [ -z "$newest" ] || [ "$f" -nt "$newest" ]; then
+          newest="$f"
+        fi
       fi
-    fi
-  done
+    done
+  fi
 
   if [ -n "$newest" ]; then
     PACKAGE_NAME="$newest"
@@ -515,6 +583,26 @@ detect_local_package() {
   fi
 
   return 1
+}
+
+find_first_file() {
+  local search_dir="$1"
+  local file_name="$2"
+  find "${search_dir}" -type f -name "${file_name}" -print -quit
+}
+
+validate_archive() {
+  local archive_path="$1"
+  if ! tar -tzf "${archive_path}" >/dev/null 2>&1; then
+    die "安装包无法读取或格式损坏: ${archive_path}"
+  fi
+  if tar -tzf "${archive_path}" | awk '
+    /^\// { invalid = 1 }
+    $0 == ".." || $0 ~ /^\.\.\// || $0 ~ /\/\.\.\// || $0 ~ /\/\.\.$/ { invalid = 1 }
+    END { exit invalid ? 0 : 1 }
+  '; then
+    die "安装包包含不安全路径，已拒绝解压: ${archive_path}"
+  fi
 }
 
 is_in_china() {
@@ -628,22 +716,9 @@ prompt_basic_config() {
     read -r -e -p "请输入端口 (默认: ${CONFIG_PORT}): " input_port || true
     input_port="${input_port:-$CONFIG_PORT}"
     if [[ "$input_port" =~ ^[0-9]+$ ]] && [ "$input_port" -ge 1 ] && [ "$input_port" -le 65535 ]; then
-      # 端口冲突检测
-      if command -v ss >/dev/null 2>&1; then
-        if ss -tuln | grep -q ":${input_port} "; then
-          warn "端口 ${input_port} 似乎已被占用，请尝试其他端口。"
-          continue
-        fi
-      elif command -v netstat >/dev/null 2>&1; then
-        if netstat -tuln | grep -q ":${input_port} "; then
-          warn "端口 ${input_port} 似乎已被占用，请尝试其他端口。"
-          continue
-        fi
-      elif command -v lsof >/dev/null 2>&1; then
-        if run_privileged lsof -i ":${input_port}" >/dev/null 2>&1; then
-          warn "端口 ${input_port} 似乎已被占用，请尝试其他端口。"
-          continue
-        fi
+      if port_is_in_use "${input_port}"; then
+        warn "端口 ${input_port} 似乎已被占用，请尝试其他端口。"
+        continue
       fi
 
       CONFIG_PORT="$input_port"
@@ -729,11 +804,17 @@ prompt_gpagent_install() {
 }
 
 download_package() {
-  if [ -f "${PACKAGE_NAME}" ]; then
+  if [ -z "${PACKAGE_URL}" ] && [ -f "${PACKAGE_NAME}" ]; then
     log "发现本地安装包: ${PACKAGE_NAME}，跳过下载。"
     return 0
   fi
-  log "开始下载安装包: ${PACKAGE_NAME} - ${PACKAGE_URL}"
+  if [ -z "${PACKAGE_URL}" ]; then
+    die "未找到本地安装包，且没有可用的下载地址: ${PACKAGE_NAME}"
+  fi
+  local archive_name="${PACKAGE_NAME}"
+  DOWNLOAD_WORK_DIR="$(mktemp -d -t gopanel_download.XXXXXX)"
+  PACKAGE_NAME="${DOWNLOAD_WORK_DIR}/${archive_name}"
+  log "开始下载安装包: ${archive_name} - ${PACKAGE_URL}"
   curl -fSL -o "${PACKAGE_NAME}" "${PACKAGE_URL}" || die "下载安装包失败"
 }
 
@@ -768,11 +849,12 @@ stop_gpagent_service() {
 extract_and_find_binaries() {
   WORK_DIR="$(mktemp -d -t gopanel_install.XXXXXX)"
   log "解压安装包到临时目录: ${WORK_DIR}"
+  validate_archive "${PACKAGE_NAME}"
   tar -zxf "${PACKAGE_NAME}" -C "${WORK_DIR}" || die "解压失败，安装包可能损坏"
 
-  BIN_GPC_PATH="$(find "${WORK_DIR}" -type f -name gpc | head -n 1)"
-  BIN_GOPANEL_PATH="$(find "${WORK_DIR}" -type f -name gopanel | head -n 1)"
-  BIN_GPAGENT_PATH="$(find "${WORK_DIR}" -type f -name gp-agent | head -n 1)"
+  BIN_GPC_PATH="$(find_first_file "${WORK_DIR}" gpc)"
+  BIN_GOPANEL_PATH="$(find_first_file "${WORK_DIR}" gopanel)"
+  BIN_GPAGENT_PATH="$(find_first_file "${WORK_DIR}" gp-agent)"
 
   [ -n "${BIN_GPC_PATH}" ] || die "安装包中未找到 gpc 二进制文件"
   [ -n "${BIN_GOPANEL_PATH}" ] || die "安装包中未找到 gopanel 二进制文件"
@@ -795,10 +877,11 @@ prepare_gpagent_binary() {
     local gpagent_archive="${GPAGENT_WORK_DIR}/${GPAGENT_PACKAGE_NAME}"
     log "开始下载 gp-agent 最新安装包: ${GPAGENT_PACKAGE_NAME}"
     curl -fSL -o "${gpagent_archive}" "${GPAGENT_PACKAGE_URL}" || die "下载 gp-agent 安装包失败"
+    validate_archive "${gpagent_archive}"
     tar -zxf "${gpagent_archive}" -C "${GPAGENT_WORK_DIR}" || die "解压 gp-agent 安装包失败"
 
     local latest_gpagent_path
-    latest_gpagent_path="$(find "${GPAGENT_WORK_DIR}" -type f -name gp-agent | head -n 1)"
+    latest_gpagent_path="$(find_first_file "${GPAGENT_WORK_DIR}" gp-agent)"
     if [ -z "${latest_gpagent_path}" ]; then
       if [ -n "${BIN_GPAGENT_PATH}" ]; then
         warn "最新安装包中未找到 gp-agent，回退到当前主包内置的 gp-agent。"
@@ -916,13 +999,19 @@ EOF
 
   local tmp_file
   tmp_file="$(mktemp -t gopanel_init.XXXXXX)"
+  local yaml_base_dir yaml_user yaml_password yaml_safe_enter yaml_install_id
+  yaml_base_dir="$(yaml_double_quoted "${CONFIG_INSTALL_DIR}")"
+  yaml_user="$(yaml_double_quoted "${CONFIG_USER}")"
+  yaml_password="$(yaml_double_quoted "${CONFIG_PASSWORD}")"
+  yaml_safe_enter="$(yaml_double_quoted "${CONFIG_SAFE_ENTER}")"
+  yaml_install_id="$(yaml_double_quoted "${CONFIG_INSTALL_ID}")"
   cat >"${tmp_file}" <<EOF
-base_dir: "${CONFIG_INSTALL_DIR}"
+base_dir: ${yaml_base_dir}
 port: ${CONFIG_PORT}
-user: "${CONFIG_USER}"
-password: "${CONFIG_PASSWORD}"
-safe_enter: "${CONFIG_SAFE_ENTER}"
-install_id: "${CONFIG_INSTALL_ID}"
+user: ${yaml_user}
+password: ${yaml_password}
+safe_enter: ${yaml_safe_enter}
+install_id: ${yaml_install_id}
 EOF
   if [ "${should_write_podman_socket}" = "true" ]; then
     local podman_socket
@@ -990,11 +1079,13 @@ create_macos_user_if_needed() {
     return 0
   fi
 
-  local max_uid next_uid
-  max_uid="$(
-    run_privileged dscl . -list /Users UniqueID | awk '{print $2}' | sort -n | tail -1
-  )"
-  next_uid=$((max_uid + 1))
+  local next_uid=501
+  while run_privileged dscl . -search /Users UniqueID "${next_uid}" 2>/dev/null | grep -q .; do
+    next_uid=$((next_uid + 1))
+    if [ "${next_uid}" -gt 60000 ]; then
+      die "无法为 macOS 服务用户分配可用 UID。"
+    fi
+  done
 
   run_privileged dscl . -create "/Users/${username}"
   run_privileged dscl . -create "/Users/${username}" UserShell /usr/bin/false
@@ -1138,9 +1229,10 @@ EOF
 
 install_service_gopanel_linux() {
   local tmp_service
-  local runtime_home runtime_dir
+  local runtime_home runtime_dir runtime_group
   runtime_home="$(user_home_dir "${RUNTIME_USER}")"
   runtime_dir="$(runtime_user_runtime_dir "${RUNTIME_USER}")"
+  runtime_group="$(runtime_user_group "${RUNTIME_USER}")"
   tmp_service="$(mktemp -t gopanel.service.XXXXXX)"
   local unit_after="network.target gpc.service"
   local unit_wants=""
@@ -1164,7 +1256,7 @@ Requires=gpc.service
 [Service]
 Type=simple
 User=${RUNTIME_USER}
-Group=${RUNTIME_USER}
+Group=${runtime_group}
 WorkingDirectory=${CONFIG_INSTALL_DIR}
 ExecStart=${CONFIG_INSTALL_DIR}/gopanel
 Restart=always
@@ -1200,9 +1292,10 @@ install_service_gpagent_linux() {
     return 0
   fi
   local tmp_service
-  local runtime_home runtime_dir
+  local runtime_home runtime_dir runtime_group
   runtime_home="$(user_home_dir "${RUNTIME_USER}")"
   runtime_dir="$(runtime_user_runtime_dir "${RUNTIME_USER}")"
+  runtime_group="$(runtime_user_group "${RUNTIME_USER}")"
   tmp_service="$(mktemp -t gp-agent.service.XXXXXX)"
   local unit_after="network.target"
   local unit_wants=""
@@ -1224,7 +1317,7 @@ EOF
 [Service]
 Type=simple
 User=${RUNTIME_USER}
-Group=${RUNTIME_USER}
+Group=${runtime_group}
 WorkingDirectory=${CONFIG_INSTALL_DIR}
 ExecStart=${CONFIG_INSTALL_DIR}/gp-agent service --base-dir ${CONFIG_INSTALL_DIR}
 Restart=always
@@ -1444,10 +1537,17 @@ install_autostart_services() {
 
 install_podman() {
   if command -v podman >/dev/null 2>&1; then
-    local pver
-    pver="$(podman version --format '{{.Server.Version}}' 2>/dev/null || podman --version 2>/dev/null | grep -oP '\d+\.\d+' | head -1 || echo "0")"
-    # Check if >= 5.x
-    if echo "$pver" | grep -qE '^[5-9]' 2>/dev/null; then
+    local pver pver_major
+    pver="$(podman version --format '{{.Server.Version}}' 2>/dev/null || true)"
+    if [ -z "${pver}" ]; then
+      pver="$(podman --version 2>/dev/null | sed -n 's/^[^0-9]*\([0-9][0-9]*\.[0-9][0-9]*\).*/\1/p' || true)"
+    fi
+    pver="${pver:-0}"
+    pver_major="${pver%%.*}"
+    case "${pver_major}" in
+      ''|*[!0-9]*) pver_major="0" ;;
+    esac
+    if [ "${pver_major}" -ge 5 ]; then
       log "Podman ${pver} 已安装（版本 >= 5），跳过。"
       ensure_podman_compose || true
       ensure_podman_machine_macos || true
@@ -1822,6 +1922,7 @@ main() {
   init_privilege
   ensure_curl
   require_cmds
+  init_generated_credentials
   detect_preexisting_install
   prompt_update_if_installed
 
@@ -1854,10 +1955,10 @@ main() {
   fi
 
   ensure_install_id
-  stop_existing_services
   download_package
   extract_and_find_binaries
   prepare_gpagent_binary
+  stop_existing_services
   install_gpc_binary
   install_gopanel_binary
   install_gpagent_binary
