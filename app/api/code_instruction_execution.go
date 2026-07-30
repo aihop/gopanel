@@ -33,7 +33,7 @@ func executeCodeInstruction(
 	}
 	executionContext, cancelExecution := context.WithCancel(ctx)
 	defer cancelExecution()
-	lease, err := codeExecutions.acquire(executionContext, codeExecutionWorkspaceKeys(session), codeExecutionInstruction, true, true)
+	lease, err := codeExecutions.acquireSession(executionContext, session, codeExecutionInstruction, true)
 	if err != nil {
 		return codeInstructionResult{Err: err}
 	}

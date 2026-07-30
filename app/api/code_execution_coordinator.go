@@ -21,7 +21,7 @@ const (
 )
 
 var (
-	errCodeExecutionBusy     = errors.New("当前工作区已有任务正在执行")
+	errCodeExecutionBusy     = errors.New("当前工作区已有任务正在执行，原任务不会停止；如需并行请启用 Git Worktree 隔离")
 	errCodeExecutionCapacity = errors.New("Code 执行并发已满，请稍后重试")
 	errCodeExecutionStopping = errors.New("Code 执行服务正在停止")
 )
@@ -29,6 +29,7 @@ var (
 type codeExecutionLease struct {
 	coordinator  *codeExecutionCoordinator
 	id           uint64
+	sessionID    uint
 	kind         string
 	keys         []string
 	done         chan struct{}
@@ -112,7 +113,29 @@ func (coordinator *codeExecutionCoordinator) acquire(
 	keys []string,
 	kind string,
 	wait bool,
-	preemptInteractive bool,
+	_ bool,
+) (*codeExecutionLease, error) {
+	return coordinator.acquireOwned(ctx, 0, keys, kind, wait)
+}
+
+func (coordinator *codeExecutionCoordinator) acquireSession(
+	ctx context.Context,
+	session *model.AIDevSession,
+	kind string,
+	wait bool,
+) (*codeExecutionLease, error) {
+	if session == nil || session.ID == 0 {
+		return nil, errors.New("Code 执行会话无效")
+	}
+	return coordinator.acquireOwned(ctx, session.ID, codeExecutionWorkspaceKeys(session), kind, wait)
+}
+
+func (coordinator *codeExecutionCoordinator) acquireOwned(
+	ctx context.Context,
+	sessionID uint,
+	keys []string,
+	kind string,
+	wait bool,
 ) (*codeExecutionLease, error) {
 	if len(keys) == 0 {
 		return nil, errors.New("Code 执行工作区无效")
@@ -132,6 +155,7 @@ func (coordinator *codeExecutionCoordinator) acquire(
 			lease := &codeExecutionLease{
 				coordinator: coordinator,
 				id:          coordinator.nextID,
+				sessionID:   sessionID,
 				kind:        kind,
 				keys:        append([]string(nil), keys...),
 				done:        make(chan struct{}),
@@ -185,11 +209,6 @@ func (coordinator *codeExecutionCoordinator) acquire(
 		if !wait {
 			return nil, errCodeExecutionBusy
 		}
-		if preemptInteractive {
-			for _, conflict := range conflicts {
-				conflict.CancelIfInteractive()
-			}
-		}
 		select {
 		case <-conflicts[0].done:
 		case <-ctx.Done():
@@ -230,9 +249,12 @@ func (lease *codeExecutionLease) SetCancel(cancel context.CancelFunc) {
 	}
 }
 
-func (coordinator *codeExecutionCoordinator) cancelAndWait(ctx context.Context, keys []string) bool {
+func (coordinator *codeExecutionCoordinator) cancelSessionAndWait(ctx context.Context, sessionID uint) bool {
+	if sessionID == 0 {
+		return false
+	}
 	coordinator.mu.Lock()
-	leases := coordinator.conflicts(keys)
+	leases := coordinator.sessionLeases(sessionID)
 	coordinator.mu.Unlock()
 	for _, lease := range leases {
 		coordinator.mu.Lock()
@@ -253,17 +275,20 @@ func (coordinator *codeExecutionCoordinator) cancelAndWait(ctx context.Context, 
 	return len(leases) > 0
 }
 
-func (lease *codeExecutionLease) CancelIfInteractive() {
-	if lease == nil || lease.kind != codeExecutionInteractive || lease.coordinator == nil {
-		return
+func (coordinator *codeExecutionCoordinator) sessionLeases(sessionID uint) []*codeExecutionLease {
+	seen := make(map[uint64]struct{})
+	leases := make([]*codeExecutionLease, 0)
+	for _, lease := range coordinator.active {
+		if lease.sessionID != sessionID {
+			continue
+		}
+		if _, exists := seen[lease.id]; exists {
+			continue
+		}
+		seen[lease.id] = struct{}{}
+		leases = append(leases, lease)
 	}
-	lease.coordinator.mu.Lock()
-	lease.cancelled = true
-	cancel := lease.cancel
-	lease.coordinator.mu.Unlock()
-	if cancel != nil {
-		cancel()
-	}
+	return leases
 }
 
 func (lease *codeExecutionLease) Release() {

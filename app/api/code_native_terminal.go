@@ -55,7 +55,7 @@ func (manager *nativeCodeTerminalManager) attach(
 	if terminal := manager.sessions[session.ID]; terminal != nil {
 		return terminal, false, nil
 	}
-	lease, err := codeExecutions.acquire(context.Background(), codeExecutionWorkspaceKeys(session), codeExecutionInteractive, false, false)
+	lease, err := codeExecutions.acquireSession(context.Background(), session, codeExecutionInteractive, false)
 	if err != nil {
 		return nil, false, err
 	}

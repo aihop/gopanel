@@ -98,7 +98,7 @@ func DeleteAITask(c fiber.Ctx) error {
 		backgroundCodeRunner.cancel(task.SessionID)
 		stopContext, cancelStop := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancelStop()
-		codeExecutions.cancelAndWait(stopContext, codeExecutionWorkspaceKeys(session))
+		codeExecutions.cancelSessionAndWait(stopContext, session.ID)
 		if !backgroundCodeRunner.wait(stopContext, task.SessionID) || stopContext.Err() != nil {
 			return c.JSON(e.Fail(errors.New("停止 Code 会话超时，请稍后重试")))
 		}

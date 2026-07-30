@@ -98,7 +98,7 @@ func RunCodeQualityCheck(c fiber.Ctx) error {
 	if check == nil {
 		return c.JSON(e.Fail(errors.New("质量检查项不存在或已发生变化，请刷新后重试")))
 	}
-	lease, err := codeExecutions.acquire(context.Background(), codeExecutionWorkspaceKeys(session), codeExecutionQuality, false, false)
+	lease, err := codeExecutions.acquireSession(context.Background(), session, codeExecutionQuality, false)
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}

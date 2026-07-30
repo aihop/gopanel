@@ -6,6 +6,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/aihop/gopanel/app/model"
 )
 
 func TestCodeExecutionCoordinatorSerializesSharedWorkspace(t *testing.T) {
@@ -25,7 +27,7 @@ func TestCodeExecutionCoordinatorSerializesSharedWorkspace(t *testing.T) {
 	second.Release()
 }
 
-func TestCodeExecutionCoordinatorPreemptsInteractiveLease(t *testing.T) {
+func TestCodeExecutionCoordinatorWaitsWithoutPreemptingInteractiveLease(t *testing.T) {
 	coordinator := newCodeExecutionCoordinator(1)
 	interactive, err := coordinator.acquire(context.Background(), []string{"/workspace/shared"}, codeExecutionInteractive, true, false)
 	if err != nil {
@@ -34,17 +36,48 @@ func TestCodeExecutionCoordinatorPreemptsInteractiveLease(t *testing.T) {
 	var cancelled atomic.Bool
 	interactive.SetCancel(func() {
 		cancelled.Store(true)
-		interactive.Release()
 	})
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	instruction, err := coordinator.acquire(ctx, []string{"/workspace/shared"}, codeExecutionInstruction, true, true)
+	result := make(chan error, 1)
+	go func() {
+		instruction, acquireErr := coordinator.acquire(ctx, []string{"/workspace/shared"}, codeExecutionInstruction, true, true)
+		if instruction != nil {
+			instruction.Release()
+		}
+		result <- acquireErr
+	}()
+	select {
+	case err := <-result:
+		t.Fatalf("instruction did not wait for interactive lease: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	if cancelled.Load() {
+		t.Fatal("interactive execution was preempted")
+	}
+	interactive.Release()
+	if err := <-result; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCodeExecutionCoordinatorNewSessionDoesNotInterruptSharedWorkspace(t *testing.T) {
+	coordinator := newCodeExecutionCoordinator(2)
+	firstSession := &model.AIDevSession{ID: 21, WorkDir: "/workspace/shared"}
+	first, err := coordinator.acquireSession(context.Background(), firstSession, codeExecutionInteractive, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer instruction.Release()
-	if !cancelled.Load() {
-		t.Fatal("interactive execution was not preempted")
+	defer first.Release()
+	var interrupted atomic.Bool
+	first.SetCancel(func() { interrupted.Store(true) })
+
+	secondSession := &model.AIDevSession{ID: 22, WorkDir: "/workspace/shared"}
+	if _, err := coordinator.acquireSession(context.Background(), secondSession, codeExecutionInteractive, false); !errors.Is(err, errCodeExecutionBusy) {
+		t.Fatalf("new session error = %v", err)
+	}
+	if interrupted.Load() {
+		t.Fatal("existing session was interrupted by a new session")
 	}
 }
 
@@ -62,7 +95,7 @@ func TestCodeExecutionCoordinatorEnforcesCapacity(t *testing.T) {
 
 func TestCodeExecutionCoordinatorDeliversCancellationSetBeforeHandler(t *testing.T) {
 	coordinator := newCodeExecutionCoordinator(1)
-	lease, err := coordinator.acquire(context.Background(), []string{"/workspace/shared"}, codeExecutionInstruction, true, false)
+	lease, err := coordinator.acquireSession(context.Background(), &model.AIDevSession{ID: 7, WorkDir: "/workspace/shared"}, codeExecutionInstruction, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +104,7 @@ func TestCodeExecutionCoordinatorDeliversCancellationSetBeforeHandler(t *testing
 	defer cancelWait()
 	waitDone := make(chan bool, 1)
 	go func() {
-		waitDone <- coordinator.cancelAndWait(cancelContext, []string{"/workspace/shared"})
+		waitDone <- coordinator.cancelSessionAndWait(cancelContext, 7)
 	}()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -84,5 +117,40 @@ func TestCodeExecutionCoordinatorDeliversCancellationSetBeforeHandler(t *testing
 	lease.Release()
 	if cancelled := <-waitDone; !cancelled {
 		t.Fatal("active lease was not reported as cancelled")
+	}
+}
+
+func TestCodeExecutionCoordinatorCancelsOnlyTargetSession(t *testing.T) {
+	coordinator := newCodeExecutionCoordinator(2)
+	first, err := coordinator.acquireSession(context.Background(), &model.AIDevSession{ID: 11, WorkDir: "/workspace/one"}, codeExecutionInstruction, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first.Release()
+	second, err := coordinator.acquireSession(context.Background(), &model.AIDevSession{ID: 12, WorkDir: "/workspace/two"}, codeExecutionInstruction, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer second.Release()
+	var firstCancelled atomic.Bool
+	first.SetCancel(func() {
+		firstCancelled.Store(true)
+		first.Release()
+	})
+	var secondCancelled atomic.Bool
+	second.SetCancel(func() {
+		secondCancelled.Store(true)
+		second.Release()
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if !coordinator.cancelSessionAndWait(ctx, 12) {
+		t.Fatal("target session lease was not cancelled")
+	}
+	if firstCancelled.Load() {
+		t.Fatal("another session lease was cancelled")
+	}
+	if !secondCancelled.Load() {
+		t.Fatal("target session cancel handler was not called")
 	}
 }

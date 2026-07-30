@@ -204,7 +204,7 @@ func StopCodeSessionExecution(c fiber.Ctx) error {
 	stoppingRunning := backgroundCodeRunner.cancel(uint(sessionID))
 	stopContext, cancelStop := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancelStop()
-	stoppingWorkspace := codeExecutions.cancelAndWait(stopContext, codeExecutionWorkspaceKeys(session))
+	stoppingWorkspace := codeExecutions.cancelSessionAndWait(stopContext, session.ID)
 	if stopContext.Err() != nil {
 		return c.JSON(e.Fail(errors.New("停止 Code 会话超时，请稍后重试")))
 	}
