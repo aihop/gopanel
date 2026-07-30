@@ -1371,7 +1371,7 @@ install_service_gpc_macos() {
     <string>service</string>
   </array>
   <key>UserName</key>
-  <string>${RUNTIME_USER}</string>
+  <string>root</string>
   <key>WorkingDirectory</key>
   <string>${CONFIG_INSTALL_DIR}</string>
   <key>RunAtLoad</key>
