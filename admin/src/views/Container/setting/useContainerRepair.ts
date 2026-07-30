@@ -122,6 +122,11 @@ export const useContainerRepair = (
 		}
 	}
 
+	const installFailureMessage = (task: any) =>
+		task?.needsAction === "updateGpc"
+			? t("containerRuntime.updateGpcAction")
+			: task?.message || t("containerRuntime.installFailed")
+
 	const pollInstallTask = async (taskId: string) => {
 		clearInstallPoll()
 		try {
@@ -143,7 +148,7 @@ export const useContainerRepair = (
 				await loadValidate()
 				refreshDaemon()
 			} else {
-				message.error(res.data?.message || t("containerRuntime.installFailed"))
+				message.error(installFailureMessage(res.data))
 			}
 		} catch (error: any) {
 			installLoading.value = false

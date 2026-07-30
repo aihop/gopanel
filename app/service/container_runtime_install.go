@@ -111,10 +111,11 @@ func runContainerRuntimeInstall(id string) {
 	if err != nil {
 		task.Status = "failed"
 		task.Stage = "failed"
-		task.Message = err.Error()
+		responseOutput := ""
 		if response != nil {
-			task.Output = strings.TrimSpace(response.Output)
+			responseOutput = response.Output
 		}
+		task.Message, task.NeedsAction, task.Output = runtimeInstallFailure(err, responseOutput)
 		return
 	}
 	task.Status = "success"
@@ -122,6 +123,16 @@ func runContainerRuntimeInstall(id string) {
 	task.Message = strings.TrimSpace(result.Message)
 	task.NeedsAction = strings.TrimSpace(result.NeedsAction)
 	task.Output = strings.TrimSpace(result.Output)
+}
+
+func runtimeInstallFailure(err error, output string) (string, string, string) {
+	message := strings.TrimSpace(err.Error())
+	needsAction := ""
+	if strings.Contains(strings.ToLower(message), "unknown action") {
+		message = "GPC 高权限服务版本过旧，请更新 GoPanel 或重新运行官方安装脚本以更新 GPC，然后重试"
+		needsAction = "updateGpc"
+	}
+	return message, needsAction, strings.TrimSpace(output)
 }
 
 func currentRuntimeUserParams() map[string]interface{} {

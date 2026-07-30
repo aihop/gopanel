@@ -28,6 +28,7 @@ export const containerRuntimeMessages = {
 			installing: "正在安装 {runtime}，预计需要几分钟…",
 			installSuccess: "{runtime} 安装完成",
 			installFailed: "安装失败",
+			updateGpcAction: "GPC 高权限服务版本过旧，请更新 GoPanel 或重新运行官方安装脚本，更新并重启 GPC 后再试。",
 			gpcRequired: "一键安装需要 GPC 高权限服务，请先启动 GPC 后重试。",
 			unsupported: "当前系统暂不支持面板内一键安装",
 			openDockerDesktop: "Docker Desktop 已安装，请在 macOS 中启动一次并完成系统授权。",
@@ -108,6 +109,8 @@ export const containerRuntimeMessages = {
 			installing: "Installing {runtime}. This may take a few minutes…",
 			installSuccess: "{runtime} installed",
 			installFailed: "Installation failed",
+			updateGpcAction:
+				"The privileged GPC service is outdated. Update GoPanel or rerun the official installer, then retry after GPC restarts.",
 			gpcRequired: "One-click installation requires the privileged GPC service. Start GPC and retry.",
 			unsupported: "One-click installation is not supported on this system",
 			openDockerDesktop: "Docker Desktop is installed. Open it once on macOS and complete system approval.",

@@ -139,7 +139,11 @@
 				type="error"
 				:title="t('containerRuntime.installFailed')"
 			>
-				{{ installTask.message }}
+				{{
+					installTask.needsAction === "updateGpc"
+						? t("containerRuntime.updateGpcAction")
+						: installTask.message
+				}}
 			</n-alert>
 			<n-alert v-else-if="installTask?.needsAction" type="warning" :show-icon="false">
 				{{
