@@ -52,46 +52,44 @@
 
       <div
         v-else
-        class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+        class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
       >
         <div
           v-for="group in groups"
           :key="group.id"
-          class="group-card cursor-pointer relative overflow-hidden rounded-3xl p-6"
+          class="group-card relative flex cursor-pointer flex-col overflow-hidden rounded-[24px] p-5"
+          :class="`group-card--${projectStatusMeta(group).status}`"
           @click="enterGroup(group.id)"
         >
-          <div class="group-card__glow"></div>
-          <div class="group-card__grid"></div>
-          <div class="flex justify-between items-start mb-4">
-            <div class="group-card__avatar w-12 h-12 rounded-2xl flex items-center justify-center text-xl font-bold">
-              {{ group.name.substring(0, 1).toUpperCase() }}
+          <div class="mb-5 flex items-start justify-between gap-3">
+            <div class="flex min-w-0 items-center gap-3.5">
+              <div class="group-card__avatar flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] text-lg font-bold">
+                {{ group.name.substring(0, 1).toUpperCase() }}
+              </div>
+              <div class="min-w-0">
+                <h3 class="group-card__title truncate text-lg font-semibold">{{ group.name }}</h3>
+                <div class="mt-1 flex items-center gap-1.5 text-xs text-[var(--n-text-color-3)]">
+                  <Icon name="mdi:folder-outline" :size="15" />
+                  <span class="truncate">
+                    {{ group.sourceDirs?.length ? t("code.projectDirectoryCount", { count: group.sourceDirs.length }) : group.workDir || t("code.projectDirectoryRequired") }}
+                  </span>
+                </div>
+              </div>
             </div>
-            <div class="relative z-[2] flex items-center gap-2" @click.stop>
-              <n-button quaternary circle size="small" @click="openEditProjectModal(group)">
+            <div class="relative z-[2] shrink-0" @click.stop>
+              <n-button quaternary circle size="small" :aria-label="t('code.editProject')" @click="openEditProjectModal(group)">
                 <template #icon><Icon name="mdi:pencil-outline" :size="16" /></template>
               </n-button>
-              <n-tag size="small" type="info" round>{{ t("code.project") }}</n-tag>
             </div>
           </div>
-          <h3 class="group-card__title text-lg font-semibold mb-2">{{ group.name }}</h3>
-          <p class="group-card__desc text-sm line-clamp-2 mb-5">{{ group.description || $t('code.noDesc') }}</p>
-          <div
-            class="group-card__path mb-4 flex items-center gap-2 text-xs"
-            :title="group.sourceDirs?.join('\n') || group.workDir"
-          >
-            <Icon name="mdi:folder-outline" :size="16" />
-            <span class="truncate">
-              {{ group.sourceDirs?.length ? t("code.projectDirectoryCount", { count: group.sourceDirs.length }) : group.workDir || t("code.projectDirectoryRequired") }}
-            </span>
-          </div>
-          <div class="group-card__status mb-4 rounded-2xl border border-[var(--n-border-color)] bg-[var(--n-color-embedded)] p-3">
+          <p class="group-card__desc mb-5 line-clamp-2 min-h-11 text-sm">{{ group.description || $t('code.noDesc') }}</p>
+          <div class="group-card__status mb-5 rounded-[18px] p-3.5">
             <div class="flex items-center justify-between gap-3">
-              <div class="flex min-w-0 items-center gap-2">
-                <span
-                  class="h-2 w-2 shrink-0 rounded-full"
-                  :class="projectStatusMeta(group).dotClass"
-                ></span>
-                <span class="truncate text-sm font-semibold text-[var(--n-text-color)]">
+              <div class="flex min-w-0 items-center gap-2.5">
+                <span class="group-card__status-icon flex h-8 w-8 shrink-0 items-center justify-center rounded-xl">
+                  <Icon :name="projectStatusMeta(group).icon" :size="17" />
+                </span>
+                <span class="truncate text-sm font-semibold">
                   {{ t(projectStatusMeta(group).labelKey) }}
                 </span>
               </div>
@@ -99,24 +97,31 @@
                 {{ formatUpdatedAt(group.executionSummary.updatedAt) }}
               </span>
             </div>
-            <div class="mt-2 truncate text-xs text-[var(--n-text-color-2)]" :title="group.executionSummary.currentTaskTitle">
+            <div class="mt-3 truncate text-xs text-[var(--n-text-color-2)]" :title="group.executionSummary.currentTaskTitle">
               {{ group.executionSummary.currentTaskTitle || t("code.projectIdleHint") }}
             </div>
-            <div v-if="group.executionSummary.activeTaskCount" class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-[var(--n-text-color-3)]">
-              <span>{{ t("code.activeTaskCount", { count: group.executionSummary.activeTaskCount }) }}</span>
-              <span v-if="group.executionSummary.pendingApprovalCount" class="text-orange-500">
+            <div v-if="group.executionSummary.activeTaskCount" class="mt-3 flex flex-wrap gap-2 text-[11px]">
+              <span class="rounded-full bg-black/5 px-2 py-1 text-[var(--n-text-color-3)] dark:bg-white/10">
+                {{ t("code.activeTaskCount", { count: group.executionSummary.activeTaskCount }) }}
+              </span>
+              <span v-if="group.executionSummary.pendingApprovalCount" class="rounded-full bg-amber-500/10 px-2 py-1 font-medium text-amber-600 dark:text-amber-400">
                 {{ t("code.pendingApprovalCount", { count: group.executionSummary.pendingApprovalCount }) }}
               </span>
             </div>
           </div>
-          <div class="group-card__footer flex justify-between items-center text-xs pt-4">
-            <span>{{ group.taskCount || 0 }} {{ $t('code.task') }}</span>
-            <div class="relative z-[2] flex items-center gap-3" @click.stop>
-              <n-button text type="primary" size="small" @click="openQuickPanel(group)">
+          <div class="group-card__footer mt-auto flex items-center justify-between gap-3 pt-4 text-xs">
+            <span class="flex items-center gap-1.5">
+              <Icon name="mdi:checkbox-marked-circle-outline" :size="15" />
+              {{ group.taskCount || 0 }} {{ $t('code.task') }}
+            </span>
+            <div class="relative z-[2] flex items-center gap-2" @click.stop>
+              <n-button quaternary circle type="primary" size="small" :title="t('code.quickPanel')" :aria-label="t('code.quickPanel')" @click="openQuickPanel(group)">
                 <template #icon><Icon name="mdi:dock-window" :size="16" /></template>
-                {{ t("code.quickPanel") }}
               </n-button>
-              <span class="group-card__action cursor-pointer" @click="enterGroup(group.id)">{{ t("code.enterProject") }}</span>
+              <n-button text type="primary" size="small" @click="enterGroup(group.id)">
+                <template #icon><Icon name="mdi:arrow-right" :size="16" /></template>
+                {{ t("code.enterProject") }}
+              </n-button>
             </div>
           </div>
         </div>
@@ -251,11 +256,11 @@ onUnmounted(() => {
 const projectStatusMeta = (group: AIGroup) => {
   const status = group.executionSummary.pendingApprovalCount > 0 ? "pending_approval" : group.executionSummary.status
   return {
-    idle: { labelKey: "code.projectStatus_idle", dotClass: "bg-slate-400" },
-    queued: { labelKey: "code.projectStatus_queued", dotClass: "bg-blue-400 animate-pulse" },
-    running: { labelKey: "code.projectStatus_running", dotClass: "bg-emerald-500 animate-pulse" },
-    pending_approval: { labelKey: "code.projectStatus_pendingApproval", dotClass: "bg-orange-500 animate-pulse" }
-  }[status] || { labelKey: "code.projectStatus_idle", dotClass: "bg-slate-400" }
+    idle: { status: "idle", labelKey: "code.projectStatus_idle", icon: "mdi:circle-slice-8" },
+    queued: { status: "queued", labelKey: "code.projectStatus_queued", icon: "mdi:progress-clock" },
+    running: { status: "running", labelKey: "code.projectStatus_running", icon: "mdi:play-circle-outline" },
+    pending_approval: { status: "pending-approval", labelKey: "code.projectStatus_pendingApproval", icon: "mdi:shield-alert-outline" }
+  }[status] || { status: "idle", labelKey: "code.projectStatus_idle", icon: "mdi:circle-slice-8" }
 }
 
 const formatUpdatedAt = (value: string) => new Date(value).toLocaleString(undefined, {
@@ -322,70 +327,51 @@ const openQuickPanel = (project: AIGroup) => quickPanelsRef.value?.open(project)
 
 <style scoped>
 .group-card {
-  background:
-    radial-gradient(circle at top right, color-mix(in srgb, var(--n-primary-color) 16%, transparent), transparent 34%),
-    linear-gradient(180deg, color-mix(in srgb, var(--n-color) 98%, white 2%), color-mix(in srgb, var(--n-color) 94%, black 6%));
-  border: 1px solid color-mix(in srgb, var(--n-border-color) 88%, var(--n-primary-color) 12%);
-  box-shadow:
-    0 12px 28px rgba(15, 23, 42, 0.06),
-    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  --project-accent: #94a3b8;
+  --project-soft: rgba(148, 163, 184, 0.09);
+  background: color-mix(in srgb, var(--n-color) 97%, transparent);
+  border: 1px solid color-mix(in srgb, var(--n-border-color) 92%, transparent);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.045);
   transition:
-    transform 0.28s ease,
-    box-shadow 0.28s ease,
-    border-color 0.28s ease,
-    background 0.28s ease;
+    transform 0.22s ease,
+    box-shadow 0.22s ease,
+    border-color 0.22s ease;
+}
+
+.group-card::before {
+  position: absolute;
+  inset: 24px auto 24px 0;
+  width: 3px;
+  border-radius: 0 999px 999px 0;
+  background: var(--project-accent);
+  content: "";
+}
+
+.group-card--queued {
+  --project-accent: #3b82f6;
+  --project-soft: rgba(59, 130, 246, 0.09);
+}
+
+.group-card--running {
+  --project-accent: #10b981;
+  --project-soft: rgba(16, 185, 129, 0.09);
+}
+
+.group-card--pending-approval {
+  --project-accent: #f59e0b;
+  --project-soft: rgba(245, 158, 11, 0.11);
 }
 
 .group-card:hover {
-  transform: translateY(-6px);
-  border-color: color-mix(in srgb, var(--n-primary-color) 42%, var(--n-border-color) 58%);
-  box-shadow:
-    0 20px 40px rgba(15, 23, 42, 0.12),
-    0 8px 18px rgba(59, 130, 246, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.72);
-}
-
-.group-card__glow {
-  position: absolute;
-  top: -44px;
-  right: -34px;
-  width: 130px;
-  height: 130px;
-  border-radius: 9999px;
-  background: color-mix(in srgb, var(--n-primary-color) 20%, transparent);
-  filter: blur(18px);
-  opacity: 0.9;
-  pointer-events: none;
-}
-
-.group-card__grid {
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
-  background-size: 18px 18px;
-  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.28), transparent 72%);
-  pointer-events: none;
-}
-
-.group-card__avatar,
-.group-card__title,
-.group-card__desc,
-.group-card__path,
-.group-card__footer {
-  position: relative;
-  z-index: 1;
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--project-accent) 36%, var(--n-border-color));
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.085);
 }
 
 .group-card__avatar {
-  color: var(--n-primary-color);
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--n-primary-color) 18%, white 82%), color-mix(in srgb, var(--n-primary-color) 6%, transparent));
-  border: 1px solid color-mix(in srgb, var(--n-primary-color) 22%, transparent);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.7),
-    0 8px 16px rgba(59, 130, 246, 0.12);
+  color: var(--project-accent);
+  background: var(--project-soft);
+  border: 1px solid color-mix(in srgb, var(--project-accent) 24%, transparent);
 }
 
 .group-card__title {
@@ -395,31 +381,23 @@ const openQuickPanel = (project: AIGroup) => quickPanelsRef.value?.open(project)
 
 .group-card__desc {
   color: var(--n-text-color-3);
-  line-height: 1.65;
-  min-height: 48px;
-}
-
-.group-card__path {
-  color: var(--n-text-color-3);
+  line-height: 1.6;
 }
 
 .group-card__status {
-  position: relative;
-  z-index: 1;
+  color: color-mix(in srgb, var(--project-accent) 88%, var(--n-text-color));
+  background: var(--project-soft);
+  border: 1px solid color-mix(in srgb, var(--project-accent) 20%, transparent);
+}
+
+.group-card__status-icon {
+  color: var(--project-accent);
+  background: color-mix(in srgb, var(--project-accent) 12%, var(--n-color));
+  border: 1px solid color-mix(in srgb, var(--project-accent) 18%, transparent);
 }
 
 .group-card__footer {
   color: var(--n-text-color-3);
-  border-top: 1px solid color-mix(in srgb, var(--n-border-color) 82%, transparent);
-}
-
-.group-card__action {
-  color: var(--n-primary-color);
-  font-weight: 600;
-  transition: transform 0.28s ease;
-}
-
-.group-card:hover .group-card__action {
-  transform: translateX(4px);
+  border-top: 1px solid color-mix(in srgb, var(--n-border-color) 76%, transparent);
 }
 </style>
