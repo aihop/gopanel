@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {
 	decideMobileApproval,
+	getMobileNodes,
 	getMobileOverview,
 	getMobileSessionState,
 	getMobileSessions,
@@ -8,6 +9,7 @@ import {
 	retryMobileInstruction,
 	sendMobileInstruction,
 	stopMobileSession,
+	type MobileNode,
 	type MobileOverview
 } from "@/api/modules/mobile"
 import type { CodeSession, CodeSessionState } from "@/api/interface/code"
@@ -16,6 +18,7 @@ import { useI18n } from "vue-i18n"
 import { computed, onBeforeUnmount, onMounted, ref } from "vue"
 import { useDialog, useMessage } from "naive-ui"
 import { useRouter } from "vue-router"
+import MobileNodeSwitcher from "./components/MobileNodeSwitcher.vue"
 
 const { t } = useI18n({ messages: mobileMessages })
 const message = useMessage()
@@ -24,6 +27,11 @@ const router = useRouter()
 const isHttp = window.location.protocol === "http:"
 const activeTab = ref<"overview" | "code">("overview")
 const overview = ref<MobileOverview | null>(null)
+const nodes = ref<MobileNode[]>([])
+const selectedNodeId = ref(Number(localStorage.getItem("gopanel-mobile-node-id") || 0))
+const showNodeSwitcher = ref(false)
+const nodesLoading = ref(false)
+const nodesLoadError = ref("")
 const sessions = ref<CodeSession[]>([])
 const selectedSessionId = ref(0)
 const sessionState = ref<CodeSessionState | null>(null)
@@ -32,11 +40,37 @@ const loading = ref(false)
 const actionLoading = ref(false)
 const loadError = ref("")
 let refreshTimer: ReturnType<typeof setInterval> | null = null
+let nodeRefreshTicks = 0
 
 const selectedSession = computed(() => sessions.value.find(item => item.id === selectedSessionId.value) || null)
+const selectedNode = computed(() => nodes.value.find(item => item.id === selectedNodeId.value) || nodes.value[0] || null)
 const isRunning = computed(() => sessionState.value?.currentStage === "executing" || sessionState.value?.latestRun?.status === "running")
-const memoryPercent = computed(() => Math.round(overview.value?.system.memoryUsedPercent || 0))
-const cpuPercent = computed(() => Math.round(overview.value?.system.cpuUsedPercent || 0))
+const memoryPercent = computed(() => Math.round(selectedNode.value?.isLocal ? overview.value?.system.memoryUsedPercent || 0 : selectedNode.value?.summary.memPercent || 0))
+const cpuPercent = computed(() => Math.round(selectedNode.value?.isLocal ? overview.value?.system.cpuUsedPercent || 0 : selectedNode.value?.summary.cpuPercent || 0))
+const load1 = computed(() => selectedNode.value?.isLocal ? overview.value?.system.load1 || 0 : selectedNode.value?.summary.load1 || 0)
+const nodeIsOnline = computed(() => selectedNode.value?.status === "online")
+
+async function loadNodes(silent = false) {
+	if (!silent) nodesLoading.value = true
+	try {
+		nodes.value = await getMobileNodes()
+		if (!nodes.value.some(item => item.id === selectedNodeId.value)) {
+			selectedNodeId.value = 0
+			localStorage.setItem("gopanel-mobile-node-id", "0")
+		}
+		nodesLoadError.value = ""
+	} catch (error) {
+		nodesLoadError.value = error instanceof Error ? error.message : t("mobile.loadFailed")
+		if (nodesLoadError.value.includes("手机授权已失效")) await router.replace("/mobile/auth")
+	} finally {
+		if (!silent) nodesLoading.value = false
+	}
+}
+
+function selectNode(node: MobileNode) {
+	selectedNodeId.value = node.id
+	localStorage.setItem("gopanel-mobile-node-id", String(node.id))
+}
 
 async function loadOverview(silent = false) {
 	if (!silent) loading.value = true
@@ -156,13 +190,21 @@ function confirmLogout() {
 
 function startRefresh() {
 	refreshTimer = setInterval(() => {
-		if (activeTab.value === "overview") void loadOverview(true)
+		if (activeTab.value === "overview") {
+			if (selectedNode.value?.isLocal) void loadOverview(true)
+			nodeRefreshTicks++
+			if (nodeRefreshTicks >= 5) {
+				nodeRefreshTicks = 0
+				void loadNodes(true)
+				if (!selectedNode.value?.isLocal) void loadOverview(true)
+			}
+		}
 		else if (selectedSessionId.value) void loadSessionState(true)
 	}, 2000)
 }
 
 onMounted(async () => {
-	await Promise.all([loadOverview(), loadSessions()])
+	await Promise.all([loadOverview(), loadNodes(), loadSessions()])
 	startRefresh()
 })
 
@@ -175,9 +217,13 @@ onBeforeUnmount(() => {
 	<div class="min-h-dvh bg-slate-100 pb-24 text-slate-900">
 		<header class="sticky top-0 z-20 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur">
 			<div class="mx-auto flex max-w-2xl items-center justify-between">
-				<div>
+				<div class="min-w-0">
 					<div class="text-lg font-bold">GoPanel</div>
-					<div class="text-xs text-slate-500">{{ t("mobile.title") }}</div>
+					<button type="button" class="mt-0.5 flex max-w-[65vw] items-center gap-1 border-0 bg-transparent p-0 text-xs text-slate-500" @click="showNodeSwitcher = true">
+						<span class="h-2 w-2 shrink-0 rounded-full" :class="nodeIsOnline ? 'bg-emerald-500' : 'bg-slate-400'"></span>
+						<span class="truncate">{{ selectedNode?.name || t("mobile.selectNode") }}</span>
+						<span>⌄</span>
+					</button>
 				</div>
 				<n-button size="small" quaternary @click="confirmLogout">{{ t("mobile.logout") }}</n-button>
 			</div>
@@ -186,32 +232,56 @@ onBeforeUnmount(() => {
 		<main class="mx-auto max-w-2xl p-4">
 			<n-alert v-if="isHttp" type="warning" :show-icon="false" class="mb-4">{{ t("mobile.httpWarning") }}</n-alert>
 			<n-alert v-if="loadError" type="error" class="mb-4" :title="t('mobile.loadFailed')">{{ loadError }}</n-alert>
+			<n-alert v-if="nodesLoadError" type="error" class="mb-4" :title="t('mobile.nodesLoadFailed')">
+				<div class="flex items-center justify-between gap-3">
+					<span>{{ nodesLoadError }}</span>
+					<n-button size="small" text type="primary" @click="loadNodes()">{{ t("mobile.retry") }}</n-button>
+				</div>
+			</n-alert>
 
 			<n-spin :show="loading">
 				<div v-if="activeTab === 'overview'" class="space-y-4">
+					<n-alert v-if="selectedNode && !nodeIsOnline" type="warning" :title="t(`mobile.nodeStatus_${selectedNode.status}`)">
+						<div>{{ t("mobile.nodeSnapshotUnavailable") }}</div>
+						<div v-if="selectedNode.lastSeenAt" class="mt-1 text-xs">{{ t("mobile.lastSeen", { time: new Date(selectedNode.lastSeenAt).toLocaleString() }) }}</div>
+					</n-alert>
 					<div class="grid grid-cols-2 gap-3">
 						<div class="rounded-2xl bg-white p-4 shadow-sm">
 							<div class="text-xs text-slate-500">{{ t("mobile.cpu") }}</div>
-							<div class="mt-2 text-2xl font-bold">{{ cpuPercent }}%</div>
-							<n-progress type="line" :percentage="cpuPercent" :show-indicator="false" class="mt-3" />
+							<div class="mt-2 text-2xl font-bold">{{ nodeIsOnline ? `${cpuPercent}%` : '—' }}</div>
+							<n-progress v-if="nodeIsOnline" type="line" :percentage="cpuPercent" :show-indicator="false" class="mt-3" />
 						</div>
 						<div class="rounded-2xl bg-white p-4 shadow-sm">
 							<div class="text-xs text-slate-500">{{ t("mobile.memory") }}</div>
-							<div class="mt-2 text-2xl font-bold">{{ memoryPercent }}%</div>
-							<n-progress type="line" :percentage="memoryPercent" :show-indicator="false" class="mt-3" />
+							<div class="mt-2 text-2xl font-bold">{{ nodeIsOnline ? `${memoryPercent}%` : '—' }}</div>
+							<n-progress v-if="nodeIsOnline" type="line" :percentage="memoryPercent" :show-indicator="false" class="mt-3" />
 						</div>
 						<div class="rounded-2xl bg-white p-4 shadow-sm">
 							<div class="text-xs text-slate-500">{{ t("mobile.load") }}</div>
-							<div class="mt-2 text-2xl font-bold">{{ overview?.system.load1?.toFixed(2) || '0.00' }}</div>
+							<div class="mt-2 text-2xl font-bold">{{ nodeIsOnline ? load1.toFixed(2) : '—' }}</div>
 						</div>
 						<div class="rounded-2xl bg-white p-4 shadow-sm">
-							<div class="text-xs text-slate-500">{{ t("mobile.pending") }}</div>
-							<div class="mt-2 text-2xl font-bold">{{ overview?.pendingApprovals.length || 0 }}</div>
+							<div class="text-xs text-slate-500">{{ t("mobile.disk") }}</div>
+							<div class="mt-2 text-2xl font-bold">{{ nodeIsOnline ? `${Math.round(selectedNode?.summary.diskMaxPercent || 0)}%` : '—' }}</div>
 						</div>
 					</div>
+					<section v-if="selectedNode && nodeIsOnline" class="rounded-2xl bg-white p-4 shadow-sm">
+						<div class="grid grid-cols-2 gap-4 text-sm">
+							<div><div class="text-xs text-slate-500">{{ t("mobile.containers") }}</div><div class="mt-1 font-semibold">{{ selectedNode.summary.containerRunning }}/{{ selectedNode.summary.containerTotal }}</div></div>
+							<div><div class="text-xs text-slate-500">{{ t("mobile.certificates") }}</div><div class="mt-1 font-semibold">{{ selectedNode.summary.certExpiringCount }}/{{ selectedNode.summary.certTotal }} {{ t("mobile.expiring") }}</div></div>
+						</div>
+						<div v-if="selectedNode.warnings.length" class="mt-3 flex flex-wrap gap-2">
+							<n-tag v-for="(warning, index) in selectedNode.warnings" :key="index" size="small" :type="warning.level === 'danger' ? 'error' : 'warning'">{{ t(`mobile.warning_${warning.type}`) }}</n-tag>
+						</div>
+					</section>
 					<section class="rounded-2xl bg-white p-4 shadow-sm">
 						<div class="mb-3 flex items-center justify-between">
-							<h2 class="font-semibold">{{ t("mobile.sessions") }}</h2>
+							<div class="flex items-center gap-2">
+								<h2 class="font-semibold">{{ t("mobile.controllerSessions") }}</h2>
+								<n-tag v-if="overview?.pendingApprovals.length" size="small" type="warning" :bordered="false">
+									{{ t("mobile.pendingCount", { count: overview.pendingApprovals.length }) }}
+								</n-tag>
+							</div>
 							<n-button size="small" text type="primary" @click="activeTab = 'code'">{{ t("mobile.code") }}</n-button>
 						</div>
 						<n-empty v-if="!overview?.sessions.length" size="small" :description="t('mobile.noSessions')" />
@@ -279,5 +349,6 @@ onBeforeUnmount(() => {
 				<n-button size="large" :type="activeTab === 'code' ? 'primary' : 'default'" :secondary="activeTab !== 'code'" @click="activeTab = 'code'; loadSessions()">{{ t("mobile.code") }}</n-button>
 			</div>
 		</nav>
+		<MobileNodeSwitcher v-model:show="showNodeSwitcher" :nodes="nodes" :selected-id="selectedNodeId" :loading="nodesLoading" @select="selectNode" />
 	</div>
 </template>

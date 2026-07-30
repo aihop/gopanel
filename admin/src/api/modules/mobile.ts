@@ -3,6 +3,7 @@ import http from "@/api"
 import type { ResultData } from "@/api/interface"
 import type { CodeApproval, CodeSession, CodeSessionState } from "@/api/interface/code"
 import type { Dashboard } from "@/api/interface/dashboard"
+import type { NodeSummary, NodeWarning } from "./node"
 
 const mobileHttp = axios.create({
 	baseURL: import.meta.env.VITE_API_URL as string,
@@ -48,6 +49,18 @@ export interface MobileOverview {
 	serverTime: string
 }
 
+export interface MobileNode {
+	id: number
+	name: string
+	isLocal: boolean
+	isProd: boolean
+	status: "online" | "offline" | "unauthorized" | "unknown"
+	version: string
+	lastSeenAt?: string
+	summary: NodeSummary
+	warnings: NodeWarning[]
+}
+
 export function issueMobilePairing() {
 	return managementRequest(http.post<{ code: string; expiresAt: string }>("/mobile/management/pair/issue"))
 }
@@ -66,6 +79,10 @@ export function exchangeMobilePairing(code: string, deviceName: string) {
 
 export function getMobileOverview() {
 	return mobileRequest(mobileHttp.get<ResultData<MobileOverview>>("/mobile/app/overview"))
+}
+
+export function getMobileNodes() {
+	return mobileRequest(mobileHttp.get<ResultData<MobileNode[]>>("/mobile/app/nodes"))
 }
 
 export function getMobileSessions(page = 1, limit = 20) {

@@ -9,6 +9,7 @@ import (
 	"github.com/aihop/gopanel/app/dto"
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
+	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/utils/encrypt"
 )
 
@@ -59,6 +60,30 @@ func (s *NodeService) List() ([]dto.NodeRes, error) {
 	list := make([]dto.NodeRes, 0, len(nodes))
 	for _, node := range nodes {
 		list = append(list, toNodeRes(node))
+	}
+	return list, nil
+}
+
+func (s *NodeService) MobileList() ([]dto.MobileNodeRes, error) {
+	localSummary := LocalNodeSummary()
+	localName := strings.TrimSpace(localSummary.Hostname)
+	if localName == "" {
+		localName = constant.AppBrand
+	}
+	local := model.Node{
+		Name:       localName,
+		Status:     NodeStatusOnline,
+		Version:    localSummary.Version,
+		LastSeenAt: localSummary.ShotTime,
+		Summary:    localSummary,
+	}
+	list := []dto.MobileNodeRes{toMobileNodeRes(local, true)}
+	nodes, err := repo.NewNode().List()
+	if err != nil {
+		return nil, err
+	}
+	for _, node := range nodes {
+		list = append(list, toMobileNodeRes(node, false))
 	}
 	return list, nil
 }
@@ -215,6 +240,25 @@ func toNodeRes(node model.Node) dto.NodeRes {
 		TokenLenExpected: NodeTokenLength,
 		HasControlToken:  strings.TrimSpace(node.ControlToken) != "",
 		ControlTokenLen:  controlLen,
+	}
+}
+
+func toMobileNodeRes(node model.Node, isLocal bool) dto.MobileNodeRes {
+	var lastSeenAt *time.Time
+	if !node.LastSeenAt.IsZero() {
+		value := node.LastSeenAt
+		lastSeenAt = &value
+	}
+	return dto.MobileNodeRes{
+		ID:         node.ID,
+		Name:       node.Name,
+		IsLocal:    isLocal,
+		IsProd:     node.IsProd,
+		Status:     node.Status,
+		Version:    node.Version,
+		LastSeenAt: lastSeenAt,
+		Summary:    node.Summary,
+		Warnings:   buildNodeWarnings(node),
 	}
 }
 

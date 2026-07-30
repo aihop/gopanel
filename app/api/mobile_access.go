@@ -135,6 +135,14 @@ func GetMobileOverview(c fiber.Ctx) error {
 	}))
 }
 
+func GetMobileNodes(c fiber.Ctx) error {
+	nodes, err := service.NewNode().MobileList()
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	return c.JSON(e.Succ(nodes))
+}
+
 func LogoutMobileDevice(c fiber.Ctx) error {
 	deviceID, _ := c.Locals("mobile_device_id").(uint)
 	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
