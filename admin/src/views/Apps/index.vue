@@ -124,7 +124,6 @@ const handleSyncApps = async () => {
 		} else {
 		}
 	} catch (error) {
-		message.error("同步失败")
 	} finally {
 		syncing.value = false
 	}

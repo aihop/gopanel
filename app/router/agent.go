@@ -12,6 +12,7 @@ func AgentRouter(r fiber.Router) {
 	agentRouter.Use(middleware.JWT(constant.UserRoleAdmin))
 	{
 		agentRouter.Get("/status", api.AgentStatus)
+		agentRouter.Get("/control-plane/status", api.ControlPlaneStatus)
 		agentRouter.Get("/update-check", api.AgentUpdateCheck)
 		agentRouter.Post("/update", api.AgentUpdate)
 		agentRouter.Post("/ensure", api.AgentEnsure)

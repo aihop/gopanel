@@ -6,14 +6,22 @@
       :active-tab="activeTab"
       :agent-status="agentStatus"
       :agent-update="agentUpdate"
-      :ensuring-agent="ensuringAgent"
       :updating-agent="updatingAgent"
       @daemon-start="handleDaemonStart"
       @daemon-stop="handleDaemonStop"
       @refresh="refreshAll"
       @create="openPost()"
-      @ensure-agent="ensureAgent"
       @update-agent="confirmUpdateAgent"
+    />
+
+    <ControlPlaneStatusCard
+      :status="controlPlaneStatus"
+      :loading="controlPlaneLoading"
+      :error="controlPlaneError"
+      :repairing="ensuringAgent"
+      @refresh="fetchControlPlaneStatus(true)"
+      @details="controlPlaneModalVisible = true"
+      @repair="ensureAgent"
     />
 
     <div class="rounded-[28px] border border-blue-100/80 bg-base-100 p-6 shadow-[0_18px_48px_rgba(15,23,42,0.08)] sm:p-8">
@@ -104,11 +112,22 @@
         @cancel="handleEnsureFinished"
       />
     </div>
+
+    <ControlPlaneRepairModal
+      v-model:show="controlPlaneModalVisible"
+      :status="controlPlaneStatus"
+      :loading="controlPlaneLoading"
+      :repairing="ensuringAgent"
+      @recheck="handleControlPlaneRecheck"
+      @repair="ensureAgent"
+    />
   </div>
 </template>
 <script setup lang="ts">
 import { useTable } from "@/composables/useTable"
 import DaemonOverviewPanel from "./DaemonOverviewPanel.vue"
+import ControlPlaneStatusCard from "./ControlPlaneStatusCard.vue"
+import ControlPlaneRepairModal from "./ControlPlaneRepairModal.vue"
 import DaemonPost from "./components/DaemonPost.vue"
 import {
 	useMessage,
@@ -126,6 +145,7 @@ import {
 import { createDaemonColumns } from "./daemonTableColumns"
 import { useDaemonActions } from "./useDaemonActions"
 import { useDaemonAgentStatus } from "./useDaemonAgentStatus"
+import { useControlPlaneStatus } from "./useControlPlaneStatus"
 const dialog = useDialog()
 void useMessage()
 
@@ -184,6 +204,13 @@ const openPost = (record?: any) => {
 }
 
 const opDialogRef = ref<InstanceType<typeof OpDialog> | null>(null)
+const controlPlaneModalVisible = ref(false)
+const {
+	controlPlaneStatus,
+	controlPlaneLoading,
+	controlPlaneError,
+	fetchControlPlaneStatus
+} = useControlPlaneStatus()
 const {
 	handleDaemonStart,
 	handleDaemonStop,
@@ -203,8 +230,20 @@ const {
 	checkAgentUpdate,
 	ensureAgent,
 	updateAgent,
-	handleEnsureFinished
-} = useDaemonAgentStatus(opDialogRef, refreshAll)
+	handleEnsureFinished: handleAgentOperationFinished
+} = useDaemonAgentStatus(opDialogRef, () => {
+	refreshAll()
+	fetchControlPlaneStatus()
+})
+
+const handleEnsureFinished = () => {
+	handleAgentOperationFinished()
+}
+
+const handleControlPlaneRecheck = async () => {
+	await fetchControlPlaneStatus(true)
+	if (controlPlaneStatus.value?.autoRepairable) ensureAgent()
+}
 
 // 更新 gp-agent 会替换二进制并重启 agent，先让用户确认再执行
 function confirmUpdateAgent() {
@@ -228,6 +267,7 @@ const columns = createDaemonColumns({
 
 onMounted(() => {
 	fetchAgentStatus()
+	fetchControlPlaneStatus()
 	checkAgentUpdate()
 	refreshAll()
 })

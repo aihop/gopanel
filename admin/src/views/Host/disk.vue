@@ -484,7 +484,7 @@ onBeforeUnmount(stopStream)
 			</div>
 		</n-card>
 
-		<n-alert v-if="gpcBlocked" type="warning" title="gpc helper 未就绪，扫描与清理只能覆盖当前用户可读的文件" class="mb-4" :show-icon="true">
+		<n-alert v-if="gpcBlocked" type="warning" title="GPC helper 未就绪，扫描与清理只能覆盖当前用户可读的文件" class="mb-4" :show-icon="true">
 			<div class="text-sm">{{ gpc?.hint }}</div>
 			<div v-for="cmd in gpc?.commands || []" :key="cmd" class="mt-2 flex items-center gap-2">
 				<code class="flex-1 overflow-x-auto whitespace-nowrap rounded bg-slate-100 px-2 py-1 text-xs dark:bg-slate-800">{{ cmd }}</code>

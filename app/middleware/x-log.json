@@ -1,4 +1,18 @@
 {
+	"/agent/ensure": {
+		"bodyKeys": [],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "修复或初始化 gp-agent",
+		"formatEN": "Repair or initialize gp-agent"
+	},
+	"/agent/update": {
+		"bodyKeys": [],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "更新 gp-agent",
+		"formatEN": "Update gp-agent"
+	},
 	"/backup/recover/byupload": {
 		"bodyKeys": [
 			"type",

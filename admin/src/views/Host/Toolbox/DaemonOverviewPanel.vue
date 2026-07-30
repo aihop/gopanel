@@ -101,29 +101,6 @@
       </div>
     </div>
 
-    <n-alert
-      v-if="!agentStatus.online"
-      class="mt-6"
-      type="warning"
-      :show-icon="true"
-      title="Agent 未初始化"
-    >
-      <div class="text-sm leading-6">
-        <div>gp-agent 未启动或未安装，守护进程功能暂不可用。</div>
-        <div
-          v-if="agentStatus.error"
-          class="mt-1 text-slate-500"
-        >{{ agentStatus.error }}</div>
-        <n-space class="mt-3">
-          <n-button
-            size="small"
-            type="primary"
-            :loading="ensuringAgent"
-            @click="emit('ensure-agent')"
-          >一键初始化</n-button>
-        </n-space>
-      </div>
-    </n-alert>
   </div>
 </template>
 
@@ -134,7 +111,6 @@ defineProps<{
   activeTab: string
   agentStatus: { online: boolean; error?: string; version?: string }
   agentUpdate?: { needUpdate: boolean; currentVersion?: string; latestVersion?: string }
-  ensuringAgent: boolean
   updatingAgent?: boolean
 }>()
 
@@ -143,7 +119,6 @@ const emit = defineEmits<{
   (e: "daemon-stop"): void
   (e: "refresh"): void
   (e: "create"): void
-  (e: "ensure-agent"): void
   (e: "update-agent"): void
 }>()
 </script>

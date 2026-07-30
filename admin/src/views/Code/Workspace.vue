@@ -215,7 +215,7 @@
 					<div
 						v-if="terminalMounted && (currentTaskId !== null || currentSessionId !== null)"
 						v-show="workspaceMode === 'terminal'"
-						class="ai-workspace-terminal-panel min-h-0 flex-1 overflow-hidden rounded-[20px] border border-slate-700 bg-[#1e1e1e] shadow-lg"
+						class="ai-workspace-terminal-panel min-h-0 flex-1 overflow-hidden rounded border border-slate-700 bg-[#1e1e1e] shadow-lg"
 					>
 						<CodeTerminal
 							:key="terminalKey"

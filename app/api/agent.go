@@ -57,6 +57,12 @@ func AgentStatus(c fiber.Ctx) error {
 	return c.JSON(e.Succ(resp))
 }
 
+func ControlPlaneStatus(c fiber.Ctx) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+	return c.JSON(e.Succ(service.DiagnoseControlPlane(ctx)))
+}
+
 // AgentUpdateCheck 返回 gp-agent 当前版本 + 升级服务器上的最新版本，供面板展示「版本 / 有无更新」
 func AgentUpdateCheck(c fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)

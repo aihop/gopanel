@@ -1,12 +1,17 @@
 import { ref } from "vue"
 import { AgentEnsureAPI, AgentStatusAPI, AgentUpdateAPI, AgentUpdateCheckAPI } from "@/api/modules/agent"
 import { useAuthStore } from "@/store/auth"
+import { useI18n } from "vue-i18n"
+import { useMessage } from "naive-ui"
+import { controlPlaneMessages } from "@/i18n/locales/controlPlane"
 
 export const useDaemonAgentStatus = (
   opDialogRef: { value: { acceptParams: (params: any) => void } | null },
   onFinished: () => void
 ) => {
   const authStore = useAuthStore()
+  const { t } = useI18n({ messages: controlPlaneMessages })
+  const message = useMessage()
   const ensuringAgent = ref(false)
   const updatingAgent = ref(false)
   const agentStatus = ref<{ online: boolean; error?: string; version?: string }>({ online: true })
@@ -22,7 +27,7 @@ export const useDaemonAgentStatus = (
         version: res?.data?.agent?.version
       }
     } catch (e: any) {
-      agentStatus.value = { online: false, error: e?.message || "获取 Agent 状态失败" }
+      agentStatus.value = { online: false, error: e?.message || t("controlPlane.loadFailed") }
     }
   }
 
@@ -54,15 +59,17 @@ export const useDaemonAgentStatus = (
       const token = authStore.getAuth() || authStore.auth || ""
       if (log) {
         opDialogRef.value?.acceptParams({
-          title: "初始化 Agent",
+          title: t("controlPlane.initializeTitle"),
           sseUrl: `/api/agent/ensure/logs?log=${encodeURIComponent(log)}&token=${encodeURIComponent(token)}`
         })
       } else {
         // 没拿到日志名说明后端没真正起任务，别把按钮一直锁着
         ensuringAgent.value = false
+        message.error(t("controlPlane.operationFailed"))
       }
-    } catch {
+    } catch (error: any) {
       ensuringAgent.value = false
+      message.error(error?.message || t("controlPlane.operationFailed"))
     }
     // 注意：成功发起后不在这里解锁 —— 任务还在后台跑，
     // 解锁交给日志弹窗结束时的 handleEnsureFinished，避免连点触发两次安装
@@ -79,14 +86,16 @@ export const useDaemonAgentStatus = (
       const token = authStore.getAuth() || authStore.auth || ""
       if (log) {
         opDialogRef.value?.acceptParams({
-          title: "更新 gp-agent",
+          title: t("controlPlane.updateTitle"),
           sseUrl: `/api/agent/ensure/logs?log=${encodeURIComponent(log)}&token=${encodeURIComponent(token)}`
         })
       } else {
         updatingAgent.value = false
+        message.error(t("controlPlane.operationFailed"))
       }
-    } catch {
+    } catch (error: any) {
       updatingAgent.value = false
+      message.error(error?.message || t("controlPlane.operationFailed"))
     }
     // 同 ensureAgent：解锁交给日志弹窗结束
   }

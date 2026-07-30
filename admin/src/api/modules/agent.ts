@@ -1,7 +1,33 @@
 import http from "@/api"
 
+export interface ControlPlaneComponentStatus {
+	name: string
+	state: "healthy" | "missing" | "service_stopped" | "socket_missing" | "permission_denied" | "config_mismatch"
+	healthy: boolean
+	installed: boolean
+	reachable: boolean
+	socketPath?: string
+	version?: string
+	error?: string
+	commands?: string[]
+}
+
+export interface ControlPlaneStatus {
+	healthy: boolean
+	autoRepairable: boolean
+	requiresSudo: boolean
+	nextAction: "none" | "repair_agent" | "repair_gpc"
+	checkedAt: number
+	gpc: ControlPlaneComponentStatus
+	agent: ControlPlaneComponentStatus
+}
+
 export async function AgentStatusAPI() {
 	return http.get<any>(`/agent/status`)
+}
+
+export async function ControlPlaneStatusAPI() {
+	return http.get<ControlPlaneStatus>(`/agent/control-plane/status`)
 }
 
 export async function AgentEnsureAPI() {
@@ -16,4 +42,3 @@ export async function AgentUpdateCheckAPI() {
 export async function AgentUpdateAPI() {
 	return http.post<any>(`/agent/update`, {})
 }
-

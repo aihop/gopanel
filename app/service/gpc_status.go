@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"net"
 	"os"
 	"runtime"
 	"strings"
@@ -36,20 +35,14 @@ func DiagnoseGpc() GpcStatus {
 		Needed:     os.Geteuid() != 0,
 		SocketPath: gpc.SocketPath(),
 	}
-	if !st.Needed {
-		st.Available = true
-		st.Hint = "面板以 root 运行，无需 gpc 即可全盘扫描与清理"
-		return st
-	}
 	if _, err := os.Stat(gpcBinaryPath); err == nil {
 		st.Installed = true
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	conn, err := (&net.Dialer{}).DialContext(ctx, "unix", st.SocketPath)
+	err := dialUnixSocket(ctx, st.SocketPath)
 	if err == nil {
-		_ = conn.Close()
 		st.Available = true
 		st.Hint = "gpc helper 正常，扫描与清理可覆盖全盘"
 		return st

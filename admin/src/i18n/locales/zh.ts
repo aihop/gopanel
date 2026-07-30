@@ -606,7 +606,7 @@ export default {
 	},
 	code: {
 		workspace: "GoPanel Code",
-		workspaceDesc: "让 AI 在服务器上持续完成开发任务。",
+		workspaceDesc: "让 AI 在服务器上持续完成开发任务",
 		teamWorkspace: "Code 开发工作区",
 		createGroup: "新建项目组",
 		noGroup: "暂无项目组，请先新建一个吧",
