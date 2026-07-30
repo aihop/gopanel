@@ -40,15 +40,23 @@ func recoverInterruptedCodeInstructions() error {
 			}).Error; err != nil {
 			return err
 		}
-		if err := tx.Model(&model.AITask{}).
-			Where("id IN ? AND status = ?", taskIDs, "running").
-			Update("status", "failed").Error; err != nil {
-			return err
-		}
-		if err := tx.Model(&model.AIDevSession{}).
-			Where("id IN ? AND current_stage = ?", sessionIDs, "executing").
-			Update("current_stage", "failed").Error; err != nil {
-			return err
+		reconciledTasks := make(map[uint]struct{}, len(taskIDs))
+		for index, taskID := range taskIDs {
+			if _, exists := reconciledTasks[taskID]; exists {
+				continue
+			}
+			reconciledTasks[taskID] = struct{}{}
+			var task model.AITask
+			var session model.AIDevSession
+			if err := tx.First(&task, taskID).Error; err != nil {
+				return err
+			}
+			if err := tx.First(&session, sessionIDs[index]).Error; err != nil {
+				return err
+			}
+			if err := reconcileCodeTaskState(tx, &session, &task, "failed", "failed"); err != nil {
+				return err
+			}
 		}
 		for _, instruction := range instructions {
 			event := &model.AITimelineEvent{

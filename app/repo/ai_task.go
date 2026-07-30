@@ -13,6 +13,7 @@ type IAITaskRepo interface {
 	GetTasksByProjectAndUserID(projectID, userID uint, page, limit int) ([]*model.AITask, int64, error)
 	UpdateTask(task *model.AITask) error
 	DeleteTask(id uint) error
+	DeleteTaskAndSession(taskID, sessionID uint) error
 
 	CreateMessage(msg *model.AIMessage) error
 	GetMessagesByTaskID(taskID uint) ([]*model.AIMessage, error)
@@ -59,21 +60,39 @@ func (r *aiTaskRepo) UpdateTask(task *model.AITask) error {
 
 func (r *aiTaskRepo) DeleteTask(id uint) error {
 	return global.DB.Transaction(func(tx *gorm.DB) error {
-		for _, target := range []any{
-			&model.AIMessage{}, &model.AIApproval{}, &model.AIExecutionRun{},
-			&model.AIPreview{}, &model.AITimelineEvent{}, &model.AIInstruction{},
-		} {
-			if err := tx.Where("task_id = ?", id).Delete(target).Error; err != nil {
-				return err
-			}
+		return r.deleteTask(tx, id, 0)
+	})
+}
+
+func (r *aiTaskRepo) DeleteTaskAndSession(taskID, sessionID uint) error {
+	return global.DB.Transaction(func(tx *gorm.DB) error {
+		return r.deleteTask(tx, taskID, sessionID)
+	})
+}
+
+func (r *aiTaskRepo) deleteTask(db *gorm.DB, taskID, sessionID uint) error {
+	for _, target := range []any{
+		&model.AIMessage{}, &model.AIApproval{}, &model.AIExecutionRun{},
+		&model.AIPreview{}, &model.AITimelineEvent{}, &model.AIInstruction{},
+	} {
+		query := db.Where("task_id = ?", taskID)
+		if sessionID > 0 {
+			query = db.Where("task_id = ? OR session_id = ?", taskID, sessionID)
 		}
-		if err := tx.Model(&model.AIDevSession{}).
-			Where("last_task_id = ?", id).
-			Updates(map[string]any{"last_task_id": 0, "current_stage": "idle"}).Error; err != nil {
+		if err := query.Delete(target).Error; err != nil {
 			return err
 		}
-		return tx.Delete(&model.AITask{}, id).Error
-	})
+	}
+	if sessionID > 0 {
+		if err := db.Delete(&model.AIDevSession{}, sessionID).Error; err != nil {
+			return err
+		}
+	} else if err := db.Model(&model.AIDevSession{}).
+		Where("last_task_id = ?", taskID).
+		Updates(map[string]any{"last_task_id": 0, "current_stage": "idle"}).Error; err != nil {
+		return err
+	}
+	return db.Delete(&model.AITask{}, taskID).Error
 }
 
 func (r *aiTaskRepo) CreateMessage(msg *model.AIMessage) error {

@@ -1,13 +1,16 @@
 package app
 
 import (
+	"context"
 	"encoding/gob"
+	"errors"
 	"fmt"
 	sysLog "log"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/mattn/go-colorable"
@@ -144,7 +147,11 @@ func (r *App) Run() error {
 
 	// 阻塞主线程，直到收到退出信号
 	<-c
-	return nil
+	shutdownContext, cancelShutdown := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancelShutdown()
+	codeErr := api.ShutdownCodeExecutions(shutdownContext)
+	httpErr := r.App.ShutdownWithContext(shutdownContext)
+	return errors.Join(codeErr, httpErr)
 }
 
 func (app *App) startupMessage() {

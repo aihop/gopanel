@@ -3,6 +3,7 @@ package db
 import (
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -84,7 +85,7 @@ func initMonitorDB(newLogger logger.Interface) {
 func openSQLite(dbPath string) (*gorm.DB, error) {
 	var lastErr error
 	for attempt := 0; attempt < 8; attempt++ {
-		db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{
+		db, err := gorm.Open(sqlite.Open(sqliteDSN(dbPath)), &gorm.Config{
 			PrepareStmt:                              true,  // 缓存预编译语句
 			AllowGlobalUpdate:                        false, // 关闭无条件的全局更新（关闭可以防止全局更新删除）
 			QueryFields:                              true,  // 查询 * 时，会自动填写所有字段名
@@ -95,6 +96,13 @@ func openSQLite(dbPath string) (*gorm.DB, error) {
 			Logger: logger.Default.LogMode(logger.Silent),
 		})
 		if err == nil {
+			sqlDB, dbErr := db.DB()
+			if dbErr != nil {
+				return nil, dbErr
+			}
+			sqlDB.SetMaxOpenConns(8)
+			sqlDB.SetMaxIdleConns(4)
+			sqlDB.SetConnMaxLifetime(time.Hour)
 			return db, nil
 		}
 		lastErr = err
@@ -108,4 +116,14 @@ func openSQLite(dbPath string) (*gorm.DB, error) {
 		}
 	}
 	return nil, lastErr
+}
+
+func sqliteDSN(dbPath string) string {
+	dsn := &url.URL{Scheme: "file", Path: filepath.Clean(dbPath)}
+	query := url.Values{}
+	query.Add("_pragma", "busy_timeout(5000)")
+	query.Add("_pragma", "journal_mode(WAL)")
+	query.Add("_pragma", "synchronous(NORMAL)")
+	dsn.RawQuery = query.Encode()
+	return dsn.String()
 }

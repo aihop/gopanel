@@ -311,25 +311,15 @@ func CreateAISessionInstruction(c fiber.Ctx) error {
 		}
 		now := time.Now()
 		session.Status = "active"
-		if needsApproval {
-			session.CurrentStage = "awaiting_approval"
-		} else if session.CurrentStage != "executing" {
-			session.CurrentStage = "instruction_queued"
-		}
-		session.LastTaskID = task.ID
 		session.LastInstructionAt = &now
 		if strings.TrimSpace(session.Title) == "" {
 			session.Title = buildDefaultSessionTitle(session.WorkDir, content)
 		}
-		if txErr = tx.Save(session).Error; txErr != nil {
+		if txErr = tx.Model(&model.AIDevSession{}).Where("id = ?", session.ID).
+			Updates(map[string]any{"status": "active", "last_instruction_at": now, "title": session.Title}).Error; txErr != nil {
 			return txErr
 		}
-		if needsApproval {
-			task.Status = "pending_approval"
-		} else if task.Status != "running" {
-			task.Status = "queued"
-		}
-		return tx.Save(task).Error
+		return reconcileCodeTaskState(tx, session, task, instructionStatus, map[bool]string{true: "awaiting_approval", false: "instruction_queued"}[needsApproval])
 	}); err != nil {
 		return c.JSON(e.Fail(err))
 	}

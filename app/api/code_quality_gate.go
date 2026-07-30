@@ -13,7 +13,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/aihop/gopanel/app/e"
@@ -67,11 +66,6 @@ type codeQualityTimelineMeta struct {
 	Result  codeQualityCheckResult `json:"result"`
 }
 
-var codeQualityRuns = struct {
-	sync.Mutex
-	sessions map[uint]bool
-}{sessions: make(map[uint]bool)}
-
 func GetCodeQualityChecks(c fiber.Ctx) error {
 	session, _, err := getCodeQualitySession(c)
 	if err != nil {
@@ -104,11 +98,12 @@ func RunCodeQualityCheck(c fiber.Ctx) error {
 	if check == nil {
 		return c.JSON(e.Fail(errors.New("质量检查项不存在或已发生变化，请刷新后重试")))
 	}
-	if !claimCodeQualitySession(session.ID) {
-		return c.JSON(e.Fail(errors.New("当前会话已有质量检查正在执行")))
+	lease, err := codeExecutions.acquire(context.Background(), codeExecutionWorkspaceKeys(session), codeExecutionQuality, false, false)
+	if err != nil {
+		return c.JSON(e.Fail(err))
 	}
-	defer releaseCodeQualitySession(session.ID)
-	result := executeCodeQualityCheck(*check)
+	defer lease.Release()
+	result := executeCodeQualityCheck(lease, *check)
 	if err := persistCodeQualityResult(session, claims.UserId, *check, result); err != nil {
 		return c.JSON(e.Fail(err))
 	}
@@ -261,10 +256,11 @@ func newCodeQualityCheck(kind, label, workDir, displayRoot, executable string, a
 	}
 }
 
-func executeCodeQualityCheck(check codeQualityCheck) codeQualityCheckResult {
+func executeCodeQualityCheck(lease *codeExecutionLease, check codeQualityCheck) codeQualityCheckResult {
 	startedAt := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), codeQualityTimeout)
 	defer cancel()
+	lease.SetCancel(cancel)
 	output := &boundedCodeOutput{}
 	command := exec.CommandContext(ctx, check.Executable, check.Args...)
 	command.Dir = check.workDirPath
@@ -318,22 +314,6 @@ func truncateCodeQualityOutput(output string, limit int) (string, bool) {
 	headLimit := limit / 3
 	tailLimit := limit - headLimit
 	return strings.TrimSpace(output[:headLimit] + "\n[GoPanel: quality output truncated]\n" + output[len(output)-tailLimit:]), true
-}
-
-func claimCodeQualitySession(sessionID uint) bool {
-	codeQualityRuns.Lock()
-	defer codeQualityRuns.Unlock()
-	if codeQualityRuns.sessions[sessionID] {
-		return false
-	}
-	codeQualityRuns.sessions[sessionID] = true
-	return true
-}
-
-func releaseCodeQualitySession(sessionID uint) {
-	codeQualityRuns.Lock()
-	delete(codeQualityRuns.sessions, sessionID)
-	codeQualityRuns.Unlock()
 }
 
 func loadCodeQualityResults(sessionID uint, checks []codeQualityCheck) {

@@ -126,6 +126,32 @@ func rollbackCodeSessionWorktree(session *model.AIDevSession) {
 	}
 }
 
+func cleanupCodeSessionWorktree(session *model.AIDevSession) error {
+	if session == nil || session.SourceWorkDir == "" || session.WorktreeBranch == "" {
+		return nil
+	}
+	if !isManagedAISessionWorkDir(session.WorkDir, session.UserID) {
+		return errors.New("会话 Worktree 不在 GoPanel 管理目录中")
+	}
+	status, err := runCodeGit(session.WorkDir, "status", "--porcelain")
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(status) != "" {
+		return errors.New("会话 Worktree 仍有未提交修改，已保留目录避免数据丢失")
+	}
+	if _, err := runCodeGit(session.SourceWorkDir, "merge-base", "--is-ancestor", session.WorktreeBranch, "HEAD"); err != nil {
+		return errors.New("会话 Worktree 包含尚未合并的提交，已保留目录避免数据丢失")
+	}
+	if _, err := runCodeGit(session.SourceWorkDir, "worktree", "remove", session.WorkDir); err != nil {
+		return err
+	}
+	if _, err := runCodeGit(session.SourceWorkDir, "branch", "-d", "--", session.WorktreeBranch); err != nil {
+		return err
+	}
+	return nil
+}
+
 func runCodeGit(workDir string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), codeWorktreeCommandTimeout)
 	defer cancel()

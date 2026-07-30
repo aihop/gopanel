@@ -31,12 +31,23 @@ func executeCodeInstruction(
 	if instruction == nil || session == nil || task == nil {
 		return codeInstructionResult{Err: errors.New("开发指令缺少会话或任务")}
 	}
+	executionContext, cancelExecution := context.WithCancel(ctx)
+	defer cancelExecution()
+	lease, err := codeExecutions.acquire(executionContext, codeExecutionWorkspaceKeys(session), codeExecutionInstruction, true, true)
+	if err != nil {
+		return codeInstructionResult{Err: err}
+	}
+	defer lease.Release()
+	lease.SetCancel(cancelExecution)
+	if err := executionContext.Err(); err != nil {
+		return codeInstructionResult{Err: err}
+	}
 	if err := startCodeInstructionExecution(session, task, instruction, claim); err != nil {
 		return codeInstructionResult{Err: err}
 	}
 
 	_, output, execErr := executeCodeAgentRun(
-		ctx, sessionRepo, taskRepo, session, task, instruction,
+		executionContext, sessionRepo, taskRepo, session, task, instruction,
 		session.AgentName, session.WorkDir, instruction.Content,
 	)
 	previews, previewErr := upsertAIPreviews(sessionRepo, session, task, instruction, output)
@@ -44,7 +55,7 @@ func executeCodeInstruction(
 		global.LOG.Errorf("Failed to upsert AI previews: %v", previewErr)
 	}
 	resultErr := errors.Join(execErr, previewErr)
-	finishErr := finishCodeInstruction(session, task, instruction, output, previews, resultErr, ctx.Err() != nil)
+	finishErr := finishCodeInstruction(session, task, instruction, output, previews, resultErr, executionContext.Err() != nil)
 	return codeInstructionResult{Output: output, Previews: previews, Err: errors.Join(resultErr, finishErr)}
 }
 
@@ -92,31 +103,24 @@ func finishCodeInstruction(
 	cancelled bool,
 ) error {
 	stage, title, status := "completed", "开发任务已完成", "success"
-	task.Status = "completed"
 	instruction.Status = "completed"
 	if cancelled {
 		stage, title, status = "cancelled", "开发任务已停止", "warning"
-		task.Status = "cancelled"
 		instruction.Status = "cancelled"
 	} else if execErr != nil {
 		stage, title, status = "failed", "开发任务执行失败", "error"
-		task.Status = "failed"
 		instruction.Status = "failed"
 	} else if len(previews) > 0 {
 		stage, title = "preview_ready", "开发预览已生成"
 	}
-	session.CurrentStage = stage
 	if strings.TrimSpace(output) == "" && execErr != nil {
 		output = execErr.Error()
 	}
 	if err := global.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Save(task).Error; err != nil {
-			return err
-		}
 		if err := tx.Save(instruction).Error; err != nil {
 			return err
 		}
-		if err := tx.Save(session).Error; err != nil {
+		if err := reconcileCodeTaskState(tx, session, task, instruction.Status, stage); err != nil {
 			return err
 		}
 		if err := tx.Create(&model.AITimelineEvent{

@@ -1,12 +1,15 @@
 package api
 
 import (
+	"context"
 	"errors"
+	"time"
 
 	"github.com/aihop/gopanel/app/e"
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
 	"github.com/aihop/gopanel/constant"
+	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/utils/token"
 	"github.com/gofiber/fiber/v3"
 	"strconv"
@@ -84,11 +87,28 @@ func DeleteAITask(c fiber.Ctx) error {
 		return c.JSON(e.Fail(errors.New("无权删除该 AI 任务")))
 	}
 	if task.SessionID > 0 {
-		if _, err := repo.NewAIDevSessionRepo().CancelQueuedInstructions(task.SessionID); err != nil {
+		sessionRepo := repo.NewAIDevSessionRepo()
+		session, sessionErr := sessionRepo.GetSessionByID(task.SessionID)
+		if sessionErr != nil {
+			return c.JSON(e.Fail(sessionErr))
+		}
+		if _, err := sessionRepo.CancelQueuedInstructions(task.SessionID); err != nil {
 			return c.JSON(e.Fail(err))
 		}
 		backgroundCodeRunner.cancel(task.SessionID)
-		backgroundCodeRunner.wait(task.SessionID)
+		stopContext, cancelStop := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancelStop()
+		codeExecutions.cancelAndWait(stopContext, codeExecutionWorkspaceKeys(session))
+		if !backgroundCodeRunner.wait(stopContext, task.SessionID) || stopContext.Err() != nil {
+			return c.JSON(e.Fail(errors.New("停止 Code 会话超时，请稍后重试")))
+		}
+		if err := aiRepo.DeleteTaskAndSession(uint(taskID), session.ID); err != nil {
+			return c.JSON(e.Fail(err))
+		}
+		if err := cleanupCodeSessionWorktree(session); err != nil {
+			global.LOG.Warnf("Cleanup Code worktree %d skipped: %v", session.ID, err)
+		}
+		return c.JSON(e.Succ())
 	}
 	if err := aiRepo.DeleteTask(uint(taskID)); err != nil {
 		return c.JSON(e.Fail(err))

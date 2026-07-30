@@ -83,3 +83,52 @@ func TestCreateAndRollbackCodeSessionWorktree(t *testing.T) {
 		t.Fatal("worktree branch still exists")
 	}
 }
+
+func TestCleanupCodeSessionWorktreePreservesUncommittedChanges(t *testing.T) {
+	withAIProjectBaseDir(t)
+	repositoryDir := createCodeGitRepository(t)
+	session := &model.AIDevSession{ID: 22, UserID: 7, WorkDir: repositoryDir}
+	project := &model.AIGroup{SourceDirs: []string{repositoryDir}}
+	if err := createCodeSessionWorktree(session, project); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(session.WorkDir, "README.md"), []byte("changed"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := cleanupCodeSessionWorktree(session); err == nil {
+		t.Fatal("dirty worktree should be preserved")
+	}
+	if _, err := os.Stat(session.WorkDir); err != nil {
+		t.Fatalf("dirty worktree was removed: %v", err)
+	}
+	rollbackCodeSessionWorktree(session)
+}
+
+func TestCleanupCodeSessionWorktreePreservesUnmergedCommit(t *testing.T) {
+	withAIProjectBaseDir(t)
+	repositoryDir := createCodeGitRepository(t)
+	session := &model.AIDevSession{ID: 23, UserID: 7, WorkDir: repositoryDir}
+	project := &model.AIGroup{SourceDirs: []string{repositoryDir}}
+	if err := createCodeSessionWorktree(session, project); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(session.WorkDir, "result.txt"), []byte("finished\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(session.WorkDir, "add", "result.txt"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(session.WorkDir, "-c", "user.name=GoPanel Test", "-c", "user.email=test@gopanel.local", "commit", "-m", "result"); err != nil {
+		t.Fatal(err)
+	}
+	if err := cleanupCodeSessionWorktree(session); err == nil {
+		t.Fatal("unmerged worktree should be preserved")
+	}
+	if _, err := os.Stat(session.WorkDir); err != nil {
+		t.Fatalf("unmerged worktree was removed: %v", err)
+	}
+	if _, err := runCodeGit(repositoryDir, "show-ref", "--verify", "refs/heads/"+session.WorktreeBranch); err != nil {
+		t.Fatalf("unmerged branch was removed: %v", err)
+	}
+	rollbackCodeSessionWorktree(session)
+}

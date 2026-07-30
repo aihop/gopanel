@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -31,6 +32,7 @@ type nativeCodeTerminal struct {
 	subscribers  map[string]chan nativeTerminalEvent
 	controllerID string
 	done         chan struct{}
+	lease        *codeExecutionLease
 }
 
 type nativeCodeTerminalManager struct {
@@ -53,13 +55,19 @@ func (manager *nativeCodeTerminalManager) attach(
 	if terminal := manager.sessions[session.ID]; terminal != nil {
 		return terminal, false, nil
 	}
+	lease, err := codeExecutions.acquire(context.Background(), codeExecutionWorkspaceKeys(session), codeExecutionInteractive, false, false)
+	if err != nil {
+		return nil, false, err
+	}
 	command, err := buildNativeCodexCommand(session)
 	if err != nil {
+		lease.Release()
 		return nil, false, err
 	}
 	command.Env = append(os.Environ(), "TERM=xterm-256color", "COLORTERM=truecolor")
 	ptmx, err := pty.StartWithSize(command, &pty.Winsize{Cols: cols, Rows: rows})
 	if err != nil {
+		lease.Release()
 		return nil, false, err
 	}
 	terminal := &nativeCodeTerminal{
@@ -68,6 +76,19 @@ func (manager *nativeCodeTerminalManager) attach(
 		ptmx:        ptmx,
 		subscribers: make(map[string]chan nativeTerminalEvent),
 		done:        make(chan struct{}),
+		lease:       lease,
+	}
+	lease.SetCancel(func() {
+		if command.Process != nil {
+			_ = command.Process.Kill()
+		}
+	})
+	if err := global.DB.Model(&model.AIDevSession{}).Where("id = ?", session.ID).
+		Updates(map[string]any{"status": "active", "current_stage": "interactive"}).Error; err != nil {
+		_ = command.Process.Kill()
+		_ = ptmx.Close()
+		lease.Release()
+		return nil, false, err
 	}
 	manager.sessions[session.ID] = terminal
 	go terminal.readOutput()
@@ -152,26 +173,22 @@ func (terminal *nativeCodeTerminal) wait(manager *nativeCodeTerminalManager) {
 	manager.mu.Lock()
 	delete(manager.sessions, terminal.sessionID)
 	manager.mu.Unlock()
-	if session, getErr := repo.NewAIDevSessionRepo().GetSessionByID(terminal.sessionID); getErr == nil {
-		session.CurrentStage = "idle"
-		_ = repo.NewAIDevSessionRepo().UpdateSession(session)
-	}
+	terminal.lease.Release()
+	_ = global.DB.Model(&model.AIDevSession{}).
+		Where("id = ? AND current_stage = ?", terminal.sessionID, "interactive").
+		Update("current_stage", "idle").Error
 }
 
 func serveNativeCodeTerminal(
 	wsConn *websocket.Conn,
-	sessionRepo repo.IAIDevSessionRepo,
+	_ repo.IAIDevSessionRepo,
 	session *model.AIDevSession,
 	cols, rows uint16,
 ) {
-	terminal, created, err := codeNativeTerminals.attach(session, cols, rows)
+	terminal, _, err := codeNativeTerminals.attach(session, cols, rows)
 	if err != nil {
 		_ = wsConn.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("启动原生 Codex 会话失败: %v", err)))
 		return
-	}
-	if created {
-		session.CurrentStage = "interactive"
-		_ = sessionRepo.UpdateSession(session)
 	}
 	afterSequence, _ := strconv.ParseUint(wsConn.Query("after_sequence", "0"), 10, 64)
 	subscription, baseline := terminal.subscribe(afterSequence)

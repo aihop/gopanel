@@ -136,22 +136,9 @@ func decideAIApproval(c fiber.Ctx, decision string) error {
 		}
 		if decision == "approved" {
 			instruction.Status = "queued"
-			session.CurrentStage = "instruction_queued"
-			session.Status = "active"
-			if task.ID > 0 {
-				task.Status = "queued"
-				if err := tx.Save(&task).Error; err != nil {
-					return err
-				}
-			}
 		} else {
 			instruction.Status = "rejected"
-			session.CurrentStage = "approval_rejected"
 			if task.ID > 0 {
-				task.Status = "cancelled"
-				if err := tx.Save(&task).Error; err != nil {
-					return err
-				}
 				if err := tx.Create(&model.AIMessage{SessionID: approval.SessionID, TaskID: task.ID, Role: "system", Content: "该开发指令已被人工拒绝执行。"}).Error; err != nil {
 					return err
 				}
@@ -160,7 +147,14 @@ func decideAIApproval(c fiber.Ctx, decision string) error {
 		if err := tx.Save(&instruction).Error; err != nil {
 			return err
 		}
-		return tx.Save(&session).Error
+		if task.ID == 0 {
+			return nil
+		}
+		terminalTaskStatus, terminalStage := "cancelled", "approval_rejected"
+		if decision == "approved" {
+			terminalTaskStatus, terminalStage = "queued", "instruction_queued"
+		}
+		return reconcileCodeTaskState(tx, &session, &task, terminalTaskStatus, terminalStage)
 	}); err != nil {
 		return c.JSON(e.Fail(err))
 	}

@@ -74,3 +74,37 @@ func TestDeleteTaskRemovesTaskRecordsAndResetsSession(t *testing.T) {
 		t.Fatalf("session was not reset: %#v, err = %v", session, err)
 	}
 }
+
+func TestDeleteTaskAndSessionIsAtomic(t *testing.T) {
+	oldDB := global.DB
+	t.Cleanup(func() { global.DB = oldDB })
+	database, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "delete-session.db")), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := database.AutoMigrate(&model.AIDevSession{}, &model.AITask{}, &model.AIMessage{}, &model.AIInstruction{}, &model.AIApproval{}, &model.AIExecutionRun{}, &model.AIPreview{}, &model.AITimelineEvent{}); err != nil {
+		t.Fatal(err)
+	}
+	global.DB = database
+	session := &model.AIDevSession{UserID: 1, Title: "session", WorkDir: "/tmp"}
+	if err := database.Create(session).Error; err != nil {
+		t.Fatal(err)
+	}
+	task := &model.AITask{UserID: 1, SessionID: session.ID, Title: "task", WorkDir: "/tmp"}
+	if err := database.Create(task).Error; err != nil {
+		t.Fatal(err)
+	}
+	message := &model.AIMessage{SessionID: session.ID, TaskID: 0, Role: "system", Content: "legacy session record"}
+	if err := database.Create(message).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := (&aiTaskRepo{}).DeleteTaskAndSession(task.ID, session.ID); err != nil {
+		t.Fatal(err)
+	}
+	for _, target := range []any{&model.AITask{}, &model.AIDevSession{}, &model.AIMessage{}} {
+		var count int64
+		if err := database.Model(target).Count(&count).Error; err != nil || count != 0 {
+			t.Fatalf("remaining %T count = %d, err = %v", target, count, err)
+		}
+	}
+}
