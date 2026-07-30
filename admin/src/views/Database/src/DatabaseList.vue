@@ -293,6 +293,7 @@ onUnmounted(() => {
     width="min(1200px, calc(100vw - 48px))"
     height="min(860px, calc(100vh - 48px))"
     body-padding="10px"
+    :body-scrollable="false"
   >
     <DatabaseManager
       fill-height

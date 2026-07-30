@@ -82,6 +82,7 @@
           :class="bodyClass"
         >
           <n-scrollbar
+            v-if="bodyScrollable"
             class="full-modal__scrollbar"
             :x-scrollable="xScrollable"
           >
@@ -92,6 +93,13 @@
               <slot></slot>
             </div>
           </n-scrollbar>
+          <div
+            v-else
+            class="full-modal__content full-modal__content--fill"
+            :style="contentStyle"
+          >
+            <slot></slot>
+          </div>
         </div>
 
         <div
@@ -139,6 +147,7 @@ const props = withDefaults(defineProps<{
 	maxWidth?: string
 	maxHeight?: string
 	bodyPadding?: string
+	bodyScrollable?: boolean
 	maskClosable?: boolean
 	closeOnEsc?: boolean
 	closable?: boolean
@@ -166,6 +175,7 @@ const props = withDefaults(defineProps<{
 	maxWidth: "100vw",
 	maxHeight: "100vh",
 	bodyPadding: "20px 20px 20px",
+	bodyScrollable: true,
 	maskClosable: false,
 	closeOnEsc: true,
 	closable: true,
@@ -390,6 +400,12 @@ defineExpose({
 .full-modal__content {
 	min-height: 100%;
 	box-sizing: border-box;
+}
+
+.full-modal__content--fill {
+	height: 100%;
+	min-height: 0;
+	overflow: hidden;
 }
 
 .full-modal__footer {
