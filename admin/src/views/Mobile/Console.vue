@@ -359,7 +359,7 @@ onBeforeUnmount(() => {
 					</div>
 					<section v-if="selectedNode && nodeIsOnline" class="rounded-2xl bg-white p-4 shadow-sm">
 						<div class="grid grid-cols-2 gap-4 text-sm">
-							<div><div class="text-xs text-slate-500">{{ t("mobile.containers") }}</div><div class="mt-1 font-semibold">{{ selectedNode.summary.containerRunning }}/{{ selectedNode.summary.containerTotal }}</div></div>
+							<div><div class="text-xs text-slate-500">{{ t("mobile.runningContainers") }}</div><div class="mt-1 font-semibold">{{ selectedNode.summary.containerRunning }}/{{ selectedNode.summary.containerTotal }}</div></div>
 							<div><div class="text-xs text-slate-500">{{ t("mobile.certificates") }}</div><div class="mt-1 font-semibold">{{ selectedNode.summary.certExpiringCount }}/{{ selectedNode.summary.certTotal }} {{ t("mobile.expiring") }}</div></div>
 						</div>
 						<div v-if="selectedNode.warnings.length" class="mt-3 flex flex-wrap gap-2">
