@@ -82,7 +82,7 @@
 												{{ task.title }}
 											</div>
 											<div class="mt-1.5 flex items-center gap-2">
-												<TaskStatusBadge :status="task.status" />
+												<TaskApprovalAction :task="task" @approved="fetchTasks()" />
 												<span class="text-xs text-slate-400">
 													{{ new Date(task.createdAt).toLocaleDateString() }}
 												</span>
@@ -279,7 +279,7 @@ import CodeApprovalCenter from "./components/CodeApprovalCenter.vue"
 import SessionHistoryDrawer from "./components/SessionHistoryDrawer.vue"
 import ProjectStructurePanel from "./components/ProjectStructurePanel.vue"
 import SessionFileEditor from "./components/SessionFileEditor.vue"
-import TaskStatusBadge from "./components/TaskStatusBadge.vue"
+import TaskApprovalAction from "./components/TaskApprovalAction.vue"
 import CodeGitReview from "./components/CodeGitReview.vue"
 import WorkspaceModeSwitch, { type CodeWorkspaceMode } from "./components/WorkspaceModeSwitch.vue"
 import { useCodeTaskPolling } from "./useCodeTaskPolling"
