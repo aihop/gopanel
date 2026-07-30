@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/aihop/gopanel/app/e"
 	"github.com/aihop/gopanel/app/repo"
@@ -45,6 +46,35 @@ func enqueueCodeInstruction(instructionID uint) {
 	backgroundCodeRunner.queued[instructionID] = struct{}{}
 	backgroundCodeRunner.mu.Unlock()
 	go backgroundCodeRunner.run(instructionID)
+}
+
+var codeInstructionRecoveryOnce sync.Once
+
+func StartCodeInstructionRecovery() {
+	codeInstructionRecoveryOnce.Do(func() {
+		if err := recoverInterruptedCodeInstructions(); err != nil {
+			global.LOG.Errorf("Recover interrupted Code instructions failed: %v", err)
+		}
+		enqueuePersistedCodeInstructions()
+		go func() {
+			ticker := time.NewTicker(15 * time.Second)
+			defer ticker.Stop()
+			for range ticker.C {
+				enqueuePersistedCodeInstructions()
+			}
+		}()
+	})
+}
+
+func enqueuePersistedCodeInstructions() {
+	ids, err := repo.NewAIDevSessionRepo().GetQueuedInstructionIDs(500)
+	if err != nil {
+		global.LOG.Errorf("Load queued Code instructions failed: %v", err)
+		return
+	}
+	for _, id := range ids {
+		enqueueCodeInstruction(id)
+	}
 }
 
 func (r *codeSessionRunner) run(instructionID uint) {
@@ -109,19 +139,31 @@ func (r *codeSessionRunner) cancel(sessionID uint) bool {
 	return true
 }
 
+func (r *codeSessionRunner) wait(sessionID uint) {
+	lock := r.sessionLock(sessionID)
+	lock.Lock()
+	lock.Unlock()
+}
+
 func StopCodeSessionExecution(c fiber.Ctx) error {
 	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
 	sessionID, _ := strconv.Atoi(c.Params("id"))
 	if _, err := getAISessionWithPermission(uint(sessionID), claims); err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	if err := repo.NewAIDevSessionRepo().CancelQueuedInstructions(uint(sessionID)); err != nil {
+	cancelledQueued, err := repo.NewAIDevSessionRepo().CancelQueuedInstructions(uint(sessionID))
+	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	if !backgroundCodeRunner.cancel(uint(sessionID)) {
+	stoppingRunning := backgroundCodeRunner.cancel(uint(sessionID))
+	if cancelledQueued == 0 && !stoppingRunning {
 		return c.JSON(e.Fail(errors.New("当前会话没有正在执行的任务")))
 	}
-	return c.JSON(e.Succ(fiber.Map{"stopping": true}))
+	return c.JSON(e.Succ(fiber.Map{
+		"stopping":        stoppingRunning,
+		"stoppingRunning": stoppingRunning,
+		"cancelledQueued": cancelledQueued,
+	}))
 }
 
 func RetryCodeInstruction(c fiber.Ctx) error {

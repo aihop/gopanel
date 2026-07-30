@@ -38,3 +38,40 @@ func TestGetPendingInstructionsDoesNotRepeatRunningWork(t *testing.T) {
 		t.Fatalf("pending instructions = %#v, want only queued work", got)
 	}
 }
+
+func TestQueuedInstructionQueriesAndCancellation(t *testing.T) {
+	oldDB := global.DB
+	t.Cleanup(func() { global.DB = oldDB })
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "queued-instructions.db")), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&model.AIInstruction{}); err != nil {
+		t.Fatal(err)
+	}
+	global.DB = db
+	instructions := []*model.AIInstruction{
+		{SessionID: 7, UserID: 1, Content: "first", Status: "queued"},
+		{SessionID: 7, UserID: 1, Content: "running", Status: "running"},
+		{SessionID: 8, UserID: 1, Content: "second", Status: "queued"},
+	}
+	if err := db.Create(&instructions).Error; err != nil {
+		t.Fatal(err)
+	}
+	repository := &aiDevSessionRepo{}
+	ids, err := repository.GetQueuedInstructionIDs(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ids) != 2 || ids[0] != instructions[0].ID || ids[1] != instructions[2].ID {
+		t.Fatalf("queued IDs = %v", ids)
+	}
+	cancelled, err := repository.CancelQueuedInstructions(7)
+	if err != nil || cancelled != 1 {
+		t.Fatalf("cancelled = %d, err = %v", cancelled, err)
+	}
+	var first model.AIInstruction
+	if err := db.First(&first, instructions[0].ID).Error; err != nil || first.Status != "cancelled" {
+		t.Fatalf("cancelled instruction = %#v, err = %v", first, err)
+	}
+}

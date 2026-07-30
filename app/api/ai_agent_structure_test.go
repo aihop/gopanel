@@ -83,7 +83,8 @@ func TestAISessionFileReadWriteStaysInsideWorkspace(t *testing.T) {
 	if err != nil || result["content"] != "package main\n" {
 		t.Fatalf("unexpected file result: %#v, %v", result, err)
 	}
-	if err := writeAISessionFile(workDir, "main.go", "package changed\n", nil); err != nil {
+	version, _ := result["version"].(string)
+	if _, err := writeAISessionFile(workDir, "main.go", "package changed\n", version, nil); err != nil {
 		t.Fatal(err)
 	}
 	content, err := os.ReadFile(filePath)
@@ -105,7 +106,29 @@ func TestAISessionFileRejectsBinaryAndOversizedContent(t *testing.T) {
 		t.Fatal("expected binary file to be rejected")
 	}
 	largeContent := strings.Repeat("x", maxAISessionFileSize+1)
-	if err := writeAISessionFile(workDir, "binary.dat", largeContent, nil); err == nil {
+	if _, err := writeAISessionFile(workDir, "binary.dat", largeContent, "version", nil); err == nil {
 		t.Fatal("expected oversized content to be rejected")
+	}
+}
+
+func TestAISessionFileRejectsStaleVersion(t *testing.T) {
+	workDir := t.TempDir()
+	filePath := filepath.Join(workDir, "main.go")
+	if err := os.WriteFile(filePath, []byte("original"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	result, err := readAISessionFile(workDir, "main.go", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filePath, []byte("changed by agent"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writeAISessionFile(workDir, "main.go", "changed by user", result["version"].(string), nil); err == nil {
+		t.Fatal("stale file version should be rejected")
+	}
+	content, _ := os.ReadFile(filePath)
+	if string(content) != "changed by agent" {
+		t.Fatalf("concurrent content was overwritten: %q", content)
 	}
 }

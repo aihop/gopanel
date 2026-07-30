@@ -10,6 +10,7 @@ import (
 	"github.com/aihop/gopanel/app/repo"
 	"github.com/aihop/gopanel/app/service"
 	"github.com/aihop/gopanel/global"
+	"gorm.io/gorm"
 )
 
 type codeInstructionResult struct {
@@ -30,30 +31,9 @@ func executeCodeInstruction(
 	if instruction == nil || session == nil || task == nil {
 		return codeInstructionResult{Err: errors.New("开发指令缺少会话或任务")}
 	}
-	if claim {
-		claimed, err := sessionRepo.ClaimInstruction(instruction.ID)
-		if err != nil {
-			return codeInstructionResult{Err: err}
-		}
-		if !claimed {
-			return codeInstructionResult{Err: errors.New("开发指令已被处理")}
-		}
+	if err := startCodeInstructionExecution(session, task, instruction, claim); err != nil {
+		return codeInstructionResult{Err: err}
 	}
-
-	instruction.Status = "running"
-	task.Status = "running"
-	now := time.Now()
-	session.Status = "active"
-	session.CurrentStage = "executing"
-	session.LastTaskID = task.ID
-	session.LastInstructionAt = &now
-	_ = taskRepo.UpdateTask(task)
-	_ = sessionRepo.UpdateSession(session)
-	createAITimelineEvent(sessionRepo, &model.AITimelineEvent{
-		SessionID: session.ID, TaskID: task.ID, InstructionID: instruction.ID,
-		EventType: "execution_started", Stage: "executing", Title: "开始执行开发任务",
-		Content: buildTimelineContent(instruction.Content), Status: "running",
-	})
 
 	_, output, execErr := executeCodeAgentRun(
 		ctx, sessionRepo, taskRepo, session, task, instruction,
@@ -64,13 +44,45 @@ func executeCodeInstruction(
 		global.LOG.Errorf("Failed to upsert AI previews: %v", previewErr)
 	}
 	resultErr := errors.Join(execErr, previewErr)
-	finishCodeInstruction(sessionRepo, taskRepo, session, task, instruction, output, previews, resultErr, ctx.Err() != nil)
-	return codeInstructionResult{Output: output, Previews: previews, Err: resultErr}
+	finishErr := finishCodeInstruction(session, task, instruction, output, previews, resultErr, ctx.Err() != nil)
+	return codeInstructionResult{Output: output, Previews: previews, Err: errors.Join(resultErr, finishErr)}
+}
+
+func startCodeInstructionExecution(session *model.AIDevSession, task *model.AITask, instruction *model.AIInstruction, claim bool) error {
+	now := time.Now()
+	return global.DB.Transaction(func(tx *gorm.DB) error {
+		query := tx.Model(&model.AIInstruction{}).Where("id = ?", instruction.ID)
+		if claim {
+			query = query.Where("status = ?", "queued")
+		}
+		result := query.Update("status", "running")
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return errors.New("开发指令已被处理")
+		}
+		instruction.Status = "running"
+		task.Status = "running"
+		session.Status = "active"
+		session.CurrentStage = "executing"
+		session.LastTaskID = task.ID
+		session.LastInstructionAt = &now
+		if err := tx.Save(task).Error; err != nil {
+			return err
+		}
+		if err := tx.Save(session).Error; err != nil {
+			return err
+		}
+		return tx.Create(&model.AITimelineEvent{
+			SessionID: session.ID, TaskID: task.ID, InstructionID: instruction.ID,
+			EventType: "execution_started", Stage: "executing", Title: "开始执行开发任务",
+			Content: buildTimelineContent(instruction.Content), Status: "running",
+		}).Error
+	})
 }
 
 func finishCodeInstruction(
-	sessionRepo repo.IAIDevSessionRepo,
-	taskRepo repo.IAITaskRepo,
 	session *model.AIDevSession,
 	task *model.AITask,
 	instruction *model.AIInstruction,
@@ -78,7 +90,7 @@ func finishCodeInstruction(
 	previews []*model.AIPreview,
 	execErr error,
 	cancelled bool,
-) {
+) error {
 	stage, title, status := "completed", "开发任务已完成", "success"
 	task.Status = "completed"
 	instruction.Status = "completed"
@@ -94,30 +106,46 @@ func finishCodeInstruction(
 		stage, title = "preview_ready", "开发预览已生成"
 	}
 	session.CurrentStage = stage
-	createAITimelineEvent(sessionRepo, &model.AITimelineEvent{
-		SessionID: session.ID, TaskID: task.ID, InstructionID: instruction.ID,
-		EventType: "execution_result", Stage: stage, Title: title,
-		Content: summarizeAIRecentOutput(output), Status: status,
-	})
-	for _, preview := range previews {
-		if preview == nil {
-			continue
-		}
-		createAITimelineEvent(sessionRepo, &model.AITimelineEvent{
-			SessionID: session.ID, TaskID: task.ID, InstructionID: instruction.ID,
-			EventType: "preview_ready", Stage: "preview_ready", Title: "预览已生成",
-			Content: buildTimelineContent(preview.URL), Status: "success",
-		})
-	}
 	if strings.TrimSpace(output) == "" && execErr != nil {
 		output = execErr.Error()
 	}
-	_ = taskRepo.UpdateTask(task)
-	_ = sessionRepo.UpdateInstruction(instruction)
-	_ = sessionRepo.UpdateSession(session)
+	if err := global.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Save(task).Error; err != nil {
+			return err
+		}
+		if err := tx.Save(instruction).Error; err != nil {
+			return err
+		}
+		if err := tx.Save(session).Error; err != nil {
+			return err
+		}
+		if err := tx.Create(&model.AITimelineEvent{
+			SessionID: session.ID, TaskID: task.ID, InstructionID: instruction.ID,
+			EventType: "execution_result", Stage: stage, Title: title,
+			Content: summarizeAIRecentOutput(output), Status: status,
+		}).Error; err != nil {
+			return err
+		}
+		for _, preview := range previews {
+			if preview == nil {
+				continue
+			}
+			if err := tx.Create(&model.AITimelineEvent{
+				SessionID: session.ID, TaskID: task.ID, InstructionID: instruction.ID,
+				EventType: "preview_ready", Stage: "preview_ready", Title: "预览已生成",
+				Content: buildTimelineContent(preview.URL), Status: "success",
+			}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
 	notifyState := service.CodeNotifyCompleted
 	if stage == "failed" || stage == "cancelled" {
 		notifyState = service.CodeNotifyFailed
 	}
 	go service.NotifyCodeSession(session, task, notifyState, summarizeAIRecentOutput(output))
+	return nil
 }

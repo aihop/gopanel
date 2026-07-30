@@ -3,6 +3,7 @@ package repo
 import (
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/global"
+	"gorm.io/gorm"
 )
 
 type IAITaskRepo interface {
@@ -57,9 +58,22 @@ func (r *aiTaskRepo) UpdateTask(task *model.AITask) error {
 }
 
 func (r *aiTaskRepo) DeleteTask(id uint) error {
-	// 同时删除关联的消息
-	global.DB.Where("task_id = ?", id).Delete(&model.AIMessage{})
-	return global.DB.Delete(&model.AITask{}, id).Error
+	return global.DB.Transaction(func(tx *gorm.DB) error {
+		for _, target := range []any{
+			&model.AIMessage{}, &model.AIApproval{}, &model.AIExecutionRun{},
+			&model.AIPreview{}, &model.AITimelineEvent{}, &model.AIInstruction{},
+		} {
+			if err := tx.Where("task_id = ?", id).Delete(target).Error; err != nil {
+				return err
+			}
+		}
+		if err := tx.Model(&model.AIDevSession{}).
+			Where("last_task_id = ?", id).
+			Updates(map[string]any{"last_task_id": 0, "current_stage": "idle"}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&model.AITask{}, id).Error
+	})
 }
 
 func (r *aiTaskRepo) CreateMessage(msg *model.AIMessage) error {

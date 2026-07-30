@@ -24,7 +24,8 @@ type IAIDevSessionRepo interface {
 	GetLatestInstructionBySessionID(sessionID uint) (*model.AIInstruction, error)
 	GetPendingInstructionsBySessionID(sessionID uint) ([]*model.AIInstruction, error)
 	ClaimInstruction(id uint) (bool, error)
-	CancelQueuedInstructions(sessionID uint) error
+	CancelQueuedInstructions(sessionID uint) (int64, error)
+	GetQueuedInstructionIDs(limit int) ([]uint, error)
 	UpdateInstruction(instruction *model.AIInstruction) error
 
 	CreatePreview(preview *model.AIPreview) error
@@ -158,10 +159,24 @@ func (r *aiDevSessionRepo) ClaimInstruction(id uint) (bool, error) {
 	return result.RowsAffected == 1, result.Error
 }
 
-func (r *aiDevSessionRepo) CancelQueuedInstructions(sessionID uint) error {
-	return global.DB.Model(&model.AIInstruction{}).
+func (r *aiDevSessionRepo) CancelQueuedInstructions(sessionID uint) (int64, error) {
+	result := global.DB.Model(&model.AIInstruction{}).
 		Where("session_id = ? AND status = ?", sessionID, "queued").
-		Update("status", "cancelled").Error
+		Update("status", "cancelled")
+	return result.RowsAffected, result.Error
+}
+
+func (r *aiDevSessionRepo) GetQueuedInstructionIDs(limit int) ([]uint, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 500
+	}
+	var ids []uint
+	err := global.DB.Model(&model.AIInstruction{}).
+		Where("status = ?", "queued").
+		Order("created_at asc").
+		Limit(limit).
+		Pluck("id", &ids).Error
+	return ids, err
 }
 
 func (r *aiDevSessionRepo) UpdateInstruction(instruction *model.AIInstruction) error {

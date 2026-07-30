@@ -8,7 +8,7 @@ import { mobileMessages } from "@/i18n/locales/mobile"
 import "xterm/css/xterm.css"
 
 const props = defineProps<{ sessionId: number; projectName: string; projectDescription: string }>()
-const emit = defineEmits<{ back: []; openFiles: [] }>()
+const emit = defineEmits<{ back: []; openFiles: []; openStatus: [] }>()
 const { t } = useI18n({ messages: mobileMessages })
 const terminalElement = ref<HTMLElement | null>(null)
 const connected = ref(false)
@@ -172,14 +172,9 @@ onBeforeUnmount(closeTerminal)
 				<div v-if="projectDescription" class="mt-0.5 truncate text-[11px] text-slate-400">{{ projectDescription }}</div>
 			</div>
 			<div class="flex shrink-0 items-center gap-1.5">
-				<n-tag size="small" :type="connected ? 'success' : reconnecting ? 'warning' : 'default'" :bordered="false" round>
-					{{ connected ? t("mobile.connected") : reconnecting ? t("mobile.reconnecting") : t("mobile.disconnected") }}
-				</n-tag>
-				<n-button v-if="connected && !hasControl" size="tiny" type="primary" @click="takeControl">
-					{{ t("mobile.takeTerminalControl") }}
-				</n-button>
-				<n-button v-else-if="connected" size="tiny" quaternary text-color="#cbd5e1" @click="releaseControl">
-					{{ t("mobile.releaseTerminalControl") }}
+				<span class="h-2 w-2 rounded-full" :class="connected ? 'bg-emerald-400' : reconnecting ? 'bg-amber-400' : 'bg-slate-500'" :title="connected ? t('mobile.connected') : reconnecting ? t('mobile.reconnecting') : t('mobile.disconnected')" />
+				<n-button size="small" quaternary circle text-color="#cbd5e1" :title="t('mobile.taskStatus')" :aria-label="t('mobile.taskStatus')" @click="emit('openStatus')">
+					<template #icon><Icon name="mdi:timeline-clock-outline" :size="19" /></template>
 				</n-button>
 				<n-button size="small" quaternary circle text-color="#cbd5e1" :title="t('mobile.files')" :aria-label="t('mobile.files')" @click="emit('openFiles')">
 					<template #icon><Icon name="mdi:folder-outline" :size="19" /></template>
@@ -187,6 +182,7 @@ onBeforeUnmount(closeTerminal)
 			</div>
 		</header>
 		<div ref="terminalElement" class="min-h-0 w-full flex-1 bg-[#0b1020] pb-[env(safe-area-inset-bottom)]" />
+		<slot name="footer" :connected="connected" :has-control="hasControl" :take-control="takeControl" :release-control="releaseControl" />
 	</section>
 </template>
 

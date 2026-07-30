@@ -13,6 +13,7 @@ interface EditorTab {
 	extension: string
 	content: string
 	originalContent: string
+	version: string
 	loading: boolean
 	error: string
 }
@@ -62,6 +63,7 @@ const loadTab = async (tab: EditorTab) => {
 		const response = await getCodeSessionFile(props.sessionId, tab.path)
 		tab.content = response.data.content
 		tab.originalContent = response.data.content
+		tab.version = response.data.version
 	} catch (error) {
 		tab.error = error instanceof Error ? error.message : t("code.fileOpenFailed")
 		message.error(tab.error)
@@ -82,6 +84,7 @@ const openFile = async () => {
 		extension: props.extension,
 		content: "",
 		originalContent: "",
+		version: "",
 		loading: false,
 		error: ""
 	})
@@ -94,8 +97,9 @@ const saveTab = async (tab = activeTab.value) => {
 	if (!props.sessionId || !tab || tab.loading || saving.value || !isDirty(tab)) return
 	saving.value = true
 	try {
-		await saveCodeSessionFile(props.sessionId, tab.path, tab.content)
+		const response = await saveCodeSessionFile(props.sessionId, tab.path, tab.content, tab.version)
 		tab.originalContent = tab.content
+		tab.version = response.data.version
 		emit("saved", tab.path)
 		message.success(t("code.fileSaved"))
 	} catch (error) {

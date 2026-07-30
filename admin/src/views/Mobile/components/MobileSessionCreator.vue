@@ -30,6 +30,7 @@ const executorOptions = computed(() => availableExecutors.value.map(executor => 
 	label: `${executor.name}${executor.version ? ` · ${executor.version}` : ""}`,
 	value: executor.id
 })))
+const supportsApproval = computed(() => executorId.value === "codex")
 
 async function loadOptions() {
 	loading.value = true
@@ -76,6 +77,10 @@ watch(
 		void loadOptions()
 	}
 )
+
+watch(executorId, value => {
+	if (value && value !== "codex") approvalPolicy.value = "full_auto"
+})
 </script>
 
 <template>
@@ -102,7 +107,7 @@ watch(
 								<n-input v-model:value="title" :placeholder="t('mobile.sessionNamePlaceholder')" />
 							</n-form-item>
 							<n-form-item :label="t('mobile.approvalPolicy')">
-								<n-radio-group v-model:value="approvalPolicy">
+								<n-radio-group v-model:value="approvalPolicy" :disabled="!supportsApproval">
 									<n-space vertical>
 										<n-radio value="manual">{{ t("mobile.approvalManual") }}</n-radio>
 										<n-radio value="safe_auto">{{ t("mobile.approvalSafe") }}</n-radio>
@@ -110,6 +115,9 @@ watch(
 									</n-space>
 								</n-radio-group>
 							</n-form-item>
+							<n-alert v-if="!supportsApproval" type="warning" :show-icon="false">
+								{{ t("mobile.executorFullAutoOnly") }}
+							</n-alert>
 						</n-form>
 					</template>
 				</div>

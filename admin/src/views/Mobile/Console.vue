@@ -18,8 +18,10 @@ import { mobileMessages } from "@/i18n/locales/mobile"
 import Logo from "@/layouts/common/Logo.vue"
 import MobileContainerPanel from "./components/MobileContainerPanel.vue"
 import MobileFileBrowser from "./components/MobileFileBrowser.vue"
+import MobileInstructionComposer from "./components/MobileInstructionComposer.vue"
 import MobileSessionCreator from "./components/MobileSessionCreator.vue"
 import MobileSystemUpdate from "./components/MobileSystemUpdate.vue"
+import MobileTaskStatusDrawer from "./components/MobileTaskStatusDrawer.vue"
 import MobileTerminal from "./components/MobileTerminal.vue"
 import { useI18n } from "vue-i18n"
 import { computed, onBeforeUnmount, onMounted, ref } from "vue"
@@ -47,13 +49,13 @@ const actionLoading = ref(false)
 const loadError = ref("")
 const showSessionCreator = ref(false)
 const showFiles = ref(false)
+const showTaskStatus = ref(false)
 let refreshTimer: ReturnType<typeof setInterval> | null = null
 let nodeRefreshTicks = 0
 
 const selectedSession = computed(() => sessions.value.find(item => item.id === selectedSessionId.value) || null)
 const selectedNode = computed(() => nodes.value.find(item => item.id === selectedNodeId.value) || nodes.value[0] || null)
 const isTaskDetail = computed(() => activeTab.value === "code" && Boolean(selectedSession.value))
-const isRunning = computed(() => sessionState.value?.currentStage === "executing" || sessionState.value?.latestRun?.status === "running")
 const memoryPercent = computed(() => Math.round(selectedNode.value?.isLocal ? overview.value?.system.memoryUsedPercent || 0 : selectedNode.value?.summary.memPercent || 0))
 const cpuPercent = computed(() => Math.round(selectedNode.value?.isLocal ? overview.value?.system.cpuUsedPercent || 0 : selectedNode.value?.summary.cpuPercent || 0))
 const load1 = computed(() => selectedNode.value?.isLocal ? overview.value?.system.load1 || 0 : selectedNode.value?.summary.load1 || 0)
@@ -219,12 +221,12 @@ async function handleSessionCreated(session: CodeSession) {
 	await loadSessionState()
 }
 
-async function decideApproval(approved: boolean) {
+async function decideApproval(approved: boolean, reason = "") {
 	const approvalId = sessionState.value?.pendingApproval?.id
 	if (!approvalId) return
 	actionLoading.value = true
 	try {
-		await decideMobileApproval(approvalId, approved)
+		await decideMobileApproval(approvalId, approved, reason)
 		await loadSessionState(true)
 	} catch (error) {
 		message.error(error instanceof Error ? error.message : t("mobile.loadFailed"))
@@ -429,30 +431,15 @@ onBeforeUnmount(() => {
 						</template>
 					</n-empty>
 					<template v-else-if="selectedSession">
-						<MobileTerminal :session-id="selectedSessionId" :project-name="sessionProjectName(selectedSession)" :project-description="sessionProjectDescription(selectedSession)" @back="leaveTaskDetail" @open-files="showFiles = true" />
-						<n-alert v-if="sessionState?.pendingApproval" type="warning" :title="sessionState.pendingApproval.title">
-							<div class="whitespace-pre-wrap text-sm">{{ sessionState.pendingApproval.content }}</div>
-							<div class="mt-3 flex gap-2">
-								<n-button type="warning" :loading="actionLoading" @click="decideApproval(true)">
-									{{ t("mobile.approve") }}
-								</n-button>
-								<n-button :disabled="actionLoading" @click="decideApproval(false)">
-									{{ t("mobile.reject") }}
-								</n-button>
-							</div>
-						</n-alert>
-
-						<n-alert v-if="sessionState?.errorSummary" type="error">
-							{{ sessionState.errorSummary }}
-						</n-alert>
-						<div class="flex gap-2">
-							<n-button v-if="isRunning" type="error" secondary :loading="actionLoading" @click="stopExecution">
-								{{ t("mobile.stop") }}
-							</n-button>
-							<n-button v-if="['failed', 'cancelled'].includes(sessionState?.latestInstruction?.status || '')" secondary :loading="actionLoading" @click="retryExecution">
-								{{ t("mobile.retryExecution") }}
-							</n-button>
-						</div>
+						<MobileTerminal :session-id="selectedSessionId" :project-name="sessionProjectName(selectedSession)" :project-description="sessionProjectDescription(selectedSession)" @back="leaveTaskDetail" @open-files="showFiles = true" @open-status="showTaskStatus = true">
+							<template #footer="{ connected, hasControl, takeControl, releaseControl }">
+								<div v-if="connected" class="flex items-center justify-between border-t border-white/10 bg-slate-950 px-3 py-1.5 text-[11px] text-slate-400">
+									<span>{{ hasControl ? t("mobile.terminalControlling") : t("mobile.terminalReadOnly") }}</span>
+									<n-button size="tiny" text type="primary" @click="hasControl ? releaseControl() : takeControl()">{{ hasControl ? t("mobile.releaseTerminalControl") : t("mobile.takeTerminalControl") }}</n-button>
+								</div>
+								<MobileInstructionComposer :session-id="selectedSessionId" @sent="loadSessionState(true)" />
+							</template>
+						</MobileTerminal>
 					</template>
 				</div>
 			</n-spin>
@@ -477,5 +464,6 @@ onBeforeUnmount(() => {
 		<MobileNodeSwitcher v-model:show="showNodeSwitcher" :nodes="nodes" :selected-id="selectedNodeId" :loading="nodesLoading" @select="selectNode" />
 		<MobileSessionCreator v-model:show="showSessionCreator" @created="handleSessionCreated" />
 		<MobileFileBrowser v-if="selectedSessionId" v-model:show="showFiles" :session-id="selectedSessionId" />
+		<MobileTaskStatusDrawer v-model:show="showTaskStatus" :state="sessionState" :loading="actionLoading" @approve="reason => decideApproval(true, reason)" @reject="reason => decideApproval(false, reason)" @stop="stopExecution" @retry="retryExecution" />
 	</div>
 </template>

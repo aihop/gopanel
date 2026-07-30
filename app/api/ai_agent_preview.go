@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"github.com/aihop/gopanel/app/e"
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
@@ -51,6 +52,14 @@ func refreshSinglePreviewStatus(sessionRepo repo.IAIDevSessionRepo, preview *mod
 		preview.LastCheckedAt = &now
 		if updateErr := sessionRepo.UpdatePreview(preview); updateErr != nil {
 			global.LOG.Warnf("update local preview status failed: %v", updateErr)
+		}
+		return preview
+	}
+	if err := validatePreviewProbeURL(context.Background(), parsed); err != nil {
+		preview.Status = "blocked"
+		preview.LastCheckedAt = &now
+		if updateErr := sessionRepo.UpdatePreview(preview); updateErr != nil {
+			global.LOG.Warnf("update blocked preview status failed: %v", updateErr)
 		}
 		return preview
 	}

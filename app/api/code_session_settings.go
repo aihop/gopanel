@@ -28,6 +28,9 @@ func UpdateCodeSessionApprovalPolicy(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
+	if err := validateCodeExecutorApprovalPolicy(session.AgentName, session.ApprovalPolicy); err != nil {
+		return c.JSON(e.Fail(err))
+	}
 	if !changed {
 		return c.JSON(e.Succ(session))
 	}

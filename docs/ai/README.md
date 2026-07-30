@@ -17,7 +17,7 @@
 
 | 模块 | 路由注册 | 核心 API 文件 | 核心模型 |
 |------|---------|-------------|---------|
-| AI 助手 | `app/router/ai_agent.go` | `app/api/ai_agent*.go` | `app/model/ai_chat_history.go` |
+| Code 控制台 | `app/router/code.go` | `app/api/ai_agent*.go`、`app/api/code*.go` | `app/model/ai_chat_history.go` |
 | 容器 | `app/router/container.go` | `app/api/container*.go` | `dto/container.go` |
 | 数据库 | `app/router/database.go` | `app/api/database*.go` `app/api/db_manager.go` | `app/model/database*.go` |
 | 网站 | `app/router/website.go` | `app/api/website*.go` | `app/model/website*.go` |
@@ -33,6 +33,13 @@
 | 容器 | `/container` | `admin/src/views/Container/` |
 | 数据库 | `/database` | `admin/src/views/Database/` |
 | 多节点 | `/node` | `admin/src/views/Node/`、常驻细条 `admin/src/layouts/common/NodeRail/` |
+
+### Code 执行约定
+
+- 服务启动后会恢复数据库中排队的指令；重启时被中断的运行中指令标记为失败，不自动重试，避免重复执行外部操作。
+- 单轮执行输出最多保留约 8 MB，超出部分保留头尾并写入截断标记。
+- 文件保存使用内容版本做乐观并发校验，并通过临时文件原子替换，冲突时拒绝覆盖。
+- Codex 支持手动、安全自动和完全自动；其他执行器当前仅支持完全自动。
 
 ### 辅助层
 

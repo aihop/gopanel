@@ -4,23 +4,30 @@ import { useI18n } from "vue-i18n"
 import { useMessage } from "naive-ui"
 import { getCodeSession, updateCodeSessionApprovalPolicy } from "@/api/modules/code"
 import type { CodeApprovalPolicy } from "@/api/interface/code"
-import { codeProjectMessages } from "@/i18n/locales/codeProject"
+import { newCodeSessionMessages } from "../newCodeSessionMessages"
 
 const props = defineProps<{ sessionId: number }>()
-const { t } = useI18n({ messages: codeProjectMessages })
+const { t } = useI18n({ messages: newCodeSessionMessages })
 const message = useMessage()
 const approvalPolicy = ref<CodeApprovalPolicy | null>(null)
+const executorId = ref("")
 const loading = ref(false)
 const saving = ref(false)
 const loadError = ref(false)
 let loadSequence = 0
 
-const options = computed(() =>
-	(["manual", "safe_auto", "full_auto"] as CodeApprovalPolicy[]).map(value => ({
+const options = computed(() => {
+	const values: CodeApprovalPolicy[] = executorId.value === "codex"
+		? ["manual", "safe_auto", "full_auto"]
+		: approvalPolicy.value && approvalPolicy.value !== "full_auto"
+			? [approvalPolicy.value, "full_auto"]
+			: ["full_auto"]
+	return values.map(value => ({
 		label: t(`code.approvalPolicy_${value}`),
-		value
+		value,
+		disabled: executorId.value !== "codex" && value !== "full_auto"
 	}))
-)
+})
 
 const loadPolicy = async () => {
 	const sequence = ++loadSequence
@@ -32,6 +39,7 @@ const loadPolicy = async () => {
 	try {
 		const response = await getCodeSession(sessionId)
 		if (sequence !== loadSequence || sessionId !== props.sessionId) return
+		executorId.value = response.data.session.agentName || ""
 		approvalPolicy.value = response.data.session.approvalPolicy || "safe_auto"
 	} catch {
 		if (sequence !== loadSequence || sessionId !== props.sessionId) return
@@ -84,7 +92,9 @@ watch(() => props.sessionId, loadPolicy, { immediate: true })
 				/>
 			</template>
 			{{
-				approvalPolicy === "full_auto"
+				executorId !== "codex"
+					? t("code.executorFullAutoOnly")
+					: approvalPolicy === "full_auto"
 					? t("code.fullAutoWarning")
 					: t("code.approvalPolicyAppliesNext")
 			}}

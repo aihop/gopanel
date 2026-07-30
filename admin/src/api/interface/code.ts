@@ -221,4 +221,5 @@ export interface CodeSessionFile {
 	content: string
 	extension: string
 	size: number
+	version: string
 }

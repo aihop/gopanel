@@ -14,6 +14,7 @@ import (
 	"github.com/mattn/go-isatty"
 	"golang.org/x/text/language"
 
+	"github.com/aihop/gopanel/app/api"
 	"github.com/aihop/gopanel/app/dto"
 	"github.com/aihop/gopanel/app/middleware"
 	"github.com/aihop/gopanel/app/router"
@@ -128,6 +129,7 @@ func (r *App) Run() error {
 	}
 
 	r.reloadFiber(false)
+	api.StartCodeInstructionRecovery()
 
 	// HTTP服务
 	go func() {

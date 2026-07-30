@@ -64,3 +64,17 @@ func TestUpdateCodeApprovalPolicy(t *testing.T) {
 		t.Fatal("expected invalid policy to be rejected")
 	}
 }
+
+func TestValidateCodeExecutorApprovalPolicy(t *testing.T) {
+	for _, policy := range []string{codeApprovalPolicyManual, codeApprovalPolicySafeAuto, codeApprovalPolicyFullAuto} {
+		if err := validateCodeExecutorApprovalPolicy("codex", policy); err != nil {
+			t.Fatalf("codex policy %q was rejected: %v", policy, err)
+		}
+	}
+	if err := validateCodeExecutorApprovalPolicy("claude", codeApprovalPolicySafeAuto); err == nil {
+		t.Fatal("executor without runtime approval must reject safe auto")
+	}
+	if err := validateCodeExecutorApprovalPolicy("claude", codeApprovalPolicyFullAuto); err != nil {
+		t.Fatalf("explicit full auto was rejected: %v", err)
+	}
+}

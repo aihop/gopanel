@@ -13,7 +13,8 @@ const providerMessages = {
 		providerField_model: "模型",
 		providerPlaceholder_baseUrl: "例如 https://api.openai.com/v1",
 		providerPlaceholder_apiKey: "请输入本会话使用的 API Key",
-		providerPlaceholder_model: "请输入模型 ID"
+		providerPlaceholder_model: "请输入模型 ID",
+		executorFullAutoOnly: "该代码助手暂不支持交互式审批，只能使用完全自动模式。"
 	},
 	en: {
 		provider: "Model connection",
@@ -28,7 +29,8 @@ const providerMessages = {
 		providerField_model: "Model",
 		providerPlaceholder_baseUrl: "Example: https://api.openai.com/v1",
 		providerPlaceholder_apiKey: "Enter the API key for this session",
-		providerPlaceholder_model: "Enter the model ID"
+		providerPlaceholder_model: "Enter the model ID",
+		executorFullAutoOnly: "This coding agent does not support interactive approval and requires fully automatic mode."
 	}
 } as const
 

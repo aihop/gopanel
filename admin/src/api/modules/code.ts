@@ -81,8 +81,8 @@ export function getCodeSessionFile(sessionId: number, path: string) {
 	return http.get<CodeSessionFile>(`/code/sessions/${sessionId}/file`, { path }, { timeout: 10000 })
 }
 
-export function saveCodeSessionFile(sessionId: number, path: string, content: string) {
-	return http.put<{ path: string; size: number }>(`/code/sessions/${sessionId}/file`, { path, content })
+export function saveCodeSessionFile(sessionId: number, path: string, content: string, baseVersion: string) {
+	return http.put<{ path: string; size: number; version: string }>(`/code/sessions/${sessionId}/file`, { path, content, baseVersion })
 }
 
 export function getCodexRuntimeState(sessionId: number) {

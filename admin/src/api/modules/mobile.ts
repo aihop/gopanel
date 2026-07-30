@@ -1,7 +1,7 @@
 import axios from "axios"
 import http from "@/api"
 import type { ResultData } from "@/api/interface"
-import type { AIGroup, CodeApproval, CodeApprovalPolicy, CodeExecutor, CodeSession, CodeSessionState } from "@/api/interface/code"
+import type { AIGroup, CodeApproval, CodeApprovalPolicy, CodeExecutor, CodeInstructionResponse, CodeSession, CodeSessionState } from "@/api/interface/code"
 import type { Dashboard } from "@/api/interface/dashboard"
 import type { NodeSummary, NodeWarning } from "./node"
 
@@ -102,6 +102,7 @@ export interface MobileCodeSessionFile {
 	content: string
 	extension: string
 	size: number
+	version: string
 }
 
 export interface MobileVersionInfo {
@@ -246,6 +247,16 @@ export function getMobileSessionState(sessionId: number) {
 	}))
 }
 
+export function createMobileInstruction(sessionId: number, content: string) {
+	return mobileRequest(
+		mobileHttp.post<ResultData<CodeInstructionResponse>>(`/mobile/app/sessions/${sessionId}/instructions`, {
+			content,
+			allowCode: true,
+			autoPreview: true
+		})
+	)
+}
+
 export function getMobileSessionStructure(sessionId: number, path = "") {
 	return mobileRequest(
 		mobileHttp.get<ResultData<MobileCodeStructureResult>>(`/mobile/app/sessions/${sessionId}/structure`, {
@@ -262,18 +273,19 @@ export function getMobileSessionFile(sessionId: number, path: string) {
 	)
 }
 
-export function saveMobileSessionFile(sessionId: number, path: string, content: string) {
+export function saveMobileSessionFile(sessionId: number, path: string, content: string, baseVersion: string) {
 	return mobileRequest(
-		mobileHttp.put<ResultData<{ path: string; size: number }>>(`/mobile/app/sessions/${sessionId}/file`, {
+		mobileHttp.put<ResultData<{ path: string; size: number; version: string }>>(`/mobile/app/sessions/${sessionId}/file`, {
 			path,
-			content
+			content,
+			baseVersion
 		})
 	)
 }
 
-export function decideMobileApproval(approvalId: number, approved: boolean) {
+export function decideMobileApproval(approvalId: number, approved: boolean, reason = "") {
 	const decision = approved ? "approve" : "reject"
-	return mobileRequest(mobileHttp.post<ResultData<void>>(`/mobile/app/approvals/${approvalId}/${decision}`, {}))
+	return mobileRequest(mobileHttp.post<ResultData<void>>(`/mobile/app/approvals/${approvalId}/${decision}`, { reason }))
 }
 
 export function stopMobileSession(sessionId: number) {

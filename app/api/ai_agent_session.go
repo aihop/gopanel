@@ -12,6 +12,7 @@ import (
 	"github.com/aihop/gopanel/app/repo"
 	"github.com/aihop/gopanel/app/service"
 	"github.com/aihop/gopanel/constant"
+	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/utils/token"
 	"github.com/gofiber/fiber/v3"
 	"gorm.io/gorm"
@@ -47,9 +48,13 @@ func buildDefaultSessionTitle(workDir, content string) string {
 	return strings.TrimSpace(string(runes))
 }
 func ensureSessionTask(session *model.AIDevSession, claims *token.CustomClaims, hint string) (*model.AITask, error) {
-	aiRepo := repo.NewAITaskRepo()
+	return ensureSessionTaskWithDB(global.DB, session, claims, hint)
+}
+
+func ensureSessionTaskWithDB(db *gorm.DB, session *model.AIDevSession, claims *token.CustomClaims, hint string) (*model.AITask, error) {
 	if session.LastTaskID > 0 {
-		task, err := aiRepo.GetTaskByID(session.LastTaskID)
+		var task model.AITask
+		err := db.Where("id = ?", session.LastTaskID).First(&task).Error
 		if err == nil {
 			changed := false
 			if task.SessionID == 0 {
@@ -61,11 +66,11 @@ func ensureSessionTask(session *model.AIDevSession, claims *token.CustomClaims, 
 				changed = true
 			}
 			if changed {
-				if err := aiRepo.UpdateTask(task); err != nil {
+				if err := db.Save(&task).Error; err != nil {
 					return nil, err
 				}
 			}
-			return task, nil
+			return &task, nil
 		}
 	}
 	title := strings.TrimSpace(session.Title)
@@ -73,13 +78,13 @@ func ensureSessionTask(session *model.AIDevSession, claims *token.CustomClaims, 
 		title = buildDefaultSessionTitle(session.WorkDir, hint)
 	}
 	task := &model.AITask{UserID: claims.UserId, SessionID: session.ID, ProjectID: session.ProjectID, Title: title, AgentName: session.AgentName, NativeSessionID: session.NativeSessionID, WorkDir: session.WorkDir, Status: "queued"}
-	if err := aiRepo.CreateTask(task); err != nil {
+	if err := db.Create(task).Error; err != nil {
 		return nil, err
 	}
 	session.LastTaskID = task.ID
 	session.Status = "active"
 	session.CurrentStage = "task_ready"
-	if err := repo.NewAIDevSessionRepo().UpdateSession(session); err != nil {
+	if err := db.Save(session).Error; err != nil {
 		return nil, err
 	}
 	return task, nil
@@ -88,6 +93,7 @@ func GetAISessions(c fiber.Ctx) error {
 	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
 	page, _ := strconv.Atoi(c.Query("page", "1"))
 	limit, _ := strconv.Atoi(c.Query("limit", "20"))
+	page, limit = normalizeCodePage(page, limit, 20)
 	projectID, _ := strconv.Atoi(c.Query("projectId", "0"))
 	sessionRepo := repo.NewAIDevSessionRepo()
 	sessions, total, err := sessionRepo.GetSessionsByUserID(claims.UserId, uint(projectID), page, limit)
@@ -185,6 +191,9 @@ func CreateAISession(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
+	if err := validateCodeExecutorApprovalPolicy(executorID, approvalPolicy); err != nil {
+		return c.JSON(e.Fail(err))
+	}
 	title := strings.TrimSpace(req.Title)
 	if title == "" {
 		title = buildDefaultSessionTitle(workDir, "")
@@ -261,71 +270,67 @@ func CreateAISessionInstruction(c fiber.Ctx) error {
 	if session.AgentName == "terminal" {
 		return c.JSON(e.Fail(errors.New("纯终端会话不支持后台对话执行，请切换到高级终端")))
 	}
-	task, err := ensureSessionTask(session, claims, content)
-	if err != nil {
-		return c.JSON(e.Fail(err))
-	}
 	requireApproval := codeSessionRequiresRiskApproval(session)
 	needsApproval := shouldRequireAIApproval(content, requireApproval)
 	instructionStatus := "queued"
 	if needsApproval {
 		instructionStatus = "pending_approval"
 	}
-	instruction := &model.AIInstruction{SessionID: session.ID, UserID: claims.UserId, ProjectID: session.ProjectID, TaskID: task.ID, Content: content, Status: instructionStatus, AllowCode: allowCode, AutoPreview: req.AutoPreview, RequireApproval: requireApproval, AnalysisOnly: req.AnalysisOnly}
-	sessionRepo := repo.NewAIDevSessionRepo()
-	if err := sessionRepo.CreateInstruction(instruction); err != nil {
-		return c.JSON(e.Fail(err))
-	}
-	createAITimelineEvent(sessionRepo, &model.AITimelineEvent{
-		SessionID:     session.ID,
-		TaskID:        task.ID,
-		InstructionID: instruction.ID,
-		EventType:     "instruction_queued",
-		Stage:         "instruction_queued",
-		Title:         "收到开发指令",
-		Content:       buildTimelineContent(content),
-		Status:        "info",
-	})
+	var task *model.AITask
+	var instruction *model.AIInstruction
 	var approval *model.AIApproval
-	if needsApproval {
-		approval = &model.AIApproval{
-			SessionID:     session.ID,
-			TaskID:        task.ID,
-			InstructionID: instruction.ID,
-			RequestUserID: claims.UserId,
-			Title:         buildApprovalTitle(content),
-			Content:       content,
-			RiskLevel:     "high",
-			Status:        "pending",
+	if err := global.DB.Transaction(func(tx *gorm.DB) error {
+		var txErr error
+		task, txErr = ensureSessionTaskWithDB(tx, session, claims, content)
+		if txErr != nil {
+			return txErr
 		}
-		if err := sessionRepo.CreateApproval(approval); err != nil {
-			return c.JSON(e.Fail(err))
+		instruction = &model.AIInstruction{SessionID: session.ID, UserID: claims.UserId, ProjectID: session.ProjectID, TaskID: task.ID, Content: content, Status: instructionStatus, AllowCode: allowCode, AutoPreview: req.AutoPreview, RequireApproval: requireApproval, AnalysisOnly: req.AnalysisOnly}
+		if txErr = tx.Create(instruction).Error; txErr != nil {
+			return txErr
 		}
-	}
-	if err := repo.NewAITaskRepo().CreateMessage(&model.AIMessage{SessionID: session.ID, TaskID: task.ID, Role: "user", Content: content}); err != nil {
-		return c.JSON(e.Fail(err))
-	}
-	now := time.Now()
-	session.Status = "active"
-	if needsApproval {
-		session.CurrentStage = "awaiting_approval"
-	} else if session.CurrentStage != "executing" {
-		session.CurrentStage = "instruction_queued"
-	}
-	session.LastTaskID = task.ID
-	session.LastInstructionAt = &now
-	if strings.TrimSpace(session.Title) == "" {
-		session.Title = buildDefaultSessionTitle(session.WorkDir, content)
-	}
-	if err := sessionRepo.UpdateSession(session); err != nil {
-		return c.JSON(e.Fail(err))
-	}
-	if needsApproval {
-		task.Status = "pending_approval"
-	} else if task.Status != "running" {
-		task.Status = "queued"
-	}
-	if err := repo.NewAITaskRepo().UpdateTask(task); err != nil {
+		if txErr = tx.Create(&model.AITimelineEvent{
+			SessionID: session.ID, TaskID: task.ID, InstructionID: instruction.ID,
+			EventType: "instruction_queued", Stage: "instruction_queued", Title: "收到开发指令",
+			Content: buildTimelineContent(content), Status: "info",
+		}).Error; txErr != nil {
+			return txErr
+		}
+		if needsApproval {
+			approval = &model.AIApproval{
+				SessionID: session.ID, TaskID: task.ID, InstructionID: instruction.ID,
+				RequestUserID: claims.UserId, Title: buildApprovalTitle(content), Content: content,
+				RiskLevel: "high", Status: "pending",
+			}
+			if txErr = tx.Create(approval).Error; txErr != nil {
+				return txErr
+			}
+		}
+		if txErr = tx.Create(&model.AIMessage{SessionID: session.ID, TaskID: task.ID, Role: "user", Content: content}).Error; txErr != nil {
+			return txErr
+		}
+		now := time.Now()
+		session.Status = "active"
+		if needsApproval {
+			session.CurrentStage = "awaiting_approval"
+		} else if session.CurrentStage != "executing" {
+			session.CurrentStage = "instruction_queued"
+		}
+		session.LastTaskID = task.ID
+		session.LastInstructionAt = &now
+		if strings.TrimSpace(session.Title) == "" {
+			session.Title = buildDefaultSessionTitle(session.WorkDir, content)
+		}
+		if txErr = tx.Save(session).Error; txErr != nil {
+			return txErr
+		}
+		if needsApproval {
+			task.Status = "pending_approval"
+		} else if task.Status != "running" {
+			task.Status = "queued"
+		}
+		return tx.Save(task).Error
+	}); err != nil {
 		return c.JSON(e.Fail(err))
 	}
 	if !needsApproval {
@@ -350,9 +355,6 @@ func GetAISessionState(c fiber.Ctx) error {
 	}
 	if err != nil {
 		return c.JSON(e.Fail(err))
-	}
-	if latestInstruction != nil && latestInstruction.Status == "queued" {
-		enqueueCodeInstruction(latestInstruction.ID)
 	}
 	previews, err := sessionRepo.GetPreviewsBySessionID(session.ID, 20)
 	if err != nil {

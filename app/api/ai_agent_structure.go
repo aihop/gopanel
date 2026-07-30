@@ -1,6 +1,8 @@
 package api
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"os"
 	"path"
@@ -174,18 +176,69 @@ func readAISessionFile(workDir, relativePath string, sourceDirs []string) (fiber
 	return fiber.Map{
 		"path": cleanRelative, "content": string(content),
 		"extension": strings.TrimPrefix(strings.ToLower(filepath.Ext(cleanRelative)), "."), "size": len(content),
+		"version": fileContentVersion(content),
 	}, nil
 }
 
-func writeAISessionFile(workDir, relativePath, content string, sourceDirs []string) error {
+func fileContentVersion(content []byte) string {
+	hash := sha256.Sum256(content)
+	return hex.EncodeToString(hash[:])
+}
+
+func writeAISessionFile(workDir, relativePath, content, baseVersion string, sourceDirs []string) (string, error) {
 	if len([]byte(content)) > maxAISessionFileSize || !utf8.ValidString(content) {
-		return errors.New("文件内容必须是 2 MB 以内的 UTF-8 文本")
+		return "", errors.New("文件内容必须是 2 MB 以内的 UTF-8 文本")
 	}
 	target, _, err := resolveAISessionFilePath(workDir, relativePath, sourceDirs)
 	if err != nil {
-		return err
+		return "", err
 	}
-	return os.WriteFile(target, []byte(content), 0)
+	current, err := os.ReadFile(target)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(baseVersion) == "" {
+		return "", errors.New("缺少文件版本，请重新打开文件后再保存")
+	}
+	if fileContentVersion(current) != baseVersion {
+		return "", errors.New("文件已被其他操作修改，请重新打开并合并变更")
+	}
+	info, err := os.Stat(target)
+	if err != nil {
+		return "", err
+	}
+	temporary, err := os.CreateTemp(filepath.Dir(target), ".gopanel-save-*")
+	if err != nil {
+		return "", err
+	}
+	temporaryPath := temporary.Name()
+	defer os.Remove(temporaryPath)
+	if err := temporary.Chmod(info.Mode().Perm()); err != nil {
+		_ = temporary.Close()
+		return "", err
+	}
+	if _, err := temporary.WriteString(content); err != nil {
+		_ = temporary.Close()
+		return "", err
+	}
+	if err := temporary.Sync(); err != nil {
+		_ = temporary.Close()
+		return "", err
+	}
+	if err := temporary.Close(); err != nil {
+		return "", err
+	}
+	latest, err := os.ReadFile(target)
+	if err != nil {
+		return "", err
+	}
+	if fileContentVersion(latest) != baseVersion {
+		return "", errors.New("文件已被其他操作修改，请重新打开并合并变更")
+	}
+	if err := os.Rename(temporaryPath, target); err != nil {
+		return "", err
+	}
+	return fileContentVersion([]byte(content)), nil
 }
 
 func GetAISessionFile(c fiber.Ctx) error {
@@ -202,8 +255,9 @@ func GetAISessionFile(c fiber.Ctx) error {
 
 func SaveAISessionFile(c fiber.Ctx) error {
 	var req struct {
-		Path    string `json:"path"`
-		Content string `json:"content"`
+		Path        string `json:"path"`
+		Content     string `json:"content"`
+		BaseVersion string `json:"baseVersion"`
 	}
 	if err := c.Bind().JSON(&req); err != nil {
 		return c.JSON(e.Fail(err))
@@ -212,10 +266,11 @@ func SaveAISessionFile(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	if err := writeAISessionFile(workDir, req.Path, req.Content, sourceDirs); err != nil {
+	version, err := writeAISessionFile(workDir, req.Path, req.Content, req.BaseVersion, sourceDirs)
+	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	return c.JSON(e.Succ(fiber.Map{"path": path.Clean(req.Path), "size": len([]byte(req.Content))}))
+	return c.JSON(e.Succ(fiber.Map{"path": path.Clean(req.Path), "size": len([]byte(req.Content)), "version": version}))
 }
 
 func listAISessionStructure(workDir, relativePath string, sourceDirs []string) (aiStructureResult, error) {

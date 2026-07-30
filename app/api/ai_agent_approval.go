@@ -10,6 +10,7 @@ import (
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
 	"github.com/aihop/gopanel/constant"
+	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/utils/token"
 	"github.com/gofiber/fiber/v3"
 	"gorm.io/gorm"
@@ -63,6 +64,7 @@ func GetAIApprovals(c fiber.Ctx) error {
 	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
 	status := strings.TrimSpace(c.Query("status"))
 	limit, _ := strconv.Atoi(c.Query("limit", "50"))
+	_, limit = normalizeCodePage(1, limit, 50)
 
 	approvals, err := repo.NewAIDevSessionRepo().GetApprovalsByUserID(claims.UserId, status, limit)
 	if err != nil {
@@ -105,78 +107,72 @@ func decideAIApproval(c fiber.Ctx, decision string) error {
 		return c.JSON(e.Fail(errors.New("该审批已处理")))
 	}
 
-	instructions, _, err := sessionRepo.GetInstructionsBySessionID(approval.SessionID, 1, 200)
-	if err != nil {
-		return c.JSON(e.Fail(err))
-	}
-	var instruction *model.AIInstruction
-	for _, item := range instructions {
-		if item.ID == approval.InstructionID {
-			instruction = item
-			break
+	var instruction model.AIInstruction
+	var session model.AIDevSession
+	if err := global.DB.Transaction(func(tx *gorm.DB) error {
+		result := tx.Model(&model.AIApproval{}).
+			Where("id = ? AND status = ?", approval.ID, "pending").
+			Updates(map[string]any{
+				"status": decision, "decision": decision, "decision_reason": strings.TrimSpace(req.Reason),
+				"approve_user_id": claims.UserId, "decision_at": time.Now(),
+			})
+		if result.Error != nil {
+			return result.Error
 		}
-	}
-	if instruction == nil {
-		return c.JSON(e.Fail(errors.New("对应指令不存在")))
-	}
-
-	session, err := sessionRepo.GetSessionByID(approval.SessionID)
-	if err != nil {
-		return c.JSON(e.Fail(err))
-	}
-
-	now := time.Now()
-	approval.Status = decision
-	approval.Decision = decision
-	approval.DecisionReason = strings.TrimSpace(req.Reason)
-	approval.ApproveUserID = claims.UserId
-	approval.DecisionAt = &now
-	if err := sessionRepo.UpdateApproval(approval); err != nil {
-		return c.JSON(e.Fail(err))
-	}
-
-	taskRepo := repo.NewAITaskRepo()
-	if decision == "approved" {
-		instruction.Status = "queued"
-		session.CurrentStage = "instruction_queued"
-		session.Status = "active"
+		if result.RowsAffected != 1 {
+			return errors.New("该审批已处理")
+		}
+		if err := tx.Where("id = ? AND session_id = ?", approval.InstructionID, approval.SessionID).First(&instruction).Error; err != nil {
+			return errors.New("对应指令不存在")
+		}
+		if err := tx.First(&session, approval.SessionID).Error; err != nil {
+			return err
+		}
+		var task model.AITask
 		if approval.TaskID > 0 {
-			if task, taskErr := taskRepo.GetTaskByID(approval.TaskID); taskErr == nil {
+			if err := tx.First(&task, approval.TaskID).Error; err != nil {
+				return err
+			}
+		}
+		if decision == "approved" {
+			instruction.Status = "queued"
+			session.CurrentStage = "instruction_queued"
+			session.Status = "active"
+			if task.ID > 0 {
 				task.Status = "queued"
-				_ = taskRepo.UpdateTask(task)
+				if err := tx.Save(&task).Error; err != nil {
+					return err
+				}
+			}
+		} else {
+			instruction.Status = "rejected"
+			session.CurrentStage = "approval_rejected"
+			if task.ID > 0 {
+				task.Status = "cancelled"
+				if err := tx.Save(&task).Error; err != nil {
+					return err
+				}
+				if err := tx.Create(&model.AIMessage{SessionID: approval.SessionID, TaskID: task.ID, Role: "system", Content: "该开发指令已被人工拒绝执行。"}).Error; err != nil {
+					return err
+				}
 			}
 		}
-	} else {
-		instruction.Status = "rejected"
-		session.CurrentStage = "approval_rejected"
-		if approval.TaskID > 0 {
-			if task, taskErr := taskRepo.GetTaskByID(approval.TaskID); taskErr == nil {
-				task.Status = "failed"
-				_ = taskRepo.UpdateTask(task)
-				_ = taskRepo.CreateMessage(&model.AIMessage{
-					SessionID: approval.SessionID,
-					TaskID:    task.ID,
-					Role:      "system",
-					Content:   "该开发指令已被人工拒绝执行。",
-				})
-			}
+		if err := tx.Save(&instruction).Error; err != nil {
+			return err
 		}
-	}
-
-	if err := sessionRepo.UpdateInstruction(instruction); err != nil {
+		return tx.Save(&session).Error
+	}); err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	if err := sessionRepo.UpdateSession(session); err != nil {
-		return c.JSON(e.Fail(err))
-	}
+	approval, _ = sessionRepo.GetApprovalByID(approval.ID)
 	if decision == "approved" {
 		enqueueCodeInstruction(instruction.ID)
 	}
 
 	return c.JSON(e.Succ(fiber.Map{
 		"approval":    approval,
-		"instruction": instruction,
-		"session":     session,
+		"instruction": &instruction,
+		"session":     &session,
 	}))
 }
 

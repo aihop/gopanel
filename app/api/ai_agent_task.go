@@ -16,6 +16,7 @@ func GetAITasks(c fiber.Ctx) error {
 	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
 	page, _ := strconv.Atoi(c.Query("page", "1"))
 	limit, _ := strconv.Atoi(c.Query("limit", "20"))
+	page, limit = normalizeCodePage(page, limit, 20)
 	projectID, _ := strconv.Atoi(c.Query("projectId", "0"))
 	aiRepo := repo.NewAITaskRepo()
 	var tasks []*model.AITask
@@ -81,6 +82,13 @@ func DeleteAITask(c fiber.Ctx) error {
 	}
 	if task.UserID != claims.UserId && claims.Role != constant.UserRoleSuper {
 		return c.JSON(e.Fail(errors.New("无权删除该 AI 任务")))
+	}
+	if task.SessionID > 0 {
+		if _, err := repo.NewAIDevSessionRepo().CancelQueuedInstructions(task.SessionID); err != nil {
+			return c.JSON(e.Fail(err))
+		}
+		backgroundCodeRunner.cancel(task.SessionID)
+		backgroundCodeRunner.wait(task.SessionID)
 	}
 	if err := aiRepo.DeleteTask(uint(taskID)); err != nil {
 		return c.JSON(e.Fail(err))

@@ -38,6 +38,10 @@ const loadError = ref("")
 
 const availableExecutors = computed(() => executors.value.filter(executor => executor.available))
 const selectedExecutor = computed(() => executors.value.find(executor => executor.id === selectedExecutorId.value))
+const supportsApproval = computed(() => selectedExecutorId.value === "codex")
+const approvalPolicies = computed<CodeApprovalPolicy[]>(() =>
+	supportsApproval.value ? ["manual", "safe_auto", "full_auto"] : ["full_auto"]
+)
 const providerFields = computed(() => selectedExecutor.value?.configSchema?.fields || [])
 const showProviderConfig = computed(() => providerFields.value.length > 0)
 const providerFieldLabel = (key: keyof CodeExecutorConfig) => t(`code.providerField_${key}`)
@@ -85,6 +89,10 @@ watch(
 		}
 	}
 )
+
+watch(selectedExecutorId, value => {
+	if (value && value !== "codex") approvalPolicy.value = "full_auto"
+})
 
 const close = () => emit("update:show", false)
 
@@ -236,7 +244,7 @@ const submit = async () => {
 						<n-form-item :label="t('code.approvalPolicy')">
 							<div class="grid w-full gap-3 sm:grid-cols-3">
 								<button
-									v-for="policy in ['manual', 'safe_auto', 'full_auto'] as CodeApprovalPolicy[]"
+									v-for="policy in approvalPolicies"
 									:key="policy"
 									type="button"
 									class="rounded-xl border p-3 text-left transition-all"
@@ -256,6 +264,9 @@ const submit = async () => {
 								</button>
 							</div>
 						</n-form-item>
+						<n-alert v-if="!supportsApproval" type="warning" :show-icon="false">
+							{{ t("code.executorFullAutoOnly") }}
+						</n-alert>
 						<n-alert v-if="approvalPolicy === 'full_auto'" type="warning">
 							{{ t("code.fullAutoWarning") }}
 						</n-alert>

@@ -83,6 +83,7 @@ func GetAIGroups(c fiber.Ctx) error {
 	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
 	page, _ := strconv.Atoi(c.Query("page", "1"))
 	limit, _ := strconv.Atoi(c.Query("limit", "50"))
+	page, limit = normalizeCodePage(page, limit, 50)
 	groupRepo := repo.NewAIGroupRepo()
 	groups, total, err := groupRepo.GetGroups(claims.UserId, claims.Role == constant.UserRoleSuper, page, limit)
 	if err != nil {

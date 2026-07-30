@@ -23,6 +23,7 @@ const loadError = ref("")
 const filePath = ref("")
 const content = ref("")
 const originalContent = ref("")
+const fileVersion = ref("")
 const saving = ref(false)
 
 const editing = computed(() => !!filePath.value)
@@ -54,6 +55,7 @@ async function openEntry(entry: MobileCodeStructureEntry) {
 		filePath.value = result.path
 		content.value = result.content
 		originalContent.value = result.content
+		fileVersion.value = result.version
 	} catch (error) {
 		message.error(error instanceof Error ? error.message : t("mobile.fileOpenFailed"))
 	} finally {
@@ -93,8 +95,9 @@ async function save() {
 	if (!filePath.value || !dirty.value || saving.value) return
 	saving.value = true
 	try {
-		await saveMobileSessionFile(props.sessionId, filePath.value, content.value)
+		const result = await saveMobileSessionFile(props.sessionId, filePath.value, content.value, fileVersion.value)
 		originalContent.value = content.value
+		fileVersion.value = result.version
 		message.success(t("mobile.fileSaved"))
 	} catch (error) {
 		message.error(error instanceof Error ? error.message : t("mobile.fileSaveFailed"))

@@ -10,6 +10,8 @@ import (
 
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
+	"github.com/aihop/gopanel/global"
+	"gorm.io/gorm"
 )
 
 func executeCodeAgentRun(
@@ -74,7 +76,11 @@ func executeCodeAgentRun(
 	rawOutput := []byte{}
 	execErr := buildErr
 	if execErr == nil {
-		rawOutput, execErr = command.CombinedOutput()
+		output := &boundedCodeOutput{}
+		command.Stdout = output
+		command.Stderr = output
+		execErr = command.Run()
+		rawOutput = output.Bytes()
 	}
 	parsed := parseCodeExecutorOutput(executorID, rawOutput, run.NativeSessionID)
 	completedAt := time.Now()
@@ -96,23 +102,29 @@ func executeCodeAgentRun(
 	} else {
 		run.Status = "completed"
 	}
-	if err := sessionRepo.UpdateExecutionRun(run); err != nil {
-		return run, run.Output, errors.Join(execErr, err)
-	}
-	if task != nil {
-		task.NativeSessionID = run.NativeSessionID
-		if err := taskRepo.UpdateTask(task); err != nil {
-			return run, run.Output, errors.Join(execErr, err)
+	persistErr := global.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Save(run).Error; err != nil {
+			return err
 		}
-		if err := taskRepo.CreateMessage(&model.AIMessage{SessionID: sessionID, TaskID: task.ID, RunID: run.ID, Role: "agent", Content: run.Output}); err != nil {
-			return run, run.Output, errors.Join(execErr, err)
+		if task != nil {
+			task.NativeSessionID = run.NativeSessionID
+			if err := tx.Save(task).Error; err != nil {
+				return err
+			}
+			if err := tx.Create(&model.AIMessage{SessionID: sessionID, TaskID: task.ID, RunID: run.ID, Role: "agent", Content: run.Output}).Error; err != nil {
+				return err
+			}
 		}
-	}
-	if session != nil && run.NativeSessionID != "" && session.NativeSessionID != run.NativeSessionID {
-		session.NativeSessionID = run.NativeSessionID
-		if err := sessionRepo.UpdateSession(session); err != nil {
-			return run, run.Output, errors.Join(execErr, err)
+		if session != nil && run.NativeSessionID != "" && session.NativeSessionID != run.NativeSessionID {
+			session.NativeSessionID = run.NativeSessionID
+			if err := tx.Save(session).Error; err != nil {
+				return err
+			}
 		}
+		return nil
+	})
+	if persistErr != nil {
+		return run, run.Output, errors.Join(execErr, persistErr)
 	}
 	return run, run.Output, execErr
 }
