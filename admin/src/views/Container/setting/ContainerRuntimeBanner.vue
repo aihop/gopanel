@@ -40,15 +40,11 @@
 				<div v-if="validate.notes?.length" class="space-y-1 text-orange-600">
 					<div v-for="(note, index) in validate.notes" :key="index">- {{ diagnosticNote(note) }}</div>
 				</div>
+				<div v-if="dockerOnly && validate.summary?.runtimeInstalled" class="text-orange-600">
+					{{ t("containerRuntime.podmanSettingsNotice", { runtime: validate.runtimeKind }) }}
+				</div>
 			</div>
 		</n-collapse-transition>
-
-		<div
-			v-if="dockerOnly && validate.summary?.runtimeInstalled"
-			class="mt-3 rounded-lg bg-orange-50 p-3 text-xs text-orange-700"
-		>
-			{{ t("containerRuntime.podmanSettingsNotice", { runtime: validate.runtimeKind }) }}
-		</div>
 	</div>
 </template>
 

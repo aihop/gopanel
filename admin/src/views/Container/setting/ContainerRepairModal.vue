@@ -2,7 +2,7 @@
 	<n-modal
 		:show="show"
 		preset="dialog"
-		:title="t('containerRuntime.runtimeRepair')"
+		:title="modalTitle"
 		:positive-text="t('containerRuntime.close')"
 		:show-icon="false"
 		@update:show="emit('update:show', $event)"
@@ -10,16 +10,11 @@
 	>
 		<div class="space-y-4">
 			<template v-if="!validate?.summary?.runtimeInstalled">
-				<div>
-					<div class="font-medium">{{ t("containerRuntime.installTitle") }}</div>
-					<div class="mt-1 text-xs text-gray-500">{{ t("containerRuntime.installDesc") }}</div>
-				</div>
-
 				<n-alert v-if="!validate?.summary?.installSupported" type="warning" :show-icon="false">
 					{{ t("containerRuntime.unsupported") }}
 				</n-alert>
 				<n-alert v-else-if="!validate?.gpc?.reachable" type="warning" :show-icon="false">
-					{{ t("containerRuntime.gpcRequired") }}
+					{{ t("containerRuntime.installServiceUnavailable") }}
 				</n-alert>
 
 				<n-radio-group v-model:value="selectedRuntime" :disabled="installLoading">
@@ -69,8 +64,11 @@
 			</template>
 
 			<template v-else>
-				<div class="flex flex-wrap items-center justify-between gap-2">
-					<div class="text-sm text-gray-600">{{ runtimeDetailText }}</div>
+				<div class="space-y-2">
+					<div class="font-medium">{{ t("containerRuntime.runtimeNeedsRepair") }}</div>
+					<div class="text-xs text-gray-500">{{ t("containerRuntime.autoRepairDesc") }}</div>
+				</div>
+				<div>
 					<n-button
 						v-if="canAutoRepair"
 						:loading="autoRepairLoading"
@@ -81,50 +79,56 @@
 						{{ t("containerRuntime.autoRepair") }}
 					</n-button>
 				</div>
-				<div class="flex flex-wrap items-center gap-2">
-					<n-tag :type="validate?.runtime?.serviceActive ? 'success' : 'warning'">
-						{{ t("containerRuntime.service") }}:
-						{{
-							t(
-								validate?.runtime?.serviceActive
-									? "containerRuntime.serviceActive"
-									: "containerRuntime.serviceInactive"
-							)
-						}}
-					</n-tag>
-					<n-tag :type="validate?.runtime?.apiReady ? 'success' : 'warning'">
-						{{ t("containerRuntime.api") }}:
-						{{
-							t(
-								validate?.runtime?.apiReady
-									? "containerRuntime.apiReady"
-									: "containerRuntime.apiNotReady"
-							)
-						}}
-					</n-tag>
-				</div>
-				<div class="flex flex-wrap gap-2">
-					<n-button
-						v-if="canAutoRepair"
-						:loading="repairSocketLoading"
-						:disabled="!validate?.gpc?.reachable || autoRepairLoading"
-						type="warning"
-						@click="emit('repair-socket')"
-					>
-						{{ t("containerRuntime.repairSocket") }}
-					</n-button>
-					<n-button
-						v-if="canAutoRepair"
-						:loading="repairLingerLoading"
-						:disabled="!validate?.gpc?.reachable || autoRepairLoading"
-						@click="emit('repair-linger')"
-					>
-						{{ t("containerRuntime.repairLinger") }}
-					</n-button>
-				</div>
 				<div v-if="canAutoRepair && !validate?.gpc?.reachable" class="text-xs text-gray-500">
-					{{ t("containerRuntime.repairNeedsGpc") }}
+					{{ t("containerRuntime.repairServiceUnavailable") }}
 				</div>
+
+				<n-collapse v-if="canAutoRepair">
+					<n-collapse-item :title="t('containerRuntime.advancedRepair')" name="advanced-repair">
+						<div class="space-y-3">
+							<div class="text-xs text-gray-500">{{ runtimeDetailText }}</div>
+							<div class="flex flex-wrap items-center gap-2">
+								<n-tag :type="validate?.runtime?.serviceActive ? 'success' : 'warning'">
+									{{ t("containerRuntime.service") }}:
+									{{
+										t(
+											validate?.runtime?.serviceActive
+												? "containerRuntime.serviceActive"
+												: "containerRuntime.serviceInactive"
+										)
+									}}
+								</n-tag>
+								<n-tag :type="validate?.runtime?.apiReady ? 'success' : 'warning'">
+									{{ t("containerRuntime.api") }}:
+									{{
+										t(
+											validate?.runtime?.apiReady
+												? "containerRuntime.apiReady"
+												: "containerRuntime.apiNotReady"
+										)
+									}}
+								</n-tag>
+							</div>
+							<div class="flex flex-wrap gap-2">
+								<n-button
+									:loading="repairSocketLoading"
+									:disabled="!validate?.gpc?.reachable || autoRepairLoading"
+									type="warning"
+									@click="emit('repair-socket')"
+								>
+									{{ t("containerRuntime.repairSocket") }}
+								</n-button>
+								<n-button
+									:loading="repairLingerLoading"
+									:disabled="!validate?.gpc?.reachable || autoRepairLoading"
+									@click="emit('repair-linger')"
+								>
+									{{ t("containerRuntime.repairLinger") }}
+								</n-button>
+							</div>
+						</div>
+					</n-collapse-item>
+				</n-collapse>
 			</template>
 
 			<n-alert v-if="installTask?.status === 'running'" type="info" :show-icon="false">
@@ -187,6 +191,9 @@ const { t } = useI18n({ messages: containerRuntimeMessages })
 const selectedRuntime = ref<"docker" | "podman">("podman")
 const runtimeOptions = computed<Array<"docker" | "podman">>(() => props.validate?.summary?.installOptions || [])
 const runtimeName = (runtime: string) => (runtime === "docker" ? "Docker" : "Podman")
+const modalTitle = computed(() =>
+	props.validate?.summary?.runtimeInstalled ? t("containerRuntime.fixProblem") : t("containerRuntime.installTitle")
+)
 
 watch(
 	() => props.validate?.summary?.recommended,

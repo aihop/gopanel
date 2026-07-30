@@ -13,6 +13,7 @@
 			:status-loading="statusLoading"
 			:reload-loading="reloadLoading"
 			:repair-hint-type="repairHintType"
+			:can-auto-repair="canAutoRepair"
 			@update-status="updateDockerStatus"
 			@open-repair="openRepairModal"
 		/>
