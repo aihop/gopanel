@@ -163,6 +163,8 @@ for t in "${TARGETS[@]}"; do
       fi
       build_local "${GOOS}" "${GOARCH}" "${dist_dir}" "${APP_NAME}" "${CGO}"
       build_gpc_local "${GOOS}" "${GOARCH}" "${dist_dir}"
+      cp "${PROJECT_ROOT}/script/install_podman.sh" "${dist_dir}/install_podman.sh"
+      chmod 755 "${dist_dir}/install_podman.sh"
       ;;
     linux)
       if [ "${CGO}" = "0" ]; then

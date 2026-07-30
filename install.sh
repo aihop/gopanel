@@ -37,9 +37,11 @@ SUDO_CMD=""
 WORK_DIR=""
 GPAGENT_WORK_DIR=""
 DOWNLOAD_WORK_DIR=""
+PODMAN_INSTALL_SCRIPT_URL="${PODMAN_INSTALL_SCRIPT_URL:-https://gopanel.run/install_podman.sh}"
 BIN_GPC_PATH=""
 BIN_GOPANEL_PATH=""
 BIN_GPAGENT_PATH=""
+BIN_PODMAN_INSTALLER_PATH=""
 
 log() { echo "[INFO] $*"; }
 warn() { echo "[WARN] $*" >&2; }
@@ -855,6 +857,7 @@ extract_and_find_binaries() {
   BIN_GPC_PATH="$(find_first_file "${WORK_DIR}" gpc)"
   BIN_GOPANEL_PATH="$(find_first_file "${WORK_DIR}" gopanel)"
   BIN_GPAGENT_PATH="$(find_first_file "${WORK_DIR}" gp-agent)"
+  BIN_PODMAN_INSTALLER_PATH="$(find_first_file "${WORK_DIR}" install_podman.sh)"
 
   [ -n "${BIN_GPC_PATH}" ] || die "安装包中未找到 gpc 二进制文件"
   [ -n "${BIN_GOPANEL_PATH}" ] || die "安装包中未找到 gopanel 二进制文件"
@@ -1559,13 +1562,29 @@ install_podman() {
 
   if [ "$os_name" = "darwin" ]; then
     log "开始安装/升级 Podman (macOS)..."
-    if command -v brew >/dev/null 2>&1; then
-      brew upgrade podman 2>/dev/null || brew install podman || warn "Podman 安装失败，请手动安装。"
-      brew install podman-compose || warn "podman-compose 安装失败，请手动安装。"
-      ensure_podman_machine_macos || true
+    local installer_status=0
+    if run_macos_podman_installer; then
+      return 0
     else
-      warn "未检测到 Homebrew，请手动安装 Podman 和 podman-compose。"
+      installer_status=$?
     fi
+    if [ "${installer_status}" -ne 2 ]; then
+      die "Podman 独立安装器执行失败，请根据上方错误处理后重试。"
+    fi
+    warn "未能获取 Podman 独立安装器，回退到主脚本内置安装流程。"
+    if ! command -v brew >/dev/null 2>&1; then
+      die "未检测到 Homebrew，无法自动安装 Podman。请先安装 Homebrew 后重新运行安装脚本。"
+    fi
+    if command -v podman >/dev/null 2>&1; then
+      brew upgrade podman || die "Podman 升级失败，请检查 Homebrew 输出后重试。"
+    else
+      brew install podman || die "Podman 安装失败，请检查 Homebrew 输出后重试。"
+    fi
+    command -v podman >/dev/null 2>&1 || die "Homebrew 执行完成，但仍未检测到 podman 命令。"
+    ensure_podman_compose || die "Podman Compose 安装失败，请检查 Homebrew 输出后重试。"
+    ensure_podman_machine_macos || die "Podman machine 初始化或启动失败，请根据上方错误处理后重试。"
+    podman info >/dev/null 2>&1 || die "Podman 已安装，但当前 machine 不可用，请执行 podman machine start 后重试。"
+    log "Podman、Podman Compose 和 Podman machine 已安装并可用。"
     return 0
   fi
 
@@ -1588,6 +1607,51 @@ install_podman() {
 
   ensure_podman_compose || true
   ensure_podman_socket_access || true
+}
+
+run_macos_podman_installer() {
+  if [ -n "${BIN_PODMAN_INSTALLER_PATH}" ] && [ -f "${BIN_PODMAN_INSTALLER_PATH}" ]; then
+    log "调用安装包内置 Podman 安装器: ${BIN_PODMAN_INSTALLER_PATH}"
+    /bin/bash "${BIN_PODMAN_INSTALLER_PATH}"
+    return $?
+  fi
+
+  local script_path="${BASH_SOURCE[0]:-}"
+  case "${script_path}" in
+    ""|/dev/fd/*|/proc/self/fd/*) ;;
+    *)
+      if [ -f "${script_path}" ]; then
+        local script_dir local_installer
+        script_dir="$(cd "$(dirname "${script_path}")" && pwd)"
+        local_installer="${script_dir}/script/install_podman.sh"
+        if [ -f "${local_installer}" ]; then
+          log "调用本地 Podman 独立安装器: ${local_installer}"
+          /bin/bash "${local_installer}"
+          return $?
+        fi
+      fi
+      ;;
+  esac
+
+  if [ -z "${PODMAN_INSTALL_SCRIPT_URL}" ]; then
+    return 2
+  fi
+  local installer_file
+  installer_file="$(mktemp -t gopanel_podman_install.XXXXXX)"
+  log "获取 Podman 独立安装器: ${PODMAN_INSTALL_SCRIPT_URL}"
+  if ! curl -fsSL --max-time 15 "${PODMAN_INSTALL_SCRIPT_URL}" -o "${installer_file}"; then
+    rm -f "${installer_file}"
+    return 2
+  fi
+  if ! grep -q '^GOPANEL_PODMAN_INSTALLER=1$' "${installer_file}"; then
+    warn "远程 Podman 安装器内容无效，已拒绝执行。"
+    rm -f "${installer_file}"
+    return 2
+  fi
+  /bin/bash "${installer_file}"
+  local installer_status=$?
+  rm -f "${installer_file}"
+  return "${installer_status}"
 }
 
 install_podman_debian() {
@@ -1637,22 +1701,38 @@ ensure_podman_machine_macos() {
     return 0
   fi
   if ! command -v podman >/dev/null 2>&1; then
+    warn "未检测到 podman 命令，无法初始化 Podman machine。"
+    return 1
+  fi
+
+  if podman info >/dev/null 2>&1; then
+    log "Podman machine 已就绪"
     return 0
   fi
 
   if ! podman machine inspect >/dev/null 2>&1; then
     log "初始化 Podman machine"
-    podman machine init || warn "Podman machine 初始化失败，请手动执行: podman machine init"
-  fi
-
-  if podman machine inspect >/dev/null 2>&1; then
-    if podman machine start >/dev/null 2>&1; then
-      log "Podman machine 已启动"
-    else
-      warn "Podman machine 启动失败，请手动执行: podman machine start"
+    if ! podman machine init; then
+      warn "Podman machine 初始化失败，可手动执行: podman machine init"
+      return 1
     fi
   fi
-  return 0
+
+  log "启动 Podman machine"
+  if ! podman machine start; then
+    if podman info >/dev/null 2>&1; then
+      log "Podman machine 已在运行"
+      return 0
+    fi
+    warn "Podman machine 启动失败，可手动执行: podman machine start"
+    return 1
+  fi
+
+  if ! podman info >/dev/null 2>&1; then
+    warn "Podman machine 已启动，但 podman info 检查失败。"
+    return 1
+  fi
+  log "Podman machine 已启动并可用"
 }
 
 install_docker() {
@@ -1798,9 +1878,17 @@ ensure_podman_compose() {
     fi
     log "检测到 podman compose 不可用，尝试通过 Homebrew 安装 podman-compose"
     if command -v brew >/dev/null 2>&1; then
-      brew install podman-compose || warn "podman-compose 安装失败，请手动执行: brew install podman-compose"
+      if ! brew install podman-compose; then
+        warn "podman-compose 安装失败，可手动执行: brew install podman-compose"
+        return 1
+      fi
     else
       warn "未检测到 Homebrew，无法自动安装 podman-compose，请手动安装"
+      return 1
+    fi
+    if ! command -v podman-compose >/dev/null 2>&1 && ! podman compose version >/dev/null 2>&1; then
+      warn "Homebrew 执行完成，但 Podman Compose 仍不可用。"
+      return 1
     fi
     return 0
   fi
