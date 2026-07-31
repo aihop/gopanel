@@ -48,17 +48,18 @@ func nextNativeTerminalConnectionID() string {
 	return strconv.FormatUint(sequence, 10)
 }
 
-func (terminal *nativeCodeTerminal) subscribe(afterSequence uint64) (*nativeTerminalSubscription, nativeTerminalEvent) {
+func (terminal *nativeCodeTerminal) subscribe(afterSequence uint64, readOnly bool) (*nativeTerminalSubscription, nativeTerminalEvent) {
 	subscription := &nativeTerminalSubscription{
-		ID:     nextNativeTerminalConnectionID(),
-		Events: make(chan nativeTerminalEvent, 128),
+		ID:       nextNativeTerminalConnectionID(),
+		Events:   make(chan nativeTerminalEvent, 128),
+		ReadOnly: readOnly,
 	}
 	terminal.mu.Lock()
 	if afterSequence > terminal.sequence {
 		afterSequence = 0
 	}
 	terminal.subscribers[subscription.ID] = subscription
-	if terminal.controllerID == "" || terminal.controlExpiredLocked(time.Now()) {
+	if !readOnly && (terminal.controllerID == "" || terminal.controlExpiredLocked(time.Now())) {
 		terminal.controllerID = subscription.ID
 		terminal.renewControlLeaseLocked(time.Now())
 	}
@@ -140,9 +141,14 @@ func (terminal *nativeCodeTerminal) unsubscribe(subscription *nativeTerminalSubs
 
 func (terminal *nativeCodeTerminal) takeControl(subscriptionID string) (bool, string) {
 	terminal.mu.Lock()
-	if _, exists := terminal.subscribers[subscriptionID]; !exists {
+	subscription, exists := terminal.subscribers[subscriptionID]
+	if !exists {
 		terminal.mu.Unlock()
 		return false, "连接不存在"
+	}
+	if subscription.ReadOnly {
+		terminal.mu.Unlock()
+		return false, "只读连接不能接管终端输入"
 	}
 	now := time.Now()
 	if terminal.controllerID != "" && terminal.controllerID != subscriptionID && !terminal.controlExpiredLocked(now) {
