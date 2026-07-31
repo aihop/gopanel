@@ -34,6 +34,9 @@ func TestInspectCodeProjectBranchesReturnsLocalAndRemoteBranches(t *testing.T) {
 	scopes := map[string]int{}
 	for _, branch := range repository.Branches {
 		scopes[branch.Scope]++
+		if branch.Additions != 1 || branch.Deletions != 0 {
+			t.Fatalf("unexpected branch line stats: %#v", branch)
+		}
 	}
 	if scopes["local"] != 2 || scopes["remote"] != 1 {
 		t.Fatalf("unexpected branch scopes: %#v", scopes)

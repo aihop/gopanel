@@ -154,6 +154,8 @@ watch(
 								</div>
 								<div class="mt-1 flex items-center gap-1.5 text-[10px] text-slate-400">
 									<span class="font-mono">{{ branch.commit }}</span>
+									<span class="font-medium text-emerald-600">+{{ branch.additions }}</span>
+									<span class="font-medium text-red-500">-{{ branch.deletions }}</span>
 									<span class="truncate" :title="branch.subject">{{ branch.subject }}</span>
 									<span v-if="branch.scope === 'local' && branch.merged" class="ml-auto shrink-0 text-emerald-600">{{ t("code.branchMerged") }}</span>
 								</div>

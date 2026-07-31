@@ -36,6 +36,8 @@ type codeProjectBranch struct {
 	Subject   string `json:"subject"`
 	UpdatedAt string `json:"updatedAt"`
 	Merged    bool   `json:"merged"`
+	Additions int    `json:"additions"`
+	Deletions int    `json:"deletions"`
 }
 
 type codeProjectBranchRepository struct {
@@ -156,14 +158,15 @@ func inspectCodeProjectBranchRepository(root string) (codeProjectBranchRepositor
 	for _, refName := range strings.Fields(mergedOutput) {
 		mergedRefs[refName] = struct{}{}
 	}
-	output, err := runCodeGit(root, "for-each-ref", "--sort=-committerdate", "--format=%(refname)%00%(refname:short)%00%(objectname:short)%00%(subject)%00%(committerdate:iso-strict)%00%(upstream:short)%00%(HEAD)", "refs/heads", "refs/remotes")
+	output, err := runCodeGit(root, "for-each-ref", "--sort=-committerdate", "--format=%(refname)%00%(refname:short)%00%(objectname)%00%(objectname:short)%00%(subject)%00%(committerdate:iso-strict)%00%(upstream:short)%00%(HEAD)", "refs/heads", "refs/remotes")
 	if err != nil {
 		return codeProjectBranchRepository{}, err
 	}
 	branches := make([]codeProjectBranch, 0)
+	commitStats := make(map[string][2]int)
 	for _, line := range strings.Split(output, "\n") {
 		fields := strings.Split(line, "\x00")
-		if len(fields) != 7 || strings.HasSuffix(fields[0], "/HEAD") {
+		if len(fields) != 8 || strings.HasSuffix(fields[0], "/HEAD") {
 			continue
 		}
 		scope := "local"
@@ -171,9 +174,18 @@ func inspectCodeProjectBranchRepository(root string) (codeProjectBranchRepositor
 			scope = "remote"
 		}
 		_, merged := mergedRefs[fields[0]]
+		stats, exists := commitStats[fields[2]]
+		if !exists {
+			numstat, statErr := runCodeGit(root, "show", "--format=", "--numstat", "--no-renames", fields[2])
+			if statErr == nil {
+				stats[0], stats[1] = parseCodeGitNumstat(numstat)
+			}
+			commitStats[fields[2]] = stats
+		}
 		branches = append(branches, codeProjectBranch{
-			Name: fields[1], Ref: fields[0], Scope: scope, Current: fields[6] == "*",
-			Commit: fields[2], Subject: fields[3], UpdatedAt: fields[4], Upstream: fields[5], Merged: merged,
+			Name: fields[1], Ref: fields[0], Scope: scope, Current: fields[7] == "*",
+			Commit: fields[3], Subject: fields[4], UpdatedAt: fields[5], Upstream: fields[6], Merged: merged,
+			Additions: stats[0], Deletions: stats[1],
 		})
 	}
 	changedFiles := 0

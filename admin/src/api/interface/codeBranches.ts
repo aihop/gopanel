@@ -8,6 +8,8 @@ export interface CodeProjectBranch {
 	subject: string
 	updatedAt: string
 	merged: boolean
+	additions: number
+	deletions: number
 }
 
 export interface CodeProjectBranchRepository {
