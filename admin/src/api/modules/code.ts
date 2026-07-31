@@ -150,7 +150,7 @@ export function retryCodeInstruction(instructionId: number) {
 // === Task APIs ===
 
 // 获取任务列表
-export function getAITasks(params: { page: number; limit: number; projectId?: number }) {
+export function getAITasks(params: { page: number; limit: number; projectId?: number; includeGit?: boolean }) {
 	return http.get<{ items: CodeTaskListItem[]; total: number }>("/code/tasks", params)
 }
 

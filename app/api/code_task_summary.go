@@ -14,6 +14,7 @@ type codeTaskSummary struct {
 	Executor     string `json:"executor,omitempty"`
 	Model        string `json:"model,omitempty"`
 	GitStatus    string `json:"gitStatus,omitempty"`
+	GitError     string `json:"gitError,omitempty"`
 	Branch       string `json:"branch,omitempty"`
 	Additions    int    `json:"additions"`
 	Deletions    int    `json:"deletions"`
@@ -33,13 +34,18 @@ type codeTaskRunSummaryRow struct {
 	Model      string
 }
 
+type codeTaskDurationSummaryRow struct {
+	TaskID     uint
+	DurationMS int64
+}
+
 type codeTaskDiffStats struct {
 	Additions int
 	Deletions int
 	Files     int
 }
 
-func buildCodeTaskListItems(tasks []*model.AITask) ([]codeTaskListItem, error) {
+func buildCodeTaskListItems(tasks []*model.AITask, includeGit bool) ([]codeTaskListItem, error) {
 	items := make([]codeTaskListItem, 0, len(tasks))
 	if len(tasks) == 0 {
 		return items, nil
@@ -53,12 +59,13 @@ func buildCodeTaskListItems(tasks []*model.AITask) ([]codeTaskListItem, error) {
 		}
 	}
 	summaries := make(map[uint]codeTaskSummary, len(tasks))
-	diffStatsCache := make(map[string]codeTaskDiffStats)
 	if err := loadCodeTaskRunSummaries(taskIDs, summaries); err != nil {
 		return nil, err
 	}
-	if err := loadCodeTaskGitSummaries(tasks, sessionIDs, summaries, diffStatsCache); err != nil {
-		return nil, err
+	if includeGit {
+		if err := loadCodeTaskGitSummaries(tasks, sessionIDs, summaries, make(map[string]codeTaskDiffStats)); err != nil {
+			return nil, err
+		}
 	}
 	for _, task := range tasks {
 		items = append(items, codeTaskListItem{AITask: task, Summary: summaries[task.ID]})
@@ -67,21 +74,31 @@ func buildCodeTaskListItems(tasks []*model.AITask) ([]codeTaskListItem, error) {
 }
 
 func loadCodeTaskRunSummaries(taskIDs []uint, summaries map[uint]codeTaskSummary) error {
-	var rows []codeTaskRunSummaryRow
+	var durations []codeTaskDurationSummaryRow
 	err := global.DB.Model(&model.AIExecutionRun{}).
-		Select("task_id, duration_ms, executor_id, model").
+		Select("task_id, COALESCE(SUM(duration_ms), 0) AS duration_ms").
 		Where("task_id IN ?", taskIDs).
-		Order("created_at desc").Scan(&rows).Error
+		Group("task_id").Scan(&durations).Error
 	if err != nil {
 		return err
 	}
-	for _, row := range rows {
+	for _, row := range durations {
 		summary := summaries[row.TaskID]
-		summary.DurationMS += row.DurationMS
-		if summary.Executor == "" {
-			summary.Executor = row.ExecutorID
-			summary.Model = row.Model
-		}
+		summary.DurationMS = row.DurationMS
+		summaries[row.TaskID] = summary
+	}
+	var latestRuns []codeTaskRunSummaryRow
+	rankedRuns := global.DB.Model(&model.AIExecutionRun{}).
+		Select("task_id, executor_id, model, ROW_NUMBER() OVER (PARTITION BY task_id ORDER BY created_at DESC, id DESC) AS row_number").
+		Where("task_id IN ?", taskIDs)
+	if err := global.DB.Table("(?) AS ranked_runs", rankedRuns).
+		Select("task_id, executor_id, model").Where("row_number = 1").Scan(&latestRuns).Error; err != nil {
+		return err
+	}
+	for _, row := range latestRuns {
+		summary := summaries[row.TaskID]
+		summary.Executor = row.ExecutorID
+		summary.Model = row.Model
 		summaries[row.TaskID] = summary
 	}
 	return nil
@@ -134,6 +151,9 @@ func loadCodeTaskGitSummaries(tasks []*model.AITask, sessionIDs []uint, summarie
 func applyCodeTaskDeliverySummary(summary *codeTaskSummary, delivery model.AICodeDelivery, diffStatsCache map[string]codeTaskDiffStats) {
 	summary.Branch = delivery.WorktreeBranch
 	summary.GitStatus = codeTaskDeliveryStatus(delivery.Status, delivery.PushStatus)
+	if summary.GitStatus == "push_failed" {
+		summary.GitError = delivery.PushError
+	}
 	if delivery.BaseCommit == "" || delivery.WorktreeCommit == "" {
 		return
 	}
@@ -153,6 +173,9 @@ func applyCodeTaskRepositorySummaries(summary *codeTaskSummary, repositories []m
 			summary.Branch = repository.Branch
 		}
 		repositoryStatus := codeTaskDeliveryStatus(repository.Status, repository.PushStatus)
+		if repositoryStatus == "push_failed" && summary.GitError == "" {
+			summary.GitError = repository.PushError
+		}
 		if repository.WorktreeCommit == "" && repositoryStatus == "working" {
 			worktreeSummary := codeTaskSummary{GitStatus: repositoryStatus}
 			applyCodeTaskWorktreeSummary(&worktreeSummary, repository.WorktreeDir, repository.BaseCommit, diffStatsCache)
@@ -174,6 +197,9 @@ func applyCodeTaskRepositorySummaries(summary *codeTaskSummary, repositories []m
 		}
 	}
 	summary.GitStatus = aggregateCodeTaskGitStatuses(statuses)
+	if summary.GitStatus != "push_failed" {
+		summary.GitError = ""
+	}
 }
 
 func applyCodeTaskWorktreeSummary(summary *codeTaskSummary, worktreeDir, baseCommit string, diffStatsCache map[string]codeTaskDiffStats) {
@@ -199,6 +225,9 @@ func codeTaskDeliveryStatus(status, pushStatus string) string {
 	if status == "conflict" {
 		return "conflict"
 	}
+	if pushStatus == codePushFailed {
+		return "push_failed"
+	}
 	if pushStatus == "pushed" {
 		return "pushed"
 	}
@@ -216,7 +245,7 @@ func aggregateCodeTaskGitStatuses(statuses []string) string {
 	if len(statuses) == 0 {
 		return ""
 	}
-	for _, candidate := range []string{"conflict", "working", "committed", "merged"} {
+	for _, candidate := range []string{"conflict", "push_failed", "working", "committed", "merged"} {
 		for _, status := range statuses {
 			if status == candidate {
 				return candidate

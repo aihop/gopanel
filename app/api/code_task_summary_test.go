@@ -47,7 +47,7 @@ func TestBuildCodeTaskListItemsSummarizesRunsAndCommittedWorktree(t *testing.T) 
 		t.Fatal(err)
 	}
 
-	items, err := buildCodeTaskListItems([]*model.AITask{task})
+	items, err := buildCodeTaskListItems([]*model.AITask{task}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,6 +77,7 @@ func TestCodeTaskDeliveryStatus(t *testing.T) {
 		{name: "committed", status: codeDeliveryPrepared, want: "committed"},
 		{name: "merged", status: codeDeliveryCompleted, want: "merged"},
 		{name: "pushed", status: codeDeliveryCompleted, pushStatus: "pushed", want: "pushed"},
+		{name: "push failed", status: codeDeliveryCompleted, pushStatus: codePushFailed, want: "push_failed"},
 		{name: "conflict", status: "conflict", pushStatus: "pushed", want: "conflict"},
 	}
 	for _, test := range tests {
@@ -88,6 +89,16 @@ func TestCodeTaskDeliveryStatus(t *testing.T) {
 	}
 }
 
+func TestApplyCodeTaskDeliverySummaryIncludesPushError(t *testing.T) {
+	summary := codeTaskSummary{}
+	applyCodeTaskDeliverySummary(&summary, model.AICodeDelivery{
+		Status: codeDeliveryCompleted, PushStatus: codePushFailed, PushError: "remote rejected",
+	}, make(map[string]codeTaskDiffStats))
+	if summary.GitStatus != "push_failed" || summary.GitError != "remote rejected" {
+		t.Fatalf("unexpected push failure summary: %#v", summary)
+	}
+}
+
 func TestAggregateCodeTaskGitStatusesUsesLeastCompleteState(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -95,6 +106,7 @@ func TestAggregateCodeTaskGitStatusesUsesLeastCompleteState(t *testing.T) {
 		want     string
 	}{
 		{name: "conflict wins", statuses: []string{"pushed", "conflict", "working"}, want: "conflict"},
+		{name: "push failure before working", statuses: []string{"working", "push_failed"}, want: "push_failed"},
 		{name: "working before pushed", statuses: []string{"pushed", "working"}, want: "working"},
 		{name: "committed before merged", statuses: []string{"merged", "committed"}, want: "committed"},
 		{name: "merged before pushed", statuses: []string{"pushed", "merged"}, want: "merged"},
@@ -110,6 +122,35 @@ func TestAggregateCodeTaskGitStatusesUsesLeastCompleteState(t *testing.T) {
 	}
 }
 
+func TestBuildCodeTaskListItemsCanSkipGitInspection(t *testing.T) {
+	database := withCodeGovernanceDB(t)
+	session := &model.AIDevSession{
+		UserID: 1, ProjectID: 1, Title: "session", WorkDir: "/missing/worktree",
+		WorktreeBranch: "task-summary", BaseCommit: "missing",
+	}
+	if err := database.Create(session).Error; err != nil {
+		t.Fatal(err)
+	}
+	task := &model.AITask{UserID: 1, SessionID: session.ID, ProjectID: 1, Title: "task", WorkDir: session.WorkDir}
+	if err := database.Create(task).Error; err != nil {
+		t.Fatal(err)
+	}
+	run := model.AIExecutionRun{
+		SessionID: session.ID, TaskID: task.ID, ExecutorID: "codex", Model: "gpt-5",
+		Prompt: "work", Status: "completed", StartedAt: time.Now(), DurationMS: 1500,
+	}
+	if err := database.Create(&run).Error; err != nil {
+		t.Fatal(err)
+	}
+	items, err := buildCodeTaskListItems([]*model.AITask{task}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].Summary.DurationMS != 1500 || items[0].Summary.GitStatus != "" {
+		t.Fatalf("unexpected database-only summary: %#v", items)
+	}
+}
+
 func TestApplyCodeTaskRepositorySummariesAggregatesMixedRepositories(t *testing.T) {
 	summary := codeTaskSummary{}
 	repositories := []model.AIDevSessionRepository{
@@ -118,6 +159,18 @@ func TestApplyCodeTaskRepositorySummariesAggregatesMixedRepositories(t *testing.
 	}
 	applyCodeTaskRepositorySummaries(&summary, repositories, make(map[string]codeTaskDiffStats))
 	if summary.GitStatus != "committed" || summary.Branch != "task-a" {
+		t.Fatalf("unexpected repository summary: %#v", summary)
+	}
+}
+
+func TestApplyCodeTaskRepositorySummariesHidesLowerPriorityPushError(t *testing.T) {
+	summary := codeTaskSummary{}
+	repositories := []model.AIDevSessionRepository{
+		{Branch: "task-a", Status: codeDeliveryCompleted, PushStatus: codePushFailed, PushError: "remote rejected"},
+		{Branch: "task-b", Status: "conflict"},
+	}
+	applyCodeTaskRepositorySummaries(&summary, repositories, make(map[string]codeTaskDiffStats))
+	if summary.GitStatus != "conflict" || summary.GitError != "" {
 		t.Fatalf("unexpected repository summary: %#v", summary)
 	}
 }

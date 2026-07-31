@@ -12,6 +12,7 @@ import TaskApprovalAction from "./TaskApprovalAction.vue"
 const props = defineProps<{
 	projectId: number
 	tasks: CodeTaskListItem[]
+	taskTotal: number
 	currentTaskId: number | null
 	taskActionOptions: Array<Record<string, unknown>>
 }>()
@@ -71,12 +72,14 @@ const taskGitMeta = (task: CodeTaskListItem) =>
 		committed: { icon: "mdi:source-commit", color: "text-blue-500" },
 		merged: { icon: "mdi:source-merge", color: "text-emerald-600" },
 		pushed: { icon: "mdi:cloud-check-outline", color: "text-emerald-600" },
+		push_failed: { icon: "mdi:cloud-alert-outline", color: "text-red-500" },
 		conflict: { icon: "mdi:source-branch-alert", color: "text-red-500" }
 	})[task.summary.gitStatus || ""]
 
 const taskTooltip = (task: CodeTaskListItem) =>
 	[
 		task.summary.gitStatus ? t(`code.taskGitStatus_${task.summary.gitStatus}`) : "",
+		task.summary.gitError,
 		task.summary.executor,
 		task.summary.model,
 		task.summary.branch,
@@ -87,7 +90,7 @@ const taskTooltip = (task: CodeTaskListItem) =>
 
 onMounted(() => {
 	void fetchBranches()
-	refreshTimer = setInterval(() => void fetchBranches(true), 15000)
+	refreshTimer = setInterval(() => void fetchBranches(true), 60000)
 })
 onBeforeUnmount(() => {
 	if (refreshTimer) clearInterval(refreshTimer)
@@ -108,7 +111,7 @@ watch(
 				<div class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
 					{{ t("code.taskHistory") }}
 				</div>
-				<div class="text-xs text-slate-400">{{ t("code.taskCount", { count: tasks.length }) }}</div>
+				<div class="text-xs text-slate-400">{{ t("code.taskCount", { count: taskTotal }) }}</div>
 			</div>
 			<n-scrollbar trigger="none" class="ai-workspace-task-scrollbar min-h-0 flex-1">
 				<div class="px-2.5 pb-3 pr-3.5">

@@ -4,7 +4,8 @@ export interface CodeTaskSummary {
 	durationMs: number
 	executor?: string
 	model?: string
-	gitStatus?: "working" | "committed" | "merged" | "pushed" | "conflict"
+	gitStatus?: "working" | "committed" | "merged" | "pushed" | "push_failed" | "conflict"
+	gitError?: string
 	branch?: string
 	additions: number
 	deletions: number

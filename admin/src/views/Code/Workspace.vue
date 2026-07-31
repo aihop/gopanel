@@ -47,6 +47,7 @@
 					<ProjectTaskSidebar
 						:project-id="currentProjectId"
 						:tasks="tasks"
+						:task-total="taskTotal"
 						:current-task-id="currentTaskId"
 						:task-action-options="taskActionOptions"
 						@select-task="selectTask"
@@ -256,6 +257,7 @@ if (!props.embedded) useHideLayoutFooter()
 const currentProjectId = computed(() => props.projectId ?? Number(route.params.id))
 const projectInfo = ref<AIProject | null>(null),
 	tasks = ref<CodeTaskListItem[]>([])
+const taskTotal = ref(0)
 const currentTaskId = ref<number | null>(null),
 	currentSessionId = ref<number | null>(null)
 const showNewSessionModal = ref(false),
@@ -292,7 +294,7 @@ const fetchProjectInfo = async () => {
 	}
 }
 
-const { fetchTasks } = useCodeTaskPolling(currentProjectId, tasks, error => {
+const { fetchTasks } = useCodeTaskPolling(currentProjectId, tasks, taskTotal, error => {
 	message.error(error instanceof Error ? error.message : t("code.taskLoadFailed"))
 })
 
@@ -427,6 +429,8 @@ const submitRename = async () => {
 const resetWorkspace = () => {
 	currentTaskId.value = null
 	currentSessionId.value = null
+	tasks.value = []
+	taskTotal.value = 0
 	showNewSessionModal.value = false
 	showHistoryDrawer.value = false
 	showProjectStructure.value = false
