@@ -53,6 +53,7 @@ class _CodeTerminalScreenState extends State<CodeTerminalScreen> {
   late final Terminal _terminal;
   late final TerminalController _terminalController;
   late final FocusNode _terminalFocusNode;
+  final _terminalViewKey = GlobalKey<TerminalViewState>();
   late final CodeTerminalClient _client;
 
   @override
@@ -107,6 +108,14 @@ class _CodeTerminalScreenState extends State<CodeTerminalScreen> {
   void _sendShortcut(String value) {
     _client.sendInput(value);
     _terminalFocusNode.requestFocus();
+  }
+
+  void _showKeyboard() {
+    if (!_client.canInput) return;
+    _terminalFocusNode.requestFocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _terminalViewKey.currentState?.requestKeyboard();
+    });
   }
 
   void _toggleControl() {
@@ -183,8 +192,10 @@ class _CodeTerminalScreenState extends State<CodeTerminalScreen> {
           Expanded(
             child: TerminalView(
               _terminal,
+              key: _terminalViewKey,
               controller: _terminalController,
               focusNode: _terminalFocusNode,
+              autofocus: true,
               theme: _terminalTheme,
               textStyle: const TerminalStyle(
                 fontSize: 12,
@@ -211,6 +222,7 @@ class _CodeTerminalScreenState extends State<CodeTerminalScreen> {
             enabled: _client.canInput,
             onShortcut: _sendShortcut,
             onEnter: () => _sendShortcut('\r'),
+            onKeyboard: _showKeyboard,
           ),
         ],
       ),

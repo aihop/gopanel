@@ -67,11 +67,13 @@ class CodeTerminalShortcutBar extends StatelessWidget {
     required this.enabled,
     required this.onShortcut,
     required this.onEnter,
+    required this.onKeyboard,
   });
 
   final bool enabled;
   final ValueChanged<String> onShortcut;
   final VoidCallback onEnter;
+  final VoidCallback onKeyboard;
 
   @override
   Widget build(BuildContext context) {
@@ -84,32 +86,45 @@ class CodeTerminalShortcutBar extends StatelessWidget {
           border: Border(top: BorderSide(color: Color(0xFF1E293B))),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-        child: ListView(
-          scrollDirection: Axis.horizontal,
+        child: Row(
           children: [
-            for (final shortcut in const [
-              ('Esc', '\x1b'),
-              ('Tab', '\t'),
-              ('^C', '\x03'),
-              ('←', '\x1b[D'),
-              ('↑', '\x1b[A'),
-              ('↓', '\x1b[B'),
-              ('→', '\x1b[C'),
-              ('⌫', '\x7f'),
-            ]) ...[
-              _TerminalKey(
-                label: shortcut.$1,
-                enabled: enabled,
-                danger: shortcut.$1 == '^C',
-                onPressed: () => onShortcut(shortcut.$2),
+            Expanded(
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: [
+                  for (final shortcut in const [
+                    ('Esc', '\x1b'),
+                    ('Tab', '\t'),
+                    ('^C', '\x03'),
+                    ('←', '\x1b[D'),
+                    ('↑', '\x1b[A'),
+                    ('↓', '\x1b[B'),
+                    ('→', '\x1b[C'),
+                    ('⌫', '\x7f'),
+                  ]) ...[
+                    _TerminalKey(
+                      label: shortcut.$1,
+                      enabled: enabled,
+                      danger: shortcut.$1 == '^C',
+                      onPressed: () => onShortcut(shortcut.$2),
+                    ),
+                    const SizedBox(width: 4),
+                  ],
+                  _TerminalKey(
+                    label: '↵',
+                    enabled: enabled,
+                    accent: true,
+                    onPressed: onEnter,
+                  ),
+                ],
               ),
-              const SizedBox(width: 4),
-            ],
+            ),
+            const SizedBox(width: 5),
             _TerminalKey(
-              label: '↵',
+              label: '键盘',
+              icon: Icons.keyboard_alt_outlined,
               enabled: enabled,
-              accent: true,
-              onPressed: onEnter,
+              onPressed: onKeyboard,
             ),
           ],
         ),
@@ -125,6 +140,7 @@ class _TerminalKey extends StatelessWidget {
     required this.onPressed,
     this.accent = false,
     this.danger = false,
+    this.icon,
   });
 
   final String label;
@@ -132,6 +148,7 @@ class _TerminalKey extends StatelessWidget {
   final VoidCallback onPressed;
   final bool accent;
   final bool danger;
+  final IconData? icon;
 
   @override
   Widget build(BuildContext context) {
@@ -155,15 +172,26 @@ class _TerminalKey extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Center(
-              child: Text(
-                label,
-                style: TextStyle(
-                  color: enabled
-                      ? foreground
-                      : foreground.withValues(alpha: 0.3),
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                ),
+              child: Tooltip(
+                message: label,
+                child: icon == null
+                    ? Text(
+                        label,
+                        style: TextStyle(
+                          color: enabled
+                              ? foreground
+                              : foreground.withValues(alpha: 0.3),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      )
+                    : Icon(
+                        icon,
+                        size: 17,
+                        color: enabled
+                            ? foreground
+                            : foreground.withValues(alpha: 0.3),
+                      ),
               ),
             ),
           ),
