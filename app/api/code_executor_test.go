@@ -60,7 +60,7 @@ func TestBuildCodeExecutorArgsPreservesPrompt(t *testing.T) {
 	prompt := `"; touch /tmp/PWNED; echo "`
 	tests := map[string][]string{
 		"codex":    {"--ask-for-approval", "on-request", "--sandbox", "workspace-write", "exec", "--json", "--skip-git-repo-check", prompt},
-		"opencode": {"run", "--format", "json", prompt},
+		"opencode": {"run", "--format", "json", "--dangerously-skip-permissions", prompt},
 	}
 	for executorID, expected := range tests {
 		t.Run(executorID, func(t *testing.T) {
@@ -84,8 +84,8 @@ func TestBuildCodeExecutorArgsResumesNativeSession(t *testing.T) {
 	prompt := "continue"
 	tests := map[string][]string{
 		"codex":    {"--ask-for-approval", "on-request", "--sandbox", "workspace-write", "exec", "resume", "--json", "--skip-git-repo-check", "native-1", prompt},
-		"claude":   {"--print", "--permission-mode", "acceptEdits", "--output-format", "json", "--resume", "native-1", prompt},
-		"opencode": {"run", "--format", "json", "--session", "native-1", prompt},
+		"claude":   {"--print", "--output-format", "json", "--permission-mode", "acceptEdits", "--resume", "native-1", prompt},
+		"opencode": {"run", "--format", "json", "--dangerously-skip-permissions", "--session", "native-1", prompt},
 	}
 	for executorID, expected := range tests {
 		t.Run(executorID, func(t *testing.T) {
@@ -97,6 +97,43 @@ func TestBuildCodeExecutorArgsResumesNativeSession(t *testing.T) {
 				t.Fatalf("unexpected resume args: %s %#v", nativeSessionID, args)
 			}
 		})
+	}
+}
+
+func TestBuildExecutorArgsMapsApprovalPolicies(t *testing.T) {
+	tests := []struct {
+		executorID string
+		policy     string
+		expected   []string
+	}{
+		{executorID: "claude", policy: codeApprovalPolicyManual, expected: []string{"--permission-mode", "manual"}},
+		{executorID: "claude", policy: codeApprovalPolicySafeAuto, expected: []string{"--permission-mode", "acceptEdits"}},
+		{executorID: "claude", policy: codeApprovalPolicyFullAuto, expected: []string{"--dangerously-skip-permissions"}},
+		{executorID: "opencode", policy: codeApprovalPolicyFullAuto, expected: []string{"--dangerously-skip-permissions"}},
+	}
+	for _, test := range tests {
+		t.Run(test.executorID+"_"+test.policy, func(t *testing.T) {
+			args, _, err := buildCodeExecutorArgs(test.executorID, "run", "", 42, test.policy)
+			if err != nil {
+				t.Fatal(err)
+			}
+			joined := strings.Join(args, " ")
+			if !strings.Contains(joined, strings.Join(test.expected, " ")) {
+				t.Fatalf("approval args missing from %#v", args)
+			}
+		})
+	}
+}
+
+func TestExecutorCapabilitiesExposeNativeTerminalAndApprovals(t *testing.T) {
+	for _, executorID := range []string{"codex", "claude", "opencode", "aider"} {
+		definition, err := getCodeExecutorDefinition(executorID)
+		if err != nil || !definition.NativeTerminal || len(definition.ApprovalPolicies) == 0 {
+			t.Fatalf("incomplete %s capabilities: %#v, %v", executorID, definition, err)
+		}
+		if !supportsNativeCodeTerminal(executorID) {
+			t.Fatalf("%s native terminal is unavailable", executorID)
+		}
 	}
 }
 

@@ -82,8 +82,9 @@ func (codexExecutorFactory) BuildArgs(prompt, nativeSessionID string, _ uint, ap
 	return append(prefix, "--json", "--skip-git-repo-check", prompt), "", nil
 }
 
-func (claudeExecutorFactory) BuildArgs(prompt, nativeSessionID string, _ uint, _ string) ([]string, string, error) {
-	prefix := []string{"--print", "--permission-mode", "acceptEdits", "--output-format", "json"}
+func (claudeExecutorFactory) BuildArgs(prompt, nativeSessionID string, _ uint, approvalPolicy string) ([]string, string, error) {
+	prefix := []string{"--print", "--output-format", "json"}
+	prefix = append(prefix, claudeApprovalArgs(approvalPolicy)...)
 	if nativeSessionID != "" {
 		return append(prefix, "--resume", nativeSessionID, prompt), nativeSessionID, nil
 	}
@@ -92,11 +93,22 @@ func (claudeExecutorFactory) BuildArgs(prompt, nativeSessionID string, _ uint, _
 }
 
 func (openCodeExecutorFactory) BuildArgs(prompt, nativeSessionID string, _ uint, _ string) ([]string, string, error) {
-	args := []string{"run", "--format", "json"}
+	args := []string{"run", "--format", "json", "--dangerously-skip-permissions"}
 	if nativeSessionID != "" {
 		args = append(args, "--session", nativeSessionID)
 	}
 	return append(args, prompt), nativeSessionID, nil
+}
+
+func claudeApprovalArgs(approvalPolicy string) []string {
+	switch approvalPolicy {
+	case codeApprovalPolicyFullAuto:
+		return []string{"--dangerously-skip-permissions"}
+	case codeApprovalPolicyManual:
+		return []string{"--permission-mode", "manual"}
+	default:
+		return []string{"--permission-mode", "acceptEdits"}
+	}
 }
 
 func (aiderExecutorFactory) BuildArgs(prompt, nativeSessionID string, sessionID uint, _ string) ([]string, string, error) {

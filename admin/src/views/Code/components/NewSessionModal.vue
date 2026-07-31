@@ -38,9 +38,9 @@ const loadError = ref("")
 
 const availableExecutors = computed(() => executors.value.filter(executor => executor.available))
 const selectedExecutor = computed(() => executors.value.find(executor => executor.id === selectedExecutorId.value))
-const supportsApproval = computed(() => selectedExecutorId.value === "codex")
+const supportsApproval = computed(() => (selectedExecutor.value?.approvalPolicies.length || 0) > 1)
 const approvalPolicies = computed<CodeApprovalPolicy[]>(() =>
-	supportsApproval.value ? ["manual", "safe_auto", "full_auto"] : ["full_auto"]
+	selectedExecutor.value?.approvalPolicies.length ? selectedExecutor.value.approvalPolicies : ["full_auto"]
 )
 const providerFields = computed(() => selectedExecutor.value?.configSchema?.fields || [])
 const showProviderConfig = computed(() => providerFields.value.length > 0)
@@ -91,7 +91,11 @@ watch(
 )
 
 watch(selectedExecutorId, value => {
-	if (value && value !== "codex") approvalPolicy.value = "full_auto"
+	if (value && !approvalPolicies.value.includes(approvalPolicy.value)) {
+		approvalPolicy.value = approvalPolicies.value.includes("safe_auto")
+			? "safe_auto"
+			: approvalPolicies.value[0] || "full_auto"
+	}
 })
 
 const close = () => emit("update:show", false)

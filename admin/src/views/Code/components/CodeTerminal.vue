@@ -5,7 +5,7 @@ import { FitAddon } from "xterm-addon-fit"
 import "xterm/css/xterm.css"
 import { useAuthStore } from "@/store/auth"
 import { useI18n } from "vue-i18n"
-import { getCodexRuntimeState } from "@/api/modules/code"
+import { getCodeSession, getCodexRuntimeState } from "@/api/modules/code"
 import type { CodexRuntimeState } from "@/api/interface/code"
 import { codeProjectMessages } from "@/i18n/locales/codeProject"
 
@@ -42,6 +42,7 @@ const runtimeState = ref<CodexRuntimeState | null>(null)
 const runtimeLoading = ref(false)
 const runtimeError = ref(false)
 const runtimeSupported = ref(true)
+const executorId = ref("")
 let runtimePollInterval: ReturnType<typeof setInterval> | null = null
 
 const runtimeTagType = computed(() => {
@@ -57,6 +58,14 @@ const loadRuntimeState = async () => {
 	if (!props.sessionId || runtimeLoading.value || !runtimeSupported.value) return
 	runtimeLoading.value = true
 	try {
+		if (!executorId.value) {
+			const sessionResponse = await getCodeSession(props.sessionId)
+			executorId.value = sessionResponse.data.session.agentName || ""
+		}
+		if (executorId.value !== "codex") {
+			runtimeSupported.value = false
+			return
+		}
 		const response = await getCodexRuntimeState(props.sessionId)
 		runtimeState.value = response.data
 		runtimeSupported.value = response.data !== null

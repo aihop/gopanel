@@ -41,11 +41,21 @@ func codeSessionRequiresRiskApproval(session *model.AIDevSession) bool {
 	return session == nil || session.ApprovalPolicy != codeApprovalPolicyFullAuto
 }
 
+func allCodeApprovalPolicies() []string {
+	return []string{codeApprovalPolicyManual, codeApprovalPolicySafeAuto, codeApprovalPolicyFullAuto}
+}
+
 func validateCodeExecutorApprovalPolicy(executorID, approvalPolicy string) error {
-	if approvalPolicy == codeApprovalPolicyFullAuto || executorID == "codex" {
-		return nil
+	definition, err := getCodeExecutorDefinition(executorID)
+	if err != nil {
+		return err
 	}
-	return errors.New("当前执行器无法保证运行时审批，请选择 Codex 或明确启用全自动模式")
+	for _, supportedPolicy := range definition.ApprovalPolicies {
+		if approvalPolicy == supportedPolicy {
+			return nil
+		}
+	}
+	return errors.New("当前执行器不支持所选的运行时审批策略")
 }
 
 func updateCodeApprovalPolicy(session *model.AIDevSession, value string) (bool, error) {

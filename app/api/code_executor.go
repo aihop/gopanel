@@ -24,6 +24,8 @@ type codeExecutorDefinition struct {
 	VersionArgs         []string
 	ConfigPaths         []string
 	Capabilities        []string
+	ApprovalPolicies    []string
+	NativeTerminal      bool
 	AutomationSupported bool
 	Factory             codeExecutorFactory
 }
@@ -40,15 +42,17 @@ type codeExecutorStatus struct {
 	Reason                     string                    `json:"reason"`
 	ReasonCode                 string                    `json:"reasonCode"`
 	Capabilities               []string                  `json:"capabilities"`
+	ApprovalPolicies           []string                  `json:"approvalPolicies"`
+	NativeTerminal             bool                      `json:"nativeTerminal"`
 	ConfigSchema               *codeExecutorConfigSchema `json:"configSchema,omitempty"`
 }
 
 var codeExecutorDefinitions = []codeExecutorDefinition{
-	{ID: "terminal", Name: "Terminal", Description: "在隔离工作区中使用普通终端", Capabilities: []string{"shell"}, AutomationSupported: true},
-	{ID: "codex", Name: "Codex", Description: "使用 OpenAI Codex 执行开发任务", Command: "codex", VersionArgs: []string{"--version"}, ConfigPaths: []string{".codex"}, Capabilities: []string{"code", "automation"}, AutomationSupported: true, Factory: codexExecutorFactory{}},
-	{ID: "claude", Name: "Claude Code", Description: "使用 Claude Code 执行开发任务", Command: "claude", VersionArgs: []string{"--version"}, ConfigPaths: []string{".claude", ".claude.json"}, Capabilities: []string{"code", "automation"}, AutomationSupported: true, Factory: claudeExecutorFactory{}},
-	{ID: "opencode", Name: "OpenCode", Description: "使用 OpenCode 执行开发任务", Command: "opencode", VersionArgs: []string{"--version"}, ConfigPaths: []string{".config/opencode"}, Capabilities: []string{"code", "automation"}, AutomationSupported: true, Factory: openCodeExecutorFactory{}},
-	{ID: "aider", Name: "Aider", Description: "使用 Aider 执行开发任务", Command: "aider", VersionArgs: []string{"--version"}, ConfigPaths: []string{".aider.conf.yml"}, Capabilities: []string{"code", "automation"}, AutomationSupported: true, Factory: aiderExecutorFactory{}},
+	{ID: "terminal", Name: "Terminal", Description: "在隔离工作区中使用普通终端", Capabilities: []string{"shell"}, ApprovalPolicies: []string{codeApprovalPolicyFullAuto}, AutomationSupported: true},
+	{ID: "codex", Name: "Codex", Description: "使用 OpenAI Codex 执行开发任务", Command: "codex", VersionArgs: []string{"--version"}, ConfigPaths: []string{".codex"}, Capabilities: []string{"code", "automation", "interactive", "resume"}, ApprovalPolicies: allCodeApprovalPolicies(), NativeTerminal: true, AutomationSupported: true, Factory: codexExecutorFactory{}},
+	{ID: "claude", Name: "Claude Code", Description: "使用 Claude Code 执行开发任务", Command: "claude", VersionArgs: []string{"--version"}, ConfigPaths: []string{".claude", ".claude.json"}, Capabilities: []string{"code", "automation", "interactive", "resume"}, ApprovalPolicies: allCodeApprovalPolicies(), NativeTerminal: true, AutomationSupported: true, Factory: claudeExecutorFactory{}},
+	{ID: "opencode", Name: "OpenCode", Description: "使用 OpenCode 执行开发任务", Command: "opencode", VersionArgs: []string{"--version"}, ConfigPaths: []string{".config/opencode", ".local/share/opencode"}, Capabilities: []string{"code", "automation", "interactive", "resume"}, ApprovalPolicies: []string{codeApprovalPolicyFullAuto}, NativeTerminal: true, AutomationSupported: true, Factory: openCodeExecutorFactory{}},
+	{ID: "aider", Name: "Aider", Description: "使用 Aider 执行开发任务", Command: "aider", VersionArgs: []string{"--version"}, ConfigPaths: []string{".aider.conf.yml", ".aider"}, Capabilities: []string{"code", "automation", "interactive", "resume"}, ApprovalPolicies: []string{codeApprovalPolicyFullAuto}, NativeTerminal: true, AutomationSupported: true, Factory: aiderExecutorFactory{}},
 	{ID: "trae", Name: "Trae", Description: "当前 Trae CLI 仅用于启动编辑器", Command: "trae", VersionArgs: []string{"--version"}, ConfigPaths: []string{".trae"}, Capabilities: []string{"editor"}, AutomationSupported: false},
 }
 
@@ -92,6 +96,8 @@ func detectCodeExecutor(definition codeExecutorDefinition) codeExecutorStatus {
 		Name:                       definition.Name,
 		Description:                definition.Description,
 		Capabilities:               definition.Capabilities,
+		ApprovalPolicies:           definition.ApprovalPolicies,
+		NativeTerminal:             definition.NativeTerminal,
 		CustomProviderConfigurable: supportsCustomCodeProvider(definition.ID),
 	}
 	if definition.Factory != nil {

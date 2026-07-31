@@ -2,7 +2,7 @@
 import { computed, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 import { useMessage } from "naive-ui"
-import { getCodeSession, updateCodeSessionApprovalPolicy } from "@/api/modules/code"
+import { getCodeExecutors, getCodeSession, updateCodeSessionApprovalPolicy } from "@/api/modules/code"
 import type { CodeApprovalPolicy } from "@/api/interface/code"
 import { newCodeSessionMessages } from "../newCodeSessionMessages"
 
@@ -11,21 +11,21 @@ const { t } = useI18n({ messages: newCodeSessionMessages })
 const message = useMessage()
 const approvalPolicy = ref<CodeApprovalPolicy | null>(null)
 const executorId = ref("")
+const supportedPolicies = ref<CodeApprovalPolicy[]>([])
 const loading = ref(false)
 const saving = ref(false)
 const loadError = ref(false)
 let loadSequence = 0
 
 const options = computed(() => {
-	const values: CodeApprovalPolicy[] = executorId.value === "codex"
-		? ["manual", "safe_auto", "full_auto"]
-		: approvalPolicy.value && approvalPolicy.value !== "full_auto"
-			? [approvalPolicy.value, "full_auto"]
-			: ["full_auto"]
+	const values = supportedPolicies.value.length
+		? supportedPolicies.value
+		: approvalPolicy.value
+			? [approvalPolicy.value]
+			: []
 	return values.map(value => ({
 		label: t(`code.approvalPolicy_${value}`),
-		value,
-		disabled: executorId.value !== "codex" && value !== "full_auto"
+		value
 	}))
 })
 
@@ -37,9 +37,11 @@ const loadPolicy = async () => {
 	loadError.value = false
 	approvalPolicy.value = null
 	try {
-		const response = await getCodeSession(sessionId)
+		const [response, executorsResponse] = await Promise.all([getCodeSession(sessionId), getCodeExecutors()])
 		if (sequence !== loadSequence || sessionId !== props.sessionId) return
 		executorId.value = response.data.session.agentName || ""
+		supportedPolicies.value =
+			executorsResponse.data.find(executor => executor.id === executorId.value)?.approvalPolicies || []
 		approvalPolicy.value = response.data.session.approvalPolicy || "safe_auto"
 	} catch {
 		if (sequence !== loadSequence || sessionId !== props.sessionId) return
@@ -92,7 +94,7 @@ watch(() => props.sessionId, loadPolicy, { immediate: true })
 				/>
 			</template>
 			{{
-				executorId !== "codex"
+				supportedPolicies.length <= 1
 					? t("code.executorFullAutoOnly")
 					: approvalPolicy === "full_auto"
 					? t("code.fullAutoWarning")

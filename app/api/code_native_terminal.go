@@ -33,6 +33,7 @@ type nativeCodeTerminal struct {
 	controllerID string
 	done         chan struct{}
 	lease        *codeExecutionLease
+	executorName string
 }
 
 type nativeCodeTerminalManager struct {
@@ -43,7 +44,8 @@ type nativeCodeTerminalManager struct {
 var codeNativeTerminals = &nativeCodeTerminalManager{sessions: make(map[uint]*nativeCodeTerminal)}
 
 func supportsNativeCodeTerminal(executorID string) bool {
-	return executorID == "codex"
+	definition, err := getCodeExecutorDefinition(executorID)
+	return err == nil && definition.NativeTerminal
 }
 
 func (manager *nativeCodeTerminalManager) attach(
@@ -59,7 +61,7 @@ func (manager *nativeCodeTerminalManager) attach(
 	if err != nil {
 		return nil, false, err
 	}
-	command, err := buildNativeCodexCommand(session)
+	command, preparedSessionID, err := buildNativeCodeCommand(session)
 	if err != nil {
 		lease.Release()
 		return nil, false, err
@@ -71,12 +73,22 @@ func (manager *nativeCodeTerminalManager) attach(
 		return nil, false, err
 	}
 	terminal := &nativeCodeTerminal{
-		sessionID:   session.ID,
-		command:     command,
-		ptmx:        ptmx,
-		subscribers: make(map[string]chan nativeTerminalEvent),
-		done:        make(chan struct{}),
-		lease:       lease,
+		sessionID:    session.ID,
+		command:      command,
+		ptmx:         ptmx,
+		subscribers:  make(map[string]chan nativeTerminalEvent),
+		done:         make(chan struct{}),
+		lease:        lease,
+		executorName: session.AgentName,
+	}
+	if preparedSessionID != "" && session.NativeSessionID != preparedSessionID {
+		session.NativeSessionID = preparedSessionID
+		if err := repo.NewAIDevSessionRepo().UpdateSession(session); err != nil {
+			_ = command.Process.Kill()
+			_ = ptmx.Close()
+			lease.Release()
+			return nil, false, err
+		}
 	}
 	lease.SetCancel(func() {
 		if command.Process != nil {
@@ -93,7 +105,11 @@ func (manager *nativeCodeTerminalManager) attach(
 	manager.sessions[session.ID] = terminal
 	go terminal.readOutput()
 	go terminal.wait(manager)
-	go discoverNativeCodexSession(session, command.Process.Pid, time.Now())
+	if session.AgentName == "codex" {
+		go discoverNativeCodexSession(session, command.Process.Pid, time.Now())
+	} else if session.AgentName == "opencode" && session.NativeSessionID == "" {
+		go discoverNativeOpenCodeSession(session, command.Path, command.Env, time.Now(), terminal.done)
+	}
 	go watchNativeCodeNotifications(session.ID, terminal.done)
 	return terminal, true, nil
 }
@@ -166,7 +182,7 @@ func (terminal *nativeCodeTerminal) resize(cols, rows uint16) error {
 func (terminal *nativeCodeTerminal) wait(manager *nativeCodeTerminalManager) {
 	err := terminal.command.Wait()
 	_ = terminal.ptmx.Close()
-	terminal.publish([]byte(fmt.Sprintf("\r\n\x1b[33m[GoPanel] Codex 会话已退出: %v\x1b[0m\r\n", err)))
+	terminal.publish([]byte(fmt.Sprintf("\r\n\x1b[33m[GoPanel] %s 会话已退出: %v\x1b[0m\r\n", terminal.executorName, err)))
 	terminal.mu.Lock()
 	closedEvent := nativeTerminalEvent{Type: "closed", Sequence: terminal.sequence}
 	for subscriptionID, subscriber := range terminal.subscribers {
@@ -196,7 +212,7 @@ func serveNativeCodeTerminal(
 ) {
 	terminal, _, err := codeNativeTerminals.attach(session, cols, rows)
 	if err != nil {
-		_ = wsConn.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("启动原生 Codex 会话失败: %v", err)))
+		_ = wsConn.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("启动原生 %s 会话失败: %v", session.AgentName, err)))
 		return
 	}
 	afterSequence, _ := strconv.ParseUint(wsConn.Query("after_sequence", "0"), 10, 64)

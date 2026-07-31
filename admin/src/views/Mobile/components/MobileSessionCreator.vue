@@ -30,7 +30,11 @@ const executorOptions = computed(() => availableExecutors.value.map(executor => 
 	label: `${executor.name}${executor.version ? ` · ${executor.version}` : ""}`,
 	value: executor.id
 })))
-const supportsApproval = computed(() => executorId.value === "codex")
+const selectedExecutor = computed(() => executors.value.find(executor => executor.id === executorId.value))
+const approvalPolicies = computed<CodeApprovalPolicy[]>(() =>
+	selectedExecutor.value?.approvalPolicies.length ? selectedExecutor.value.approvalPolicies : ["full_auto"]
+)
+const supportsApproval = computed(() => approvalPolicies.value.length > 1)
 
 async function loadOptions() {
 	loading.value = true
@@ -79,7 +83,11 @@ watch(
 )
 
 watch(executorId, value => {
-	if (value && value !== "codex") approvalPolicy.value = "full_auto"
+	if (value && !approvalPolicies.value.includes(approvalPolicy.value)) {
+		approvalPolicy.value = approvalPolicies.value.includes("safe_auto")
+			? "safe_auto"
+			: approvalPolicies.value[0] || "full_auto"
+	}
 })
 </script>
 
@@ -107,11 +115,11 @@ watch(executorId, value => {
 								<n-input v-model:value="title" :placeholder="t('mobile.sessionNamePlaceholder')" />
 							</n-form-item>
 							<n-form-item :label="t('mobile.approvalPolicy')">
-								<n-radio-group v-model:value="approvalPolicy" :disabled="!supportsApproval">
+								<n-radio-group v-model:value="approvalPolicy">
 									<n-space vertical>
-										<n-radio value="manual">{{ t("mobile.approvalManual") }}</n-radio>
-										<n-radio value="safe_auto">{{ t("mobile.approvalSafe") }}</n-radio>
-										<n-radio value="full_auto">{{ t("mobile.approvalFull") }}</n-radio>
+										<n-radio v-if="approvalPolicies.includes('manual')" value="manual">{{ t("mobile.approvalManual") }}</n-radio>
+										<n-radio v-if="approvalPolicies.includes('safe_auto')" value="safe_auto">{{ t("mobile.approvalSafe") }}</n-radio>
+										<n-radio v-if="approvalPolicies.includes('full_auto')" value="full_auto">{{ t("mobile.approvalFull") }}</n-radio>
 									</n-space>
 								</n-radio-group>
 							</n-form-item>

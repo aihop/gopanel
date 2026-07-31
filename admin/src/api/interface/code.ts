@@ -44,6 +44,8 @@ export interface CodeExecutor {
 	reason: string
 	reasonCode: string
 	capabilities: string[]
+	approvalPolicies: CodeApprovalPolicy[]
+	nativeTerminal: boolean
 	customProviderConfigurable: boolean
 	configSchema?: CodeExecutorConfigSchema
 }
