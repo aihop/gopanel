@@ -22,6 +22,13 @@ const stageLabel = computed(() => {
 	const stage = props.state?.currentStage || "idle"
 	return t(`mobile.stage_${knownStages.includes(stage) ? stage : "unknown"}`)
 })
+const deliveryStageLabel = computed(() => t(`mobile.deliveryStage_${props.state?.delivery?.stage || "queued"}`))
+const deliveryStatusType = computed(() => {
+	const status = props.state?.delivery?.status
+	if (status === "completed") return "success"
+	if (status === "failed" || status === "conflict") return "error"
+	return "info"
+})
 const tokenLabel = (count: number) => new Intl.NumberFormat().format(count || 0)
 
 function previewCanOpen(status: string) {
@@ -36,6 +43,12 @@ watch(() => props.state?.pendingApproval?.id, () => { approvalReason.value = "" 
 		<n-drawer-content :title="t('mobile.taskStatus')" closable>
 			<n-spin :show="loading">
 				<div class="space-y-4">
+					<section v-if="state?.delivery" class="rounded-2xl border border-slate-200 bg-white p-4">
+						<div class="flex items-center justify-between gap-3"><strong>{{ t("mobile.deliveryTitle") }}</strong><n-tag size="small" :type="deliveryStatusType" :bordered="false">{{ deliveryStageLabel }}</n-tag></div>
+						<n-progress class="mt-3" type="line" :percentage="state.delivery.progress" :status="state.delivery.status === 'failed' || state.delivery.status === 'conflict' ? 'error' : state.delivery.status === 'completed' ? 'success' : 'default'" />
+						<div class="mt-2 flex justify-between text-xs text-slate-500"><span>{{ t(`mobile.deliveryStatus_${state.delivery.status}`, { position: state.delivery.queuePosition }) }}</span><span>{{ t("mobile.deliveryAttempt", { count: state.delivery.attempt }) }}</span></div>
+						<n-alert v-if="state.delivery.errorMessage" class="mt-3" type="error" :show-icon="false">{{ state.delivery.errorMessage }}</n-alert>
+					</section>
 					<n-alert v-if="state?.pendingApproval" type="warning" :title="state.pendingApproval.title">
 						<div class="whitespace-pre-wrap text-sm">{{ state.pendingApproval.content }}</div>
 						<n-input v-model:value="approvalReason" class="mt-3" :placeholder="t('mobile.approvalReason')" />

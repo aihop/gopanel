@@ -28,7 +28,6 @@ type hostTerminal struct {
 	controllerID     string
 	controlExpiresAt time.Time
 	controlTimer     *time.Timer
-	idleTimer        *time.Timer
 	stopRequested    bool
 	finished         bool
 	done             chan struct{}
@@ -88,20 +87,25 @@ func (manager *hostTerminalManager) create(req createHostTerminalRequest, userID
 	manager.mu.Lock()
 	manager.sessions[record.ID] = session
 	manager.mu.Unlock()
-	session.scheduleIdleStop()
 	go session.readOutput()
 	go session.wait(manager)
 	recordHostTerminalAudit(record.ID, userID, "create", "success", ip, fmt.Sprintf("shell=%s workDir=%s", shellName, workDir))
 	return record, nil
 }
 
-func (manager *hostTerminalManager) reconnect(record *model.HostTerminalSession, userID uint, ip string) (*model.HostTerminalSession, error) {
-	if record == nil {
-		return nil, errors.New("终端会话不存在")
+func (manager *hostTerminalManager) resume(id uint) (*model.HostTerminalSession, error) {
+	session := manager.get(id)
+	if session == nil {
+		return nil, errors.New("终端进程已结束或服务已重启")
 	}
-	return manager.create(createHostTerminalRequest{
-		Shell: record.Shell, WorkDir: record.WorkDir, Cols: 120, Rows: 32,
-	}, userID, ip)
+	session.mu.Lock()
+	record := *session.record
+	finished := session.finished
+	session.mu.Unlock()
+	if finished {
+		return nil, errors.New("终端进程已结束或服务已重启")
+	}
+	return &record, nil
 }
 
 func resolveHostTerminalWorkDir(requested string) (string, error) {
@@ -203,9 +207,6 @@ func (session *hostTerminal) wait(manager *hostTerminalManager) {
 	if err != nil && !session.stopRequested {
 		session.record.ErrorMessage = truncateHostTerminalDetail(err.Error())
 	}
-	if session.idleTimer != nil {
-		session.idleTimer.Stop()
-	}
 	if session.controlTimer != nil {
 		session.controlTimer.Stop()
 	}
@@ -256,34 +257,9 @@ func (manager *hostTerminalManager) stop(id uint) bool {
 	return true
 }
 
-func (session *hostTerminal) scheduleIdleStop() {
-	session.mu.Lock()
-	defer session.mu.Unlock()
-	if session.idleTimer != nil {
-		session.idleTimer.Stop()
-	}
-	session.idleTimer = time.AfterFunc(hostTerminalIdleTimeout, func() {
-		session.mu.Lock()
-		if len(session.subscribers) != 0 {
-			session.mu.Unlock()
-			return
-		}
-		session.stopRequested = true
-		process := session.command.Process
-		session.mu.Unlock()
-		if process != nil {
-			_ = stopHostTerminalProcess(session.command)
-		}
-	})
-}
-
 func (session *hostTerminal) subscribe(userID uint, ip string, readOnly bool) (*hostTerminalSubscription, hostTerminalEvent) {
 	subscriber := &hostTerminalSubscription{ID: nextHostTerminalSubscriberID(), Events: make(chan hostTerminalEvent, 128), UserID: userID, IP: ip}
 	session.mu.Lock()
-	if session.idleTimer != nil {
-		session.idleTimer.Stop()
-		session.idleTimer = nil
-	}
 	session.subscribers[subscriber.ID] = subscriber
 	now := time.Now()
 	if !readOnly && (session.controllerID == "" || !now.Before(session.controlExpiresAt)) {
@@ -318,14 +294,9 @@ func (session *hostTerminal) unsubscribe(subscriber *hostTerminalSubscription) {
 			session.controlTimer = nil
 		}
 	}
-	empty := len(session.subscribers) == 0
-	finished := session.finished
 	session.mu.Unlock()
 	if controlChanged {
 		session.broadcastControl()
-	}
-	if empty && !finished {
-		session.scheduleIdleStop()
 	}
 }
 

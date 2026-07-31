@@ -247,6 +247,10 @@ func pushCodeMultiRepositoryDelivery(sessionID uint) (codePushResult, error) {
 }
 
 func pushCodeDeliveryRepository(sourceDir, targetBranch, remoteName, remoteBranch, remoteCommit, mergeCommit, pushStatus string) (codeRepositoryPushResult, error) {
+	return pushCodeDeliveryRepositoryWithProgress(sourceDir, targetBranch, remoteName, remoteBranch, remoteCommit, mergeCommit, pushStatus, nil)
+}
+
+func pushCodeDeliveryRepositoryWithProgress(sourceDir, targetBranch, remoteName, remoteBranch, remoteCommit, mergeCommit, pushStatus string, report codeDeliveryProgressReporter) (codeRepositoryPushResult, error) {
 	result := codeRepositoryPushResult{Status: codePushPending, Remote: remoteName, Branch: remoteBranch, Commit: mergeCommit, Ready: mergeCommit != ""}
 	if pushStatus == codePushPushed {
 		result.Status = codePushPushed
@@ -286,6 +290,9 @@ func pushCodeDeliveryRepository(sourceDir, targetBranch, remoteName, remoteBranc
 			}
 		}
 		return failedCodePushResult(result, pushErr)
+	}
+	if report != nil {
+		report(codeDeliveryStageVerifying, 85)
 	}
 	if _, err := fetchCodeRepository(sourceDir, remoteName); err != nil {
 		return failedCodePushResult(result, err)

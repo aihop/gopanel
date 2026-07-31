@@ -124,9 +124,14 @@ func TestHostTerminalControlLeaseExpires(t *testing.T) {
 	}
 }
 
-func TestHostTerminalReconnectRejectsMissingRecord(t *testing.T) {
-	manager := &hostTerminalManager{sessions: make(map[uint]*hostTerminal)}
-	if _, err := manager.reconnect(nil, 1, "127.0.0.1"); err == nil {
-		t.Fatal("missing source session should be rejected")
+func TestHostTerminalResumeReturnsSameSession(t *testing.T) {
+	record := &model.HostTerminalSession{ID: 8, UserID: 1, Status: "running"}
+	manager := &hostTerminalManager{sessions: map[uint]*hostTerminal{record.ID: {record: record}}}
+	resumed, err := manager.resume(record.ID)
+	if err != nil || resumed.ID != record.ID {
+		t.Fatalf("existing terminal should resume with the same id: %#v, %v", resumed, err)
+	}
+	if _, err := manager.resume(99); err == nil {
+		t.Fatal("missing terminal process should not be recreated")
 	}
 }

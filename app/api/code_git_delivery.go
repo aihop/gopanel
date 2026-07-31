@@ -253,10 +253,36 @@ func MergeCodeSessionWorktree(c fiber.Ctx) error {
 	if !req.Confirm {
 		return c.JSON(e.Fail(errors.New("合并操作需要明确确认")))
 	}
-	return runCodeWorktreeMerge(c, func(session *model.AIDevSession) (codeGitDeliveryResult, error) {
-		if session.IsolationMode == codeIsolationMultiWorktree || hasCodeMultiRepositoryDelivery(session.ID) {
-			return resumeCodeMultiRepositoryDelivery(session, claims.UserId)
-		}
-		return resumeCodeSessionDelivery(session, claims.UserId)
-	})
+	session, err := getCodeDeliverySessionContext(c)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	job, err := enqueueCodeDeliveryJob(session, claims.UserId, c.IP())
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	view, err := loadCodeDeliveryJobView(job.SessionID)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	return c.JSON(e.Succ(view))
+}
+
+func GetCodeDeliveryJob(c fiber.Ctx) error {
+	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
+	session, err := getCodeDeliverySessionContext(c)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	if session.UserID != claims.UserId && claims.Role != constant.UserRoleSuper {
+		return c.JSON(e.Fail(errors.New("无权访问该交付任务")))
+	}
+	view, err := loadCodeDeliveryJobView(session.ID)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return c.JSON(e.Succ(nil))
+	}
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	return c.JSON(e.Succ(view))
 }

@@ -119,6 +119,13 @@ func commitCodeSessionRepository(session *model.AIDevSession, repositoryID, mess
 }
 
 func prepareCodeMultiRepositoryDelivery(session *model.AIDevSession, repositories []model.AIDevSessionRepository) error {
+	return prepareCodeMultiRepositoryDeliveryWithProgress(session, repositories, nil)
+}
+
+func prepareCodeMultiRepositoryDeliveryWithProgress(session *model.AIDevSession, repositories []model.AIDevSessionRepository, report codeDeliveryProgressReporter) error {
+	if report != nil {
+		report(codeDeliveryStageSyncing, 20)
+	}
 	for index := range repositories {
 		repository := &repositories[index]
 		if repository.Status == codeDeliveryCompleted || repository.Status == codeDeliveryMerged {
@@ -145,6 +152,9 @@ func prepareCodeMultiRepositoryDelivery(session *model.AIDevSession, repositorie
 		}
 		repository.TargetBranch, repository.RemoteCommit = targetBranch, targetCommit
 		repository.WorktreeCommit = commit
+	}
+	if report != nil {
+		report(codeDeliveryStageQualityCheck, 40)
 	}
 	if err := validateCodeQualityGate(session); err != nil {
 		return err
@@ -249,6 +259,10 @@ func completeCodeMultiRepositorySession(session *model.AIDevSession) error {
 }
 
 func resumeCodeMultiRepositoryDelivery(session *model.AIDevSession, _ uint) (codeGitDeliveryResult, error) {
+	return resumeCodeMultiRepositoryDeliveryWithProgress(session, 0, nil)
+}
+
+func resumeCodeMultiRepositoryDeliveryWithProgress(session *model.AIDevSession, _ uint, report codeDeliveryProgressReporter) (codeGitDeliveryResult, error) {
 	repositories, err := loadCodeSessionRepositories(session.ID)
 	if err != nil || len(repositories) == 0 {
 		return codeGitDeliveryResult{}, errors.New("会话多仓库 Worktree 元数据不可用")
@@ -258,12 +272,12 @@ func resumeCodeMultiRepositoryDelivery(session *model.AIDevSession, _ uint) (cod
 	if err != nil {
 		return codeGitDeliveryResult{}, err
 	}
-	if err := prepareCodeMultiRepositoryDelivery(session, repositories); err != nil {
+	if err := prepareCodeMultiRepositoryDeliveryWithProgress(session, repositories, report); err != nil {
 		return codeGitDeliveryResult{}, err
 	}
 	results := make([]codeRepositoryDeliveryResult, 0, len(repositories))
 	for index := range repositories {
-		result, mergeErr := integrateAndPushCodeRepository(session, &repositories[index])
+		result, mergeErr := integrateAndPushCodeRepositoryWithProgress(session, &repositories[index], report)
 		results = append(results, result)
 		if mergeErr != nil {
 			return codeGitDeliveryResult{Status: "failed", Repositories: results}, mergeErr
@@ -273,6 +287,9 @@ func resumeCodeMultiRepositoryDelivery(session *model.AIDevSession, _ uint) (cod
 				Status: "conflict", RepositoryID: result.RepositoryID, RepositoryName: result.RepositoryName,
 				Branch: result.Branch, ConflictFiles: result.ConflictFiles, Repositories: results,
 			}, nil
+		}
+		if report != nil {
+			report(codeDeliveryStageCleaning, 90+index*5/max(1, len(repositories)))
 		}
 		if err := cleanupMergedCodeSessionRepository(&repositories[index]); err != nil {
 			return codeGitDeliveryResult{Status: "failed", Repositories: results}, err

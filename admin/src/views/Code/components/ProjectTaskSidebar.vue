@@ -67,6 +67,15 @@ const formatTaskDuration = (durationMs: number) => {
 }
 
 const taskGitMeta = (task: CodeTaskListItem) =>
+	task.summary.deliveryStatus === "queued"
+		? { icon: "mdi:clock-outline", color: "text-amber-500" }
+		: task.summary.deliveryStatus === "running"
+			? { icon: "mdi:cloud-sync-outline", color: "text-blue-500" }
+			: task.summary.deliveryStatus === "failed"
+				? { icon: "mdi:cloud-alert-outline", color: "text-red-500" }
+				: task.summary.deliveryStatus === "conflict"
+					? { icon: "mdi:source-branch-alert", color: "text-red-500" }
+					:
 	({
 		working: { icon: "mdi:source-branch", color: "text-slate-400" },
 		committed: { icon: "mdi:source-commit", color: "text-blue-500" },
@@ -78,6 +87,14 @@ const taskGitMeta = (task: CodeTaskListItem) =>
 
 const taskTooltip = (task: CodeTaskListItem) =>
 	[
+		task.summary.deliveryStatus
+			? t(`code.deliveryStatus_${task.summary.deliveryStatus}`, {
+				position: task.summary.deliveryQueuePosition,
+				progress: task.summary.deliveryProgress
+			})
+			: "",
+		task.summary.deliveryStage ? t(`code.deliveryStage_${task.summary.deliveryStage}`) : "",
+		task.summary.deliveryError,
 		task.summary.gitStatus ? t(`code.taskGitStatus_${task.summary.gitStatus}`) : "",
 		task.summary.gitError,
 		task.summary.executor,

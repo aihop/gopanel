@@ -3,7 +3,6 @@ package api
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strconv"
 	"strings"
 	"sync"
@@ -82,20 +81,16 @@ func ReconnectHostTerminalSession(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	if hostTerminals.get(record.ID) != nil {
-		recordHostTerminalAudit(record.ID, claims.UserId, "reconnect", "success", c.IP(), "重新连接现有终端进程")
-		return c.JSON(e.Succ(record))
+	if record.Status != "running" && record.Status != "starting" {
+		return c.JSON(e.Fail(errors.New("终端会话已结束，无法恢复原进程")))
 	}
-	if record.Status == "running" || record.Status == "starting" {
-		markHostTerminalInterrupted(record)
-	}
-	reconnected, err := hostTerminals.reconnect(record, claims.UserId, c.IP())
+	reconnected, err := hostTerminals.resume(record.ID)
 	if err != nil {
+		markHostTerminalInterrupted(record)
 		recordHostTerminalAudit(record.ID, claims.UserId, "reconnect", "failed", c.IP(), err.Error())
 		return c.JSON(e.Fail(err))
 	}
-	recordHostTerminalAudit(record.ID, claims.UserId, "reconnect", "success", c.IP(), fmt.Sprintf("newSessionId=%d", reconnected.ID))
-	recordHostTerminalAudit(reconnected.ID, claims.UserId, "reconnect", "success", c.IP(), fmt.Sprintf("sourceSessionId=%d", record.ID))
+	recordHostTerminalAudit(record.ID, claims.UserId, "reconnect", "success", c.IP(), "重新连接现有终端进程")
 	return c.JSON(e.Succ(reconnected))
 }
 
@@ -159,6 +154,7 @@ func HostTerminalWebSocket(wsConn *websocket.Conn) {
 	subscriber, baseline := session.subscribe(claims.UserId, wsConn.IP(), readOnly)
 	recordHostTerminalAudit(record.ID, claims.UserId, "connect", "success", wsConn.IP(), mapReadOnlyDetail(readOnly))
 	defer session.unsubscribe(subscriber)
+	defer recordHostTerminalAudit(record.ID, claims.UserId, "disconnect", "success", wsConn.IP(), mapReadOnlyDetail(readOnly))
 	var writeMu sync.Mutex
 	writeEvent := func(event hostTerminalEvent) error {
 		writeMu.Lock()
