@@ -139,11 +139,11 @@ func resetCodeRepositoryToRemote(repository *model.AIDevSessionRepository) error
 	return nil
 }
 
-func integrateAndPushCodeRepository(session *model.AIDevSession, repository *model.AIDevSessionRepository) (codeRepositoryDeliveryResult, error) {
-	return integrateAndPushCodeRepositoryWithProgress(session, repository, nil)
+func integrateAndPushCodeRepository(session *model.AIDevSession, repository *model.AIDevSessionRepository, repositories []model.AIDevSessionRepository) (codeRepositoryDeliveryResult, error) {
+	return integrateAndPushCodeRepositoryWithProgress(session, repository, repositories, nil)
 }
 
-func integrateAndPushCodeRepositoryWithProgress(session *model.AIDevSession, repository *model.AIDevSessionRepository, report codeDeliveryProgressReporter) (codeRepositoryDeliveryResult, error) {
+func integrateAndPushCodeRepositoryWithProgress(session *model.AIDevSession, repository *model.AIDevSessionRepository, repositories []model.AIDevSessionRepository, report codeDeliveryProgressReporter) (codeRepositoryDeliveryResult, error) {
 	result := codeRepositoryDeliveryResult{
 		RepositoryID: codeSessionRepositoryID(repository.ID), RepositoryName: repository.LinkName,
 		Status: repository.Status, Branch: repository.Branch, Commit: repository.MergeCommit,
@@ -152,7 +152,7 @@ func integrateAndPushCodeRepositoryWithProgress(session *model.AIDevSession, rep
 		if report != nil {
 			report(codeDeliveryStageMerging, 55)
 		}
-		merged, err := mergeCodeSessionRepository(repository)
+		merged, err := mergeCodeSessionRepository(repository, repositories)
 		if err != nil || merged.Status == "conflict" {
 			return merged, err
 		}

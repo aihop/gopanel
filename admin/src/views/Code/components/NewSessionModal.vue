@@ -30,6 +30,7 @@ const approvalPolicy = ref<CodeApprovalPolicy>("safe_auto")
 const providerMode = ref<"default" | "custom">("default")
 const providerConfig = ref<CodeExecutorConfig>({ baseUrl: "", apiKey: "", model: "" })
 const isolated = ref(false)
+const includeUncommitted = ref(false)
 const worktreeCapability = ref<CodeWorktreeCapability | null>(null)
 const title = ref("")
 const loading = ref(false)
@@ -46,6 +47,7 @@ const providerFields = computed(() => selectedExecutor.value?.configSchema?.fiel
 const showProviderConfig = computed(() => providerFields.value.length > 0)
 const providerFieldLabel = (key: keyof CodeExecutorConfig) => t(`code.providerField_${key}`)
 const providerFieldPlaceholder = (key: keyof CodeExecutorConfig) => t(`code.providerPlaceholder_${key}`)
+const dirtyRepositories = computed(() => worktreeCapability.value?.dirtyRepositories || [])
 
 const loadExecutors = async () => {
 	loading.value = true
@@ -68,6 +70,7 @@ const loadExecutors = async () => {
 const loadWorktreeCapability = async () => {
 	worktreeCapability.value = null
 	isolated.value = false
+	includeUncommitted.value = false
 	try {
 		const response = await getCodeWorktreeCapability(props.projectId)
 		worktreeCapability.value = response.data
@@ -123,6 +126,7 @@ const submit = async () => {
 			executorId: selectedExecutorId.value,
 			approvalPolicy: approvalPolicy.value,
 			isolated: isolated.value,
+			includeUncommitted: isolated.value && includeUncommitted.value,
 			provider:
 				showProviderConfig.value && providerMode.value === "custom"
 					? (Object.fromEntries(
@@ -275,7 +279,7 @@ const submit = async () => {
 							{{ t("code.fullAutoWarning") }}
 						</n-alert>
 						<n-form-item :label="t('code.worktreeIsolation')">
-							<div class="w-full rounded-xl border border-slate-200 bg-slate-50 p-3">
+							<div class="w-full space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
 								<div class="flex items-center justify-between gap-4">
 									<div>
 										<div class="text-sm font-semibold text-slate-800">
@@ -293,6 +297,21 @@ const submit = async () => {
 									</div>
 									<n-switch :value="isolated" disabled />
 								</div>
+								<n-alert v-if="dirtyRepositories.length" type="warning" :show-icon="false">
+									<div class="text-xs leading-5">
+										{{ t("code.worktreeDirtyRepositories", { repositories: dirtyRepositories.join(", ") }) }}
+									</div>
+									<n-checkbox
+										v-model:checked="includeUncommitted"
+										class="mt-2"
+										:disabled="!isolated || !worktreeCapability?.snapshotSupported"
+									>
+										{{ t("code.worktreeIncludeUncommitted") }}
+									</n-checkbox>
+									<div v-if="includeUncommitted" class="mt-1 text-xs opacity-80">
+										{{ t("code.worktreeSnapshotWarning") }}
+									</div>
+								</n-alert>
 							</div>
 						</n-form-item>
 						<n-alert type="info" :show-icon="false">{{ t("code.sessionUsesProjectDirectory") }}</n-alert>

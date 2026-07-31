@@ -176,7 +176,7 @@ func prepareCodeMultiRepositoryDeliveryWithProgress(session *model.AIDevSession,
 	return nil
 }
 
-func mergeCodeSessionRepository(repository *model.AIDevSessionRepository) (codeRepositoryDeliveryResult, error) {
+func mergeCodeSessionRepository(repository *model.AIDevSessionRepository, repositories []model.AIDevSessionRepository) (codeRepositoryDeliveryResult, error) {
 	result := codeRepositoryDeliveryResult{
 		RepositoryID: codeSessionRepositoryID(repository.ID), RepositoryName: repository.LinkName,
 		Status: repository.Status, Branch: repository.Branch, Commit: repository.MergeCommit,
@@ -185,9 +185,8 @@ func mergeCodeSessionRepository(repository *model.AIDevSessionRepository) (codeR
 		return result, nil
 	}
 	if _, err := runCodeGit(repository.SourceDir, "merge-base", "--is-ancestor", repository.WorktreeCommit, "HEAD"); err != nil {
-		status, statusErr := runCodeGit(repository.SourceDir, "status", "--porcelain")
-		if statusErr != nil || strings.TrimSpace(status) != "" {
-			return result, fmt.Errorf("源仓库 %s 存在未提交变更，无法安全合并", repository.LinkName)
+		if statusErr := validateCodeRepositoryMergeStatus(repository, repositories); statusErr != nil {
+			return result, statusErr
 		}
 		if _, err := runCodeGit(repository.SourceDir, "merge", "--no-ff", "--no-edit", repository.Branch); err != nil {
 			conflicts := codeGitConflictFiles(repository.SourceDir)
@@ -267,7 +266,14 @@ func resumeCodeMultiRepositoryDeliveryWithProgress(session *model.AIDevSession, 
 	if err != nil || len(repositories) == 0 {
 		return codeGitDeliveryResult{}, errors.New("会话多仓库 Worktree 元数据不可用")
 	}
-	sort.SliceStable(repositories, func(i, j int) bool { return repositories[i].LinkName < repositories[j].LinkName })
+	sort.SliceStable(repositories, func(i, j int) bool {
+		leftDepth := strings.Count(filepath.Clean(repositories[i].SourceDir), string(filepath.Separator))
+		rightDepth := strings.Count(filepath.Clean(repositories[j].SourceDir), string(filepath.Separator))
+		if leftDepth != rightDepth {
+			return leftDepth > rightDepth
+		}
+		return repositories[i].LinkName < repositories[j].LinkName
+	})
 	workspaceDir, err := codeMultiRepositoryWorkspaceDir(session, repositories)
 	if err != nil {
 		return codeGitDeliveryResult{}, err
@@ -277,7 +283,20 @@ func resumeCodeMultiRepositoryDeliveryWithProgress(session *model.AIDevSession, 
 	}
 	results := make([]codeRepositoryDeliveryResult, 0, len(repositories))
 	for index := range repositories {
-		result, mergeErr := integrateAndPushCodeRepositoryWithProgress(session, &repositories[index], report)
+		if err := syncCodeSessionRepositoryGitlinks(repositories); err != nil {
+			return codeGitDeliveryResult{Status: "failed", Repositories: results}, err
+		}
+		if err := commitCodeRepositoryGitlinkUpdates(&repositories[index], repositories); err != nil {
+			return codeGitDeliveryResult{Status: "failed", Repositories: results}, err
+		}
+		if repositories[index].WorktreeCommit != "" {
+			if err := global.DB.Model(&repositories[index]).Updates(map[string]any{
+				"worktree_commit": repositories[index].WorktreeCommit, "error_message": "",
+			}).Error; err != nil {
+				return codeGitDeliveryResult{Status: "failed", Repositories: results}, err
+			}
+		}
+		result, mergeErr := integrateAndPushCodeRepositoryWithProgress(session, &repositories[index], repositories, report)
 		results = append(results, result)
 		if mergeErr != nil {
 			return codeGitDeliveryResult{Status: "failed", Repositories: results}, mergeErr

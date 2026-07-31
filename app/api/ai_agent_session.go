@@ -133,14 +133,15 @@ func GetAISession(c fiber.Ctx) error {
 func CreateAISession(c fiber.Ctx) error {
 	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
 	var req struct {
-		Title          string               `json:"title"`
-		WorkDir        string               `json:"workDir"`
-		ProjectID      uint                 `json:"projectId"`
-		ExecutorID     string               `json:"executorId"`
-		ApprovalPolicy string               `json:"approvalPolicy"`
-		Isolated       bool                 `json:"isolated"`
-		Provider       *codeProviderRequest `json:"provider"`
-		CodexProvider  *codeProviderRequest `json:"codexProvider"`
+		Title              string               `json:"title"`
+		WorkDir            string               `json:"workDir"`
+		ProjectID          uint                 `json:"projectId"`
+		ExecutorID         string               `json:"executorId"`
+		ApprovalPolicy     string               `json:"approvalPolicy"`
+		Isolated           bool                 `json:"isolated"`
+		IncludeUncommitted bool                 `json:"includeUncommitted"`
+		Provider           *codeProviderRequest `json:"provider"`
+		CodexProvider      *codeProviderRequest `json:"codexProvider"`
 	}
 	if bindErr := c.Bind().JSON(&req); bindErr != nil {
 		return c.JSON(e.Fail(bindErr))
@@ -215,7 +216,7 @@ func CreateAISession(c fiber.Ctx) error {
 			_ = sessionRepo.DeleteSession(session.ID)
 			return c.JSON(e.Fail(errors.New("Git Worktree 隔离仅支持项目会话")))
 		}
-		if err := createCodeSessionWorktree(session, project); err != nil {
+		if err := createCodeSessionWorktree(session, project, req.IncludeUncommitted); err != nil {
 			_ = sessionRepo.DeleteSession(session.ID)
 			return c.JSON(e.Fail(err))
 		}

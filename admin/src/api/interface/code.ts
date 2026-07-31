@@ -102,6 +102,8 @@ export interface CodeWorktreeCapability {
 	sourceDir?: string
 	sourceDirs?: string[]
 	repositoryCount: number
+	dirtyRepositories?: string[]
+	snapshotSupported: boolean
 }
 
 export interface AIMessage {

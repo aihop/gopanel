@@ -30,6 +30,7 @@ func MobileRouter(r fiber.Router) {
 	app.Get("/containers", api.GetMobileContainers)
 	app.Post("/containers/operate", api.OperateMobileContainer)
 	app.Get("/projects", api.GetAIProjects)
+	app.Get("/projects/:id/worktree-capability", api.GetCodeWorktreeCapability)
 	app.Get("/executors", api.GetCodeExecutors)
 	app.Get("/terminal", websocket.New(api.AIAgentWsSSH))
 	app.Get("/sessions", api.GetAISessions)
