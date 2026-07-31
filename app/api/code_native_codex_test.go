@@ -138,6 +138,25 @@ func TestBuildNativeCodexCommandStartsAndResumesInteractiveSession(t *testing.T)
 	}
 }
 
+func TestBuildNativeCodexCommandAddsWorktreeGitWritableDirs(t *testing.T) {
+	withAIProjectBaseDir(t)
+	repositoryDir := createCodeGitRepository(t)
+	session := &model.AIDevSession{ID: 34, UserID: 7, ProjectID: 9, ApprovalPolicy: codeApprovalPolicySafeAuto}
+	if err := createCodeSessionWorktree(session, &model.AIGroup{SourceDirs: []string{repositoryDir}}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { rollbackCodeSessionWorktree(session) })
+	writableDirs, err := codexWritableDirsForSession(session)
+	if err != nil {
+		t.Fatal(err)
+	}
+	command, err := buildNativeCodexCommand(session)
+	if err != nil {
+		t.Skipf("codex is not installed: %v", err)
+	}
+	assertCodexWritableDirArgs(t, command.Args, writableDirs)
+}
+
 func TestFindNativeCodexSessionIDMatchesWorkingDirectory(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
