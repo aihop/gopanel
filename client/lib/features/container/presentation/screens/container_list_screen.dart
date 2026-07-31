@@ -106,19 +106,23 @@ class _ContainerListScreenState extends ConsumerState<ContainerListScreen> {
       return Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
             child: Row(
               children: [
                 const Expanded(
                   child: Text(
-                    'Docker 容器',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                    '容器',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
                   ),
                 ),
                 PopupMenuButton<String>(
                   icon: const Icon(Icons.filter_list_rounded),
+                  iconSize: 20,
+                  padding: EdgeInsets.zero,
                   onSelected: (value) {
-                    ref.read(containerControllerProvider.notifier).setFilter(value);
+                    ref
+                        .read(containerControllerProvider.notifier)
+                        .setFilter(value);
                   },
                   itemBuilder: (context) => [
                     _buildPopupMenuItem('all', '全部', state.filterState),
@@ -128,6 +132,8 @@ class _ContainerListScreenState extends ConsumerState<ContainerListScreen> {
                 ),
                 IconButton(
                   icon: const Icon(Icons.refresh_rounded),
+                  iconSize: 20,
+                  visualDensity: VisualDensity.compact,
                   onPressed: () {
                     ref.read(containerControllerProvider.notifier).refresh();
                   },
@@ -143,7 +149,7 @@ class _ContainerListScreenState extends ConsumerState<ContainerListScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Docker 容器'),
+        title: const Text('容器'),
         actions: [
           // 状态过滤菜单
           PopupMenuButton<String>(

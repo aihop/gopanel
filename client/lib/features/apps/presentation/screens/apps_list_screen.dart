@@ -122,17 +122,19 @@ class _AppsListScreenState extends ConsumerState<AppsListScreen> {
       return Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
             child: Row(
               children: [
                 const Expanded(
                   child: Text(
                     '已安装应用',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
                   ),
                 ),
                 PopupMenuButton<String>(
                   icon: const Icon(Icons.filter_list_rounded),
+                  iconSize: 20,
+                  padding: EdgeInsets.zero,
                   onSelected: (value) {
                     ref.read(appsControllerProvider.notifier).setFilter(value);
                   },
@@ -144,6 +146,8 @@ class _AppsListScreenState extends ConsumerState<AppsListScreen> {
                 ),
                 IconButton(
                   icon: const Icon(Icons.refresh_rounded),
+                  iconSize: 20,
+                  visualDensity: VisualDensity.compact,
                   onPressed: () {
                     ref.read(appsControllerProvider.notifier).refresh();
                   },

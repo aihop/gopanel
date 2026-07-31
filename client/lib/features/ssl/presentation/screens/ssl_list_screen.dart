@@ -25,17 +25,19 @@ class SslListScreen extends ConsumerWidget {
       return Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
             child: Row(
               children: [
                 const Expanded(
                   child: Text(
                     'SSL 证书',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
                   ),
                 ),
                 IconButton(
                   icon: const Icon(Icons.refresh_rounded),
+                  iconSize: 20,
+                  visualDensity: VisualDensity.compact,
                   onPressed: () {
                     ref.read(sslControllerProvider.notifier).refresh();
                   },
