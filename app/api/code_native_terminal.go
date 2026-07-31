@@ -240,18 +240,15 @@ func serveNativeCodeTerminal(
 		return
 	}
 	afterSequence, _ := strconv.ParseUint(wsConn.Query("after_sequence", "0"), 10, 64)
-	subscription, baseline := terminal.subscribe(afterSequence)
+	readOnly := wsConn.Query("read_only") == "1"
+	subscription, baseline := terminal.subscribe(afterSequence, readOnly)
 	subscription.UserID = claims.UserId
 	subscription.IP = wsConn.IP()
-	subscription.ReadOnly = wsConn.Query("read_only") == "1"
 	subscription.DeviceID, _ = wsConn.Locals(middleware.MobileDeviceIDKey).(uint)
-	if baseline.HasControl && wsConn.Query("read_only") != "1" && wsConn.Query("take_control") != "1" {
+	if baseline.HasControl && !readOnly && wsConn.Query("take_control") != "1" {
 		recordCodeAudit(claims.UserId, session.ProjectID, session.ID, "terminal_control_acquire", "success", subscription.ID, "连接自动获得控制权", wsConn.IP(), time.Now(), codeAuditMeta{"deviceId": subscription.DeviceID, "automatic": true})
 	}
-	if wsConn.Query("read_only") == "1" && baseline.HasControl {
-		terminal.releaseControl(subscription.ID)
-		baseline.HasControl = false
-	} else if wsConn.Query("take_control") == "1" {
+	if wsConn.Query("take_control") == "1" {
 		startedAt := time.Now()
 		granted, reason := terminal.takeControl(subscription.ID)
 		baseline.HasControl = granted
@@ -323,6 +320,10 @@ func serveNativeCodeTerminal(
 		}
 		switch message.Type {
 		case "cmd":
+			if subscription.ReadOnly {
+				_ = writeEvent(nativeTerminalEvent{Type: "control", HasControl: false, ControlReason: "只读连接不能输入终端命令"})
+				continue
+			}
 			if writeErr := terminal.write(subscription.ID, []byte(message.Data)); writeErr != nil {
 				_ = writeEvent(nativeTerminalEvent{Type: "control", HasControl: false})
 			}

@@ -257,7 +257,7 @@ func TestNativeCodeTerminalKeepsBoundedReconnectHistory(t *testing.T) {
 	terminal := newNativeTerminalProtocolTestSubject()
 	terminal.publish([]byte(strings.Repeat("a", nativeTerminalHistoryLimit)))
 	terminal.publish([]byte("tail"))
-	subscription, baseline := terminal.subscribe(0)
+	subscription, baseline := terminal.subscribe(0, false)
 	defer terminal.unsubscribe(subscription)
 	if len(baseline.Data) != nativeTerminalHistoryLimit || string(baseline.Data[len(baseline.Data)-4:]) != "tail" {
 		t.Fatalf("unexpected reconnect history: len=%d tail=%q", len(baseline.Data), baseline.Data[len(baseline.Data)-4:])
