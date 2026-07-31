@@ -6,11 +6,11 @@ import (
 )
 
 type IAIProjectRepo interface {
-	CreateProject(group *model.AIProject) error
+	CreateProject(project *model.AIProject) error
 	GetProjectByID(id uint) (*model.AIProject, error)
 	GetProjects(userID uint, includeAll bool, page, limit int) ([]*model.AIProject, int64, error)
-	LoadExecutionSummaries(groups []*model.AIProject, userID uint, includeAll bool) error
-	UpdateProject(group *model.AIProject) error
+	LoadExecutionSummaries(projects []*model.AIProject, userID uint, includeAll bool) error
+	UpdateProject(project *model.AIProject) error
 	DeleteProject(id uint) error
 }
 
@@ -20,40 +20,40 @@ func NewAIProjectRepo() IAIProjectRepo {
 	return &aiProjectRepo{}
 }
 
-func (r *aiProjectRepo) CreateProject(group *model.AIProject) error {
-	return global.DB.Create(group).Error
+func (r *aiProjectRepo) CreateProject(project *model.AIProject) error {
+	return global.DB.Create(project).Error
 }
 
 func (r *aiProjectRepo) GetProjectByID(id uint) (*model.AIProject, error) {
-	var group model.AIProject
-	err := global.DB.Where("id = ?", id).First(&group).Error
-	return &group, err
+	var project model.AIProject
+	err := global.DB.Where("id = ?", id).First(&project).Error
+	return &project, err
 }
 
 func (r *aiProjectRepo) GetProjects(userID uint, includeAll bool, page, limit int) ([]*model.AIProject, int64, error) {
-	var groups []*model.AIProject
+	var projects []*model.AIProject
 	var total int64
 	db := global.DB.Model(&model.AIProject{})
 	if !includeAll {
 		db = db.Where("creator_id = ?", userID)
 	}
 	db.Count(&total)
-	err := db.Order("created_at desc").Offset((page - 1) * limit).Limit(limit).Find(&groups).Error
-	return groups, total, err
+	err := db.Order("created_at desc").Offset((page - 1) * limit).Limit(limit).Find(&projects).Error
+	return projects, total, err
 }
 
-func (r *aiProjectRepo) LoadExecutionSummaries(groups []*model.AIProject, userID uint, includeAll bool) error {
-	if len(groups) == 0 {
+func (r *aiProjectRepo) LoadExecutionSummaries(projects []*model.AIProject, userID uint, includeAll bool) error {
+	if len(projects) == 0 {
 		return nil
 	}
-	projectIDs := make([]uint, 0, len(groups))
-	summaries := make(map[uint]*model.AIProjectExecutionSummary, len(groups))
-	currentPriorities := make(map[uint]int, len(groups))
-	for _, group := range groups {
-		projectIDs = append(projectIDs, group.ID)
-		updatedAt := group.UpdatedAt
-		group.ExecutionSummary = &model.AIProjectExecutionSummary{Status: "idle", UpdatedAt: &updatedAt}
-		summaries[group.ID] = group.ExecutionSummary
+	projectIDs := make([]uint, 0, len(projects))
+	summaries := make(map[uint]*model.AIProjectExecutionSummary, len(projects))
+	currentPriorities := make(map[uint]int, len(projects))
+	for _, project := range projects {
+		projectIDs = append(projectIDs, project.ID)
+		updatedAt := project.UpdatedAt
+		project.ExecutionSummary = &model.AIProjectExecutionSummary{Status: "idle", UpdatedAt: &updatedAt}
+		summaries[project.ID] = project.ExecutionSummary
 	}
 
 	type projectTaskCount struct {
@@ -68,13 +68,13 @@ func (r *aiProjectRepo) LoadExecutionSummaries(groups []*model.AIProject, userID
 	if err := taskQuery.Select("project_id, COUNT(*) AS task_count").Group("project_id").Scan(&taskCounts).Error; err != nil {
 		return err
 	}
-	groupsByID := make(map[uint]*model.AIProject, len(groups))
-	for _, group := range groups {
-		groupsByID[group.ID] = group
+	projectsByID := make(map[uint]*model.AIProject, len(projects))
+	for _, project := range projects {
+		projectsByID[project.ID] = project
 	}
 	for _, count := range taskCounts {
-		if group := groupsByID[count.ProjectID]; group != nil {
-			group.TaskCount = count.TaskCount
+		if project := projectsByID[count.ProjectID]; project != nil {
+			project.TaskCount = count.TaskCount
 		}
 	}
 
@@ -132,8 +132,8 @@ func (r *aiProjectRepo) LoadExecutionSummaries(groups []*model.AIProject, userID
 	return nil
 }
 
-func (r *aiProjectRepo) UpdateProject(group *model.AIProject) error {
-	return global.DB.Save(group).Error
+func (r *aiProjectRepo) UpdateProject(project *model.AIProject) error {
+	return global.DB.Save(project).Error
 }
 
 func (r *aiProjectRepo) DeleteProject(id uint) error {

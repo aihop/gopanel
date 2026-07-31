@@ -2,7 +2,7 @@ package model
 
 import "time"
 
-// AIProject 记录 Code 项目。保留原表名以兼容已有数据。
+// AIProject 记录 Code 项目。
 type AIProject struct {
 	ID                 uint                       `gorm:"primaryKey" json:"id"`
 	CreatedAt          time.Time                  `json:"createdAt"`
@@ -40,7 +40,7 @@ type AITask struct {
 	UpdatedAt       time.Time `json:"updatedAt"`
 	UserID          uint      `gorm:"column:user_id;type:integer;not null;index" json:"userId"`
 	SessionID       uint      `gorm:"column:session_id;type:integer;index" json:"sessionId"`
-	ProjectID       uint      `gorm:"column:project_id;type:integer;index;comment:所属项目/团队组ID，用于未来的团队共享记忆库" json:"projectId"`
+	ProjectID       uint      `gorm:"column:project_id;type:integer;index;comment:所属项目ID" json:"projectId"`
 	Title           string    `gorm:"column:title;type:varchar(255);not null" json:"title"`
 	AgentName       string    `gorm:"column:agent_name;type:varchar(64)" json:"agentName"`
 	NativeSessionID string    `gorm:"column:native_session_id;type:varchar(255)" json:"nativeSessionId"`

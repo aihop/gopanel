@@ -80,7 +80,7 @@ const router = createRouter({
 					path: "project/:id",
 					name: "Code-Project",
 					component: () => import("@/views/Code/Workspace.vue"),
-					meta: { title: t("code.teamWorkspace"), titleKey: "code.teamWorkspace", auth: true, roles: "all" }
+					meta: { title: t("code.projectWorkspace"), titleKey: "code.projectWorkspace", auth: true, roles: "all" }
 				}
 			]
 		},

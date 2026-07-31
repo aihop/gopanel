@@ -27,7 +27,7 @@
 									</n-button>
 									<div class="min-w-0">
 										<div class="truncate text-lg font-semibold text-[var(--n-text-color)]">
-											{{ groupInfo?.name || t("code.projectFallback") }}
+											{{ projectInfo?.name || t("code.projectFallback") }}
 										</div>
 									</div>
 								</div>
@@ -45,7 +45,7 @@
 					</div>
 
 					<ProjectTaskSidebar
-						:project-id="currentGroupId"
+						:project-id="currentProjectId"
 						:tasks="tasks"
 						:current-task-id="currentTaskId"
 						:task-action-options="taskActionOptions"
@@ -122,8 +122,8 @@
 					</div>
 					<ProjectOverviewPanel
 						v-if="currentSessionId === null && currentTaskId === null"
-						:project="groupInfo"
-						:project-id="currentGroupId"
+						:project="projectInfo"
+						:project-id="currentProjectId"
 						:tasks="tasks"
 						@create-task="createNewTask"
 						@select-task="selectTask"
@@ -198,7 +198,7 @@
 
 		<NewSessionModal
 			v-model:show="showNewSessionModal"
-			:project-id="currentGroupId"
+			:project-id="currentProjectId"
 			@created="handleSessionCreated"
 		/>
 		<SessionHistoryDrawer
@@ -253,8 +253,8 @@ const message = useMessage()
 const dialog = useDialog()
 const { t } = useI18n({ messages: codeWorkspaceMessages })
 if (!props.embedded) useHideLayoutFooter()
-const currentGroupId = computed(() => props.projectId ?? Number(route.params.id))
-const groupInfo = ref<AIProject | null>(null),
+const currentProjectId = computed(() => props.projectId ?? Number(route.params.id))
+const projectInfo = ref<AIProject | null>(null),
 	tasks = ref<CodeTaskListItem[]>([])
 const currentTaskId = ref<number | null>(null),
 	currentSessionId = ref<number | null>(null)
@@ -282,17 +282,17 @@ const taskActionOptions = computed(() => [
 	{ label: t("code.deleteTask"), key: "delete", style: "color: red;" }
 ])
 
-const fetchGroupInfo = async () => {
+const fetchProjectInfo = async () => {
 	try {
 		const response = await getAIProjects({ page: 1, limit: 50 })
-		groupInfo.value =
-			response.code === 0 ? response.data.items.find(group => group.id === currentGroupId.value) || null : null
+		projectInfo.value =
+			response.code === 0 ? response.data.items.find(project => project.id === currentProjectId.value) || null : null
 	} catch (error) {
 		message.error(error instanceof Error ? error.message : t("code.projectLoadFailed"))
 	}
 }
 
-const { fetchTasks } = useCodeTaskPolling(currentGroupId, tasks, error => {
+const { fetchTasks } = useCodeTaskPolling(currentProjectId, tasks, error => {
 	message.error(error instanceof Error ? error.message : t("code.taskLoadFailed"))
 })
 
@@ -444,13 +444,13 @@ onBeforeRouteLeave(() => props.embedded || confirmLeaveWorkspace())
 onBeforeRouteUpdate(() => props.embedded || confirmLeaveWorkspace())
 
 onMounted(() => {
-	void fetchGroupInfo()
+	void fetchProjectInfo()
 	void fetchTasks()
 })
-watch(currentGroupId, newId => {
+watch(currentProjectId, newId => {
 	if (!newId) return
 	resetWorkspace()
-	void fetchGroupInfo()
+	void fetchProjectInfo()
 	void fetchTasks()
 })
 </script>

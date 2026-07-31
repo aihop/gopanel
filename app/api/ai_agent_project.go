@@ -84,12 +84,12 @@ func GetAIProjects(c fiber.Ctx) error {
 	page, _ := strconv.Atoi(c.Query("page", "1"))
 	limit, _ := strconv.Atoi(c.Query("limit", "50"))
 	page, limit = normalizeCodePage(page, limit, 50)
-	groupRepo := repo.NewAIProjectRepo()
-	groups, total, err := groupRepo.GetProjects(claims.UserId, claims.Role == constant.UserRoleSuper, page, limit)
+	projectRepo := repo.NewAIProjectRepo()
+	projects, total, err := projectRepo.GetProjects(claims.UserId, claims.Role == constant.UserRoleSuper, page, limit)
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	if err := groupRepo.LoadExecutionSummaries(groups, claims.UserId, claims.Role == constant.UserRoleSuper); err != nil {
+	if err := projectRepo.LoadExecutionSummaries(projects, claims.UserId, claims.Role == constant.UserRoleSuper); err != nil {
 		return c.JSON(e.Fail(err))
 	}
 	userHome, _ := os.UserHomeDir()
@@ -98,7 +98,7 @@ func GetAIProjects(c fiber.Ctx) error {
 		return c.JSON(e.Fail(err))
 	}
 	return c.JSON(e.Succ(fiber.Map{
-		"items":          groups,
+		"items":          projects,
 		"total":          total,
 		"defaultWorkDir": defaultWorkDir,
 		"directoryRoot":  directoryRoot,
@@ -132,24 +132,24 @@ func CreateAIProject(c fiber.Ctx) error {
 	if req.MonthlyTokenBudget < 0 {
 		return c.JSON(e.Fail(errors.New("Token 月度预算不能为负数")))
 	}
-	group := &model.AIProject{Name: name, Description: strings.TrimSpace(req.Description), SourceDirs: sourceDirs, CreatorID: claims.UserId, RequireQualityGate: req.RequireQualityGate, MonthlyTokenBudget: req.MonthlyTokenBudget}
-	groupRepo := repo.NewAIProjectRepo()
-	if err := groupRepo.CreateProject(group); err != nil {
+	project := &model.AIProject{Name: name, Description: strings.TrimSpace(req.Description), SourceDirs: sourceDirs, CreatorID: claims.UserId, RequireQualityGate: req.RequireQualityGate, MonthlyTokenBudget: req.MonthlyTokenBudget}
+	projectRepo := repo.NewAIProjectRepo()
+	if err := projectRepo.CreateProject(project); err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	workDir, err := syncAIProjectWorkspace(group, sourceDirs)
+	workDir, err := syncAIProjectWorkspace(project, sourceDirs)
 	if err != nil {
-		_ = groupRepo.DeleteProject(group.ID)
-		_ = os.RemoveAll(aiProjectWorkspaceDir(group.CreatorID, group.ID))
+		_ = projectRepo.DeleteProject(project.ID)
+		_ = os.RemoveAll(aiProjectWorkspaceDir(project.CreatorID, project.ID))
 		return c.JSON(e.Fail(err))
 	}
-	group.WorkDir = workDir
-	if err := groupRepo.UpdateProject(group); err != nil {
-		_ = groupRepo.DeleteProject(group.ID)
-		_ = os.RemoveAll(aiProjectWorkspaceDir(group.CreatorID, group.ID))
+	project.WorkDir = workDir
+	if err := projectRepo.UpdateProject(project); err != nil {
+		_ = projectRepo.DeleteProject(project.ID)
+		_ = os.RemoveAll(aiProjectWorkspaceDir(project.CreatorID, project.ID))
 		return c.JSON(e.Fail(err))
 	}
-	return c.JSON(e.Succ(group))
+	return c.JSON(e.Succ(project))
 }
 
 func UpdateAIProject(c fiber.Ctx) error {
@@ -158,8 +158,8 @@ func UpdateAIProject(c fiber.Ctx) error {
 	if err != nil || projectID == 0 {
 		return c.JSON(e.Fail(errors.New("项目 ID 无效")))
 	}
-	groupRepo := repo.NewAIProjectRepo()
-	project, err := groupRepo.GetProjectByID(uint(projectID))
+	projectRepo := repo.NewAIProjectRepo()
+	project, err := projectRepo.GetProjectByID(uint(projectID))
 	if err != nil {
 		return c.JSON(e.Fail(errors.New("项目不存在")))
 	}
@@ -202,7 +202,7 @@ func UpdateAIProject(c fiber.Ctx) error {
 	}
 	project.RequireQualityGate = req.RequireQualityGate
 	project.MonthlyTokenBudget = req.MonthlyTokenBudget
-	if err := groupRepo.UpdateProject(project); err != nil {
+	if err := projectRepo.UpdateProject(project); err != nil {
 		return c.JSON(e.Fail(err))
 	}
 	return c.JSON(e.Succ(project))
