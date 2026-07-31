@@ -7,7 +7,15 @@ import Icon from "@/components/common/Icon.vue"
 import { mobileMessages } from "@/i18n/locales/mobile"
 import "@xterm/xterm/css/xterm.css"
 
-const props = defineProps<{ sessionId: number; taskName: string; projectName: string }>()
+const props = withDefaults(
+	defineProps<{
+		sessionId: number
+		taskName: string
+		projectName: string
+		mode?: "ai" | "native"
+	}>(),
+	{ mode: "ai" }
+)
 const emit = defineEmits<{ back: []; openFiles: []; openStatus: [] }>()
 const { t } = useI18n({ messages: mobileMessages })
 const terminalElement = ref<HTMLElement | null>(null)
@@ -38,6 +46,11 @@ function sendAck(sequence: number) {
 
 function requestResync() {
 	if (socket?.readyState !== WebSocket.OPEN || pendingResyncId) return
+	if (props.mode === "native") {
+		pendingResyncId = "native"
+		socket.send(JSON.stringify({ type: "resync", data: "" }))
+		return
+	}
 	pendingResyncId = `${Date.now()}-${++resyncRequest}`
 	socket.send(JSON.stringify({
 		type: "resync",
@@ -109,8 +122,12 @@ function connect() {
 	if (!terminal || !props.sessionId) return
 	connecting.value = true
 	const protocol = window.location.protocol === "https:" ? "wss:" : "ws:"
-	let url = `${protocol}//${window.location.host}/api/mobile/app/terminal?session_id=${props.sessionId}`
-	url += `&cols=${terminal.cols}&rows=${terminal.rows}&read_only=1`
+	let url =
+		props.mode === "native"
+			? `${protocol}//${window.location.host}/api/mobile/app/project-terminal/${props.sessionId}/ws`
+			: `${protocol}//${window.location.host}/api/mobile/app/terminal?session_id=${props.sessionId}`
+	url += `${url.includes("?") ? "&" : "?"}cols=${terminal.cols}&rows=${terminal.rows}`
+	if (props.mode === "ai") url += "&read_only=1"
 	if (lastSequence) url += `&after_sequence=${lastSequence}`
 	const currentSocket = new WebSocket(url)
 	socket = currentSocket
@@ -125,11 +142,11 @@ function connect() {
 		try {
 			const message = JSON.parse(event.data)
 			if (message.type === "baseline") {
-				if (pendingResyncId && message.requestId !== pendingResyncId) return
+				if (props.mode === "ai" && pendingResyncId && message.requestId !== pendingResyncId) return
 				const sequence = Number(message.sequence) || 0
 				const chunkIndex = Number(message.chunkIndex) || 0
 				const chunkCount = Number(message.chunkCount) || 1
-				if (message.truncated && chunkIndex === 0) terminal?.reset()
+				if ((props.mode === "native" || message.truncated) && chunkIndex === 0) terminal?.reset()
 				if (message.data) terminal?.write(message.data)
 				if (chunkIndex === chunkCount - 1) {
 					lastSequence = sequence
@@ -151,12 +168,18 @@ function connect() {
 				requestResync()
 			} else if (message.type === "control") {
 				updateControl(Boolean(message.hasControl))
-				if (message.controlReason) terminal?.writeln(`\r\n\x1b[33m[GoPanel] ${t("mobile.terminalControlBusy")}\x1b[0m`)
+				if (message.controlReason || message.data) terminal?.writeln(`\r\n\x1b[33m[GoPanel] ${t("mobile.terminalControlBusy")}\x1b[0m`)
 			} else if (message.type === "closed") {
 				closing = true
 				connected.value = false
 				connecting.value = false
 				updateControl(false)
+			} else if (message.type === "error") {
+				closing = true
+				connected.value = false
+				connecting.value = false
+				updateControl(false)
+				if (message.data) terminal?.writeln(`\r\n\x1b[31m[GoPanel] ${message.data}\x1b[0m`)
 			} else if (message.type === "cmd" && message.data) {
 				terminal?.write(message.data)
 			}
@@ -274,10 +297,10 @@ onBeforeUnmount(closeTerminal)
 			<div class="flex shrink-0 items-center gap-1.5">
 				<span class="max-w-[30vw] truncate text-right text-xs text-slate-400" :title="projectName">{{ projectName }}</span>
 				<span class="h-2 w-2 rounded-full" :class="connected ? 'bg-emerald-400' : reconnecting ? 'bg-amber-400' : 'bg-slate-500'" :title="connected ? t('mobile.connected') : reconnecting ? t('mobile.reconnecting') : t('mobile.disconnected')" />
-				<n-button size="small" quaternary circle :title="t('mobile.taskStatus')" :aria-label="t('mobile.taskStatus')" @click="emit('openStatus')">
+				<n-button v-if="mode === 'ai'" size="small" quaternary circle :title="t('mobile.taskStatus')" :aria-label="t('mobile.taskStatus')" @click="emit('openStatus')">
 					<template #icon><Icon name="mdi:timeline-clock-outline" :size="19" color="#cbd5e1" /></template>
 				</n-button>
-				<n-button size="small" quaternary circle :title="t('mobile.files')" :aria-label="t('mobile.files')" @click="emit('openFiles')">
+				<n-button v-if="mode === 'ai'" size="small" quaternary circle :title="t('mobile.files')" :aria-label="t('mobile.files')" @click="emit('openFiles')">
 					<template #icon><Icon name="mdi:folder-outline" :size="19" color="#cbd5e1" /></template>
 				</n-button>
 			</div>
@@ -289,7 +312,12 @@ onBeforeUnmount(closeTerminal)
 				<span>{{ reconnecting ? t("mobile.reconnecting") : t("mobile.terminalConnecting") }}</span>
 			</div>
 		</div>
-		<slot name="footer" :connected="connected" :has-control="hasControl" :take-control="takeControl" :release-control="releaseControl" />
+		<div v-if="connected" class="flex min-h-12 items-center justify-between gap-3 border-t border-white/10 bg-slate-950 px-3 text-xs text-slate-400">
+			<span>{{ hasControl ? t("mobile.terminalControlling") : t("mobile.terminalReadOnly") }}</span>
+			<n-button size="small" round secondary type="primary" @click="hasControl ? releaseControl() : takeControl()">
+				{{ hasControl ? t("mobile.releaseTerminalControl") : t("mobile.takeTerminalControl") }}
+			</n-button>
+		</div>
 		<div class="flex shrink-0 items-center gap-1.5 overflow-x-auto border-t border-white/10 bg-slate-950 px-2 py-2 transition-opacity [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" :class="hasControl ? '' : 'opacity-50'" role="toolbar" :aria-label="t('mobile.terminal')">
 			<button type="button" :disabled="!hasControl" class="flex h-10 min-w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-2 font-mono text-sm font-medium text-slate-200 transition active:scale-95 active:bg-white/15 disabled:cursor-not-allowed" aria-label="Esc" @pointerdown.prevent @click="sendShortcut('\x1b')">Esc</button>
 			<button type="button" :disabled="!hasControl" class="flex h-10 min-w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-2 font-mono text-sm font-medium text-slate-200 transition active:scale-95 active:bg-white/15 disabled:cursor-not-allowed" aria-label="Tab" @pointerdown.prevent @click="sendShortcut('\t')">Tab</button>

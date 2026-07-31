@@ -3,6 +3,7 @@ import http from "@/api"
 import type { ResultData } from "@/api/interface"
 import type { AIProject, CodeApproval, CodeApprovalPolicy, CodeExecutor, CodeInstructionResponse, CodeSession, CodeSessionState, CodeWorktreeCapability } from "@/api/interface/code"
 import type { Dashboard } from "@/api/interface/dashboard"
+import type { HostTerminalSession } from "@/api/interface/hostTerminal"
 import type { NodeSummary, NodeWarning } from "./node"
 
 const mobileHttp = axios.create({
@@ -229,6 +230,12 @@ export function getMobileExecutors() {
 
 export function getMobileWorktreeCapability(projectId: number) {
 	return mobileRequest(mobileHttp.get<ResultData<CodeWorktreeCapability>>(`/mobile/app/projects/${projectId}/worktree-capability`))
+}
+
+export function openMobileProjectTerminal(projectId: number) {
+	return mobileRequest(
+		mobileHttp.post<ResultData<HostTerminalSession>>(`/mobile/app/projects/${projectId}/terminal`, {})
+	)
 }
 
 export function createMobileSession(data: { title: string; projectId: number; executorId: string; approvalPolicy: CodeApprovalPolicy }) {
