@@ -102,8 +102,14 @@ func TestCodeDeliveryCompletesAndIsIdempotent(t *testing.T) {
 	if content, err := os.ReadFile(filepath.Join(sourceDir, "delivery.txt")); err != nil || string(content) != "complete\n" {
 		t.Fatalf("merged content unavailable: %q, %v", content, err)
 	}
+	if _, err := os.Stat(session.WorkDir); err != nil {
+		t.Fatalf("delivery removed a potentially active worktree: %v", err)
+	}
+	if err := cleanupDeliveredCodeSessionWorktrees(session); err != nil {
+		t.Fatalf("delivered worktree cleanup failed after execution stopped: %v", err)
+	}
 	if _, err := os.Stat(session.WorkDir); !os.IsNotExist(err) {
-		t.Fatalf("worktree was not cleaned: %v", err)
+		t.Fatalf("delivered worktree remained after deferred cleanup: %v", err)
 	}
 	var delivery model.AICodeDelivery
 	if err := database.Where("session_id = ?", session.ID).First(&delivery).Error; err != nil || delivery.Status != codeDeliveryCompleted || delivery.CompletedAt == nil {
@@ -160,8 +166,8 @@ func TestCodeDeliveryResumesFromMergedState(t *testing.T) {
 	if err != nil || result.Commit != mergeCommit {
 		t.Fatalf("unexpected merged recovery: %#v, %v", result, err)
 	}
-	if _, err := os.Stat(session.WorkDir); !os.IsNotExist(err) {
-		t.Fatalf("merged worktree was not cleaned: %v", err)
+	if _, err := os.Stat(session.WorkDir); err != nil {
+		t.Fatalf("merged delivery removed a potentially active worktree: %v", err)
 	}
 	if err := database.First(delivery, delivery.ID).Error; err != nil || delivery.Status != codeDeliveryCompleted {
 		t.Fatalf("delivery did not complete: %#v, %v", delivery, err)

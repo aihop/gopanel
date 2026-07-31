@@ -164,6 +164,9 @@ func cleanupCodeDeliveryWorktree(delivery *model.AICodeDelivery) error {
 			return err
 		}
 	}
+	if delivery.Status == codeDeliveryCompleted {
+		return nil
+	}
 	return global.DB.Model(delivery).Updates(map[string]any{
 		"status": codeDeliveryWorktreeCleaned, "error_message": "",
 	}).Error
@@ -182,10 +185,10 @@ func resumeCodeSessionDelivery(session *model.AIDevSession, userID uint) (codeGi
 		}
 	}
 	if delivery.Status == codeDeliveryMerged {
-		if err := cleanupCodeDeliveryWorktree(delivery); err != nil {
+		if err := updateCodeDeliveryMetadata(delivery); err != nil {
 			return codeGitDeliveryResult{}, err
 		}
-		delivery.Status = codeDeliveryWorktreeCleaned
+		delivery.Status = codeDeliveryCompleted
 	}
 	if delivery.Status == codeDeliveryWorktreeCleaned {
 		if err := updateCodeDeliveryMetadata(delivery); err != nil {

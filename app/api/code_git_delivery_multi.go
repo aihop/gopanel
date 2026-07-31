@@ -3,7 +3,6 @@ package api
 import (
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -207,21 +206,9 @@ func mergeCodeSessionRepository(repository *model.AIDevSessionRepository) (codeR
 	return result, nil
 }
 
-func cleanupMergedCodeSessionRepository(repository *model.AIDevSessionRepository) error {
+func completeMergedCodeSessionRepository(repository *model.AIDevSessionRepository) error {
 	if repository.Status == codeDeliveryCompleted {
 		return nil
-	}
-	if _, err := os.Stat(repository.WorktreeDir); err == nil {
-		if _, err := runCodeGit(repository.SourceDir, "worktree", "remove", repository.WorktreeDir); err != nil {
-			return err
-		}
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-	if branches, err := runCodeGit(repository.SourceDir, "branch", "--list", repository.Branch); err == nil && strings.TrimSpace(branches) != "" {
-		if _, err := runCodeGit(repository.SourceDir, "branch", "-d", "--", repository.Branch); err != nil {
-			return err
-		}
 	}
 	now := time.Now()
 	if err := global.DB.Model(repository).Updates(map[string]any{
@@ -254,8 +241,7 @@ func resumeCodeMultiRepositoryDelivery(session *model.AIDevSession, _ uint) (cod
 		return codeGitDeliveryResult{}, errors.New("会话多仓库 Worktree 元数据不可用")
 	}
 	sort.SliceStable(repositories, func(i, j int) bool { return repositories[i].LinkName < repositories[j].LinkName })
-	workspaceDir, err := codeMultiRepositoryWorkspaceDir(session, repositories)
-	if err != nil {
+	if _, err := codeMultiRepositoryWorkspaceDir(session, repositories); err != nil {
 		return codeGitDeliveryResult{}, err
 	}
 	if err := prepareCodeMultiRepositoryDelivery(session, repositories); err != nil {
@@ -274,14 +260,11 @@ func resumeCodeMultiRepositoryDelivery(session *model.AIDevSession, _ uint) (cod
 				Branch: result.Branch, ConflictFiles: result.ConflictFiles, Repositories: results,
 			}, nil
 		}
-		if err := cleanupMergedCodeSessionRepository(&repositories[index]); err != nil {
+		if err := completeMergedCodeSessionRepository(&repositories[index]); err != nil {
 			return codeGitDeliveryResult{Status: "failed", Repositories: results}, err
 		}
 	}
 	if err := completeCodeMultiRepositorySession(session); err != nil {
-		return codeGitDeliveryResult{Status: "failed", Repositories: results}, err
-	}
-	if err := os.RemoveAll(workspaceDir); err != nil {
 		return codeGitDeliveryResult{Status: "failed", Repositories: results}, err
 	}
 	return codeGitDeliveryResult{Status: "merged", Repositories: results}, nil

@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"errors"
-	"fmt"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -103,9 +102,6 @@ func mergeCodeSessionWorktree(session *model.AIDevSession) (codeGitDeliveryResul
 	commit, err := runCodeGit(session.SourceWorkDir, "rev-parse", "HEAD")
 	if err != nil {
 		return codeGitDeliveryResult{}, err
-	}
-	if err := cleanupCodeSessionWorktree(session); err != nil {
-		return codeGitDeliveryResult{}, fmt.Errorf("合并成功，但清理 Worktree 失败：%w", err)
 	}
 	return codeGitDeliveryResult{Status: "merged", Commit: commit, Branch: session.WorktreeBranch}, nil
 }

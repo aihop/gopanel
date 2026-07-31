@@ -18,6 +18,7 @@ import (
 	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/utils/token"
 	"github.com/gofiber/fiber/v3"
+	"gorm.io/gorm"
 )
 
 const codeWorktreeCommandTimeout = 15 * time.Second
@@ -181,6 +182,30 @@ func cleanupCodeSessionWorktree(session *model.AIDevSession) error {
 		return err
 	}
 	return nil
+}
+
+func cleanupDeliveredCodeSessionWorktrees(session *model.AIDevSession) error {
+	if session == nil || session.ID == 0 {
+		return nil
+	}
+	var delivery model.AICodeDelivery
+	if err := global.DB.Where("session_id = ?", session.ID).First(&delivery).Error; err == nil {
+		return cleanupCodeDeliveryWorktree(&delivery)
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+	repositories, err := loadCodeSessionRepositories(session.ID)
+	if err != nil || len(repositories) == 0 {
+		return err
+	}
+	workspaceDir, err := codeMultiRepositoryWorkspaceDir(session, repositories)
+	if err != nil {
+		return err
+	}
+	snapshot := *session
+	snapshot.WorkDir = workspaceDir
+	snapshot.IsolationMode = codeIsolationMultiWorktree
+	return cleanupCodeSessionRepositoryWorktrees(&snapshot)
 }
 
 func runCodeGit(workDir string, args ...string) (string, error) {

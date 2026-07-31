@@ -45,8 +45,8 @@ func TestCommitAndMergeCodeSessionWorktree(t *testing.T) {
 	if err != nil || string(content) != "done\n" {
 		t.Fatalf("merged file unavailable: %q, %v", content, err)
 	}
-	if _, err := os.Stat(session.WorkDir); !os.IsNotExist(err) {
-		t.Fatalf("merged worktree was not cleaned: %v", err)
+	if _, err := os.Stat(session.WorkDir); err != nil {
+		t.Fatalf("merged worktree was removed while the session may still be running: %v", err)
 	}
 }
 
