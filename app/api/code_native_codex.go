@@ -33,7 +33,7 @@ func buildNativeCodexCommand(session *model.AIDevSession) (*exec.Cmd, error) {
 		"--no-alt-screen",
 		"--cd", session.WorkDir,
 	)
-	writableDirs, err := codexWritableDirsForSession(session)
+	writableDirs, err := codexWritableDirsForSessionWithRepair(session)
 	if err != nil {
 		return nil, err
 	}

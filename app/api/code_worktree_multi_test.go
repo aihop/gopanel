@@ -81,6 +81,31 @@ func TestCreateMultiRepositorySessionWorktrees(t *testing.T) {
 	}
 }
 
+func TestCodexMultiWorktreeWritableDirsRepairsSameSessionBranch(t *testing.T) {
+	session, _, _ := createMultiRepositorySession(t, 134)
+	repositories, err := loadCodeSessionRepositories(session.ID)
+	if err != nil || len(repositories) == 0 {
+		t.Fatalf("load repositories: %#v, %v", repositories, err)
+	}
+	repository := repositories[0]
+	newBranch := "gopanel/code-134-recovered-1"
+	if _, err := runCodeGit(repository.WorktreeDir, "branch", "-m", newBranch); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := codexWritableDirsForSessionWithRepair(session); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := codeSessionRepositoryByCodeID(session.ID, codeSessionRepositoryID(repository.ID))
+	if err != nil || stored.Branch != newBranch {
+		t.Fatalf("stored repository branch = %q, err=%v", stored.Branch, err)
+	}
+	manifest, err := os.ReadFile(filepath.Join(session.WorkDir, codeSessionManifestName))
+	if err != nil || !strings.Contains(string(manifest), `"branch": "`+newBranch+`"`) {
+		t.Fatalf("session manifest was not repaired: %v, %s", err, manifest)
+	}
+}
+
 func TestCreateMultiRepositorySessionDiscoversWorkspaceRepositories(t *testing.T) {
 	database := withCodeGovernanceDB(t)
 	withAIProjectBaseDir(t)

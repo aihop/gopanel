@@ -11,6 +11,8 @@ import (
 	"github.com/aihop/gopanel/app/repo"
 )
 
+var errCodeWorktreeBranchMismatch = errors.New("会话 Worktree 当前分支与会话记录不一致")
+
 func codexWritableDirsForSession(session *model.AIDevSession) ([]string, error) {
 	if session == nil {
 		return nil, nil
@@ -109,40 +111,51 @@ func resolveCodexMultiWorktreeGitWritableDirs(session *model.AIDevSession) ([]st
 }
 
 func resolveCodexRepositoryWorktreeGitWritableDirs(sourcePath, worktreePath, branch string) ([]string, error) {
-	workDir, err := resolveCodexGitDirectory(worktreePath)
+	writableDirs, currentBranch, err := inspectCodexRepositoryWorktreeGitWritableDirs(sourcePath, worktreePath)
 	if err != nil {
 		return nil, err
+	}
+	if currentBranch != branch {
+		return nil, errCodeWorktreeBranchMismatch
+	}
+	return writableDirs, nil
+}
+
+func inspectCodexRepositoryWorktreeGitWritableDirs(sourcePath, worktreePath string) ([]string, string, error) {
+	workDir, err := resolveCodexGitDirectory(worktreePath)
+	if err != nil {
+		return nil, "", err
 	}
 	sourceDir, err := resolveCodexGitDirectory(sourcePath)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	worktreeRoot, err := resolveCodeGitPath(workDir, "--show-toplevel")
 	if err != nil || worktreeRoot != workDir {
-		return nil, errors.New("会话目录不是预期的 Git Worktree 根目录")
+		return nil, "", errors.New("会话目录不是预期的 Git Worktree 根目录")
 	}
 	sourceRoot, err := resolveCodeGitPath(sourceDir, "--show-toplevel")
 	if err != nil || sourceRoot != sourceDir {
-		return nil, errors.New("会话源目录不是预期的 Git 仓库根目录")
+		return nil, "", errors.New("会话源目录不是预期的 Git 仓库根目录")
 	}
 	worktreeGitDir, err := resolveCodeGitPath(workDir, "--git-dir")
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	worktreeCommonDir, err := resolveCodeGitPath(workDir, "--git-common-dir")
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	sourceCommonDir, err := resolveCodeGitPath(sourceDir, "--git-common-dir")
 	if err != nil || sourceCommonDir != worktreeCommonDir {
-		return nil, errors.New("会话 Worktree 与源仓库的 Git 公共目录不一致")
+		return nil, "", errors.New("会话 Worktree 与源仓库的 Git 公共目录不一致")
 	}
 	if worktreeGitDir == worktreeCommonDir || !isPathInside(worktreeGitDir, filepath.Join(worktreeCommonDir, "worktrees")) {
-		return nil, errors.New("会话 Worktree 的 Git 私有目录无效")
+		return nil, "", errors.New("会话 Worktree 的 Git 私有目录无效")
 	}
-	headRef, err := runCodeGit(workDir, "symbolic-ref", "--quiet", "HEAD")
-	if err != nil || strings.TrimSpace(headRef) != "refs/heads/"+branch {
-		return nil, errors.New("会话 Worktree 当前分支与会话记录不一致")
+	currentBranch := ""
+	if headRef, headErr := runCodeGit(workDir, "symbolic-ref", "--quiet", "HEAD"); headErr == nil {
+		currentBranch = strings.TrimPrefix(strings.TrimSpace(headRef), "refs/heads/")
 	}
 	writableDirs := []string{
 		worktreeGitDir,
@@ -153,18 +166,18 @@ func resolveCodexRepositoryWorktreeGitWritableDirs(sourcePath, worktreePath, bra
 	for index, writableDir := range writableDirs {
 		resolvedDir, resolveErr := resolveCodexGitDirectory(writableDir)
 		if resolveErr != nil {
-			return nil, resolveErr
+			return nil, "", resolveErr
 		}
 		container := worktreeCommonDir
 		if index == 0 {
 			container = filepath.Join(worktreeCommonDir, "worktrees")
 		}
 		if !isPathInside(resolvedDir, container) {
-			return nil, errors.New("Git 可写目录超出已验证的元数据范围")
+			return nil, "", errors.New("Git 可写目录超出已验证的元数据范围")
 		}
 		writableDirs[index] = resolvedDir
 	}
-	return writableDirs, nil
+	return writableDirs, currentBranch, nil
 }
 
 func resolveCodeGitPath(workDir, pathName string) (string, error) {
