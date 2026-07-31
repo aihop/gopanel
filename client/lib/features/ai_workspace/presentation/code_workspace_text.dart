@@ -24,6 +24,17 @@ abstract final class CodeWorkspaceText {
       'hub.all': '全部',
       'hub.active': '进行中',
       'hub.create': '新建',
+      'session.worktreeChecking': '正在检查隔离工作区...',
+      'session.worktreeReady': '已启用隔离工作区',
+      'session.worktreeReadyHint': '会话将在独立 Git Worktree 中运行，不直接修改项目主目录。',
+      'session.worktreeDirty': '项目存在未提交变更',
+      'session.worktreeDirtyHint': '请先在桌面端处理以下仓库，再创建开发会话：{repositories}',
+      'session.worktreeUnavailable': '当前项目无法安全创建会话',
+      'session.worktreeReason_not_git': '项目目录不是 Git 仓库，请先在桌面端完成仓库配置。',
+      'session.worktreeReason_source_unavailable': '项目源码目录不可用，请先在桌面端检查项目配置。',
+      'session.worktreeReason_unknown': '项目暂不支持 Git Worktree 隔离。',
+      'session.worktreeCheckFailed': '隔离能力检查失败',
+      'session.worktreeRetry': '重新检查',
       'stop.title': '停止当前开发任务？',
       'stop.description': '正在执行和排队中的指令会被停止，已产生的文件变更会保留。',
       'stop.cancel': '继续执行',
@@ -79,6 +90,23 @@ abstract final class CodeWorkspaceText {
       'hub.all': 'All',
       'hub.active': 'Active',
       'hub.create': 'New',
+      'session.worktreeChecking': 'Checking workspace isolation...',
+      'session.worktreeReady': 'Isolated workspace enabled',
+      'session.worktreeReadyHint':
+          'This session runs in a separate Git Worktree without editing the project directory directly.',
+      'session.worktreeDirty': 'Uncommitted changes detected',
+      'session.worktreeDirtyHint':
+          'Resolve these repositories on desktop before creating a session: {repositories}',
+      'session.worktreeUnavailable':
+          'This project cannot create a safe session',
+      'session.worktreeReason_not_git':
+          'The project directory is not a Git repository. Configure it on desktop first.',
+      'session.worktreeReason_source_unavailable':
+          'The project source directory is unavailable. Check its desktop configuration.',
+      'session.worktreeReason_unknown':
+          'Git Worktree isolation is unavailable for this project.',
+      'session.worktreeCheckFailed': 'Workspace isolation check failed',
+      'session.worktreeRetry': 'Check again',
       'stop.title': 'Stop the current Code task?',
       'stop.description':
           'Running and queued instructions will stop. Existing file changes are preserved.',

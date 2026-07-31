@@ -27,6 +27,15 @@ class AiWorkspaceRepository {
         .toList();
   }
 
+  Future<CodeWorktreeCapability> getWorktreeCapability(int projectId) async {
+    final response = await _apiClient.get<Map<String, dynamic>>(
+      '/api/code/projects/$projectId/worktree-capability',
+    );
+    return CodeWorktreeCapability.fromJson(
+      response.data ?? const <String, dynamic>{},
+    );
+  }
+
   Future<List<AiDevSession>> getSessions() async {
     final response = await _apiClient.get<Map<String, dynamic>>(
       '/api/code/sessions',

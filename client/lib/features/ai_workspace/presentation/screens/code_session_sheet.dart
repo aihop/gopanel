@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/ai_dev_session.dart';
 import '../controllers/ai_workspace_controller.dart';
+import '../widgets/code_worktree_capability_status.dart';
 
 class CodeSessionSheet extends ConsumerStatefulWidget {
   const CodeSessionSheet({super.key});
@@ -16,11 +17,48 @@ class _CodeSessionSheetState extends ConsumerState<CodeSessionSheet> {
   int? _projectId;
   String? _executorId;
   String _approvalPolicy = 'safe_auto';
+  CodeWorktreeCapability? _worktreeCapability;
+  bool _capabilityLoading = false;
+  String? _capabilityError;
+  int _capabilityRequest = 0;
 
   @override
   void dispose() {
+    _capabilityRequest++;
     _titleController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadWorktreeCapability(int? projectId) async {
+    final request = ++_capabilityRequest;
+    if (projectId == null) {
+      setState(() {
+        _worktreeCapability = null;
+        _capabilityError = null;
+        _capabilityLoading = false;
+      });
+      return;
+    }
+    setState(() {
+      _worktreeCapability = null;
+      _capabilityError = null;
+      _capabilityLoading = true;
+    });
+    try {
+      final repository = ref.read(aiWorkspaceRepositoryProvider);
+      final capability = await repository.getWorktreeCapability(projectId);
+      if (!mounted || request != _capabilityRequest) return;
+      setState(() {
+        _worktreeCapability = capability;
+        _capabilityLoading = false;
+      });
+    } catch (error) {
+      if (!mounted || request != _capabilityRequest) return;
+      setState(() {
+        _capabilityError = error.toString();
+        _capabilityLoading = false;
+      });
+    }
   }
 
   Future<void> _createSession(
@@ -29,7 +67,11 @@ class _CodeSessionSheetState extends ConsumerState<CodeSessionSheet> {
   ) async {
     final projectId = _selectedProjectId(projects);
     final executor = _selectedExecutor(executors);
-    if (projectId == null || executor == null) return;
+    if (projectId == null ||
+        executor == null ||
+        _worktreeCapability?.canCreate != true) {
+      return;
+    }
     final policy = executor.approvalPolicies.contains(_approvalPolicy)
         ? _approvalPolicy
         : executor.approvalPolicies.firstOrNull ?? 'full_auto';
@@ -73,6 +115,15 @@ class _CodeSessionSheetState extends ConsumerState<CodeSessionSheet> {
     final selectedPolicy = policies.contains(_approvalPolicy)
         ? _approvalPolicy
         : policies.firstOrNull;
+    final selectedProjectId = _selectedProjectId(projects);
+    if (_projectId == null && selectedProjectId != null) {
+      _projectId = selectedProjectId;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _worktreeCapability == null && !_capabilityLoading) {
+          _loadWorktreeCapability(selectedProjectId);
+        }
+      });
+    }
 
     return SafeArea(
       child: Padding(
@@ -122,7 +173,7 @@ class _CodeSessionSheetState extends ConsumerState<CodeSessionSheet> {
                   const _EmptyHint(text: '服务器没有可用的开发执行器。')
                 else ...[
                   DropdownButtonFormField<int>(
-                    initialValue: _selectedProjectId(projects),
+                    initialValue: selectedProjectId,
                     decoration: const InputDecoration(labelText: '项目'),
                     items: projects
                         .map(
@@ -132,7 +183,17 @@ class _CodeSessionSheetState extends ConsumerState<CodeSessionSheet> {
                           ),
                         )
                         .toList(),
-                    onChanged: (value) => setState(() => _projectId = value),
+                    onChanged: (value) {
+                      setState(() => _projectId = value);
+                      _loadWorktreeCapability(value);
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  CodeWorktreeCapabilityStatus(
+                    capability: _worktreeCapability,
+                    loading: _capabilityLoading,
+                    error: _capabilityError,
+                    onRetry: () => _loadWorktreeCapability(_projectId),
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
@@ -200,7 +261,10 @@ class _CodeSessionSheetState extends ConsumerState<CodeSessionSheet> {
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton.icon(
-                      onPressed: state.isActionLoading
+                      onPressed:
+                          state.isActionLoading ||
+                              _capabilityLoading ||
+                              _worktreeCapability?.canCreate != true
                           ? null
                           : () => _createSession(projects, state.executors),
                       icon: state.isActionLoading

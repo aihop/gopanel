@@ -88,6 +88,44 @@ class CodeProject {
   }
 }
 
+class CodeWorktreeCapability {
+  final bool available;
+  final String reason;
+  final List<String> sourceDirs;
+  final int repositoryCount;
+  final List<String> dirtyRepositories;
+  final bool snapshotSupported;
+
+  const CodeWorktreeCapability({
+    required this.available,
+    required this.reason,
+    required this.sourceDirs,
+    required this.repositoryCount,
+    required this.dirtyRepositories,
+    required this.snapshotSupported,
+  });
+
+  bool get canCreate => available && dirtyRepositories.isEmpty;
+
+  factory CodeWorktreeCapability.fromJson(Map<String, dynamic> json) {
+    return CodeWorktreeCapability(
+      available: json['available'] == true,
+      reason: (json['reason'] ?? '').toString(),
+      sourceDirs: (json['sourceDirs'] as List<dynamic>? ?? const [])
+          .map((item) => item.toString())
+          .where((item) => item.isNotEmpty)
+          .toList(),
+      repositoryCount: (json['repositoryCount'] as num?)?.toInt() ?? 0,
+      dirtyRepositories:
+          (json['dirtyRepositories'] as List<dynamic>? ?? const [])
+              .map((item) => item.toString())
+              .where((item) => item.isNotEmpty)
+              .toList(),
+      snapshotSupported: json['snapshotSupported'] == true,
+    );
+  }
+}
+
 class CodeExecutor {
   final String id;
   final String name;

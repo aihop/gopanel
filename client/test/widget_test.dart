@@ -19,6 +19,21 @@ void main() {
     expect(executor.approvalPolicies, contains('safe_auto'));
   });
 
+  test('parses Code worktree capability and dirty repositories', () {
+    final capability = CodeWorktreeCapability.fromJson({
+      'available': true,
+      'sourceDirs': ['/srv/app', '/srv/api'],
+      'repositoryCount': 2,
+      'dirtyRepositories': ['app'],
+      'snapshotSupported': true,
+    });
+
+    expect(capability.available, isTrue);
+    expect(capability.repositoryCount, 2);
+    expect(capability.dirtyRepositories, ['app']);
+    expect(capability.canCreate, isFalse);
+  });
+
   test('parses structured Code session state', () {
     final state = AiSessionStateInfo.fromJson({
       'session': {
