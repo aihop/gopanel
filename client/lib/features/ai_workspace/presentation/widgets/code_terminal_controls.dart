@@ -54,12 +54,12 @@ class CodeTerminalShortcutBar extends StatelessWidget {
     return SafeArea(
       top: false,
       child: Container(
-        height: 50,
+        height: 44,
         decoration: const BoxDecoration(
           color: Color(0xFF020617),
           border: Border(top: BorderSide(color: Color(0xFF1E293B))),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
         child: ListView(
           scrollDirection: Axis.horizontal,
           children: [
@@ -122,12 +122,12 @@ class _TerminalKey extends StatelessWidget {
           : danger
           ? const Color(0xFF3F1D26)
           : const Color(0xFF111827),
-      borderRadius: BorderRadius.circular(9),
+      borderRadius: BorderRadius.circular(7),
       child: InkWell(
         onTap: enabled ? onPressed : null,
-        borderRadius: BorderRadius.circular(9),
+        borderRadius: BorderRadius.circular(7),
         child: ConstrainedBox(
-          constraints: const BoxConstraints(minWidth: 40),
+          constraints: const BoxConstraints(minWidth: 38),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10),
             child: Center(

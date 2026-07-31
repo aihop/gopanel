@@ -1,14 +1,37 @@
-import 'dart:async';
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:xterm/xterm.dart';
 
-import '../../../../core/storage/storage_service.dart';
 import '../../models/ai_dev_session.dart';
+import '../controllers/code_terminal_client.dart';
 import '../widgets/code_terminal_controls.dart';
 import 'ai_chat_screen.dart';
 import 'code_workspace_files_screen.dart';
+
+const _terminalTheme = TerminalTheme(
+  cursor: Color(0xFF60A5FA),
+  selection: Color(0x663B82F6),
+  foreground: Color(0xFFD4D4D8),
+  background: Color(0xFF0B1020),
+  black: Color(0xFF0B1020),
+  red: Color(0xFFEF4444),
+  green: Color(0xFF22C55E),
+  yellow: Color(0xFFF59E0B),
+  blue: Color(0xFF3B82F6),
+  magenta: Color(0xFFA855F7),
+  cyan: Color(0xFF06B6D4),
+  white: Color(0xFFE4E4E7),
+  brightBlack: Color(0xFF64748B),
+  brightRed: Color(0xFFF87171),
+  brightGreen: Color(0xFF4ADE80),
+  brightYellow: Color(0xFFFBBF24),
+  brightBlue: Color(0xFF60A5FA),
+  brightMagenta: Color(0xFFC084FC),
+  brightCyan: Color(0xFF22D3EE),
+  brightWhite: Color(0xFFFAFAFA),
+  searchHitBackground: Color(0xFFF59E0B),
+  searchHitBackgroundCurrent: Color(0xFF3B82F6),
+  searchHitForeground: Color(0xFF0B1020),
+);
 
 class CodeTerminalScreen extends StatefulWidget {
   const CodeTerminalScreen({
@@ -27,248 +50,39 @@ class CodeTerminalScreen extends StatefulWidget {
 }
 
 class _CodeTerminalScreenState extends State<CodeTerminalScreen> {
-  static const _maxOutputLength = 120000;
-
-  final _commandController = TextEditingController();
-  final _scrollController = ScrollController();
-  final _commandFocusNode = FocusNode();
-  final _output = StringBuffer();
-  WebSocketChannel? _channel;
-  StreamSubscription<dynamic>? _subscription;
-  Timer? _reconnectTimer;
-  Timer? _pingTimer;
-  bool _connected = false;
-  bool _reconnecting = false;
-  bool _hasControl = false;
-  bool _closing = false;
-  int _lastSequence = 0;
-  int _resyncRequest = 0;
-  String _pendingResyncId = '';
+  late final Terminal _terminal;
+  late final TerminalController _terminalController;
+  late final FocusNode _terminalFocusNode;
+  late final CodeTerminalClient _client;
 
   @override
   void initState() {
     super.initState();
-    _connect();
+    _terminal = Terminal(maxLines: 5000);
+    _terminalController = TerminalController();
+    _terminalFocusNode = FocusNode();
+    _client = CodeTerminalClient(
+      terminal: _terminal,
+      sessionId: widget.session.id,
+      nativeProtocol: widget.nativeProtocol,
+    )..addListener(_refresh);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _client.connect();
+    });
   }
 
   @override
   void dispose() {
-    _closing = true;
-    _reconnectTimer?.cancel();
-    _pingTimer?.cancel();
-    _subscription?.cancel();
-    _channel?.sink.close();
-    _commandController.dispose();
-    _scrollController.dispose();
-    _commandFocusNode.dispose();
+    _client
+      ..removeListener(_refresh)
+      ..dispose();
+    _terminalController.dispose();
+    _terminalFocusNode.dispose();
     super.dispose();
   }
 
-  Uri? _terminalUri() {
-    final server = StorageService.activeServerUrl;
-    final token = StorageService.activeServerToken;
-    if (server == null || server.isEmpty || token == null || token.isEmpty) {
-      return null;
-    }
-    final base = Uri.parse(server);
-    return base.replace(
-      scheme: base.scheme == 'https' ? 'wss' : 'ws',
-      path: '/api/code/terminal',
-      queryParameters: {
-        'token': token,
-        'session_id': widget.session.id.toString(),
-        'cols': '80',
-        'rows': '24',
-        if (_lastSequence > 0) 'after_sequence': _lastSequence.toString(),
-      },
-    );
-  }
-
-  Future<void> _connect() async {
-    final uri = _terminalUri();
-    if (uri == null) {
-      _appendOutput('[GoPanel] 缺少服务器连接信息，无法打开终端。\n');
-      return;
-    }
-    await _subscription?.cancel();
-    _channel?.sink.close();
-    final channel = WebSocketChannel.connect(uri);
-    _channel = channel;
-    _subscription = channel.stream.listen(
-      _handleMessage,
-      onError: (Object error) {
-        _appendOutput('[GoPanel] 终端连接失败：$error\n');
-        _handleDisconnect();
-      },
-      onDone: _handleDisconnect,
-      cancelOnError: true,
-    );
-    try {
-      await channel.ready;
-      if (!mounted || _channel != channel) return;
-      setState(() {
-        _connected = true;
-        _reconnecting = false;
-        if (!widget.nativeProtocol) _hasControl = true;
-      });
-      _startPing();
-    } catch (error) {
-      if (_channel != channel) return;
-      _appendOutput('[GoPanel] 终端握手失败：$error\n');
-      _handleDisconnect();
-    }
-  }
-
-  void _handleMessage(dynamic event) {
-    if (mounted && !_connected) {
-      setState(() {
-        _connected = true;
-        _reconnecting = false;
-      });
-    }
-    final text = event is List<int> ? utf8.decode(event) : event.toString();
-    try {
-      final message = jsonDecode(text) as Map<String, dynamic>;
-      final type = (message['type'] ?? '').toString();
-      switch (type) {
-        case 'baseline':
-          _handleBaseline(message);
-        case 'output':
-          _handleOutput(message);
-        case 'control':
-          _updateControl(message['hasControl'] == true);
-          final reason = (message['controlReason'] ?? '').toString();
-          if (reason.isNotEmpty) _appendOutput('\n[GoPanel] $reason\n');
-        case 'resync_required':
-          _requestResync();
-        case 'closed':
-          _closing = true;
-          _updateControl(false);
-          _appendOutput('\n[GoPanel] 会话已结束。\n');
-        case 'cmd':
-          _appendOutput((message['data'] ?? '').toString());
-          if (!widget.nativeProtocol) _updateControl(true);
-        case 'pong':
-          break;
-        default:
-          _appendOutput(text);
-      }
-    } catch (_) {
-      _appendOutput(text);
-    }
-  }
-
-  void _handleBaseline(Map<String, dynamic> message) {
-    final requestId = (message['requestId'] ?? '').toString();
-    if (_pendingResyncId.isNotEmpty && requestId != _pendingResyncId) return;
-    final chunkIndex = (message['chunkIndex'] as num?)?.toInt() ?? 0;
-    final chunkCount = (message['chunkCount'] as num?)?.toInt() ?? 1;
-    if (message['truncated'] == true && chunkIndex == 0) {
-      _replaceOutput('[GoPanel] 较早的终端输出已截断。\n');
-    }
-    _appendOutput((message['data'] ?? '').toString());
-    if (chunkIndex != chunkCount - 1) return;
-    _lastSequence = (message['sequence'] as num?)?.toInt() ?? 0;
-    _pendingResyncId = '';
-    _updateControl(message['hasControl'] == true);
-    _send('ack', _lastSequence.toString());
-  }
-
-  void _handleOutput(Map<String, dynamic> message) {
-    if (_pendingResyncId.isNotEmpty) return;
-    final sequence = (message['sequence'] as num?)?.toInt() ?? 0;
-    if (_lastSequence > 0 && sequence != _lastSequence + 1) {
-      _requestResync();
-      return;
-    }
-    _appendOutput((message['data'] ?? '').toString());
-    _lastSequence = sequence;
-    _send('ack', sequence.toString());
-  }
-
-  void _handleDisconnect() {
-    _pingTimer?.cancel();
-    if (mounted) {
-      setState(() {
-        _connected = false;
-        _hasControl = false;
-      });
-    }
-    if (_closing || _reconnectTimer != null) return;
-    if (mounted) setState(() => _reconnecting = true);
-    _reconnectTimer = Timer(const Duration(milliseconds: 1500), () {
-      _reconnectTimer = null;
-      _connect();
-    });
-  }
-
-  void _startPing() {
-    _pingTimer?.cancel();
-    _pingTimer = Timer.periodic(
-      const Duration(seconds: 15),
-      (_) => _send('ping', ''),
-    );
-  }
-
-  void _requestResync() {
-    if (!_connected || _pendingResyncId.isNotEmpty) return;
-    _pendingResyncId =
-        '${DateTime.now().millisecondsSinceEpoch}-${++_resyncRequest}';
-    _send(
-      'resync',
-      jsonEncode({'sequence': _lastSequence, 'requestId': _pendingResyncId}),
-    );
-  }
-
-  void _send(String type, String data) {
-    if (!_connected) return;
-    _channel?.sink.add(jsonEncode({'type': type, 'data': data}));
-  }
-
-  void _sendCommand() {
-    final command = _commandController.text;
-    if (command.trim().isEmpty || !_hasControl) return;
-    _commandController.clear();
-    _send('cmd', '$command\r');
-    _commandFocusNode.requestFocus();
-  }
-
-  void _updateControl(bool value) {
-    if (!mounted || _hasControl == value) return;
-    setState(() => _hasControl = value);
-  }
-
-  void _appendOutput(String value) {
-    if (value.isEmpty) return;
-    final clean = _stripAnsi(
-      value,
-    ).replaceAll('\r\n', '\n').replaceAll('\r', '');
-    _output.write(clean);
-    if (_output.length > _maxOutputLength) {
-      final content = _output.toString();
-      _output
-        ..clear()
-        ..write(content.substring(content.length - _maxOutputLength));
-    }
-    if (!mounted) return;
-    setState(() {});
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_scrollController.hasClients) return;
-      _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
-    });
-  }
-
-  void _replaceOutput(String value) {
-    _output
-      ..clear()
-      ..write(value);
-  }
-
-  String _stripAnsi(String value) {
-    return value.replaceAll(
-      RegExp(r'\x1B(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1B\\))'),
-      '',
-    );
+  void _refresh() {
+    if (mounted) setState(() {});
   }
 
   void _openSessionStatus() {
@@ -291,16 +105,16 @@ class _CodeTerminalScreenState extends State<CodeTerminalScreen> {
   }
 
   void _sendShortcut(String value) {
-    _send('cmd', value);
-    _commandFocusNode.requestFocus();
+    _client.sendInput(value);
+    _terminalFocusNode.requestFocus();
   }
 
-  void _handleEnterShortcut() {
-    if (_commandController.text.trim().isEmpty) {
-      _sendShortcut('\r');
-      return;
+  void _toggleControl() {
+    if (_client.hasControl) {
+      _client.releaseControl();
+    } else {
+      _client.takeControl();
     }
-    _sendCommand();
   }
 
   @override
@@ -333,13 +147,17 @@ class _CodeTerminalScreenState extends State<CodeTerminalScreen> {
           ],
         ),
         actions: [
-          if (widget.nativeProtocol && !_hasControl)
+          if (widget.nativeProtocol)
             IconButton(
-              tooltip: '接管终端',
-              onPressed: _connected ? () => _send('take_control', '') : null,
-              icon: const Icon(
-                Icons.lock_outline_rounded,
-                color: Colors.white54,
+              tooltip: _client.hasControl ? '释放终端控制' : '接管终端',
+              onPressed: _client.connected ? _toggleControl : null,
+              icon: Icon(
+                _client.hasControl
+                    ? Icons.lock_open_rounded
+                    : Icons.lock_outline_rounded,
+                color: _client.hasControl
+                    ? const Color(0xFF60A5FA)
+                    : Colors.white54,
               ),
             ),
           IconButton(
@@ -353,95 +171,35 @@ class _CodeTerminalScreenState extends State<CodeTerminalScreen> {
             icon: const Icon(Icons.timeline_rounded),
           ),
           CodeTerminalConnectionDot(
-            connected: _connected,
-            reconnecting: _reconnecting,
+            connected: _client.connected,
+            reconnecting: _client.reconnecting,
           ),
         ],
       ),
       body: Column(
         children: [
           Expanded(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => _commandFocusNode.requestFocus(),
-              child: SingleChildScrollView(
-                controller: _scrollController,
-                padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: SelectableText(
-                    _output.isEmpty
-                        ? _reconnecting
-                              ? '正在重新连接终端…'
-                              : '正在连接开发终端…'
-                        : _output.toString(),
-                    style: const TextStyle(
-                      color: Color(0xFFD4D4D8),
-                      fontFamily: 'monospace',
-                      fontSize: 12,
-                      height: 1.45,
-                    ),
-                  ),
-                ),
+            child: TerminalView(
+              _terminal,
+              controller: _terminalController,
+              focusNode: _terminalFocusNode,
+              theme: _terminalTheme,
+              textStyle: const TerminalStyle(
+                fontSize: 12.5,
+                height: 1.25,
+                fontFamily: 'Menlo',
               ),
-            ),
-          ),
-          Container(
-            color: const Color(0xFF0B1020),
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                const Text(
-                  '❯',
-                  style: TextStyle(
-                    color: Color(0xFF60A5FA),
-                    fontFamily: 'monospace',
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextField(
-                    controller: _commandController,
-                    focusNode: _commandFocusNode,
-                    enabled: _connected && _hasControl,
-                    onSubmitted: (_) => _sendCommand(),
-                    textInputAction: TextInputAction.send,
-                    minLines: 1,
-                    maxLines: 3,
-                    style: const TextStyle(
-                      color: Color(0xFFF4F4F5),
-                      fontFamily: 'monospace',
-                      fontSize: 14,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: _connected && _hasControl
-                          ? ''
-                          : _connected
-                          ? '终端只读'
-                          : '等待连接',
-                      hintStyle: const TextStyle(
-                        color: Color(0xFF64748B),
-                        fontFamily: 'monospace',
-                      ),
-                      filled: false,
-                      border: InputBorder.none,
-                      enabledBorder: InputBorder.none,
-                      disabledBorder: InputBorder.none,
-                      focusedBorder: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                    ),
-                  ),
-                ),
-              ],
+              padding: const EdgeInsets.fromLTRB(8, 8, 8, 6),
+              readOnly: !_client.canInput,
+              deleteDetection: true,
+              cursorType: TerminalCursorType.verticalBar,
+              keyboardAppearance: Brightness.dark,
             ),
           ),
           CodeTerminalShortcutBar(
-            enabled: _connected && _hasControl,
+            enabled: _client.canInput,
             onShortcut: _sendShortcut,
-            onEnter: _handleEnterShortcut,
+            onEnter: () => _sendShortcut('\r'),
           ),
         ],
       ),
