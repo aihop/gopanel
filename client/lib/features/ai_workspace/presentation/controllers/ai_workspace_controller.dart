@@ -158,7 +158,7 @@ class AiWorkspaceController extends Notifier<AiWorkspaceState> {
     } catch (error) {
       state = state.copyWith(
         isLoading: false,
-        errorMessage: 'Code 工作区加载失败：$error',
+        errorMessage: '开发工作区加载失败：$error',
       );
     }
   }
@@ -185,7 +185,7 @@ class AiWorkspaceController extends Notifier<AiWorkspaceState> {
     } catch (error) {
       state = state.copyWith(
         isActionLoading: false,
-        errorMessage: '创建 Code 会话失败：$error',
+        errorMessage: '创建开发会话失败：$error',
       );
       rethrow;
     }
@@ -262,7 +262,7 @@ class AiWorkspaceController extends Notifier<AiWorkspaceState> {
     if (content.isEmpty || state.isSending) return;
     final session = state.currentSession;
     if (session == null) {
-      state = state.copyWith(errorMessage: '请先创建或选择一个 Code 会话');
+      state = state.copyWith(errorMessage: '请先创建或选择一个开发会话');
       return;
     }
     final userMessage = ChatMessage(
@@ -347,7 +347,7 @@ class AiWorkspaceController extends Notifier<AiWorkspaceState> {
   ChatMessage _welcomeMessage() {
     return ChatMessage(
       id: 'welcome',
-      text: '选择已有会话，或从 Code 项目创建会话，然后发送开发指令。',
+      text: '选择已有会话，或从开发项目创建会话，然后发送开发指令。',
       isUser: false,
       timestamp: DateTime.now(),
     );

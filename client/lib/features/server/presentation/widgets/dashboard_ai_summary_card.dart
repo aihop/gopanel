@@ -51,7 +51,7 @@ class DashboardAiSummaryCard extends ConsumerWidget {
               .read(mainScaffoldIndexProvider.notifier)
               .setIndex(MainScaffoldIndexController.codeIndex);
         },
-        child: const Text('Code'),
+        child: const Text('开发'),
       ),
       child: Column(
         children: [

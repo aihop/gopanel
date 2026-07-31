@@ -73,10 +73,10 @@ class _CodeHubScreenState extends ConsumerState<CodeHubScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Code'),
+        title: const Text('开发'),
         actions: [
           IconButton(
-            tooltip: '新建 Code 会话',
+            tooltip: '新建开发会话',
             onPressed: _openSessionCreator,
             icon: const Icon(Icons.add_rounded),
           ),
@@ -137,7 +137,7 @@ class _CodeHubScreenState extends ConsumerState<CodeHubScreen> {
       return [
         CodeHubEmptyCard(
           icon: Icons.terminal_rounded,
-          title: '还没有 Code 会话',
+          title: '还没有开发会话',
           description: '创建会话后，可以在手机上查看执行过程、发送指令并处理审批。',
           actionLabel: '创建会话',
           onAction: _openSessionCreator,
@@ -209,7 +209,7 @@ class _CodeHubScreenState extends ConsumerState<CodeHubScreen> {
     for (final project in projects) {
       if (project.id == projectId) return project.name;
     }
-    return 'Code 项目';
+    return '开发项目';
   }
 
   bool _usesNativeProtocol(List<CodeExecutor> executors, String executorId) {

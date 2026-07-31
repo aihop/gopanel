@@ -24,7 +24,7 @@ class CodeSessionListCard extends StatelessWidget {
     final stage = session.currentStage.isEmpty
         ? session.status
         : session.currentStage;
-    final title = session.title.isEmpty ? 'Code #${session.id}' : session.title;
+    final title = session.title.isEmpty ? '开发 #${session.id}' : session.title;
     final updatedAt =
         session.lastInstructionAt ?? session.updatedAt ?? session.createdAt;
 
@@ -79,7 +79,7 @@ class CodeSessionListCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 5),
                 Text(
-                  session.agentName.isEmpty ? 'Code' : session.agentName,
+                  session.agentName.isEmpty ? '开发' : session.agentName,
                   style: const TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 12,

@@ -16,7 +16,7 @@ abstract final class CodeWorkspaceText {
       'action.refresh': '刷新',
       'action.retry': '重试',
       'action.stop': '停止执行',
-      'stop.title': '停止当前 Code 任务？',
+      'stop.title': '停止当前开发任务？',
       'stop.description': '正在执行和排队中的指令会被停止，已产生的文件变更会保留。',
       'stop.cancel': '继续执行',
       'stop.confirm': '确认停止',

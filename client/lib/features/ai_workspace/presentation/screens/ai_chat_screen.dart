@@ -70,7 +70,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
         builder: (_) => CodeWorkspaceFilesScreen(
           sessionId: session.id,
           sessionTitle: session.title.isEmpty
-              ? 'Code #${session.id}'
+              ? '开发 #${session.id}'
               : session.title,
         ),
       ),
@@ -123,7 +123,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
         backgroundColor: const Color(0xFF1E293B),
         foregroundColor: Colors.white,
         title: const Text(
-          'GoPanel Code',
+          'GoPanel 开发',
           style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
         actions: [
@@ -284,7 +284,7 @@ class _EmptyWorkspace extends StatelessWidget {
             const Icon(Icons.terminal_rounded, color: Colors.white54, size: 52),
             const SizedBox(height: 16),
             const Text(
-              '开始一个 Code 会话',
+              '开始一个开发会话',
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 18,
@@ -332,7 +332,7 @@ class _ExecutionIndicator extends StatelessWidget {
           const SizedBox(width: 10),
           const Expanded(
             child: Text(
-              'Code 正在执行，状态会自动刷新',
+              '开发任务正在执行，状态会自动刷新',
               style: TextStyle(color: Colors.greenAccent),
             ),
           ),
@@ -400,7 +400,7 @@ class _CommandComposer extends StatelessWidget {
               onSubmitted: (_) => onSend(),
               style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
-                hintText: enabled ? '输入开发指令或补充要求...' : '请先选择 Code 会话',
+                hintText: enabled ? '输入开发指令或补充要求...' : '请先选择开发会话',
                 hintStyle: const TextStyle(color: Colors.white38),
                 border: InputBorder.none,
               ),

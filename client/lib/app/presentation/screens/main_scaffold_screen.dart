@@ -37,7 +37,7 @@ class MainScaffoldScreen extends ConsumerWidget {
           NavigationDestination(
             icon: Icon(Icons.terminal_outlined),
             selectedIcon: Icon(Icons.terminal_rounded),
-            label: 'Code',
+            label: '开发',
           ),
           NavigationDestination(
             icon: Icon(Icons.widgets_outlined),

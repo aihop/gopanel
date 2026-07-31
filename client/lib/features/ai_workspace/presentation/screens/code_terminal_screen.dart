@@ -283,7 +283,7 @@ class _CodeTerminalScreenState extends State<CodeTerminalScreen> {
         builder: (_) => CodeWorkspaceFilesScreen(
           sessionId: widget.session.id,
           sessionTitle: widget.session.title.isEmpty
-              ? 'Code #${widget.session.id}'
+              ? '开发 #${widget.session.id}'
               : widget.session.title,
         ),
       ),
@@ -295,38 +295,51 @@ class _CodeTerminalScreenState extends State<CodeTerminalScreen> {
     _commandFocusNode.requestFocus();
   }
 
+  void _handleEnterShortcut() {
+    if (_commandController.text.trim().isEmpty) {
+      _sendShortcut('\r');
+      return;
+    }
+    _sendCommand();
+  }
+
   @override
   Widget build(BuildContext context) {
     final title = widget.session.title.isEmpty
-        ? 'Code #${widget.session.id}'
+        ? '开发 #${widget.session.id}'
         : widget.session.title;
     return Scaffold(
-      backgroundColor: const Color(0xFF090909),
+      backgroundColor: const Color(0xFF0B1020),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF111111),
+        toolbarHeight: 52,
+        backgroundColor: const Color(0xFF0F172A),
         foregroundColor: Colors.white,
         titleSpacing: 0,
-        title: Text(
-          title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+            ),
+            Text(
+              widget.projectName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 10, color: Colors.white54),
+            ),
+          ],
         ),
         actions: [
-          if (widget.nativeProtocol)
+          if (widget.nativeProtocol && !_hasControl)
             IconButton(
-              tooltip: _hasControl ? '释放终端控制' : '接管终端',
-              onPressed: _connected
-                  ? () => _send(
-                      _hasControl ? 'release_control' : 'take_control',
-                      '',
-                    )
-                  : null,
-              icon: Icon(
-                _hasControl
-                    ? Icons.keyboard_rounded
-                    : Icons.lock_outline_rounded,
-                color: _hasControl ? const Color(0xFF22D3EE) : Colors.white54,
+              tooltip: '接管终端',
+              onPressed: _connected ? () => _send('take_control', '') : null,
+              icon: const Icon(
+                Icons.lock_outline_rounded,
+                color: Colors.white54,
               ),
             ),
           IconButton(
@@ -339,143 +352,96 @@ class _CodeTerminalScreenState extends State<CodeTerminalScreen> {
             onPressed: _openSessionStatus,
             icon: const Icon(Icons.timeline_rounded),
           ),
+          CodeTerminalConnectionDot(
+            connected: _connected,
+            reconnecting: _reconnecting,
+          ),
         ],
       ),
       body: Column(
         children: [
-          CodeTerminalSessionHeader(
-            projectName: widget.projectName,
-            agentName: widget.session.agentName,
-            stage: widget.session.currentStage,
-            connected: _connected,
-            reconnecting: _reconnecting,
-            hasControl: _hasControl,
-          ),
           Expanded(
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: () => _commandFocusNode.requestFocus(),
               child: SingleChildScrollView(
                 controller: _scrollController,
-                padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text.rich(
-                      TextSpan(
-                        children: [
-                          const TextSpan(
-                            text: '➜  ',
-                            style: TextStyle(color: Color(0xFF86EFAC)),
-                          ),
-                          TextSpan(
-                            text: widget.projectName,
-                            style: const TextStyle(
-                              color: Color(0xFF67E8F9),
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          TextSpan(
-                            text: '  ${widget.session.agentName}',
-                            style: const TextStyle(color: Color(0xFFFCA5A5)),
-                          ),
-                        ],
-                      ),
-                      style: const TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 13,
-                      ),
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: SelectableText(
+                    _output.isEmpty
+                        ? _reconnecting
+                              ? '正在重新连接终端…'
+                              : '正在连接开发终端…'
+                        : _output.toString(),
+                    style: const TextStyle(
+                      color: Color(0xFFD4D4D8),
+                      fontFamily: 'monospace',
+                      fontSize: 12,
+                      height: 1.45,
                     ),
-                    const SizedBox(height: 16),
-                    SelectableText(
-                      _output.isEmpty
-                          ? _reconnecting
-                                ? '正在重新连接终端…'
-                                : '正在连接 Code 终端…'
-                          : _output.toString(),
-                      style: const TextStyle(
-                        color: Color(0xFFD4D4D8),
-                        fontFamily: 'monospace',
-                        fontSize: 13,
-                        height: 1.5,
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    Container(height: 1, color: const Color(0xFF3F3F46)),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        const Text(
-                          '❯',
-                          style: TextStyle(
-                            color: Color(0xFFF4F4F5),
-                            fontFamily: 'monospace',
-                            fontSize: 22,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: TextField(
-                            controller: _commandController,
-                            focusNode: _commandFocusNode,
-                            enabled: _connected && _hasControl,
-                            onSubmitted: (_) => _sendCommand(),
-                            textInputAction: TextInputAction.send,
-                            maxLines: null,
-                            style: const TextStyle(
-                              color: Color(0xFFF4F4F5),
-                              fontFamily: 'monospace',
-                              fontSize: 15,
-                            ),
-                            decoration: InputDecoration(
-                              hintText: _connected && _hasControl
-                                  ? '输入命令'
-                                  : '等待终端控制权',
-                              hintStyle: const TextStyle(
-                                color: Color(0xFF52525B),
-                                fontFamily: 'monospace',
-                              ),
-                              border: InputBorder.none,
-                              enabledBorder: InputBorder.none,
-                              disabledBorder: InputBorder.none,
-                              focusedBorder: InputBorder.none,
-                              contentPadding: const EdgeInsets.symmetric(
-                                vertical: 14,
-                              ),
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: '执行',
-                          onPressed: _connected && _hasControl
-                              ? _sendCommand
-                              : null,
-                          icon: const Icon(Icons.keyboard_return_rounded),
-                          color: const Color(0xFF22D3EE),
-                        ),
-                      ],
-                    ),
-                    Container(height: 1, color: const Color(0xFF3F3F46)),
-                    const SizedBox(height: 12),
-                    Text(
-                      _hasControl ? '? 查看帮助  ·  ↑↓ 浏览历史' : '终端当前只读，请从顶部申请接管',
-                      style: const TextStyle(
-                        color: Color(0xFF71717A),
-                        fontFamily: 'monospace',
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
+            ),
+          ),
+          Container(
+            color: const Color(0xFF0B1020),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                const Text(
+                  '❯',
+                  style: TextStyle(
+                    color: Color(0xFF60A5FA),
+                    fontFamily: 'monospace',
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _commandController,
+                    focusNode: _commandFocusNode,
+                    enabled: _connected && _hasControl,
+                    onSubmitted: (_) => _sendCommand(),
+                    textInputAction: TextInputAction.send,
+                    minLines: 1,
+                    maxLines: 3,
+                    style: const TextStyle(
+                      color: Color(0xFFF4F4F5),
+                      fontFamily: 'monospace',
+                      fontSize: 14,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: _connected && _hasControl
+                          ? ''
+                          : _connected
+                          ? '终端只读'
+                          : '等待连接',
+                      hintStyle: const TextStyle(
+                        color: Color(0xFF64748B),
+                        fontFamily: 'monospace',
+                      ),
+                      filled: false,
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      disabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
           CodeTerminalShortcutBar(
             enabled: _connected && _hasControl,
             onShortcut: _sendShortcut,
-            onEnter: _sendCommand,
-            onKeyboard: () => _commandFocusNode.requestFocus(),
+            onEnter: _handleEnterShortcut,
           ),
         ],
       ),

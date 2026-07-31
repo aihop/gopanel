@@ -98,7 +98,7 @@ class _CodeSessionSheetState extends ConsumerState<CodeSessionSheet> {
                 ),
               ),
               const SizedBox(height: 18),
-              Text('Code 会话', style: Theme.of(context).textTheme.titleLarge),
+              Text('开发会话', style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 12),
               if (state.isLoading && state.sessions.isEmpty)
                 const Center(child: CircularProgressIndicator())
@@ -117,9 +117,9 @@ class _CodeSessionSheetState extends ConsumerState<CodeSessionSheet> {
                 Text('新建会话', style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 12),
                 if (projects.isEmpty)
-                  const _EmptyHint(text: '还没有 Code 项目，请先在管理台创建项目。')
+                  const _EmptyHint(text: '还没有开发项目，请先在管理台创建项目。')
                 else if (availableExecutors.isEmpty)
-                  const _EmptyHint(text: '服务器没有可用的 Code 执行器。')
+                  const _EmptyHint(text: '服务器没有可用的开发执行器。')
                 else ...[
                   DropdownButtonFormField<int>(
                     initialValue: _selectedProjectId(projects),
