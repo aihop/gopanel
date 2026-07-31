@@ -24,6 +24,7 @@ import (
 	"github.com/aihop/gopanel/app/middleware"
 	"github.com/aihop/gopanel/cmd"
 	"github.com/aihop/gopanel/global"
+	initconf "github.com/aihop/gopanel/init/conf"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
@@ -34,11 +35,12 @@ import (
 var desktopFS embed.FS
 
 type desktopApp struct {
-	panel    *panelapp.App
-	listener net.Listener
-	serveErr chan error
-	context  context.Context
-	token    string
+	panel              *panelapp.App
+	listener           net.Listener
+	serveErr           chan error
+	context            context.Context
+	token              string
+	initialCredentials *desktopCredentials
 }
 
 func main() {
@@ -81,11 +83,11 @@ func main() {
 }
 
 func newDesktopApp() (*desktopApp, error) {
-	configDir, err := os.UserConfigDir()
+	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		return nil, fmt.Errorf("resolve user config directory: %w", err)
+		return nil, fmt.Errorf("resolve user home directory: %w", err)
 	}
-	baseDir := filepath.Join(configDir, "GoPanel")
+	baseDir := filepath.Join(homeDir, ".gopanel")
 	if err := os.MkdirAll(baseDir, 0o700); err != nil {
 		return nil, fmt.Errorf("create desktop data directory: %w", err)
 	}
@@ -93,6 +95,14 @@ func newDesktopApp() (*desktopApp, error) {
 		return nil, fmt.Errorf("set desktop data directory: %w", err)
 	}
 	cmd.ConfFilePath = filepath.Join(baseDir, "conf.yaml")
+	credentials, err := prepareDesktopCredentials(baseDir)
+	if err != nil {
+		return nil, err
+	}
+	if credentials != nil {
+		initconf.InitInstall.User = credentials.Email
+		initconf.InitInstall.Password = credentials.Password
+	}
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -106,7 +116,13 @@ func newDesktopApp() (*desktopApp, error) {
 		return nil, err
 	}
 	middleware.SetDesktopAccessToken(token)
-	return &desktopApp{panel: &panelapp.App{}, listener: listener, serveErr: make(chan error, 1), token: token}, nil
+	return &desktopApp{
+		panel:              &panelapp.App{},
+		listener:           listener,
+		serveErr:           make(chan error, 1),
+		token:              token,
+		initialCredentials: credentials,
+	}, nil
 }
 
 func newDesktopToken() (string, error) {
@@ -156,6 +172,9 @@ func (a *desktopApp) bootstrapMiddleware() assetserver.Middleware {
 func (a *desktopApp) startup(ctx context.Context) {
 	a.context = ctx
 	a.panel.Init()
+	if a.initialCredentials != nil {
+		go a.showInitialCredentials(ctx)
+	}
 	go func() {
 		a.serveErr <- a.panel.Serve(a.listener)
 	}()
