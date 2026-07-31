@@ -95,23 +95,29 @@ func (AIDevSession) TableName() string {
 
 // AIExecutionRun 保存每轮执行的原始层数据，消息表仅承载适合界面展示的对话内容。
 type AIExecutionRun struct {
-	ID              uint       `gorm:"primaryKey" json:"id"`
-	CreatedAt       time.Time  `json:"createdAt"`
-	UpdatedAt       time.Time  `json:"updatedAt"`
-	SessionID       uint       `gorm:"column:session_id;type:integer;not null;index" json:"sessionId"`
-	TaskID          uint       `gorm:"column:task_id;type:integer;index" json:"taskId"`
-	InstructionID   uint       `gorm:"column:instruction_id;type:integer;index" json:"instructionId"`
-	ExecutorID      string     `gorm:"column:executor_id;type:varchar(64);not null;index" json:"executorId"`
-	NativeSessionID string     `gorm:"column:native_session_id;type:varchar(255)" json:"nativeSessionId"`
-	Prompt          string     `gorm:"column:prompt;type:text;not null" json:"prompt"`
-	Output          string     `gorm:"column:output;type:text" json:"output"`
-	RawOutput       string     `gorm:"column:raw_output;type:text" json:"rawOutput,omitempty"`
-	Status          string     `gorm:"column:status;type:varchar(32);not null;index" json:"status"`
-	ExitCode        int        `gorm:"column:exit_code;default:0" json:"exitCode"`
-	DurationMS      int64      `gorm:"column:duration_ms;default:0" json:"durationMs"`
-	ErrorMessage    string     `gorm:"column:error_message;type:text" json:"errorMessage"`
-	StartedAt       time.Time  `gorm:"column:started_at;not null" json:"startedAt"`
-	CompletedAt     *time.Time `gorm:"column:completed_at" json:"completedAt,omitempty"`
+	ID                uint       `gorm:"primaryKey" json:"id"`
+	CreatedAt         time.Time  `json:"createdAt"`
+	UpdatedAt         time.Time  `json:"updatedAt"`
+	SessionID         uint       `gorm:"column:session_id;type:integer;not null;index" json:"sessionId"`
+	TaskID            uint       `gorm:"column:task_id;type:integer;index" json:"taskId"`
+	InstructionID     uint       `gorm:"column:instruction_id;type:integer;index" json:"instructionId"`
+	ExecutorID        string     `gorm:"column:executor_id;type:varchar(64);not null;index" json:"executorId"`
+	Model             string     `gorm:"column:model;type:varchar(255)" json:"model"`
+	NativeSessionID   string     `gorm:"column:native_session_id;type:varchar(255)" json:"nativeSessionId"`
+	Prompt            string     `gorm:"column:prompt;type:text;not null" json:"prompt"`
+	Output            string     `gorm:"column:output;type:text" json:"output"`
+	RawOutput         string     `gorm:"column:raw_output;type:text" json:"rawOutput,omitempty"`
+	Status            string     `gorm:"column:status;type:varchar(32);not null;index" json:"status"`
+	ExitCode          int        `gorm:"column:exit_code;default:0" json:"exitCode"`
+	DurationMS        int64      `gorm:"column:duration_ms;default:0" json:"durationMs"`
+	InputTokens       int64      `gorm:"column:input_tokens;default:0" json:"inputTokens"`
+	OutputTokens      int64      `gorm:"column:output_tokens;default:0" json:"outputTokens"`
+	CachedInputTokens int64      `gorm:"column:cached_input_tokens;default:0" json:"cachedInputTokens"`
+	ReasoningTokens   int64      `gorm:"column:reasoning_tokens;default:0" json:"reasoningTokens"`
+	TotalTokens       int64      `gorm:"column:total_tokens;default:0;index" json:"totalTokens"`
+	ErrorMessage      string     `gorm:"column:error_message;type:text" json:"errorMessage"`
+	StartedAt         time.Time  `gorm:"column:started_at;not null" json:"startedAt"`
+	CompletedAt       *time.Time `gorm:"column:completed_at" json:"completedAt,omitempty"`
 }
 
 func (AIExecutionRun) TableName() string {

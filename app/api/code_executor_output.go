@@ -8,9 +8,15 @@ import (
 )
 
 type codeExecutorOutput struct {
-	Message         string
-	RawOutput       string
-	NativeSessionID string
+	Message           string
+	RawOutput         string
+	NativeSessionID   string
+	Model             string
+	InputTokens       int64
+	OutputTokens      int64
+	CachedInputTokens int64
+	ReasoningTokens   int64
+	TotalTokens       int64
 }
 
 func parseCodeExecutorOutput(executorID string, rawOutput []byte, preparedSessionID string) codeExecutorOutput {
@@ -28,6 +34,9 @@ func parseCodeExecutorOutput(executorID string, rawOutput []byte, preparedSessio
 	if strings.TrimSpace(result.Message) == "" {
 		result.Message = strings.TrimSpace(string(rawOutput))
 	}
+	if result.TotalTokens == 0 {
+		result.TotalTokens = result.InputTokens + result.OutputTokens
+	}
 	return result
 }
 
@@ -39,6 +48,7 @@ func parseCodexOutput(rawOutput []byte, result *codeExecutorOutput) {
 				result.NativeSessionID = threadID
 			}
 		}
+		applyCodeUsageMap(result, event)
 		if eventType != "item.completed" {
 			return
 		}
@@ -54,11 +64,15 @@ func parseCodexOutput(rawOutput []byte, result *codeExecutorOutput) {
 
 func parseClaudeOutput(rawOutput []byte, result *codeExecutorOutput) {
 	var payload struct {
-		Result    string `json:"result"`
-		SessionID string `json:"session_id"`
+		Result    string         `json:"result"`
+		SessionID string         `json:"session_id"`
+		Model     string         `json:"model"`
+		Usage     map[string]any `json:"usage"`
 	}
 	if json.Unmarshal(bytes.TrimSpace(rawOutput), &payload) == nil {
 		result.Message = payload.Result
+		result.Model = payload.Model
+		applyCodeUsageMap(result, payload.Usage)
 		if payload.SessionID != "" {
 			result.NativeSessionID = payload.SessionID
 		}
@@ -68,6 +82,7 @@ func parseClaudeOutput(rawOutput []byte, result *codeExecutorOutput) {
 func parseOpenCodeOutput(rawOutput []byte, result *codeExecutorOutput) {
 	var messages []string
 	scanJSONLines(rawOutput, func(event map[string]any) {
+		applyCodeUsageMap(result, event)
 		if sessionID, ok := event["sessionID"].(string); ok && sessionID != "" {
 			result.NativeSessionID = sessionID
 		}
@@ -80,6 +95,54 @@ func parseOpenCodeOutput(rawOutput []byte, result *codeExecutorOutput) {
 		}
 	})
 	result.Message = strings.Join(messages, "")
+}
+
+func applyCodeUsageMap(result *codeExecutorOutput, payload map[string]any) {
+	if result == nil || payload == nil {
+		return
+	}
+	if model, ok := firstCodeString(payload, "model", "model_id", "modelID"); ok {
+		result.Model = model
+	}
+	for _, key := range []string{"usage", "token_usage", "tokenUsage", "tokens", "part"} {
+		if nested, ok := payload[key].(map[string]any); ok {
+			applyCodeUsageMap(result, nested)
+		}
+	}
+	result.InputTokens = max(result.InputTokens, firstCodeInt(payload, "input_tokens", "inputTokens", "input"))
+	result.OutputTokens = max(result.OutputTokens, firstCodeInt(payload, "output_tokens", "outputTokens", "output"))
+	result.ReasoningTokens = max(result.ReasoningTokens, firstCodeInt(payload, "reasoning_tokens", "reasoningTokens", "reasoning_output_tokens", "reasoning"))
+	cached := firstCodeInt(payload, "cached_input_tokens", "cachedInputTokens", "cache_read_input_tokens", "cacheReadInputTokens")
+	if cache, ok := payload["cache"].(map[string]any); ok {
+		cached = max(cached, firstCodeInt(cache, "read", "read_tokens", "readTokens"))
+	}
+	result.CachedInputTokens = max(result.CachedInputTokens, cached)
+	result.TotalTokens = max(result.TotalTokens, firstCodeInt(payload, "total_tokens", "totalTokens", "total"))
+}
+
+func firstCodeString(payload map[string]any, keys ...string) (string, bool) {
+	for _, key := range keys {
+		if value, ok := payload[key].(string); ok && strings.TrimSpace(value) != "" {
+			return value, true
+		}
+	}
+	return "", false
+}
+
+func firstCodeInt(payload map[string]any, keys ...string) int64 {
+	for _, key := range keys {
+		switch value := payload[key].(type) {
+		case float64:
+			if value > 0 {
+				return int64(value)
+			}
+		case json.Number:
+			if parsed, err := value.Int64(); err == nil && parsed > 0 {
+				return parsed
+			}
+		}
+	}
+	return 0
 }
 
 func scanJSONLines(rawOutput []byte, visit func(map[string]any)) {

@@ -55,7 +55,13 @@ export const codeDeliveryMessages = {
 			exitCode: "退出码 {code}",
 			retry: "重试",
 			confirm: "确认执行",
-			cancel: "取消"
+			cancel: "取消",
+			tokenUsage: "Token 使用量",
+			noTokenUsage: "执行器尚未返回 Token 统计",
+			latestRunTokens: "本轮",
+			sessionTokens: "当前会话",
+			projectTokens: "项目累计",
+			tokenBreakdown: "输入 {input} · 输出 {output} · 缓存输入 {cached} · 推理 {reasoning}"
 		}
 	},
 	en: {
@@ -114,7 +120,13 @@ export const codeDeliveryMessages = {
 			exitCode: "Exit code {code}",
 			retry: "Retry",
 			confirm: "Run",
-			cancel: "Cancel"
+			cancel: "Cancel",
+			tokenUsage: "Token usage",
+			noTokenUsage: "The executor has not reported token usage yet",
+			latestRunTokens: "Latest run",
+			sessionTokens: "Session",
+			projectTokens: "Project total",
+			tokenBreakdown: "Input {input} · Output {output} · Cached input {cached} · Reasoning {reasoning}"
 		}
 	}
 } as const

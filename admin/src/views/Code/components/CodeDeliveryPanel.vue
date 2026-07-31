@@ -142,6 +142,7 @@ const qualityType = (status?: CodeQualityStatus) => {
 const durationLabel = (milliseconds: number) => milliseconds < 1000
 	? `${milliseconds} ms`
 	: `${(milliseconds / 1000).toFixed(milliseconds < 10000 ? 1 : 0)} s`
+const tokenLabel = (count: number) => new Intl.NumberFormat().format(count || 0)
 
 watch(() => props.sessionId, () => {
 	state.value = null
@@ -183,6 +184,17 @@ useIntervalFn(() => {
 						<n-alert v-if="state?.errorSummary" type="error" class="mt-4" :title="t('code.errorSummary')">
 							{{ state.errorSummary }}
 						</n-alert>
+					</section>
+
+					<section class="rounded-2xl border border-slate-200 bg-white p-4">
+						<strong class="text-sm text-slate-800">{{ t("code.tokenUsage") }}</strong>
+						<n-empty v-if="!state?.tokenUsage.project.runs" size="small" :description="t('code.noTokenUsage')" class="py-5" />
+						<div v-else class="mt-3 grid grid-cols-3 gap-2 text-center">
+							<div class="rounded-xl bg-slate-50 p-3"><div class="text-lg font-semibold text-slate-800">{{ tokenLabel(state.latestRun?.totalTokens || 0) }}</div><div class="text-xs text-slate-500">{{ t("code.latestRunTokens") }}</div></div>
+							<div class="rounded-xl bg-blue-50 p-3"><div class="text-lg font-semibold text-blue-700">{{ tokenLabel(state.tokenUsage.session.totalTokens) }}</div><div class="text-xs text-slate-500">{{ t("code.sessionTokens") }}</div></div>
+							<div class="rounded-xl bg-emerald-50 p-3"><div class="text-lg font-semibold text-emerald-700">{{ tokenLabel(state.tokenUsage.project.totalTokens) }}</div><div class="text-xs text-slate-500">{{ t("code.projectTokens") }}</div></div>
+						</div>
+						<div v-if="state?.tokenUsage.project.runs" class="mt-3 text-xs text-slate-400">{{ t("code.tokenBreakdown", { input: tokenLabel(state.tokenUsage.project.inputTokens), output: tokenLabel(state.tokenUsage.project.outputTokens), cached: tokenLabel(state.tokenUsage.project.cachedInputTokens), reasoning: tokenLabel(state.tokenUsage.project.reasoningTokens) }) }}</div>
 					</section>
 
 					<section class="rounded-2xl border border-slate-200 bg-white p-4">

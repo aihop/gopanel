@@ -371,6 +371,10 @@ func GetAISessionState(c fiber.Ctx) error {
 	if latestRun != nil {
 		latestRun.RawOutput = ""
 	}
+	tokenUsage, err := loadCodeTokenUsage(session)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
 	if session.LastTaskID > 0 {
 		taskRepo := repo.NewAITaskRepo()
 		currentTask, _ = taskRepo.GetTaskByID(session.LastTaskID)
@@ -410,5 +414,6 @@ func GetAISessionState(c fiber.Ctx) error {
 		"errorSummary":      errorSummary,
 		"changedFiles":      changedFiles,
 		"latestRun":         latestRun,
+		"tokenUsage":        tokenUsage,
 	}))
 }

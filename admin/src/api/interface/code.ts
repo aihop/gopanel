@@ -109,6 +109,7 @@ export interface CodeExecutionRun {
 	taskId: number
 	instructionId: number
 	executorId: string
+	model: string
 	nativeSessionId: string
 	prompt: string
 	output: string
@@ -116,9 +117,33 @@ export interface CodeExecutionRun {
 	status: string
 	exitCode: number
 	durationMs: number
+	inputTokens: number
+	outputTokens: number
+	cachedInputTokens: number
+	reasoningTokens: number
+	totalTokens: number
 	errorMessage: string
 	startedAt: string
 	completedAt?: string
+}
+
+export interface CodeTokenUsage {
+	inputTokens: number
+	outputTokens: number
+	cachedInputTokens: number
+	reasoningTokens: number
+	totalTokens: number
+	runs: number
+}
+
+export interface CodeDailyTokenUsage extends CodeTokenUsage {
+	date: string
+}
+
+export interface CodeTokenUsageResponse {
+	session: CodeTokenUsage
+	project: CodeTokenUsage
+	daily: CodeDailyTokenUsage[]
 }
 
 export interface CodeSessionHistory {
@@ -196,6 +221,7 @@ export interface CodeSessionState {
 	errorSummary: string
 	changedFiles: string[]
 	latestRun: CodeExecutionRun | null
+	tokenUsage: CodeTokenUsageResponse
 }
 
 export type CodeQualityKind = "test" | "lint" | "typecheck" | "build"

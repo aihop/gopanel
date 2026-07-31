@@ -18,7 +18,8 @@ import type {
 	CodeSessionHistory,
 	CodeSessionState,
 	CodeStructureResult,
-	CodexRuntimeState
+	CodexRuntimeState,
+	CodeTokenUsageResponse
 } from "../interface/code"
 
 // === Group APIs ===
@@ -91,6 +92,10 @@ export function getCodexRuntimeState(sessionId: number) {
 	return http.get<CodexRuntimeState | null>(`/code/sessions/${sessionId}/codex-runtime`, undefined, {
 		timeout: 10000
 	})
+}
+
+export function getCodeTokenUsage(sessionId: number) {
+	return http.get<CodeTokenUsageResponse>(`/code/sessions/${sessionId}/token-usage`, undefined, { timeout: 10000 })
 }
 
 export function getCodeQualityChecks(sessionId: number) {

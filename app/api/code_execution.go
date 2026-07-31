@@ -89,6 +89,12 @@ func executeCodeAgentRun(
 	run.RawOutput = parsed.RawOutput
 	run.Output = parsed.Message
 	run.NativeSessionID = parsed.NativeSessionID
+	run.Model = parsed.Model
+	run.InputTokens = parsed.InputTokens
+	run.OutputTokens = parsed.OutputTokens
+	run.CachedInputTokens = parsed.CachedInputTokens
+	run.ReasoningTokens = parsed.ReasoningTokens
+	run.TotalTokens = parsed.TotalTokens
 	if execErr != nil {
 		run.Status = "failed"
 		if ctx.Err() != nil {

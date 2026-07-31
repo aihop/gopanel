@@ -40,6 +40,7 @@ func CodeRouter(r fiber.Router) {
 		group.Get("/sessions/:id/file", api.GetAISessionFile)
 		group.Put("/sessions/:id/file", api.SaveAISessionFile)
 		group.Get("/sessions/:id/codex-runtime", api.GetCodexRuntimeState)
+		group.Get("/sessions/:id/token-usage", api.GetCodeTokenUsage)
 		group.Get("/sessions/:id/git/status", api.GetCodeGitStatus)
 		group.Get("/sessions/:id/git/diff", api.GetCodeGitDiff)
 		group.Put("/sessions/:id/git/stage", api.UpdateCodeGitStage)
