@@ -58,7 +58,7 @@ class DashboardController extends Notifier<DashboardState> {
   DashboardState build() {
     _repo = ref.watch(dashboardRepositoryProvider);
     // 初次加载数据
-    _loadInitialData();
+    Future.microtask(_loadInitialData);
 
     // 页面销毁时清理定时器
     ref.onDispose(() {

@@ -41,7 +41,7 @@ class SslController extends Notifier<SslListState> {
   @override
   SslListState build() {
     _repo = ref.watch(sslRepositoryProvider);
-    _load();
+    Future.microtask(_load);
     return const SslListState();
   }
 
@@ -59,4 +59,3 @@ class SslController extends Notifier<SslListState> {
     }
   }
 }
-

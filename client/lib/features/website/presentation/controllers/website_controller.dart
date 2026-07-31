@@ -41,7 +41,7 @@ class WebsiteController extends Notifier<WebsiteListState> {
   @override
   WebsiteListState build() {
     _repo = ref.watch(websiteRepositoryProvider);
-    _load();
+    Future.microtask(_load);
     return const WebsiteListState();
   }
 
@@ -59,4 +59,3 @@ class WebsiteController extends Notifier<WebsiteListState> {
     }
   }
 }
-

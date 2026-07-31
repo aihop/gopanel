@@ -45,7 +45,7 @@ class ContainerController extends Notifier<ContainerListState> {
   ContainerListState build() {
     _repo = ref.watch(containerRepositoryProvider);
     // 首次进入加载列表
-    _loadContainers();
+    Future.microtask(_loadContainers);
     return const ContainerListState();
   }
 
@@ -89,7 +89,7 @@ class ContainerController extends Notifier<ContainerListState> {
         names: [containerName],
         operation: operation,
       );
-      
+
       // 成功后重新刷新当前列表获取最新状态
       await refresh();
       return true;

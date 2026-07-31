@@ -46,7 +46,7 @@ class AppsController extends Notifier<AppsListState> {
   @override
   AppsListState build() {
     _repo = ref.watch(appsRepositoryProvider);
-    _loadApps();
+    Future.microtask(_loadApps);
     return const AppsListState();
   }
 

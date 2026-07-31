@@ -59,7 +59,7 @@ class TaskCenterController extends Notifier<TaskCenterState> {
   @override
   TaskCenterState build() {
     _repo = ref.watch(taskRepositoryProvider);
-    _load();
+    Future.microtask(_load);
     return const TaskCenterState();
   }
 

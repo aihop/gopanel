@@ -43,7 +43,7 @@ class DatabaseController extends Notifier<DatabaseListState> {
   @override
   DatabaseListState build() {
     _repo = ref.watch(databaseRepositoryProvider);
-    _load();
+    Future.microtask(_load);
     return const DatabaseListState();
   }
 
@@ -61,4 +61,3 @@ class DatabaseController extends Notifier<DatabaseListState> {
     }
   }
 }
-

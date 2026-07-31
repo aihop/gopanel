@@ -47,7 +47,7 @@ class AuthController extends Notifier<AuthState> {
   @override
   AuthState build() {
     _authRepository = ref.watch(authRepositoryProvider);
-    _checkInitialAuth();
+    Future.microtask(_checkInitialAuth);
     return const AuthState();
   }
 
