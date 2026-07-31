@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -47,6 +48,11 @@ var (
 func (manager *hostTerminalManager) create(req createHostTerminalRequest, userID uint, ip string) (*model.HostTerminalSession, error) {
 	workDir, err := resolveHostTerminalWorkDir(req.WorkDir)
 	if err != nil {
+		return nil, err
+	}
+	codeHostTerminalLifecycle.Lock()
+	defer codeHostTerminalLifecycle.Unlock()
+	if err := validateHostTerminalDevelopmentOpen(); err != nil {
 		return nil, err
 	}
 	command, shellName, err := buildHostTerminalCommand(req.Shell, workDir)
@@ -239,22 +245,34 @@ func (manager *hostTerminalManager) get(id uint) *hostTerminal {
 }
 
 func (manager *hostTerminalManager) stop(id uint) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	return manager.stopAndWait(ctx, id)
+}
+
+func (manager *hostTerminalManager) stopAndWait(ctx context.Context, id uint) bool {
 	session := manager.get(id)
 	if session == nil {
 		return false
 	}
 	session.mu.Lock()
+	if session.finished {
+		session.mu.Unlock()
+		return true
+	}
 	session.stopRequested = true
 	process := session.command.Process
 	session.mu.Unlock()
-	if process == nil || stopHostTerminalProcess(session.command) != nil {
+	if process == nil {
 		return false
 	}
+	_ = stopHostTerminalProcess(session.command)
 	select {
 	case <-session.done:
-	case <-time.After(2 * time.Second):
+		return true
+	case <-ctx.Done():
+		return false
 	}
-	return true
 }
 
 func (session *hostTerminal) subscribe(userID uint, ip string, readOnly bool) (*hostTerminalSubscription, hostTerminalEvent) {

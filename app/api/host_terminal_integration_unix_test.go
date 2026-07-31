@@ -3,6 +3,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"path/filepath"
 	"strings"
@@ -20,7 +21,7 @@ func TestHostTerminalManagerCreateWriteAndStop(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := database.AutoMigrate(&model.HostTerminalSession{}, &model.HostTerminalAuditEvent{}); err != nil {
+	if err := database.AutoMigrate(&model.AIDevSession{}, &model.HostTerminalSession{}, &model.HostTerminalAuditEvent{}); err != nil {
 		t.Fatal(err)
 	}
 	oldDB := global.DB
@@ -74,12 +75,46 @@ func TestHostTerminalManagerCreateWriteAndStop(t *testing.T) {
 	}
 }
 
+func TestCodeDeliveryStopsAllHostTerminals(t *testing.T) {
+	database, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "terminal-delivery.db")), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := database.AutoMigrate(&model.AIDevSession{}, &model.HostTerminalSession{}, &model.HostTerminalAuditEvent{}); err != nil {
+		t.Fatal(err)
+	}
+	oldDB := global.DB
+	global.DB = database
+	t.Cleanup(func() { global.DB = oldDB })
+	manager := &hostTerminalManager{sessions: make(map[uint]*hostTerminal)}
+	record, err := manager.create(createHostTerminalRequest{Shell: "sh", WorkDir: t.TempDir()}, 9, "127.0.0.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := manager.stopAllForCodeDelivery(ctx, 9); err != nil {
+		t.Fatal(err)
+	}
+	if manager.get(record.ID) != nil {
+		t.Fatal("delivery returned before the host terminal exited")
+	}
+	var stored model.HostTerminalSession
+	if err := database.First(&stored, record.ID).Error; err != nil || stored.Status != "stopped" {
+		t.Fatalf("terminal was not stopped for delivery: %#v, %v", stored, err)
+	}
+	var audit model.HostTerminalAuditEvent
+	if err := database.Where("session_id = ? AND action = ?", record.ID, "delivery_stop").First(&audit).Error; err != nil {
+		t.Fatalf("delivery stop audit is missing: %v", err)
+	}
+}
+
 func TestDeleteHostTerminalRecordUsesSoftDelete(t *testing.T) {
 	database, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "terminal-delete.db")), &gorm.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := database.AutoMigrate(&model.HostTerminalSession{}, &model.HostTerminalAuditEvent{}); err != nil {
+	if err := database.AutoMigrate(&model.AIDevSession{}, &model.HostTerminalSession{}, &model.HostTerminalAuditEvent{}); err != nil {
 		t.Fatal(err)
 	}
 	oldDB := global.DB

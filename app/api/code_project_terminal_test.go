@@ -34,3 +34,16 @@ func TestCodeProjectTerminalWorkDirRejectsSubAdmin(t *testing.T) {
 		t.Fatal("sub-admin should not receive a native host shell")
 	}
 }
+
+func TestHostTerminalRejectedDuringCodeDelivery(t *testing.T) {
+	database := withCodeGovernanceDB(t)
+	if err := database.Create(&model.AIDevSession{
+		ID: 921, UserID: 7, Status: codeSessionStatusDelivering, WorkDir: t.TempDir(),
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	manager := &hostTerminalManager{sessions: make(map[uint]*hostTerminal)}
+	if _, err := manager.create(createHostTerminalRequest{Shell: "default", WorkDir: t.TempDir()}, 7, "127.0.0.1"); err == nil {
+		t.Fatal("host terminal should be rejected while a Code session is delivering")
+	}
+}
