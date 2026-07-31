@@ -89,6 +89,7 @@ type AIDevSession struct {
 	ProviderAPIKey    string     `gorm:"column:codex_api_key;type:text" json:"-"`
 	ApprovalPolicy    string     `gorm:"column:approval_policy;type:varchar(32);not null;default:'safe_auto'" json:"approvalPolicy"`
 	LastInstructionAt *time.Time `gorm:"column:last_instruction_at" json:"lastInstructionAt,omitempty"`
+	CurrentTaskTitle  string     `gorm:"-" json:"currentTaskTitle,omitempty"`
 }
 
 func (AIDevSession) TableName() string {

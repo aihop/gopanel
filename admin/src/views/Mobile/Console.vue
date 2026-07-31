@@ -18,7 +18,6 @@ import { mobileMessages } from "@/i18n/locales/mobile"
 import Logo from "@/layouts/common/Logo.vue"
 import MobileContainerPanel from "./components/MobileContainerPanel.vue"
 import MobileFileBrowser from "./components/MobileFileBrowser.vue"
-import MobileInstructionComposer from "./components/MobileInstructionComposer.vue"
 import MobileSessionCreator from "./components/MobileSessionCreator.vue"
 import MobileSystemUpdate from "./components/MobileSystemUpdate.vue"
 import MobileTaskStatusDrawer from "./components/MobileTaskStatusDrawer.vue"
@@ -135,6 +134,10 @@ function sessionProjectName(session: CodeSession) {
 
 function sessionProjectDescription(session: CodeSession) {
 	return sessionProject(session)?.description || ""
+}
+
+function sessionTaskTitle(session: CodeSession) {
+	return session.currentTaskTitle || session.title
 }
 
 async function loadProjects() {
@@ -383,7 +386,7 @@ onBeforeUnmount(() => {
 							<button v-for="session in overview?.sessions || []" :key="session.id" class="w-full rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition active:scale-[0.99]" @click="openSession(session)">
 								<div class="flex items-start justify-between gap-3">
 									<div class="min-w-0 flex-1">
-										<div class="truncate font-semibold text-slate-900">{{ session.title }}</div>
+										<div class="truncate font-semibold text-slate-900">{{ sessionTaskTitle(session) }}</div>
 										<div class="mt-1.5 flex items-center gap-1.5 text-sm font-medium text-blue-600">
 											<Icon name="mdi:folder-outline" :size="16" />
 											<span class="truncate">{{ sessionProjectName(session) }}</span>
@@ -420,7 +423,7 @@ onBeforeUnmount(() => {
 					<div v-if="!isTaskDetail" class="flex items-center gap-2 overflow-x-auto pb-1">
 						<n-button size="small" round type="primary" secondary class="shrink-0" @click="showSessionCreator = true">+ {{ t("mobile.newSession") }}</n-button>
 						<n-button v-for="session in sessions" :key="session.id" size="small" round :type="selectedSessionId === session.id ? 'primary' : 'default'" @click="selectSession(session)">
-							{{ session.title }}
+							{{ sessionTaskTitle(session) }}
 						</n-button>
 					</div>
 					<n-empty v-if="sessions.length === 0" :description="t('mobile.noSessions')" class="rounded-2xl bg-white py-16">
@@ -436,7 +439,6 @@ onBeforeUnmount(() => {
 								<div v-if="connected" class="border-t border-white/10 bg-slate-950 px-3 py-1.5 text-[11px] text-slate-400">
 									<span>{{ t("mobile.terminalReadOnly") }}</span>
 								</div>
-								<MobileInstructionComposer :session-id="selectedSessionId" @sent="loadSessionState(true)" />
 							</template>
 						</MobileTerminal>
 					</template>
