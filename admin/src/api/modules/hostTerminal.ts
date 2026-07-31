@@ -18,6 +18,14 @@ export function stopHostTerminalSession(sessionId: number) {
 	return http.post(`/host/terminal/sessions/${sessionId}/stop`)
 }
 
+export function reconnectHostTerminalSession(sessionId: number) {
+	return http.post<HostTerminalSession>(`/host/terminal/sessions/${sessionId}/reconnect`)
+}
+
+export function deleteHostTerminalSession(sessionId: number) {
+	return http.delete(`/host/terminal/sessions/${sessionId}`)
+}
+
 export function getHostTerminalAuditEvents(sessionId: number) {
 	return http.get<HostTerminalAuditEvent[]>(`/host/terminal/sessions/${sessionId}/audit-events`)
 }

@@ -95,6 +95,15 @@ func (manager *hostTerminalManager) create(req createHostTerminalRequest, userID
 	return record, nil
 }
 
+func (manager *hostTerminalManager) reconnect(record *model.HostTerminalSession, userID uint, ip string) (*model.HostTerminalSession, error) {
+	if record == nil {
+		return nil, errors.New("终端会话不存在")
+	}
+	return manager.create(createHostTerminalRequest{
+		Shell: record.Shell, WorkDir: record.WorkDir, Cols: 120, Rows: 32,
+	}, userID, ip)
+}
+
 func resolveHostTerminalWorkDir(requested string) (string, error) {
 	requested = strings.TrimSpace(requested)
 	if requested == "" {
