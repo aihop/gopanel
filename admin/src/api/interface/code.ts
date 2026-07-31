@@ -77,6 +77,7 @@ export interface CodeSession {
 	createdAt: string
 	projectId: number
 	title: string
+	currentTaskTitle?: string
 	agentName: string
 	workDir: string
 	sourceWorkDir?: string

@@ -74,6 +74,29 @@ func (r *aiDevSessionRepo) GetSessionsByUserID(userID, projectID uint, page, lim
 
 	db.Count(&total)
 	err := db.Order("updated_at desc").Offset((page - 1) * limit).Limit(limit).Find(&sessions).Error
+	if err != nil || len(sessions) == 0 {
+		return sessions, total, err
+	}
+	taskIDs := make([]uint, 0, len(sessions))
+	for _, session := range sessions {
+		if session.LastTaskID > 0 {
+			taskIDs = append(taskIDs, session.LastTaskID)
+		}
+	}
+	if len(taskIDs) == 0 {
+		return sessions, total, nil
+	}
+	var tasks []*model.AITask
+	if err = global.DB.Select("id", "title").Where("id IN ? AND user_id = ?", taskIDs, userID).Find(&tasks).Error; err != nil {
+		return nil, 0, err
+	}
+	titles := make(map[uint]string, len(tasks))
+	for _, task := range tasks {
+		titles[task.ID] = task.Title
+	}
+	for _, session := range sessions {
+		session.CurrentTaskTitle = titles[session.LastTaskID]
+	}
 	return sessions, total, err
 }
 
