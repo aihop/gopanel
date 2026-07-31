@@ -60,6 +60,23 @@ export interface CodeGitDeliveryResult {
 	repositories?: CodeRepositoryDeliveryResult[]
 }
 
+export interface CodeDeliveryPushRepository {
+	repositoryId: string
+	repositoryName: string
+	status: "pending" | "pushed" | "failed"
+	remote?: string
+	branch?: string
+	commit?: string
+	errorMessage?: string
+	ready: boolean
+}
+
+export interface CodeDeliveryPushResult {
+	available: boolean
+	status: "unavailable" | "pending" | "pushed" | "failed"
+	repositories: CodeDeliveryPushRepository[]
+}
+
 export interface CodeRepositoryDeliveryResult {
 	repositoryId: string
 	repositoryName: string

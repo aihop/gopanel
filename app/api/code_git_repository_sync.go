@@ -27,6 +27,7 @@ type codePreparedRepository struct {
 	TargetBranch string
 	BaseCommit   string
 	RemoteName   string
+	RemoteBranch string
 	RemoteCommit string
 	SyncStatus   string
 }
@@ -115,9 +116,20 @@ func prepareCodeRepository(sourceDir string) (codePreparedRepository, error) {
 	}
 	prepared.BaseCommit = baseCommit
 	prepared.RemoteName = remoteName
+	prepared.RemoteBranch = codeRemoteBranch(remoteName, remoteRef, targetBranch)
 	prepared.RemoteCommit = remoteCommit
 	prepared.SyncStatus = syncStatus
 	return prepared, nil
+}
+
+func codeRemoteBranch(remoteName, remoteRef, fallback string) string {
+	remoteRef = strings.TrimSpace(remoteRef)
+	for _, prefix := range []string{"refs/remotes/" + remoteName + "/", remoteName + "/"} {
+		if remoteName != "" && strings.HasPrefix(remoteRef, prefix) {
+			return strings.TrimPrefix(remoteRef, prefix)
+		}
+	}
+	return fallback
 }
 
 func codeRepositoryRemoteTracking(sourceDir, branch string) (string, string) {
@@ -219,7 +231,7 @@ func syncCodeWorktreeWithTarget(worktreeDir, targetBranch string) error {
 func fetchCodeRepository(sourceDir, remoteName string) (string, error) {
 	return runCodeGitWithTimeout(
 		sourceDir, codeGitFetchTimeout,
-		"-c", "credential.interactive=never", "fetch", "--prune", remoteName,
+		"-c", "credential.interactive=never", "fetch", "--prune", "--", remoteName,
 	)
 }
 

@@ -27,6 +27,7 @@ type codeSessionRepositoryManifest struct {
 	TargetBranch string `json:"targetBranch"`
 	BaseCommit   string `json:"baseCommit"`
 	RemoteName   string `json:"remoteName,omitempty"`
+	RemoteBranch string `json:"remoteBranch,omitempty"`
 	RemoteCommit string `json:"remoteCommit,omitempty"`
 	SyncStatus   string `json:"syncStatus"`
 }
@@ -58,7 +59,8 @@ func writeCodeSessionManifest(workDir string, repositories []model.AIDevSessionR
 			SourceDir: repository.SourceDir, WorktreeDir: repository.WorktreeDir,
 			LinkName: repository.LinkName, Branch: repository.Branch,
 			TargetBranch: repository.TargetBranch, BaseCommit: repository.BaseCommit,
-			RemoteName: repository.RemoteName, RemoteCommit: repository.RemoteCommit, SyncStatus: repository.SyncStatus,
+			RemoteName: repository.RemoteName, RemoteBranch: repository.RemoteBranch,
+			RemoteCommit: repository.RemoteCommit, SyncStatus: repository.SyncStatus,
 		})
 	}
 	content, err := json.MarshalIndent(manifest, "", "  ")
@@ -105,7 +107,8 @@ func createCodeSessionRepositoryWorktrees(session *model.AIDevSession, project *
 			WorktreeDir: worktreeDir, LinkName: source.LinkName, Branch: branch,
 			TargetBranch: repository.TargetBranch, BaseCommit: repository.BaseCommit,
 			RemoteName: repository.RemoteName, RemoteCommit: repository.RemoteCommit,
-			SyncStatus: repository.SyncStatus, Status: "active",
+			RemoteBranch: repository.RemoteBranch,
+			SyncStatus:   repository.SyncStatus, Status: "active",
 		})
 	}
 	if err := writeCodeSessionManifest(workspaceDir, created); err != nil {

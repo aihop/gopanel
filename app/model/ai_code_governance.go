@@ -16,12 +16,17 @@ type AICodeDelivery struct {
 	TargetBranch   string     `gorm:"column:target_branch;type:varchar(255)" json:"targetBranch,omitempty"`
 	BaseCommit     string     `gorm:"column:base_commit;type:varchar(64)" json:"baseCommit,omitempty"`
 	RemoteName     string     `gorm:"column:remote_name;type:varchar(255)" json:"remoteName,omitempty"`
+	RemoteBranch   string     `gorm:"column:remote_branch;type:varchar(255)" json:"remoteBranch,omitempty"`
 	RemoteCommit   string     `gorm:"column:remote_commit;type:varchar(64)" json:"remoteCommit,omitempty"`
 	WorktreeCommit string     `gorm:"column:worktree_commit;type:varchar(64)" json:"worktreeCommit"`
 	MergeCommit    string     `gorm:"column:merge_commit;type:varchar(64)" json:"mergeCommit"`
 	ErrorMessage   string     `gorm:"column:error_message;type:text" json:"errorMessage"`
 	MergedAt       *time.Time `gorm:"column:merged_at" json:"mergedAt,omitempty"`
 	CompletedAt    *time.Time `gorm:"column:completed_at" json:"completedAt,omitempty"`
+	PushStatus     string     `gorm:"column:push_status;type:varchar(32);not null;default:'pending';index" json:"pushStatus"`
+	PushedCommit   string     `gorm:"column:pushed_commit;type:varchar(64)" json:"pushedCommit,omitempty"`
+	PushError      string     `gorm:"column:push_error;type:text" json:"pushError,omitempty"`
+	PushedAt       *time.Time `gorm:"column:pushed_at" json:"pushedAt,omitempty"`
 }
 
 func (AICodeDelivery) TableName() string { return "ai_code_deliveries" }

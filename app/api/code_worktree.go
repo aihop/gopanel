@@ -130,6 +130,7 @@ func createCodeSessionWorktree(session *model.AIDevSession, project *model.AIGro
 	session.TargetBranch = repository.TargetBranch
 	session.BaseCommit = repository.BaseCommit
 	session.RemoteName = repository.RemoteName
+	session.RemoteBranch = repository.RemoteBranch
 	session.RemoteCommit = repository.RemoteCommit
 	session.RepositorySync = repository.SyncStatus
 	session.IsolationMode = "single_worktree"

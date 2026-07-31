@@ -4,6 +4,7 @@ import { useIntervalFn } from "@vueuse/core"
 import { useI18n } from "vue-i18n"
 import { useDialog, useMessage } from "naive-ui"
 import Icon from "@/components/common/Icon.vue"
+import CodeDeliveryPush from "./CodeDeliveryPush.vue"
 import { commitCodeGitChanges, getCodeGitDiff, getCodeGitStatus, mergeCodeSessionWorktree, updateCodeGitStage } from "@/api/modules/codeGit"
 import { getCodeSession } from "@/api/modules/code"
 import type { CodeGitDiffKind, CodeGitFile, CodeGitRepository, CodeGitStatus } from "@/api/interface/codeGit"
@@ -27,6 +28,7 @@ const worktreeBranch = ref("")
 const isolationMode = ref("")
 const commitMessage = ref("")
 const deliveryLoading = ref(false)
+const deliveryPushKey = ref(0)
 let statusPending = false
 let diffSequence = 0
 
@@ -182,6 +184,7 @@ const mergeWorktree = () => {
 				}
 				worktreeBranch.value = ""
 				isolationMode.value = ""
+				deliveryPushKey.value++
 				message.success(t("code.gitMergeSuccess"))
 				await loadStatus(true)
 			} catch (error) {
@@ -279,6 +282,7 @@ useIntervalFn(() => {
 				</div>
 				<p class="text-[11px] leading-4 text-slate-400">{{ t(canMerge ? "code.gitMergeReady" : "code.gitMergeHint") }}</p>
 			</div>
+			<CodeDeliveryPush v-if="!hasIsolation && sessionId" :session-id="sessionId" :refresh-key="deliveryPushKey" />
 			<n-spin :show="loading" class="min-h-0 flex-1">
 				<div v-if="loadError" class="p-4">
 					<n-alert type="error" :title="t('code.gitLoadFailed')">{{ loadError }}</n-alert>

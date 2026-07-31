@@ -60,7 +60,7 @@ func loadOrCreateCodeDelivery(session *model.AIDevSession, userID uint) (*model.
 		Status: codeDeliveryPrepared, SourceWorkDir: session.SourceWorkDir,
 		WorkDir: session.WorkDir, WorktreeBranch: session.WorktreeBranch,
 		TargetBranch: targetBranch, BaseCommit: session.BaseCommit,
-		RemoteName: session.RemoteName, RemoteCommit: targetCommit,
+		RemoteName: session.RemoteName, RemoteBranch: session.RemoteBranch, RemoteCommit: targetCommit,
 		WorktreeCommit: commit,
 	}
 	if err := global.DB.Create(&delivery).Error; err != nil {
@@ -77,7 +77,8 @@ func codeDeliverySessionSnapshot(delivery *model.AICodeDelivery) *model.AIDevSes
 		ID: delivery.SessionID, UserID: delivery.UserID, ProjectID: delivery.ProjectID,
 		WorkDir: delivery.WorkDir, SourceWorkDir: delivery.SourceWorkDir,
 		WorktreeBranch: delivery.WorktreeBranch, TargetBranch: delivery.TargetBranch,
-		BaseCommit: delivery.BaseCommit, RemoteName: delivery.RemoteName, RemoteCommit: delivery.RemoteCommit,
+		BaseCommit: delivery.BaseCommit, RemoteName: delivery.RemoteName,
+		RemoteBranch: delivery.RemoteBranch, RemoteCommit: delivery.RemoteCommit,
 	}
 }
 

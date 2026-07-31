@@ -40,6 +40,16 @@ export const codeGitReviewMessages = {
 			gitMergeConflict: "仓库 {repository} 存在合并冲突：{files}。源仓库已恢复，隔离分支仍保留。",
 			gitMergeReady: "工作区已干净，可以执行合并交付。",
 			gitMergeHint: "请先暂存并提交全部变更，再执行合并。",
+			gitPush: "推送远端",
+			gitPushTitle: "推送已交付提交",
+			gitPushConfirm: "确认将 {count} 个仓库的已交付提交推送到 {destinations}？系统禁止强推，远端变化会立即停止。",
+			gitPushReady: "本地交付完成，{count} 个仓库等待推送。",
+			gitPushUnavailable: "当前交付尚未完成，或仓库没有可用的远端跟踪分支。",
+			gitPushSuccess: "已交付提交已推送并完成远端核验",
+			gitPushFailed: "Git 推送失败",
+			gitPushStatusFailed: "推送状态加载失败",
+			gitPushCompleted: "{count} 个仓库均已推送到远端",
+			gitRetry: "重试",
 			gitCancel: "取消"
 		}
 	},
@@ -84,6 +94,16 @@ export const codeGitReviewMessages = {
 			gitMergeConflict: "Repository {repository} has merge conflicts: {files}. The source repository was restored and the isolated branch was kept.",
 			gitMergeReady: "The worktree is clean and ready to merge.",
 			gitMergeHint: "Stage and commit every change before merging.",
+			gitPush: "Push delivery",
+			gitPushTitle: "Push delivered commits",
+			gitPushConfirm: "Push delivered commits for {count} repositories to {destinations}? Force push is disabled and remote changes stop the operation.",
+			gitPushReady: "Local delivery is complete; {count} repositories are waiting to be pushed.",
+			gitPushUnavailable: "Delivery is incomplete or no tracked remote branch is available.",
+			gitPushSuccess: "Delivered commits were pushed and verified remotely",
+			gitPushFailed: "Git push failed",
+			gitPushStatusFailed: "Failed to load push status",
+			gitPushCompleted: "All {count} repositories were pushed remotely",
+			gitRetry: "Retry",
 			gitCancel: "Cancel"
 		}
 	}

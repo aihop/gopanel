@@ -85,6 +85,7 @@ export interface CodeSession {
 	targetBranch?: string
 	baseCommit?: string
 	remoteName?: string
+	remoteBranch?: string
 	remoteCommit?: string
 	repositorySync?: "local" | "synced" | "fast_forwarded"
 	isolationMode?: "single_worktree" | "multi_worktree"
