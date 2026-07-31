@@ -28,6 +28,8 @@ type codeGitDeliveryResult struct {
 	Repositories   []codeRepositoryDeliveryResult `json:"repositories,omitempty"`
 }
 
+const codeDeliveryQueueTimeout = 2 * time.Minute
+
 func validateCodeGitCommitMessage(message string) (string, error) {
 	message = strings.TrimSpace(message)
 	if message == "" || len([]rune(message)) > 500 {
@@ -200,7 +202,13 @@ func runCodeWorktreeMerge(c fiber.Ctx, operation func(*model.AIDevSession) (code
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	lease, err := codeExecutions.acquireSession(context.Background(), session, codeExecutionDelivery, false)
+	deliveryContext, cancelDelivery := context.WithTimeout(context.Background(), codeDeliveryQueueTimeout)
+	defer cancelDelivery()
+	codeExecutions.cancelSessionKindAndWait(deliveryContext, session.ID, codeExecutionInteractive)
+	if deliveryContext.Err() != nil {
+		return c.JSON(e.Fail(errors.New("停止会话交互终端超时，请稍后重试")))
+	}
+	lease, err := codeExecutions.acquireSession(deliveryContext, session, codeExecutionDelivery, true)
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}

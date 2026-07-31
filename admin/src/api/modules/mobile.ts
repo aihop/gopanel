@@ -232,7 +232,7 @@ export function createMobileSession(data: { title: string; projectId: number; ex
 		mobileHttp.post<ResultData<CodeSession>>("/mobile/app/sessions", {
 			...data,
 			workDir: "",
-			isolated: false
+			isolated: true
 		})
 	)
 }

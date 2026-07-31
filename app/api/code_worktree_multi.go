@@ -102,6 +102,12 @@ func createCodeSessionRepositoryWorktrees(session *model.AIDevSession, project *
 			rollback()
 			return err
 		}
+		if err := installCodeManagedPushGuard(worktreeDir); err != nil {
+			_, _ = runCodeGit(source.Path, "worktree", "remove", "--force", worktreeDir)
+			_, _ = runCodeGit(source.Path, "branch", "-D", "--", branch)
+			rollback()
+			return err
+		}
 		created = append(created, model.AIDevSessionRepository{
 			SessionID: session.ID, ProjectID: project.ID, SourceDir: source.Path,
 			WorktreeDir: worktreeDir, LinkName: source.LinkName, Branch: branch,

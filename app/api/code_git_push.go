@@ -24,6 +24,8 @@ const (
 	codePushFailed  = "failed"
 )
 
+var errCodePushRemoteAdvanced = errors.New("远端分支已在交付后更新，请先同步并重新交付")
+
 type codeRepositoryPushResult struct {
 	RepositoryID   string `json:"repositoryId"`
 	RepositoryName string `json:"repositoryName"`
@@ -76,7 +78,13 @@ func PushCodeSessionDelivery(c fiber.Ctx) error {
 	if err := validateCodeDeliveryPushSession(session, claims); err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	lease, err := codeExecutions.acquireSession(context.Background(), session, codeExecutionDelivery, false)
+	deliveryContext, cancelDelivery := context.WithTimeout(context.Background(), codeDeliveryQueueTimeout)
+	defer cancelDelivery()
+	codeExecutions.cancelSessionKindAndWait(deliveryContext, session.ID, codeExecutionInteractive)
+	if deliveryContext.Err() != nil {
+		return c.JSON(e.Fail(errors.New("停止会话交互终端超时，请稍后重试")))
+	}
+	lease, err := codeExecutions.acquireSession(deliveryContext, session, codeExecutionDelivery, true)
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
@@ -264,14 +272,20 @@ func pushCodeDeliveryRepository(sourceDir, targetBranch, remoteName, remoteBranc
 		return result, nil
 	}
 	if err != nil || currentRemoteCommit != remoteCommit {
-		return failedCodePushResult(result, errors.New("远端分支已在交付后更新，请先同步并重新交付"))
+		return failedCodePushResult(result, errCodePushRemoteAdvanced)
 	}
 	if _, err := runCodeGitWithTimeout(
 		sourceDir, codeGitFetchTimeout,
 		"-c", "credential.interactive=never", "push", "--", remoteName,
 		mergeCommit+":refs/heads/"+remoteBranch,
 	); err != nil {
-		return failedCodePushResult(result, err)
+		pushErr := err
+		if _, fetchErr := fetchCodeRepository(sourceDir, remoteName); fetchErr == nil {
+			if latestRemoteCommit, resolveErr := runCodeGit(sourceDir, "rev-parse", remoteRef); resolveErr == nil && latestRemoteCommit != remoteCommit {
+				return failedCodePushResult(result, errCodePushRemoteAdvanced)
+			}
+		}
+		return failedCodePushResult(result, pushErr)
 	}
 	if _, err := fetchCodeRepository(sourceDir, remoteName); err != nil {
 		return failedCodePushResult(result, err)

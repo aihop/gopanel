@@ -100,6 +100,9 @@ func normalizeAIAgentAuthorizedWorkDir(workDir string, userID uint, claims *toke
 }
 
 func ensureAIAgentWorkspaceContainer(wsConn *websocket.Conn, workDir string, session *model.AIDevSession, claims *token.CustomClaims) (string, error) {
+	if err := ensureCodeManagedPushGuards(session); err != nil {
+		return "", err
+	}
 	containerName := aiAgentWorkspaceContainerName(workDir, claims.UserId)
 	isRunning, exists, err := docker.InspectContainerRunning(context.Background(), containerName)
 	if err != nil {

@@ -291,7 +291,7 @@ const submit = async () => {
 											}}
 										</div>
 									</div>
-									<n-switch v-model:value="isolated" :disabled="!worktreeCapability?.available" />
+									<n-switch :value="isolated" disabled />
 								</div>
 							</div>
 						</n-form-item>

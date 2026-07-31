@@ -263,7 +263,7 @@ func resumeCodeMultiRepositoryDelivery(session *model.AIDevSession, _ uint) (cod
 	}
 	results := make([]codeRepositoryDeliveryResult, 0, len(repositories))
 	for index := range repositories {
-		result, mergeErr := mergeCodeSessionRepository(&repositories[index])
+		result, mergeErr := integrateAndPushCodeRepository(session, &repositories[index])
 		results = append(results, result)
 		if mergeErr != nil {
 			return codeGitDeliveryResult{Status: "failed", Repositories: results}, mergeErr

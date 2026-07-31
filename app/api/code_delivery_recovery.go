@@ -174,12 +174,9 @@ func resumeCodeSessionDelivery(session *model.AIDevSession, userID uint) (codeGi
 	if err != nil {
 		return codeGitDeliveryResult{}, err
 	}
-	result := codeGitDeliveryResult{Status: "merged", Commit: delivery.MergeCommit, Branch: delivery.WorktreeBranch}
-	if delivery.Status == codeDeliveryPrepared {
-		result, err = mergePreparedCodeDelivery(delivery)
-		if err != nil || result.Status == "conflict" {
-			return result, err
-		}
+	result, err := integrateAndPushCodeDelivery(delivery)
+	if err != nil || result.Status == "conflict" {
+		return result, err
 	}
 	if delivery.Status == codeDeliveryMerged {
 		if err := cleanupCodeDeliveryWorktree(delivery); err != nil {
