@@ -2,9 +2,10 @@
 import { computed, ref, watch } from "vue"
 import { useIntervalFn } from "@vueuse/core"
 import { useI18n } from "vue-i18n"
-import { useMessage } from "naive-ui"
+import { useDialog, useMessage } from "naive-ui"
 import Icon from "@/components/common/Icon.vue"
-import { getCodeGitDiff, getCodeGitStatus, updateCodeGitStage } from "@/api/modules/codeGit"
+import { commitCodeGitChanges, getCodeGitDiff, getCodeGitStatus, mergeCodeSessionWorktree, updateCodeGitStage } from "@/api/modules/codeGit"
+import { getCodeSession } from "@/api/modules/code"
 import type { CodeGitDiffKind, CodeGitFile, CodeGitRepository, CodeGitStatus } from "@/api/interface/codeGit"
 import { codeGitReviewMessages } from "../codeGitReviewMessages"
 
@@ -12,6 +13,7 @@ const props = defineProps<{ sessionId: number | null; active: boolean }>()
 const emit = defineEmits<{ (event: "open-file", file: { path: string; extension: string }): void }>()
 const { t } = useI18n({ messages: codeGitReviewMessages })
 const message = useMessage()
+const dialog = useDialog()
 const status = ref<CodeGitStatus | null>(null)
 const loading = ref(false)
 const refreshing = ref(false)
@@ -21,6 +23,9 @@ const diffContent = ref("")
 const diffTruncated = ref(false)
 const diffLoading = ref(false)
 const stagingKey = ref("")
+const worktreeBranch = ref("")
+const commitMessage = ref("")
+const deliveryLoading = ref(false)
 let statusPending = false
 let diffSequence = 0
 
@@ -49,6 +54,8 @@ const selectedEntry = computed(() => entries.value.find(entry => entry.key === s
 const hasChanges = computed(() => entries.value.length > 0)
 const totalAdditions = computed(() => (status.value?.additions || 0) + (status.value?.stagedAdditions || 0))
 const totalDeletions = computed(() => (status.value?.deletions || 0) + (status.value?.stagedDeletions || 0))
+const canCommit = computed(() => Boolean(worktreeBranch.value && status.value?.staged && commitMessage.value.trim()))
+const canMerge = computed(() => Boolean(worktreeBranch.value && status.value && status.value.files === 0))
 const diffLines = computed(() => diffContent.value.split("\n"))
 const diffLineClass = (line: string) => {
 	if (line.startsWith("+++") || line.startsWith("---")) return "text-slate-400"
@@ -108,8 +115,11 @@ const loadStatus = async (silent = false) => {
 	if (!silent) loading.value = true
 	else refreshing.value = true
 	try {
-		const response = await getCodeGitStatus(props.sessionId)
+		const [response, sessionResponse] = await Promise.all([
+			getCodeGitStatus(props.sessionId), getCodeSession(props.sessionId)
+		])
 		status.value = response.data
+		worktreeBranch.value = sessionResponse.data.session.worktreeBranch || ""
 		loadError.value = ""
 		await reconcileSelection()
 	} catch (error) {
@@ -120,6 +130,48 @@ const loadStatus = async (silent = false) => {
 		loading.value = false
 		refreshing.value = false
 	}
+}
+
+const commitChanges = async () => {
+	if (!props.sessionId || !canCommit.value) return
+	deliveryLoading.value = true
+	try {
+		await commitCodeGitChanges(props.sessionId, commitMessage.value.trim())
+		commitMessage.value = ""
+		message.success(t("code.gitCommitSuccess"))
+		await loadStatus(true)
+	} catch (error) {
+		message.error(error instanceof Error ? error.message : t("code.gitCommitFailed"))
+	} finally {
+		deliveryLoading.value = false
+	}
+}
+
+const mergeWorktree = () => {
+	if (!props.sessionId || !canMerge.value) return
+	dialog.warning({
+		title: t("code.gitMergeTitle"),
+		content: t("code.gitMergeConfirm", { branch: worktreeBranch.value }),
+		positiveText: t("code.gitMerge"),
+		negativeText: t("code.gitCancel"),
+		onPositiveClick: async () => {
+			deliveryLoading.value = true
+			try {
+				const response = await mergeCodeSessionWorktree(props.sessionId as number)
+				if (response.data.status === "conflict") {
+					message.error(t("code.gitMergeConflict", { files: response.data.conflictFiles?.join(", ") || "-" }))
+					return
+				}
+				worktreeBranch.value = ""
+				message.success(t("code.gitMergeSuccess"))
+				await loadStatus(true)
+			} catch (error) {
+				message.error(error instanceof Error ? error.message : t("code.gitMergeFailed"))
+			} finally {
+				deliveryLoading.value = false
+			}
+		}
+	})
 }
 
 const updateStage = async (entry: GitReviewEntry, staged: boolean) => {
@@ -154,6 +206,8 @@ watch(
 		selectedKey.value = ""
 		diffContent.value = ""
 		loadError.value = ""
+		worktreeBranch.value = ""
+		commitMessage.value = ""
 		if (props.active) void loadStatus()
 	}
 )
@@ -192,6 +246,15 @@ useIntervalFn(() => {
 						<template #icon><Icon name="mdi:refresh" :size="17" /></template>
 					</n-button>
 				</div>
+			</div>
+			<div v-if="worktreeBranch" class="space-y-2 border-b border-slate-200 p-3">
+				<div class="truncate text-xs text-slate-500" :title="worktreeBranch">{{ t("code.gitWorktreeBranch", { branch: worktreeBranch }) }}</div>
+				<n-input v-model:value="commitMessage" size="small" :placeholder="t('code.gitCommitPlaceholder')" :disabled="deliveryLoading" @keyup.enter="commitChanges" />
+				<div class="grid grid-cols-2 gap-2">
+					<n-button size="small" type="primary" :disabled="!canCommit" :loading="deliveryLoading" @click="commitChanges">{{ t("code.gitCommit") }}</n-button>
+					<n-button size="small" type="success" secondary :disabled="!canMerge" :loading="deliveryLoading" @click="mergeWorktree">{{ t("code.gitMerge") }}</n-button>
+				</div>
+				<p class="text-[11px] leading-4 text-slate-400">{{ t(canMerge ? "code.gitMergeReady" : "code.gitMergeHint") }}</p>
 			</div>
 			<n-spin :show="loading" class="min-h-0 flex-1">
 				<div v-if="loadError" class="p-4">

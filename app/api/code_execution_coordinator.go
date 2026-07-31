@@ -18,6 +18,7 @@ const (
 	codeExecutionInteractive = "interactive"
 	codeExecutionInstruction = "instruction"
 	codeExecutionQuality     = "quality"
+	codeExecutionDelivery    = "delivery"
 )
 
 var (

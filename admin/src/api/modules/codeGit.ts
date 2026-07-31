@@ -1,8 +1,16 @@
 import http from "@/api"
-import type { CodeGitDiff, CodeGitDiffKind, CodeGitStatus } from "../interface/codeGit"
+import type { CodeGitDeliveryResult, CodeGitDiff, CodeGitDiffKind, CodeGitStatus } from "../interface/codeGit"
 
 export function getCodeGitStatus(sessionId: number) {
 	return http.get<CodeGitStatus>(`/code/sessions/${sessionId}/git/status`, undefined, { timeout: 15000 })
+}
+
+export function commitCodeGitChanges(sessionId: number, message: string) {
+	return http.post<CodeGitDeliveryResult>(`/code/sessions/${sessionId}/git/commit`, { message })
+}
+
+export function mergeCodeSessionWorktree(sessionId: number) {
+	return http.post<CodeGitDeliveryResult>(`/code/sessions/${sessionId}/worktree/merge`, { confirm: true })
 }
 
 export function getCodeGitDiff(sessionId: number, repositoryId: string, path: string, kind: CodeGitDiffKind) {

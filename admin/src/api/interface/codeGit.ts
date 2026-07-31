@@ -47,3 +47,10 @@ export interface CodeGitDiff {
 	content: string
 	truncated: boolean
 }
+
+export interface CodeGitDeliveryResult {
+	status: "committed" | "merged" | "conflict"
+	commit?: string
+	branch?: string
+	conflictFiles?: string[]
+}

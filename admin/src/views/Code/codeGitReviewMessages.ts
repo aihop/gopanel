@@ -23,7 +23,21 @@ export const codeGitReviewMessages = {
 			gitSummary: "{files} 个文件",
 			gitWorkingDiff: "工作区差异",
 			gitStagedDiff: "暂存区差异",
-			gitOpenFile: "打开文件"
+			gitOpenFile: "打开文件",
+			gitWorktreeBranch: "隔离分支：{branch}",
+			gitCommitPlaceholder: "输入本次提交说明",
+			gitCommit: "提交变更",
+			gitCommitSuccess: "暂存变更已提交",
+			gitCommitFailed: "Git 提交失败",
+			gitMerge: "合并交付",
+			gitMergeTitle: "合并 Worktree 交付",
+			gitMergeConfirm: "确认将分支 {branch} 合并回项目当前分支？合并成功后会清理隔离工作区。",
+			gitMergeSuccess: "变更已合并并清理隔离工作区",
+			gitMergeFailed: "Worktree 合并失败",
+			gitMergeConflict: "存在合并冲突：{files}。源仓库已恢复，隔离分支仍保留。",
+			gitMergeReady: "工作区已干净，可以执行合并交付。",
+			gitMergeHint: "请先暂存并提交全部变更，再执行合并。",
+			gitCancel: "取消"
 		}
 	},
 	en: {
@@ -50,7 +64,21 @@ export const codeGitReviewMessages = {
 			gitSummary: "{files} files",
 			gitWorkingDiff: "Working tree diff",
 			gitStagedDiff: "Staged diff",
-			gitOpenFile: "Open file"
+			gitOpenFile: "Open file",
+			gitWorktreeBranch: "Isolated branch: {branch}",
+			gitCommitPlaceholder: "Describe this commit",
+			gitCommit: "Commit changes",
+			gitCommitSuccess: "Staged changes committed",
+			gitCommitFailed: "Git commit failed",
+			gitMerge: "Merge delivery",
+			gitMergeTitle: "Merge worktree delivery",
+			gitMergeConfirm: "Merge branch {branch} into the project's current branch? The isolated worktree will be cleaned after success.",
+			gitMergeSuccess: "Changes merged and isolated worktree cleaned",
+			gitMergeFailed: "Worktree merge failed",
+			gitMergeConflict: "Merge conflicts: {files}. The source repository was restored and the isolated branch was kept.",
+			gitMergeReady: "The worktree is clean and ready to merge.",
+			gitMergeHint: "Stage and commit every change before merging.",
+			gitCancel: "Cancel"
 		}
 	}
 } as const
