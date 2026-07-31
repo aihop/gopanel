@@ -1,0 +1,21 @@
+name: File Size Gate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  file-size:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Enforce file-size limits
+        env:
+          FILE_SIZE_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: bash scripts/check-file-size.sh --base-ref "${FILE_SIZE_BASE_REF}"

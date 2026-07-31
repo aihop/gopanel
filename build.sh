@@ -70,6 +70,8 @@ echo "Building Project: ${APP_BRAND}"
 echo "Targets: ${TARGETS[*]}"
 echo "==========================================="
 
+bash "${PROJECT_ROOT}/scripts/check-file-size.sh"
+
 # 前端构建逻辑 (保持不变)
 if [ -d "${PROJECT_ROOT}/admin" ]; then
   echo "Building frontend..."
