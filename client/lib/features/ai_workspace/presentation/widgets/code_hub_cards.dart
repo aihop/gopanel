@@ -2,9 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/widgets/panel/panel_card.dart';
-import '../../../task_center/models/task_entity.dart';
-import '../../../task_center/models/task_status.dart';
-import '../../../task_center/models/task_type.dart';
 import '../../models/ai_dev_session.dart';
 
 class CodeSessionListCard extends StatelessWidget {
@@ -97,59 +94,6 @@ class CodeSessionListCard extends StatelessWidget {
                 const Icon(Icons.chevron_right_rounded, size: 18),
               ],
             ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class CodeSystemTaskCard extends StatelessWidget {
-  const CodeSystemTaskCard({
-    super.key,
-    required this.task,
-    required this.onTap,
-  });
-
-  final TaskEntity task;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
-      child: PanelCard(
-        title: Text(task.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-        trailing: _TaskStatusBadge(status: task.status),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              task.type.label,
-              style: const TextStyle(
-                color: AppTheme.primaryBlue,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            if (task.summary?.isNotEmpty == true) ...[
-              const SizedBox(height: 8),
-              Text(
-                task.summary!,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: AppTheme.textSecondary),
-              ),
-            ],
-            if (task.error?.isNotEmpty == true) ...[
-              const SizedBox(height: 8),
-              Text(
-                task.error!,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: AppTheme.error),
-              ),
-            ],
           ],
         ),
       ),
@@ -262,25 +206,6 @@ class _StageBadge extends StatelessWidget {
           fontWeight: FontWeight.w800,
         ),
       ),
-    );
-  }
-}
-
-class _TaskStatusBadge extends StatelessWidget {
-  const _TaskStatusBadge({required this.status});
-
-  final TaskStatus status;
-
-  @override
-  Widget build(BuildContext context) {
-    final foreground = switch (status) {
-      TaskStatus.running => AppTheme.primaryBlue,
-      TaskStatus.success => AppTheme.success,
-      TaskStatus.failed => AppTheme.error,
-    };
-    return Text(
-      status.label,
-      style: TextStyle(color: foreground, fontWeight: FontWeight.w800),
     );
   }
 }
