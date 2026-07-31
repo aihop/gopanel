@@ -177,13 +177,18 @@ for t in "${TARGETS[@]}"; do
       ;;
     windows)
       build_local "windows" "${GOARCH}" "${dist_dir}" "${APP_NAME}" "0"
-      build_gpc_local "windows" "${GOARCH}" "${dist_dir}"
+      cp "${PROJECT_ROOT}/install.ps1" "${dist_dir}/install.ps1"
       ;;
   esac
 
   # 打包
-  tar -C "${OUTDIR}" -czf "${OUTDIR}/${short_name}.tar.gz" "${short_name}"
-  echo "Finished: ${short_name}.tar.gz"
+  if [ "${GOOS}" = "windows" ] && command -v zip >/dev/null 2>&1; then
+    (cd "${OUTDIR}" && zip -qr "${short_name}.zip" "${short_name}")
+    echo "Finished: ${short_name}.zip"
+  else
+    tar -C "${OUTDIR}" -czf "${OUTDIR}/${short_name}.tar.gz" "${short_name}"
+    echo "Finished: ${short_name}.tar.gz"
+  fi
   
   # 清理临时目录
   [ "${KEEP_DIST_DIR:-0}" = "0" ] && rm -rf "${dist_dir}"

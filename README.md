@@ -31,6 +31,12 @@ GoPanel is designed to make those actions feel direct, instead of forcing you to
 bash <(curl -fsSL https://gopanel.run)
 ```
 
+Windows PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/aihop/gopanel/main/install.ps1 | iex
+```
+
 ## 🖼 Preview
 
 ![GoPanel Preview](./preview.png)
@@ -85,7 +91,8 @@ bash <(curl -fsSL https://gopanel.run)
 **Compatibility**:
 
 - **Linux**: Installs to `/opt/gopanel` by default and configures `systemd` for auto-start.
-- **macOS / Windows**: Installs to `~/.gopanel` by default, perfect as a local development tool.
+- **macOS**: Installs to `~/.gopanel` by default, perfect as a local development tool.
+- **Windows 10 1809+**: Installs to `%USERPROFILE%\.gopanel` with local development and ConPTY AI terminals; GPC and gp-agent host management remain unsupported.
 
 ## 🛠 Development & Build
 

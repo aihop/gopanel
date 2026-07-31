@@ -166,7 +166,7 @@ fi
 ASSETS=()
 while IFS=  read -r -d $'\0'; do
     ASSETS+=("$REPLY")
-done < <(find "${OUTDIR}" -maxdepth 1 -name "*.tar.gz" -print0)
+done < <(find "${OUTDIR}" -maxdepth 1 \( -name "*.tar.gz" -o -name "*.zip" \) -print0)
 
 # 如果存在说明文档，也一并作为 Release 附件上传
 if [ -f "${PROJECT_ROOT}/README.md" ]; then
@@ -180,7 +180,7 @@ if [ -f "${PROJECT_ROOT}/perview.png" ]; then
 fi
 
 if [ ${#ASSETS[@]} -eq 0 ]; then
-    echo "错误：在 ${OUTDIR} 下没有找到任何 .tar.gz 文件。"
+    echo "错误：在 ${OUTDIR} 下没有找到任何 .tar.gz 或 .zip 文件。"
     echo "请先运行: bash build.sh ${VERSION}"
     exit 1
 fi

@@ -16,7 +16,6 @@ import (
 	"github.com/aihop/gopanel/app/repo"
 	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/pkg/websocket"
-	"github.com/creack/pty"
 )
 
 const nativeTerminalHistoryLimit = 1024 * 1024
@@ -25,7 +24,7 @@ type nativeCodeTerminal struct {
 	mu           sync.Mutex
 	sessionID    uint
 	command      *exec.Cmd
-	ptmx         *os.File
+	ptmx         nativeTerminal
 	sequence     uint64
 	history      []nativeTerminalChunk
 	historySize  int
@@ -45,7 +44,7 @@ var codeNativeTerminals = &nativeCodeTerminalManager{sessions: make(map[uint]*na
 
 func supportsNativeCodeTerminal(executorID string) bool {
 	definition, err := getCodeExecutorDefinition(executorID)
-	return err == nil && definition.NativeTerminal
+	return err == nil && definition.NativeTerminal && nativeTerminalPlatformSupported()
 }
 
 func (manager *nativeCodeTerminalManager) attach(
@@ -67,7 +66,7 @@ func (manager *nativeCodeTerminalManager) attach(
 		return nil, false, err
 	}
 	configureNativeTerminalEnvironment(command)
-	ptmx, err := pty.StartWithSize(command, &pty.Winsize{Cols: cols, Rows: rows})
+	ptmx, err := startNativeTerminal(command, cols, rows)
 	if err != nil {
 		lease.Release()
 		return nil, false, err
@@ -176,7 +175,7 @@ func (terminal *nativeCodeTerminal) write(subscriptionID string, data []byte) er
 }
 
 func (terminal *nativeCodeTerminal) resize(cols, rows uint16) error {
-	return pty.Setsize(terminal.ptmx, &pty.Winsize{Cols: cols, Rows: rows})
+	return terminal.ptmx.Resize(cols, rows)
 }
 
 func (terminal *nativeCodeTerminal) wait(manager *nativeCodeTerminalManager) {

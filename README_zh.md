@@ -31,6 +31,12 @@ GoPanel 都希望让这些动作变得足够直接，而不是让你在复杂配
 bash <(curl -fsSL https://gopanel.run)
 ```
 
+Windows PowerShell：
+
+```powershell
+irm https://raw.githubusercontent.com/aihop/gopanel/main/install.ps1 | iex
+```
+
 ## 🖼 界面预览
 
 ![GoPanel Preview](./preview.png)
@@ -85,7 +91,8 @@ bash <(curl -fsSL https://gopanel.run)
 **系统兼容性**：
 
 - **Linux**: 默认安装至 `/opt/gopanel`，并自动配置 `systemd` 开机自启服务。
-- **macOS / Windows**: 默认安装至 `~/.gopanel`，适合作为本地开发辅助工具。
+- **macOS**: 默认安装至 `~/.gopanel`，适合作为本地开发辅助工具。
+- **Windows 10 1809+**: 默认安装至 `%USERPROFILE%\.gopanel`，支持本地开发与 ConPTY AI 终端；GPC、gp-agent 宿主管理暂不支持。
 
 ## 🛠 开发与构建
 

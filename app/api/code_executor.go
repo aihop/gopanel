@@ -97,7 +97,7 @@ func detectCodeExecutor(definition codeExecutorDefinition) codeExecutorStatus {
 		Description:                definition.Description,
 		Capabilities:               definition.Capabilities,
 		ApprovalPolicies:           definition.ApprovalPolicies,
-		NativeTerminal:             definition.NativeTerminal,
+		NativeTerminal:             definition.NativeTerminal && nativeTerminalPlatformSupported(),
 		CustomProviderConfigurable: supportsCustomCodeProvider(definition.ID),
 	}
 	if definition.Factory != nil {
