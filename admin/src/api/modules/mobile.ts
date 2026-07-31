@@ -205,10 +205,10 @@ export function getMobileNodes() {
 	return mobileRequest(mobileHttp.get<ResultData<MobileNode[]>>("/mobile/app/nodes"))
 }
 
-export function getMobileSessions(page = 1, limit = 20) {
+export function getMobileSessions(projectId: number, page = 1, limit = 50) {
 	return mobileRequest(
 		mobileHttp.get<ResultData<{ items: CodeSession[]; total: number }>>("/mobile/app/sessions", {
-			params: { page, limit }
+			params: { page, limit, projectId }
 		})
 	).then(result => ({
 		...result,

@@ -213,7 +213,7 @@ func RevokeMobileDevice(c fiber.Ctx) error {
 func GetMobileOverview(c fiber.Ctx) error {
 	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
 	current := dashboardService.LoadCurrentInfo(dto.DashboardReq{Scope: "basic"})
-	sessions, total, err := repo.NewAIDevSessionRepo().GetSessionsByUserID(claims.UserId, 0, 1, 20)
+	sessions, total, err := repo.NewAIDevSessionRepo().GetSessionsByUserID(claims.UserId, 0, 1, 5)
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}

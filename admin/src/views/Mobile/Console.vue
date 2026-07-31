@@ -19,7 +19,9 @@ import { mobileMessages } from "@/i18n/locales/mobile"
 import Logo from "@/layouts/common/Logo.vue"
 import MobileContainerPanel from "./components/MobileContainerPanel.vue"
 import MobileFileBrowser from "./components/MobileFileBrowser.vue"
+import MobileRecentSessions from "./components/MobileRecentSessions.vue"
 import MobileSessionCreator from "./components/MobileSessionCreator.vue"
+import MobileSessionBrowser from "./components/MobileSessionBrowser.vue"
 import MobileSystemUpdate from "./components/MobileSystemUpdate.vue"
 import MobileTaskStatusDrawer from "./components/MobileTaskStatusDrawer.vue"
 import MobileTerminal from "./components/MobileTerminal.vue"
@@ -43,7 +45,9 @@ const nodesLoading = ref(false)
 const nodesLoadError = ref("")
 const projects = ref<AIProject[]>([])
 const sessions = ref<CodeSession[]>([])
+const selectedProjectId = ref<number | null>(Number(localStorage.getItem("gopanel-mobile-project-id")) || null)
 const selectedSessionId = ref(0)
+const sessionsLoading = ref(false)
 const sessionState = ref<CodeSessionState | null>(null)
 const loading = ref(false)
 const actionLoading = ref(false)
@@ -90,38 +94,6 @@ function selectNode(node: MobileNode) {
 	localStorage.setItem("gopanel-mobile-node-id", String(node.id))
 }
 
-function sessionStageLabel(session: CodeSession) {
-	const knownStages = ["idle", "interactive", "task_ready", "instruction_queued", "awaiting_approval", "executing", "completed", "preview_ready", "failed", "cancelled", "approval_rejected"]
-	const stage = knownStages.includes(session.currentStage) ? session.currentStage : "unknown"
-	return t(`mobile.stage_${stage}`)
-}
-
-function sessionStageType(session: CodeSession) {
-	if (session.currentStage === "failed") return "error"
-	if (["awaiting_approval", "approval_rejected", "cancelled"].includes(session.currentStage)) return "warning"
-	if (["completed", "preview_ready"].includes(session.currentStage)) return "success"
-	if (["executing", "instruction_queued", "interactive"].includes(session.currentStage)) return "info"
-	return "default"
-}
-
-function sessionApprovalLabel(session: CodeSession) {
-	const labels = {
-		manual: "mobile.approvalManual",
-		safe_auto: "mobile.approvalSafe",
-		full_auto: "mobile.approvalFull"
-	} as const
-	return t(labels[session.approvalPolicy])
-}
-
-function formatSessionTime(value: string) {
-	return new Date(value).toLocaleString(undefined, {
-		month: "2-digit",
-		day: "2-digit",
-		hour: "2-digit",
-		minute: "2-digit"
-	})
-}
-
 function normalizedProjectPath(value?: string) {
 	return (value || "").replace(/\\/g, "/").replace(/\/+$/, "")
 }
@@ -148,6 +120,10 @@ async function loadProjects() {
 	try {
 		const result = await getMobileProjects()
 		projects.value = result.items
+		if (!projects.value.some(project => project.id === selectedProjectId.value)) {
+			selectedProjectId.value = projects.value[0]?.id || null
+			if (selectedProjectId.value) localStorage.setItem("gopanel-mobile-project-id", String(selectedProjectId.value))
+		}
 	} catch (error) {
 		loadError.value = error instanceof Error ? error.message : t("mobile.loadFailed")
 		if (loadError.value.includes("手机授权已失效")) await router.replace("/mobile/auth")
@@ -167,15 +143,23 @@ async function loadOverview(silent = false) {
 	}
 }
 
-async function loadSessions() {
+async function loadSessions(clearCurrent = false) {
+	if (!selectedProjectId.value) {
+		sessions.value = []
+		return
+	}
+	sessionsLoading.value = true
+	if (clearCurrent) sessions.value = []
 	try {
-		const result = await getMobileSessions()
+		const result = await getMobileSessions(selectedProjectId.value)
 		sessions.value = result.items || []
 		if (selectedSessionId.value) await loadSessionState(true)
 		loadError.value = ""
 	} catch (error) {
 		loadError.value = error instanceof Error ? error.message : t("mobile.loadFailed")
 		if (loadError.value.includes("手机授权已失效")) await router.replace("/mobile/auth")
+	} finally {
+		sessionsLoading.value = false
 	}
 }
 
@@ -202,7 +186,23 @@ async function selectSession(session: CodeSession) {
 
 async function openSession(session: CodeSession) {
 	activeTab.value = "code"
+	const projectId = sessionProject(session)?.id || session.projectId
+	if (projectId) {
+		selectedProjectId.value = projectId
+		localStorage.setItem("gopanel-mobile-project-id", String(projectId))
+		await loadSessions(true)
+	} else {
+		sessions.value = [session]
+	}
 	await selectSession(session)
+}
+
+async function selectProject(projectId: number) {
+	selectedProjectId.value = projectId
+	localStorage.setItem("gopanel-mobile-project-id", String(projectId))
+	selectedSessionId.value = 0
+	sessionState.value = null
+	await loadSessions(true)
 }
 
 async function switchToOverview() {
@@ -216,7 +216,7 @@ async function switchToCode() {
 	sessionState.value = null
 	projectTerminalSession.value = null
 	projectTerminalProject.value = null
-	await loadSessions()
+	await loadSessions(true)
 }
 
 async function leaveTaskDetail() {
@@ -239,8 +239,10 @@ function openProjectTerminal(session: HostTerminalSession, project: AIProject) {
 
 async function handleSessionCreated(session: CodeSession) {
 	activeTab.value = "code"
+	selectedProjectId.value = session.projectId
+	localStorage.setItem("gopanel-mobile-project-id", String(session.projectId))
 	selectedSessionId.value = session.id
-	await loadSessions()
+	await loadSessions(true)
 	await loadSessionState()
 }
 
@@ -312,7 +314,8 @@ function startRefresh() {
 }
 
 onMounted(async () => {
-	await Promise.all([loadOverview(), loadNodes(), loadProjects(), loadSessions()])
+	await Promise.all([loadOverview(), loadNodes(), loadProjects()])
+	await loadSessions()
 	startRefresh()
 })
 
@@ -391,72 +394,30 @@ onBeforeUnmount(() => {
 							<n-tag v-for="(warning, index) in selectedNode.warnings" :key="index" size="small" :type="warning.level === 'danger' ? 'error' : 'warning'">{{ t(`mobile.warning_${warning.type}`) }}</n-tag>
 						</div>
 					</section>
-					<section>
-						<div class="flex items-center justify-between my-6">
-							<div class="flex items-center gap-2">
-								<h2 class="text-xl">{{ t("mobile.controllerSessions") }}</h2>
-								<n-tag v-if="overview?.pendingApprovals.length" size="small" type="warning" :bordered="false">
-									{{ t("mobile.pendingCount", { count: overview.pendingApprovals.length }) }}
-								</n-tag>
-							</div>
-							<n-button size="small" text type="primary" @click="activeTab = 'code'">{{ t("mobile.code") }}</n-button>
-						</div>
-						<n-empty v-if="!overview?.sessions.length" size="small" :description="t('mobile.noSessions')" />
-						<div v-else class="space-y-3">
-							<button v-for="session in overview?.sessions || []" :key="session.id" class="w-full rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition active:scale-[0.99]" @click="openSession(session)">
-								<div class="flex items-start justify-between gap-3">
-									<div class="min-w-0 flex-1">
-										<div class="truncate font-semibold text-slate-900">{{ sessionTaskTitle(session) }}</div>
-										<div class="mt-1.5 flex items-center gap-1.5 text-sm font-medium text-blue-600">
-											<Icon name="mdi:folder-outline" :size="16" />
-											<span class="truncate">{{ sessionProjectName(session) }}</span>
-										</div>
-										<div class="mt-1 flex items-center gap-1.5 text-xs text-slate-500">
-											<Icon name="mdi:robot-outline" :size="14" />
-											<span>{{ session.agentName }}</span>
-											<span v-if="session.providerModel" class="truncate">· {{ session.providerModel }}</span>
-										</div>
-									</div>
-									<n-tag size="small" :type="sessionStageType(session)" :bordered="false" round>
-										{{ sessionStageLabel(session) }}
-									</n-tag>
-								</div>
-								<div class="mt-3 flex items-center gap-2 text-xs text-slate-500">
-									<Icon name="mdi:source-branch" :size="15" class="shrink-0" />
-									<span class="min-w-0 flex-1 truncate">{{ session.workDir }}</span>
-								</div>
-								<div class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-slate-100 pt-3 text-xs text-slate-400">
-									<span>{{ sessionApprovalLabel(session) }}</span>
-									<span v-if="session.worktreeBranch" class="max-w-full truncate">
-										{{ session.worktreeBranch }}
-									</span>
-									<span class="ml-auto">{{ formatSessionTime(session.createdAt) }}</span>
-								</div>
-							</button>
-						</div>
-					</section>
+					<MobileRecentSessions
+						:sessions="overview?.sessions || []"
+						:projects="projects"
+						:pending-count="overview?.pendingApprovals.length || 0"
+						@open="openSession"
+						@show-all="switchToCode"
+					/>
 				</div>
 
 				<MobileContainerPanel v-else-if="activeTab === 'containers'" />
 
 				<div v-else :class="isTaskDetail ? '' : 'space-y-4'">
-					<div v-if="!isTaskDetail" class="flex items-center gap-2 overflow-x-auto pb-1">
-						<n-button size="small" round type="primary" secondary class="shrink-0" @click="showSessionCreator = true">+ {{ t("mobile.newSession") }}</n-button>
-						<n-button size="small" round secondary class="shrink-0" @click="showProjectTerminals = true">
-							<template #icon><Icon name="mdi:console-line" /></template>
-							{{ t("mobile.projectTerminal") }}
-						</n-button>
-						<n-button v-for="session in sessions" :key="session.id" size="small" round :type="selectedSessionId === session.id ? 'primary' : 'default'" @click="selectSession(session)">
-							{{ sessionTaskTitle(session) }}
-						</n-button>
-					</div>
-					<n-empty v-if="!isTaskDetail && sessions.length === 0" :description="t('mobile.noSessions')" class="rounded-2xl bg-white py-16">
-						<template #extra>
-							<n-button type="primary" @click="showSessionCreator = true">
-								{{ t("mobile.newSession") }}
-							</n-button>
-						</template>
-					</n-empty>
+					<MobileSessionBrowser
+						v-if="!isTaskDetail"
+						:projects="projects"
+						:sessions="sessions"
+						:selected-project-id="selectedProjectId"
+						:selected-session-id="selectedSessionId"
+						:loading="sessionsLoading"
+						@update:selected-project-id="selectProject"
+						@new-session="showSessionCreator = true"
+						@project-terminal="showProjectTerminals = true"
+						@select-session="selectSession"
+					/>
 					<MobileTerminal
 						v-if="projectTerminalSession && projectTerminalProject"
 						:session-id="projectTerminalSession.id"
