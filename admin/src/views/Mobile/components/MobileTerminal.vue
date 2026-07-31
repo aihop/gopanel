@@ -12,6 +12,7 @@ const emit = defineEmits<{ back: []; openFiles: []; openStatus: [] }>()
 const { t } = useI18n({ messages: mobileMessages })
 const terminalElement = ref<HTMLElement | null>(null)
 const connected = ref(false)
+const connecting = ref(true)
 const reconnecting = ref(false)
 const hasControl = ref(false)
 let terminal: Terminal | null = null
@@ -69,6 +70,7 @@ function scheduleFit() {
 
 function connect() {
 	if (!terminal || !props.sessionId) return
+	connecting.value = true
 	const protocol = window.location.protocol === "https:" ? "wss:" : "ws:"
 	let url = `${protocol}//${window.location.host}/api/mobile/app/terminal?session_id=${props.sessionId}`
 	url += `&cols=${terminal.cols}&rows=${terminal.rows}&read_only=1`
@@ -78,6 +80,7 @@ function connect() {
 	currentSocket.onopen = () => {
 		if (socket !== currentSocket) return
 		connected.value = true
+		connecting.value = false
 		reconnecting.value = false
 	}
 	currentSocket.onmessage = event => {
@@ -116,6 +119,7 @@ function connect() {
 			} else if (message.type === "closed") {
 				closing = true
 				connected.value = false
+				connecting.value = false
 				hasControl.value = false
 			} else if (message.type === "cmd" && message.data) {
 				terminal?.write(message.data)
@@ -131,6 +135,7 @@ function connect() {
 		hasControl.value = false
 		pendingResyncId = ""
 		if (!closing && !reconnectTimer) {
+			connecting.value = true
 			reconnecting.value = true
 			reconnectTimer = setTimeout(() => {
 				reconnectTimer = null
@@ -143,6 +148,7 @@ function connect() {
 function openTerminal() {
 	if (!terminalElement.value || terminal) return
 	closing = false
+	connecting.value = true
 	lastSequence = 0
 	pendingResyncId = ""
 	reportedCols = 0
@@ -177,6 +183,7 @@ function openTerminal() {
 function closeTerminal() {
 	closing = true
 	connected.value = false
+	connecting.value = false
 	hasControl.value = false
 	pendingResyncId = ""
 	if (reconnectTimer) clearTimeout(reconnectTimer)
@@ -240,7 +247,13 @@ onBeforeUnmount(closeTerminal)
 				</n-button>
 			</div>
 		</header>
-		<div ref="terminalElement" class="min-h-0 w-full flex-1 bg-[#0b1020]" />
+		<div class="relative min-h-0 w-full flex-1 bg-[#0b1020]">
+			<div ref="terminalElement" class="h-full w-full" />
+			<div v-if="connecting" class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-[#0b1020] text-sm text-slate-300" role="status" aria-live="polite">
+				<Icon name="mdi:loading" :size="28" class="animate-spin text-blue-400" />
+				<span>{{ reconnecting ? t("mobile.reconnecting") : t("mobile.terminalConnecting") }}</span>
+			</div>
+		</div>
 		<slot name="footer" :connected="connected" :has-control="hasControl" :take-control="takeControl" :release-control="releaseControl" />
 		<div class="h-[max(8px,env(safe-area-inset-bottom))] shrink-0 bg-slate-950" aria-hidden="true" />
 	</section>
