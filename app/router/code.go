@@ -22,6 +22,9 @@ func CodeRouter(r fiber.Router) {
 		group.Post("/groups", api.CreateAIGroup)
 		group.Put("/groups/:id", api.UpdateAIGroup)
 		group.Get("/groups/:id/worktree-capability", api.GetCodeWorktreeCapability)
+		group.Get("/groups/:id/database-accesses", api.GetCodeDatabaseAccesses)
+		group.Put("/groups/:id/database-accesses", api.SaveCodeDatabaseAccess)
+		group.Delete("/groups/:id/database-accesses/:accessId", api.DeleteCodeDatabaseAccess)
 
 		// Dev Sessions APIs
 		group.Get("/sessions", api.GetAISessions)
@@ -40,6 +43,7 @@ func CodeRouter(r fiber.Router) {
 		group.Get("/sessions/:id/git/status", api.GetCodeGitStatus)
 		group.Get("/sessions/:id/git/diff", api.GetCodeGitDiff)
 		group.Put("/sessions/:id/git/stage", api.UpdateCodeGitStage)
+		group.Post("/sessions/:id/database-query", api.ExecuteCodeDatabaseQuery)
 		group.Get("/sessions/:id/quality-checks", api.GetCodeQualityChecks)
 		group.Post("/sessions/:id/quality-checks/run", api.RunCodeQualityCheck)
 		group.Post("/sessions/:id/stop", api.StopCodeSessionExecution)

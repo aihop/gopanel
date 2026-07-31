@@ -128,6 +128,7 @@ func Init() {
 		&model.AIMessage{},
 		&model.AIDevSession{},
 		&model.AIExecutionRun{},
+		&model.AICodeDatabaseAccess{},
 		&model.AIInstruction{},
 		&model.AIPreview{},
 		&model.AITimelineEvent{},

@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/md5"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -107,39 +106,27 @@ func ensureAIAgentWorkspaceContainer(wsConn *websocket.Conn, workDir string, cla
 		_ = wsConn.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("检查持久化沙箱失败: %s\r\n", err.Error())))
 		return "", err
 	}
+	if exists {
+		exposesCredentials, inspectErr := workspaceContainerExposesCredentials(containerName)
+		if inspectErr != nil {
+			return "", inspectErr
+		}
+		if exposesCredentials {
+			if removeErr := removeAIAgentWorkspaceContainer(containerName); removeErr != nil {
+				return "", removeErr
+			}
+			isRunning, exists = false, false
+		}
+	}
 
 	if !exists {
-		runArgs := []string{
-			"run", "-d", "--name", containerName,
-			"-v", fmt.Sprintf("%s:/workspace", workDir),
-			"-w", "/workspace",
-		}
+		runArgs := buildAIAgentWorkspaceRunArgs(containerName, workDir)
 		if isAnyManagedAIProjectWorkDir(workDir) {
 			for _, sourceDir := range aiProjectWorkspaceSourceDirs(workDir) {
 				if _, sourceErr := normalizeAIProjectSourceDir(sourceDir, claims); sourceErr != nil {
 					return "", sourceErr
 				}
 				runArgs = append(runArgs, "-v", fmt.Sprintf("%s:%s", sourceDir, sourceDir))
-			}
-		}
-
-		if claims.Role == constant.UserRoleAdmin || claims.Role == constant.UserRoleSuper {
-			hostHome, _ := os.UserHomeDir()
-			if hostHome == "" {
-				hostHome = "/root"
-			}
-			credentialsPaths := []string{
-				filepath.Join(hostHome, ".ssh"),
-				filepath.Join(hostHome, ".trae"),
-				filepath.Join(hostHome, ".aws"),
-				filepath.Join(hostHome, ".npmrc"),
-				filepath.Join(hostHome, ".gitconfig"),
-			}
-			for _, path := range credentialsPaths {
-				if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
-					containerPath := "/root/" + filepath.Base(path)
-					runArgs = append(runArgs, "-v", fmt.Sprintf("%s:%s:ro", path, containerPath))
-				}
 			}
 		}
 
@@ -174,6 +161,47 @@ func ensureAIAgentWorkspaceContainer(wsConn *websocket.Conn, workDir string, cla
 		return "", startErr
 	}
 	return containerName, nil
+}
+
+func workspaceContainerExposesCredentials(containerName string) (bool, error) {
+	command, err := docker.RuntimeCommand(context.Background(), "inspect", "-f", "{{range .Mounts}}{{println .Destination}}{{end}}", containerName)
+	if err != nil {
+		return false, err
+	}
+	output, err := command.CombinedOutput()
+	if err != nil {
+		return false, fmt.Errorf("检查沙箱挂载失败: %s", formatExecOutput(output, err.Error()))
+	}
+	return hasSensitiveWorkspaceMount(string(output)), nil
+}
+
+func hasSensitiveWorkspaceMount(output string) bool {
+	for _, destination := range strings.Fields(output) {
+		switch filepath.Clean(destination) {
+		case "/root/.ssh", "/root/.aws", "/root/.npmrc", "/root/.gitconfig", "/root/.trae":
+			return true
+		}
+	}
+	return false
+}
+
+func removeAIAgentWorkspaceContainer(containerName string) error {
+	command, err := docker.RuntimeCommand(context.Background(), "rm", "-f", containerName)
+	if err != nil {
+		return err
+	}
+	if output, err := command.CombinedOutput(); err != nil {
+		return fmt.Errorf("迁移旧沙箱失败: %s", formatExecOutput(output, err.Error()))
+	}
+	return nil
+}
+
+func buildAIAgentWorkspaceRunArgs(containerName, workDir string) []string {
+	return []string{
+		"run", "-d", "--name", containerName,
+		"-v", fmt.Sprintf("%s:/workspace", workDir),
+		"-w", "/workspace",
+	}
 }
 
 func buildAIAgentWorkspaceDaemonCommand() string {

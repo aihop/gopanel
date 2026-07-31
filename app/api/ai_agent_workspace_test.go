@@ -2,6 +2,7 @@ package api
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/aihop/gopanel/constant"
@@ -22,5 +23,26 @@ func TestNormalizeAIAgentAuthorizedWorkDirKeepsSubAdminInBase(t *testing.T) {
 	}
 	if _, err := normalizeAIAgentAuthorizedWorkDir(filepath.Join(base, "..", "outside"), claims.UserId, claims); err == nil {
 		t.Fatal("expected a work directory outside the sub-admin base to be rejected")
+	}
+}
+
+func TestWorkspaceRunArgsDoNotExposeHostCredentials(t *testing.T) {
+	args := strings.Join(buildAIAgentWorkspaceRunArgs("workspace", "/srv/project"), " ")
+	for _, sensitivePath := range []string{".ssh", ".aws", ".npmrc", ".gitconfig", ".trae"} {
+		if strings.Contains(args, sensitivePath) {
+			t.Fatalf("workspace args expose host credential path %s: %s", sensitivePath, args)
+		}
+	}
+	if !strings.Contains(args, "/srv/project:/workspace") {
+		t.Fatalf("workspace mount missing: %s", args)
+	}
+}
+
+func TestDetectSensitiveWorkspaceMounts(t *testing.T) {
+	if !hasSensitiveWorkspaceMount("/workspace\n/root/.ssh\n") {
+		t.Fatal("legacy SSH mount should trigger sandbox migration")
+	}
+	if hasSensitiveWorkspaceMount("/workspace\n/usr/local/bin\n") {
+		t.Fatal("normal workspace mounts should not trigger migration")
 	}
 }
