@@ -33,7 +33,11 @@ func GetAITasks(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	return c.JSON(e.Succ(fiber.Map{"items": tasks, "total": total}))
+	items, err := buildCodeTaskListItems(tasks)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	return c.JSON(e.Succ(fiber.Map{"items": items, "total": total}))
 }
 func GetAITaskMessages(c fiber.Ctx) error {
 	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)

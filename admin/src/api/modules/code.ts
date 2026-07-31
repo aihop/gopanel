@@ -23,6 +23,7 @@ import type {
 	CodeTokenUsageResponse,
 } from "../interface/code"
 import type { CodeProjectBranches } from "../interface/codeBranches"
+import type { CodeTaskListItem } from "../interface/codeTasks"
 
 // === Group APIs ===
 
@@ -150,7 +151,7 @@ export function retryCodeInstruction(instructionId: number) {
 
 // 获取任务列表
 export function getAITasks(params: { page: number; limit: number; projectId?: number }) {
-	return http.get<{ items: AITask[]; total: number }>("/code/tasks", params)
+	return http.get<{ items: CodeTaskListItem[]; total: number }>("/code/tasks", params)
 }
 
 // 获取某个任务的消息记录

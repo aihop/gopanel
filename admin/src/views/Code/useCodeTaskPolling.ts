@@ -1,11 +1,11 @@
 import type { ComputedRef, Ref } from "vue"
 import { useIntervalFn } from "@vueuse/core"
 import { getAITasks } from "@/api/modules/code"
-import type { AITask } from "@/api/interface/code"
+import type { CodeTaskListItem } from "@/api/interface/codeTasks"
 
 export function useCodeTaskPolling(
 	projectId: ComputedRef<number>,
-	tasks: Ref<AITask[]>,
+	tasks: Ref<CodeTaskListItem[]>,
 	onError: (error: unknown) => void
 ) {
 	let requestPending = false
@@ -15,7 +15,8 @@ export function useCodeTaskPolling(
 		requestPending = true
 		try {
 			const response = await getAITasks({ page: 1, limit: 50, projectId: requestedProjectId })
-			if (response.code === 0 && projectId.value === requestedProjectId) tasks.value = response.data.items || []
+			if (response.code !== 0) throw new Error(response.message)
+			if (projectId.value === requestedProjectId) tasks.value = response.data.items || []
 		} catch (error) {
 			if (!silent) onError(error)
 		} finally {
