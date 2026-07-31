@@ -15,6 +15,7 @@ const connected = ref(false)
 const connecting = ref(true)
 const reconnecting = ref(false)
 const hasControl = ref(false)
+const ctrlActive = ref(false)
 let terminal: Terminal | null = null
 let fitAddon: FitAddon | null = null
 let socket: WebSocket | null = null
@@ -62,11 +63,38 @@ function fit() {
 
 function updateControl(value: boolean) {
 	hasControl.value = value
+	if (!value) ctrlActive.value = false
 	if (terminal) terminal.options.disableStdin = !value
 	if (value) nextTick(() => {
 		terminal?.focus()
 		scheduleFit()
 	})
+}
+
+function sendTerminalInput(data: string) {
+	if (!hasControl.value || socket?.readyState !== WebSocket.OPEN) return
+	socket.send(JSON.stringify({ type: "cmd", data }))
+}
+
+function applyCtrlModifier(data: string) {
+	if (!ctrlActive.value) return data
+	ctrlActive.value = false
+	if (data.length !== 1) return data
+	if (data === "?") return "\x7f"
+	const code = data.toUpperCase().charCodeAt(0)
+	return code >= 64 && code <= 95 ? String.fromCharCode(code & 31) : data
+}
+
+function sendShortcut(data: string) {
+	ctrlActive.value = false
+	sendTerminalInput(data)
+	nextTick(() => terminal?.focus())
+}
+
+function toggleCtrl() {
+	if (!hasControl.value) return
+	ctrlActive.value = !ctrlActive.value
+	nextTick(() => terminal?.focus())
 }
 
 function scheduleFit() {
@@ -174,9 +202,7 @@ function openTerminal() {
 	terminal.loadAddon(fitAddon)
 	terminal.open(terminalElement.value)
 	terminal.onData(data => {
-		if (hasControl.value && socket?.readyState === WebSocket.OPEN) {
-			socket.send(JSON.stringify({ type: "cmd", data }))
-		}
+		sendTerminalInput(applyCtrlModifier(data))
 	})
 	resizeObserver = new ResizeObserver(scheduleFit)
 	resizeObserver.observe(terminalElement.value)
@@ -264,6 +290,17 @@ onBeforeUnmount(closeTerminal)
 			</div>
 		</div>
 		<slot name="footer" :connected="connected" :has-control="hasControl" :take-control="takeControl" :release-control="releaseControl" />
+		<div v-if="hasControl" class="flex shrink-0 items-center gap-1.5 overflow-x-auto border-t border-white/10 bg-slate-950 px-2 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="toolbar" :aria-label="t('mobile.terminal')">
+			<button type="button" class="flex h-10 min-w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-2 font-mono text-sm font-medium text-slate-200 transition active:scale-95 active:bg-white/15" aria-label="Esc" @pointerdown.prevent @click="sendShortcut('\x1b')">Esc</button>
+			<button type="button" class="flex h-10 min-w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-2 font-mono text-sm font-medium text-slate-200 transition active:scale-95 active:bg-white/15" aria-label="Tab" @pointerdown.prevent @click="sendShortcut('\t')">Tab</button>
+			<button type="button" class="flex h-10 min-w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-2 font-mono text-sm font-medium text-slate-200 transition active:scale-95 active:bg-white/15" :class="ctrlActive ? 'border-blue-400 bg-blue-500/25 text-blue-200' : ''" aria-label="Ctrl" :aria-pressed="ctrlActive" @pointerdown.prevent @click="toggleCtrl">Ctrl</button>
+			<button type="button" class="flex h-10 min-w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-2 font-mono text-sm font-medium text-slate-200 transition active:scale-95 active:bg-white/15" aria-label="←" @pointerdown.prevent @click="sendShortcut('\x1b[D')">←</button>
+			<button type="button" class="flex h-10 min-w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-2 font-mono text-sm font-medium text-slate-200 transition active:scale-95 active:bg-white/15" aria-label="↑" @pointerdown.prevent @click="sendShortcut('\x1b[A')">↑</button>
+			<button type="button" class="flex h-10 min-w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-2 font-mono text-sm font-medium text-slate-200 transition active:scale-95 active:bg-white/15" aria-label="↓" @pointerdown.prevent @click="sendShortcut('\x1b[B')">↓</button>
+			<button type="button" class="flex h-10 min-w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-2 font-mono text-sm font-medium text-slate-200 transition active:scale-95 active:bg-white/15" aria-label="→" @pointerdown.prevent @click="sendShortcut('\x1b[C')">→</button>
+			<button type="button" class="flex h-10 min-w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-2 font-mono text-sm font-medium text-slate-200 transition active:scale-95 active:bg-white/15" aria-label="⌫" @pointerdown.prevent @click="sendShortcut('\x7f')">⌫</button>
+			<button type="button" class="flex h-10 min-w-10 shrink-0 items-center justify-center rounded-xl border border-blue-500/40 bg-blue-500/15 px-2 font-mono text-sm font-medium text-blue-200 transition active:scale-95 active:bg-blue-500/25" aria-label="↵" @pointerdown.prevent @click="sendShortcut('\r')">↵</button>
+		</div>
 		<div class="h-[max(8px,env(safe-area-inset-bottom))] shrink-0 bg-slate-950" aria-hidden="true" />
 	</section>
 </template>
