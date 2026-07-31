@@ -71,7 +71,24 @@ func writeCodeSessionManifest(workDir string, repositories []model.AIDevSessionR
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(workDir, codeSessionManifestName), content, 0600)
+	tempFile, err := os.CreateTemp(workDir, ".gopanel-session-*.tmp")
+	if err != nil {
+		return err
+	}
+	tempPath := tempFile.Name()
+	defer os.Remove(tempPath)
+	if err := tempFile.Chmod(0600); err != nil {
+		tempFile.Close()
+		return err
+	}
+	if _, err := tempFile.Write(content); err != nil {
+		tempFile.Close()
+		return err
+	}
+	if err := tempFile.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tempPath, filepath.Join(workDir, codeSessionManifestName))
 }
 
 func createCodeSessionRepositoryWorktrees(session *model.AIDevSession, project *model.AIProject, prepared []codePreparedRepository) error {

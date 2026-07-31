@@ -106,6 +106,25 @@ func TestCodexMultiWorktreeWritableDirsRepairsSameSessionBranch(t *testing.T) {
 	}
 }
 
+func TestRepairCodeMultiWorktreeSkipsCompletedRepository(t *testing.T) {
+	session, _, _ := createMultiRepositorySession(t, 137)
+	repositories, err := loadCodeSessionRepositories(session.ID)
+	if err != nil || len(repositories) < 2 {
+		t.Fatalf("load repositories: %#v, %v", repositories, err)
+	}
+	completed := repositories[0]
+	if _, err := runCodeGit(completed.SourceDir, "worktree", "remove", "--force", completed.WorktreeDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := global.DB.Model(&completed).Update("status", codeDeliveryCompleted).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	if err := repairCodeSessionWorktreeBranches(session); err != nil {
+		t.Fatalf("completed repository should not require a Worktree: %v", err)
+	}
+}
+
 func TestCreateMultiRepositorySessionDiscoversWorkspaceRepositories(t *testing.T) {
 	database := withCodeGovernanceDB(t)
 	withAIProjectBaseDir(t)
