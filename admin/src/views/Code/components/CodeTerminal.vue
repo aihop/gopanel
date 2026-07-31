@@ -32,6 +32,8 @@ let resizeObserver: ResizeObserver | null = null
 let intentionalClose = false
 let serverErrorShown = false
 let lastSequence = 0
+let resyncRequest = 0
+let pendingResyncId = ""
 let receivedServerMessage = false
 let initialReconnectAttempts = 0
 let autoTakeControlPending = Boolean(props.autoTakeControl)
@@ -44,6 +46,16 @@ const runtimeError = ref(false)
 const runtimeSupported = ref(true)
 const executorId = ref("")
 let runtimePollInterval: ReturnType<typeof setInterval> | null = null
+
+const sendTerminalAck = (sequence: number) => {
+	if (ws?.readyState === WebSocket.OPEN && sequence > 0) ws.send(JSON.stringify({ type: "ack", data: String(sequence) }))
+}
+
+const requestTerminalResync = () => {
+	if (ws?.readyState !== WebSocket.OPEN || pendingResyncId) return
+	pendingResyncId = `${Date.now()}-${++resyncRequest}`
+	ws.send(JSON.stringify({ type: "resync", data: JSON.stringify({ sequence: lastSequence, requestId: pendingResyncId }) }))
+}
 
 const runtimeTagType = computed(() => {
 	if (runtimeState.value?.responseState === "failed") return "error"
@@ -152,13 +164,25 @@ const connectWebSocket = () => {
 		}
 		try {
 			const msg = JSON.parse(event.data)
-			if (msg.type === "baseline" || msg.type === "output") {
+			if (msg.type === "baseline") {
 				nativeProtocol.value = true
-				if (msg.type === "baseline") autoTakeControlPending = false
+				if (pendingResyncId && msg.requestId !== pendingResyncId) return
+				autoTakeControlPending = false
 				const sequence = Number(msg.sequence) || 0
-				lastSequence = msg.type === "baseline" ? sequence : Math.max(lastSequence, sequence)
-				if (msg.type === "baseline") hasTerminalControl.value = Boolean(msg.hasControl)
+				const chunkIndex = Number(msg.chunkIndex) || 0
+				const chunkCount = Number(msg.chunkCount) || 1
+				if (msg.truncated && chunkIndex === 0) term.reset()
 				if (msg.data) term.write(msg.data)
+				if (chunkIndex === chunkCount - 1) { lastSequence = sequence; pendingResyncId = ""; hasTerminalControl.value = Boolean(msg.hasControl); sendTerminalAck(sequence) }
+			} else if (msg.type === "output") {
+				nativeProtocol.value = true
+				const sequence = Number(msg.sequence) || 0
+				if (pendingResyncId) return
+				if (lastSequence > 0 && sequence !== lastSequence + 1) { requestTerminalResync(); return }
+				if (msg.data) term.write(msg.data)
+				lastSequence = sequence; sendTerminalAck(sequence)
+			} else if (msg.type === "resync_required") {
+				requestTerminalResync()
 			} else if (msg.type === "control") {
 				hasTerminalControl.value = Boolean(msg.hasControl)
 			} else if (msg.type === "closed") {
@@ -184,6 +208,7 @@ const connectWebSocket = () => {
 	}
 
 	ws.onclose = () => {
+		pendingResyncId = ""
 		if (intentionalClose) {
 			return
 		}

@@ -18,21 +18,25 @@ import (
 	"github.com/aihop/gopanel/pkg/websocket"
 )
 
-const nativeTerminalHistoryLimit = 1024 * 1024
+const (
+	nativeTerminalHistoryLimit       = 1024 * 1024
+	nativeTerminalBaselineChunkLimit = 64 * 1024
+)
 
 type nativeCodeTerminal struct {
-	mu           sync.Mutex
-	sessionID    uint
-	command      *exec.Cmd
-	ptmx         nativeTerminal
-	sequence     uint64
-	history      []nativeTerminalChunk
-	historySize  int
-	subscribers  map[string]chan nativeTerminalEvent
-	controllerID string
-	done         chan struct{}
-	lease        *codeExecutionLease
-	executorName string
+	mu               sync.Mutex
+	sessionID        uint
+	command          *exec.Cmd
+	ptmx             nativeTerminal
+	sequence         uint64
+	history          []nativeTerminalChunk
+	historySize      int
+	historyTruncated bool
+	subscribers      map[string]*nativeTerminalSubscription
+	controllerID     string
+	done             chan struct{}
+	lease            *codeExecutionLease
+	executorName     string
 }
 
 type nativeCodeTerminalManager struct {
@@ -75,7 +79,7 @@ func (manager *nativeCodeTerminalManager) attach(
 		sessionID:    session.ID,
 		command:      command,
 		ptmx:         ptmx,
-		subscribers:  make(map[string]chan nativeTerminalEvent),
+		subscribers:  make(map[string]*nativeTerminalSubscription),
 		done:         make(chan struct{}),
 		lease:        lease,
 		executorName: session.AgentName,
@@ -145,6 +149,7 @@ func (terminal *nativeCodeTerminal) publish(output []byte) {
 	terminal.history = append(terminal.history, nativeTerminalChunk{Sequence: terminal.sequence, Data: chunk})
 	terminal.historySize += len(chunk)
 	for terminal.historySize > nativeTerminalHistoryLimit {
+		terminal.historyTruncated = true
 		excess := terminal.historySize - nativeTerminalHistoryLimit
 		if len(terminal.history) > 1 && len(terminal.history[0].Data) <= excess {
 			terminal.historySize -= len(terminal.history[0].Data)
@@ -155,10 +160,14 @@ func (terminal *nativeCodeTerminal) publish(output []byte) {
 		terminal.historySize -= excess
 	}
 	event := nativeTerminalEvent{Type: "output", Sequence: terminal.sequence, Data: chunk}
-	for _, subscriber := range terminal.subscribers {
+	for _, subscription := range terminal.subscribers {
+		if subscription.NeedsResync {
+			continue
+		}
 		select {
-		case subscriber <- event:
+		case subscription.Events <- event:
 		default:
+			terminal.markSubscriptionForResync(subscription)
 		}
 	}
 	terminal.mu.Unlock()
@@ -184,13 +193,13 @@ func (terminal *nativeCodeTerminal) wait(manager *nativeCodeTerminalManager) {
 	terminal.publish([]byte(fmt.Sprintf("\r\n\x1b[33m[GoPanel] %s 会话已退出: %v\x1b[0m\r\n", terminal.executorName, err)))
 	terminal.mu.Lock()
 	closedEvent := nativeTerminalEvent{Type: "closed", Sequence: terminal.sequence}
-	for subscriptionID, subscriber := range terminal.subscribers {
+	for subscriptionID, subscription := range terminal.subscribers {
 		select {
-		case subscriber <- closedEvent:
+		case subscription.Events <- closedEvent:
 		default:
 		}
 		delete(terminal.subscribers, subscriptionID)
-		close(subscriber)
+		close(subscription.Events)
 	}
 	terminal.mu.Unlock()
 	close(terminal.done)
@@ -226,15 +235,28 @@ func serveNativeCodeTerminal(
 	defer terminal.unsubscribe(subscription)
 	var writeMu sync.Mutex
 	writeEvent := func(event nativeTerminalEvent) error {
-		payload, _ := json.Marshal(struct {
-			Type       string `json:"type"`
-			Sequence   uint64 `json:"sequence"`
-			Data       string `json:"data,omitempty"`
-			HasControl bool   `json:"hasControl"`
-		}{Type: event.Type, Sequence: event.Sequence, Data: string(event.Data), HasControl: event.HasControl})
 		writeMu.Lock()
 		defer writeMu.Unlock()
-		return wsConn.WriteMessage(websocket.TextMessage, payload)
+		chunks := splitNativeTerminalBaseline(event)
+		for index, chunk := range chunks {
+			payload, _ := json.Marshal(struct {
+				Type          string `json:"type"`
+				Sequence      uint64 `json:"sequence"`
+				StartSequence uint64 `json:"startSequence,omitempty"`
+				RequestID     string `json:"requestId,omitempty"`
+				Data          string `json:"data,omitempty"`
+				HasControl    bool   `json:"hasControl"`
+				Truncated     bool   `json:"truncated,omitempty"`
+				ChunkIndex    int    `json:"chunkIndex,omitempty"`
+				ChunkCount    int    `json:"chunkCount,omitempty"`
+			}{Type: chunk.Type, Sequence: chunk.Sequence, StartSequence: chunk.StartSequence, RequestID: chunk.RequestID,
+				Data: string(chunk.Data), HasControl: chunk.HasControl, Truncated: chunk.Truncated && index == 0,
+				ChunkIndex: index, ChunkCount: len(chunks)})
+			if err := wsConn.WriteMessage(websocket.TextMessage, payload); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
 	_ = writeEvent(baseline)
 	go func() {
@@ -267,6 +289,15 @@ func serveNativeCodeTerminal(
 			terminal.takeControl(subscription.ID)
 		case "release_control":
 			terminal.releaseControl(subscription.ID)
+		case "ack":
+			if sequence, parseErr := strconv.ParseUint(message.Data, 10, 64); parseErr == nil {
+				terminal.acknowledge(subscription.ID, sequence)
+			}
+		case "resync":
+			var request nativeTerminalResyncRequest
+			if json.Unmarshal([]byte(message.Data), &request) == nil {
+				terminal.resync(subscription.ID, request.Sequence, request.RequestID)
+			}
 		case "resize":
 			var size struct {
 				Cols uint16 `json:"cols"`
