@@ -156,8 +156,8 @@ func CreateAISession(c fiber.Ctx) error {
 		if project.CreatorID != claims.UserId && claims.Role != constant.UserRoleSuper {
 			return c.JSON(e.Fail(errors.New("无权访问该项目")))
 		}
-		if strings.TrimSpace(project.WorkDir) != "" {
-			workDir, err = normalizeAIProjectWorkDir(project.WorkDir, claims)
+		if strings.TrimSpace(project.WorkDir) != "" || len(project.SourceDirs) == 1 {
+			workDir, err = aiProjectSessionWorkDir(project, claims)
 			if err != nil {
 				return c.JSON(e.Fail(err))
 			}

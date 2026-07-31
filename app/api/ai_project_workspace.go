@@ -228,6 +228,9 @@ func buildAIProjectWorkspaceSources(sourceDirs []string, previous aiProjectWorks
 }
 
 func syncAIProjectWorkspace(project *model.AIGroup, sourceDirs []string) (string, error) {
+	if len(sourceDirs) == 1 {
+		return sourceDirs[0], nil
+	}
 	workspaceDir := aiProjectWorkspaceDir(project.CreatorID, project.ID)
 	if err := os.MkdirAll(workspaceDir, 0750); err != nil {
 		return "", fmt.Errorf("创建项目工作区失败：%w", err)
@@ -306,6 +309,16 @@ func syncAIProjectWorkspace(project *model.AIGroup, sourceDirs []string) (string
 		return "", fmt.Errorf("保存项目工作区元数据失败：%w", err)
 	}
 	return workspaceDir, nil
+}
+
+func aiProjectSessionWorkDir(project *model.AIGroup, claims *token.CustomClaims) (string, error) {
+	if project == nil {
+		return "", errors.New("项目不存在")
+	}
+	if len(project.SourceDirs) == 1 {
+		return normalizeAIProjectWorkDir(project.SourceDirs[0], claims)
+	}
+	return normalizeAIProjectWorkDir(project.WorkDir, claims)
 }
 
 func aiProjectWorkspaceSourceDirs(workspaceDir string) []string {
