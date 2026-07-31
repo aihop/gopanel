@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useMessage, NEmpty, NIcon, NButton, NSpin, NInput } from 'naive-ui'
 import { insertDBManagerRecordAPI, updateDBManagerRecordAPI } from '@/api/modules/database'
 import { renderIcon } from '@/utils'
@@ -22,6 +23,7 @@ const emit = defineEmits<{
 }>()
 
 const message = useMessage()
+const { t } = useI18n()
 const savingRecord = ref(false)
 const localRecordData = ref<Record<string, any>>({})
 
@@ -42,7 +44,7 @@ const fieldRows = computed(() => {
       nullable,
       defaultValue,
       isPrimary: col.Key === 'PRI',
-      isAutoIncrement: extra.includes('auto_increment'),
+      isAutoIncrement: extra.includes('auto_increment') || extra.includes('identity') || type.includes('serial'),
       isTextLike: type.includes('text') || type.includes('char') || type.includes('json'),
       isJsonType: type.includes('json'),
       typeLabel: col.Type || '-'
@@ -89,11 +91,11 @@ const submitRecord = async () => {
   savingRecord.value = true
   try {
     const submitData: Record<string, any> = {}
-    props.structureData.forEach((col: any) => {
+    fieldRows.value.forEach((col: any) => {
       const field = col.Field
       let value = localRecordData.value[field]
 
-      if (submitData[field] === '' && !props.isEditing && col.Key === 'PRI') {
+      if (!props.isEditing && col.isAutoIncrement && (value === '' || value === null || value === undefined)) {
         return
       }
 
@@ -123,11 +125,13 @@ const submitRecord = async () => {
     }
 
     if (res.code === 0) {
-      message.success(props.isEditing ? '更新成功' : '插入成功')
+      message.success(t(props.isEditing ? 'database.recordUpdateSuccess' : 'database.recordInsertSuccess'))
       emit('success')
-    } 
-  } catch (error) {
-    // message.error('保存请求失败')
+    } else {
+      message.error(res.message || t('database.recordSaveFailed'))
+    }
+  } catch (error: any) {
+    message.error(error?.message || t('database.recordSaveFailed'))
   } finally {
     savingRecord.value = false
   }

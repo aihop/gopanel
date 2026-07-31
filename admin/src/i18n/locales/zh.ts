@@ -802,7 +802,10 @@ export default {
 		colExtra: "额外",
 		colCollation: "排序规则",
 		colPrivileges: "权限",
-		colComment: "注释"
+		colComment: "注释",
+		recordInsertSuccess: "插入成功",
+		recordUpdateSuccess: "更新成功",
+		recordSaveFailed: "保存记录失败"
 	},
 	container: {
 		create: "创建容器",

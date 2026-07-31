@@ -4,40 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
-
-	"github.com/aihop/gopanel/app/model"
 )
-
-// parseCSVFields splits a CSV line into fields, handling quoted fields
-func parseCSVFields(line string) []string {
-	var fields []string
-	var current strings.Builder
-	inQuotes := false
-	for _, ch := range line {
-		if ch == '"' {
-			inQuotes = !inQuotes
-		} else if ch == ',' && !inQuotes {
-			fields = append(fields, current.String())
-			current.Reset()
-		} else {
-			current.WriteRune(ch)
-		}
-	}
-	fields = append(fields, current.String())
-	return fields
-}
-
-func isNumericTypeGuess(dbType model.DatabaseType, colName string) bool {
-	// Simple heuristic: columns named "id" or ending with "_id" might be numeric
-	lower := strings.ToLower(colName)
-	if lower == "id" {
-		return true
-	}
-	if strings.HasSuffix(lower, "_id") {
-		return true
-	}
-	return false
-}
 
 // splitSQLStatements 智能分割 SQL 语句，识别引号和注释内的分号不切割
 func splitSQLStatements(content string) []string {

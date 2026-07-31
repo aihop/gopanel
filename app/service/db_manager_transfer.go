@@ -1,7 +1,10 @@
 package service
 
 import (
+	"database/sql"
+	"encoding/csv"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/aihop/gopanel/app/dto/request"
@@ -17,70 +20,75 @@ func (s *DBManagerService) ImportTable(req request.ImportTableReq) (int, error) 
 
 	server, _ := s.serverRepo.Get(req.ServerID)
 	tableName := sanitizeIdent(req.TableName)
-	q := string(quoteChar(server.Type))
-	quote := func(name string) string {
-		return q + name + q
-	}
-
 	switch req.Format {
 	case "sql":
 		return execSQLImport(db, req.Content)
 	case "csv":
-		normalized := strings.ReplaceAll(req.Content, "\r\n", "\n")
-		normalized = strings.ReplaceAll(normalized, "\r", "")
-		rows := strings.Split(strings.TrimSpace(normalized), "\n")
-		if len(rows) < 2 {
-			return 0, fmt.Errorf("csv must have at least a header row and one data row")
-		}
-
-		headers := parseCSVFields(strings.TrimSpace(rows[0]))
-		if len(headers) == 0 {
-			return 0, fmt.Errorf("no columns found in CSV header")
-		}
-
-		imported := 0
-		for _, line := range rows[1:] {
-			line = strings.TrimSpace(line)
-			if line == "" {
-				continue
-			}
-			values := parseCSVFields(line)
-			if len(values) != len(headers) {
-				continue
-			}
-
-			var columns, placeholders []string
-			var args []interface{}
-			for index, header := range headers {
-				column := sanitizeIdent(header)
-				if column == "" {
-					continue
-				}
-				columns = append(columns, quote(column))
-				if server.Type == model.DatabaseTypePostgresql {
-					placeholders = append(placeholders, fmt.Sprintf("$%d", len(placeholders)+1))
-				} else {
-					placeholders = append(placeholders, "?")
-				}
-				if values[index] == "" && isNumericTypeGuess(server.Type, column) {
-					args = append(args, nil)
-				} else {
-					args = append(args, values[index])
-				}
-			}
-			if len(columns) == 0 {
-				continue
-			}
-
-			sqlStr := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)", quote(tableName), strings.Join(columns, ", "), strings.Join(placeholders, ", "))
-			if _, err := db.Exec(sqlStr, args...); err == nil {
-				imported++
-			}
-		}
-		return imported, nil
+		return importCSV(db, server.Type, tableName, req.Content)
 	default:
 		return 0, fmt.Errorf("unsupported import format: %s", req.Format)
 	}
+}
+
+func importCSV(db *sql.DB, dbType model.DatabaseType, tableName, content string) (int, error) {
+	reader := csv.NewReader(strings.NewReader(strings.TrimPrefix(content, "\ufeff")))
+	headers, err := reader.Read()
+	if err != nil {
+		return 0, fmt.Errorf("read CSV header: %w", err)
+	}
+
+	quotedTable := quoteTable(dbType, tableName)
+	stringColumns := tableStringColumns(db, quotedTable)
+	columns := make([]string, 0, len(headers))
+	columnNames := make([]string, 0, len(headers))
+	placeholders := make([]string, 0, len(headers))
+	for _, header := range headers {
+		column := sanitizeIdent(header)
+		if column == "" {
+			return 0, fmt.Errorf("CSV header contains an empty column")
+		}
+		columnNames = append(columnNames, column)
+		columns = append(columns, quoteIdent(dbType, column))
+		if dbType == model.DatabaseTypePostgresql {
+			placeholders = append(placeholders, fmt.Sprintf("$%d", len(placeholders)+1))
+		} else {
+			placeholders = append(placeholders, "?")
+		}
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	statement := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)", quotedTable, strings.Join(columns, ", "), strings.Join(placeholders, ", "))
+	imported := 0
+	for rowNumber := 2; ; rowNumber++ {
+		values, readErr := reader.Read()
+		if readErr == io.EOF {
+			break
+		}
+		if readErr != nil {
+			_ = tx.Rollback()
+			return imported, fmt.Errorf("read CSV row %d: %w", rowNumber, readErr)
+		}
+		args := make([]interface{}, len(values))
+		for index, value := range values {
+			args[index] = emptyStringToNull(value, columnNames[index], stringColumns)
+		}
+		if _, execErr := tx.Exec(statement, args...); execErr != nil {
+			_ = tx.Rollback()
+			return imported, fmt.Errorf("import CSV row %d: %w", rowNumber, execErr)
+		}
+		imported++
+	}
+	if imported == 0 {
+		_ = tx.Rollback()
+		return 0, fmt.Errorf("csv must have at least one data row")
+	}
+	if err := tx.Commit(); err != nil {
+		return imported, fmt.Errorf("commit CSV import: %w", err)
+	}
+	return imported, nil
 }
 
 func (s *DBManagerService) ImportSQLContent(serverID uint, databaseName, content string) (int, error) {

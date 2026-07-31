@@ -822,7 +822,10 @@ export default {
 		colExtra: "Extra",
 		colCollation: "Collation",
 		colPrivileges: "Privileges",
-		colComment: "Comment"
+		colComment: "Comment",
+		recordInsertSuccess: "Record inserted",
+		recordUpdateSuccess: "Record updated",
+		recordSaveFailed: "Failed to save record"
 	},
 	container: {
 		create: "Create container",

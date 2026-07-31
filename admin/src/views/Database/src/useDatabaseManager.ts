@@ -235,9 +235,9 @@ export const useDatabaseManager = (
       const escapedIdentifierTable = selectedTable.value.replace(/`/g, '``')
       sql = `SHOW FULL COLUMNS FROM \`${escapedIdentifierTable}\``
     } else if (server.type === 'sqlite') {
-      sql = `SELECT name AS "Field", type AS "Type", "notnull" AS "Null", dflt_value AS "Default", CASE WHEN pk > 0 THEN 'PRI' ELSE '' END AS "Key" FROM pragma_table_info('${escapedStringTable}')`
+      sql = `SELECT name AS "Field", type AS "Type", CASE WHEN "notnull" = 0 THEN 'YES' ELSE 'NO' END AS "Null", dflt_value AS "Default", CASE WHEN pk > 0 THEN 'PRI' ELSE '' END AS "Key" FROM pragma_table_info('${escapedStringTable}')`
     } else {
-      sql = `SELECT column_name AS "Field", data_type AS "Type", is_nullable AS "Null", column_default AS "Default" FROM information_schema.columns WHERE table_schema = (SELECT n.nspname FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace WHERE c.relname = '${escapedStringTable}' AND c.relkind IN ('r', 'p') AND pg_catalog.pg_table_is_visible(c.oid) LIMIT 1) AND table_name = '${escapedStringTable}' ORDER BY ordinal_position`
+      sql = `SELECT col.column_name AS "Field", col.data_type AS "Type", col.is_nullable AS "Null", col.column_default AS "Default", CASE WHEN pk.column_name IS NOT NULL THEN 'PRI' ELSE '' END AS "Key", CASE WHEN col.is_identity = 'YES' OR col.column_default LIKE 'nextval(%' THEN 'auto_increment' ELSE '' END AS "Extra" FROM information_schema.columns col LEFT JOIN (SELECT kcu.table_schema, kcu.table_name, kcu.column_name FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu ON kcu.constraint_name = tc.constraint_name AND kcu.constraint_schema = tc.constraint_schema WHERE tc.constraint_type = 'PRIMARY KEY') pk ON pk.table_schema = col.table_schema AND pk.table_name = col.table_name AND pk.column_name = col.column_name WHERE col.table_schema = (SELECT n.nspname FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace WHERE c.relname = '${escapedStringTable}' AND c.relkind IN ('r', 'p') AND pg_catalog.pg_table_is_visible(c.oid) LIMIT 1) AND col.table_name = '${escapedStringTable}' ORDER BY col.ordinal_position`
     }
 
     try {

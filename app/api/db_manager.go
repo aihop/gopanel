@@ -19,6 +19,24 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
+const (
+	maxDBImportChunkSize  = 2 << 20
+	maxDBImportChunkCount = 128
+)
+
+func validateDBImportChunk(filename string, chunkIndex, chunkCount int) error {
+	if filename == "" || filename == "." || filename == ".." || filepath.Base(filename) != filename || strings.ContainsAny(filename, `/\\`) {
+		return fmt.Errorf("invalid filename")
+	}
+	if chunkCount <= 0 || chunkCount > maxDBImportChunkCount {
+		return fmt.Errorf("invalid chunkCount")
+	}
+	if chunkIndex < 0 || chunkIndex >= chunkCount {
+		return fmt.Errorf("invalid chunkIndex")
+	}
+	return nil
+}
+
 // 获取数据库的表列表
 func GetDBManagerTables(c fiber.Ctx) error {
 	req, err := e.BodyToStruct[request.GetTablesReq](c.Body())
@@ -211,8 +229,11 @@ func UploadChunkDBImport(c fiber.Ctx) error {
 		return c.JSON(e.Fail(fmt.Errorf("invalid chunkCount")))
 	}
 
-	if serverID == 0 || databaseName == "" || filename == "" {
+	if serverID <= 0 || databaseName == "" {
 		return c.JSON(e.Fail(fmt.Errorf("serverId, databaseName, filename are required")))
+	}
+	if err := validateDBImportChunk(filename, chunkIndex, chunkCount); err != nil {
+		return c.JSON(e.Fail(err))
 	}
 
 	// 创建临时目录：{tmpDir}/upload/db_import/{filename}/
@@ -226,15 +247,24 @@ func UploadChunkDBImport(c fiber.Ctx) error {
 	chunkDir := filepath.Join(tmpDir, filename)
 	if chunkIndex == 0 {
 		if fileOp.Stat(chunkDir) {
-			_ = fileOp.DeleteDir(chunkDir)
+			if err := fileOp.DeleteDir(chunkDir); err != nil {
+				return c.JSON(e.Fail(err))
+			}
 		}
-		_ = os.MkdirAll(chunkDir, 0755)
+		if err := os.MkdirAll(chunkDir, 0755); err != nil {
+			return c.JSON(e.Fail(err))
+		}
+	} else if !fileOp.Stat(chunkDir) {
+		return c.JSON(e.Fail(fmt.Errorf("upload session not found")))
 	}
 
 	// 保存当前分片
-	chunkData, err := io.ReadAll(uploadFile)
+	chunkData, err := io.ReadAll(io.LimitReader(uploadFile, maxDBImportChunkSize+1))
 	if err != nil {
 		return c.JSON(e.Fail(buserr.WithMap(constant.ErrFileUpload, map[string]interface{}{"name": filename, "detail": err.Error()})))
+	}
+	if len(chunkData) > maxDBImportChunkSize {
+		return c.JSON(e.Fail(fmt.Errorf("chunk exceeds %d bytes", maxDBImportChunkSize)))
 	}
 	chunkPath := filepath.Join(chunkDir, fmt.Sprintf("%s.%d", filename, chunkIndex))
 	if err := os.WriteFile(chunkPath, chunkData, 0644); err != nil {
