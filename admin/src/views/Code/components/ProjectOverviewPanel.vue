@@ -10,6 +10,7 @@ import type { CodeTaskListItem } from "@/api/interface/codeTasks"
 import { getCodeProjectBranches } from "@/api/modules/code"
 import { getCodeProjectOverview } from "@/api/modules/codeOverview"
 import Icon from "@/components/common/Icon.vue"
+import ProjectRepositorySync from "./ProjectRepositorySync.vue"
 import { projectOverviewMessages } from "../projectOverviewMessages"
 
 const props = defineProps<{
@@ -207,6 +208,7 @@ useIntervalFn(() => void loadOverview(), 5000)
 						</div>
 					</div>
 				</section>
+				<ProjectRepositorySync :project-id="projectId" />
 
 				<div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
 					<section

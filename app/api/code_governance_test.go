@@ -23,6 +23,7 @@ func withCodeGovernanceDB(t *testing.T) *gorm.DB {
 		&model.AIProject{}, &model.AIDevSession{}, &model.AITask{}, &model.AIExecutionRun{},
 		&model.AITimelineEvent{}, &model.AICodeDelivery{}, &model.AICodeDeliveryJob{}, &model.AICodeDeliveryLease{},
 		&model.AICodeAuditEvent{}, &model.AIDevSessionRepository{}, &model.AIInstruction{},
+		&model.HostTerminalSession{},
 	); err != nil {
 		t.Fatal(err)
 	}

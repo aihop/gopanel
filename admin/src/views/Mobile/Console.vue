@@ -14,9 +14,9 @@ import {
 } from "@/api/modules/mobile"
 import type { AIProject, CodeSession, CodeSessionState } from "@/api/interface/code"
 import type { HostTerminalSession } from "@/api/interface/hostTerminal"
-import Icon from "@/components/common/Icon.vue"
 import { mobileMessages } from "@/i18n/locales/mobile"
-import Logo from "@/layouts/common/Logo.vue"
+import MobileConsoleHeader from "./components/MobileConsoleHeader.vue"
+import MobileConsoleNavigation from "./components/MobileConsoleNavigation.vue"
 import MobileContainerPanel from "./components/MobileContainerPanel.vue"
 import MobileFileBrowser from "./components/MobileFileBrowser.vue"
 import MobileRecentSessions from "./components/MobileRecentSessions.vue"
@@ -30,6 +30,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from "vue"
 import { useDialog, useMessage } from "naive-ui"
 import { useRouter } from "vue-router"
 import MobileNodeSwitcher from "./components/MobileNodeSwitcher.vue"
+import MobileNodeOverview from "./components/MobileNodeOverview.vue"
 import MobileProjectTerminals from "./components/MobileProjectTerminals.vue"
 
 const { t } = useI18n({ messages: mobileMessages })
@@ -61,15 +62,35 @@ const projectTerminalProject = ref<AIProject | null>(null)
 let refreshTimer: ReturnType<typeof setInterval> | null = null
 let nodeRefreshTicks = 0
 
+async function handleDeliveryQueued() {
+	await Promise.all([loadSessions(), loadSessionState(true)])
+}
+
 const selectedSession = computed(() => sessions.value.find(item => item.id === selectedSessionId.value) || null)
-const selectedNode = computed(() => nodes.value.find(item => item.id === selectedNodeId.value) || nodes.value[0] || null)
+const selectedNode = computed(
+	() => nodes.value.find(item => item.id === selectedNodeId.value) || nodes.value[0] || null
+)
 const isProjectTerminal = computed(() => activeTab.value === "code" && Boolean(projectTerminalSession.value))
 const isTaskDetail = computed(
 	() => activeTab.value === "code" && (Boolean(selectedSession.value) || isProjectTerminal.value)
 )
-const memoryPercent = computed(() => Math.round(selectedNode.value?.isLocal ? overview.value?.system.memoryUsedPercent || 0 : selectedNode.value?.summary.memPercent || 0))
-const cpuPercent = computed(() => Math.round(selectedNode.value?.isLocal ? overview.value?.system.cpuUsedPercent || 0 : selectedNode.value?.summary.cpuPercent || 0))
-const load1 = computed(() => selectedNode.value?.isLocal ? overview.value?.system.load1 || 0 : selectedNode.value?.summary.load1 || 0)
+const memoryPercent = computed(() =>
+	Math.round(
+		selectedNode.value?.isLocal
+			? overview.value?.system.memoryUsedPercent || 0
+			: selectedNode.value?.summary.memPercent || 0
+	)
+)
+const cpuPercent = computed(() =>
+	Math.round(
+		selectedNode.value?.isLocal
+			? overview.value?.system.cpuUsedPercent || 0
+			: selectedNode.value?.summary.cpuPercent || 0
+	)
+)
+const load1 = computed(() =>
+	selectedNode.value?.isLocal ? overview.value?.system.load1 || 0 : selectedNode.value?.summary.load1 || 0
+)
 const nodeIsOnline = computed(() => selectedNode.value?.status === "online")
 
 async function loadNodes(silent = false) {
@@ -113,7 +134,7 @@ function sessionProjectName(session: CodeSession) {
 }
 
 function sessionTaskTitle(session: CodeSession) {
-	return session.title
+	return session.currentTaskTitle || session.title
 }
 
 async function loadProjects() {
@@ -122,7 +143,8 @@ async function loadProjects() {
 		projects.value = result.items
 		if (!projects.value.some(project => project.id === selectedProjectId.value)) {
 			selectedProjectId.value = projects.value[0]?.id || null
-			if (selectedProjectId.value) localStorage.setItem("gopanel-mobile-project-id", String(selectedProjectId.value))
+			if (selectedProjectId.value)
+				localStorage.setItem("gopanel-mobile-project-id", String(selectedProjectId.value))
 		}
 	} catch (error) {
 		loadError.value = error instanceof Error ? error.message : t("mobile.loadFailed")
@@ -217,6 +239,12 @@ async function switchToCode() {
 	projectTerminalSession.value = null
 	projectTerminalProject.value = null
 	await loadSessions(true)
+}
+
+function selectTab(tab: "overview" | "containers" | "code") {
+	if (tab === "overview") void switchToOverview()
+	else if (tab === "code") void switchToCode()
+	else activeTab.value = "containers"
 }
 
 async function leaveTaskDetail() {
@@ -326,33 +354,32 @@ onBeforeUnmount(() => {
 
 <template>
 	<div class="min-h-dvh text-slate-900" :class="isTaskDetail ? 'bg-[#0b1020] pb-0' : 'bg-slate-100 pb-24'">
-		<header v-if="!isTaskDetail" class="sticky top-0 z-20 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur">
-			<div class="mx-auto flex max-w-2xl items-center justify-between">
-				<div class="flex min-w-0 items-center gap-3">
-					<Logo :dark="false" class="shrink-0" />
-					<button v-if="activeTab === 'overview'" type="button" class="mt-0.5 flex max-w-[65vw] items-center gap-1 border-0 bg-transparent p-0 text-xs text-slate-500" @click="showNodeSwitcher = true">
-						<span class="h-2 w-2 shrink-0 rounded-full" :class="nodeIsOnline ? 'bg-emerald-500' : 'bg-slate-400'"></span>
-						<span class="truncate">{{ selectedNode?.name || t("mobile.selectNode") }}</span>
-						<span>⌄</span>
-					</button>
-				</div>
-				<div class="flex shrink-0 items-center gap-1">
-					<n-button size="small" quaternary circle :title="t('mobile.logout')" :aria-label="t('mobile.logout')" @click="confirmLogout">
-						<template #icon><Icon name="mdi:logout" /></template>
-					</n-button>
-					<n-button v-if="activeTab !== 'containers'" size="small" type="primary" secondary @click="showSessionCreator = true">
-						{{ t("mobile.newSession") }}
-					</n-button>
-				</div>
-			</div>
-		</header>
+		<MobileConsoleHeader
+			v-if="!isTaskDetail"
+			:active-tab="activeTab"
+			:node-name="selectedNode?.name || ''"
+			:node-online="nodeIsOnline"
+			@select-node="showNodeSwitcher = true"
+			@logout="confirmLogout"
+			@new-session="showSessionCreator = true"
+		/>
 
 		<main :class="isTaskDetail ? 'w-full p-0' : 'mx-auto max-w-2xl p-4'">
 			<MobileSystemUpdate v-if="activeTab === 'overview' && selectedNode?.isLocal" />
-			<n-alert v-if="loadError && activeTab !== 'containers'" type="error" class="mb-4" :title="t('mobile.loadFailed')">
+			<n-alert
+				v-if="loadError && activeTab !== 'containers'"
+				type="error"
+				class="mb-4"
+				:title="t('mobile.loadFailed')"
+			>
 				{{ loadError }}
 			</n-alert>
-			<n-alert v-if="nodesLoadError && activeTab === 'overview'" type="error" class="mb-4" :title="t('mobile.nodesLoadFailed')">
+			<n-alert
+				v-if="nodesLoadError && activeTab === 'overview'"
+				type="error"
+				class="mb-4"
+				:title="t('mobile.nodesLoadFailed')"
+			>
 				<div class="flex items-center justify-between gap-3">
 					<span>{{ nodesLoadError }}</span>
 					<n-button size="small" text type="primary" @click="loadNodes()">{{ t("mobile.retry") }}</n-button>
@@ -361,39 +388,13 @@ onBeforeUnmount(() => {
 
 			<n-spin :show="loading">
 				<div v-if="activeTab === 'overview'" class="space-y-4">
-					<n-alert v-if="selectedNode && !nodeIsOnline" type="warning" :title="t(`mobile.nodeStatus_${selectedNode.status}`)">
-						<div>{{ t("mobile.nodeSnapshotUnavailable") }}</div>
-						<div v-if="selectedNode.lastSeenAt" class="mt-1 text-xs">{{ t("mobile.lastSeen", { time: new Date(selectedNode.lastSeenAt).toLocaleString() }) }}</div>
-					</n-alert>
-					<div class="grid grid-cols-2 gap-3">
-						<div class="rounded-2xl bg-white p-4 shadow-sm">
-							<div class="text-xs text-slate-500">{{ t("mobile.cpu") }}</div>
-							<div class="mt-2 text-2xl font-bold">{{ nodeIsOnline ? `${cpuPercent}%` : '—' }}</div>
-							<n-progress v-if="nodeIsOnline" type="line" :percentage="cpuPercent" :show-indicator="false" class="mt-3" />
-						</div>
-						<div class="rounded-2xl bg-white p-4 shadow-sm">
-							<div class="text-xs text-slate-500">{{ t("mobile.memory") }}</div>
-							<div class="mt-2 text-2xl font-bold">{{ nodeIsOnline ? `${memoryPercent}%` : '—' }}</div>
-							<n-progress v-if="nodeIsOnline" type="line" :percentage="memoryPercent" :show-indicator="false" class="mt-3" />
-						</div>
-						<div class="rounded-2xl bg-white p-4 shadow-sm">
-							<div class="text-xs text-slate-500">{{ t("mobile.load") }}</div>
-							<div class="mt-2 text-2xl font-bold">{{ nodeIsOnline ? load1.toFixed(2) : '—' }}</div>
-						</div>
-						<div class="rounded-2xl bg-white p-4 shadow-sm">
-							<div class="text-xs text-slate-500">{{ t("mobile.disk") }}</div>
-							<div class="mt-2 text-2xl font-bold">{{ nodeIsOnline ? `${Math.round(selectedNode?.summary.diskMaxPercent || 0)}%` : '—' }}</div>
-						</div>
-					</div>
-					<section v-if="selectedNode && nodeIsOnline" class="rounded-2xl bg-white p-4 shadow-sm">
-						<div class="grid grid-cols-2 gap-4 text-sm">
-							<div><div class="text-xs text-slate-500">{{ t("mobile.runningContainers") }}</div><div class="mt-1 font-semibold">{{ selectedNode.summary.containerRunning }}/{{ selectedNode.summary.containerTotal }}</div></div>
-							<div><div class="text-xs text-slate-500">{{ t("mobile.certificates") }}</div><div class="mt-1 font-semibold">{{ selectedNode.summary.certExpiringCount }}/{{ selectedNode.summary.certTotal }} {{ t("mobile.expiring") }}</div></div>
-						</div>
-						<div v-if="selectedNode.warnings.length" class="mt-3 flex flex-wrap gap-2">
-							<n-tag v-for="(warning, index) in selectedNode.warnings" :key="index" size="small" :type="warning.level === 'danger' ? 'error' : 'warning'">{{ t(`mobile.warning_${warning.type}`) }}</n-tag>
-						</div>
-					</section>
+					<MobileNodeOverview
+						:node="selectedNode"
+						:online="nodeIsOnline"
+						:cpu-percent="cpuPercent"
+						:memory-percent="memoryPercent"
+						:load="load1"
+					/>
 					<MobileRecentSessions
 						:sessions="overview?.sessions || []"
 						:projects="projects"
@@ -427,32 +428,45 @@ onBeforeUnmount(() => {
 						@back="leaveTaskDetail"
 					/>
 					<template v-else-if="selectedSession">
-						<MobileTerminal :session-id="selectedSessionId" :task-name="sessionTaskTitle(selectedSession)" :project-name="sessionProjectName(selectedSession)" @back="leaveTaskDetail" @open-files="showFiles = true" @open-status="showTaskStatus = true" @renamed="loadSessions" />
+						<MobileTerminal
+							:session-id="selectedSessionId"
+							:task-name="sessionTaskTitle(selectedSession)"
+							:project-name="sessionProjectName(selectedSession)"
+							@back="leaveTaskDetail"
+							@open-files="showFiles = true"
+							@open-status="showTaskStatus = true"
+							@renamed="loadSessions"
+						/>
 					</template>
 				</div>
 			</n-spin>
 		</main>
 
-		<nav v-if="!isTaskDetail" class="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 pb-[max(8px,env(safe-area-inset-bottom))] pt-1 backdrop-blur">
-			<div class="mx-auto grid max-w-2xl grid-cols-3">
-				<button class="flex min-h-14 flex-col items-center justify-center gap-0.5 text-xs transition-colors" :class="activeTab === 'overview' ? 'text-blue-600' : 'text-slate-400'" @click="switchToOverview">
-					<Icon :name="activeTab === 'overview' ? 'mdi:view-dashboard' : 'mdi:view-dashboard-outline'" :size="23" />
-					<span>{{ t("mobile.overview") }}</span>
-				</button>
-				<button class="flex min-h-14 flex-col items-center justify-center gap-0.5 text-xs transition-colors" :class="activeTab === 'containers' ? 'text-blue-600' : 'text-slate-400'" @click="activeTab = 'containers'">
-					<Icon :name="activeTab === 'containers' ? 'mdi:cube' : 'mdi:cube-outline'" :size="23" />
-					<span>{{ t("mobile.containers") }}</span>
-				</button>
-				<button class="flex min-h-14 flex-col items-center justify-center gap-0.5 text-xs transition-colors" :class="activeTab === 'code' ? 'text-blue-600' : 'text-slate-400'" @click="switchToCode">
-					<Icon name="mdi:console-line" :size="23" />
-					<span>{{ t("mobile.code") }}</span>
-				</button>
-			</div>
-		</nav>
-		<MobileNodeSwitcher v-model:show="showNodeSwitcher" :nodes="nodes" :selected-id="selectedNodeId" :loading="nodesLoading" @select="selectNode" />
-		<MobileProjectTerminals v-model:show="showProjectTerminals" :projects="projects" @opened="openProjectTerminal" />
+		<MobileConsoleNavigation v-if="!isTaskDetail" :active-tab="activeTab" @select="selectTab" />
+		<MobileNodeSwitcher
+			v-model:show="showNodeSwitcher"
+			:nodes="nodes"
+			:selected-id="selectedNodeId"
+			:loading="nodesLoading"
+			@select="selectNode"
+		/>
+		<MobileProjectTerminals
+			v-model:show="showProjectTerminals"
+			:projects="projects"
+			@opened="openProjectTerminal"
+		/>
 		<MobileSessionCreator v-model:show="showSessionCreator" @created="handleSessionCreated" />
 		<MobileFileBrowser v-if="selectedSessionId" v-model:show="showFiles" :session-id="selectedSessionId" />
-		<MobileTaskStatusDrawer v-model:show="showTaskStatus" :state="sessionState" :loading="actionLoading" @approve="reason => decideApproval(true, reason)" @reject="reason => decideApproval(false, reason)" @stop="stopExecution" @retry="retryExecution" />
+		<MobileTaskStatusDrawer
+			v-model:show="showTaskStatus"
+			:session="selectedSession"
+			:state="sessionState"
+			:loading="actionLoading"
+			@approve="reason => decideApproval(true, reason)"
+			@reject="reason => decideApproval(false, reason)"
+			@stop="stopExecution"
+			@retry="retryExecution"
+			@delivery-queued="handleDeliveryQueued"
+		/>
 	</div>
 </template>

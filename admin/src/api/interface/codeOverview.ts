@@ -35,3 +35,35 @@ export interface CodeProjectOverview {
 	}
 	latestRun: CodeProjectLatestRun | null
 }
+
+export type CodeProjectRepositorySyncStatus =
+	| "synced"
+	| "local"
+	| "behind"
+	| "ahead"
+	| "diverged"
+	| "dirty"
+	| "offline"
+	| "blocked"
+
+export interface CodeProjectRepositorySync {
+	name: string
+	path: string
+	branch: string
+	remote?: string
+	remoteBranch?: string
+	localCommit?: string
+	remoteCommit?: string
+	ahead: number
+	behind: number
+	status: CodeProjectRepositorySyncStatus
+	reason?: string
+}
+
+export interface CodeProjectSyncStatus {
+	projectId: number
+	status: CodeProjectRepositorySyncStatus
+	canSync: boolean
+	updated: boolean
+	repositories: CodeProjectRepositorySync[]
+}

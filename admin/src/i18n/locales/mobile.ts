@@ -71,10 +71,19 @@ export const mobileMessages = {
 			sessionCreateFailed: "会话创建失败",
 			worktreeCheckFailed: "无法检查项目隔离能力",
 			worktreeUnavailable: "当前项目无法创建安全的隔离会话，请在电脑端检查项目目录。",
-			worktreeDirtyDesktopHint: "仓库 {repositories} 存在未提交改动，创建时会自动安全复制到隔离会话，不会修改源仓库。",
+			worktreeDirtyDesktopHint:
+				"仓库 {repositories} 存在未提交改动，创建时会自动安全复制到隔离会话，不会修改源仓库。",
 			project: "项目",
 			selectProject: "选择项目",
 			projectSessions: "当前项目的开发会话",
+			projectTaskCount: "{count} 个任务",
+			projectStatus_idle: "空闲",
+			projectStatus_queued: "等待执行",
+			projectStatus_running: "执行中",
+			projectStatus_delivering: "交付中",
+			projectStatus_pending_approval: "待审批",
+			projectStatus_unknown: "状态未知",
+			noActivityTime: "暂无时间",
 			noProjectSessions: "当前项目暂无开发会话",
 			recentSessions: "最近开发会话",
 			viewProjectSessions: "查看项目会话",
@@ -231,14 +240,15 @@ export const mobileMessages = {
 			updateConnectionLost: "日志连接已断开，正在确认更新结果…",
 			updateCompleteLog: "系统已更新并恢复服务。",
 			updateVerifyFailed: "暂时无法确认新版本，请稍后重新检查。",
-			stage: "状态",
-		},
+			stage: "状态"
+		}
 	},
 	en: {
 		mobile: {
 			title: "Mobile Console",
 			accountLogin: "Sign in to Mobile Console",
-			loginHint: "Sign in with an administrator account to authorize this device for 30 days. You can revoke it separately.",
+			loginHint:
+				"Sign in with an administrator account to authorize this device for 30 days. You can revoke it separately.",
 			loginAccount: "Administrator email",
 			loginAccountPlaceholder: "Enter the administrator email",
 			loginPassword: "Password",
@@ -305,11 +315,21 @@ export const mobileMessages = {
 			sessionCreated: "Session created",
 			sessionCreateFailed: "Failed to create session",
 			worktreeCheckFailed: "Unable to check project isolation",
-			worktreeUnavailable: "This project cannot create a safe isolated session. Check its directories from the desktop console.",
-			worktreeDirtyDesktopHint: "Repositories {repositories} contain uncommitted changes. They will be safely copied into the isolated session without changing the source repositories.",
+			worktreeUnavailable:
+				"This project cannot create a safe isolated session. Check its directories from the desktop console.",
+			worktreeDirtyDesktopHint:
+				"Repositories {repositories} contain uncommitted changes. They will be safely copied into the isolated session without changing the source repositories.",
 			project: "Project",
 			selectProject: "Select a project",
 			projectSessions: "Code sessions in this project",
+			projectTaskCount: "{count} tasks",
+			projectStatus_idle: "Idle",
+			projectStatus_queued: "Queued",
+			projectStatus_running: "Running",
+			projectStatus_delivering: "Delivering",
+			projectStatus_pending_approval: "Awaiting approval",
+			projectStatus_unknown: "Unknown",
+			noActivityTime: "No activity time",
 			noProjectSessions: "No code sessions in this project",
 			recentSessions: "Recent code sessions",
 			viewProjectSessions: "View project sessions",
@@ -331,7 +351,8 @@ export const mobileMessages = {
 			approvalManual: "Confirm each operation",
 			approvalSafe: "Run safe operations automatically",
 			approvalFull: "Run fully automatically",
-			executorFullAutoOnly: "This coding agent does not support interactive approval and requires fully automatic mode.",
+			executorFullAutoOnly:
+				"This coding agent does not support interactive approval and requires fully automatic mode.",
 			stage_idle: "Waiting for a task",
 			stage_interactive: "Native session",
 			stage_task_ready: "Task ready",
@@ -445,7 +466,8 @@ export const mobileMessages = {
 			loadFailed: "Failed to load",
 			logout: "Revoke this device",
 			logoutConfirm: "You will need to scan again. Continue?",
-			httpWarning: "This connection uses HTTP. Use it only for testing because network attackers may intercept the token.",
+			httpWarning:
+				"This connection uses HTTP. Use it only for testing because network attackers may intercept the token.",
 			updateAvailable: "New version available",
 			updateAvailableHint: "A new system version is available. Updating is recommended.",
 			updateNow: "Update now",
@@ -466,7 +488,7 @@ export const mobileMessages = {
 			updateConnectionLost: "The log connection closed. Verifying the update…",
 			updateCompleteLog: "The system is updated and back online.",
 			updateVerifyFailed: "The new version could not be verified yet. Check again later.",
-			stage: "Status",
-		},
-	},
+			stage: "Status"
+		}
+	}
 } as const
