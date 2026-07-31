@@ -13,6 +13,7 @@ class CodeTerminalClient extends ChangeNotifier {
     required this.terminal,
     required this.sessionId,
     required this.nativeProtocol,
+    this.mode = CodeTerminalMode.aiSession,
   }) {
     terminal.onOutput = sendInput;
     terminal.onResize = _handleResize;
@@ -21,6 +22,7 @@ class CodeTerminalClient extends ChangeNotifier {
   final Terminal terminal;
   final int sessionId;
   final bool nativeProtocol;
+  final CodeTerminalMode mode;
 
   WebSocketChannel? _channel;
   StreamSubscription<dynamic>? _subscription;
@@ -50,17 +52,14 @@ class CodeTerminalClient extends ChangeNotifier {
     if (server == null || server.isEmpty || token == null || token.isEmpty) {
       return null;
     }
-    final base = Uri.parse(server);
-    return base.replace(
-      scheme: base.scheme == 'https' ? 'wss' : 'ws',
-      path: '/api/code/terminal',
-      queryParameters: {
-        'token': token,
-        'session_id': sessionId.toString(),
-        'cols': _cols.toString(),
-        'rows': _rows.toString(),
-        if (_lastSequence > 0) 'after_sequence': _lastSequence.toString(),
-      },
+    return buildCodeTerminalUri(
+      server: server,
+      token: token,
+      sessionId: sessionId,
+      mode: mode,
+      cols: _cols,
+      rows: _rows,
+      lastSequence: _lastSequence,
     );
   }
 
@@ -150,7 +149,8 @@ class CodeTerminalClient extends ChangeNotifier {
           _handleOutput(message);
         case 'control':
           _updateControl(message['hasControl'] == true);
-          final reason = (message['controlReason'] ?? '').toString();
+          final reason = (message['controlReason'] ?? message['data'] ?? '')
+              .toString();
           if (reason.isNotEmpty) _writeSystem(reason);
         case 'resync_required':
           _requestResync();
@@ -183,7 +183,11 @@ class CodeTerminalClient extends ChangeNotifier {
   void _handleBaseline(Map<String, dynamic> message) {
     _connectionFailed = false;
     final requestId = (message['requestId'] ?? '').toString();
-    if (_pendingResyncId.isNotEmpty && requestId != _pendingResyncId) return;
+    if (_pendingResyncId.isNotEmpty &&
+        requestId.isNotEmpty &&
+        requestId != _pendingResyncId) {
+      return;
+    }
     final chunkIndex = (message['chunkIndex'] as num?)?.toInt() ?? 0;
     final chunkCount = (message['chunkCount'] as num?)?.toInt() ?? 1;
     if (message['truncated'] == true && chunkIndex == 0) {

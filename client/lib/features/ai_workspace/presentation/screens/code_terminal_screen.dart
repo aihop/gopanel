@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:xterm/xterm.dart';
 
 import '../../models/ai_dev_session.dart';
+import '../../models/code_project_terminal_session.dart';
+import '../code_workspace_text.dart';
 import '../controllers/code_terminal_client.dart';
+import '../controllers/code_terminal_socket.dart';
 import '../widgets/code_terminal_controls.dart';
 import 'ai_chat_screen.dart';
 import 'code_workspace_files_screen.dart';
@@ -36,16 +39,33 @@ const _terminalTheme = TerminalTheme(
 class CodeTerminalScreen extends StatefulWidget {
   const CodeTerminalScreen({
     super.key,
-    required this.session,
+    required AiDevSession session,
     required this.task,
     required this.projectName,
     required this.nativeProtocol,
-  });
+  }) : session = session,
+       terminalId = session.id,
+       terminalMode = CodeTerminalMode.aiSession,
+       projectTerminal = null;
 
-  final AiDevSession session;
+  const CodeTerminalScreen.project({
+    super.key,
+    required CodeProjectTerminalSession terminal,
+    required this.projectName,
+  }) : session = null,
+       task = null,
+       nativeProtocol = true,
+       terminalId = terminal.id,
+       terminalMode = CodeTerminalMode.projectTerminal,
+       projectTerminal = terminal;
+
+  final AiDevSession? session;
   final AiTaskSummary? task;
   final String projectName;
   final bool nativeProtocol;
+  final int terminalId;
+  final CodeTerminalMode terminalMode;
+  final CodeProjectTerminalSession? projectTerminal;
 
   @override
   State<CodeTerminalScreen> createState() => _CodeTerminalScreenState();
@@ -66,8 +86,9 @@ class _CodeTerminalScreenState extends State<CodeTerminalScreen> {
     _terminalFocusNode = FocusNode();
     _client = CodeTerminalClient(
       terminal: _terminal,
-      sessionId: widget.session.id,
+      sessionId: widget.terminalId,
       nativeProtocol: widget.nativeProtocol,
+      mode: widget.terminalMode,
     )..addListener(_refresh);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _client.connect();
@@ -95,13 +116,15 @@ class _CodeTerminalScreenState extends State<CodeTerminalScreen> {
   }
 
   void _openFiles() {
+    final session = widget.session;
+    if (session == null) return;
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => CodeWorkspaceFilesScreen(
-          sessionId: widget.session.id,
-          sessionTitle: widget.session.title.isEmpty
-              ? '开发 #${widget.session.id}'
-              : widget.session.title,
+          sessionId: session.id,
+          sessionTitle: session.title.isEmpty
+              ? '开发 #${session.id}'
+              : session.title,
         ),
       ),
     );
@@ -130,14 +153,24 @@ class _CodeTerminalScreenState extends State<CodeTerminalScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final sessionTitle = widget.session.title.isEmpty
-        ? '开发 #${widget.session.id}'
-        : widget.session.title;
+    final session = widget.session;
+    final projectTerminal = widget.projectTerminal;
+    final sessionTitle = session == null
+        ? CodeWorkspaceText.t(context, 'terminal.projectTitle')
+        : session.title.isEmpty
+        ? '开发 #${session.id}'
+        : session.title;
     final taskTitle = widget.task == null
-        ? '暂无任务'
+        ? CodeWorkspaceText.t(context, 'terminal.noTask')
         : widget.task!.title.isEmpty
         ? '任务 #${widget.task!.id}'
         : widget.task!.title;
+    final title = projectTerminal == null
+        ? CodeWorkspaceText.format(context, 'terminal.taskTitle', {
+            'task': taskTitle,
+          })
+        : widget.projectName;
+    final subtitle = projectTerminal?.workDir ?? sessionTitle;
     return Scaffold(
       backgroundColor: const Color(0xFF0B1020),
       appBar: AppBar(
@@ -152,13 +185,13 @@ class _CodeTerminalScreenState extends State<CodeTerminalScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '任务 · $taskTitle',
+              title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
             ),
             Text(
-              sessionTitle,
+              subtitle,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8)),
@@ -173,7 +206,7 @@ class _CodeTerminalScreenState extends State<CodeTerminalScreen> {
           ),
           if (_client.connectionFailed)
             IconButton(
-              tooltip: '重新连接',
+              tooltip: CodeWorkspaceText.t(context, 'terminal.reconnect'),
               onPressed: _client.reconnect,
               visualDensity: VisualDensity.compact,
               padding: EdgeInsets.zero,
@@ -182,7 +215,9 @@ class _CodeTerminalScreenState extends State<CodeTerminalScreen> {
             ),
           if (widget.nativeProtocol)
             IconButton(
-              tooltip: _client.hasControl ? '释放终端控制' : '接管终端',
+              tooltip: _client.hasControl
+                  ? CodeWorkspaceText.t(context, 'terminal.releaseControl')
+                  : CodeWorkspaceText.t(context, 'terminal.takeControl'),
               onPressed: _client.connected ? _toggleControl : null,
               visualDensity: VisualDensity.compact,
               padding: EdgeInsets.zero,
@@ -196,22 +231,24 @@ class _CodeTerminalScreenState extends State<CodeTerminalScreen> {
                     : Colors.white54,
               ),
             ),
-          IconButton(
-            tooltip: '会话状态与指令',
-            onPressed: _openSessionStatus,
-            visualDensity: VisualDensity.compact,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints.tightFor(width: 36, height: 36),
-            icon: const Icon(Icons.timeline_rounded),
-          ),
-          IconButton(
-            tooltip: '文件',
-            onPressed: _openFiles,
-            visualDensity: VisualDensity.compact,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints.tightFor(width: 36, height: 36),
-            icon: const Icon(Icons.folder_outlined),
-          ),
+          if (session != null) ...[
+            IconButton(
+              tooltip: CodeWorkspaceText.t(context, 'terminal.sessionStatus'),
+              onPressed: _openSessionStatus,
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+              icon: const Icon(Icons.timeline_rounded),
+            ),
+            IconButton(
+              tooltip: CodeWorkspaceText.t(context, 'terminal.files'),
+              onPressed: _openFiles,
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+              icon: const Icon(Icons.folder_outlined),
+            ),
+          ],
           const SizedBox(width: 4),
         ],
       ),

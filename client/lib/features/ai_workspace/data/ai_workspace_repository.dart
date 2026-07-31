@@ -3,6 +3,7 @@ import '../models/ai_dev_session.dart';
 import '../models/ai_session_state_info.dart';
 import '../models/code_workspace_file.dart';
 import '../models/code_delivery_job.dart';
+import '../models/code_project_terminal_session.dart';
 
 /// AI 工作区仓库
 /// 负责读取服务器目录、执行远程 AI 任务等 API 交互
@@ -32,6 +33,16 @@ class AiWorkspaceRepository {
       '/api/code/projects/$projectId/worktree-capability',
     );
     return CodeWorktreeCapability.fromJson(
+      response.data ?? const <String, dynamic>{},
+    );
+  }
+
+  Future<CodeProjectTerminalSession> openProjectTerminal(int projectId) async {
+    final response = await _apiClient.post<Map<String, dynamic>>(
+      '/api/code/projects/$projectId/terminal',
+      data: const <String, dynamic>{},
+    );
+    return CodeProjectTerminalSession.fromJson(
       response.data ?? const <String, dynamic>{},
     );
   }

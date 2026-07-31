@@ -5,6 +5,8 @@ import '../../models/ai_dev_session.dart';
 import '../code_workspace_text.dart';
 import '../controllers/ai_workspace_controller.dart';
 import '../widgets/code_hub_cards.dart';
+import '../widgets/code_project_terminal_card.dart';
+import 'code_project_terminal_sheet.dart';
 import 'code_session_sheet.dart';
 import 'code_terminal_screen.dart';
 
@@ -26,6 +28,24 @@ class _CodeHubScreenState extends ConsumerState<CodeHubScreen> {
       isScrollControlled: true,
       showDragHandle: false,
       builder: (_) => const CodeSessionSheet(),
+    );
+  }
+
+  Future<void> _openProjectTerminal() async {
+    final launch = await showModalBottomSheet<CodeProjectTerminalLaunch>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: false,
+      builder: (_) => const CodeProjectTerminalSheet(),
+    );
+    if (!mounted || launch == null) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => CodeTerminalScreen.project(
+          terminal: launch.terminal,
+          projectName: launch.project.name,
+        ),
+      ),
     );
   }
 
@@ -67,6 +87,8 @@ class _CodeHubScreenState extends ConsumerState<CodeHubScreen> {
               activeCount: workspace.sessions.where(_isActive).length,
               onCreate: _openSessionCreator,
             ),
+            const SizedBox(height: 16),
+            CodeProjectTerminalCard(onTap: _openProjectTerminal),
             const SizedBox(height: 28),
             Row(
               children: [
