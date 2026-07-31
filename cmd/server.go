@@ -31,7 +31,11 @@ var (
 
 func Init() {
 	log.Println("GoPanel is starting...")
-	pflag.StringVarP(&ConfFilePath, "config", "c", "./conf.yaml", "config file path.")
+	defaultConfigPath := ConfFilePath
+	if strings.TrimSpace(defaultConfigPath) == "" {
+		defaultConfigPath = "./conf.yaml"
+	}
+	pflag.StringVarP(&ConfFilePath, "config", "c", defaultConfigPath, "config file path.")
 	pflag.BoolVarP(&helpFlag, "help", "h", false, "show help")
 	pflag.BoolVarP(&versionFlag, "version", "v", false, "show version info")
 	pflag.BoolVarP(&showConfig, "show-config", "s", false, "show security configuration")

@@ -1,7 +1,10 @@
+//go:build !desktop
+
 package main
 
 import (
 	"embed"
+	"log"
 
 	"github.com/aihop/gopanel/app"
 	"github.com/aihop/gopanel/global"
@@ -13,5 +16,7 @@ var EmbedFS embed.FS
 func main() {
 	global.EmbedFS = EmbedFS
 	app := app.App{}
-	app.Run()
+	if err := app.Run(); err != nil {
+		log.Fatal(err)
+	}
 }

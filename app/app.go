@@ -5,7 +5,7 @@ import (
 	"encoding/gob"
 	"errors"
 	"fmt"
-	sysLog "log"
+	"net"
 	"os"
 	"os/signal"
 	"strings"
@@ -131,30 +131,51 @@ func (r *App) Run() error {
 		r.Init()
 	}
 
-	r.reloadFiber(false)
-	api.StartCodeInstructionRecovery()
+	listener, err := net.Listen("tcp", global.CONF.System.Port)
+	if err != nil {
+		return fmt.Errorf("listen %s: %w", global.CONF.System.Port, err)
+	}
 
-	// HTTP服务
+	serveErr := make(chan error, 1)
 	go func() {
-		if err := r.App.Listen(global.CONF.System.Port, fiber.ListenConfig{DisableStartupMessage: true}); err != nil {
-			sysLog.Fatalf("run listen error: %v", err)
-		}
+		serveErr <- r.Serve(listener)
 	}()
-	r.startupMessage()
+
 	// 优雅地处理退出信号
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(c)
 
-	// 阻塞主线程，直到收到退出信号
-	<-c
+	select {
+	case <-c:
+	case err := <-serveErr:
+		return err
+	}
+
 	shutdownContext, cancelShutdown := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancelShutdown()
-	codeErr := api.ShutdownCodeExecutions(shutdownContext)
-	httpErr := r.App.ShutdownWithContext(shutdownContext)
+	return r.Shutdown(shutdownContext)
+}
+
+func (r *App) Serve(listener net.Listener) error {
+	r.reloadFiber(false)
+	api.StartCodeInstructionRecovery()
+	r.startupMessage(listener.Addr().String())
+
+	err := r.App.Listener(listener, fiber.ListenConfig{DisableStartupMessage: true})
+	if errors.Is(err, net.ErrClosed) {
+		return nil
+	}
+	return err
+}
+
+func (r *App) Shutdown(ctx context.Context) error {
+	codeErr := api.ShutdownCodeExecutions(ctx)
+	httpErr := r.App.ShutdownWithContext(ctx)
 	return errors.Join(codeErr, httpErr)
 }
 
-func (app *App) startupMessage() {
+func (app *App) startupMessage(address string) {
 
 	out := colorable.NewColorableStdout()
 	if os.Getenv("TERM") == "dumb" || os.Getenv("NO_COLOR") == "1" || (!isatty.IsTerminal(os.Stdout.Fd()) && !isatty.IsCygwinTerminal(os.Stdout.Fd())) {
@@ -167,7 +188,7 @@ func (app *App) startupMessage() {
 
 	fmt.Fprintf(out,
 		"Listen %sHTTP%s Server started on: \t%s%s%s\n",
-		"\u001b[92m", "\u001b[0m", "\u001b[94m", fmt.Sprintf("%s%s", "127.0.0.1", global.CONF.System.Port), "\u001b[0m")
+		"\u001b[92m", "\u001b[0m", "\u001b[94m", address, "\u001b[0m")
 
 	// add new Line as spacer
 	fmt.Fprintf(out, "\n%s", "\u001b[0m")

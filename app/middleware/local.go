@@ -145,7 +145,7 @@ const NoEntrance = `<!doctype html>
 
 // 安全入口
 func Entrance(c fiber.Ctx) error {
-	if isDevMode() {
+	if isDevMode() || authorizeDesktopAccess(c) {
 		return c.Next()
 	}
 
