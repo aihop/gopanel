@@ -5,35 +5,35 @@ import (
 	"github.com/aihop/gopanel/global"
 )
 
-type IAIGroupRepo interface {
-	CreateGroup(group *model.AIGroup) error
-	GetGroupByID(id uint) (*model.AIGroup, error)
-	GetGroups(userID uint, includeAll bool, page, limit int) ([]*model.AIGroup, int64, error)
-	LoadExecutionSummaries(groups []*model.AIGroup, userID uint, includeAll bool) error
-	UpdateGroup(group *model.AIGroup) error
-	DeleteGroup(id uint) error
+type IAIProjectRepo interface {
+	CreateProject(group *model.AIProject) error
+	GetProjectByID(id uint) (*model.AIProject, error)
+	GetProjects(userID uint, includeAll bool, page, limit int) ([]*model.AIProject, int64, error)
+	LoadExecutionSummaries(groups []*model.AIProject, userID uint, includeAll bool) error
+	UpdateProject(group *model.AIProject) error
+	DeleteProject(id uint) error
 }
 
-type aiGroupRepo struct{}
+type aiProjectRepo struct{}
 
-func NewAIGroupRepo() IAIGroupRepo {
-	return &aiGroupRepo{}
+func NewAIProjectRepo() IAIProjectRepo {
+	return &aiProjectRepo{}
 }
 
-func (r *aiGroupRepo) CreateGroup(group *model.AIGroup) error {
+func (r *aiProjectRepo) CreateProject(group *model.AIProject) error {
 	return global.DB.Create(group).Error
 }
 
-func (r *aiGroupRepo) GetGroupByID(id uint) (*model.AIGroup, error) {
-	var group model.AIGroup
+func (r *aiProjectRepo) GetProjectByID(id uint) (*model.AIProject, error) {
+	var group model.AIProject
 	err := global.DB.Where("id = ?", id).First(&group).Error
 	return &group, err
 }
 
-func (r *aiGroupRepo) GetGroups(userID uint, includeAll bool, page, limit int) ([]*model.AIGroup, int64, error) {
-	var groups []*model.AIGroup
+func (r *aiProjectRepo) GetProjects(userID uint, includeAll bool, page, limit int) ([]*model.AIProject, int64, error) {
+	var groups []*model.AIProject
 	var total int64
-	db := global.DB.Model(&model.AIGroup{})
+	db := global.DB.Model(&model.AIProject{})
 	if !includeAll {
 		db = db.Where("creator_id = ?", userID)
 	}
@@ -42,7 +42,7 @@ func (r *aiGroupRepo) GetGroups(userID uint, includeAll bool, page, limit int) (
 	return groups, total, err
 }
 
-func (r *aiGroupRepo) LoadExecutionSummaries(groups []*model.AIGroup, userID uint, includeAll bool) error {
+func (r *aiProjectRepo) LoadExecutionSummaries(groups []*model.AIProject, userID uint, includeAll bool) error {
 	if len(groups) == 0 {
 		return nil
 	}
@@ -68,7 +68,7 @@ func (r *aiGroupRepo) LoadExecutionSummaries(groups []*model.AIGroup, userID uin
 	if err := taskQuery.Select("project_id, COUNT(*) AS task_count").Group("project_id").Scan(&taskCounts).Error; err != nil {
 		return err
 	}
-	groupsByID := make(map[uint]*model.AIGroup, len(groups))
+	groupsByID := make(map[uint]*model.AIProject, len(groups))
 	for _, group := range groups {
 		groupsByID[group.ID] = group
 	}
@@ -132,12 +132,12 @@ func (r *aiGroupRepo) LoadExecutionSummaries(groups []*model.AIGroup, userID uin
 	return nil
 }
 
-func (r *aiGroupRepo) UpdateGroup(group *model.AIGroup) error {
+func (r *aiProjectRepo) UpdateProject(group *model.AIProject) error {
 	return global.DB.Save(group).Error
 }
 
-func (r *aiGroupRepo) DeleteGroup(id uint) error {
+func (r *aiProjectRepo) DeleteProject(id uint) error {
 	// 连带删除关联的 AI 任务及消息
 	global.DB.Where("project_id = ?", id).Delete(&model.AITask{})
-	return global.DB.Delete(&model.AIGroup{}, id).Error
+	return global.DB.Delete(&model.AIProject{}, id).Error
 }

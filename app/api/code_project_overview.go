@@ -37,11 +37,11 @@ type codeProjectOverview struct {
 	LatestRun        *codeProjectLatestRun            `json:"latestRun"`
 }
 
-func loadCodeProjectOverview(project *model.AIGroup, userID uint, includeAll bool) (codeProjectOverview, error) {
+func loadCodeProjectOverview(project *model.AIProject, userID uint, includeAll bool) (codeProjectOverview, error) {
 	if project == nil || project.ID == 0 {
 		return codeProjectOverview{}, errors.New("项目无效")
 	}
-	if err := repo.NewAIGroupRepo().LoadExecutionSummaries([]*model.AIGroup{project}, userID, includeAll); err != nil {
+	if err := repo.NewAIProjectRepo().LoadExecutionSummaries([]*model.AIProject{project}, userID, includeAll); err != nil {
 		return codeProjectOverview{}, err
 	}
 	projectRuns := global.DB.Model(&model.AIExecutionRun{}).

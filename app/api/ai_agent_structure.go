@@ -134,7 +134,7 @@ func getAISessionSourceDirs(sessionProjectID uint, claims *token.CustomClaims) (
 	if sessionProjectID == 0 {
 		return nil, nil
 	}
-	project, err := repo.NewAIGroupRepo().GetGroupByID(sessionProjectID)
+	project, err := repo.NewAIProjectRepo().GetProjectByID(sessionProjectID)
 	if err != nil || !canManageAIProject(project, claims) {
 		return nil, errors.New("无权访问该项目目录")
 	}

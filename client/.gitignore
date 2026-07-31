@@ -1,0 +1,13 @@
+# Flutter build artifacts
+/build/
+/.dart_tool/
+
+# Flutter plugin state
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+
+# IDE
+/.idea/
+/.vscode/
+*.iml

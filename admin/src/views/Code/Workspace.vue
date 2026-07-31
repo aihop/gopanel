@@ -240,8 +240,8 @@ import CodeGitReview from "./components/CodeGitReview.vue"
 import WorkspaceModeSwitch, { type CodeWorkspaceMode } from "./components/WorkspaceModeSwitch.vue"
 import { useCodeTaskPolling } from "./useCodeTaskPolling"
 import { useCodeWorkspaceFullscreen } from "./useCodeWorkspaceFullscreen"
-import { deleteAITask, getAIGroups, updateAITask } from "@/api/modules/code"
-import type { AIGroup, AITask, CodeSession } from "@/api/interface/code"
+import { deleteAITask, getAIProjects, updateAITask } from "@/api/modules/code"
+import type { AIProject, AITask, CodeSession } from "@/api/interface/code"
 import type { CodeTaskListItem } from "@/api/interface/codeTasks"
 import { codeWorkspaceMessages } from "./codeWorkspaceMessages"
 
@@ -254,7 +254,7 @@ const dialog = useDialog()
 const { t } = useI18n({ messages: codeWorkspaceMessages })
 if (!props.embedded) useHideLayoutFooter()
 const currentGroupId = computed(() => props.projectId ?? Number(route.params.id))
-const groupInfo = ref<AIGroup | null>(null),
+const groupInfo = ref<AIProject | null>(null),
 	tasks = ref<CodeTaskListItem[]>([])
 const currentTaskId = ref<number | null>(null),
 	currentSessionId = ref<number | null>(null)
@@ -284,7 +284,7 @@ const taskActionOptions = computed(() => [
 
 const fetchGroupInfo = async () => {
 	try {
-		const response = await getAIGroups({ page: 1, limit: 50 })
+		const response = await getAIProjects({ page: 1, limit: 50 })
 		groupInfo.value =
 			response.code === 0 ? response.data.items.find(group => group.id === currentGroupId.value) || null : null
 	} catch (error) {

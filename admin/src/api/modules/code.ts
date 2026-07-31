@@ -1,6 +1,6 @@
 import http from "@/api"
 import type {
-	AIGroup,
+	AIProject,
 	AITask,
 	AIMessage,
 	CodeExecutor,
@@ -25,22 +25,22 @@ import type {
 import type { CodeProjectBranches } from "../interface/codeBranches"
 import type { CodeTaskListItem } from "../interface/codeTasks"
 
-// === Group APIs ===
+// === Project APIs ===
 
-export function getAIGroups(params: { page: number; limit: number }) {
-	return http.get<{ items: AIGroup[]; total: number }>("/code/groups", params)
+export function getAIProjects(params: { page: number; limit: number }) {
+	return http.get<{ items: AIProject[]; total: number }>("/code/projects", params)
 }
 
-export function createAIGroup(data: { name: string; description: string; sourceDirs: string[]; requireQualityGate: boolean; monthlyTokenBudget: number }) {
-	return http.post<AIGroup>("/code/groups", data)
+export function createAIProject(data: { name: string; description: string; sourceDirs: string[]; requireQualityGate: boolean; monthlyTokenBudget: number }) {
+	return http.post<AIProject>("/code/projects", data)
 }
 
-export function updateAIGroup(id: number, data: { name: string; description: string; sourceDirs: string[]; requireQualityGate: boolean; monthlyTokenBudget: number }) {
-	return http.put<AIGroup>(`/code/groups/${id}`, data)
+export function updateAIProject(id: number, data: { name: string; description: string; sourceDirs: string[]; requireQualityGate: boolean; monthlyTokenBudget: number }) {
+	return http.put<AIProject>(`/code/projects/${id}`, data)
 }
 
 export function getCodeProjectBranches(projectId: number) {
-	return http.get<CodeProjectBranches>(`/code/groups/${projectId}/git/branches`, undefined, { timeout: 15000 })
+	return http.get<CodeProjectBranches>(`/code/projects/${projectId}/git/branches`, undefined, { timeout: 15000 })
 }
 
 export function getCodeExecutors() {
@@ -48,7 +48,7 @@ export function getCodeExecutors() {
 }
 
 export function getCodeWorktreeCapability(projectId: number) {
-	return http.get<CodeWorktreeCapability>(`/code/groups/${projectId}/worktree-capability`)
+	return http.get<CodeWorktreeCapability>(`/code/projects/${projectId}/worktree-capability`)
 }
 
 export function createCodeSession(data: {

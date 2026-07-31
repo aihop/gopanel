@@ -28,8 +28,8 @@ type codeDatabaseAccessView struct {
 	ReadOnly     bool               `json:"readOnly"`
 }
 
-func getCodeProjectWithPermission(projectID uint, claims *token.CustomClaims) (*model.AIGroup, error) {
-	project, err := repo.NewAIGroupRepo().GetGroupByID(projectID)
+func getCodeProjectWithPermission(projectID uint, claims *token.CustomClaims) (*model.AIProject, error) {
+	project, err := repo.NewAIProjectRepo().GetProjectByID(projectID)
 	if err != nil {
 		return nil, errors.New("项目不存在")
 	}

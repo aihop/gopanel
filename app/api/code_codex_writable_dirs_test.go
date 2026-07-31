@@ -60,7 +60,7 @@ func TestCodexWritableDirsForIsolatedWorktree(t *testing.T) {
 	withAIProjectBaseDir(t)
 	repositoryDir := createCodeGitRepository(t)
 	session := &model.AIDevSession{ID: 31, UserID: 7, ProjectID: 9}
-	if err := createCodeSessionWorktree(session, &model.AIGroup{SourceDirs: []string{repositoryDir}}); err != nil {
+	if err := createCodeSessionWorktree(session, &model.AIProject{SourceDirs: []string{repositoryDir}}); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { rollbackCodeSessionWorktree(session) })
@@ -92,7 +92,7 @@ func TestCodexWorktreeWritableDirsRejectTamperedSession(t *testing.T) {
 	withAIProjectBaseDir(t)
 	repositoryDir := createCodeGitRepository(t)
 	session := &model.AIDevSession{ID: 32, UserID: 7, ProjectID: 9}
-	if err := createCodeSessionWorktree(session, &model.AIGroup{SourceDirs: []string{repositoryDir}}); err != nil {
+	if err := createCodeSessionWorktree(session, &model.AIProject{SourceDirs: []string{repositoryDir}}); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { rollbackCodeSessionWorktree(session) })
@@ -121,7 +121,7 @@ func TestCodexWorktreeWritableDirsAllowGitCommit(t *testing.T) {
 	withAIProjectBaseDir(t)
 	repositoryDir := createCodeGitRepository(t)
 	session := &model.AIDevSession{ID: 33, UserID: 7, ProjectID: 9}
-	if err := createCodeSessionWorktree(session, &model.AIGroup{SourceDirs: []string{repositoryDir}}); err != nil {
+	if err := createCodeSessionWorktree(session, &model.AIProject{SourceDirs: []string{repositoryDir}}); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { rollbackCodeSessionWorktree(session) })
@@ -195,13 +195,13 @@ func TestCodexWritableDirsForProjectSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := database.AutoMigrate(&model.AIGroup{}); err != nil {
+	if err := database.AutoMigrate(&model.AIProject{}); err != nil {
 		t.Fatal(err)
 	}
 	oldDatabase := global.DB
 	global.DB = database
 	t.Cleanup(func() { global.DB = oldDatabase })
-	project := &model.AIGroup{Name: "project", SourceDirs: []string{linkDir}, CreatorID: 1}
+	project := &model.AIProject{Name: "project", SourceDirs: []string{linkDir}, CreatorID: 1}
 	if err := database.Create(project).Error; err != nil {
 		t.Fatal(err)
 	}

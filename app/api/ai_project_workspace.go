@@ -227,7 +227,7 @@ func buildAIProjectWorkspaceSources(sourceDirs []string, previous aiProjectWorks
 	return result
 }
 
-func syncAIProjectWorkspace(project *model.AIGroup, sourceDirs []string) (string, error) {
+func syncAIProjectWorkspace(project *model.AIProject, sourceDirs []string) (string, error) {
 	if len(sourceDirs) == 1 {
 		return sourceDirs[0], nil
 	}
@@ -311,7 +311,7 @@ func syncAIProjectWorkspace(project *model.AIGroup, sourceDirs []string) (string
 	return workspaceDir, nil
 }
 
-func aiProjectSessionWorkDir(project *model.AIGroup, claims *token.CustomClaims) (string, error) {
+func aiProjectSessionWorkDir(project *model.AIProject, claims *token.CustomClaims) (string, error) {
 	if project == nil {
 		return "", errors.New("项目不存在")
 	}

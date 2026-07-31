@@ -49,7 +49,7 @@ func TestNormalizeAIProjectWorkDirRejectsInvalidPaths(t *testing.T) {
 }
 
 func TestCanManageAIProject(t *testing.T) {
-	project := &model.AIGroup{CreatorID: 7}
+	project := &model.AIProject{CreatorID: 7}
 	if !canManageAIProject(project, &token.CustomClaims{UserId: 7, Role: constant.UserRoleSubAdmin}) {
 		t.Fatal("expected the project creator to manage the project")
 	}

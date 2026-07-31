@@ -14,7 +14,7 @@ func createDeliveryWorktree(t *testing.T, sessionID uint) (*model.AIDevSession, 
 	withAIProjectBaseDir(t)
 	repositoryDir := createCodeGitRepository(t)
 	session := &model.AIDevSession{ID: sessionID, UserID: 7, WorkDir: repositoryDir}
-	if err := createCodeSessionWorktree(session, &model.AIGroup{SourceDirs: []string{repositoryDir}}); err != nil {
+	if err := createCodeSessionWorktree(session, &model.AIProject{SourceDirs: []string{repositoryDir}}); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {

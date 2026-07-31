@@ -20,7 +20,7 @@ func TestInspectCodeProjectBranchesReturnsLocalAndRemoteBranches(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result, err := inspectCodeProjectBranches(&model.AIGroup{SourceDirs: []string{repositoryDir}})
+	result, err := inspectCodeProjectBranches(&model.AIProject{SourceDirs: []string{repositoryDir}})
 	if err != nil {
 		t.Fatal(err)
 	}

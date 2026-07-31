@@ -3,7 +3,7 @@ import { computed, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 import { useMessage } from "naive-ui"
 import { createMobileSession, getMobileExecutors, getMobileProjects } from "@/api/modules/mobile"
-import type { AIGroup, CodeApprovalPolicy, CodeExecutor, CodeSession } from "@/api/interface/code"
+import type { AIProject, CodeApprovalPolicy, CodeExecutor, CodeSession } from "@/api/interface/code"
 import { mobileMessages } from "@/i18n/locales/mobile"
 
 const props = defineProps<{ show: boolean }>()
@@ -14,7 +14,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n({ messages: mobileMessages })
 const message = useMessage()
-const projects = ref<AIGroup[]>([])
+const projects = ref<AIProject[]>([])
 const executors = ref<CodeExecutor[]>([])
 const projectId = ref<number | null>(null)
 const executorId = ref("")

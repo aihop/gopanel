@@ -2,8 +2,8 @@ package model
 
 import "time"
 
-// AIGroup 记录 Code 项目。保留原表名以兼容已有数据。
-type AIGroup struct {
+// AIProject 记录 Code 项目。保留原表名以兼容已有数据。
+type AIProject struct {
 	ID                 uint                       `gorm:"primaryKey" json:"id"`
 	CreatedAt          time.Time                  `json:"createdAt"`
 	UpdatedAt          time.Time                  `json:"updatedAt"`
@@ -29,8 +29,8 @@ type AIProjectExecutionSummary struct {
 	UpdatedAt            *time.Time `json:"updatedAt,omitempty"`
 }
 
-func (AIGroup) TableName() string {
-	return "ai_groups"
+func (AIProject) TableName() string {
+	return "ai_projects"
 }
 
 // AITask 记录一次 AI 终端的会话/任务，允许用户后续根据 ID 恢复任务

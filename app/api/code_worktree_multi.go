@@ -70,7 +70,7 @@ func writeCodeSessionManifest(workDir string, repositories []model.AIDevSessionR
 	return os.WriteFile(filepath.Join(workDir, codeSessionManifestName), content, 0600)
 }
 
-func createCodeSessionRepositoryWorktrees(session *model.AIDevSession, project *model.AIGroup, prepared []codePreparedRepository) error {
+func createCodeSessionRepositoryWorktrees(session *model.AIDevSession, project *model.AIProject, prepared []codePreparedRepository) error {
 	workspaceDir := aiSessionWorktreeDir(session.UserID, session.ID)
 	if _, err := os.Lstat(workspaceDir); !errors.Is(err, os.ErrNotExist) {
 		return errors.New("会话 Worktree 目录已存在")

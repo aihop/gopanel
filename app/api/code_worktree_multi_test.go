@@ -11,12 +11,12 @@ import (
 	"github.com/aihop/gopanel/global"
 )
 
-func createMultiRepositorySession(t *testing.T, sessionID uint) (*model.AIDevSession, *model.AIGroup, []string) {
+func createMultiRepositorySession(t *testing.T, sessionID uint) (*model.AIDevSession, *model.AIProject, []string) {
 	t.Helper()
 	database := withCodeGovernanceDB(t)
 	withAIProjectBaseDir(t)
 	sourceDirs := []string{createCodeGitRepository(t), createCodeGitRepository(t)}
-	project := &model.AIGroup{ID: sessionID, Name: "multi", CreatorID: 7, SourceDirs: sourceDirs}
+	project := &model.AIProject{ID: sessionID, Name: "multi", CreatorID: 7, SourceDirs: sourceDirs}
 	workDir, err := syncAIProjectWorkspace(project, sourceDirs)
 	if err != nil {
 		t.Fatal(err)
@@ -95,7 +95,7 @@ func TestCreateMultiRepositorySessionDiscoversWorkspaceRepositories(t *testing.T
 		}
 		commitCodeTestFile(t, sourceDir, "README.md", "test\n")
 	}
-	project := &model.AIGroup{ID: 84, Name: "workspace", CreatorID: 7, SourceDirs: []string{workspace}, WorkDir: workspace}
+	project := &model.AIProject{ID: 84, Name: "workspace", CreatorID: 7, SourceDirs: []string{workspace}, WorkDir: workspace}
 	if err := database.Create(project).Error; err != nil {
 		t.Fatal(err)
 	}

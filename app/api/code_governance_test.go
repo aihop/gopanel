@@ -20,7 +20,7 @@ func withCodeGovernanceDB(t *testing.T) *gorm.DB {
 		t.Fatal(err)
 	}
 	if err := database.AutoMigrate(
-		&model.AIGroup{}, &model.AIDevSession{}, &model.AITask{}, &model.AIExecutionRun{},
+		&model.AIProject{}, &model.AIDevSession{}, &model.AITask{}, &model.AIExecutionRun{},
 		&model.AITimelineEvent{}, &model.AICodeDelivery{}, &model.AICodeAuditEvent{}, &model.AIDevSessionRepository{},
 	); err != nil {
 		t.Fatal(err)
@@ -35,7 +35,7 @@ func TestCodeDeliveryResumesAfterWorktreeCleanup(t *testing.T) {
 	database := withCodeGovernanceDB(t)
 	session, sourceDir := createDeliveryWorktree(t, 61)
 	session.ProjectID = 8
-	if err := database.Create(&model.AIGroup{ID: 8, Name: "project", CreatorID: session.UserID}).Error; err != nil {
+	if err := database.Create(&model.AIProject{ID: 8, Name: "project", CreatorID: session.UserID}).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := database.Create(session).Error; err != nil {
@@ -75,7 +75,7 @@ func TestCodeDeliveryCompletesAndIsIdempotent(t *testing.T) {
 	database := withCodeGovernanceDB(t)
 	session, sourceDir := createDeliveryWorktree(t, 62)
 	session.ProjectID = 9
-	if err := database.Create(&model.AIGroup{ID: 9, Name: "project", CreatorID: session.UserID}).Error; err != nil {
+	if err := database.Create(&model.AIProject{ID: 9, Name: "project", CreatorID: session.UserID}).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := database.Create(session).Error; err != nil {
@@ -119,7 +119,7 @@ func TestCodeDeliveryResumesFromMergedState(t *testing.T) {
 	database := withCodeGovernanceDB(t)
 	session, sourceDir := createDeliveryWorktree(t, 63)
 	session.ProjectID = 10
-	if err := database.Create(&model.AIGroup{ID: 10, Name: "project", CreatorID: session.UserID}).Error; err != nil {
+	if err := database.Create(&model.AIProject{ID: 10, Name: "project", CreatorID: session.UserID}).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := database.Create(session).Error; err != nil {
@@ -171,7 +171,7 @@ func TestCodeDeliveryResumesFromMergedState(t *testing.T) {
 func TestCodeQualityGateRejectsStaleRevision(t *testing.T) {
 	database := withCodeGovernanceDB(t)
 	workDir := createCodeGitRepository(t)
-	project := &model.AIGroup{Name: "quality", CreatorID: 1, RequireQualityGate: true}
+	project := &model.AIProject{Name: "quality", CreatorID: 1, RequireQualityGate: true}
 	if err := database.Create(project).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -242,7 +242,7 @@ func TestCodeAuditPersistsSafeMetadata(t *testing.T) {
 
 func TestCodeTokenBudgetBlocksExceededProject(t *testing.T) {
 	database := withCodeGovernanceDB(t)
-	project := &model.AIGroup{Name: "budget", CreatorID: 1, MonthlyTokenBudget: 100}
+	project := &model.AIProject{Name: "budget", CreatorID: 1, MonthlyTokenBudget: 100}
 	if err := database.Create(project).Error; err != nil {
 		t.Fatal(err)
 	}

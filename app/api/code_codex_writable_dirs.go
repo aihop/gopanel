@@ -27,7 +27,7 @@ func codexWritableDirsForSession(session *model.AIDevSession) ([]string, error) 
 	if session.ProjectID == 0 {
 		return nil, nil
 	}
-	project, err := repo.NewAIGroupRepo().GetGroupByID(session.ProjectID)
+	project, err := repo.NewAIProjectRepo().GetProjectByID(session.ProjectID)
 	if err != nil {
 		return nil, err
 	}

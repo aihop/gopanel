@@ -384,7 +384,7 @@ func validateCodeQualityGate(session *model.AIDevSession) error {
 	if session == nil || session.ProjectID == 0 {
 		return nil
 	}
-	project, err := repo.NewAIGroupRepo().GetGroupByID(session.ProjectID)
+	project, err := repo.NewAIProjectRepo().GetProjectByID(session.ProjectID)
 	if err != nil || !project.RequireQualityGate {
 		return err
 	}

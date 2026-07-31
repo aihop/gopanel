@@ -61,7 +61,7 @@ func GetCodeProjectBranches(c fiber.Ctx) error {
 	if err != nil || projectID == 0 {
 		return c.JSON(e.Fail(errors.New("项目参数无效")))
 	}
-	project, err := repo.NewAIGroupRepo().GetGroupByID(uint(projectID))
+	project, err := repo.NewAIProjectRepo().GetProjectByID(uint(projectID))
 	if err != nil {
 		return c.JSON(e.Fail(errors.New("项目不存在")))
 	}
@@ -75,7 +75,7 @@ func GetCodeProjectBranches(c fiber.Ctx) error {
 	return c.JSON(e.Succ(result))
 }
 
-func inspectCodeProjectBranches(project *model.AIGroup) (codeProjectBranches, error) {
+func inspectCodeProjectBranches(project *model.AIProject) (codeProjectBranches, error) {
 	sourceDirs := project.SourceDirs
 	if len(sourceDirs) == 0 && strings.TrimSpace(project.WorkDir) != "" {
 		sourceDirs = aiProjectWorkspaceSourceDirs(project.WorkDir)

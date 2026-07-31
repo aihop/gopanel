@@ -171,7 +171,7 @@ func TestBuildCodeExecutorCommandAddsWorktreeGitWritableDirs(t *testing.T) {
 	withAIProjectBaseDir(t)
 	repositoryDir := createCodeGitRepository(t)
 	session := &model.AIDevSession{ID: 35, UserID: 7, ProjectID: 9, ApprovalPolicy: codeApprovalPolicySafeAuto}
-	if err := createCodeSessionWorktree(session, &model.AIGroup{SourceDirs: []string{repositoryDir}}); err != nil {
+	if err := createCodeSessionWorktree(session, &model.AIProject{SourceDirs: []string{repositoryDir}}); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { rollbackCodeSessionWorktree(session) })

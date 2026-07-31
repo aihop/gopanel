@@ -9,35 +9,35 @@ import (
 	"gorm.io/gorm"
 )
 
-func TestAIGroupRepositoryFiltersProjectsByCreator(t *testing.T) {
+func TestAIProjectRepositoryFiltersProjectsByCreator(t *testing.T) {
 	oldDB := global.DB
 	t.Cleanup(func() { global.DB = oldDB })
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&model.AIGroup{}, &model.AITask{}, &model.AIDevSession{}); err != nil {
+	if err := db.AutoMigrate(&model.AIProject{}, &model.AITask{}, &model.AIDevSession{}); err != nil {
 		t.Fatal(err)
 	}
 	global.DB = db
-	repository := NewAIGroupRepo()
-	for _, project := range []*model.AIGroup{
+	repository := NewAIProjectRepo()
+	for _, project := range []*model.AIProject{
 		{Name: "first", WorkDir: "/workspace/first", CreatorID: 1},
 		{Name: "second", WorkDir: "/workspace/second", CreatorID: 2},
 	} {
-		if err := repository.CreateGroup(project); err != nil {
+		if err := repository.CreateProject(project); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	projects, total, err := repository.GetGroups(1, false, 1, 50)
+	projects, total, err := repository.GetProjects(1, false, 1, 50)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if total != 1 || len(projects) != 1 || projects[0].CreatorID != 1 {
 		t.Fatalf("unexpected scoped projects: total=%d projects=%#v", total, projects)
 	}
-	projects, total, err = repository.GetGroups(1, true, 1, 50)
+	projects, total, err = repository.GetProjects(1, true, 1, 50)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,10 +45,10 @@ func TestAIGroupRepositoryFiltersProjectsByCreator(t *testing.T) {
 		t.Fatalf("unexpected super-admin projects: total=%d projects=%#v", total, projects)
 	}
 	projects[0].Name = "updated"
-	if err := repository.UpdateGroup(projects[0]); err != nil {
+	if err := repository.UpdateProject(projects[0]); err != nil {
 		t.Fatal(err)
 	}
-	updated, err := repository.GetGroupByID(projects[0].ID)
+	updated, err := repository.GetProjectByID(projects[0].ID)
 	if err != nil || updated.Name != "updated" {
 		t.Fatalf("unexpected updated project: %#v, %v", updated, err)
 	}
@@ -65,7 +65,7 @@ func TestAIGroupRepositoryFiltersProjectsByCreator(t *testing.T) {
 	if err := db.Create(&tasks).Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := repository.LoadExecutionSummaries([]*model.AIGroup{updated}, 1, false); err != nil {
+	if err := repository.LoadExecutionSummaries([]*model.AIProject{updated}, 1, false); err != nil {
 		t.Fatal(err)
 	}
 	if updated.TaskCount != 2 || updated.ExecutionSummary.ActiveTaskCount != 1 {

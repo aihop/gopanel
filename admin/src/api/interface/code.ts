@@ -1,4 +1,4 @@
-export interface AIGroup {
+export interface AIProject {
 	id: number
 	createdAt: string
 	name: string

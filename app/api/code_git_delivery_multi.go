@@ -234,7 +234,7 @@ func cleanupMergedCodeSessionRepository(repository *model.AIDevSessionRepository
 }
 
 func completeCodeMultiRepositorySession(session *model.AIDevSession) error {
-	project, err := repo.NewAIGroupRepo().GetGroupByID(session.ProjectID)
+	project, err := repo.NewAIProjectRepo().GetProjectByID(session.ProjectID)
 	if err != nil || strings.TrimSpace(project.WorkDir) == "" {
 		return errors.New("项目聚合工作区不可用")
 	}

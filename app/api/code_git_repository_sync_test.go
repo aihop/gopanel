@@ -105,7 +105,7 @@ func TestSyncCodeWorktreeWithUpdatedTarget(t *testing.T) {
 	withAIProjectBaseDir(t)
 	repository := createCodeGitRepository(t)
 	session := &model.AIDevSession{ID: 91, UserID: 7, WorkDir: repository}
-	if err := createCodeSessionWorktree(session, &model.AIGroup{SourceDirs: []string{repository}}); err != nil {
+	if err := createCodeSessionWorktree(session, &model.AIProject{SourceDirs: []string{repository}}); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { rollbackCodeSessionWorktree(session) })

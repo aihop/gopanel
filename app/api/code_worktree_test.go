@@ -33,16 +33,16 @@ func createCodeGitRepository(t *testing.T) string {
 
 func TestInspectCodeWorktreeCapability(t *testing.T) {
 	repositoryDir := createCodeGitRepository(t)
-	available := inspectCodeWorktreeCapability(&model.AIGroup{SourceDirs: []string{repositoryDir}})
+	available := inspectCodeWorktreeCapability(&model.AIProject{SourceDirs: []string{repositoryDir}})
 	if !available.Available || available.SourceDir != repositoryDir {
 		t.Fatalf("unexpected capability: %#v", available)
 	}
 	secondRepository := createCodeGitRepository(t)
-	multiSource := inspectCodeWorktreeCapability(&model.AIGroup{SourceDirs: []string{repositoryDir, secondRepository}})
+	multiSource := inspectCodeWorktreeCapability(&model.AIProject{SourceDirs: []string{repositoryDir, secondRepository}})
 	if !multiSource.Available || multiSource.RepositoryCount != 2 || len(multiSource.SourceDirs) != 2 {
 		t.Fatalf("unexpected multi-source capability: %#v", multiSource)
 	}
-	notGit := inspectCodeWorktreeCapability(&model.AIGroup{SourceDirs: []string{t.TempDir()}})
+	notGit := inspectCodeWorktreeCapability(&model.AIProject{SourceDirs: []string{t.TempDir()}})
 	if notGit.Available || notGit.Reason != "not_git" {
 		t.Fatalf("unexpected non-git capability: %#v", notGit)
 	}
@@ -50,7 +50,7 @@ func TestInspectCodeWorktreeCapability(t *testing.T) {
 	if err := os.Mkdir(subdirectory, 0755); err != nil {
 		t.Fatal(err)
 	}
-	notRoot := inspectCodeWorktreeCapability(&model.AIGroup{SourceDirs: []string{subdirectory}})
+	notRoot := inspectCodeWorktreeCapability(&model.AIProject{SourceDirs: []string{subdirectory}})
 	if notRoot.Available || notRoot.Reason != "not_git" {
 		t.Fatalf("unexpected nested repository capability: %#v", notRoot)
 	}
@@ -71,7 +71,7 @@ func TestInspectCodeWorktreeCapabilityDiscoversNestedRepositories(t *testing.T) 
 			t.Fatal(err)
 		}
 	}
-	capability := inspectCodeWorktreeCapability(&model.AIGroup{SourceDirs: []string{workspace}})
+	capability := inspectCodeWorktreeCapability(&model.AIProject{SourceDirs: []string{workspace}})
 	if !capability.Available || capability.RepositoryCount != 2 {
 		t.Fatalf("nested repositories were not discovered: %#v", capability)
 	}
@@ -81,7 +81,7 @@ func TestCreateAndRollbackCodeSessionWorktree(t *testing.T) {
 	withAIProjectBaseDir(t)
 	repositoryDir := createCodeGitRepository(t)
 	session := &model.AIDevSession{ID: 21, UserID: 7, WorkDir: repositoryDir}
-	project := &model.AIGroup{SourceDirs: []string{repositoryDir}}
+	project := &model.AIProject{SourceDirs: []string{repositoryDir}}
 	if err := createCodeSessionWorktree(session, project); err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +110,7 @@ func TestCleanupCodeSessionWorktreePreservesUncommittedChanges(t *testing.T) {
 	withAIProjectBaseDir(t)
 	repositoryDir := createCodeGitRepository(t)
 	session := &model.AIDevSession{ID: 22, UserID: 7, WorkDir: repositoryDir}
-	project := &model.AIGroup{SourceDirs: []string{repositoryDir}}
+	project := &model.AIProject{SourceDirs: []string{repositoryDir}}
 	if err := createCodeSessionWorktree(session, project); err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +130,7 @@ func TestCleanupCodeSessionWorktreePreservesUnmergedCommit(t *testing.T) {
 	withAIProjectBaseDir(t)
 	repositoryDir := createCodeGitRepository(t)
 	session := &model.AIDevSession{ID: 23, UserID: 7, WorkDir: repositoryDir}
-	project := &model.AIGroup{SourceDirs: []string{repositoryDir}}
+	project := &model.AIProject{SourceDirs: []string{repositoryDir}}
 	if err := createCodeSessionWorktree(session, project); err != nil {
 		t.Fatal(err)
 	}

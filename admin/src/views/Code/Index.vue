@@ -200,8 +200,8 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
-import { getAIGroups, createAIGroup, updateAIGroup } from '@/api/modules/code'
-import type { AIGroup } from '@/api/interface/code'
+import { getAIProjects, createAIProject, updateAIProject } from '@/api/modules/code'
+import type { AIProject } from '@/api/interface/code'
 import Icon from '@/components/common/Icon.vue'
 import ProjectDirectoryPicker from './components/ProjectDirectoryPicker.vue'
 import ProjectQuickPanels from './components/ProjectQuickPanels.vue'
@@ -221,7 +221,7 @@ const creatingProject = ref(false)
 const editingProjectId = ref<number | null>(null)
 const projectForm = ref({ name: '', desc: '', workDir: '', sourceDirs: [] as string[], requireQualityGate: false, monthlyTokenBudget: 0 })
 
-const groups = ref<AIGroup[]>([])
+const groups = ref<AIProject[]>([])
 const groupsLoading = ref(false)
 const groupsLoadError = ref(false)
 const groupsRefreshing = ref(false)
@@ -238,7 +238,7 @@ const fetchGroups = async (silent = false) => {
     groupsLoadError.value = false
   }
   try {
-    const res = await getAIGroups({ page: 1, limit: 50 })
+    const res = await getAIProjects({ page: 1, limit: 50 })
     if (res.code === 0) {
       groups.value = res.data.items || []
       const directoryDefaults = res.data as typeof res.data & { defaultWorkDir?: string; directoryRoot?: string }
@@ -265,7 +265,7 @@ onUnmounted(() => {
   if (refreshTimer) clearInterval(refreshTimer)
 })
 
-const projectStatusMeta = (group: AIGroup) => {
+const projectStatusMeta = (group: AIProject) => {
   const status = group.executionSummary.pendingApprovalCount > 0 ? "pending_approval" : group.executionSummary.status
   return {
     idle: { status: "idle", labelKey: "code.projectStatus_idle", icon: "mdi:circle-slice-8" },
@@ -288,7 +288,7 @@ const openCreateProjectModal = () => {
   showCreateProjectModal.value = true
 }
 
-const openEditProjectModal = (project: AIGroup) => {
+const openEditProjectModal = (project: AIProject) => {
   editingProjectId.value = project.id
   const sourceDirs = project.sourceDirs?.length ? project.sourceDirs : project.workDir ? [project.workDir] : []
   projectForm.value = { name: project.name, desc: project.description || '', workDir: sourceDirs[0] || defaultWorkDir.value, sourceDirs, requireQualityGate: Boolean(project.requireQualityGate), monthlyTokenBudget: project.monthlyTokenBudget || 0 }
@@ -318,8 +318,8 @@ const submitProject = async () => {
       monthlyTokenBudget: projectForm.value.monthlyTokenBudget || 0,
     }
     const res = editingProjectId.value
-      ? await updateAIGroup(editingProjectId.value, payload)
-      : await createAIGroup(payload)
+      ? await updateAIProject(editingProjectId.value, payload)
+      : await createAIProject(payload)
     if (res.code === 0) {
       showCreateProjectModal.value = false
       message.success(t(editingProjectId.value ? 'code.projectUpdateSuccess' : 'code.projectCreateSuccess'))
@@ -333,10 +333,10 @@ const submitProject = async () => {
 }
 
 const enterGroup = (id: number) => {
-  router.push(`/code/group/${id}`)
+  router.push(`/code/project/${id}`)
 }
 
-const openQuickPanel = (project: AIGroup) => quickPanelsRef.value?.open(project)
+const openQuickPanel = (project: AIProject) => quickPanelsRef.value?.open(project)
 </script>
 
 <style scoped>

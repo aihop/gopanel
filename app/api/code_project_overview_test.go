@@ -19,10 +19,10 @@ func TestLoadCodeProjectOverviewAggregatesProjectState(t *testing.T) {
 	}
 	global.DB = database
 	t.Cleanup(func() { global.DB = oldDB })
-	if err := database.AutoMigrate(&model.AIGroup{}, &model.AIDevSession{}, &model.AITask{}, &model.AIExecutionRun{}); err != nil {
+	if err := database.AutoMigrate(&model.AIProject{}, &model.AIDevSession{}, &model.AITask{}, &model.AIExecutionRun{}); err != nil {
 		t.Fatal(err)
 	}
-	project := model.AIGroup{Name: "project", CreatorID: 1, WorkDir: t.TempDir(), MonthlyTokenBudget: 1000}
+	project := model.AIProject{Name: "project", CreatorID: 1, WorkDir: t.TempDir(), MonthlyTokenBudget: 1000}
 	if err := database.Create(&project).Error; err != nil {
 		t.Fatal(err)
 	}

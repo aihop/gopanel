@@ -12,7 +12,7 @@ import {
 	type MobileNode,
 	type MobileOverview
 } from "@/api/modules/mobile"
-import type { AIGroup, CodeSession, CodeSessionState } from "@/api/interface/code"
+import type { AIProject, CodeSession, CodeSessionState } from "@/api/interface/code"
 import Icon from "@/components/common/Icon.vue"
 import { mobileMessages } from "@/i18n/locales/mobile"
 import Logo from "@/layouts/common/Logo.vue"
@@ -39,7 +39,7 @@ const selectedNodeId = ref(Number(localStorage.getItem("gopanel-mobile-node-id")
 const showNodeSwitcher = ref(false)
 const nodesLoading = ref(false)
 const nodesLoadError = ref("")
-const projects = ref<AIGroup[]>([])
+const projects = ref<AIProject[]>([])
 const sessions = ref<CodeSession[]>([])
 const selectedSessionId = ref(0)
 const sessionState = ref<CodeSessionState | null>(null)
@@ -368,9 +368,9 @@ onBeforeUnmount(() => {
 						</div>
 					</section>
 					<section>
-						<div class="mb-3 flex items-center justify-between">
+						<div class="flex items-center justify-between my-6">
 							<div class="flex items-center gap-2">
-								<h2 class="font-semibold">{{ t("mobile.controllerSessions") }}</h2>
+								<h2 class="text-xl">{{ t("mobile.controllerSessions") }}</h2>
 								<n-tag v-if="overview?.pendingApprovals.length" size="small" type="warning" :bordered="false">
 									{{ t("mobile.pendingCount", { count: overview.pendingApprovals.length }) }}
 								</n-tag>

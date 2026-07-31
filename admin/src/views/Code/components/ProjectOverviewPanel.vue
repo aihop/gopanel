@@ -3,7 +3,7 @@ import { computed, onMounted, ref, watch } from "vue"
 import { useIntervalFn } from "@vueuse/core"
 import { useMessage } from "naive-ui"
 import { useI18n } from "vue-i18n"
-import type { AIGroup } from "@/api/interface/code"
+import type { AIProject } from "@/api/interface/code"
 import type { CodeProjectOverview } from "@/api/interface/codeOverview"
 import type { CodeProjectBranches } from "@/api/interface/codeBranches"
 import type { CodeTaskListItem } from "@/api/interface/codeTasks"
@@ -12,7 +12,7 @@ import { getCodeProjectOverview } from "@/api/modules/codeOverview"
 import Icon from "@/components/common/Icon.vue"
 import { projectOverviewMessages } from "../projectOverviewMessages"
 
-const props = defineProps<{ project: AIGroup | null; projectId: number; tasks: CodeTaskListItem[] }>()
+const props = defineProps<{ project: AIProject | null; projectId: number; tasks: CodeTaskListItem[] }>()
 const emit = defineEmits<{ createTask: []; selectTask: [task: CodeTaskListItem] }>()
 const { t } = useI18n({ messages: projectOverviewMessages })
 const message = useMessage()

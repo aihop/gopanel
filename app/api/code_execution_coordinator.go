@@ -87,7 +87,7 @@ func codeExecutionWorkspaceKeys(session *model.AIDevSession) []string {
 		}
 	}
 	if session.IsolationMode != codeIsolationMultiWorktree && session.SourceWorkDir == "" && session.WorktreeBranch == "" && session.ProjectID > 0 {
-		if project, err := repo.NewAIGroupRepo().GetGroupByID(session.ProjectID); err == nil {
+		if project, err := repo.NewAIProjectRepo().GetProjectByID(session.ProjectID); err == nil {
 			paths = append(paths, project.SourceDirs...)
 		}
 	}
