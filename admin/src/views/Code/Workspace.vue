@@ -47,71 +47,15 @@
 						</div>
 					</div>
 
-					<div class="ai-workspace-task-history mt-3 flex min-h-0 flex-1 flex-col overflow-hidden">
-						<div class="flex items-center justify-between px-4 pb-2 pt-1">
-							<div class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-								{{ t("code.taskHistory") }}
-							</div>
-							<div class="text-xs text-slate-400">{{ t("code.taskCount", { count: tasks.length }) }}</div>
-						</div>
-						<n-scrollbar class="ai-workspace-task-scrollbar min-h-0 flex-1">
-							<div class="px-2.5 pb-3 pr-3.5">
-								<div
-									v-if="tasks.length === 0"
-									class="ai-workspace-task-empty flex min-h-[180px] items-center justify-center"
-								>
-									<n-empty :description="t('code.noProjectHistory')" />
-								</div>
-								<div v-else class="space-y-1">
-									<div
-										v-for="task in tasks"
-										:key="task.id"
-										class="ai-workspace-task-row group/task relative flex cursor-pointer items-start justify-between gap-3 rounded-xl px-3 py-2.5 transition-colors duration-200 hover:bg-slate-200/45"
-										:class="
-											currentTaskId === task.id
-												? 'ai-workspace-task-row--active bg-blue-50/80'
-												: ''
-										"
-										@click="selectTask(task)"
-									>
-										<div class="min-w-0 flex-1">
-											<div
-												class="truncate text-sm font-semibold text-slate-800"
-												:title="task.title"
-											>
-												{{ task.title }}
-											</div>
-											<div class="mt-1.5 flex items-center gap-2">
-												<TaskApprovalAction :task="task" @approved="fetchTasks()" />
-												<span class="text-xs text-slate-400">
-													{{ new Date(task.createdAt).toLocaleDateString() }}
-												</span>
-											</div>
-										</div>
-										<div
-											class="opacity-100 transition-opacity md:opacity-0 md:group-hover/task:opacity-100"
-											@click.stop
-										>
-											<n-dropdown
-												trigger="click"
-												:options="taskActionOptions"
-												@select="key => handleTaskAction(key, task)"
-											>
-												<n-button
-													quaternary
-													circle
-													size="small"
-													class="ai-workspace-task-btn !bg-transparent"
-												>
-													<template #icon><Icon name="mdi:dots-horizontal" /></template>
-												</n-button>
-											</n-dropdown>
-										</div>
-									</div>
-								</div>
-							</div>
-						</n-scrollbar>
-					</div>
+					<ProjectTaskSidebar
+						:project-id="currentGroupId"
+						:tasks="tasks"
+						:current-task-id="currentTaskId"
+						:task-action-options="taskActionOptions"
+						@select-task="selectTask"
+						@task-action="handleTaskAction"
+						@refresh-tasks="fetchTasks()"
+					/>
 				</div>
 			</n-layout-sider>
 
@@ -281,7 +225,7 @@ import CodeDeliveryPanel from "./components/CodeDeliveryPanel.vue"
 import SessionHistoryDrawer from "./components/SessionHistoryDrawer.vue"
 import ProjectStructurePanel from "./components/ProjectStructurePanel.vue"
 import SessionFileEditor from "./components/SessionFileEditor.vue"
-import TaskApprovalAction from "./components/TaskApprovalAction.vue"
+import ProjectTaskSidebar from "./components/ProjectTaskSidebar.vue"
 import CodeGitReview from "./components/CodeGitReview.vue"
 import WorkspaceModeSwitch, { type CodeWorkspaceMode } from "./components/WorkspaceModeSwitch.vue"
 import { useCodeTaskPolling } from "./useCodeTaskPolling"

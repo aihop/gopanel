@@ -22,6 +22,7 @@ import type {
 	CodexRuntimeState,
 	CodeTokenUsageResponse,
 } from "../interface/code"
+import type { CodeProjectBranches } from "../interface/codeBranches"
 
 // === Group APIs ===
 
@@ -35,6 +36,10 @@ export function createAIGroup(data: { name: string; description: string; sourceD
 
 export function updateAIGroup(id: number, data: { name: string; description: string; sourceDirs: string[]; requireQualityGate: boolean; monthlyTokenBudget: number }) {
 	return http.put<AIGroup>(`/code/groups/${id}`, data)
+}
+
+export function getCodeProjectBranches(projectId: number) {
+	return http.get<CodeProjectBranches>(`/code/groups/${projectId}/git/branches`, undefined, { timeout: 15000 })
 }
 
 export function getCodeExecutors() {
