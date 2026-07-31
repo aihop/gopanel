@@ -21,7 +21,7 @@ func withCodeGovernanceDB(t *testing.T) *gorm.DB {
 	}
 	if err := database.AutoMigrate(
 		&model.AIGroup{}, &model.AIDevSession{}, &model.AITask{}, &model.AIExecutionRun{},
-		&model.AITimelineEvent{}, &model.AICodeDelivery{}, &model.AICodeAuditEvent{},
+		&model.AITimelineEvent{}, &model.AICodeDelivery{}, &model.AICodeAuditEvent{}, &model.AIDevSessionRepository{},
 	); err != nil {
 		t.Fatal(err)
 	}

@@ -23,9 +23,11 @@ import (
 const codeWorktreeCommandTimeout = 15 * time.Second
 
 type codeWorktreeCapability struct {
-	Available bool   `json:"available"`
-	Reason    string `json:"reason"`
-	SourceDir string `json:"sourceDir,omitempty"`
+	Available       bool     `json:"available"`
+	Reason          string   `json:"reason"`
+	SourceDir       string   `json:"sourceDir,omitempty"`
+	SourceDirs      []string `json:"sourceDirs,omitempty"`
+	RepositoryCount int      `json:"repositoryCount"`
 }
 
 func aiProjectWorktreeRoot(userID uint) string {
@@ -48,8 +50,10 @@ func isManagedAISessionWorkDir(workDir string, userID uint) bool {
 	if _, err := strconv.ParseUint(sessionID, 10, 64); err != nil {
 		return false
 	}
-	info, err := os.Stat(filepath.Join(workDir, ".git"))
-	return err == nil && !info.IsDir()
+	if info, err := os.Stat(filepath.Join(workDir, ".git")); err == nil && !info.IsDir() {
+		return true
+	}
+	return isAISessionWorkspaceDirectory(workDir)
 }
 
 func GetCodeWorktreeCapability(c fiber.Ctx) error {
@@ -73,28 +77,39 @@ func inspectCodeWorktreeCapability(project *model.AIGroup) codeWorktreeCapabilit
 	if len(sourceDirs) == 0 && strings.TrimSpace(project.WorkDir) != "" {
 		sourceDirs = aiProjectWorkspaceSourceDirs(project.WorkDir)
 	}
-	if len(sourceDirs) != 1 {
-		return codeWorktreeCapability{Reason: "multi_source"}
-	}
-	sourceDir, err := filepath.EvalSymlinks(filepath.Clean(sourceDirs[0]))
-	if err != nil {
+	if len(sourceDirs) == 0 {
 		return codeWorktreeCapability{Reason: "source_unavailable"}
 	}
-	root, err := runCodeGit(sourceDir, "rev-parse", "--show-toplevel")
-	if err != nil {
-		return codeWorktreeCapability{Reason: "not_git"}
+	resolvedDirs := make([]string, 0, len(sourceDirs))
+	for _, candidate := range sourceDirs {
+		sourceDir, err := filepath.EvalSymlinks(filepath.Clean(candidate))
+		if err != nil {
+			return codeWorktreeCapability{Reason: "source_unavailable"}
+		}
+		root, err := runCodeGit(sourceDir, "rev-parse", "--show-toplevel")
+		if err != nil {
+			return codeWorktreeCapability{Reason: "not_git"}
+		}
+		root, err = filepath.EvalSymlinks(filepath.Clean(strings.TrimSpace(root)))
+		if err != nil || root != sourceDir {
+			return codeWorktreeCapability{Reason: "not_git_root"}
+		}
+		resolvedDirs = append(resolvedDirs, sourceDir)
 	}
-	root, err = filepath.EvalSymlinks(filepath.Clean(strings.TrimSpace(root)))
-	if err != nil || root != sourceDir {
-		return codeWorktreeCapability{Reason: "not_git_root"}
+	result := codeWorktreeCapability{Available: true, SourceDirs: resolvedDirs, RepositoryCount: len(resolvedDirs)}
+	if len(resolvedDirs) == 1 {
+		result.SourceDir = resolvedDirs[0]
 	}
-	return codeWorktreeCapability{Available: true, SourceDir: sourceDir}
+	return result
 }
 
 func createCodeSessionWorktree(session *model.AIDevSession, project *model.AIGroup) error {
 	capability := inspectCodeWorktreeCapability(project)
 	if !capability.Available {
 		return fmt.Errorf("当前项目不支持 Git Worktree 隔离：%s", capability.Reason)
+	}
+	if len(capability.SourceDirs) > 1 {
+		return createCodeSessionRepositoryWorktrees(session, project, capability.SourceDirs)
 	}
 	worktreeDir := aiSessionWorktreeDir(session.UserID, session.ID)
 	if _, err := os.Lstat(worktreeDir); !errors.Is(err, os.ErrNotExist) {
@@ -110,10 +125,15 @@ func createCodeSessionWorktree(session *model.AIDevSession, project *model.AIGro
 	session.SourceWorkDir = capability.SourceDir
 	session.WorkDir = worktreeDir
 	session.WorktreeBranch = branch
+	session.IsolationMode = "single_worktree"
 	return nil
 }
 
 func rollbackCodeSessionWorktree(session *model.AIDevSession) {
+	if session != nil && session.IsolationMode == codeIsolationMultiWorktree {
+		rollbackCodeSessionRepositoryWorktrees(session)
+		return
+	}
 	if session == nil || session.SourceWorkDir == "" || session.WorktreeBranch == "" {
 		return
 	}
@@ -127,6 +147,9 @@ func rollbackCodeSessionWorktree(session *model.AIDevSession) {
 }
 
 func cleanupCodeSessionWorktree(session *model.AIDevSession) error {
+	if session != nil && session.IsolationMode == codeIsolationMultiWorktree {
+		return cleanupCodeSessionRepositoryWorktrees(session)
+	}
 	if session == nil || session.SourceWorkDir == "" || session.WorktreeBranch == "" {
 		return nil
 	}

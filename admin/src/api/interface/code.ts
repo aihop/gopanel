@@ -82,6 +82,7 @@ export interface CodeSession {
 	workDir: string
 	sourceWorkDir?: string
 	worktreeBranch?: string
+	isolationMode?: "single_worktree" | "multi_worktree"
 	status: string
 	currentStage: string
 	approvalPolicy: CodeApprovalPolicy
@@ -91,8 +92,10 @@ export interface CodeSession {
 
 export interface CodeWorktreeCapability {
 	available: boolean
-	reason: "" | "multi_source" | "source_unavailable" | "not_git" | "not_git_root"
+	reason: "" | "source_unavailable" | "not_git" | "not_git_root"
 	sourceDir?: string
+	sourceDirs?: string[]
+	repositoryCount: number
 }
 
 export interface AIMessage {

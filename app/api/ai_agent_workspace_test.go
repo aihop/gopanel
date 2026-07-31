@@ -1,7 +1,9 @@
 package api
 
 import (
+	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -35,6 +37,48 @@ func TestWorkspaceRunArgsDoNotExposeHostCredentials(t *testing.T) {
 	}
 	if !strings.Contains(args, "/srv/project:/workspace") {
 		t.Fatalf("workspace mount missing: %s", args)
+	}
+}
+
+func TestWorkspaceGitMetadataMountsForMultiRepositorySession(t *testing.T) {
+	session, _, _ := createMultiRepositorySession(t, 84)
+	repositories, err := loadCodeSessionRepositories(session.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := make([]string, 0, len(repositories))
+	for _, repository := range repositories {
+		commonDir, err := resolveCodeGitPath(repository.WorktreeDir, "--git-common-dir")
+		if err != nil {
+			t.Fatal(err)
+		}
+		want = append(want, commonDir)
+	}
+	got, err := workspaceGitMetadataMounts(session, session.WorkDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("metadata mounts = %#v, want %#v", got, want)
+	}
+	for _, metadataDir := range got {
+		if _, err := os.Stat(metadataDir); err != nil {
+			t.Fatalf("metadata mount unavailable: %s", metadataDir)
+		}
+	}
+}
+
+func TestWorkspaceContainerKeepsWorktreeAbsolutePathAvailable(t *testing.T) {
+	workDir := "/srv/gopanel/worktrees/session_84"
+	metadataDirs := []string{"/srv/project-one/.git", "/srv/project-two/.git"}
+	args := buildAIAgentWorkspaceRunArgs("workspace", workDir)
+	for _, metadataDir := range metadataDirs {
+		args = append(args, "-v", metadataDir+":"+metadataDir)
+	}
+	args = append(args, "-v", workDir+":"+workDir)
+	joined := strings.Join(args, " ")
+	if !strings.Contains(joined, workDir+":"+workDir) || !strings.Contains(joined, workDir+":/workspace") {
+		t.Fatalf("worktree paths are not both available: %s", joined)
 	}
 }
 

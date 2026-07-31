@@ -80,6 +80,7 @@ type AIDevSession struct {
 	WorkDir           string     `gorm:"column:work_dir;type:varchar(255);not null" json:"workDir"`
 	SourceWorkDir     string     `gorm:"column:source_work_dir;type:varchar(255)" json:"sourceWorkDir,omitempty"`
 	WorktreeBranch    string     `gorm:"column:worktree_branch;type:varchar(255)" json:"worktreeBranch,omitempty"`
+	IsolationMode     string     `gorm:"column:isolation_mode;type:varchar(32);not null;default:''" json:"isolationMode,omitempty"`
 	Status            string     `gorm:"column:status;type:varchar(32);default:'active'" json:"status"`
 	CurrentStage      string     `gorm:"column:current_stage;type:varchar(64);default:'idle'" json:"currentStage"`
 	LastTaskID        uint       `gorm:"column:last_task_id;type:integer;index" json:"lastTaskId"`

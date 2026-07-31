@@ -99,7 +99,7 @@ func mergePreparedCodeDelivery(delivery *model.AICodeDelivery) (codeGitDeliveryR
 func updateCodeDeliveryMetadata(delivery *model.AICodeDelivery) error {
 	return global.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Model(&model.AIDevSession{}).Where("id = ?", delivery.SessionID).Updates(map[string]any{
-			"work_dir": delivery.SourceWorkDir, "source_work_dir": "", "worktree_branch": "",
+			"work_dir": delivery.SourceWorkDir, "source_work_dir": "", "worktree_branch": "", "isolation_mode": "",
 		}).Error; err != nil {
 			return err
 		}

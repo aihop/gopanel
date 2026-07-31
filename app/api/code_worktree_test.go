@@ -37,8 +37,9 @@ func TestInspectCodeWorktreeCapability(t *testing.T) {
 	if !available.Available || available.SourceDir != repositoryDir {
 		t.Fatalf("unexpected capability: %#v", available)
 	}
-	multiSource := inspectCodeWorktreeCapability(&model.AIGroup{SourceDirs: []string{repositoryDir, t.TempDir()}})
-	if multiSource.Available || multiSource.Reason != "multi_source" {
+	secondRepository := createCodeGitRepository(t)
+	multiSource := inspectCodeWorktreeCapability(&model.AIGroup{SourceDirs: []string{repositoryDir, secondRepository}})
+	if !multiSource.Available || multiSource.RepositoryCount != 2 || len(multiSource.SourceDirs) != 2 {
 		t.Fatalf("unexpected multi-source capability: %#v", multiSource)
 	}
 	notGit := inspectCodeWorktreeCapability(&model.AIGroup{SourceDirs: []string{t.TempDir()}})

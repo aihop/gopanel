@@ -19,10 +19,13 @@ import (
 )
 
 type codeGitDeliveryResult struct {
-	Status        string   `json:"status"`
-	Commit        string   `json:"commit,omitempty"`
-	Branch        string   `json:"branch,omitempty"`
-	ConflictFiles []string `json:"conflictFiles,omitempty"`
+	Status         string                         `json:"status"`
+	Commit         string                         `json:"commit,omitempty"`
+	Branch         string                         `json:"branch,omitempty"`
+	RepositoryID   string                         `json:"repositoryId,omitempty"`
+	RepositoryName string                         `json:"repositoryName,omitempty"`
+	ConflictFiles  []string                       `json:"conflictFiles,omitempty"`
+	Repositories   []codeRepositoryDeliveryResult `json:"repositories,omitempty"`
 }
 
 func validateCodeGitCommitMessage(message string) (string, error) {
@@ -151,6 +154,15 @@ func getCodeDeliverySessionContext(c fiber.Ctx) (*model.AIDevSession, error) {
 	if err != nil {
 		return nil, err
 	}
+	if session.IsolationMode == codeIsolationMultiWorktree {
+		if err := validateCodeMultiWorktreeDeliverySession(session, claims); err != nil {
+			return nil, err
+		}
+		return session, nil
+	}
+	if hasCodeMultiRepositoryDelivery(session.ID) {
+		return session, nil
+	}
 	var delivery model.AICodeDelivery
 	if err := global.DB.Where("session_id = ?", session.ID).First(&delivery).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -206,12 +218,16 @@ func runCodeWorktreeMerge(c fiber.Ctx, operation func(*model.AIDevSession) (code
 
 func CommitCodeGitChanges(c fiber.Ctx) error {
 	var req struct {
-		Message string `json:"message"`
+		Message      string `json:"message"`
+		RepositoryID string `json:"repositoryId"`
 	}
 	if err := c.Bind().JSON(&req); err != nil {
 		return c.JSON(e.Fail(err))
 	}
 	return runCodeGitDelivery(c, "git_commit", func(session *model.AIDevSession) (codeGitDeliveryResult, error) {
+		if session.IsolationMode == codeIsolationMultiWorktree {
+			return commitCodeSessionRepository(session, req.RepositoryID, req.Message)
+		}
 		return commitCodeSessionWorktree(session, req.Message)
 	})
 }
@@ -228,6 +244,9 @@ func MergeCodeSessionWorktree(c fiber.Ctx) error {
 		return c.JSON(e.Fail(errors.New("合并操作需要明确确认")))
 	}
 	return runCodeWorktreeMerge(c, func(session *model.AIDevSession) (codeGitDeliveryResult, error) {
+		if session.IsolationMode == codeIsolationMultiWorktree || hasCodeMultiRepositoryDelivery(session.ID) {
+			return resumeCodeMultiRepositoryDelivery(session, claims.UserId)
+		}
 		return resumeCodeSessionDelivery(session, claims.UserId)
 	})
 }

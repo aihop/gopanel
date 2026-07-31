@@ -5,8 +5,8 @@ export function getCodeGitStatus(sessionId: number) {
 	return http.get<CodeGitStatus>(`/code/sessions/${sessionId}/git/status`, undefined, { timeout: 15000 })
 }
 
-export function commitCodeGitChanges(sessionId: number, message: string) {
-	return http.post<CodeGitDeliveryResult>(`/code/sessions/${sessionId}/git/commit`, { message })
+export function commitCodeGitChanges(sessionId: number, repositoryId: string, message: string) {
+	return http.post<CodeGitDeliveryResult>(`/code/sessions/${sessionId}/git/commit`, { repositoryId, message })
 }
 
 export function mergeCodeSessionWorktree(sessionId: number) {

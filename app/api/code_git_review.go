@@ -49,6 +49,8 @@ type codeGitRepository struct {
 	StagedAdditions int           `json:"stagedAdditions"`
 	StagedDeletions int           `json:"stagedDeletions"`
 	Truncated       bool          `json:"truncated"`
+	Isolated        bool          `json:"isolated"`
+	DeliveryStatus  string        `json:"deliveryStatus,omitempty"`
 	root            string
 	workspacePrefix string
 }
@@ -197,7 +199,28 @@ func discoverCodeGitRepositories(session *model.AIDevSession, sourceDirs []strin
 	if session == nil {
 		return nil
 	}
+	if session.IsolationMode == codeIsolationMultiWorktree {
+		sessionRepositories, err := loadCodeSessionRepositories(session.ID)
+		if err != nil {
+			return nil
+		}
+		repositories := make([]codeGitRepository, 0, len(sessionRepositories))
+		for _, sessionRepository := range sessionRepositories {
+			repository, ok := inspectCodeGitRepository(
+				codeSessionRepositoryID(sessionRepository.ID), sessionRepository.LinkName,
+				sessionRepository.WorktreeDir, sessionRepository.LinkName,
+			)
+			if !ok {
+				continue
+			}
+			repository.Isolated = true
+			repository.DeliveryStatus = sessionRepository.Status
+			repositories = append(repositories, repository)
+		}
+		return repositories
+	}
 	if repository, ok := inspectCodeGitRepository("session", filepath.Base(session.WorkDir), session.WorkDir, ""); ok {
+		repository.Isolated = session.WorktreeBranch != ""
 		return []codeGitRepository{repository}
 	}
 	prefixes := codeGitWorkspacePrefixes(session)

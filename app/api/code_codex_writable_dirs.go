@@ -15,6 +15,9 @@ func codexWritableDirsForSession(session *model.AIDevSession) ([]string, error) 
 	if session == nil {
 		return nil, nil
 	}
+	if session.IsolationMode == codeIsolationMultiWorktree {
+		return resolveCodexMultiWorktreeGitWritableDirs(session)
+	}
 	if session.SourceWorkDir != "" || session.WorktreeBranch != "" {
 		if session.SourceWorkDir == "" || session.WorktreeBranch == "" {
 			return nil, errors.New("会话 Worktree 元数据不完整")
@@ -70,7 +73,47 @@ func resolveCodexWorktreeGitWritableDirs(session *model.AIDevSession) ([]string,
 	if err != nil {
 		return nil, err
 	}
-	sourceDir, err := resolveCodexGitDirectory(session.SourceWorkDir)
+	return resolveCodexRepositoryWorktreeGitWritableDirs(session.SourceWorkDir, workDir, session.WorktreeBranch)
+}
+
+func resolveCodexMultiWorktreeGitWritableDirs(session *model.AIDevSession) ([]string, error) {
+	if !isManagedAISessionWorkDir(session.WorkDir, session.UserID) || !isAISessionWorkspaceDirectory(session.WorkDir) {
+		return nil, errors.New("会话多仓库 Worktree 不在 GoPanel 管理目录中")
+	}
+	if filepath.Clean(session.WorkDir) != filepath.Clean(aiSessionWorktreeDir(session.UserID, session.ID)) {
+		return nil, errors.New("会话多仓库 Worktree 目录与会话编号不一致")
+	}
+	repositories, err := loadCodeSessionRepositories(session.ID)
+	if err != nil || len(repositories) == 0 {
+		return nil, errors.New("会话多仓库 Worktree 元数据不可用")
+	}
+	seen := make(map[string]struct{})
+	writableDirs := make([]string, 0, len(repositories)*4)
+	for _, repository := range repositories {
+		if !isPathInside(filepath.Clean(repository.WorktreeDir), filepath.Clean(session.WorkDir)) {
+			return nil, errors.New("会话仓库 Worktree 超出管理目录")
+		}
+		resolved, resolveErr := resolveCodexRepositoryWorktreeGitWritableDirs(repository.SourceDir, repository.WorktreeDir, repository.Branch)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+		for _, writableDir := range resolved {
+			if _, exists := seen[writableDir]; exists {
+				continue
+			}
+			seen[writableDir] = struct{}{}
+			writableDirs = append(writableDirs, writableDir)
+		}
+	}
+	return writableDirs, nil
+}
+
+func resolveCodexRepositoryWorktreeGitWritableDirs(sourcePath, worktreePath, branch string) ([]string, error) {
+	workDir, err := resolveCodexGitDirectory(worktreePath)
+	if err != nil {
+		return nil, err
+	}
+	sourceDir, err := resolveCodexGitDirectory(sourcePath)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +141,7 @@ func resolveCodexWorktreeGitWritableDirs(session *model.AIDevSession) ([]string,
 		return nil, errors.New("会话 Worktree 的 Git 私有目录无效")
 	}
 	headRef, err := runCodeGit(workDir, "symbolic-ref", "--quiet", "HEAD")
-	if err != nil || strings.TrimSpace(headRef) != "refs/heads/"+session.WorktreeBranch {
+	if err != nil || strings.TrimSpace(headRef) != "refs/heads/"+branch {
 		return nil, errors.New("会话 Worktree 当前分支与会话记录不一致")
 	}
 	writableDirs := []string{
