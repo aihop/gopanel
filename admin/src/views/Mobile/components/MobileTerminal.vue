@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
+import { useMessage } from "naive-ui"
 import { FitAddon } from "@xterm/addon-fit"
 import { Terminal } from "@xterm/xterm"
+import { updateMobileSessionTitle } from "@/api/modules/mobile"
 import Icon from "@/components/common/Icon.vue"
 import { mobileMessages } from "@/i18n/locales/mobile"
 import "@xterm/xterm/css/xterm.css"
@@ -16,8 +18,9 @@ const props = withDefaults(
 	}>(),
 	{ mode: "ai" }
 )
-const emit = defineEmits<{ back: []; openFiles: []; openStatus: [] }>()
+const emit = defineEmits<{ back: []; openFiles: []; openStatus: []; renamed: [] }>()
 const { t } = useI18n({ messages: mobileMessages })
+const message = useMessage()
 const terminalElement = ref<HTMLElement | null>(null)
 const commandInput = ref<HTMLInputElement | null>(null)
 const commandDraft = ref("")
@@ -27,6 +30,9 @@ const connecting = ref(true)
 const reconnecting = ref(false)
 const hasControl = ref(false)
 const ctrlActive = ref(false)
+const showRenameModal = ref(false)
+const renameTitle = ref("")
+const renameLoading = ref(false)
 let terminal: Terminal | null = null
 let fitAddon: FitAddon | null = null
 let socket: WebSocket | null = null
@@ -309,6 +315,27 @@ function releaseControl() {
 	socket.send(JSON.stringify({ type: "release_control", data: "" }))
 }
 
+function openRenameModal() {
+	renameTitle.value = props.taskName
+	showRenameModal.value = true
+}
+
+async function renameSession() {
+	const title = renameTitle.value.trim()
+	if (!title || renameLoading.value) return
+	renameLoading.value = true
+	try {
+		await updateMobileSessionTitle(props.sessionId, title)
+		showRenameModal.value = false
+		message.success(t("mobile.sessionRenameSuccess"))
+		emit("renamed")
+	} catch (error) {
+		message.error(error instanceof Error ? error.message : t("mobile.sessionRenameFailed"))
+	} finally {
+		renameLoading.value = false
+	}
+}
+
 watch(
 	() => props.sessionId,
 	() => {
@@ -336,6 +363,9 @@ onBeforeUnmount(closeTerminal)
 			<div class="flex shrink-0 items-center gap-1.5">
 				<span class="max-w-[30vw] truncate text-right text-xs text-slate-400" :title="projectName">{{ projectName }}</span>
 				<span class="h-2 w-2 rounded-full" :class="connected ? 'bg-emerald-400' : reconnecting ? 'bg-amber-400' : 'bg-slate-500'" :title="connected ? t('mobile.connected') : reconnecting ? t('mobile.reconnecting') : t('mobile.disconnected')" />
+				<n-button v-if="mode === 'ai'" size="small" quaternary circle :title="t('mobile.renameSession')" :aria-label="t('mobile.renameSession')" @click="openRenameModal">
+					<template #icon><Icon name="mdi:pencil-outline" :size="18" color="#cbd5e1" /></template>
+				</n-button>
 				<n-button v-if="mode === 'ai'" size="small" quaternary circle :title="t('mobile.taskStatus')" :aria-label="t('mobile.taskStatus')" @click="emit('openStatus')">
 					<template #icon><Icon name="mdi:timeline-clock-outline" :size="19" color="#cbd5e1" /></template>
 				</n-button>
@@ -376,6 +406,15 @@ onBeforeUnmount(closeTerminal)
 			<button type="button" :disabled="!hasControl" class="flex h-10 min-w-10 shrink-0 items-center justify-center rounded-xl border border-blue-500/40 bg-blue-500/15 px-2 font-mono text-sm font-medium text-blue-200 transition active:scale-95 active:bg-blue-500/25 disabled:cursor-not-allowed" aria-label="↵" @pointerdown.prevent @click="sendShortcut('\r')">↵</button>
 		</div>
 		<div class="h-[max(8px,env(safe-area-inset-bottom))] shrink-0 bg-slate-950" aria-hidden="true" />
+		<n-modal v-model:show="showRenameModal" preset="card" style="width: min(92vw, 420px)" :title="t('mobile.renameSession')">
+			<n-input v-model:value="renameTitle" maxlength="255" show-count autofocus :placeholder="t('mobile.sessionNamePlaceholder')" @keydown.enter.prevent="renameSession" />
+			<template #footer>
+				<div class="flex justify-end gap-2">
+					<n-button @click="showRenameModal = false">{{ t("mobile.cancel") }}</n-button>
+					<n-button type="primary" :loading="renameLoading" :disabled="!renameTitle.trim()" @click="renameSession">{{ t("mobile.renameSession") }}</n-button>
+				</div>
+			</template>
+		</n-modal>
 	</section>
 </template>
 

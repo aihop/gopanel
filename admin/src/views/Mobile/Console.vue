@@ -141,7 +141,7 @@ function sessionProjectName(session: CodeSession) {
 }
 
 function sessionTaskTitle(session: CodeSession) {
-	return session.currentTaskTitle || session.title
+	return session.title
 }
 
 async function loadProjects() {
@@ -466,7 +466,7 @@ onBeforeUnmount(() => {
 						@back="leaveTaskDetail"
 					/>
 					<template v-else-if="selectedSession">
-						<MobileTerminal :session-id="selectedSessionId" :task-name="sessionTaskTitle(selectedSession)" :project-name="sessionProjectName(selectedSession)" @back="leaveTaskDetail" @open-files="showFiles = true" @open-status="showTaskStatus = true" />
+						<MobileTerminal :session-id="selectedSessionId" :task-name="sessionTaskTitle(selectedSession)" :project-name="sessionProjectName(selectedSession)" @back="leaveTaskDetail" @open-files="showFiles = true" @open-status="showTaskStatus = true" @renamed="loadSessions" />
 					</template>
 				</div>
 			</n-spin>

@@ -11,6 +11,7 @@ type IAIDevSessionRepo interface {
 	GetSessionByID(id uint) (*model.AIDevSession, error)
 	GetSessionsByUserID(userID, projectID uint, page, limit int) ([]*model.AIDevSession, int64, error)
 	UpdateSession(session *model.AIDevSession) error
+	UpdateSessionTitle(id uint, title string) error
 	UpdateSessionApprovalPolicy(id uint, approvalPolicy string) error
 	CreateExecutionRun(run *model.AIExecutionRun) error
 	UpdateExecutionRun(run *model.AIExecutionRun) error
@@ -102,6 +103,10 @@ func (r *aiDevSessionRepo) GetSessionsByUserID(userID, projectID uint, page, lim
 
 func (r *aiDevSessionRepo) UpdateSession(session *model.AIDevSession) error {
 	return global.DB.Save(session).Error
+}
+
+func (r *aiDevSessionRepo) UpdateSessionTitle(id uint, title string) error {
+	return global.DB.Model(&model.AIDevSession{}).Where("id = ?", id).Update("title", title).Error
 }
 
 func (r *aiDevSessionRepo) UpdateSessionApprovalPolicy(id uint, approvalPolicy string) error {

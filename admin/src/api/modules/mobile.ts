@@ -244,8 +244,14 @@ export function createMobileSession(data: { title: string; projectId: number; ex
 			...data,
 			workDir: "",
 			isolated: true,
-			includeUncommitted: false
+			includeUncommitted: true
 		})
+	)
+}
+
+export function updateMobileSessionTitle(sessionId: number, title: string) {
+	return mobileRequest(
+		mobileHttp.put<ResultData<CodeSession>>(`/mobile/app/sessions/${sessionId}/title`, { title })
 	)
 }
 
