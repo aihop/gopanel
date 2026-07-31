@@ -11,7 +11,7 @@ class PanelCard extends StatelessWidget {
     this.title,
     this.trailing,
     required this.child,
-    this.padding = const EdgeInsets.all(20),
+    this.padding = const EdgeInsets.all(22),
   });
 
   @override
@@ -40,7 +40,7 @@ class PanelCard extends StatelessWidget {
                   if (trailing != null) trailing! else const SizedBox.shrink(),
                 ],
               ),
-            if (title != null || trailing != null) const SizedBox(height: 16),
+            if (title != null || trailing != null) const SizedBox(height: 18),
             child,
           ],
         ),
@@ -48,4 +48,3 @@ class PanelCard extends StatelessWidget {
     );
   }
 }
-

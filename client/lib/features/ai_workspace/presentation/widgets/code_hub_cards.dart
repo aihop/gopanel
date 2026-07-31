@@ -3,6 +3,140 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/widgets/panel/panel_card.dart';
 import '../../models/ai_dev_session.dart';
+import '../code_workspace_text.dart';
+
+class CodeHubHero extends StatelessWidget {
+  const CodeHubHero({
+    super.key,
+    required this.sessionCount,
+    required this.activeCount,
+    required this.onCreate,
+  });
+
+  final int sessionCount;
+  final int activeCount;
+  final VoidCallback onCreate;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF172554), Color(0xFF1E3A8A)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.primaryBlue.withValues(alpha: 0.18),
+            blurRadius: 28,
+            offset: const Offset(0, 12),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Icon(Icons.terminal_rounded, color: Colors.white),
+          ),
+          const SizedBox(height: 22),
+          Text(
+            CodeWorkspaceText.t(context, 'hub.heroTitle'),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            CodeWorkspaceText.t(context, 'hub.heroDescription'),
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.72),
+              fontSize: 14,
+              height: 1.55,
+            ),
+          ),
+          const SizedBox(height: 22),
+          Row(
+            children: [
+              _HeroMetric(
+                label: CodeWorkspaceText.t(context, 'hub.all'),
+                value: '$sessionCount',
+              ),
+              const SizedBox(width: 12),
+              _HeroMetric(
+                label: CodeWorkspaceText.t(context, 'hub.active'),
+                value: '$activeCount',
+              ),
+              const Spacer(),
+              FilledButton.icon(
+                onPressed: onCreate,
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: AppTheme.primaryBlue,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 13,
+                  ),
+                ),
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: Text(CodeWorkspaceText.t(context, 'hub.create')),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HeroMetric extends StatelessWidget {
+  const _HeroMetric({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.64),
+              fontSize: 11,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class CodeSessionListCard extends StatelessWidget {
   const CodeSessionListCard({
@@ -27,7 +161,7 @@ class CodeSessionListCard extends StatelessWidget {
 
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(24),
       child: PanelCard(
         title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
         trailing: _StageBadge(stage: stage),
@@ -55,7 +189,7 @@ class CodeSessionListCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 9),
+            const SizedBox(height: 12),
             Text(
               session.workDir.isEmpty ? '未绑定工作目录' : session.workDir,
               maxLines: 1,
@@ -66,7 +200,7 @@ class CodeSessionListCard extends StatelessWidget {
                 fontSize: 12,
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             Row(
               children: [
                 const Icon(
@@ -143,12 +277,12 @@ class CodeHubEmptyCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return PanelCard(
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 28),
+        padding: const EdgeInsets.symmetric(vertical: 36),
         child: Center(
           child: Column(
             children: [
               Icon(icon, size: 46, color: AppTheme.textSecondary),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
               Text(title, style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
               Text(
@@ -160,7 +294,7 @@ class CodeHubEmptyCard extends StatelessWidget {
                 ),
               ),
               if (actionLabel != null && onAction != null) ...[
-                const SizedBox(height: 18),
+                const SizedBox(height: 22),
                 FilledButton(onPressed: onAction, child: Text(actionLabel!)),
               ],
             ],

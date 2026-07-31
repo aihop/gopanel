@@ -19,7 +19,7 @@ class AppTheme {
   static const Color textSecondary = Color(0xFF64748B); // slate-500
   static const Color textLight = Color(0xFF94A3B8); // slate-400
 
-  static const Color background = Color(0xFFF8FAFC); // slate-50
+  static const Color background = Color(0xFFF4F7FB);
   static const Color surface = Colors.white;
   static const Color border = Color(0xFFE2E8F0); // slate-200
 
@@ -35,7 +35,7 @@ class AppTheme {
       colorScheme: ColorScheme.fromSeed(
         seedColor: primaryBlue,
         primary: primaryBlue,
-        surface: background,
+        surface: surface,
         onSurface: textPrimary,
         error: error,
       ),
@@ -43,27 +43,29 @@ class AppTheme {
 
       // AppBar 样式（扁平、克制）
       appBarTheme: const AppBarTheme(
-        backgroundColor: surface,
+        backgroundColor: background,
         foregroundColor: textPrimary,
         elevation: 0,
         scrolledUnderElevation: 0,
-        centerTitle: true,
+        centerTitle: false,
+        toolbarHeight: 68,
+        titleSpacing: 20,
         iconTheme: IconThemeData(color: textPrimary),
         titleTextStyle: TextStyle(
           color: textPrimary,
-          fontSize: 18,
-          fontWeight: FontWeight.w600,
+          fontSize: 20,
+          fontWeight: FontWeight.w700,
         ),
       ),
 
       // 卡片样式（白底卡片、弱边框、柔和阴影、圆角）
       cardTheme: CardThemeData(
         color: surface,
-        elevation: 1, // 柔和阴影
-        shadowColor: textPrimary.withValues(alpha: 0.04),
+        elevation: 0,
+        shadowColor: textPrimary.withValues(alpha: 0.06),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20), // 类似 StatusCard 的大圆角
-          side: const BorderSide(color: border, width: 1),
+          borderRadius: BorderRadius.circular(24),
+          side: BorderSide(color: border.withValues(alpha: 0.8), width: 1),
         ),
         margin: EdgeInsets.zero,
       ),
@@ -75,9 +77,9 @@ class AppTheme {
           foregroundColor: Colors.white,
           elevation: 0,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(16),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
       ),
@@ -98,22 +100,39 @@ class AppTheme {
           vertical: 16,
         ),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(color: border),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(color: border),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(color: primaryBlue, width: 2),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(color: error),
         ),
         hintStyle: const TextStyle(color: textLight),
+      ),
+      dividerTheme: DividerThemeData(
+        color: border.withValues(alpha: 0.75),
+        space: 1,
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: surface,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+      ),
+      floatingActionButtonTheme: const FloatingActionButtonThemeData(
+        backgroundColor: primaryBlue,
+        foregroundColor: Colors.white,
+        elevation: 4,
+        shape: StadiumBorder(),
       ),
     );
   }

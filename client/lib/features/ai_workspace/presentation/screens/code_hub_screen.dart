@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/ai_dev_session.dart';
+import '../code_workspace_text.dart';
 import '../controllers/ai_workspace_controller.dart';
 import '../widgets/code_hub_cards.dart';
 import 'code_session_sheet.dart';
@@ -54,28 +55,40 @@ class _CodeHubScreenState extends ConsumerState<CodeHubScreen> {
     final workspace = ref.watch(aiWorkspaceControllerProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('开发'),
-        actions: [
-          IconButton(
-            tooltip: '新建开发会话',
-            onPressed: _openSessionCreator,
-            icon: const Icon(Icons.add_rounded),
-          ),
-        ],
-      ),
+      appBar: AppBar(title: Text(CodeWorkspaceText.t(context, 'hub.title'))),
       body: RefreshIndicator(
         onRefresh: _refresh,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16),
-          children: _buildSessionList(workspace),
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 28),
+          children: [
+            CodeHubHero(
+              sessionCount: workspace.sessions.length,
+              activeCount: workspace.sessions.where(_isActive).length,
+              onCreate: _openSessionCreator,
+            ),
+            const SizedBox(height: 28),
+            Row(
+              children: [
+                Text(
+                  CodeWorkspaceText.t(context, 'hub.sessions'),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  CodeWorkspaceText.format(context, 'hub.sessionCount', {
+                    'count': workspace.sessions.length,
+                  }),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            ..._buildSessionList(workspace),
+          ],
         ),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _openSessionCreator,
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('新建会话'),
       ),
     );
   }
@@ -114,7 +127,7 @@ class _CodeHubScreenState extends ConsumerState<CodeHubScreen> {
     return state.sessions
         .map(
           (session) => Padding(
-            padding: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.only(bottom: 16),
             child: CodeSessionListCard(
               session: session,
               projectName: _projectName(state.projects, session.projectId),
@@ -137,5 +150,13 @@ class _CodeHubScreenState extends ConsumerState<CodeHubScreen> {
       if (executor.id == executorId) return executor.nativeTerminal;
     }
     return executorId != 'terminal';
+  }
+
+  bool _isActive(AiDevSession session) {
+    final stage = session.currentStage.toLowerCase();
+    return stage == 'executing' ||
+        stage == 'running' ||
+        stage == 'instruction_queued' ||
+        stage == 'awaiting_approval';
   }
 }

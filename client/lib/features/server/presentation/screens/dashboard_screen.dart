@@ -102,15 +102,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         ref.invalidate(pendingAiApprovalCountProvider);
       },
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 28),
         physics: const AlwaysScrollableScrollPhysics(),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             DashboardBaseCard(osInfo: osInfo, currentInfo: currentInfo),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             const DashboardAiSummaryCard(),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             LayoutBuilder(
               builder: (context, constraints) {
                 final wide = constraints.maxWidth >= 520;
@@ -141,9 +141,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   return Row(
                     children: [
                       Expanded(child: cpuCard),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 16),
                       Expanded(child: memCard),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 16),
                       Expanded(child: loadCard),
                     ],
                   );
@@ -152,15 +152,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 return Column(
                   children: [
                     cpuCard,
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 16),
                     memCard,
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 16),
                     loadCard,
                   ],
                 );
               },
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             DashboardDiskCard(
               disks: disks,
               expanded: _diskExpanded,
@@ -172,7 +172,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     }
                   : null,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             DashboardMonitorCard(
               monitor: monitor,
               tab: _monitorTab,
