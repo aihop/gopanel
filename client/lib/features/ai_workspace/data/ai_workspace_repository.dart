@@ -2,6 +2,7 @@ import '../../../core/network/api_client.dart';
 import '../models/ai_dev_session.dart';
 import '../models/ai_session_state_info.dart';
 import '../models/code_workspace_file.dart';
+import '../models/code_delivery_job.dart';
 
 /// AI 工作区仓库
 /// 负责读取服务器目录、执行远程 AI 任务等 API 交互
@@ -169,6 +170,22 @@ class AiWorkspaceRepository {
       '/api/code/sessions/$sessionId/stop',
       data: const <String, dynamic>{},
     );
+  }
+
+  Future<CodeDeliveryJob?> getDelivery(int sessionId) async {
+    final response = await _apiClient.get<Map<String, dynamic>>(
+      '/api/code/sessions/$sessionId/delivery',
+    );
+    final data = response.data;
+    return data == null ? null : CodeDeliveryJob.fromJson(data);
+  }
+
+  Future<CodeDeliveryJob> startDelivery(int sessionId) async {
+    final response = await _apiClient.post<Map<String, dynamic>>(
+      '/api/code/sessions/$sessionId/worktree/merge',
+      data: const {'confirm': true},
+    );
+    return CodeDeliveryJob.fromJson(response.data ?? const <String, dynamic>{});
   }
 
   List<T> _items<T>(

@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gopanel/features/ai_workspace/models/ai_dev_session.dart';
 import 'package:gopanel/features/ai_workspace/models/ai_session_state_info.dart';
 import 'package:gopanel/features/ai_workspace/models/code_workspace_file.dart';
+import 'package:gopanel/features/ai_workspace/models/code_delivery_job.dart';
 
 void main() {
   test('parses Code executor capabilities and policies', () {
@@ -107,5 +108,32 @@ void main() {
     expect(structure.entries.last.extension, 'dart');
     expect(file.content, 'void main() {}');
     expect(file.size, 14);
+  });
+
+  test('parses Code delivery progress and conflicts', () {
+    final delivery = CodeDeliveryJob.fromJson({
+      'id': 21,
+      'sessionId': 12,
+      'status': 'conflict',
+      'stage': 'merging',
+      'progress': 42,
+      'attempt': 2,
+      'queuePosition': 0,
+      'targetBranch': 'main',
+      'conflictFiles': ['lib/main.dart'],
+      'repositories': [
+        {
+          'repositoryName': 'client',
+          'status': 'conflict',
+          'targetBranch': 'main',
+          'conflictFiles': ['lib/main.dart'],
+        },
+      ],
+    });
+
+    expect(delivery.progress, 42);
+    expect(delivery.canRetry, isTrue);
+    expect(delivery.conflictFiles, ['lib/main.dart']);
+    expect(delivery.repositories.single.repositoryName, 'client');
   });
 }

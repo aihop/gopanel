@@ -7,6 +7,7 @@ class AiDevSession {
   final String workDir;
   final String sourceWorkDir;
   final String worktreeBranch;
+  final String isolationMode;
   final String status;
   final String currentStage;
   final String approvalPolicy;
@@ -24,6 +25,7 @@ class AiDevSession {
     required this.workDir,
     required this.sourceWorkDir,
     required this.worktreeBranch,
+    required this.isolationMode,
     required this.status,
     required this.currentStage,
     required this.approvalPolicy,
@@ -43,6 +45,7 @@ class AiDevSession {
       workDir: (json['workDir'] ?? '').toString(),
       sourceWorkDir: (json['sourceWorkDir'] ?? '').toString(),
       worktreeBranch: (json['worktreeBranch'] ?? '').toString(),
+      isolationMode: (json['isolationMode'] ?? '').toString(),
       status: (json['status'] ?? '').toString(),
       currentStage: (json['currentStage'] ?? '').toString(),
       approvalPolicy: (json['approvalPolicy'] ?? 'safe_auto').toString(),

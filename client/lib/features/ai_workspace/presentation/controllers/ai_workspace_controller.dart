@@ -6,6 +6,7 @@ import '../../../../core/network/api_client.dart';
 import '../../data/ai_workspace_repository.dart';
 import '../../models/ai_dev_session.dart';
 import '../../models/chat_message.dart';
+import '../../models/code_delivery_job.dart';
 
 final aiWorkspaceRepositoryProvider = Provider<AiWorkspaceRepository>((ref) {
   return AiWorkspaceRepository(ApiClient());
@@ -30,6 +31,9 @@ class AiWorkspaceState {
   final List<AiTimelineEvent> timelineEvents;
   final String errorSummary;
   final List<String> changedFiles;
+  final CodeDeliveryJob? delivery;
+  final bool isDeliveryLoading;
+  final String? deliveryError;
 
   const AiWorkspaceState({
     this.isLoading = false,
@@ -50,10 +54,17 @@ class AiWorkspaceState {
     this.timelineEvents = const [],
     this.errorSummary = '',
     this.changedFiles = const [],
+    this.delivery,
+    this.isDeliveryLoading = false,
+    this.deliveryError,
   });
 
   String? get selectedWorkspacePath => currentSession?.workDir;
   bool get isAiThinking => isSending || _activeStages.contains(currentStage);
+  bool get isDevelopmentClosed =>
+      currentSession?.status == 'delivering' ||
+      currentSession?.status == 'delivered' ||
+      delivery?.isActive == true;
 
   AiWorkspaceState copyWith({
     bool? isLoading,
@@ -74,11 +85,16 @@ class AiWorkspaceState {
     List<AiTimelineEvent>? timelineEvents,
     String? errorSummary,
     List<String>? changedFiles,
+    CodeDeliveryJob? delivery,
+    bool? isDeliveryLoading,
+    String? deliveryError,
     bool clearError = false,
     bool clearSession = false,
     bool clearTask = false,
     bool clearInstruction = false,
     bool clearApproval = false,
+    bool clearDelivery = false,
+    bool clearDeliveryError = false,
   }) {
     return AiWorkspaceState(
       isLoading: isLoading ?? this.isLoading,
@@ -105,6 +121,11 @@ class AiWorkspaceState {
       timelineEvents: timelineEvents ?? this.timelineEvents,
       errorSummary: errorSummary ?? this.errorSummary,
       changedFiles: changedFiles ?? this.changedFiles,
+      delivery: clearDelivery ? null : (delivery ?? this.delivery),
+      isDeliveryLoading: isDeliveryLoading ?? this.isDeliveryLoading,
+      deliveryError: clearDeliveryError
+          ? null
+          : (deliveryError ?? this.deliveryError),
     );
   }
 }
@@ -204,6 +225,8 @@ class AiWorkspaceController extends Notifier<AiWorkspaceState> {
       clearTask: true,
       clearInstruction: true,
       clearApproval: true,
+      clearDelivery: true,
+      clearDeliveryError: true,
     );
     await refreshCurrentSession(showLoading: true);
     _refreshTimer = Timer.periodic(
@@ -220,7 +243,10 @@ class AiWorkspaceController extends Notifier<AiWorkspaceState> {
       state = state.copyWith(isLoading: true, clearError: true);
     }
     try {
-      final sessionState = await _repo.getSessionState(sessionId);
+      final sessionFuture = _repo.getSessionState(sessionId);
+      final deliveryFuture = _loadDelivery(sessionId);
+      final sessionState = await sessionFuture;
+      final (delivery, deliveryError) = await deliveryFuture;
       final messages = sessionState.recentMessages.isEmpty
           ? state.chatHistory
           : sessionState.recentMessages;
@@ -246,6 +272,10 @@ class AiWorkspaceController extends Notifier<AiWorkspaceState> {
         timelineEvents: sessionState.timelineEvents,
         errorSummary: sessionState.errorSummary,
         changedFiles: sessionState.changedFiles,
+        delivery: delivery,
+        clearDelivery: delivery == null,
+        deliveryError: deliveryError,
+        clearDeliveryError: deliveryError == null,
         clearTask: sessionState.currentTask == null,
         clearInstruction: sessionState.latestInstruction == null,
         clearApproval: sessionState.pendingApproval == null,
@@ -337,6 +367,36 @@ class AiWorkspaceController extends Notifier<AiWorkspaceState> {
         errorMessage: error.toString(),
       );
       return false;
+    }
+  }
+
+  Future<bool> startDelivery() async {
+    final sessionId = state.currentSession?.id;
+    if (sessionId == null || state.isDeliveryLoading) return false;
+    state = state.copyWith(
+      isDeliveryLoading: true,
+      clearDeliveryError: true,
+      clearError: true,
+    );
+    try {
+      final delivery = await _repo.startDelivery(sessionId);
+      state = state.copyWith(delivery: delivery, isDeliveryLoading: false);
+      await refreshCurrentSession();
+      return true;
+    } catch (error) {
+      state = state.copyWith(
+        isDeliveryLoading: false,
+        deliveryError: error.toString(),
+      );
+      return false;
+    }
+  }
+
+  Future<(CodeDeliveryJob?, String?)> _loadDelivery(int sessionId) async {
+    try {
+      return (await _repo.getDelivery(sessionId), null);
+    } catch (error) {
+      return (null, error.toString());
     }
   }
 

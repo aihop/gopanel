@@ -8,6 +8,7 @@ import '../widgets/ai_chat_message_item.dart';
 import '../widgets/ai_preview_strip.dart';
 import '../widgets/ai_session_overview_card.dart';
 import '../widgets/ai_timeline_panel.dart';
+import '../widgets/code_delivery_card.dart';
 import 'ai_preview_detail_screen.dart';
 import 'ai_preview_list_screen.dart';
 import 'code_session_sheet.dart';
@@ -105,6 +106,38 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
     );
   }
 
+  Future<void> _confirmDelivery() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(
+          CodeWorkspaceText.t(dialogContext, 'delivery.confirmTitle'),
+        ),
+        content: Text(
+          CodeWorkspaceText.t(dialogContext, 'delivery.confirmDescription'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(CodeWorkspaceText.t(dialogContext, 'delivery.cancel')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(CodeWorkspaceText.t(dialogContext, 'delivery.confirm')),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final started = await ref
+        .read(aiWorkspaceControllerProvider.notifier)
+        .startDelivery();
+    if (!mounted || !started) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(CodeWorkspaceText.t(context, 'delivery.started'))),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(aiWorkspaceControllerProvider);
@@ -170,6 +203,13 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                         currentTask: state.currentTask,
                         stage: state.currentStage,
                       ),
+                      CodeDeliveryCard(
+                        session: session,
+                        delivery: state.delivery,
+                        loading: state.isDeliveryLoading,
+                        errorMessage: state.deliveryError,
+                        onStart: _confirmDelivery,
+                      ),
                       if (state.pendingApproval != null)
                         AiApprovalPrompt(
                           approval: state.pendingApproval!,
@@ -234,7 +274,11 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
           _CommandComposer(
             controller: _inputController,
             focusNode: _focusNode,
-            enabled: session != null && !state.isSending,
+            enabled:
+                session != null &&
+                !state.isSending &&
+                !state.isDevelopmentClosed,
+            closed: state.isDevelopmentClosed,
             onSend: _sendMessage,
           ),
         ],
@@ -357,12 +401,14 @@ class _CommandComposer extends StatelessWidget {
     required this.controller,
     required this.focusNode,
     required this.enabled,
+    required this.closed,
     required this.onSend,
   });
 
   final TextEditingController controller;
   final FocusNode focusNode;
   final bool enabled;
+  final bool closed;
   final VoidCallback onSend;
 
   @override
@@ -400,7 +446,11 @@ class _CommandComposer extends StatelessWidget {
               onSubmitted: (_) => onSend(),
               style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
-                hintText: enabled ? '输入开发指令或补充要求...' : '请先选择开发会话',
+                hintText: closed
+                    ? '当前会话已进入统一交付，不能继续修改'
+                    : enabled
+                    ? '输入开发指令或补充要求...'
+                    : '请先选择开发会话',
                 hintStyle: const TextStyle(color: Colors.white38),
                 border: InputBorder.none,
               ),
