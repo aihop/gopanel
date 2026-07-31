@@ -5,55 +5,55 @@ import (
 	"github.com/aihop/gopanel/global"
 )
 
-type IAIGroupRepo interface {
-	CreateGroup(group *model.AIGroup) error
-	GetGroupByID(id uint) (*model.AIGroup, error)
-	GetGroups(userID uint, includeAll bool, page, limit int) ([]*model.AIGroup, int64, error)
-	LoadExecutionSummaries(groups []*model.AIGroup, userID uint, includeAll bool) error
-	UpdateGroup(group *model.AIGroup) error
-	DeleteGroup(id uint) error
+type IAIProjectRepo interface {
+	CreateProject(project *model.AIProject) error
+	GetProjectByID(id uint) (*model.AIProject, error)
+	GetProjects(userID uint, includeAll bool, page, limit int) ([]*model.AIProject, int64, error)
+	LoadExecutionSummaries(projects []*model.AIProject, userID uint, includeAll bool) error
+	UpdateProject(project *model.AIProject) error
+	DeleteProject(id uint) error
 }
 
-type aiGroupRepo struct{}
+type aiProjectRepo struct{}
 
-func NewAIGroupRepo() IAIGroupRepo {
-	return &aiGroupRepo{}
+func NewAIProjectRepo() IAIProjectRepo {
+	return &aiProjectRepo{}
 }
 
-func (r *aiGroupRepo) CreateGroup(group *model.AIGroup) error {
-	return global.DB.Create(group).Error
+func (r *aiProjectRepo) CreateProject(project *model.AIProject) error {
+	return global.DB.Create(project).Error
 }
 
-func (r *aiGroupRepo) GetGroupByID(id uint) (*model.AIGroup, error) {
-	var group model.AIGroup
-	err := global.DB.Where("id = ?", id).First(&group).Error
-	return &group, err
+func (r *aiProjectRepo) GetProjectByID(id uint) (*model.AIProject, error) {
+	var project model.AIProject
+	err := global.DB.Where("id = ?", id).First(&project).Error
+	return &project, err
 }
 
-func (r *aiGroupRepo) GetGroups(userID uint, includeAll bool, page, limit int) ([]*model.AIGroup, int64, error) {
-	var groups []*model.AIGroup
+func (r *aiProjectRepo) GetProjects(userID uint, includeAll bool, page, limit int) ([]*model.AIProject, int64, error) {
+	var projects []*model.AIProject
 	var total int64
-	db := global.DB.Model(&model.AIGroup{})
+	db := global.DB.Model(&model.AIProject{})
 	if !includeAll {
 		db = db.Where("creator_id = ?", userID)
 	}
 	db.Count(&total)
-	err := db.Order("created_at desc").Offset((page - 1) * limit).Limit(limit).Find(&groups).Error
-	return groups, total, err
+	err := db.Order("created_at desc").Offset((page - 1) * limit).Limit(limit).Find(&projects).Error
+	return projects, total, err
 }
 
-func (r *aiGroupRepo) LoadExecutionSummaries(groups []*model.AIGroup, userID uint, includeAll bool) error {
-	if len(groups) == 0 {
+func (r *aiProjectRepo) LoadExecutionSummaries(projects []*model.AIProject, userID uint, includeAll bool) error {
+	if len(projects) == 0 {
 		return nil
 	}
-	projectIDs := make([]uint, 0, len(groups))
-	summaries := make(map[uint]*model.AIProjectExecutionSummary, len(groups))
-	currentPriorities := make(map[uint]int, len(groups))
-	for _, group := range groups {
-		projectIDs = append(projectIDs, group.ID)
-		updatedAt := group.UpdatedAt
-		group.ExecutionSummary = &model.AIProjectExecutionSummary{Status: "idle", UpdatedAt: &updatedAt}
-		summaries[group.ID] = group.ExecutionSummary
+	projectIDs := make([]uint, 0, len(projects))
+	summaries := make(map[uint]*model.AIProjectExecutionSummary, len(projects))
+	currentPriorities := make(map[uint]int, len(projects))
+	for _, project := range projects {
+		projectIDs = append(projectIDs, project.ID)
+		updatedAt := project.UpdatedAt
+		project.ExecutionSummary = &model.AIProjectExecutionSummary{Status: "idle", UpdatedAt: &updatedAt}
+		summaries[project.ID] = project.ExecutionSummary
 	}
 
 	type projectTaskCount struct {
@@ -68,13 +68,13 @@ func (r *aiGroupRepo) LoadExecutionSummaries(groups []*model.AIGroup, userID uin
 	if err := taskQuery.Select("project_id, COUNT(*) AS task_count").Group("project_id").Scan(&taskCounts).Error; err != nil {
 		return err
 	}
-	groupsByID := make(map[uint]*model.AIGroup, len(groups))
-	for _, group := range groups {
-		groupsByID[group.ID] = group
+	projectsByID := make(map[uint]*model.AIProject, len(projects))
+	for _, project := range projects {
+		projectsByID[project.ID] = project
 	}
 	for _, count := range taskCounts {
-		if group := groupsByID[count.ProjectID]; group != nil {
-			group.TaskCount = count.TaskCount
+		if project := projectsByID[count.ProjectID]; project != nil {
+			project.TaskCount = count.TaskCount
 		}
 	}
 
@@ -132,12 +132,12 @@ func (r *aiGroupRepo) LoadExecutionSummaries(groups []*model.AIGroup, userID uin
 	return nil
 }
 
-func (r *aiGroupRepo) UpdateGroup(group *model.AIGroup) error {
-	return global.DB.Save(group).Error
+func (r *aiProjectRepo) UpdateProject(project *model.AIProject) error {
+	return global.DB.Save(project).Error
 }
 
-func (r *aiGroupRepo) DeleteGroup(id uint) error {
+func (r *aiProjectRepo) DeleteProject(id uint) error {
 	// 连带删除关联的 AI 任务及消息
 	global.DB.Where("project_id = ?", id).Delete(&model.AITask{})
-	return global.DB.Delete(&model.AIGroup{}, id).Error
+	return global.DB.Delete(&model.AIProject{}, id).Error
 }

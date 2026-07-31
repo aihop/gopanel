@@ -23,9 +23,11 @@ import (
 const codeWorktreeCommandTimeout = 15 * time.Second
 
 type codeWorktreeCapability struct {
-	Available bool   `json:"available"`
-	Reason    string `json:"reason"`
-	SourceDir string `json:"sourceDir,omitempty"`
+	Available       bool     `json:"available"`
+	Reason          string   `json:"reason"`
+	SourceDir       string   `json:"sourceDir,omitempty"`
+	SourceDirs      []string `json:"sourceDirs,omitempty"`
+	RepositoryCount int      `json:"repositoryCount"`
 }
 
 func aiProjectWorktreeRoot(userID uint) string {
@@ -48,8 +50,10 @@ func isManagedAISessionWorkDir(workDir string, userID uint) bool {
 	if _, err := strconv.ParseUint(sessionID, 10, 64); err != nil {
 		return false
 	}
-	info, err := os.Stat(filepath.Join(workDir, ".git"))
-	return err == nil && !info.IsDir()
+	if info, err := os.Stat(filepath.Join(workDir, ".git")); err == nil && !info.IsDir() {
+		return true
+	}
+	return isAISessionWorkspaceDirectory(workDir)
 }
 
 func GetCodeWorktreeCapability(c fiber.Ctx) error {
@@ -58,7 +62,7 @@ func GetCodeWorktreeCapability(c fiber.Ctx) error {
 	if err != nil || projectID <= 0 {
 		return c.JSON(e.Fail(errors.New("项目参数无效")))
 	}
-	project, err := repo.NewAIGroupRepo().GetGroupByID(uint(projectID))
+	project, err := repo.NewAIProjectRepo().GetProjectByID(uint(projectID))
 	if err != nil {
 		return c.JSON(e.Fail(errors.New("项目不存在")))
 	}
@@ -68,34 +72,47 @@ func GetCodeWorktreeCapability(c fiber.Ctx) error {
 	return c.JSON(e.Succ(inspectCodeWorktreeCapability(project)))
 }
 
-func inspectCodeWorktreeCapability(project *model.AIGroup) codeWorktreeCapability {
+func inspectCodeWorktreeCapability(project *model.AIProject) codeWorktreeCapability {
 	sourceDirs := project.SourceDirs
 	if len(sourceDirs) == 0 && strings.TrimSpace(project.WorkDir) != "" {
 		sourceDirs = aiProjectWorkspaceSourceDirs(project.WorkDir)
+		if len(sourceDirs) == 0 {
+			sourceDirs = []string{project.WorkDir}
+		}
 	}
-	if len(sourceDirs) != 1 {
-		return codeWorktreeCapability{Reason: "multi_source"}
+	if len(sourceDirs) == 0 {
+		return codeWorktreeCapability{Reason: "source_unavailable"}
 	}
-	sourceDir, err := filepath.EvalSymlinks(filepath.Clean(sourceDirs[0]))
+	resolvedDirs, err := discoverCodeRepositoryRoots(sourceDirs)
 	if err != nil {
 		return codeWorktreeCapability{Reason: "source_unavailable"}
 	}
-	root, err := runCodeGit(sourceDir, "rev-parse", "--show-toplevel")
-	if err != nil {
+	if len(resolvedDirs) == 0 {
 		return codeWorktreeCapability{Reason: "not_git"}
 	}
-	root, err = filepath.EvalSymlinks(filepath.Clean(strings.TrimSpace(root)))
-	if err != nil || root != sourceDir {
-		return codeWorktreeCapability{Reason: "not_git_root"}
+	result := codeWorktreeCapability{Available: true, SourceDirs: resolvedDirs, RepositoryCount: len(resolvedDirs)}
+	if len(resolvedDirs) == 1 {
+		result.SourceDir = resolvedDirs[0]
 	}
-	return codeWorktreeCapability{Available: true, SourceDir: sourceDir}
+	return result
 }
 
-func createCodeSessionWorktree(session *model.AIDevSession, project *model.AIGroup) error {
-	capability := inspectCodeWorktreeCapability(project)
-	if !capability.Available {
-		return fmt.Errorf("当前项目不支持 Git Worktree 隔离：%s", capability.Reason)
+func createCodeSessionWorktree(session *model.AIDevSession, project *model.AIProject) error {
+	sourceDirs := project.SourceDirs
+	if len(sourceDirs) == 0 && strings.TrimSpace(project.WorkDir) != "" {
+		sourceDirs = aiProjectWorkspaceSourceDirs(project.WorkDir)
+		if len(sourceDirs) == 0 {
+			sourceDirs = []string{project.WorkDir}
+		}
 	}
+	prepared, err := prepareDiscoveredCodeRepositories(sourceDirs)
+	if err != nil {
+		return fmt.Errorf("当前项目不支持 Git Worktree 隔离：%w", err)
+	}
+	if len(prepared) > 1 {
+		return createCodeSessionRepositoryWorktrees(session, project, prepared)
+	}
+	repository := prepared[0]
 	worktreeDir := aiSessionWorktreeDir(session.UserID, session.ID)
 	if _, err := os.Lstat(worktreeDir); !errors.Is(err, os.ErrNotExist) {
 		return errors.New("会话 Worktree 目录已存在")
@@ -104,16 +121,32 @@ func createCodeSessionWorktree(session *model.AIDevSession, project *model.AIGro
 		return fmt.Errorf("创建 Worktree 管理目录失败：%w", err)
 	}
 	branch := fmt.Sprintf("gopanel/code-%d-%d", session.ID, time.Now().Unix())
-	if _, err := runCodeGit(capability.SourceDir, "worktree", "add", "-b", branch, worktreeDir, "HEAD"); err != nil {
+	if _, err := runCodeGit(repository.SourceDir, "worktree", "add", "-b", branch, worktreeDir, repository.BaseCommit); err != nil {
 		return err
 	}
-	session.SourceWorkDir = capability.SourceDir
+	if err := installCodeManagedPushGuard(worktreeDir); err != nil {
+		_, _ = runCodeGit(repository.SourceDir, "worktree", "remove", "--force", worktreeDir)
+		_, _ = runCodeGit(repository.SourceDir, "branch", "-D", "--", branch)
+		return err
+	}
+	session.SourceWorkDir = repository.SourceDir
 	session.WorkDir = worktreeDir
 	session.WorktreeBranch = branch
+	session.TargetBranch = repository.TargetBranch
+	session.BaseCommit = repository.BaseCommit
+	session.RemoteName = repository.RemoteName
+	session.RemoteBranch = repository.RemoteBranch
+	session.RemoteCommit = repository.RemoteCommit
+	session.RepositorySync = repository.SyncStatus
+	session.IsolationMode = "single_worktree"
 	return nil
 }
 
 func rollbackCodeSessionWorktree(session *model.AIDevSession) {
+	if session != nil && session.IsolationMode == codeIsolationMultiWorktree {
+		rollbackCodeSessionRepositoryWorktrees(session)
+		return
+	}
 	if session == nil || session.SourceWorkDir == "" || session.WorktreeBranch == "" {
 		return
 	}
@@ -127,6 +160,9 @@ func rollbackCodeSessionWorktree(session *model.AIDevSession) {
 }
 
 func cleanupCodeSessionWorktree(session *model.AIDevSession) error {
+	if session != nil && session.IsolationMode == codeIsolationMultiWorktree {
+		return cleanupCodeSessionRepositoryWorktrees(session)
+	}
 	if session == nil || session.SourceWorkDir == "" || session.WorktreeBranch == "" {
 		return nil
 	}
@@ -153,7 +189,11 @@ func cleanupCodeSessionWorktree(session *model.AIDevSession) error {
 }
 
 func runCodeGit(workDir string, args ...string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), codeWorktreeCommandTimeout)
+	return runCodeGitWithTimeout(workDir, codeWorktreeCommandTimeout, args...)
+}
+
+func runCodeGitWithTimeout(workDir string, timeout time.Duration, args ...string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	commandArgs := append([]string{"-C", workDir}, args...)
 	output, err := exec.CommandContext(ctx, "git", commandArgs...).CombinedOutput()

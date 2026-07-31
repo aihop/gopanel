@@ -56,7 +56,7 @@
 </template>
 
 <script setup lang="ts">
-import type { AIGroup } from "@/api/interface/code"
+import type { AIProject } from "@/api/interface/code"
 import Icon from "@/components/common/Icon.vue"
 import { codeProjectMessages } from "@/i18n/locales/codeProject"
 import { onBeforeUnmount, onMounted, ref } from "vue"
@@ -67,7 +67,7 @@ import Workspace from "../Workspace.vue"
 type ResizeDirection = "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | "nw"
 type WorkspaceInstance = { confirmClose: () => boolean }
 type QuickPanel = {
-	project: AIGroup
+	project: AIProject
 	x: number
 	y: number
 	width: number
@@ -120,7 +120,7 @@ function clampPanel(panel: QuickPanel) {
 	panel.y = Math.min(Math.max(SCREEN_GAP, panel.y), Math.max(SCREEN_GAP, window.innerHeight - panel.height - SCREEN_GAP))
 }
 
-function open(project: AIGroup) {
+function open(project: AIProject) {
 	const existing = panels.value.find(panel => panel.project.id === project.id)
 	if (existing) {
 		existing.project = project
@@ -153,7 +153,7 @@ function closePanel(panel: QuickPanel) {
 }
 
 function openFullProject(panel: QuickPanel) {
-	void router.push(`/code/group/${panel.project.id}`)
+	void router.push(`/code/project/${panel.project.id}`)
 }
 
 function bindPointerMove(move: (event: PointerEvent) => void) {

@@ -75,3 +75,40 @@ func TestQueuedInstructionQueriesAndCancellation(t *testing.T) {
 		t.Fatalf("cancelled instruction = %#v, err = %v", first, err)
 	}
 }
+
+func TestGetSessionsLoadsUpdatedCurrentTaskTitle(t *testing.T) {
+	oldDB := global.DB
+	t.Cleanup(func() { global.DB = oldDB })
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "session-title.db")), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&model.AIDevSession{}, &model.AITask{}); err != nil {
+		t.Fatal(err)
+	}
+	global.DB = db
+	session := &model.AIDevSession{UserID: 1, Title: "session title", WorkDir: "/tmp"}
+	if err := db.Create(session).Error; err != nil {
+		t.Fatal(err)
+	}
+	task := &model.AITask{UserID: 1, SessionID: session.ID, Title: "first task title", WorkDir: "/tmp"}
+	if err := db.Create(task).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Model(session).Update("last_task_id", task.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	repository := &aiDevSessionRepo{}
+	sessions, _, err := repository.GetSessionsByUserID(1, 0, 1, 20)
+	if err != nil || len(sessions) != 1 || sessions[0].CurrentTaskTitle != task.Title {
+		t.Fatalf("current task title = %#v, err = %v", sessions, err)
+	}
+	if err := db.Model(task).Update("title", "updated task title").Error; err != nil {
+		t.Fatal(err)
+	}
+	sessions, _, err = repository.GetSessionsByUserID(1, 0, 1, 20)
+	if err != nil || sessions[0].CurrentTaskTitle != "updated task title" {
+		t.Fatalf("updated current task title = %#v, err = %v", sessions, err)
+	}
+}

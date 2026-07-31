@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/constant"
 )
 
@@ -164,4 +165,23 @@ func TestBuildCodeExecutorCommandUsesWorkDir(t *testing.T) {
 	if command.Dir == "" {
 		t.Fatal("expected command working directory")
 	}
+}
+
+func TestBuildCodeExecutorCommandAddsWorktreeGitWritableDirs(t *testing.T) {
+	withAIProjectBaseDir(t)
+	repositoryDir := createCodeGitRepository(t)
+	session := &model.AIDevSession{ID: 35, UserID: 7, ProjectID: 9, ApprovalPolicy: codeApprovalPolicySafeAuto}
+	if err := createCodeSessionWorktree(session, &model.AIProject{SourceDirs: []string{repositoryDir}}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { rollbackCodeSessionWorktree(session) })
+	writableDirs, err := codexWritableDirsForSession(session)
+	if err != nil {
+		t.Fatal(err)
+	}
+	command, _, err := buildCodeExecutorCommand(context.Background(), "codex", session.WorkDir, "inspect only", "", session.ID, session)
+	if err != nil {
+		t.Skipf("codex is not installed: %v", err)
+	}
+	assertCodexWritableDirArgs(t, command.Args, writableDirs)
 }

@@ -38,7 +38,7 @@ func TestSyncAIProjectWorkspaceCreatesDeduplicatedLinks(t *testing.T) {
 	sourcesRoot := t.TempDir()
 	first := createAIProjectSourceDir(t, filepath.Join(sourcesRoot, "first"), "app")
 	second := createAIProjectSourceDir(t, filepath.Join(sourcesRoot, "second"), "app")
-	project := &model.AIGroup{ID: 12, CreatorID: 7}
+	project := &model.AIProject{ID: 12, CreatorID: 7}
 
 	workspaceDir, err := syncAIProjectWorkspace(project, []string{first, second})
 	if err != nil {
@@ -72,7 +72,7 @@ func TestSyncAIProjectWorkspacePreservesUnmanagedFiles(t *testing.T) {
 	sourcesRoot := t.TempDir()
 	source := createAIProjectSourceDir(t, filepath.Join(sourcesRoot, "first"), "api")
 	second := createAIProjectSourceDir(t, filepath.Join(sourcesRoot, "second"), "web")
-	project := &model.AIGroup{ID: 3, CreatorID: 2}
+	project := &model.AIProject{ID: 3, CreatorID: 2}
 	workspaceDir := aiProjectWorkspaceDir(project.CreatorID, project.ID)
 	if err := os.MkdirAll(workspaceDir, 0750); err != nil {
 		t.Fatal(err)
@@ -99,7 +99,7 @@ func TestSyncAIProjectWorkspacePreservesUnmanagedFiles(t *testing.T) {
 func TestSyncAIProjectWorkspaceUsesSourceDirectlyForSingleDirectory(t *testing.T) {
 	withAIProjectBaseDir(t)
 	source := createCodeGitRepository(t)
-	project := &model.AIGroup{ID: 8, CreatorID: 4}
+	project := &model.AIProject{ID: 8, CreatorID: 4}
 
 	workspaceDir, err := syncAIProjectWorkspace(project, []string{source})
 	if err != nil {
@@ -125,7 +125,7 @@ func TestSyncAIProjectWorkspaceUsesSourceDirectlyForSingleDirectory(t *testing.T
 func TestAIProjectSessionWorkDirMigratesLegacySingleDirectoryProject(t *testing.T) {
 	withAIProjectBaseDir(t)
 	source := createAIProjectSourceDir(t, t.TempDir(), "project")
-	project := &model.AIGroup{
+	project := &model.AIProject{
 		ID: 9, CreatorID: 5, SourceDirs: []string{source},
 		WorkDir: aiProjectWorkspaceDir(5, 9),
 	}

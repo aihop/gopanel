@@ -1,25 +1,30 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
-import { Terminal } from "xterm"
-import { FitAddon } from "xterm-addon-fit"
+import { FitAddon } from "@xterm/addon-fit"
+import { Terminal } from "@xterm/xterm"
 import Icon from "@/components/common/Icon.vue"
 import { mobileMessages } from "@/i18n/locales/mobile"
-import "xterm/css/xterm.css"
+import "@xterm/xterm/css/xterm.css"
 
-const props = defineProps<{ sessionId: number; projectName: string; projectDescription: string }>()
+const props = defineProps<{ sessionId: number; taskName: string; projectName: string }>()
 const emit = defineEmits<{ back: []; openFiles: []; openStatus: [] }>()
 const { t } = useI18n({ messages: mobileMessages })
 const terminalElement = ref<HTMLElement | null>(null)
 const connected = ref(false)
+const connecting = ref(true)
 const reconnecting = ref(false)
 const hasControl = ref(false)
+const ctrlActive = ref(false)
 let terminal: Terminal | null = null
 let fitAddon: FitAddon | null = null
 let socket: WebSocket | null = null
 let resizeObserver: ResizeObserver | null = null
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let pingTimer: ReturnType<typeof setInterval> | null = null
+let fitFrame: number | null = null
+let reportedCols = 0
+let reportedRows = 0
 let lastSequence = 0
 let resyncRequest = 0
 let pendingResyncId = ""
@@ -43,19 +48,66 @@ function requestResync() {
 function fit() {
 	try {
 		fitAddon?.fit()
-		if (socket?.readyState === WebSocket.OPEN && hasControl.value && terminal) {
+		if (socket?.readyState === WebSocket.OPEN && hasControl.value && terminal && (terminal.cols !== reportedCols || terminal.rows !== reportedRows)) {
 			socket.send(JSON.stringify({
 				type: "resize",
 				data: JSON.stringify({ cols: terminal.cols, rows: terminal.rows }),
 			}))
+			reportedCols = terminal.cols
+			reportedRows = terminal.rows
 		}
 	} catch (error) {
 		void error
 	}
 }
 
+function updateControl(value: boolean) {
+	hasControl.value = value
+	if (!value) ctrlActive.value = false
+	if (terminal) terminal.options.disableStdin = !value
+	if (value) nextTick(() => {
+		terminal?.focus()
+		scheduleFit()
+	})
+}
+
+function sendTerminalInput(data: string) {
+	if (!hasControl.value || socket?.readyState !== WebSocket.OPEN) return
+	socket.send(JSON.stringify({ type: "cmd", data }))
+}
+
+function applyCtrlModifier(data: string) {
+	if (!ctrlActive.value) return data
+	ctrlActive.value = false
+	if (data.length !== 1) return data
+	if (data === "?") return "\x7f"
+	const code = data.toUpperCase().charCodeAt(0)
+	return code >= 64 && code <= 95 ? String.fromCharCode(code & 31) : data
+}
+
+function sendShortcut(data: string) {
+	ctrlActive.value = false
+	sendTerminalInput(data)
+	nextTick(() => terminal?.focus())
+}
+
+function toggleCtrl() {
+	if (!hasControl.value) return
+	ctrlActive.value = !ctrlActive.value
+	nextTick(() => terminal?.focus())
+}
+
+function scheduleFit() {
+	if (fitFrame !== null) return
+	fitFrame = window.requestAnimationFrame(() => {
+		fitFrame = null
+		fit()
+	})
+}
+
 function connect() {
 	if (!terminal || !props.sessionId) return
+	connecting.value = true
 	const protocol = window.location.protocol === "https:" ? "wss:" : "ws:"
 	let url = `${protocol}//${window.location.host}/api/mobile/app/terminal?session_id=${props.sessionId}`
 	url += `&cols=${terminal.cols}&rows=${terminal.rows}&read_only=1`
@@ -65,6 +117,7 @@ function connect() {
 	currentSocket.onopen = () => {
 		if (socket !== currentSocket) return
 		connected.value = true
+		connecting.value = false
 		reconnecting.value = false
 	}
 	currentSocket.onmessage = event => {
@@ -81,7 +134,7 @@ function connect() {
 				if (chunkIndex === chunkCount - 1) {
 					lastSequence = sequence
 					pendingResyncId = ""
-					hasControl.value = Boolean(message.hasControl)
+					updateControl(Boolean(message.hasControl))
 					sendAck(sequence)
 				}
 			} else if (message.type === "output") {
@@ -97,13 +150,13 @@ function connect() {
 			} else if (message.type === "resync_required") {
 				requestResync()
 			} else if (message.type === "control") {
-				hasControl.value = Boolean(message.hasControl)
+				updateControl(Boolean(message.hasControl))
 				if (message.controlReason) terminal?.writeln(`\r\n\x1b[33m[GoPanel] ${t("mobile.terminalControlBusy")}\x1b[0m`)
-				if (hasControl.value) nextTick(() => terminal?.focus())
 			} else if (message.type === "closed") {
 				closing = true
 				connected.value = false
-				hasControl.value = false
+				connecting.value = false
+				updateControl(false)
 			} else if (message.type === "cmd" && message.data) {
 				terminal?.write(message.data)
 			}
@@ -115,9 +168,10 @@ function connect() {
 		if (socket !== currentSocket) return
 		socket = null
 		connected.value = false
-		hasControl.value = false
+		updateControl(false)
 		pendingResyncId = ""
 		if (!closing && !reconnectTimer) {
+			connecting.value = true
 			reconnecting.value = true
 			reconnectTimer = setTimeout(() => {
 				reconnectTimer = null
@@ -130,9 +184,13 @@ function connect() {
 function openTerminal() {
 	if (!terminalElement.value || terminal) return
 	closing = false
+	connecting.value = true
 	lastSequence = 0
 	pendingResyncId = ""
+	reportedCols = 0
+	reportedRows = 0
 	terminal = new Terminal({
+		disableStdin: true,
 		cursorBlink: true,
 		cursorStyle: "bar",
 		fontSize: window.innerWidth < 640 ? 12 : 14,
@@ -144,11 +202,9 @@ function openTerminal() {
 	terminal.loadAddon(fitAddon)
 	terminal.open(terminalElement.value)
 	terminal.onData(data => {
-		if (hasControl.value && socket?.readyState === WebSocket.OPEN) {
-			socket.send(JSON.stringify({ type: "cmd", data }))
-		}
+		sendTerminalInput(applyCtrlModifier(data))
 	})
-	resizeObserver = new ResizeObserver(fit)
+	resizeObserver = new ResizeObserver(scheduleFit)
 	resizeObserver.observe(terminalElement.value)
 	nextTick(() => {
 		fit()
@@ -162,12 +218,15 @@ function openTerminal() {
 function closeTerminal() {
 	closing = true
 	connected.value = false
-	hasControl.value = false
+	connecting.value = false
+	updateControl(false)
 	pendingResyncId = ""
 	if (reconnectTimer) clearTimeout(reconnectTimer)
 	if (pingTimer) clearInterval(pingTimer)
+	if (fitFrame !== null) cancelAnimationFrame(fitFrame)
 	reconnectTimer = null
 	pingTimer = null
+	fitFrame = null
 	resizeObserver?.disconnect()
 	resizeObserver = null
 	const activeSocket = socket
@@ -210,37 +269,50 @@ onBeforeUnmount(closeTerminal)
 				</svg>
 			</button>
 			<div class="min-w-0 flex-1">
-				<div class="truncate text-sm font-semibold">{{ projectName }}</div>
-				<div v-if="projectDescription" class="mt-0.5 truncate text-[11px] text-slate-400">{{ projectDescription }}</div>
+				<div class="truncate text-sm font-semibold">{{ taskName }}</div>
 			</div>
 			<div class="flex shrink-0 items-center gap-1.5">
+				<span class="max-w-[30vw] truncate text-right text-xs text-slate-400" :title="projectName">{{ projectName }}</span>
 				<span class="h-2 w-2 rounded-full" :class="connected ? 'bg-emerald-400' : reconnecting ? 'bg-amber-400' : 'bg-slate-500'" :title="connected ? t('mobile.connected') : reconnecting ? t('mobile.reconnecting') : t('mobile.disconnected')" />
-				<n-button size="small" quaternary circle text-color="#cbd5e1" :title="t('mobile.taskStatus')" :aria-label="t('mobile.taskStatus')" @click="emit('openStatus')">
-					<template #icon><Icon name="mdi:timeline-clock-outline" :size="19" /></template>
+				<n-button size="small" quaternary circle :title="t('mobile.taskStatus')" :aria-label="t('mobile.taskStatus')" @click="emit('openStatus')">
+					<template #icon><Icon name="mdi:timeline-clock-outline" :size="19" color="#cbd5e1" /></template>
 				</n-button>
-				<n-button size="small" quaternary circle text-color="#cbd5e1" :title="t('mobile.files')" :aria-label="t('mobile.files')" @click="emit('openFiles')">
-					<template #icon><Icon name="mdi:folder-outline" :size="19" /></template>
+				<n-button size="small" quaternary circle :title="t('mobile.files')" :aria-label="t('mobile.files')" @click="emit('openFiles')">
+					<template #icon><Icon name="mdi:folder-outline" :size="19" color="#cbd5e1" /></template>
 				</n-button>
 			</div>
 		</header>
-		<div ref="terminalElement" class="min-h-0 w-full flex-1 bg-[#0b1020] pb-[env(safe-area-inset-bottom)]" />
+		<div class="relative min-h-0 w-full flex-1 bg-[#0b1020]">
+			<div ref="terminalElement" class="h-full w-full" />
+			<div v-if="connecting" class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-[#0b1020] text-sm text-slate-300" role="status" aria-live="polite">
+				<Icon name="mdi:loading" :size="28" class="animate-spin text-blue-400" />
+				<span>{{ reconnecting ? t("mobile.reconnecting") : t("mobile.terminalConnecting") }}</span>
+			</div>
+		</div>
 		<slot name="footer" :connected="connected" :has-control="hasControl" :take-control="takeControl" :release-control="releaseControl" />
+		<div class="flex shrink-0 items-center gap-1.5 overflow-x-auto border-t border-white/10 bg-slate-950 px-2 py-2 transition-opacity [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" :class="hasControl ? '' : 'opacity-50'" role="toolbar" :aria-label="t('mobile.terminal')">
+			<button type="button" :disabled="!hasControl" class="flex h-10 min-w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-2 font-mono text-sm font-medium text-slate-200 transition active:scale-95 active:bg-white/15 disabled:cursor-not-allowed" aria-label="Esc" @pointerdown.prevent @click="sendShortcut('\x1b')">Esc</button>
+			<button type="button" :disabled="!hasControl" class="flex h-10 min-w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-2 font-mono text-sm font-medium text-slate-200 transition active:scale-95 active:bg-white/15 disabled:cursor-not-allowed" aria-label="Tab" @pointerdown.prevent @click="sendShortcut('\t')">Tab</button>
+			<button type="button" :disabled="!hasControl" class="flex h-10 min-w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-2 font-mono text-sm font-medium text-slate-200 transition active:scale-95 active:bg-white/15 disabled:cursor-not-allowed" :class="ctrlActive ? 'border-blue-400 bg-blue-500/25 text-blue-200' : ''" aria-label="Ctrl" :aria-pressed="ctrlActive" @pointerdown.prevent @click="toggleCtrl">Ctrl</button>
+			<button type="button" :disabled="!hasControl" class="flex h-10 min-w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-2 font-mono text-sm font-medium text-slate-200 transition active:scale-95 active:bg-white/15 disabled:cursor-not-allowed" aria-label="←" @pointerdown.prevent @click="sendShortcut('\x1b[D')">←</button>
+			<button type="button" :disabled="!hasControl" class="flex h-10 min-w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-2 font-mono text-sm font-medium text-slate-200 transition active:scale-95 active:bg-white/15 disabled:cursor-not-allowed" aria-label="↑" @pointerdown.prevent @click="sendShortcut('\x1b[A')">↑</button>
+			<button type="button" :disabled="!hasControl" class="flex h-10 min-w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-2 font-mono text-sm font-medium text-slate-200 transition active:scale-95 active:bg-white/15 disabled:cursor-not-allowed" aria-label="↓" @pointerdown.prevent @click="sendShortcut('\x1b[B')">↓</button>
+			<button type="button" :disabled="!hasControl" class="flex h-10 min-w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-2 font-mono text-sm font-medium text-slate-200 transition active:scale-95 active:bg-white/15 disabled:cursor-not-allowed" aria-label="→" @pointerdown.prevent @click="sendShortcut('\x1b[C')">→</button>
+			<button type="button" :disabled="!hasControl" class="flex h-10 min-w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-2 font-mono text-sm font-medium text-slate-200 transition active:scale-95 active:bg-white/15 disabled:cursor-not-allowed" aria-label="⌫" @pointerdown.prevent @click="sendShortcut('\x7f')">⌫</button>
+			<button type="button" :disabled="!hasControl" class="flex h-10 min-w-10 shrink-0 items-center justify-center rounded-xl border border-blue-500/40 bg-blue-500/15 px-2 font-mono text-sm font-medium text-blue-200 transition active:scale-95 active:bg-blue-500/25 disabled:cursor-not-allowed" aria-label="↵" @pointerdown.prevent @click="sendShortcut('\r')">↵</button>
+		</div>
+		<div class="h-[max(8px,env(safe-area-inset-bottom))] shrink-0 bg-slate-950" aria-hidden="true" />
 	</section>
 </template>
 
 <style scoped>
 :deep(.xterm) {
 	height: 100%;
-	padding: 12px;
-}
-
-:deep(.xterm-screen),
-:deep(.xterm-helpers),
-:deep(.xterm-viewport) {
-	height: 100%;
+	padding: 12px 2px 12px 10px;
 }
 
 :deep(.xterm-viewport) {
-	overflow-y: auto !important;
+	overscroll-behavior-y: contain;
+	-webkit-overflow-scrolling: touch;
 }
 </style>

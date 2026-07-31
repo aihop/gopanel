@@ -146,10 +146,10 @@ func CreateAISession(c fiber.Ctx) error {
 		return c.JSON(e.Fail(bindErr))
 	}
 	workDir := strings.TrimSpace(req.WorkDir)
-	var project *model.AIGroup
+	var project *model.AIProject
 	var err error
 	if req.ProjectID > 0 {
-		project, err = repo.NewAIGroupRepo().GetGroupByID(req.ProjectID)
+		project, err = repo.NewAIProjectRepo().GetProjectByID(req.ProjectID)
 		if err != nil {
 			return c.JSON(e.Fail(errors.New("项目不存在")))
 		}
@@ -206,7 +206,11 @@ func CreateAISession(c fiber.Ctx) error {
 	if err := sessionRepo.CreateSession(session); err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	if req.Isolated {
+	useWorktree := req.Isolated
+	if project != nil {
+		useWorktree = inspectCodeWorktreeCapability(project).Available
+	}
+	if useWorktree {
 		if project == nil {
 			_ = sessionRepo.DeleteSession(session.ID)
 			return c.JSON(e.Fail(errors.New("Git Worktree 隔离仅支持项目会话")))

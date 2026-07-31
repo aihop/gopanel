@@ -17,14 +17,16 @@ func CodeRouter(r fiber.Router) {
 		group.Get("/terminal", websocket.New(api.AIAgentWsSSH))
 		group.Get("/executors", api.GetCodeExecutors)
 
-		// Groups APIs
-		group.Get("/groups", api.GetAIGroups)
-		group.Post("/groups", api.CreateAIGroup)
-		group.Put("/groups/:id", api.UpdateAIGroup)
-		group.Get("/groups/:id/worktree-capability", api.GetCodeWorktreeCapability)
-		group.Get("/groups/:id/database-accesses", api.GetCodeDatabaseAccesses)
-		group.Put("/groups/:id/database-accesses", api.SaveCodeDatabaseAccess)
-		group.Delete("/groups/:id/database-accesses/:accessId", api.DeleteCodeDatabaseAccess)
+		// Projects APIs
+		group.Get("/projects", api.GetAIProjects)
+		group.Post("/projects", api.CreateAIProject)
+		group.Put("/projects/:id", api.UpdateAIProject)
+		group.Get("/projects/:id/overview", api.GetCodeProjectOverview)
+		group.Get("/projects/:id/git/branches", api.GetCodeProjectBranches)
+		group.Get("/projects/:id/worktree-capability", api.GetCodeWorktreeCapability)
+		group.Get("/projects/:id/database-accesses", api.GetCodeDatabaseAccesses)
+		group.Put("/projects/:id/database-accesses", api.SaveCodeDatabaseAccess)
+		group.Delete("/projects/:id/database-accesses/:accessId", api.DeleteCodeDatabaseAccess)
 
 		// Dev Sessions APIs
 		group.Get("/sessions", api.GetAISessions)
@@ -47,6 +49,8 @@ func CodeRouter(r fiber.Router) {
 		group.Put("/sessions/:id/git/stage", api.UpdateCodeGitStage)
 		group.Post("/sessions/:id/git/commit", api.CommitCodeGitChanges)
 		group.Post("/sessions/:id/worktree/merge", api.MergeCodeSessionWorktree)
+		group.Get("/sessions/:id/delivery/push", api.GetCodeDeliveryPushStatus)
+		group.Post("/sessions/:id/delivery/push", api.PushCodeSessionDelivery)
 		group.Post("/sessions/:id/database-query", api.ExecuteCodeDatabaseQuery)
 		group.Get("/sessions/:id/quality-checks", api.GetCodeQualityChecks)
 		group.Post("/sessions/:id/quality-checks/run", api.RunCodeQualityCheck)

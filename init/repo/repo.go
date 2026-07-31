@@ -119,14 +119,19 @@ func Init() {
 		sysLog.Println("Node table error", err)
 		return
 	}
+	if err := repo.DropLegacyAIProjectTable(global.DB); err != nil {
+		sysLog.Println("AIProject legacy table cleanup error", err)
+		return
+	}
 
 	if err := global.DB.AutoMigrate(
 		&model.Firewall{},
 		&model.Forward{},
-		&model.AIGroup{},
+		&model.AIProject{},
 		&model.AITask{},
 		&model.AIMessage{},
 		&model.AIDevSession{},
+		&model.AIDevSessionRepository{},
 		&model.AIExecutionRun{},
 		&model.AICodeDatabaseAccess{},
 		&model.AICodeDelivery{},
@@ -139,6 +144,8 @@ func Init() {
 		&model.MobileDevice{},
 		&model.OperationLog{},
 		&model.LoginLog{},
+		&model.HostTerminalSession{},
+		&model.HostTerminalAuditEvent{},
 		&model.LegacyWebsiteDeploy{},
 	); err != nil {
 		sysLog.Println("AutoMigrate additional tables error", err)

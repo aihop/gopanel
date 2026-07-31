@@ -3,7 +3,7 @@
     class="bg-base-accent border-base-accent rounded-[28px] w-full relative"
     style="min-height: calc(100vh - 130px); height: 100%; display: flex; flex-direction: column;"
   >
-    <div class="group-lobby flex-1 overflow-y-auto p-6 md:p-10">
+    <div class="project-lobby flex-1 overflow-y-auto p-6 md:p-10">
       <div class="lobby-header mb-10 flex justify-between items-center">
         <div>
           <h1 class="text-2xl font-bold text-[var(--n-text-color)] mb-2">{{ $t('code.workspace') }}</h1>
@@ -23,25 +23,25 @@
       </div>
 
       <div
-        v-if="groupsLoading"
+        v-if="projectsLoading"
         class="flex justify-center items-center h-64"
       >
         <n-spin size="large" />
       </div>
 
       <n-alert
-        v-else-if="groupsLoadError"
+        v-else-if="projectsLoadError"
         type="error"
         :show-icon="false"
       >
         <div class="flex items-center justify-between gap-3">
           <span>{{ t("code.projectLoadFailed") }}</span>
-          <n-button text type="primary" @click="fetchGroups()">{{ t("code.retry") }}</n-button>
+          <n-button text type="primary" @click="fetchProjects()">{{ t("code.retry") }}</n-button>
         </div>
       </n-alert>
 
       <div
-        v-else-if="groups.length === 0"
+        v-else-if="projects.length === 0"
         class="flex justify-center items-center h-64"
       >
         <n-empty
@@ -55,70 +55,70 @@
         class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
       >
         <div
-          v-for="group in groups"
-          :key="group.id"
-          class="group-card relative flex cursor-pointer flex-col overflow-hidden rounded-[24px] p-5"
-          :class="`group-card--${projectStatusMeta(group).status}`"
-          @click="enterGroup(group.id)"
+          v-for="project in projects"
+          :key="project.id"
+          class="project-card relative flex cursor-pointer flex-col overflow-hidden rounded-[24px] p-5"
+          :class="`project-card--${projectStatusMeta(project).status}`"
+          @click="enterProject(project.id)"
         >
           <div class="mb-5 flex items-start justify-between gap-3">
             <div class="flex min-w-0 items-center gap-3.5">
-              <div class="group-card__avatar flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] text-lg font-bold">
-                {{ group.name.substring(0, 1).toUpperCase() }}
+              <div class="project-card__avatar flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] text-lg font-bold">
+                {{ project.name.substring(0, 1).toUpperCase() }}
               </div>
               <div class="min-w-0">
-                <h3 class="group-card__title truncate text-lg font-semibold">{{ group.name }}</h3>
+                <h3 class="project-card__title truncate text-lg font-semibold">{{ project.name }}</h3>
                 <div class="mt-1 flex items-center gap-1.5 text-xs text-[var(--n-text-color-3)]">
                   <Icon name="mdi:folder-outline" :size="15" />
                   <span class="truncate">
-                    {{ group.sourceDirs?.length ? t("code.projectDirectoryCount", { count: group.sourceDirs.length }) : group.workDir || t("code.projectDirectoryRequired") }}
+                    {{ project.sourceDirs?.length ? t("code.projectDirectoryCount", { count: project.sourceDirs.length }) : project.workDir || t("code.projectDirectoryRequired") }}
                   </span>
                 </div>
               </div>
             </div>
             <div class="relative z-[2] shrink-0" @click.stop>
-              <n-button quaternary circle size="small" :aria-label="t('code.editProject')" @click="openEditProjectModal(group)">
+              <n-button quaternary circle size="small" :aria-label="t('code.editProject')" @click="openEditProjectModal(project)">
                 <template #icon><Icon name="mdi:pencil-outline" :size="16" /></template>
               </n-button>
             </div>
           </div>
-          <p class="group-card__desc mb-5 line-clamp-2 min-h-11 text-sm">{{ group.description || $t('code.noDesc') }}</p>
-          <div class="group-card__status mb-5 rounded-[18px] p-3.5">
+          <p class="project-card__desc mb-5 line-clamp-2 min-h-11 text-sm">{{ project.description || $t('code.noDesc') }}</p>
+          <div class="project-card__status mb-5 rounded-[18px] p-3.5">
             <div class="flex items-center justify-between gap-3">
               <div class="flex min-w-0 items-center gap-2.5">
-                <span class="group-card__status-icon flex h-8 w-8 shrink-0 items-center justify-center rounded-xl">
-                  <Icon :name="projectStatusMeta(group).icon" :size="17" />
+                <span class="project-card__status-icon flex h-8 w-8 shrink-0 items-center justify-center rounded-xl">
+                  <Icon :name="projectStatusMeta(project).icon" :size="17" />
                 </span>
                 <span class="truncate text-sm font-semibold">
-                  {{ t(projectStatusMeta(group).labelKey) }}
+                  {{ t(projectStatusMeta(project).labelKey) }}
                 </span>
               </div>
-              <span v-if="group.executionSummary.updatedAt" class="shrink-0 text-[11px] text-[var(--n-text-color-3)]">
-                {{ formatUpdatedAt(group.executionSummary.updatedAt) }}
+              <span v-if="project.executionSummary.updatedAt" class="shrink-0 text-[11px] text-[var(--n-text-color-3)]">
+                {{ formatUpdatedAt(project.executionSummary.updatedAt) }}
               </span>
             </div>
-            <div class="mt-3 truncate text-xs text-[var(--n-text-color-2)]" :title="group.executionSummary.currentTaskTitle">
-              {{ group.executionSummary.currentTaskTitle || t("code.projectIdleHint") }}
+            <div class="mt-3 truncate text-xs text-[var(--n-text-color-2)]" :title="project.executionSummary.currentTaskTitle">
+              {{ project.executionSummary.currentTaskTitle || t("code.projectIdleHint") }}
             </div>
-            <div v-if="group.executionSummary.activeTaskCount" class="mt-3 flex flex-wrap gap-2 text-[11px]">
+            <div v-if="project.executionSummary.activeTaskCount" class="mt-3 flex flex-wrap gap-2 text-[11px]">
               <span class="rounded-full bg-black/5 px-2 py-1 text-[var(--n-text-color-3)] dark:bg-white/10">
-                {{ t("code.activeTaskCount", { count: group.executionSummary.activeTaskCount }) }}
+                {{ t("code.activeTaskCount", { count: project.executionSummary.activeTaskCount }) }}
               </span>
-              <span v-if="group.executionSummary.pendingApprovalCount" class="rounded-full bg-amber-500/10 px-2 py-1 font-medium text-amber-600 dark:text-amber-400">
-                {{ t("code.pendingApprovalCount", { count: group.executionSummary.pendingApprovalCount }) }}
+              <span v-if="project.executionSummary.pendingApprovalCount" class="rounded-full bg-amber-500/10 px-2 py-1 font-medium text-amber-600 dark:text-amber-400">
+                {{ t("code.pendingApprovalCount", { count: project.executionSummary.pendingApprovalCount }) }}
               </span>
             </div>
           </div>
-          <div class="group-card__footer mt-auto flex items-center justify-between gap-3 pt-4 text-xs">
+          <div class="project-card__footer mt-auto flex items-center justify-between gap-3 pt-4 text-xs">
             <span class="flex items-center gap-1.5">
               <Icon name="mdi:checkbox-marked-circle-outline" :size="15" />
-              {{ group.taskCount || 0 }} {{ $t('code.task') }}
+              {{ project.taskCount || 0 }} {{ $t('code.task') }}
             </span>
             <div class="relative z-[2] flex items-center gap-2" @click.stop>
-              <n-button quaternary circle type="primary" size="small" :title="t('code.quickPanel')" :aria-label="t('code.quickPanel')" @click="openQuickPanel(group)">
+              <n-button quaternary circle type="primary" size="small" :title="t('code.quickPanel')" :aria-label="t('code.quickPanel')" @click="openQuickPanel(project)">
                 <template #icon><Icon name="mdi:dock-window" :size="16" /></template>
               </n-button>
-              <n-button text type="primary" size="small" @click="enterGroup(group.id)">
+              <n-button text type="primary" size="small" @click="enterProject(project.id)">
                 <template #icon><Icon name="mdi:arrow-right" :size="16" /></template>
                 {{ t("code.enterProject") }}
               </n-button>
@@ -200,8 +200,8 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
-import { getAIGroups, createAIGroup, updateAIGroup } from '@/api/modules/code'
-import type { AIGroup } from '@/api/interface/code'
+import { getAIProjects, createAIProject, updateAIProject } from '@/api/modules/code'
+import type { AIProject } from '@/api/interface/code'
 import Icon from '@/components/common/Icon.vue'
 import ProjectDirectoryPicker from './components/ProjectDirectoryPicker.vue'
 import ProjectQuickPanels from './components/ProjectQuickPanels.vue'
@@ -221,52 +221,52 @@ const creatingProject = ref(false)
 const editingProjectId = ref<number | null>(null)
 const projectForm = ref({ name: '', desc: '', workDir: '', sourceDirs: [] as string[], requireQualityGate: false, monthlyTokenBudget: 0 })
 
-const groups = ref<AIGroup[]>([])
-const groupsLoading = ref(false)
-const groupsLoadError = ref(false)
-const groupsRefreshing = ref(false)
+const projects = ref<AIProject[]>([])
+const projectsLoading = ref(false)
+const projectsLoadError = ref(false)
+const projectsRefreshing = ref(false)
 const defaultWorkDir = ref("/")
 const directoryRoot = ref("/")
 const quickPanelsRef = ref<InstanceType<typeof ProjectQuickPanels> | null>(null)
 let refreshTimer: ReturnType<typeof setInterval> | undefined
 
-const fetchGroups = async (silent = false) => {
-  if (groupsRefreshing.value) return
-  groupsRefreshing.value = true
+const fetchProjects = async (silent = false) => {
+  if (projectsRefreshing.value) return
+  projectsRefreshing.value = true
   if (!silent) {
-    groupsLoading.value = true
-    groupsLoadError.value = false
+    projectsLoading.value = true
+    projectsLoadError.value = false
   }
   try {
-    const res = await getAIGroups({ page: 1, limit: 50 })
+    const res = await getAIProjects({ page: 1, limit: 50 })
     if (res.code === 0) {
-      groups.value = res.data.items || []
+      projects.value = res.data.items || []
       const directoryDefaults = res.data as typeof res.data & { defaultWorkDir?: string; directoryRoot?: string }
       defaultWorkDir.value = directoryDefaults.defaultWorkDir || "/"
       directoryRoot.value = directoryDefaults.directoryRoot || "/"
     }
   } catch {
     if (!silent) {
-      groupsLoadError.value = true
-      groups.value = []
+      projectsLoadError.value = true
+      projects.value = []
     }
   } finally {
-    if (!silent) groupsLoading.value = false
-    groupsRefreshing.value = false
+    if (!silent) projectsLoading.value = false
+    projectsRefreshing.value = false
   }
 }
 
 onMounted(() => {
-  fetchGroups()
-  refreshTimer = setInterval(() => fetchGroups(true), 10000)
+  fetchProjects()
+  refreshTimer = setInterval(() => fetchProjects(true), 10000)
 })
 
 onUnmounted(() => {
   if (refreshTimer) clearInterval(refreshTimer)
 })
 
-const projectStatusMeta = (group: AIGroup) => {
-  const status = group.executionSummary.pendingApprovalCount > 0 ? "pending_approval" : group.executionSummary.status
+const projectStatusMeta = (project: AIProject) => {
+  const status = project.executionSummary.pendingApprovalCount > 0 ? "pending_approval" : project.executionSummary.status
   return {
     idle: { status: "idle", labelKey: "code.projectStatus_idle", icon: "mdi:circle-slice-8" },
     queued: { status: "queued", labelKey: "code.projectStatus_queued", icon: "mdi:progress-clock" },
@@ -288,7 +288,7 @@ const openCreateProjectModal = () => {
   showCreateProjectModal.value = true
 }
 
-const openEditProjectModal = (project: AIGroup) => {
+const openEditProjectModal = (project: AIProject) => {
   editingProjectId.value = project.id
   const sourceDirs = project.sourceDirs?.length ? project.sourceDirs : project.workDir ? [project.workDir] : []
   projectForm.value = { name: project.name, desc: project.description || '', workDir: sourceDirs[0] || defaultWorkDir.value, sourceDirs, requireQualityGate: Boolean(project.requireQualityGate), monthlyTokenBudget: project.monthlyTokenBudget || 0 }
@@ -318,12 +318,12 @@ const submitProject = async () => {
       monthlyTokenBudget: projectForm.value.monthlyTokenBudget || 0,
     }
     const res = editingProjectId.value
-      ? await updateAIGroup(editingProjectId.value, payload)
-      : await createAIGroup(payload)
+      ? await updateAIProject(editingProjectId.value, payload)
+      : await createAIProject(payload)
     if (res.code === 0) {
       showCreateProjectModal.value = false
       message.success(t(editingProjectId.value ? 'code.projectUpdateSuccess' : 'code.projectCreateSuccess'))
-      await fetchGroups()
+      await fetchProjects()
     }
   } catch {
     message.error(t(editingProjectId.value ? 'code.projectUpdateFailed' : 'code.projectCreateFailed'))
@@ -332,15 +332,15 @@ const submitProject = async () => {
   }
 }
 
-const enterGroup = (id: number) => {
-  router.push(`/code/group/${id}`)
+const enterProject = (id: number) => {
+  router.push(`/code/project/${id}`)
 }
 
-const openQuickPanel = (project: AIGroup) => quickPanelsRef.value?.open(project)
+const openQuickPanel = (project: AIProject) => quickPanelsRef.value?.open(project)
 </script>
 
 <style scoped>
-.group-card {
+.project-card {
   --status-accent: #94a3b8;
   background: color-mix(in srgb, var(--n-color) 97%, transparent);
   border: 1px solid color-mix(in srgb, var(--n-border-color) 92%, transparent);
@@ -351,7 +351,7 @@ const openQuickPanel = (project: AIGroup) => quickPanelsRef.value?.open(project)
     border-color 0.22s ease;
 }
 
-.group-card::before {
+.project-card::before {
   position: absolute;
   inset: 24px auto 24px 0;
   width: 3px;
@@ -360,53 +360,53 @@ const openQuickPanel = (project: AIGroup) => quickPanelsRef.value?.open(project)
   content: "";
 }
 
-.group-card--queued {
+.project-card--queued {
   --status-accent: #3b82f6;
 }
 
-.group-card--running {
+.project-card--running {
   --status-accent: #10b981;
 }
 
-.group-card--pending-approval {
+.project-card--pending-approval {
   --status-accent: #f59e0b;
 }
 
-.group-card:hover {
+.project-card:hover {
   transform: translateY(-3px);
   border-color: color-mix(in srgb, var(--n-primary-color) 34%, var(--n-border-color));
   box-shadow: 0 14px 34px rgba(15, 23, 42, 0.085);
 }
 
-.group-card__avatar {
+.project-card__avatar {
   color: var(--n-primary-color);
   background: color-mix(in srgb, var(--n-primary-color) 10%, var(--n-color));
   border: 1px solid color-mix(in srgb, var(--n-primary-color) 20%, transparent);
 }
 
-.group-card__title {
+.project-card__title {
   color: var(--n-text-color);
   letter-spacing: -0.01em;
 }
 
-.group-card__desc {
+.project-card__desc {
   color: var(--n-text-color-3);
   line-height: 1.6;
 }
 
-.group-card__status {
+.project-card__status {
   color: var(--status-accent);
   background: color-mix(in srgb, var(--n-color-embedded) 92%, var(--n-color));
   border: 1px solid color-mix(in srgb, var(--n-border-color) 82%, transparent);
 }
 
-.group-card__status-icon {
+.project-card__status-icon {
   color: var(--status-accent);
   background: color-mix(in srgb, var(--status-accent) 10%, var(--n-color));
   border: 1px solid color-mix(in srgb, var(--status-accent) 16%, transparent);
 }
 
-.group-card__footer {
+.project-card__footer {
   color: var(--n-text-color-3);
   border-top: 1px solid color-mix(in srgb, var(--n-border-color) 76%, transparent);
 }

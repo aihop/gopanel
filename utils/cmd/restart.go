@@ -1,15 +1,27 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/aihop/gopanel/global"
+	"github.com/aihop/gopanel/utils/gpc"
 	"github.com/aihop/gopanel/utils/systemctl"
+)
+
+const goPanelServiceName = "gopanel.service"
+
+var (
+	panelRestartOS            = runtime.GOOS
+	panelRestartGPCDo         = gpc.Do
+	panelRestartServiceExists = systemctl.IsExist
+	panelRestartStandalone    = restartStandaloneGoPanelNow
 )
 
 func RestartGoPanel() error {
@@ -17,9 +29,13 @@ func RestartGoPanel() error {
 }
 
 func RestartGoPanelWithDelay(delay time.Duration) error {
+	restart, err := prepareGoPanelRestart()
+	if err != nil {
+		return err
+	}
 	go func() {
 		time.Sleep(delay)
-		if err := restartGoPanelNow(); err != nil {
+		if err := restart(); err != nil && global.LOG != nil {
 			global.LOG.Errorf("restart gopanel failed: %v", err)
 		}
 	}()
@@ -40,20 +56,47 @@ func RestartServerWithDelay(delay time.Duration) error {
 	return nil
 }
 
-func restartGoPanelNow() error {
-	if runtime.GOOS == "linux" {
-		if err := systemctl.Restart("gopanel"); err == nil {
-			return nil
-		}
+func prepareGoPanelRestart() (func() error, error) {
+	if panelRestartOS != "linux" && panelRestartOS != "darwin" {
+		return panelRestartStandalone, nil
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	resp, gpcErr := panelRestartGPCDo(ctx, "GOPANEL_SERVICE_ACTION", map[string]interface{}{
+		"op":   "status",
+		"name": goPanelServiceName,
+	})
+	if gpcErr == nil && resp != nil && strings.EqualFold(strings.TrimSpace(resp.Output), "active") {
+		return func() error {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			_, err := panelRestartGPCDo(ctx, "GOPANEL_SERVICE_ACTION", map[string]interface{}{
+				"op":   "restart",
+				"name": goPanelServiceName,
+			})
+			return err
+		}, nil
+	}
+
+	managed, err := panelRestartServiceExists("gopanel")
+	if err != nil {
+		return nil, fmt.Errorf("检查 GoPanel 服务状态失败: %w", err)
+	}
+	if managed {
+		return nil, fmt.Errorf("面板由系统服务托管，但 gpc helper 不可用；请先重启 gpc 服务后重试")
+	}
+	return panelRestartStandalone, nil
+}
+
+func restartStandaloneGoPanelNow() error {
 	exePath, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("resolve executable failed: %w", err)
 	}
 	workDir := filepath.Dir(exePath)
 
-	switch runtime.GOOS {
+	switch panelRestartOS {
 	case "windows":
 		cmd := exec.Command("cmd", "/C", "start", "", exePath)
 		cmd.Dir = workDir
@@ -67,7 +110,7 @@ func restartGoPanelNow() error {
 			return fmt.Errorf("start new daemon process failed: %w", err)
 		}
 	default:
-		return fmt.Errorf("unsupported os for panel restart: %s", runtime.GOOS)
+		return fmt.Errorf("unsupported os for panel restart: %s", panelRestartOS)
 	}
 
 	go func() {

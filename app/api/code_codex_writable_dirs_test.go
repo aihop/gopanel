@@ -56,18 +56,128 @@ func TestAddCodexWritableDirArgsToInteractiveCommand(t *testing.T) {
 	}
 }
 
-func TestCodexWritableDirsSkipIsolatedWorktree(t *testing.T) {
-	session := &model.AIDevSession{
-		ProjectID:      7,
-		SourceWorkDir:  "/code/project",
-		WorktreeBranch: "gopanel/code-1",
+func TestCodexWritableDirsForIsolatedWorktree(t *testing.T) {
+	withAIProjectBaseDir(t)
+	repositoryDir := createCodeGitRepository(t)
+	session := &model.AIDevSession{ID: 31, UserID: 7, ProjectID: 9}
+	if err := createCodeSessionWorktree(session, &model.AIProject{SourceDirs: []string{repositoryDir}}); err != nil {
+		t.Fatal(err)
 	}
+	t.Cleanup(func() { rollbackCodeSessionWorktree(session) })
+
 	writableDirs, err := codexWritableDirsForSession(session)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(writableDirs) != 0 {
-		t.Fatalf("isolated worktree writable dirs = %#v, want none", writableDirs)
+	gitDir, err := resolveCodeGitPath(session.WorkDir, "--git-dir")
+	if err != nil {
+		t.Fatal(err)
+	}
+	commonDir, err := resolveCodeGitPath(session.WorkDir, "--git-common-dir")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		gitDir,
+		filepath.Join(commonDir, "objects"),
+		filepath.Join(commonDir, "refs"),
+		filepath.Join(commonDir, "logs"),
+	}
+	if !reflect.DeepEqual(writableDirs, want) {
+		t.Fatalf("isolated worktree writable dirs = %#v, want %#v", writableDirs, want)
+	}
+}
+
+func TestCodexWorktreeWritableDirsRejectTamperedSession(t *testing.T) {
+	withAIProjectBaseDir(t)
+	repositoryDir := createCodeGitRepository(t)
+	session := &model.AIDevSession{ID: 32, UserID: 7, ProjectID: 9}
+	if err := createCodeSessionWorktree(session, &model.AIProject{SourceDirs: []string{repositoryDir}}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { rollbackCodeSessionWorktree(session) })
+
+	tests := []struct {
+		name   string
+		mutate func(*model.AIDevSession)
+	}{
+		{name: "managed worktree", mutate: func(candidate *model.AIDevSession) { candidate.WorkDir = t.TempDir() }},
+		{name: "session ID", mutate: func(candidate *model.AIDevSession) { candidate.ID++ }},
+		{name: "source repository", mutate: func(candidate *model.AIDevSession) { candidate.SourceWorkDir = t.TempDir() }},
+		{name: "worktree branch", mutate: func(candidate *model.AIDevSession) { candidate.WorktreeBranch += "-tampered" }},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			candidate := *session
+			test.mutate(&candidate)
+			if _, err := codexWritableDirsForSession(&candidate); err == nil {
+				t.Fatal("tampered Worktree session should be rejected")
+			}
+		})
+	}
+}
+
+func TestCodexWorktreeWritableDirsAllowGitCommit(t *testing.T) {
+	withAIProjectBaseDir(t)
+	repositoryDir := createCodeGitRepository(t)
+	session := &model.AIDevSession{ID: 33, UserID: 7, ProjectID: 9}
+	if err := createCodeSessionWorktree(session, &model.AIProject{SourceDirs: []string{repositoryDir}}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { rollbackCodeSessionWorktree(session) })
+	writableDirs, err := codexWritableDirsForSession(session)
+	if err != nil {
+		t.Fatal(err)
+	}
+	commonDir, err := resolveCodeGitPath(session.WorkDir, "--git-common-dir")
+	if err != nil {
+		t.Fatal(err)
+	}
+	setGitTreePermissions(t, commonDir, 0555, 0444)
+	t.Cleanup(func() { setGitTreePermissions(t, commonDir, 0755, 0644) })
+	for _, writableDir := range writableDirs {
+		setGitTreePermissions(t, writableDir, 0755, 0644)
+	}
+	if err := os.WriteFile(filepath.Join(session.WorkDir, "result.txt"), []byte("finished\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(session.WorkDir, "add", "result.txt"); err != nil {
+		t.Fatalf("git add with restricted metadata failed: %v", err)
+	}
+	if _, err := runCodeGit(session.WorkDir, "-c", "user.name=GoPanel Test", "-c", "user.email=test@gopanel.local", "commit", "-m", "result"); err != nil {
+		t.Fatalf("git commit with restricted metadata failed: %v", err)
+	}
+}
+
+func setGitTreePermissions(t *testing.T, root string, directoryMode, fileMode os.FileMode) {
+	t.Helper()
+	if err := filepath.Walk(root, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		mode := fileMode
+		if info.IsDir() {
+			mode = directoryMode
+		}
+		return os.Chmod(path, mode)
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func assertCodexWritableDirArgs(t *testing.T, args, writableDirs []string) {
+	t.Helper()
+	for _, writableDir := range writableDirs {
+		found := false
+		for index := 0; index+1 < len(args); index++ {
+			if args[index] == "--add-dir" && args[index+1] == writableDir {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("Codex command missing writable directory %q: %#v", writableDir, args)
+		}
 	}
 }
 
@@ -85,13 +195,13 @@ func TestCodexWritableDirsForProjectSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := database.AutoMigrate(&model.AIGroup{}); err != nil {
+	if err := database.AutoMigrate(&model.AIProject{}); err != nil {
 		t.Fatal(err)
 	}
 	oldDatabase := global.DB
 	global.DB = database
 	t.Cleanup(func() { global.DB = oldDatabase })
-	project := &model.AIGroup{Name: "project", SourceDirs: []string{linkDir}, CreatorID: 1}
+	project := &model.AIProject{Name: "project", SourceDirs: []string{linkDir}, CreatorID: 1}
 	if err := database.Create(project).Error; err != nil {
 		t.Fatal(err)
 	}

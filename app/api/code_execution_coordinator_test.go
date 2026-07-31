@@ -154,3 +154,30 @@ func TestCodeExecutionCoordinatorCancelsOnlyTargetSession(t *testing.T) {
 		t.Fatal("target session cancel handler was not called")
 	}
 }
+
+func TestCodeExecutionCoordinatorCancelsOnlyRequestedSessionKind(t *testing.T) {
+	coordinator := newCodeExecutionCoordinator(2)
+	interactive, err := coordinator.acquireOwned(context.Background(), 21, []string{"/workspace/interactive"}, codeExecutionInteractive, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	instruction, err := coordinator.acquireOwned(context.Background(), 21, []string{"/workspace/instruction"}, codeExecutionInstruction, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	interactive.SetCancel(func() { interactive.Release() })
+	var instructionCancelled atomic.Bool
+	instruction.SetCancel(func() {
+		instructionCancelled.Store(true)
+		instruction.Release()
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if !coordinator.cancelSessionKindAndWait(ctx, 21, codeExecutionInteractive) {
+		t.Fatal("interactive lease was not cancelled")
+	}
+	if instructionCancelled.Load() {
+		t.Fatal("instruction lease was cancelled with interactive terminal")
+	}
+	instruction.Release()
+}

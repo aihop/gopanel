@@ -12,7 +12,7 @@ class AiWorkspaceRepository {
 
   Future<List<CodeProject>> getProjects() async {
     final response = await _apiClient.get<Map<String, dynamic>>(
-      '/api/code/groups',
+      '/api/code/projects',
       queryParameters: {'page': 1, 'limit': 100},
     );
     return _items(response.data, CodeProject.fromJson);

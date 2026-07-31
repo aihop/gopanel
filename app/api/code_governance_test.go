@@ -20,8 +20,8 @@ func withCodeGovernanceDB(t *testing.T) *gorm.DB {
 		t.Fatal(err)
 	}
 	if err := database.AutoMigrate(
-		&model.AIGroup{}, &model.AIDevSession{}, &model.AITask{}, &model.AIExecutionRun{},
-		&model.AITimelineEvent{}, &model.AICodeDelivery{}, &model.AICodeAuditEvent{},
+		&model.AIProject{}, &model.AIDevSession{}, &model.AITask{}, &model.AIExecutionRun{},
+		&model.AITimelineEvent{}, &model.AICodeDelivery{}, &model.AICodeAuditEvent{}, &model.AIDevSessionRepository{},
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -35,7 +35,7 @@ func TestCodeDeliveryResumesAfterWorktreeCleanup(t *testing.T) {
 	database := withCodeGovernanceDB(t)
 	session, sourceDir := createDeliveryWorktree(t, 61)
 	session.ProjectID = 8
-	if err := database.Create(&model.AIGroup{ID: 8, Name: "project", CreatorID: session.UserID}).Error; err != nil {
+	if err := database.Create(&model.AIProject{ID: 8, Name: "project", CreatorID: session.UserID}).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := database.Create(session).Error; err != nil {
@@ -75,7 +75,7 @@ func TestCodeDeliveryCompletesAndIsIdempotent(t *testing.T) {
 	database := withCodeGovernanceDB(t)
 	session, sourceDir := createDeliveryWorktree(t, 62)
 	session.ProjectID = 9
-	if err := database.Create(&model.AIGroup{ID: 9, Name: "project", CreatorID: session.UserID}).Error; err != nil {
+	if err := database.Create(&model.AIProject{ID: 9, Name: "project", CreatorID: session.UserID}).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := database.Create(session).Error; err != nil {
@@ -115,11 +115,148 @@ func TestCodeDeliveryCompletesAndIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestCodeDeliveryMergesLocallyAndPushesRemote(t *testing.T) {
+	database := withCodeGovernanceDB(t)
+	withAIProjectBaseDir(t)
+	sourceDir, remoteDir := createCodeRemoteRepository(t)
+	session := &model.AIDevSession{ID: 64, UserID: 7, ProjectID: 11, WorkDir: sourceDir}
+	if err := database.Create(&model.AIProject{ID: 11, Name: "remote", CreatorID: session.UserID}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := createCodeSessionWorktree(session, &model.AIProject{SourceDirs: []string{sourceDir}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.Create(session).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(session.WorkDir, "delivered.txt"), []byte("delivered\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(session.WorkDir, "add", "delivered.txt"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := commitCodeSessionWorktree(session, "feat: deliver remote"); err != nil {
+		t.Fatal(err)
+	}
+	result, err := resumeCodeSessionDelivery(session, session.UserID)
+	if err != nil || result.Status != "merged" || result.Commit == "" {
+		t.Fatalf("unexpected atomic delivery: %#v, %v", result, err)
+	}
+	branch, _ := runCodeGit(sourceDir, "branch", "--show-current")
+	localHead, localErr := runCodeGit(sourceDir, "rev-parse", "refs/heads/"+branch)
+	remoteHead, remoteErr := runCodeGit(remoteDir, "rev-parse", "refs/heads/"+branch)
+	if localErr != nil || remoteErr != nil || localHead != result.Commit || remoteHead != result.Commit {
+		t.Fatalf("delivery commits differ: local=%q remote=%q want=%q errors=%v/%v", localHead, remoteHead, result.Commit, localErr, remoteErr)
+	}
+	if _, err := os.Stat(session.WorkDir); !os.IsNotExist(err) {
+		t.Fatalf("pushed worktree was not cleaned: %v", err)
+	}
+	var delivery model.AICodeDelivery
+	if err := database.Where("session_id = ?", session.ID).First(&delivery).Error; err != nil || delivery.PushStatus != codePushPushed || delivery.PushedCommit != result.Commit {
+		t.Fatalf("push state was not persisted: %#v, %v", delivery, err)
+	}
+}
+
+func TestCodeDeliveryKeepsWorktreeWhenPushFails(t *testing.T) {
+	database := withCodeGovernanceDB(t)
+	withAIProjectBaseDir(t)
+	sourceDir, remoteDir := createCodeRemoteRepository(t)
+	session := &model.AIDevSession{ID: 65, UserID: 7, ProjectID: 12, WorkDir: sourceDir}
+	if err := database.Create(&model.AIProject{ID: 12, Name: "push-failure", CreatorID: session.UserID}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := createCodeSessionWorktree(session, &model.AIProject{SourceDirs: []string{sourceDir}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.Create(session).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(session.WorkDir, "kept.txt"), []byte("kept\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(session.WorkDir, "add", "kept.txt"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := commitCodeSessionWorktree(session, "feat: keep failed delivery"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(remoteDir, "config", "receive.denyNonFastForwards", "true"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(remoteDir, "hooks", "pre-receive"), []byte("#!/bin/sh\nexit 1\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := resumeCodeSessionDelivery(session, session.UserID); err == nil {
+		t.Fatal("rejected push should fail delivery")
+	}
+	if _, err := os.Stat(session.WorkDir); err != nil {
+		t.Fatalf("failed delivery removed worktree: %v", err)
+	}
+	var delivery model.AICodeDelivery
+	if err := database.Where("session_id = ?", session.ID).First(&delivery).Error; err != nil || delivery.PushStatus != codePushFailed || delivery.Status != codeDeliveryMerged {
+		t.Fatalf("failed delivery state unavailable: %#v, %v", delivery, err)
+	}
+}
+
+func TestCodeDeliveryRetriesWhenRemoteAdvancesAfterLocalMerge(t *testing.T) {
+	database := withCodeGovernanceDB(t)
+	withAIProjectBaseDir(t)
+	sourceDir, remoteDir := createCodeRemoteRepository(t)
+	session := &model.AIDevSession{ID: 66, UserID: 7, ProjectID: 13, WorkDir: sourceDir}
+	if err := database.Create(&model.AIProject{ID: 13, Name: "concurrent", CreatorID: session.UserID}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := createCodeSessionWorktree(session, &model.AIProject{SourceDirs: []string{sourceDir}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.Create(session).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(session.WorkDir, "session.txt"), []byte("session\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(session.WorkDir, "add", "session.txt"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := commitCodeSessionWorktree(session, "feat: concurrent session"); err != nil {
+		t.Fatal(err)
+	}
+	delivery, err := loadOrCreateCodeDelivery(session, session.UserID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstMerge, err := mergePreparedCodeDelivery(delivery)
+	if err != nil || firstMerge.Commit == "" {
+		t.Fatalf("local merge failed: %#v, %v", firstMerge, err)
+	}
+	updater := cloneCodeRepository(t, remoteDir)
+	remoteCommit := commitCodeTestFile(t, updater, "remote.txt", "remote\n")
+	if _, err := runCodeGit(updater, "push", "origin", "HEAD"); err != nil {
+		t.Fatal(err)
+	}
+	result, err := integrateAndPushCodeDelivery(delivery)
+	if err != nil || result.Commit == "" || result.Commit == firstMerge.Commit {
+		t.Fatalf("delivery was not rebuilt on latest remote: %#v, %v", result, err)
+	}
+	branch, _ := runCodeGit(sourceDir, "branch", "--show-current")
+	localHead, _ := runCodeGit(sourceDir, "rev-parse", "refs/heads/"+branch)
+	remoteHead, _ := runCodeGit(remoteDir, "rev-parse", "refs/heads/"+branch)
+	if localHead != result.Commit || remoteHead != result.Commit {
+		t.Fatalf("retried delivery differs: local=%q remote=%q want=%q", localHead, remoteHead, result.Commit)
+	}
+	if _, err := runCodeGit(sourceDir, "merge-base", "--is-ancestor", remoteCommit, result.Commit); err != nil {
+		t.Fatalf("remote update missing from retried delivery: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(sourceDir, "session.txt")); err != nil {
+		t.Fatalf("session update missing from local project: %v", err)
+	}
+}
+
 func TestCodeDeliveryResumesFromMergedState(t *testing.T) {
 	database := withCodeGovernanceDB(t)
 	session, sourceDir := createDeliveryWorktree(t, 63)
 	session.ProjectID = 10
-	if err := database.Create(&model.AIGroup{ID: 10, Name: "project", CreatorID: session.UserID}).Error; err != nil {
+	if err := database.Create(&model.AIProject{ID: 10, Name: "project", CreatorID: session.UserID}).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := database.Create(session).Error; err != nil {
@@ -171,7 +308,7 @@ func TestCodeDeliveryResumesFromMergedState(t *testing.T) {
 func TestCodeQualityGateRejectsStaleRevision(t *testing.T) {
 	database := withCodeGovernanceDB(t)
 	workDir := createCodeGitRepository(t)
-	project := &model.AIGroup{Name: "quality", CreatorID: 1, RequireQualityGate: true}
+	project := &model.AIProject{Name: "quality", CreatorID: 1, RequireQualityGate: true}
 	if err := database.Create(project).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -242,7 +379,7 @@ func TestCodeAuditPersistsSafeMetadata(t *testing.T) {
 
 func TestCodeTokenBudgetBlocksExceededProject(t *testing.T) {
 	database := withCodeGovernanceDB(t)
-	project := &model.AIGroup{Name: "budget", CreatorID: 1, MonthlyTokenBudget: 100}
+	project := &model.AIProject{Name: "budget", CreatorID: 1, MonthlyTokenBudget: 100}
 	if err := database.Create(project).Error; err != nil {
 		t.Fatal(err)
 	}

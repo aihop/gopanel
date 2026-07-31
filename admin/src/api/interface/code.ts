@@ -1,4 +1,4 @@
-export interface AIGroup {
+export interface AIProject {
 	id: number
 	createdAt: string
 	name: string
@@ -77,10 +77,18 @@ export interface CodeSession {
 	createdAt: string
 	projectId: number
 	title: string
+	currentTaskTitle?: string
 	agentName: string
 	workDir: string
 	sourceWorkDir?: string
 	worktreeBranch?: string
+	targetBranch?: string
+	baseCommit?: string
+	remoteName?: string
+	remoteBranch?: string
+	remoteCommit?: string
+	repositorySync?: "local" | "synced" | "fast_forwarded"
+	isolationMode?: "single_worktree" | "multi_worktree"
 	status: string
 	currentStage: string
 	approvalPolicy: CodeApprovalPolicy
@@ -90,8 +98,10 @@ export interface CodeSession {
 
 export interface CodeWorktreeCapability {
 	available: boolean
-	reason: "" | "multi_source" | "source_unavailable" | "not_git" | "not_git_root"
+	reason: "" | "source_unavailable" | "not_git"
 	sourceDir?: string
+	sourceDirs?: string[]
+	repositoryCount: number
 }
 
 export interface AIMessage {

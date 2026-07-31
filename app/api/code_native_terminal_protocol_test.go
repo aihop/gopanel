@@ -13,7 +13,7 @@ func TestNativeTerminalProtocolResyncsAfterSequenceGap(t *testing.T) {
 	terminal := newNativeTerminalProtocolTestSubject()
 	terminal.publish([]byte("one"))
 	terminal.publish([]byte("two"))
-	subscription, _ := terminal.subscribe(0)
+	subscription, _ := terminal.subscribe(0, false)
 	drainNativeTerminalEvents(subscription.Events)
 	if !terminal.resync(subscription.ID, 1, "request-1") {
 		t.Fatal("resync request was rejected")
@@ -27,7 +27,7 @@ func TestNativeTerminalProtocolResyncsAfterSequenceGap(t *testing.T) {
 
 func TestNativeTerminalProtocolSignalsSubscriberOverflow(t *testing.T) {
 	terminal := newNativeTerminalProtocolTestSubject()
-	subscription, _ := terminal.subscribe(0)
+	subscription, _ := terminal.subscribe(0, false)
 	for index := 0; index < cap(subscription.Events); index++ {
 		subscription.Events <- nativeTerminalEvent{Type: "output"}
 	}
@@ -49,7 +49,7 @@ func TestNativeTerminalProtocolMarksTruncatedBaseline(t *testing.T) {
 	terminal := newNativeTerminalProtocolTestSubject()
 	terminal.sequence = 5
 	terminal.history = []nativeTerminalChunk{{Sequence: 4, Data: []byte("four")}, {Sequence: 5, Data: []byte("five")}}
-	subscription, baseline := terminal.subscribe(1)
+	subscription, baseline := terminal.subscribe(1, false)
 	if !baseline.Truncated || baseline.StartSequence != 4 || string(baseline.Data) != "fourfive" {
 		t.Fatalf("unexpected truncated baseline: %#v", baseline)
 	}
@@ -59,7 +59,7 @@ func TestNativeTerminalProtocolMarksTruncatedBaseline(t *testing.T) {
 func TestNativeTerminalProtocolCapsAcknowledgement(t *testing.T) {
 	terminal := newNativeTerminalProtocolTestSubject()
 	terminal.publish([]byte("one"))
-	subscription, _ := terminal.subscribe(0)
+	subscription, _ := terminal.subscribe(0, false)
 	terminal.acknowledge(subscription.ID, 99)
 	if subscription.AckSequence != 1 {
 		t.Fatalf("acknowledgement exceeded server sequence: %d", subscription.AckSequence)
@@ -80,7 +80,7 @@ func TestNativeTerminalProtocolReplaysOnlyMissingOutput(t *testing.T) {
 	terminal.publish([]byte("one"))
 	terminal.publish([]byte("two"))
 	terminal.publish([]byte("three"))
-	subscription, baseline := terminal.subscribe(1)
+	subscription, baseline := terminal.subscribe(1, false)
 	defer terminal.unsubscribe(subscription)
 	if baseline.Type != "baseline" || baseline.Sequence != 3 || string(baseline.Data) != "twothree" {
 		t.Fatalf("unexpected baseline: %#v", baseline)
@@ -97,8 +97,8 @@ func TestNativeTerminalProtocolReplaysOnlyMissingOutput(t *testing.T) {
 
 func TestNativeTerminalProtocolPreventsControlLeasePreemption(t *testing.T) {
 	terminal := newNativeTerminalProtocolTestSubject()
-	first, firstBaseline := terminal.subscribe(0)
-	second, secondBaseline := terminal.subscribe(0)
+	first, firstBaseline := terminal.subscribe(0, false)
+	second, secondBaseline := terminal.subscribe(0, false)
 	if !firstBaseline.HasControl || secondBaseline.HasControl {
 		t.Fatalf("unexpected initial control: first=%v second=%v", firstBaseline.HasControl, secondBaseline.HasControl)
 	}
@@ -122,26 +122,51 @@ func TestNativeTerminalProtocolPreventsControlLeasePreemption(t *testing.T) {
 	terminal.unsubscribe(first)
 }
 
-func TestNativeTerminalProtocolCanReleaseReadOnlySubscriberControl(t *testing.T) {
+func TestNativeTerminalProtocolReadOnlySubscriberRequiresExplicitControl(t *testing.T) {
 	terminal := newNativeTerminalProtocolTestSubject()
-	subscription, baseline := terminal.subscribe(0)
-	if !baseline.HasControl {
-		t.Fatal("first subscriber should initially receive control")
+	subscription, baseline := terminal.subscribe(0, true)
+	if baseline.HasControl || terminal.controllerID != "" {
+		t.Fatal("read-only subscriber should not receive terminal control")
 	}
-	if !terminal.releaseControl(subscription.ID) || terminal.controllerID != "" {
-		t.Fatal("read-only subscriber should release terminal control")
+	if granted, reason := terminal.takeControl(subscription.ID); granted || reason != "只读连接不能接管终端输入" {
+		t.Fatalf("untrusted read-only subscriber took control: granted=%v reason=%q", granted, reason)
 	}
-	control := <-subscription.Events
-	if control.HasControl {
-		t.Fatalf("unexpected control event after release: %#v", control)
+	subscription.AllowControl = true
+	if granted, reason := terminal.takeControl(subscription.ID); !granted || reason != "" {
+		t.Fatalf("read-only subscriber failed to explicitly take control: granted=%v reason=%q", granted, reason)
+	}
+	if subscription.ReadOnly {
+		t.Fatal("controlled subscriber should accept terminal input")
+	}
+	if !terminal.releaseControl(subscription.ID) || !subscription.ReadOnly {
+		t.Fatal("released subscriber should return to its default read-only state")
+	}
+	<-subscription.Events
+	<-subscription.Events
+	terminal.unsubscribe(subscription)
+}
+
+func TestNativeTerminalProtocolExpiredControlRestoresReadOnlyState(t *testing.T) {
+	terminal := newNativeTerminalProtocolTestSubject()
+	subscription, _ := terminal.subscribe(0, true)
+	subscription.AllowControl = true
+	if granted, reason := terminal.takeControl(subscription.ID); !granted || reason != "" {
+		t.Fatalf("take control failed: %q", reason)
+	}
+	terminal.mu.Lock()
+	terminal.controlExpiresAt = time.Now().Add(-time.Second)
+	terminal.mu.Unlock()
+	terminal.expireControl(subscription.ID)
+	if !subscription.ReadOnly || terminal.controllerID != "" {
+		t.Fatal("expired control should restore the subscriber's read-only state")
 	}
 	terminal.unsubscribe(subscription)
 }
 
 func TestNativeTerminalProtocolAllowsExpiredLeaseTakeover(t *testing.T) {
 	terminal := newNativeTerminalProtocolTestSubject()
-	first, _ := terminal.subscribe(0)
-	second, _ := terminal.subscribe(0)
+	first, _ := terminal.subscribe(0, false)
+	second, _ := terminal.subscribe(0, false)
 	terminal.mu.Lock()
 	terminal.controlExpiresAt = time.Now().Add(-time.Second)
 	terminal.mu.Unlock()
@@ -155,7 +180,7 @@ func TestNativeTerminalProtocolAllowsExpiredLeaseTakeover(t *testing.T) {
 func TestNativeTerminalProtocolResetsStaleSequence(t *testing.T) {
 	terminal := newNativeTerminalProtocolTestSubject()
 	terminal.publish([]byte("fresh"))
-	subscription, baseline := terminal.subscribe(99)
+	subscription, baseline := terminal.subscribe(99, false)
 	defer terminal.unsubscribe(subscription)
 	if baseline.Sequence != 1 || string(baseline.Data) != "fresh" {
 		t.Fatalf("unexpected reset baseline: %#v", baseline)

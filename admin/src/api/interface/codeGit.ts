@@ -24,6 +24,8 @@ export interface CodeGitRepository {
 	stagedAdditions: number
 	stagedDeletions: number
 	truncated: boolean
+	isolated: boolean
+	deliveryStatus?: string
 }
 
 export interface CodeGitStatus {
@@ -49,8 +51,37 @@ export interface CodeGitDiff {
 }
 
 export interface CodeGitDeliveryResult {
-	status: "committed" | "merged" | "conflict"
+	status: "committed" | "merged" | "conflict" | "failed"
 	commit?: string
 	branch?: string
+	repositoryId?: string
+	repositoryName?: string
+	conflictFiles?: string[]
+	repositories?: CodeRepositoryDeliveryResult[]
+}
+
+export interface CodeDeliveryPushRepository {
+	repositoryId: string
+	repositoryName: string
+	status: "pending" | "pushed" | "failed"
+	remote?: string
+	branch?: string
+	commit?: string
+	errorMessage?: string
+	ready: boolean
+}
+
+export interface CodeDeliveryPushResult {
+	available: boolean
+	status: "unavailable" | "pending" | "pushed" | "failed"
+	repositories: CodeDeliveryPushRepository[]
+}
+
+export interface CodeRepositoryDeliveryResult {
+	repositoryId: string
+	repositoryName: string
+	status: string
+	branch: string
+	commit?: string
 	conflictFiles?: string[]
 }

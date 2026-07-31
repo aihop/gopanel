@@ -1,7 +1,7 @@
 import axios from "axios"
 import http from "@/api"
 import type { ResultData } from "@/api/interface"
-import type { AIGroup, CodeApproval, CodeApprovalPolicy, CodeExecutor, CodeInstructionResponse, CodeSession, CodeSessionState } from "@/api/interface/code"
+import type { AIProject, CodeApproval, CodeApprovalPolicy, CodeExecutor, CodeInstructionResponse, CodeSession, CodeSessionState } from "@/api/interface/code"
 import type { Dashboard } from "@/api/interface/dashboard"
 import type { NodeSummary, NodeWarning } from "./node"
 
@@ -217,7 +217,7 @@ export function getMobileSessions(page = 1, limit = 20) {
 
 export function getMobileProjects() {
 	return mobileRequest(
-		mobileHttp.get<ResultData<{ items: AIGroup[]; total: number }>>("/mobile/app/projects", {
+		mobileHttp.get<ResultData<{ items: AIProject[]; total: number }>>("/mobile/app/projects", {
 			params: { page: 1, limit: 100 }
 		})
 	).then(result => ({ ...result, items: result.items || [] }))
@@ -232,7 +232,7 @@ export function createMobileSession(data: { title: string; projectId: number; ex
 		mobileHttp.post<ResultData<CodeSession>>("/mobile/app/sessions", {
 			...data,
 			workDir: "",
-			isolated: false
+			isolated: true
 		})
 	)
 }

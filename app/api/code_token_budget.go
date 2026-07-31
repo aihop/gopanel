@@ -28,7 +28,7 @@ func loadCodeTokenBudget(projectID uint, now time.Time) (codeTokenBudget, error)
 	if projectID == 0 {
 		return codeTokenBudget{Unlimited: true}, nil
 	}
-	project, err := repo.NewAIGroupRepo().GetGroupByID(projectID)
+	project, err := repo.NewAIProjectRepo().GetProjectByID(projectID)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return codeTokenBudget{Unlimited: true}, nil
 	}

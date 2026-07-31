@@ -1,5 +1,5 @@
 <template>
-	<component :is="componentName" v-bind="options">
+	<component :is="componentName" v-bind="merged">
 		<template v-if="$slots.default">
 			<slot />
 		</template>
@@ -13,7 +13,9 @@
 import type { IconifyIcon } from "@iconify/vue"
 import { Icon, loadIcon } from "@iconify/vue"
 import { NIcon, NIconWrapper } from "naive-ui"
-import { computed, ref, watchEffect } from "vue"
+import { computed, ref, useAttrs, watchEffect } from "vue"
+
+defineOptions({ name: "CommonIcon", inheritAttrs: false })
 
 const props = defineProps<{
 	name?: string
@@ -28,6 +30,7 @@ const props = defineProps<{
 const useWrapper = computed(() => !!(props.bgColor || props.bgSize || props.borderRadius))
 const componentName = computed(() => (useWrapper.value ? NIconWrapper : NIcon))
 
+const attrs = useAttrs()
 const options = computed(() => {
 	const opt: Partial<{ size: number; color: string; borderRadius: number; iconColor: string; depth: number }> = {}
 	if (useWrapper.value) {
@@ -42,6 +45,7 @@ const options = computed(() => {
 	}
 	return opt
 })
+const merged = computed(() => ({ ...options.value, ...attrs }))
 
 const load = (name: string) => loadIcon(name).catch(() => console.error(`Failed to load icon ${name}`))
 

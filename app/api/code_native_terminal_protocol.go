@@ -26,14 +26,16 @@ type nativeTerminalEvent struct {
 }
 
 type nativeTerminalSubscription struct {
-	ID          string
-	Events      chan nativeTerminalEvent
-	AckSequence uint64
-	NeedsResync bool
-	UserID      uint
-	DeviceID    uint
-	IP          string
-	ReadOnly    bool
+	ID              string
+	Events          chan nativeTerminalEvent
+	AckSequence     uint64
+	NeedsResync     bool
+	UserID          uint
+	DeviceID        uint
+	IP              string
+	ReadOnly        bool
+	DefaultReadOnly bool
+	AllowControl    bool
 }
 
 type nativeTerminalResyncRequest struct {
@@ -48,17 +50,19 @@ func nextNativeTerminalConnectionID() string {
 	return strconv.FormatUint(sequence, 10)
 }
 
-func (terminal *nativeCodeTerminal) subscribe(afterSequence uint64) (*nativeTerminalSubscription, nativeTerminalEvent) {
+func (terminal *nativeCodeTerminal) subscribe(afterSequence uint64, readOnly bool) (*nativeTerminalSubscription, nativeTerminalEvent) {
 	subscription := &nativeTerminalSubscription{
-		ID:     nextNativeTerminalConnectionID(),
-		Events: make(chan nativeTerminalEvent, 128),
+		ID:              nextNativeTerminalConnectionID(),
+		Events:          make(chan nativeTerminalEvent, 128),
+		ReadOnly:        readOnly,
+		DefaultReadOnly: readOnly,
 	}
 	terminal.mu.Lock()
 	if afterSequence > terminal.sequence {
 		afterSequence = 0
 	}
 	terminal.subscribers[subscription.ID] = subscription
-	if terminal.controllerID == "" || terminal.controlExpiredLocked(time.Now()) {
+	if !readOnly && (terminal.controllerID == "" || terminal.controlExpiredLocked(time.Now())) {
 		terminal.controllerID = subscription.ID
 		terminal.renewControlLeaseLocked(time.Now())
 	}
@@ -140,17 +144,26 @@ func (terminal *nativeCodeTerminal) unsubscribe(subscription *nativeTerminalSubs
 
 func (terminal *nativeCodeTerminal) takeControl(subscriptionID string) (bool, string) {
 	terminal.mu.Lock()
-	if _, exists := terminal.subscribers[subscriptionID]; !exists {
+	subscription, exists := terminal.subscribers[subscriptionID]
+	if !exists {
 		terminal.mu.Unlock()
 		return false, "连接不存在"
+	}
+	if subscription.ReadOnly && !subscription.AllowControl {
+		terminal.mu.Unlock()
+		return false, "只读连接不能接管终端输入"
 	}
 	now := time.Now()
 	if terminal.controllerID != "" && terminal.controllerID != subscriptionID && !terminal.controlExpiredLocked(now) {
 		terminal.mu.Unlock()
 		return false, "其他设备正在控制终端"
 	}
+	if terminal.controllerID != "" && terminal.controllerID != subscriptionID {
+		terminal.restoreSubscriptionReadOnlyLocked(terminal.controllerID)
+	}
 	changed := terminal.controllerID != subscriptionID
 	terminal.controllerID = subscriptionID
+	subscription.ReadOnly = false
 	terminal.renewControlLeaseLocked(now)
 	terminal.mu.Unlock()
 	if changed {
@@ -165,6 +178,7 @@ func (terminal *nativeCodeTerminal) releaseControl(subscriptionID string) bool {
 		terminal.mu.Unlock()
 		return false
 	}
+	terminal.restoreSubscriptionReadOnlyLocked(subscriptionID)
 	terminal.controllerID = ""
 	terminal.controlExpiresAt = time.Time{}
 	if terminal.controlTimer != nil {
@@ -232,9 +246,16 @@ func (terminal *nativeCodeTerminal) controlExpiredLocked(now time.Time) bool {
 }
 
 func (terminal *nativeCodeTerminal) clearExpiredControlLocked() {
+	terminal.restoreSubscriptionReadOnlyLocked(terminal.controllerID)
 	terminal.controllerID = ""
 	terminal.controlExpiresAt = time.Time{}
 	terminal.controlTimer = nil
+}
+
+func (terminal *nativeCodeTerminal) restoreSubscriptionReadOnlyLocked(subscriptionID string) {
+	if subscription := terminal.subscribers[subscriptionID]; subscription != nil {
+		subscription.ReadOnly = subscription.DefaultReadOnly
+	}
 }
 
 func (terminal *nativeCodeTerminal) expireControl(expectedController string) {

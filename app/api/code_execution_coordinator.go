@@ -79,11 +79,61 @@ func codeExecutionWorkspaceKeys(session *model.AIDevSession) []string {
 		return nil
 	}
 	paths := []string{session.WorkDir}
-	if session.SourceWorkDir == "" && session.WorktreeBranch == "" && session.ProjectID > 0 {
-		if project, err := repo.NewAIGroupRepo().GetGroupByID(session.ProjectID); err == nil {
+	if session.IsolationMode == codeIsolationMultiWorktree {
+		if repositories, err := loadCodeSessionRepositories(session.ID); err == nil {
+			for _, repository := range repositories {
+				paths = append(paths, repository.WorktreeDir)
+			}
+		}
+	}
+	if session.IsolationMode != codeIsolationMultiWorktree && session.SourceWorkDir == "" && session.WorktreeBranch == "" && session.ProjectID > 0 {
+		if project, err := repo.NewAIProjectRepo().GetProjectByID(session.ProjectID); err == nil {
 			paths = append(paths, project.SourceDirs...)
 		}
 	}
+	seen := make(map[string]struct{}, len(paths))
+	keys := make([]string, 0, len(paths))
+	for _, candidate := range paths {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" {
+			continue
+		}
+		resolved, err := filepath.EvalSymlinks(filepath.Clean(candidate))
+		if err != nil {
+			resolved, err = filepath.Abs(filepath.Clean(candidate))
+			if err != nil {
+				continue
+			}
+		}
+		resolved = filepath.Clean(resolved)
+		if _, exists := seen[resolved]; exists {
+			continue
+		}
+		seen[resolved] = struct{}{}
+		keys = append(keys, resolved)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func codeExecutionDeliveryKeys(session *model.AIDevSession) []string {
+	keys := codeExecutionWorkspaceKeys(session)
+	if session == nil {
+		return keys
+	}
+	if session.IsolationMode == codeIsolationMultiWorktree {
+		if repositories, err := loadCodeSessionRepositories(session.ID); err == nil {
+			for _, repository := range repositories {
+				keys = append(keys, repository.SourceDir)
+			}
+		}
+	} else if strings.TrimSpace(session.SourceWorkDir) != "" {
+		keys = append(keys, session.SourceWorkDir)
+	}
+	return normalizedCodeExecutionKeys(keys)
+}
+
+func normalizedCodeExecutionKeys(paths []string) []string {
 	seen := make(map[string]struct{}, len(paths))
 	keys := make([]string, 0, len(paths))
 	for _, candidate := range paths {
@@ -128,7 +178,11 @@ func (coordinator *codeExecutionCoordinator) acquireSession(
 	if session == nil || session.ID == 0 {
 		return nil, errors.New("Code 执行会话无效")
 	}
-	return coordinator.acquireOwned(ctx, session.ID, codeExecutionWorkspaceKeys(session), kind, wait)
+	keys := codeExecutionWorkspaceKeys(session)
+	if kind == codeExecutionDelivery {
+		keys = codeExecutionDeliveryKeys(session)
+	}
+	return coordinator.acquireOwned(ctx, session.ID, keys, kind, wait)
 }
 
 func (coordinator *codeExecutionCoordinator) acquireOwned(
@@ -251,11 +305,15 @@ func (lease *codeExecutionLease) SetCancel(cancel context.CancelFunc) {
 }
 
 func (coordinator *codeExecutionCoordinator) cancelSessionAndWait(ctx context.Context, sessionID uint) bool {
+	return coordinator.cancelSessionKindAndWait(ctx, sessionID, "")
+}
+
+func (coordinator *codeExecutionCoordinator) cancelSessionKindAndWait(ctx context.Context, sessionID uint, kind string) bool {
 	if sessionID == 0 {
 		return false
 	}
 	coordinator.mu.Lock()
-	leases := coordinator.sessionLeases(sessionID)
+	leases := coordinator.sessionLeases(sessionID, kind)
 	coordinator.mu.Unlock()
 	for _, lease := range leases {
 		coordinator.mu.Lock()
@@ -276,11 +334,11 @@ func (coordinator *codeExecutionCoordinator) cancelSessionAndWait(ctx context.Co
 	return len(leases) > 0
 }
 
-func (coordinator *codeExecutionCoordinator) sessionLeases(sessionID uint) []*codeExecutionLease {
+func (coordinator *codeExecutionCoordinator) sessionLeases(sessionID uint, kind string) []*codeExecutionLease {
 	seen := make(map[uint64]struct{})
 	leases := make([]*codeExecutionLease, 0)
 	for _, lease := range coordinator.active {
-		if lease.sessionID != sessionID {
+		if lease.sessionID != sessionID || (kind != "" && lease.kind != kind) {
 			continue
 		}
 		if _, exists := seen[lease.id]; exists {

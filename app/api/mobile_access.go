@@ -127,7 +127,7 @@ func LoginMobileDevice(c fiber.Ctx) error {
 	if err != nil || user == nil {
 		return failLogin("user not found")
 	}
-	if user.Status != constant.UserStatusNormal || user.Role != constant.UserRoleAdmin {
+	if !canLoginMobileConsole(user) {
 		return failLogin("user is not an active administrator")
 	}
 	if !cryptx.ValidatePassword(user.Password, authReq.Password) {
@@ -146,6 +146,13 @@ func LoginMobileDevice(c fiber.Ctx) error {
 	_ = userService.Update(&model.User{ID: user.ID, LoginAt: time.Now()})
 	setMobileDeviceCookie(c, deviceToken, device.ExpiresAt)
 	return c.JSON(e.Succ(fiber.Map{"device": device}))
+}
+
+func canLoginMobileConsole(user *model.User) bool {
+	if user == nil || user.Status != constant.UserStatusNormal {
+		return false
+	}
+	return user.Role == constant.UserRoleAdmin || user.Role == constant.UserRoleSuper
 }
 
 func setMobileDeviceCookie(c fiber.Ctx, deviceToken string, expiresAt time.Time) {

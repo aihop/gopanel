@@ -33,32 +33,6 @@
 	background-color: color-mix(in srgb, var(--bg-default-color) 90%, transparent);
 }
 
-.ai-workspace-task-scrollbar :deep(.n-scrollbar-rail.n-scrollbar-rail--vertical) {
-	right: 4px !important;
-	width: 3px !important;
-}
-
-.ai-workspace-task-scrollbar :deep(.n-scrollbar-rail__scrollbar) {
-	width: 3px !important;
-	background-color: rgba(148, 163, 184, 0.24) !important;
-}
-
-.ai-workspace-task-scrollbar :deep(.n-scrollbar-rail__scrollbar:hover) {
-	background-color: rgba(148, 163, 184, 0.4) !important;
-}
-
-.theme-dark .ai-workspace-task-row:hover {
-	background-color: color-mix(in srgb, var(--fg-secondary-color) 10%, transparent) !important;
-}
-
-.theme-dark .ai-workspace-task-row--active {
-	background-color: color-mix(in srgb, var(--primary-color) 14%, transparent) !important;
-}
-
-.theme-dark .ai-workspace-task-btn {
-	background-color: color-mix(in srgb, var(--fg-secondary-color) 15%, transparent) !important;
-}
-
 .theme-dark .ai-workspace-content-panel {
 	background: radial-gradient(
 		circle at top right,

@@ -75,6 +75,35 @@ func TestDeleteTaskRemovesTaskRecordsAndResetsSession(t *testing.T) {
 	}
 }
 
+func TestGetTasksByProjectIDPrioritizesActiveTasks(t *testing.T) {
+	oldDB := global.DB
+	t.Cleanup(func() { global.DB = oldDB })
+	database, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "task-list.db")), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := database.AutoMigrate(&model.AITask{}); err != nil {
+		t.Fatal(err)
+	}
+	global.DB = database
+	now := time.Now()
+	tasks := []*model.AITask{
+		{CreatedAt: now, UserID: 1, ProjectID: 1, Title: "recent completed", WorkDir: "/tmp", Status: "completed"},
+		{CreatedAt: now.Add(-time.Hour), UserID: 2, ProjectID: 1, Title: "old running", WorkDir: "/tmp", Status: "running"},
+		{CreatedAt: now.Add(-2 * time.Hour), UserID: 3, ProjectID: 1, Title: "old approval", WorkDir: "/tmp", Status: "pending_approval"},
+	}
+	if err := database.Create(&tasks).Error; err != nil {
+		t.Fatal(err)
+	}
+	items, total, err := (&aiTaskRepo{}).GetTasksByProjectID(1, 1, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 3 || len(items) != 2 || items[0].Status != "pending_approval" || items[1].Status != "running" {
+		t.Fatalf("unexpected task order: total=%d items=%#v", total, items)
+	}
+}
+
 func TestDeleteTaskAndSessionIsAtomic(t *testing.T) {
 	oldDB := global.DB
 	t.Cleanup(func() { global.DB = oldDB })
