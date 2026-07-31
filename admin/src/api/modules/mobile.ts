@@ -96,6 +96,52 @@ export interface MobileContainerList {
 	stopped: number
 }
 
+export interface MobileWebsite {
+	id: number
+	alias: string
+	primaryDomain: string
+	type: string
+	status: string
+	appName: string
+	pipelineId: number
+}
+
+export interface MobileDatabase {
+	type: string
+	name: string
+	server: string
+	encoding: string
+	comment: string
+}
+
+export interface MobileSSL {
+	id: number
+	primaryDomain: string
+	type: string
+	provider: string
+	status: string
+	autoRenew: boolean
+	expireDate: string
+}
+
+export interface MobileApp {
+	id: number
+	name: string
+	version: string
+	status: string
+	description: string
+	httpPort: number
+	httpsPort: number
+	runtimeHost: string
+	runtimeKind: string
+}
+
+export interface MobileResourceList<T> {
+	items: T[]
+	total: number
+	warningCount?: number
+}
+
 export interface MobileCodeStructureEntry {
 	name: string
 	path: string
@@ -212,6 +258,28 @@ export function operateMobileContainer(container: MobileContainer, operation: "s
 			operation
 		})
 	)
+}
+
+function getMobileResourceList<T>(resource: string) {
+	return mobileRequest(mobileHttp.get<ResultData<MobileResourceList<T>>>(`/mobile/app/resources/${resource}`)).then(
+		result => ({ ...result, items: result.items || [] })
+	)
+}
+
+export function getMobileWebsites() {
+	return getMobileResourceList<MobileWebsite>("websites")
+}
+
+export function getMobileDatabases() {
+	return getMobileResourceList<MobileDatabase>("databases")
+}
+
+export function getMobileSSLs() {
+	return getMobileResourceList<MobileSSL>("ssl")
+}
+
+export function getMobileApps() {
+	return getMobileResourceList<MobileApp>("apps")
 }
 
 export function getMobileNodes() {

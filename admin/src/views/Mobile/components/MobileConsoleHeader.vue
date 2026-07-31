@@ -5,7 +5,7 @@ import { mobileMessages } from "@/i18n/locales/mobile"
 import Logo from "@/layouts/common/Logo.vue"
 
 defineProps<{
-	activeTab: "overview" | "containers" | "code"
+	activeTab: "overview" | "resources" | "code"
 	nodeName: string
 	nodeOnline: boolean
 }>()
@@ -44,7 +44,7 @@ const { t } = useI18n({ messages: mobileMessages })
 					<template #icon><Icon name="mdi:logout" /></template>
 				</n-button>
 				<n-button
-					v-if="activeTab !== 'containers'"
+					v-if="activeTab !== 'resources'"
 					size="small"
 					type="primary"
 					secondary

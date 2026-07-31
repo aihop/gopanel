@@ -3,8 +3,8 @@ import { useI18n } from "vue-i18n"
 import Icon from "@/components/common/Icon.vue"
 import { mobileMessages } from "@/i18n/locales/mobile"
 
-defineProps<{ activeTab: "overview" | "containers" | "code" }>()
-const emit = defineEmits<{ select: [tab: "overview" | "containers" | "code"] }>()
+defineProps<{ activeTab: "overview" | "resources" | "code" }>()
+const emit = defineEmits<{ select: [tab: "overview" | "resources" | "code"] }>()
 const { t } = useI18n({ messages: mobileMessages })
 </script>
 
@@ -26,11 +26,11 @@ const { t } = useI18n({ messages: mobileMessages })
 			</button>
 			<button
 				class="flex min-h-14 flex-col items-center justify-center gap-0.5 text-xs transition-colors"
-				:class="activeTab === 'containers' ? 'text-blue-600' : 'text-slate-400'"
-				@click="emit('select', 'containers')"
+				:class="activeTab === 'resources' ? 'text-blue-600' : 'text-slate-400'"
+				@click="emit('select', 'resources')"
 			>
-				<Icon :name="activeTab === 'containers' ? 'mdi:cube' : 'mdi:cube-outline'" :size="23" />
-				<span>{{ t("mobile.containers") }}</span>
+				<Icon :name="activeTab === 'resources' ? 'mdi:widgets' : 'mdi:widgets-outline'" :size="23" />
+				<span>{{ t("mobile.resources") }}</span>
 			</button>
 			<button
 				class="flex min-h-14 flex-col items-center justify-center gap-0.5 text-xs transition-colors"
