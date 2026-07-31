@@ -109,6 +109,34 @@ func TestDatabaseListFiltersBeforeLoadingServers(t *testing.T) {
 	}
 }
 
+func TestDatabaseListTotalIsNotLimitedToCurrentPage(t *testing.T) {
+	oldDatabase := global.DB
+	t.Cleanup(func() { global.DB = oldDatabase })
+
+	database, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "database-pagination.db")), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	global.DB = database
+	if err := database.AutoMigrate(&model.DatabaseServer{}); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"first", "second"} {
+		server := &model.DatabaseServer{Name: name, Type: model.DatabaseSQLite, Host: "/data/" + name + ".db"}
+		if err := database.Create(server).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	result, err := NewDatabase().List(&gormx.Contextx{Page: 1, Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Total != 2 || len(result.Items) != 1 {
+		t.Fatalf("unexpected pagination result: %#v", result)
+	}
+}
+
 func TestDatabaseListWarningRedactsPasswordVariants(t *testing.T) {
 	server := &model.DatabaseServer{
 		ID:       1,
