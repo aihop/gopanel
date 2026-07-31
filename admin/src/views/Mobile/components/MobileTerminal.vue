@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
-import { Terminal } from "xterm"
-import { FitAddon } from "xterm-addon-fit"
+import { FitAddon } from "@xterm/addon-fit"
+import { Terminal } from "@xterm/xterm"
 import Icon from "@/components/common/Icon.vue"
 import { mobileMessages } from "@/i18n/locales/mobile"
-import "xterm/css/xterm.css"
+import "@xterm/xterm/css/xterm.css"
 
 const props = defineProps<{ sessionId: number; projectName: string; projectDescription: string }>()
 const emit = defineEmits<{ back: []; openFiles: []; openStatus: [] }>()
@@ -20,6 +20,9 @@ let socket: WebSocket | null = null
 let resizeObserver: ResizeObserver | null = null
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let pingTimer: ReturnType<typeof setInterval> | null = null
+let fitFrame: number | null = null
+let reportedCols = 0
+let reportedRows = 0
 let lastSequence = 0
 let resyncRequest = 0
 let pendingResyncId = ""
@@ -43,15 +46,25 @@ function requestResync() {
 function fit() {
 	try {
 		fitAddon?.fit()
-		if (socket?.readyState === WebSocket.OPEN && hasControl.value && terminal) {
+		if (socket?.readyState === WebSocket.OPEN && hasControl.value && terminal && (terminal.cols !== reportedCols || terminal.rows !== reportedRows)) {
 			socket.send(JSON.stringify({
 				type: "resize",
 				data: JSON.stringify({ cols: terminal.cols, rows: terminal.rows }),
 			}))
+			reportedCols = terminal.cols
+			reportedRows = terminal.rows
 		}
 	} catch (error) {
 		void error
 	}
+}
+
+function scheduleFit() {
+	if (fitFrame !== null) return
+	fitFrame = window.requestAnimationFrame(() => {
+		fitFrame = null
+		fit()
+	})
 }
 
 function connect() {
@@ -132,6 +145,8 @@ function openTerminal() {
 	closing = false
 	lastSequence = 0
 	pendingResyncId = ""
+	reportedCols = 0
+	reportedRows = 0
 	terminal = new Terminal({
 		cursorBlink: true,
 		cursorStyle: "bar",
@@ -148,7 +163,7 @@ function openTerminal() {
 			socket.send(JSON.stringify({ type: "cmd", data }))
 		}
 	})
-	resizeObserver = new ResizeObserver(fit)
+	resizeObserver = new ResizeObserver(scheduleFit)
 	resizeObserver.observe(terminalElement.value)
 	nextTick(() => {
 		fit()
@@ -166,8 +181,10 @@ function closeTerminal() {
 	pendingResyncId = ""
 	if (reconnectTimer) clearTimeout(reconnectTimer)
 	if (pingTimer) clearInterval(pingTimer)
+	if (fitFrame !== null) cancelAnimationFrame(fitFrame)
 	reconnectTimer = null
 	pingTimer = null
+	fitFrame = null
 	resizeObserver?.disconnect()
 	resizeObserver = null
 	const activeSocket = socket
@@ -234,13 +251,8 @@ onBeforeUnmount(closeTerminal)
 	padding: 12px;
 }
 
-:deep(.xterm-screen),
-:deep(.xterm-helpers),
 :deep(.xterm-viewport) {
-	height: 100%;
-}
-
-:deep(.xterm-viewport) {
-	overflow-y: auto !important;
+	overscroll-behavior-y: contain;
+	-webkit-overflow-scrolling: touch;
 }
 </style>
