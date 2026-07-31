@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue"
 import { useI18n } from "vue-i18n"
-import { useMessage } from "naive-ui"
+import { useDialog, useMessage } from "naive-ui"
 import Icon from "@/components/common/Icon.vue"
-import { createHostTerminalSession, getHostTerminalAuditEvents, getHostTerminalCapabilities, listHostTerminalSessions, stopHostTerminalSession } from "@/api/modules/hostTerminal"
+import { createHostTerminalSession, deleteHostTerminalSession, getHostTerminalAuditEvents, getHostTerminalCapabilities, listHostTerminalSessions, reconnectHostTerminalSession, stopHostTerminalSession } from "@/api/modules/hostTerminal"
 import type { HostTerminalAuditEvent, HostTerminalSession } from "@/api/interface/hostTerminal"
 import HostTerminalPanel from "./HostTerminalPanel.vue"
 
 const { t } = useI18n()
 const message = useMessage()
+const dialog = useDialog()
 const sessions = ref<HostTerminalSession[]>([])
 const selectedId = ref<number | null>(null)
 const loading = ref(false)
@@ -19,6 +20,8 @@ const workDir = ref("")
 const availableShells = ref<string[]>([])
 const auditVisible = ref(false)
 const auditLoading = ref(false)
+const reconnecting = ref(false)
+const deleting = ref(false)
 const auditEvents = ref<HostTerminalAuditEvent[]>([])
 const selectedSession = computed(() => sessions.value.find(item => item.id === selectedId.value) || null)
 const shellOptions = computed(() => [
@@ -76,6 +79,45 @@ async function stopSession() {
 	}
 }
 
+async function reconnectSession() {
+	if (!selectedSession.value) return
+	reconnecting.value = true
+	try {
+		const response = await reconnectHostTerminalSession(selectedSession.value.id)
+		await loadSessions(true)
+		selectedId.value = response.data.id
+		message.success(t("terminal.reconnectSuccess"))
+	} catch (error) {
+		message.error(error instanceof Error ? error.message : t("terminal.reconnectFailed"))
+	} finally {
+		reconnecting.value = false
+	}
+}
+
+function confirmDeleteSession() {
+	if (!selectedSession.value) return
+	const sessionId = selectedSession.value.id
+	dialog.warning({
+		title: t("terminal.deleteSession"),
+		content: t("terminal.deleteConfirm"),
+		positiveText: t("commons.button.confirm"),
+		negativeText: t("commons.button.cancel"),
+		onPositiveClick: async () => {
+			deleting.value = true
+			try {
+				await deleteHostTerminalSession(sessionId)
+				selectedId.value = null
+				await loadSessions(true)
+				message.success(t("terminal.deleteSuccess"))
+			} catch (error) {
+				message.error(error instanceof Error ? error.message : t("terminal.deleteFailed"))
+			} finally {
+				deleting.value = false
+			}
+		}
+	})
+}
+
 async function openAudit() {
 	if (!selectedSession.value) return
 	auditVisible.value = true
@@ -111,6 +153,8 @@ onMounted(() => loadSessions())
 			<n-button size="small" :loading="loading" @click="loadSessions()">{{ t("commons.button.refresh") }}</n-button>
 			<n-button v-if="selectedSession" size="small" secondary @click="openAudit">{{ t("terminal.audit") }}</n-button>
 			<n-button v-if="selectedSession?.status === 'running'" size="small" type="error" secondary @click="stopSession">{{ t("terminal.stopSession") }}</n-button>
+			<n-button v-if="selectedSession && selectedSession.status !== 'running' && selectedSession.status !== 'starting'" size="small" type="primary" secondary :loading="reconnecting" @click="reconnectSession">{{ t("terminal.reconnectSession") }}</n-button>
+			<n-button v-if="selectedSession && selectedSession.status !== 'running' && selectedSession.status !== 'starting'" size="small" type="error" secondary :loading="deleting" @click="confirmDeleteSession">{{ t("terminal.deleteSession") }}</n-button>
 			<span class="ml-auto text-xs text-slate-400">{{ t("terminal.securityHint") }}</span>
 		</div>
 

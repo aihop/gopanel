@@ -123,3 +123,10 @@ func TestHostTerminalControlLeaseExpires(t *testing.T) {
 		t.Fatal("expired controller should not retain input access")
 	}
 }
+
+func TestHostTerminalReconnectRejectsMissingRecord(t *testing.T) {
+	manager := &hostTerminalManager{sessions: make(map[uint]*hostTerminal)}
+	if _, err := manager.reconnect(nil, 1, "127.0.0.1"); err == nil {
+		t.Fatal("missing source session should be rejected")
+	}
+}
