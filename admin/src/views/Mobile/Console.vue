@@ -132,10 +132,6 @@ function sessionProjectName(session: CodeSession) {
 	return sessionProject(session)?.name || t("mobile.unlinkedProject")
 }
 
-function sessionProjectDescription(session: CodeSession) {
-	return sessionProject(session)?.description || ""
-}
-
 function sessionTaskTitle(session: CodeSession) {
 	return session.currentTaskTitle || session.title
 }
@@ -434,7 +430,7 @@ onBeforeUnmount(() => {
 						</template>
 					</n-empty>
 					<template v-else-if="selectedSession">
-						<MobileTerminal :session-id="selectedSessionId" :project-name="sessionProjectName(selectedSession)" :project-description="sessionProjectDescription(selectedSession)" @back="leaveTaskDetail" @open-files="showFiles = true" @open-status="showTaskStatus = true">
+						<MobileTerminal :session-id="selectedSessionId" :task-name="sessionTaskTitle(selectedSession)" :project-name="sessionProjectName(selectedSession)" @back="leaveTaskDetail" @open-files="showFiles = true" @open-status="showTaskStatus = true">
 							<template #footer="{ connected }">
 								<div v-if="connected" class="border-t border-white/10 bg-slate-950 px-3 py-1.5 text-[11px] text-slate-400">
 									<span>{{ t("mobile.terminalReadOnly") }}</span>

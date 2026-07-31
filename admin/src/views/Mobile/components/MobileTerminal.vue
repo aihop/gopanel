@@ -7,7 +7,7 @@ import Icon from "@/components/common/Icon.vue"
 import { mobileMessages } from "@/i18n/locales/mobile"
 import "@xterm/xterm/css/xterm.css"
 
-const props = defineProps<{ sessionId: number; projectName: string; projectDescription: string }>()
+const props = defineProps<{ sessionId: number; taskName: string; projectName: string }>()
 const emit = defineEmits<{ back: []; openFiles: []; openStatus: [] }>()
 const { t } = useI18n({ messages: mobileMessages })
 const terminalElement = ref<HTMLElement | null>(null)
@@ -203,10 +203,10 @@ onBeforeUnmount(closeTerminal)
 				</svg>
 			</button>
 			<div class="min-w-0 flex-1">
-				<div class="truncate text-sm font-semibold">{{ projectName }}</div>
-				<div v-if="projectDescription" class="mt-0.5 truncate text-[11px] text-slate-400">{{ projectDescription }}</div>
+				<div class="truncate text-sm font-semibold">{{ taskName }}</div>
 			</div>
 			<div class="flex shrink-0 items-center gap-1.5">
+				<span class="max-w-[30vw] truncate text-right text-xs text-slate-400" :title="projectName">{{ projectName }}</span>
 				<span class="h-2 w-2 rounded-full" :class="connected ? 'bg-emerald-400' : reconnecting ? 'bg-amber-400' : 'bg-slate-500'" :title="connected ? t('mobile.connected') : reconnecting ? t('mobile.reconnecting') : t('mobile.disconnected')" />
 				<n-button size="small" quaternary circle text-color="#cbd5e1" :title="t('mobile.taskStatus')" :aria-label="t('mobile.taskStatus')" @click="emit('openStatus')">
 					<template #icon><Icon name="mdi:timeline-clock-outline" :size="19" /></template>
