@@ -13,11 +13,10 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"net/http/httputil"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	panelapp "github.com/aihop/gopanel/app"
@@ -26,6 +25,7 @@ import (
 	"github.com/aihop/gopanel/global"
 	initconf "github.com/aihop/gopanel/init/conf"
 	"github.com/wailsapp/wails/v2"
+	"github.com/wailsapp/wails/v2/pkg/menu"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -36,11 +36,12 @@ var desktopFS embed.FS
 
 type desktopApp struct {
 	panel              *panelapp.App
-	listener           net.Listener
 	serveErr           chan error
 	context            context.Context
-	token              string
 	initialCredentials *desktopCredentials
+	baseDir            string
+	gateway            *desktopGateway
+	builtinMu          sync.Mutex
 }
 
 func main() {
@@ -58,16 +59,16 @@ func main() {
 
 	err = wails.Run(&options.App{
 		Title:            "GoPanel",
-		Width:            1440,
-		Height:           900,
-		MinWidth:         1024,
-		MinHeight:        700,
+		Width:            1280,
+		Height:           800,
+		MinWidth:         900,
+		MinHeight:        600,
 		BackgroundColour: options.NewRGB(15, 23, 42),
-		WindowStartState: options.Maximised,
+		Menu:             app.applicationMenu(),
 		AssetServer: &assetserver.Options{
 			Assets:     frontend,
-			Handler:    app.proxy(),
-			Middleware: app.bootstrapMiddleware(),
+			Handler:    app.gateway,
+			Middleware: app.desktopMiddleware(),
 		},
 		OnStartup:  app.startup,
 		OnShutdown: app.shutdown,
@@ -95,33 +96,15 @@ func newDesktopApp() (*desktopApp, error) {
 		return nil, fmt.Errorf("set desktop data directory: %w", err)
 	}
 	cmd.ConfFilePath = filepath.Join(baseDir, "conf.yaml")
-	credentials, err := prepareDesktopCredentials(baseDir)
-	if err != nil {
-		return nil, err
-	}
-	if credentials != nil {
-		initconf.InitInstall.User = credentials.Email
-		initconf.InitInstall.Password = credentials.Password
-	}
-
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return nil, fmt.Errorf("listen on loopback: %w", err)
-	}
-
 	global.EmbedFS = desktopFS
-	token, err := newDesktopToken()
+	gateway, err := newDesktopGateway(baseDir)
 	if err != nil {
-		_ = listener.Close()
 		return nil, err
 	}
-	middleware.SetDesktopAccessToken(token)
 	return &desktopApp{
-		panel:              &panelapp.App{},
-		listener:           listener,
-		serveErr:           make(chan error, 1),
-		token:              token,
-		initialCredentials: credentials,
+		baseDir:  baseDir,
+		gateway:  gateway,
+		serveErr: make(chan error, 1),
 	}, nil
 }
 
@@ -133,24 +116,22 @@ func newDesktopToken() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(buffer), nil
 }
 
-func (a *desktopApp) proxy() http.Handler {
-	target := &url.URL{Scheme: "http", Host: a.listener.Addr().String()}
-	proxy := httputil.NewSingleHostReverseProxy(target)
-	originalDirector := proxy.Director
-	proxy.Director = func(request *http.Request) {
-		originalDirector(request)
-		request.Header.Set("X-GoPanel-Desktop-Token", a.token)
-	}
-	proxy.ErrorHandler = func(response http.ResponseWriter, _ *http.Request, err error) {
-		http.Error(response, err.Error(), http.StatusBadGateway)
-	}
-	return proxy
-}
-
-func (a *desktopApp) bootstrapMiddleware() assetserver.Middleware {
-	script := "<script>" + websocketBootstrap(a.listener.Addr().String(), a.token) + "</script>"
+func (a *desktopApp) desktopMiddleware() assetserver.Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+			if a.gateway.handleDesktopRoute(response, request) {
+				return
+			}
+			if !a.gateway.ready() {
+				if request.URL.Path == "/" || request.URL.Path == "/index.html" {
+					response.Header().Set("Content-Type", "text/html; charset=utf-8")
+					response.Header().Set("Cache-Control", "no-store")
+					_, _ = response.Write([]byte(a.gateway.launcherHTML()))
+					return
+				}
+				http.Redirect(response, request, "/", http.StatusSeeOther)
+				return
+			}
 			if request.Method != http.MethodGet || (request.URL.Path != "/" && request.URL.Path != "/index.html") {
 				next.ServeHTTP(response, request)
 				return
@@ -161,7 +142,7 @@ func (a *desktopApp) bootstrapMiddleware() assetserver.Middleware {
 			for key, values := range recorder.Header() {
 				response.Header()[key] = values
 			}
-			body := strings.Replace(recorder.Body.String(), "</head>", script+"</head>", 1)
+			body := strings.Replace(recorder.Body.String(), "</head>", a.gateway.bootstrapHTML()+"</head>", 1)
 			response.Header().Del("Content-Length")
 			response.WriteHeader(recorder.Code)
 			_, _ = response.Write([]byte(body))
@@ -171,17 +152,19 @@ func (a *desktopApp) bootstrapMiddleware() assetserver.Middleware {
 
 func (a *desktopApp) startup(ctx context.Context) {
 	a.context = ctx
-	a.panel.Init()
-	if a.initialCredentials != nil {
-		go a.showInitialCredentials(ctx)
+	a.gateway.setBuiltinStarter(a.startBuiltin)
+	if a.gateway.shouldStartBuiltin() {
+		if err := a.startBuiltin(); err == nil {
+			wailsruntime.WindowReload(ctx)
+		}
 	}
-	go func() {
-		a.serveErr <- a.panel.Serve(a.listener)
-	}()
 }
 
 func (a *desktopApp) shutdown(context.Context) {
 	middleware.SetDesktopAccessToken("")
+	if a.panel == nil {
+		return
+	}
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	_ = a.panel.Shutdown(shutdownCtx)
@@ -194,27 +177,55 @@ func (a *desktopApp) shutdown(context.Context) {
 	}
 }
 
+func (a *desktopApp) startBuiltin() error {
+	a.builtinMu.Lock()
+	defer a.builtinMu.Unlock()
+	if a.panel != nil {
+		return nil
+	}
+	credentials, err := prepareDesktopCredentials(a.baseDir)
+	if err != nil {
+		return err
+	}
+	if credentials != nil {
+		initconf.InitInstall.User = credentials.Email
+		initconf.InitInstall.Password = credentials.Password
+	}
+	listener, target, mobileURL, token, err := newBuiltinDesktopTarget(a.baseDir)
+	if err != nil {
+		return err
+	}
+	a.panel = &panelapp.App{}
+	a.initialCredentials = credentials
+	a.panel.Init()
+	a.gateway.useBuiltin(target, mobileURL, token)
+	if credentials != nil && a.context != nil {
+		go a.showInitialCredentials(a.context)
+	}
+	go func() { a.serveErr <- a.panel.Serve(listener) }()
+	return nil
+}
+
 func (a *desktopApp) showWindow(options.SecondInstanceData) {
 	if a.context != nil {
 		wailsruntime.WindowShow(a.context)
 	}
 }
 
-func websocketBootstrap(address, token string) string {
-	host := strings.ReplaceAll(address, "`", "")
-	desktopToken := strings.ReplaceAll(token, "`", "")
-	return fmt.Sprintf(`(() => {
-  const NativeWebSocket = window.WebSocket;
-  window.WebSocket = class extends NativeWebSocket {
-    constructor(url, protocols) {
-      const parsed = new URL(url, window.location.href);
-      if (parsed.protocol === "wails:" || parsed.hostname === "wails" || parsed.hostname === "wails.localhost" || parsed.hostname.endsWith(".wails")) {
-		parsed.protocol = "ws:";
-		parsed.host = %q;
-		parsed.searchParams.set("desktop_token", %q);
-	  }
-      super(parsed.toString(), protocols);
-    }
-  };
-})();`, host, desktopToken)
+func (a *desktopApp) applicationMenu() *menu.Menu {
+	applicationMenu := menu.NewMenuFromItems(menu.AppMenu())
+	connectionMenu := applicationMenu.AddSubmenu("连接")
+	connectionMenu.AddText("连接设置…", nil, func(*menu.CallbackData) {
+		if a.context != nil {
+			wailsruntime.WindowExecJS(a.context, `window.location.href="/__desktop"`)
+		}
+	})
+	connectionMenu.AddText("重新加载", nil, func(*menu.CallbackData) {
+		if a.context != nil {
+			wailsruntime.WindowReload(a.context)
+		}
+	})
+	applicationMenu.Append(menu.EditMenu())
+	applicationMenu.Append(menu.WindowMenu())
+	return applicationMenu
 }
