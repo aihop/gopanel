@@ -33,18 +33,17 @@ class _CodeHubScreenState extends ConsumerState<CodeHubScreen> {
         .read(aiWorkspaceControllerProvider.notifier)
         .selectSession(session);
     if (!mounted) return;
+    final workspace = ref.read(aiWorkspaceControllerProvider);
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => CodeTerminalScreen(
-          session: session,
+          session: workspace.currentSession ?? session,
+          task: workspace.currentTask,
           nativeProtocol: _usesNativeProtocol(
-            ref.read(aiWorkspaceControllerProvider).executors,
+            workspace.executors,
             session.agentName,
           ),
-          projectName: _projectName(
-            ref.read(aiWorkspaceControllerProvider).projects,
-            session.projectId,
-          ),
+          projectName: _projectName(workspace.projects, session.projectId),
         ),
       ),
     );

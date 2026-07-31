@@ -32,6 +32,12 @@ void main() {
         'approvalPolicy': 'safe_auto',
       },
       'currentStage': 'awaiting_approval',
+      'currentTask': {
+        'id': 18,
+        'title': '修复移动端终端连接',
+        'status': 'running',
+        'agentName': 'codex',
+      },
       'recentMessages': [
         {
           'id': 8,
@@ -69,6 +75,7 @@ void main() {
 
     expect(state.session.agentName, 'codex');
     expect(state.session.approvalPolicy, 'safe_auto');
+    expect(state.currentTask?.title, '修复移动端终端连接');
     expect(state.recentMessages.single.text, '准备执行高风险操作');
     expect(state.previews.single.status, 'ready');
     expect(state.pendingApproval?.riskLevel, 'high');

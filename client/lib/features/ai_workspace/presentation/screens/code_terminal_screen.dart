@@ -37,11 +37,13 @@ class CodeTerminalScreen extends StatefulWidget {
   const CodeTerminalScreen({
     super.key,
     required this.session,
+    required this.task,
     required this.projectName,
     required this.nativeProtocol,
   });
 
   final AiDevSession session;
+  final AiTaskSummary? task;
   final String projectName;
   final bool nativeProtocol;
 
@@ -128,9 +130,14 @@ class _CodeTerminalScreenState extends State<CodeTerminalScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final title = widget.session.title.isEmpty
+    final sessionTitle = widget.session.title.isEmpty
         ? '开发 #${widget.session.id}'
         : widget.session.title;
+    final taskTitle = widget.task == null
+        ? '暂无任务'
+        : widget.task!.title.isEmpty
+        ? '任务 #${widget.task!.id}'
+        : widget.task!.title;
     return Scaffold(
       backgroundColor: const Color(0xFF0B1020),
       appBar: AppBar(
@@ -140,11 +147,23 @@ class _CodeTerminalScreenState extends State<CodeTerminalScreen> {
         foregroundColor: Colors.white,
         titleSpacing: 0,
         iconTheme: const IconThemeData(size: 20),
-        title: Text(
-          title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+        title: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '任务 · $taskTitle',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+            ),
+            Text(
+              sessionTitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8)),
+            ),
+          ],
         ),
         actions: [
           CodeTerminalProjectLabel(projectName: widget.projectName),
