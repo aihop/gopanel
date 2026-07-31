@@ -335,6 +335,18 @@ watch(
 	background-color: rgba(100, 116, 139, 0.28) !important;
 }
 
+.ai-workspace-task-row--active::before {
+	position: absolute;
+	top: 8px;
+	bottom: 8px;
+	left: 0;
+	width: 4px;
+	border-radius: 0 9999px 9999px 0;
+	background-color: rgb(29, 78, 216);
+	box-shadow: 0 2px 8px rgba(29, 78, 216, 0.32);
+	content: "";
+}
+
 :global(.theme-dark) .ai-workspace-branches {
 	border-top-color: color-mix(in srgb, var(--border-color) 80%, transparent);
 	background-color: color-mix(in srgb, var(--bg-default-color) 76%, transparent);
@@ -346,6 +358,11 @@ watch(
 
 :global(.theme-dark) .ai-workspace-task-row--active {
 	background-color: color-mix(in srgb, var(--primary-color) 14%, transparent) !important;
+}
+
+:global(.theme-dark) .ai-workspace-task-row--active::before {
+	background-color: rgb(96, 165, 250);
+	box-shadow: 0 2px 8px rgba(96, 165, 250, 0.28);
 }
 
 :global(.theme-dark) .ai-workspace-task-btn {
