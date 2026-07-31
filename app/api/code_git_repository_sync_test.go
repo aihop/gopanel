@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -83,6 +84,43 @@ func TestPrepareCodeRepositoryRejectsLocalAhead(t *testing.T) {
 	_, err := prepareCodeRepository(localDir)
 	if err == nil || !strings.Contains(err.Error(), "领先") {
 		t.Fatalf("local-ahead repository should be rejected: %v", err)
+	}
+}
+
+func TestPrepareCodeRepositoryUsesLocalBaselineWhenFetchUnavailable(t *testing.T) {
+	localDir, _ := createCodeRemoteRepository(t)
+	localCommit, err := runCodeGit(localDir, "rev-parse", "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(localDir, "remote", "set-url", "origin", "https://127.0.0.1:1/gopanel.git"); err != nil {
+		t.Fatal(err)
+	}
+
+	prepared, err := prepareCodeRepository(localDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prepared.BaseCommit != localCommit || prepared.RemoteCommit != "" || prepared.SyncStatus != "local_only" {
+		t.Fatalf("unexpected local-only repository: %#v", prepared)
+	}
+	if prepared.RemoteName != "origin" || prepared.RemoteBranch == "" {
+		t.Fatalf("remote delivery metadata unavailable: %#v", prepared)
+	}
+}
+
+func TestCodeGitFetchUnavailableClassification(t *testing.T) {
+	for _, message := range []string{
+		"Git 操作失败：fatal: unable to get password from user",
+		"Git 操作失败：fatal: could not resolve host: codeup.aliyun.com",
+		"Git 操作超时",
+	} {
+		if !isCodeGitFetchUnavailable(errors.New(message)) {
+			t.Fatalf("fetch error should allow local fallback: %s", message)
+		}
+	}
+	if isCodeGitFetchUnavailable(errors.New("Git 操作失败：fatal: bad object refs/heads/main")) {
+		t.Fatal("repository corruption must not allow local fallback")
 	}
 }
 

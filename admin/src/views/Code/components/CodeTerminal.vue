@@ -54,6 +54,14 @@ const sendTerminalAck = (sequence: number) => {
 	}
 }
 
+const writeTerminalData = (data: string, forceBottom = false) => {
+	const buffer = term.buffer.active
+	const shouldFollow = forceBottom || buffer.baseY - buffer.viewportY <= 1
+	term.write(data, () => {
+		if (shouldFollow) term.scrollToBottom()
+	})
+}
+
 const requestTerminalResync = () => {
 	if (ws?.readyState !== WebSocket.OPEN || pendingResyncId) return
 	pendingResyncId = `${Date.now()}-${++resyncRequest}`
@@ -180,7 +188,8 @@ const connectWebSocket = () => {
 				const chunkIndex = Number(msg.chunkIndex) || 0
 				const chunkCount = Number(msg.chunkCount) || 1
 				if (msg.truncated && chunkIndex === 0) term.reset()
-				if (msg.data) term.write(msg.data)
+				if (msg.data) writeTerminalData(msg.data, chunkIndex === chunkCount - 1)
+				else if (chunkIndex === chunkCount - 1) term.scrollToBottom()
 				if (chunkIndex === chunkCount - 1) {
 					lastSequence = sequence
 					pendingResyncId = ""
@@ -196,7 +205,7 @@ const connectWebSocket = () => {
 					requestTerminalResync()
 					return
 				}
-				if (msg.data) term.write(msg.data)
+				if (msg.data) writeTerminalData(msg.data)
 				lastSequence = sequence
 				sendTerminalAck(sequence)
 			} else if (msg.type === "resync_required") {
@@ -208,17 +217,17 @@ const connectWebSocket = () => {
 				intentionalClose = true
 				hasTerminalControl.value = false
 			} else if (msg.type === "cmd") {
-				term.write(msg.data)
+				writeTerminalData(msg.data)
 			} else if (msg.type === "meta" && msg.task_id) {
 				// 后端通知前端：新任务已创建，请更新 URL 或左侧列表
 				emit("task-created", msg.task_id)
 			} else if (msg.type === "pong") {
 				// do nothing
 			} else {
-				term.write(event.data)
+				writeTerminalData(event.data)
 			}
 		} catch (e) {
-			term.write(event.data)
+			writeTerminalData(event.data)
 		}
 	}
 

@@ -1,6 +1,7 @@
 export interface AIProject {
 	id: number
 	createdAt: string
+	updatedAt?: string
 	name: string
 	description: string
 	workDir: string
@@ -77,6 +78,7 @@ export type CodeApprovalPolicy = "manual" | "safe_auto" | "full_auto"
 export interface CodeSession {
 	id: number
 	createdAt: string
+	updatedAt?: string
 	projectId: number
 	title: string
 	currentTaskTitle?: string
@@ -89,7 +91,7 @@ export interface CodeSession {
 	remoteName?: string
 	remoteBranch?: string
 	remoteCommit?: string
-	repositorySync?: "local" | "synced" | "fast_forwarded"
+	repositorySync?: "local" | "local_only" | "synced" | "fast_forwarded"
 	isolationMode?: "single_worktree" | "multi_worktree"
 	status: string
 	deliveredAt?: string

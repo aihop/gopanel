@@ -52,7 +52,7 @@ func (manager *hostTerminalManager) create(req createHostTerminalRequest, userID
 	}
 	codeHostTerminalLifecycle.Lock()
 	defer codeHostTerminalLifecycle.Unlock()
-	if err := validateHostTerminalDevelopmentOpen(); err != nil {
+	if err := validateHostTerminalDevelopmentOpen(workDir); err != nil {
 		return nil, err
 	}
 	command, shellName, err := buildHostTerminalCommand(req.Shell, workDir)

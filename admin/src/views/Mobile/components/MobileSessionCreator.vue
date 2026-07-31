@@ -38,7 +38,7 @@ const approvalPolicies = computed<CodeApprovalPolicy[]>(() =>
 )
 const supportsApproval = computed(() => approvalPolicies.value.length > 1)
 const dirtyRepositories = computed(() => worktreeCapability.value?.dirtyRepositories || [])
-const canCreate = computed(() => Boolean(projectId.value && executorId.value && worktreeCapability.value?.available && !dirtyRepositories.value.length))
+const canCreate = computed(() => Boolean(projectId.value && executorId.value && worktreeCapability.value?.available))
 
 async function loadWorktreeCapability() {
 	worktreeCapability.value = null

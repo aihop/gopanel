@@ -4,6 +4,7 @@ import { useI18n } from "vue-i18n"
 import Icon from "@/components/common/Icon.vue"
 import CodeApprovalCenter from "./CodeApprovalCenter.vue"
 import CodeDeliveryPanel from "./CodeDeliveryPanel.vue"
+import CodeTaskDeliveryButton from "./CodeTaskDeliveryButton.vue"
 import SessionApprovalPolicy from "./SessionApprovalPolicy.vue"
 import WorkspaceModeSwitch, { type CodeWorkspaceMode } from "./WorkspaceModeSwitch.vue"
 import { codeWorkspaceMessages } from "../codeWorkspaceMessages"
@@ -60,6 +61,7 @@ const sessionIcon = computed(() => (props.isTerminalSession ? "mdi:console-line"
 		</div>
 
 		<div class="flex min-w-0 flex-wrap items-center gap-2 md:justify-end">
+			<CodeTaskDeliveryButton v-if="sessionId !== null && !isTerminalSession" :session-id="sessionId" />
 			<div
 				v-if="hasContext && !isTerminalSession"
 				class="rounded-xl border border-slate-200 bg-slate-50/80 p-0.5 dark:border-[var(--border-color)] dark:bg-white/5"
@@ -119,10 +121,20 @@ const sessionIcon = computed(() => (props.isTerminalSession ? "mdi:console-line"
 				</n-tooltip>
 				<n-tooltip v-if="!embedded">
 					<template #trigger>
-						<n-button quaternary circle size="small" :aria-label="fullscreenLabel" @click="emit('toggleFullscreen')">
+						<n-button
+							quaternary
+							circle
+							size="small"
+							:aria-label="fullscreenLabel"
+							@click="emit('toggleFullscreen')"
+						>
 							<template #icon>
 								<Icon
-									:name="isFullscreen ? 'fluent:full-screen-minimize-24-regular' : 'fluent:full-screen-maximize-24-regular'"
+									:name="
+										isFullscreen
+											? 'fluent:full-screen-minimize-24-regular'
+											: 'fluent:full-screen-maximize-24-regular'
+									"
 								/>
 							</template>
 						</n-button>
