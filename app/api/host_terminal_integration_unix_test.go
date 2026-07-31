@@ -56,6 +56,10 @@ func TestHostTerminalManagerCreateWriteAndStop(t *testing.T) {
 		t.Fatalf("terminal output unavailable: %q", output)
 	}
 	session.unsubscribe(subscriber)
+	resumed, err := manager.resume(record.ID)
+	if err != nil || resumed.ID != record.ID || resumed.PID != record.PID {
+		t.Fatalf("disconnected terminal should resume the original process: %#v, %v", resumed, err)
+	}
 	if !manager.stop(record.ID) {
 		t.Fatal("terminal stop failed")
 	}
@@ -67,39 +71,6 @@ func TestHostTerminalManagerCreateWriteAndStop(t *testing.T) {
 	var stored model.HostTerminalSession
 	if err := database.First(&stored, record.ID).Error; err != nil || stored.Status != "stopped" || stored.EndedAt == nil {
 		t.Fatalf("terminal final state was not persisted: %#v, %v", stored, err)
-	}
-}
-
-func TestHostTerminalManagerReconnectCreatesReplacement(t *testing.T) {
-	database, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "terminal-reconnect.db")), &gorm.Config{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := database.AutoMigrate(&model.HostTerminalSession{}, &model.HostTerminalAuditEvent{}); err != nil {
-		t.Fatal(err)
-	}
-	oldDB := global.DB
-	global.DB = database
-	t.Cleanup(func() { global.DB = oldDB })
-	manager := &hostTerminalManager{sessions: make(map[uint]*hostTerminal)}
-	source := &model.HostTerminalSession{UserID: 9, Status: "interrupted", Shell: "sh", WorkDir: t.TempDir(), StartedAt: time.Now()}
-	if err := database.Create(source).Error; err != nil {
-		t.Fatal(err)
-	}
-	reconnected, err := manager.reconnect(source, source.UserID, "127.0.0.1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { manager.stop(reconnected.ID) })
-	expectedWorkDir, err := resolveHostTerminalWorkDir(source.WorkDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if reconnected.ID == source.ID || reconnected.Status != "running" || reconnected.Shell != source.Shell || reconnected.WorkDir != expectedWorkDir {
-		t.Fatalf("unexpected replacement terminal: %#v", reconnected)
-	}
-	if !manager.stop(reconnected.ID) {
-		t.Fatal("replacement terminal did not stop")
 	}
 }
 

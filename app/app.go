@@ -160,6 +160,7 @@ func (r *App) Run() error {
 func (r *App) Serve(listener net.Listener) error {
 	r.reloadFiber(false)
 	api.StartCodeInstructionRecovery()
+	api.StartCodeDeliveryRecovery()
 	r.startupMessage(listener.Addr().String())
 
 	err := r.App.Listener(listener, fiber.ListenConfig{DisableStartupMessage: true})

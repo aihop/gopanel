@@ -245,6 +245,7 @@ export interface CodeSessionState {
 	changedFiles: string[]
 	latestRun: CodeExecutionRun | null
 	tokenUsage: CodeTokenUsageResponse
+	delivery: import("./codeGit").CodeDeliveryJob | null
 }
 
 export type CodeQualityKind = "test" | "lint" | "typecheck" | "build"

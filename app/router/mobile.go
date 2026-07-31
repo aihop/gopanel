@@ -36,6 +36,7 @@ func MobileRouter(r fiber.Router) {
 	app.Get("/sessions", api.GetAISessions)
 	app.Post("/sessions", api.CreateAISession)
 	app.Get("/sessions/:id/state", api.GetAISessionState)
+	app.Get("/sessions/:id/delivery", api.GetCodeDeliveryJob)
 	app.Get("/sessions/:id/structure", api.GetAISessionStructure)
 	app.Get("/sessions/:id/file", api.GetAISessionFile)
 	app.Put("/sessions/:id/file", api.SaveAISessionFile)

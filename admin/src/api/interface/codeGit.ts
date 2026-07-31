@@ -60,6 +60,26 @@ export interface CodeGitDeliveryResult {
 	repositories?: CodeRepositoryDeliveryResult[]
 }
 
+export type CodeDeliveryJobStatus = "queued" | "running" | "completed" | "conflict" | "failed"
+
+export interface CodeDeliveryJob {
+	id: number
+	sessionId: number
+	status: CodeDeliveryJobStatus
+	stage: string
+	progress: number
+	attempt: number
+	queuePosition: number
+	targetBranch?: string
+	resultCommit?: string
+	errorMessage?: string
+	conflictFiles: string[]
+	createdAt: string
+	updatedAt: string
+	startedAt?: string
+	completedAt?: string
+}
+
 export interface CodeDeliveryPushRepository {
 	repositoryId: string
 	repositoryName: string

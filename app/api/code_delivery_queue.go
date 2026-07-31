@@ -1,0 +1,430 @@
+package api
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/aihop/gopanel/app/model"
+	"github.com/aihop/gopanel/global"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
+)
+
+const (
+	codeDeliveryJobQueued    = "queued"
+	codeDeliveryJobRunning   = "running"
+	codeDeliveryJobCompleted = "completed"
+	codeDeliveryJobConflict  = "conflict"
+	codeDeliveryJobFailed    = "failed"
+
+	codeDeliveryStageQueued           = "queued"
+	codeDeliveryStageStoppingTerminal = "stopping_terminal"
+	codeDeliveryStageSyncing          = "syncing"
+	codeDeliveryStageMerging          = "merging"
+	codeDeliveryStageQualityCheck     = "quality_check"
+	codeDeliveryStagePushing          = "pushing"
+	codeDeliveryStageVerifying        = "verifying"
+	codeDeliveryStageCleaning         = "cleaning"
+	codeDeliveryStageCompleted        = "completed"
+
+	codeDeliveryLeaseDuration = 45 * time.Second
+)
+
+type codeDeliveryProgressReporter func(stage string, progress int)
+
+type codeDeliveryJobView struct {
+	ID            uint       `json:"id"`
+	SessionID     uint       `json:"sessionId"`
+	Status        string     `json:"status"`
+	Stage         string     `json:"stage"`
+	Progress      int        `json:"progress"`
+	Attempt       int        `json:"attempt"`
+	QueuePosition int        `json:"queuePosition"`
+	TargetBranch  string     `json:"targetBranch,omitempty"`
+	ResultCommit  string     `json:"resultCommit,omitempty"`
+	ErrorMessage  string     `json:"errorMessage,omitempty"`
+	ConflictFiles []string   `json:"conflictFiles"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	UpdatedAt     time.Time  `json:"updatedAt"`
+	StartedAt     *time.Time `json:"startedAt,omitempty"`
+	CompletedAt   *time.Time `json:"completedAt,omitempty"`
+}
+
+type codeDeliveryRunner struct {
+	mu     sync.Mutex
+	queued map[uint]struct{}
+	owner  string
+}
+
+var backgroundCodeDelivery = &codeDeliveryRunner{queued: make(map[uint]struct{}), owner: newCodeDeliveryOwner()}
+var codeDeliveryRecoveryOnce sync.Once
+
+func newCodeDeliveryOwner() string {
+	random := make([]byte, 8)
+	_, _ = rand.Read(random)
+	hostname, _ := os.Hostname()
+	return fmt.Sprintf("%s-%d-%s", hostname, os.Getpid(), hex.EncodeToString(random))
+}
+
+func codeDeliveryRepositoryKey(sourceDir, remoteName, targetBranch string) string {
+	resolved, err := filepath.EvalSymlinks(filepath.Clean(sourceDir))
+	if err != nil {
+		resolved, _ = filepath.Abs(filepath.Clean(sourceDir))
+	}
+	sum := sha256.Sum256([]byte(strings.Join([]string{resolved, remoteName, targetBranch}, "\x00")))
+	return hex.EncodeToString(sum[:])
+}
+
+func codeDeliveryRepositoryKeys(session *model.AIDevSession) ([]string, string, error) {
+	if session.IsolationMode == codeIsolationMultiWorktree || hasCodeMultiRepositoryDelivery(session.ID) {
+		repositories, err := loadCodeSessionRepositories(session.ID)
+		if err != nil || len(repositories) == 0 {
+			return nil, "", errors.New("会话多仓库交付记录不可用")
+		}
+		keys := make([]string, 0, len(repositories))
+		for _, repository := range repositories {
+			targetBranch := repository.TargetBranch
+			if strings.TrimSpace(targetBranch) == "" {
+				targetBranch, _ = runCodeGit(repository.SourceDir, "branch", "--show-current")
+			}
+			keys = append(keys, codeDeliveryRepositoryKey(repository.SourceDir, repository.RemoteName, targetBranch))
+		}
+		sort.Strings(keys)
+		return keys, "", nil
+	}
+	sourceDir, remoteName, targetBranch := session.SourceWorkDir, session.RemoteName, session.TargetBranch
+	var delivery model.AICodeDelivery
+	if err := global.DB.Where("session_id = ?", session.ID).First(&delivery).Error; err == nil {
+		sourceDir, remoteName, targetBranch = delivery.SourceWorkDir, delivery.RemoteName, delivery.TargetBranch
+	}
+	if strings.TrimSpace(sourceDir) == "" {
+		return nil, "", errors.New("交付源仓库不可用")
+	}
+	if strings.TrimSpace(targetBranch) == "" {
+		targetBranch, _ = runCodeGit(sourceDir, "branch", "--show-current")
+	}
+	if strings.TrimSpace(targetBranch) == "" {
+		return nil, "", errors.New("交付目标分支不可用")
+	}
+	return []string{codeDeliveryRepositoryKey(sourceDir, remoteName, targetBranch)}, targetBranch, nil
+}
+
+func enqueueCodeDeliveryJob(session *model.AIDevSession, userID uint, requestIP string) (*model.AICodeDeliveryJob, error) {
+	job, err := persistCodeDeliveryJob(session, userID, requestIP)
+	if err != nil {
+		return nil, err
+	}
+	enqueueCodeDelivery(job.ID)
+	return job, nil
+}
+
+func persistCodeDeliveryJob(session *model.AIDevSession, userID uint, requestIP string) (*model.AICodeDeliveryJob, error) {
+	keys, targetBranch, err := codeDeliveryRepositoryKeys(session)
+	if err != nil {
+		return nil, err
+	}
+	encodedKeys, _ := json.Marshal(keys)
+	var job model.AICodeDeliveryJob
+	err = global.DB.Transaction(func(tx *gorm.DB) error {
+		queryErr := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("session_id = ?", session.ID).First(&job).Error
+		if errors.Is(queryErr, gorm.ErrRecordNotFound) {
+			job = model.AICodeDeliveryJob{
+				SessionID: session.ID, ProjectID: session.ProjectID, UserID: userID,
+				Status: codeDeliveryJobQueued, Stage: codeDeliveryStageQueued,
+				RepositoryKeys: string(encodedKeys), TargetBranch: targetBranch, RequestIP: requestIP,
+			}
+			return tx.Create(&job).Error
+		}
+		if queryErr != nil {
+			return queryErr
+		}
+		if job.Status == codeDeliveryJobQueued || job.Status == codeDeliveryJobRunning || job.Status == codeDeliveryJobCompleted {
+			return nil
+		}
+		updates := map[string]any{
+			"status": codeDeliveryJobQueued, "stage": codeDeliveryStageQueued, "progress": 0,
+			"repository_keys": string(encodedKeys), "target_branch": targetBranch,
+			"result_commit": "", "error_message": "", "conflict_files": "", "request_ip": requestIP,
+			"lease_owner": "", "lease_expires_at": nil, "started_at": nil, "completed_at": nil,
+		}
+		return tx.Model(&job).Updates(updates).Error
+	})
+	if err != nil {
+		if loadErr := global.DB.Where("session_id = ?", session.ID).First(&job).Error; loadErr != nil {
+			return nil, err
+		}
+	}
+	return &job, nil
+}
+
+func StartCodeDeliveryRecovery() {
+	codeDeliveryRecoveryOnce.Do(func() {
+		enqueuePersistedCodeDeliveries()
+		go func() {
+			ticker := time.NewTicker(5 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					enqueuePersistedCodeDeliveries()
+				case <-codeExecutions.stop:
+					return
+				}
+			}
+		}()
+	})
+}
+
+func enqueuePersistedCodeDeliveries() {
+	if global.DB == nil {
+		return
+	}
+	var ids []uint
+	now := time.Now()
+	err := global.DB.Model(&model.AICodeDeliveryJob{}).Where(
+		"status = ? OR (status = ? AND (lease_expires_at IS NULL OR lease_expires_at < ?))",
+		codeDeliveryJobQueued, codeDeliveryJobRunning, now,
+	).Order("created_at ASC").Limit(500).Pluck("id", &ids).Error
+	if err != nil {
+		global.LOG.Errorf("Load queued Code deliveries failed: %v", err)
+		return
+	}
+	for _, id := range ids {
+		enqueueCodeDelivery(id)
+	}
+}
+
+func enqueueCodeDelivery(jobID uint) {
+	if codeExecutions.isStopping() {
+		return
+	}
+	backgroundCodeDelivery.mu.Lock()
+	if _, exists := backgroundCodeDelivery.queued[jobID]; exists {
+		backgroundCodeDelivery.mu.Unlock()
+		return
+	}
+	backgroundCodeDelivery.queued[jobID] = struct{}{}
+	backgroundCodeDelivery.mu.Unlock()
+	go backgroundCodeDelivery.run(jobID)
+}
+
+func decodeCodeDeliveryKeys(job *model.AICodeDeliveryJob) ([]string, error) {
+	var keys []string
+	if err := json.Unmarshal([]byte(job.RepositoryKeys), &keys); err != nil || len(keys) == 0 {
+		return nil, errors.New("交付仓库租约信息无效")
+	}
+	sort.Strings(keys)
+	return keys, nil
+}
+
+func (runner *codeDeliveryRunner) claim(jobID uint) (*model.AICodeDeliveryJob, []string, bool, error) {
+	now, expiresAt := time.Now(), time.Now().Add(codeDeliveryLeaseDuration)
+	result := global.DB.Model(&model.AICodeDeliveryJob{}).Where(
+		"id = ? AND (status = ? OR (status = ? AND (lease_expires_at IS NULL OR lease_expires_at < ?)))",
+		jobID, codeDeliveryJobQueued, codeDeliveryJobRunning, now,
+	).Updates(map[string]any{
+		"status": codeDeliveryJobRunning, "lease_owner": runner.owner, "lease_expires_at": expiresAt,
+		"completed_at": nil,
+	})
+	if result.Error != nil || result.RowsAffected == 0 {
+		return nil, nil, false, result.Error
+	}
+	var job model.AICodeDeliveryJob
+	if err := global.DB.First(&job, jobID).Error; err != nil {
+		return nil, nil, false, err
+	}
+	keys, err := decodeCodeDeliveryKeys(&job)
+	return &job, keys, true, err
+}
+
+func (runner *codeDeliveryRunner) acquireRepositoryLeases(job *model.AICodeDeliveryJob, keys []string) (bool, error) {
+	now, expiresAt := time.Now(), time.Now().Add(codeDeliveryLeaseDuration)
+	errBusy := errors.New("repository delivery busy")
+	err := global.DB.Transaction(func(tx *gorm.DB) error {
+		for _, key := range keys {
+			result := tx.Model(&model.AICodeDeliveryLease{}).Where(
+				"repository_key = ? AND (job_id = ? OR lease_expires_at IS NULL OR lease_expires_at < ?)", key, job.ID, now,
+			).Updates(map[string]any{"job_id": job.ID, "lease_owner": runner.owner, "lease_expires_at": expiresAt})
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected > 0 {
+				continue
+			}
+			lease := model.AICodeDeliveryLease{RepositoryKey: key, JobID: job.ID, LeaseOwner: runner.owner, LeaseExpiresAt: &expiresAt}
+			created := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&lease)
+			if created.Error != nil {
+				return created.Error
+			}
+			if created.RowsAffected == 0 {
+				return errBusy
+			}
+		}
+		return nil
+	})
+	if errors.Is(err, errBusy) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+func (runner *codeDeliveryRunner) deferJob(jobID uint, err error) {
+	updates := map[string]any{"status": codeDeliveryJobQueued, "stage": codeDeliveryStageQueued, "lease_owner": "", "lease_expires_at": nil}
+	if err != nil {
+		updates["error_message"] = err.Error()
+	}
+	_ = global.DB.Model(&model.AICodeDeliveryJob{}).Where("id = ? AND lease_owner = ?", jobID, runner.owner).Updates(updates).Error
+	_ = global.DB.Where("job_id = ? AND lease_owner = ?", jobID, runner.owner).Delete(&model.AICodeDeliveryLease{}).Error
+}
+
+func (runner *codeDeliveryRunner) heartbeat(ctx context.Context, jobID uint, keys []string) {
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			expiresAt := time.Now().Add(codeDeliveryLeaseDuration)
+			_ = global.DB.Model(&model.AICodeDeliveryJob{}).Where("id = ? AND lease_owner = ?", jobID, runner.owner).Update("lease_expires_at", expiresAt).Error
+			_ = global.DB.Model(&model.AICodeDeliveryLease{}).Where("job_id = ? AND lease_owner = ? AND repository_key IN ?", jobID, runner.owner, keys).Update("lease_expires_at", expiresAt).Error
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func (runner *codeDeliveryRunner) updateProgress(jobID uint, stage string, progress int) {
+	_ = global.DB.Model(&model.AICodeDeliveryJob{}).Where("id = ? AND lease_owner = ?", jobID, runner.owner).
+		Updates(map[string]any{"stage": stage, "progress": progress, "error_message": ""}).Error
+}
+
+func (runner *codeDeliveryRunner) finish(job *model.AICodeDeliveryJob, result codeGitDeliveryResult, runErr error) {
+	status, stage, progress := codeDeliveryJobCompleted, codeDeliveryStageCompleted, 100
+	if runErr != nil {
+		status, stage, progress = codeDeliveryJobFailed, codeDeliveryJobFailed, job.Progress
+	} else if result.Status == codeDeliveryJobConflict {
+		status, stage, progress = codeDeliveryJobConflict, codeDeliveryJobConflict, job.Progress
+	}
+	conflicts, _ := json.Marshal(result.ConflictFiles)
+	now := time.Now()
+	updates := map[string]any{
+		"status": status, "stage": stage, "progress": progress, "result_commit": result.Commit,
+		"conflict_files": string(conflicts), "lease_owner": "", "lease_expires_at": nil, "completed_at": now,
+	}
+	if runErr != nil {
+		updates["error_message"] = runErr.Error()
+	} else {
+		updates["error_message"] = ""
+	}
+	_ = global.DB.Model(&model.AICodeDeliveryJob{}).Where("id = ? AND lease_owner = ?", job.ID, runner.owner).Updates(updates).Error
+	_ = global.DB.Where("job_id = ? AND lease_owner = ?", job.ID, runner.owner).Delete(&model.AICodeDeliveryLease{}).Error
+	auditStatus, detail := "success", result.Status
+	if status == codeDeliveryJobConflict {
+		auditStatus, detail = "conflict", strings.Join(result.ConflictFiles, ", ")
+	} else if runErr != nil {
+		auditStatus, detail = "failed", runErr.Error()
+	}
+	duration := time.Duration(0)
+	if job.StartedAt != nil {
+		duration = time.Since(*job.StartedAt)
+	}
+	recordCodeAudit(job.UserID, job.ProjectID, job.SessionID, "worktree_merge", auditStatus, "delivery", detail, job.RequestIP, time.Now().Add(-duration), codeAuditMeta{"commit": result.Commit, "conflictFiles": result.ConflictFiles})
+}
+
+func (runner *codeDeliveryRunner) run(jobID uint) {
+	defer func() {
+		runner.mu.Lock()
+		delete(runner.queued, jobID)
+		runner.mu.Unlock()
+	}()
+	job, keys, claimed, err := runner.claim(jobID)
+	if err != nil {
+		if claimed && job != nil {
+			runner.finish(job, codeGitDeliveryResult{}, err)
+		}
+		return
+	}
+	if !claimed {
+		return
+	}
+	acquired, err := runner.acquireRepositoryLeases(job, keys)
+	if err != nil || !acquired {
+		runner.deferJob(job.ID, err)
+		return
+	}
+	startedAt := time.Now()
+	if err := global.DB.Model(&model.AICodeDeliveryJob{}).Where("id = ? AND lease_owner = ?", job.ID, runner.owner).
+		Updates(map[string]any{"started_at": startedAt, "attempt": gorm.Expr("attempt + 1")}).Error; err != nil {
+		runner.deferJob(job.ID, err)
+		return
+	}
+	job.StartedAt = &startedAt
+	job.Attempt++
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go runner.heartbeat(ctx, job.ID, keys)
+	reporter := func(stage string, progress int) {
+		job.Stage, job.Progress = stage, progress
+		runner.updateProgress(job.ID, stage, progress)
+	}
+	reporter(codeDeliveryStageStoppingTerminal, 5)
+	stopContext, cancelStop := context.WithTimeout(ctx, codeDeliveryQueueTimeout)
+	codeExecutions.cancelSessionKindAndWait(stopContext, job.SessionID, codeExecutionInteractive)
+	cancelStop()
+	if stopContext.Err() != nil {
+		runner.finish(job, codeGitDeliveryResult{}, errors.New("停止会话交互终端超时，请稍后重试"))
+		return
+	}
+	var session model.AIDevSession
+	if err := global.DB.First(&session, job.SessionID).Error; err != nil {
+		runner.finish(job, codeGitDeliveryResult{}, err)
+		return
+	}
+	lease, err := codeExecutions.acquireSession(ctx, &session, codeExecutionDelivery, true)
+	if err != nil {
+		runner.finish(job, codeGitDeliveryResult{}, err)
+		return
+	}
+	defer lease.Release()
+	var result codeGitDeliveryResult
+	if session.IsolationMode == codeIsolationMultiWorktree || hasCodeMultiRepositoryDelivery(session.ID) {
+		result, err = resumeCodeMultiRepositoryDeliveryWithProgress(&session, job.UserID, reporter)
+	} else {
+		result, err = resumeCodeSessionDeliveryWithProgress(&session, job.UserID, reporter)
+	}
+	runner.finish(job, result, err)
+}
+
+func loadCodeDeliveryJobView(sessionID uint) (*codeDeliveryJobView, error) {
+	var job model.AICodeDeliveryJob
+	if err := global.DB.Where("session_id = ?", sessionID).First(&job).Error; err != nil {
+		return nil, err
+	}
+	var conflicts []string
+	_ = json.Unmarshal([]byte(job.ConflictFiles), &conflicts)
+	position := 0
+	if job.Status == codeDeliveryJobQueued {
+		var count int64
+		_ = global.DB.Model(&model.AICodeDeliveryJob{}).Where(
+			"status IN ? AND (created_at < ? OR (created_at = ? AND id < ?))",
+			[]string{codeDeliveryJobQueued, codeDeliveryJobRunning}, job.CreatedAt, job.CreatedAt, job.ID,
+		).Count(&count).Error
+		position = int(count) + 1
+	}
+	return &codeDeliveryJobView{
+		ID: job.ID, SessionID: job.SessionID, Status: job.Status, Stage: job.Stage, Progress: job.Progress,
+		Attempt: job.Attempt, QueuePosition: position, TargetBranch: job.TargetBranch, ResultCommit: job.ResultCommit,
+		ErrorMessage: job.ErrorMessage, ConflictFiles: conflicts, CreatedAt: job.CreatedAt, UpdatedAt: job.UpdatedAt,
+		StartedAt: job.StartedAt, CompletedAt: job.CompletedAt,
+	}, nil
+}
