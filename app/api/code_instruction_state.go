@@ -42,9 +42,7 @@ func reconcileCodeTaskState(
 		"current_stage": sessionStage,
 		"last_task_id":  task.ID,
 	}
-	if err := tx.Model(&model.AIDevSession{}).
-		Where("id = ?", session.ID).
-		Updates(updates).Error; err != nil {
+	if err := updateCodeSessionDevelopmentState(tx, session.ID, updates); err != nil {
 		return err
 	}
 	task.Status = taskStatus

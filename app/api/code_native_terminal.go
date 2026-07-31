@@ -60,6 +60,16 @@ func (manager *nativeCodeTerminalManager) attach(
 	session *model.AIDevSession,
 	cols, rows uint16,
 ) (*nativeCodeTerminal, bool, error) {
+	if session == nil || session.ID == 0 {
+		return nil, false, errors.New("开发会话不可用")
+	}
+	unlockLifecycle := codeSessionLifecycles.lock(session.ID)
+	defer unlockLifecycle()
+	current, err := repo.NewAIDevSessionRepo().GetSessionByID(session.ID)
+	if err != nil {
+		return nil, false, err
+	}
+	session = current
 	if err := validateCodeSessionDevelopmentOpen(session); err != nil {
 		return nil, false, err
 	}
@@ -97,21 +107,24 @@ func (manager *nativeCodeTerminalManager) attach(
 		executorName: session.AgentName,
 	}
 	if preparedSessionID != "" && session.NativeSessionID != preparedSessionID {
-		session.NativeSessionID = preparedSessionID
-		if err := repo.NewAIDevSessionRepo().UpdateSession(session); err != nil {
+		if err := updateCodeSessionDevelopmentState(global.DB, session.ID, map[string]any{
+			"native_session_id": preparedSessionID,
+		}); err != nil {
 			_ = command.Process.Kill()
 			_ = ptmx.Close()
 			lease.Release()
 			return nil, false, err
 		}
+		session.NativeSessionID = preparedSessionID
 	}
 	lease.SetCancel(func() {
 		if command.Process != nil {
 			_ = command.Process.Kill()
 		}
 	})
-	if err := global.DB.Model(&model.AIDevSession{}).Where("id = ?", session.ID).
-		Updates(map[string]any{"status": "active", "current_stage": "interactive"}).Error; err != nil {
+	if err := updateCodeSessionDevelopmentState(global.DB, session.ID, map[string]any{
+		"status": "active", "current_stage": "interactive",
+	}); err != nil {
 		_ = command.Process.Kill()
 		_ = ptmx.Close()
 		lease.Release()

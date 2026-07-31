@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/aihop/gopanel/app/e"
+	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/utils/token"
@@ -141,24 +142,24 @@ func getAISessionSourceDirs(sessionProjectID uint, claims *token.CustomClaims) (
 	return project.SourceDirs, nil
 }
 
-func getAISessionFileContext(c fiber.Ctx) (string, []string, error) {
+func getAISessionFileContext(c fiber.Ctx) (*model.AIDevSession, string, []string, error) {
 	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
 	sessionID, err := strconv.ParseUint(c.Params("id"), 10, 64)
 	if err != nil || sessionID == 0 {
-		return "", nil, errors.New("会话 ID 无效")
+		return nil, "", nil, errors.New("会话 ID 无效")
 	}
 	session, err := getAISessionWithPermission(uint(sessionID), claims)
 	if err != nil {
-		return "", nil, err
+		return nil, "", nil, err
 	}
 	if err := validateAIProjectWorkDirForClaims(session.WorkDir, claims); err != nil {
-		return "", nil, err
+		return nil, "", nil, err
 	}
 	sourceDirs, err := getAISessionSourceDirs(session.ProjectID, claims)
 	if err != nil {
-		return "", nil, err
+		return nil, "", nil, err
 	}
-	return session.WorkDir, sourceDirs, nil
+	return session, session.WorkDir, sourceDirs, nil
 }
 
 func readAISessionFile(workDir, relativePath string, sourceDirs []string) (fiber.Map, error) {
@@ -242,7 +243,7 @@ func writeAISessionFile(workDir, relativePath, content, baseVersion string, sour
 }
 
 func GetAISessionFile(c fiber.Ctx) error {
-	workDir, sourceDirs, err := getAISessionFileContext(c)
+	_, workDir, sourceDirs, err := getAISessionFileContext(c)
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
@@ -262,11 +263,19 @@ func SaveAISessionFile(c fiber.Ctx) error {
 	if err := c.Bind().JSON(&req); err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	workDir, sourceDirs, err := getAISessionFileContext(c)
+	session, workDir, sourceDirs, err := getAISessionFileContext(c)
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	version, err := writeAISessionFile(workDir, req.Path, req.Content, req.BaseVersion, sourceDirs)
+	version := ""
+	err = runCodeSessionWorkspaceMutation(session, func(current *model.AIDevSession) error {
+		if current.WorkDir != workDir {
+			return errors.New("会话工作目录已变化，请刷新后重试")
+		}
+		var writeErr error
+		version, writeErr = writeAISessionFile(workDir, req.Path, req.Content, req.BaseVersion, sourceDirs)
+		return writeErr
+	})
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}

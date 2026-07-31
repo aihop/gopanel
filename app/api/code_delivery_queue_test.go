@@ -100,6 +100,76 @@ func TestCodeDeliveryLifecycleCompletesAndReopens(t *testing.T) {
 	}
 }
 
+func TestCodeDeliveredSessionRejectsWorkspaceMutation(t *testing.T) {
+	database := withCodeGovernanceDB(t)
+	session := &model.AIDevSession{
+		ID: 912, UserID: 1, Status: codeSessionStatusDelivered, WorkDir: t.TempDir(),
+	}
+	if err := database.Create(session).Error; err != nil {
+		t.Fatal(err)
+	}
+	called := false
+	err := runCodeSessionWorkspaceMutation(session, func(*model.AIDevSession) error {
+		called = true
+		return nil
+	})
+	if err == nil || called {
+		t.Fatalf("delivered mutation was not rejected: called=%v err=%v", called, err)
+	}
+}
+
+func TestCodeWorkspaceMutationCompletesBeforeDeliverySeal(t *testing.T) {
+	database := withCodeGovernanceDB(t)
+	workDir := t.TempDir()
+	session := &model.AIDevSession{
+		ID: 913, UserID: 1, Status: codeSessionStatusActive, WorkDir: workDir,
+		SourceWorkDir: workDir, TargetBranch: "main",
+	}
+	if err := database.Create(session).Error; err != nil {
+		t.Fatal(err)
+	}
+	mutationStarted := make(chan struct{})
+	releaseMutation := make(chan struct{})
+	mutationDone := make(chan error, 1)
+	go func() {
+		mutationDone <- runCodeSessionWorkspaceMutation(session, func(*model.AIDevSession) error {
+			close(mutationStarted)
+			<-releaseMutation
+			return nil
+		})
+	}()
+	select {
+	case <-mutationStarted:
+	case <-time.After(time.Second):
+		t.Fatal("workspace mutation did not start")
+	}
+	deliveryDone := make(chan error, 1)
+	go func() {
+		_, err := persistCodeDeliveryJob(session, session.UserID, "127.0.0.1")
+		deliveryDone <- err
+	}()
+	select {
+	case err := <-deliveryDone:
+		t.Fatalf("delivery sealed before mutation completed: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(releaseMutation)
+	if err := <-mutationDone; err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-deliveryDone:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("delivery did not resume after mutation")
+	}
+	if err := database.First(session, session.ID).Error; err != nil || session.Status != codeSessionStatusDelivering {
+		t.Fatalf("session was not sealed after mutation: %#v, %v", session, err)
+	}
+}
+
 func TestCodeDeliveryRecoveryRestoresSessionLifecycle(t *testing.T) {
 	database := withCodeGovernanceDB(t)
 	queuedSession := &model.AIDevSession{ID: 910, UserID: 1, Status: codeSessionStatusActive, WorkDir: t.TempDir()}

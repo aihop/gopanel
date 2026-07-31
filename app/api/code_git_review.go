@@ -428,36 +428,40 @@ func UpdateCodeGitStage(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	repository, err := findCodeGitRepository(discoverCodeGitRepositories(session, sourceDirs), req.RepositoryID)
-	if err != nil {
-		return c.JSON(e.Fail(err))
-	}
-	status, err := loadCodeGitRepositoryStatus(*repository)
-	if err != nil {
-		return c.JSON(e.Fail(err))
-	}
-	validPaths := make(map[string]codeGitFile, len(status.Files))
-	for _, file := range status.Files {
-		validPaths[filepath.ToSlash(file.Path)] = file
-	}
-	paths := make([]string, 0, len(req.Paths))
-	seen := make(map[string]struct{})
-	for _, requestedPath := range req.Paths {
-		cleanPath := filepath.ToSlash(path.Clean(strings.TrimSpace(requestedPath)))
-		file, exists := validPaths[cleanPath]
-		if !exists || (req.Staged && !file.Changed && !file.Untracked) || (!req.Staged && !file.Staged) {
-			return c.JSON(e.Fail(fmt.Errorf("文件不允许执行当前暂存操作：%s", cleanPath)))
+	var updated codeGitStatus
+	err = runCodeSessionWorkspaceMutation(session, func(current *model.AIDevSession) error {
+		repository, mutationErr := findCodeGitRepository(discoverCodeGitRepositories(current, sourceDirs), req.RepositoryID)
+		if mutationErr != nil {
+			return mutationErr
 		}
-		if _, exists := seen[cleanPath]; exists {
-			continue
+		status, mutationErr := loadCodeGitRepositoryStatus(*repository)
+		if mutationErr != nil {
+			return mutationErr
 		}
-		seen[cleanPath] = struct{}{}
-		paths = append(paths, cleanPath)
-	}
-	if err := updateCodeGitPathsStage(*repository, paths, req.Staged); err != nil {
-		return c.JSON(e.Fail(err))
-	}
-	updated, err := loadCodeGitStatus(session, sourceDirs)
+		validPaths := make(map[string]codeGitFile, len(status.Files))
+		for _, file := range status.Files {
+			validPaths[filepath.ToSlash(file.Path)] = file
+		}
+		paths := make([]string, 0, len(req.Paths))
+		seen := make(map[string]struct{})
+		for _, requestedPath := range req.Paths {
+			cleanPath := filepath.ToSlash(path.Clean(strings.TrimSpace(requestedPath)))
+			file, exists := validPaths[cleanPath]
+			if !exists || (req.Staged && !file.Changed && !file.Untracked) || (!req.Staged && !file.Staged) {
+				return fmt.Errorf("文件不允许执行当前暂存操作：%s", cleanPath)
+			}
+			if _, exists := seen[cleanPath]; exists {
+				continue
+			}
+			seen[cleanPath] = struct{}{}
+			paths = append(paths, cleanPath)
+		}
+		if mutationErr = updateCodeGitPathsStage(*repository, paths, req.Staged); mutationErr != nil {
+			return mutationErr
+		}
+		updated, mutationErr = loadCodeGitStatus(current, sourceDirs)
+		return mutationErr
+	})
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}

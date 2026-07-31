@@ -137,6 +137,8 @@ func enqueueCodeDeliveryJob(session *model.AIDevSession, userID uint, requestIP 
 }
 
 func persistCodeDeliveryJob(session *model.AIDevSession, userID uint, requestIP string) (*model.AICodeDeliveryJob, error) {
+	unlockLifecycle := codeSessionLifecycles.lock(session.ID)
+	defer unlockLifecycle()
 	keys, targetBranch, err := codeDeliveryRepositoryKeys(session)
 	if err != nil {
 		return nil, err

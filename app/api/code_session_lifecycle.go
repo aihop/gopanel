@@ -1,13 +1,16 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/global"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 const (
@@ -15,6 +18,25 @@ const (
 	codeSessionStatusDelivering = "delivering"
 	codeSessionStatusDelivered  = "delivered"
 )
+
+type codeSessionLifecycleLocker struct {
+	mu    sync.Mutex
+	locks map[uint]*sync.Mutex
+}
+
+var codeSessionLifecycles = &codeSessionLifecycleLocker{locks: make(map[uint]*sync.Mutex)}
+
+func (locker *codeSessionLifecycleLocker) lock(sessionID uint) func() {
+	locker.mu.Lock()
+	lock := locker.locks[sessionID]
+	if lock == nil {
+		lock = &sync.Mutex{}
+		locker.locks[sessionID] = lock
+	}
+	locker.mu.Unlock()
+	lock.Lock()
+	return lock.Unlock
+}
 
 func validateCodeSessionDevelopmentOpen(session *model.AIDevSession) error {
 	if session == nil {
@@ -28,6 +50,57 @@ func validateCodeSessionDevelopmentOpen(session *model.AIDevSession) error {
 	default:
 		return nil
 	}
+}
+
+func lockCodeSessionForDevelopment(tx *gorm.DB, sessionID uint) (*model.AIDevSession, error) {
+	var session model.AIDevSession
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&session, sessionID).Error; err != nil {
+		return nil, err
+	}
+	if err := validateCodeSessionDevelopmentOpen(&session); err != nil {
+		return nil, err
+	}
+	return &session, nil
+}
+
+func updateCodeSessionDevelopmentState(tx *gorm.DB, sessionID uint, updates map[string]any) error {
+	result := tx.Model(&model.AIDevSession{}).
+		Where("id = ? AND status NOT IN ?", sessionID, []string{codeSessionStatusDelivering, codeSessionStatusDelivered}).
+		Updates(updates)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 1 {
+		return nil
+	}
+	var session model.AIDevSession
+	if err := tx.First(&session, sessionID).Error; err != nil {
+		return err
+	}
+	if err := validateCodeSessionDevelopmentOpen(&session); err != nil {
+		return err
+	}
+	return errors.New("开发会话状态已变化，请刷新后重试")
+}
+
+func runCodeSessionWorkspaceMutation(session *model.AIDevSession, operation func(*model.AIDevSession) error) error {
+	if session == nil || session.ID == 0 {
+		return errors.New("开发会话不可用")
+	}
+	unlockLifecycle := codeSessionLifecycles.lock(session.ID)
+	defer unlockLifecycle()
+	lease, err := codeExecutions.acquireSession(context.Background(), session, codeExecutionMutation, false)
+	if err != nil {
+		return err
+	}
+	defer lease.Release()
+	return global.DB.Transaction(func(tx *gorm.DB) error {
+		current, err := lockCodeSessionForDevelopment(tx, session.ID)
+		if err != nil {
+			return err
+		}
+		return operation(current)
+	})
 }
 
 func validateCodeSessionReadyForDelivery(tx *gorm.DB, session *model.AIDevSession) error {
@@ -49,8 +122,14 @@ func validateCodeSessionReadyForDelivery(tx *gorm.DB, session *model.AIDevSessio
 
 func markCodeSessionDelivering(tx *gorm.DB, session *model.AIDevSession) error {
 	updates := map[string]any{"status": codeSessionStatusDelivering, "current_stage": "delivery_queued"}
-	if err := tx.Model(&model.AIDevSession{}).Where("id = ?", session.ID).Updates(updates).Error; err != nil {
-		return err
+	result := tx.Model(&model.AIDevSession{}).
+		Where("id = ? AND status NOT IN ?", session.ID, []string{codeSessionStatusDelivering, codeSessionStatusDelivered}).
+		Updates(updates)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return errors.New("开发会话状态已变化，请刷新后重试")
 	}
 	session.Status, session.CurrentStage = codeSessionStatusDelivering, "delivery_queued"
 	if session.LastTaskID == 0 {

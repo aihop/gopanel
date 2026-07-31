@@ -17,6 +17,7 @@ import (
 const (
 	codeExecutionInteractive = "interactive"
 	codeExecutionInstruction = "instruction"
+	codeExecutionMutation    = "mutation"
 	codeExecutionQuality     = "quality"
 	codeExecutionDelivery    = "delivery"
 )

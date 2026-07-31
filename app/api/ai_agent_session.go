@@ -84,7 +84,9 @@ func ensureSessionTaskWithDB(db *gorm.DB, session *model.AIDevSession, claims *t
 	session.LastTaskID = task.ID
 	session.Status = "active"
 	session.CurrentStage = "task_ready"
-	if err := db.Save(session).Error; err != nil {
+	if err := updateCodeSessionDevelopmentState(db, session.ID, map[string]any{
+		"last_task_id": task.ID, "status": "active", "current_stage": "task_ready",
+	}); err != nil {
 		return nil, err
 	}
 	return task, nil
@@ -282,6 +284,8 @@ func CreateAISessionInstruction(c fiber.Ctx) error {
 	if err := validateCodeTokenBudget(session); err != nil {
 		return c.JSON(e.Fail(err))
 	}
+	unlockLifecycle := codeSessionLifecycles.lock(session.ID)
+	defer unlockLifecycle()
 	requireApproval := codeSessionRequiresRiskApproval(session)
 	needsApproval := shouldRequireAIApproval(content, requireApproval)
 	instructionStatus := "queued"
@@ -292,7 +296,17 @@ func CreateAISessionInstruction(c fiber.Ctx) error {
 	var instruction *model.AIInstruction
 	var approval *model.AIApproval
 	if err := global.DB.Transaction(func(tx *gorm.DB) error {
-		var txErr error
+		lockedSession, txErr := lockCodeSessionForDevelopment(tx, session.ID)
+		if txErr != nil {
+			return txErr
+		}
+		session = lockedSession
+		requireApproval = codeSessionRequiresRiskApproval(session)
+		needsApproval = shouldRequireAIApproval(content, requireApproval)
+		instructionStatus = "queued"
+		if needsApproval {
+			instructionStatus = "pending_approval"
+		}
 		task, txErr = ensureSessionTaskWithDB(tx, session, claims, content)
 		if txErr != nil {
 			return txErr
@@ -327,8 +341,9 @@ func CreateAISessionInstruction(c fiber.Ctx) error {
 		if strings.TrimSpace(session.Title) == "" {
 			session.Title = buildDefaultSessionTitle(session.WorkDir, content)
 		}
-		if txErr = tx.Model(&model.AIDevSession{}).Where("id = ?", session.ID).
-			Updates(map[string]any{"status": "active", "last_instruction_at": now, "title": session.Title}).Error; txErr != nil {
+		if txErr = updateCodeSessionDevelopmentState(tx, session.ID, map[string]any{
+			"status": "active", "last_instruction_at": now, "title": session.Title,
+		}); txErr != nil {
 			return txErr
 		}
 		return reconcileCodeTaskState(tx, session, task, instructionStatus, map[bool]string{true: "awaiting_approval", false: "instruction_queued"}[needsApproval])

@@ -133,12 +133,12 @@ func runCodeGitDelivery(c fiber.Ctx, action string, operation func(*model.AIDevS
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	lease, err := codeExecutions.acquireSession(context.Background(), session, codeExecutionDelivery, false)
-	if err != nil {
-		return c.JSON(e.Fail(err))
-	}
-	defer lease.Release()
-	result, err := operation(session)
+	var result codeGitDeliveryResult
+	err = runCodeSessionWorkspaceMutation(session, func(current *model.AIDevSession) error {
+		var operationErr error
+		result, operationErr = operation(current)
+		return operationErr
+	})
 	if err != nil {
 		recordCodeAudit(claims.UserId, session.ProjectID, session.ID, action, "failed", session.WorktreeBranch, err.Error(), c.IP(), startedAt, nil)
 		return c.JSON(e.Fail(err))

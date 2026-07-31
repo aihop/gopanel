@@ -171,6 +171,11 @@ func (r *codeSessionRunner) wait(ctx context.Context, sessionID uint) bool {
 func cancelQueuedCodeInstructions(session *model.AIDevSession) (int64, error) {
 	var cancelled int64
 	err := global.DB.Transaction(func(tx *gorm.DB) error {
+		lockedSession, err := lockCodeSessionForDevelopment(tx, session.ID)
+		if err != nil {
+			return err
+		}
+		session = lockedSession
 		result := tx.Model(&model.AIInstruction{}).
 			Where("session_id = ? AND status = ?", session.ID, "queued").
 			Update("status", "cancelled")
@@ -197,6 +202,8 @@ func StopCodeSessionExecution(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
+	unlockLifecycle := codeSessionLifecycles.lock(session.ID)
+	defer unlockLifecycle()
 	cancelledQueued, err := cancelQueuedCodeInstructions(session)
 	if err != nil {
 		return c.JSON(e.Fail(err))
@@ -239,16 +246,32 @@ func RetryCodeInstruction(c fiber.Ctx) error {
 	if err := validateCodeSessionDevelopmentOpen(session); err != nil {
 		return c.JSON(e.Fail(err))
 	}
+	unlockLifecycle := codeSessionLifecycles.lock(session.ID)
+	defer unlockLifecycle()
 	task, err := repo.NewAITaskRepo().GetTaskByID(instruction.TaskID)
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	instruction.Status = "queued"
 	if err := global.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Save(instruction).Error; err != nil {
+		lockedSession, err := lockCodeSessionForDevelopment(tx, session.ID)
+		if err != nil {
 			return err
 		}
-		return reconcileCodeTaskState(tx, session, task, "queued", "instruction_queued")
+		session = lockedSession
+		result := tx.Model(&model.AIInstruction{}).
+			Where("id = ? AND status IN ?", instruction.ID, []string{"failed", "cancelled"}).
+			Update("status", "queued")
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return errors.New("该指令状态已变化，请刷新后重试")
+		}
+		instruction.Status = "queued"
+		if err := reconcileCodeTaskState(tx, session, task, "queued", "instruction_queued"); err != nil {
+			return err
+		}
+		return nil
 	}); err != nil {
 		return c.JSON(e.Fail(err))
 	}
