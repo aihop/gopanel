@@ -114,7 +114,11 @@ func createCodeSessionWorktree(session *model.AIDevSession, project *model.AIPro
 			sourceDirs = []string{project.WorkDir}
 		}
 	}
-	prepared, err := prepareDiscoveredCodeRepositories(sourceDirs, includeUncommitted...)
+	policy, err := codeProjectDeliveryPolicy(project, sourceDirs)
+	if err != nil {
+		return fmt.Errorf("项目交付策略无效：%w", err)
+	}
+	prepared, err := prepareDiscoveredCodeRepositoriesWithPolicy(sourceDirs, policy, includeUncommitted...)
 	if err != nil {
 		return fmt.Errorf("当前项目不支持 Git Worktree 隔离：%w", err)
 	}

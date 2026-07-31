@@ -6,6 +6,8 @@ export interface AIProject {
 	workDir: string
 	sourceDirs: string[]
 	creatorId: number
+	primaryRepository?: string
+	deliveryBranch: string
 	requireQualityGate: boolean
 	monthlyTokenBudget: number
 	memberCount?: number
@@ -14,7 +16,7 @@ export interface AIProject {
 }
 
 export interface AIProjectExecutionSummary {
-	status: "idle" | "queued" | "running" | "pending_approval"
+	status: "idle" | "queued" | "running" | "delivering" | "pending_approval"
 	activeTaskCount: number
 	pendingApprovalCount: number
 	currentSessionId: number
@@ -90,6 +92,7 @@ export interface CodeSession {
 	repositorySync?: "local" | "synced" | "fast_forwarded"
 	isolationMode?: "single_worktree" | "multi_worktree"
 	status: string
+	deliveredAt?: string
 	currentStage: string
 	approvalPolicy: CodeApprovalPolicy
 	providerBaseUrl?: string

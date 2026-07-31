@@ -21,7 +21,13 @@ type codeRepositoryDeliveryResult struct {
 	RepositoryName string   `json:"repositoryName"`
 	Status         string   `json:"status"`
 	Branch         string   `json:"branch"`
+	TargetBranch   string   `json:"targetBranch"`
+	Remote         string   `json:"remote,omitempty"`
+	RemoteBranch   string   `json:"remoteBranch,omitempty"`
 	Commit         string   `json:"commit,omitempty"`
+	PushStatus     string   `json:"pushStatus"`
+	PushedCommit   string   `json:"pushedCommit,omitempty"`
+	ErrorMessage   string   `json:"errorMessage,omitempty"`
 	ConflictFiles  []string `json:"conflictFiles,omitempty"`
 }
 
@@ -179,7 +185,10 @@ func prepareCodeMultiRepositoryDeliveryWithProgress(session *model.AIDevSession,
 func mergeCodeSessionRepository(repository *model.AIDevSessionRepository, repositories []model.AIDevSessionRepository) (codeRepositoryDeliveryResult, error) {
 	result := codeRepositoryDeliveryResult{
 		RepositoryID: codeSessionRepositoryID(repository.ID), RepositoryName: repository.LinkName,
-		Status: repository.Status, Branch: repository.Branch, Commit: repository.MergeCommit,
+		Status: repository.Status, Branch: repository.Branch, TargetBranch: repository.TargetBranch,
+		Remote: repository.RemoteName, RemoteBranch: deliveryRemoteBranch(repository.RemoteBranch, repository.TargetBranch),
+		Commit: repository.MergeCommit, PushStatus: repository.PushStatus,
+		PushedCommit: repository.PushedCommit, ErrorMessage: repository.PushError,
 	}
 	if repository.Status == codeDeliveryMerged || repository.Status == codeDeliveryCompleted {
 		return result, nil
@@ -283,42 +292,106 @@ func resumeCodeMultiRepositoryDeliveryWithProgress(session *model.AIDevSession, 
 	}
 	results := make([]codeRepositoryDeliveryResult, 0, len(repositories))
 	for index := range repositories {
+		if repositories[index].Status == codeDeliveryCompleted {
+			results = append(results, codeStoredRepositoryDeliveryResult(&repositories[index]))
+			continue
+		}
 		if err := syncCodeSessionRepositoryGitlinks(repositories); err != nil {
-			return codeGitDeliveryResult{Status: "failed", Repositories: results}, err
+			return codeMultiRepositoryFailure(results, err), err
 		}
 		if err := commitCodeRepositoryGitlinkUpdates(&repositories[index], repositories); err != nil {
-			return codeGitDeliveryResult{Status: "failed", Repositories: results}, err
+			return codeMultiRepositoryFailure(results, err), err
 		}
 		if repositories[index].WorktreeCommit != "" {
 			if err := global.DB.Model(&repositories[index]).Updates(map[string]any{
 				"worktree_commit": repositories[index].WorktreeCommit, "error_message": "",
 			}).Error; err != nil {
-				return codeGitDeliveryResult{Status: "failed", Repositories: results}, err
+				return codeMultiRepositoryFailure(results, err), err
 			}
 		}
 		result, mergeErr := integrateAndPushCodeRepositoryWithProgress(session, &repositories[index], repositories, report)
 		results = append(results, result)
 		if mergeErr != nil {
-			return codeGitDeliveryResult{Status: "failed", Repositories: results}, mergeErr
+			return codeMultiRepositoryFailure(results, mergeErr), mergeErr
 		}
 		if result.Status == "conflict" {
-			return codeGitDeliveryResult{
+			conflictResult := codeGitDeliveryResult{
 				Status: "conflict", RepositoryID: result.RepositoryID, RepositoryName: result.RepositoryName,
 				Branch: result.Branch, ConflictFiles: result.ConflictFiles, Repositories: results,
-			}, nil
+			}
+			if hasCompletedCodeRepositoryResult(results[:len(results)-1]) {
+				conflictResult.Status = codeDeliveryJobPartial
+			}
+			conflictResult.ResultType = codeMultiRepositoryResultType(results)
+			return conflictResult, nil
 		}
 		if report != nil {
 			report(codeDeliveryStageCleaning, 90+index*5/max(1, len(repositories)))
 		}
 		if err := cleanupMergedCodeSessionRepository(&repositories[index]); err != nil {
-			return codeGitDeliveryResult{Status: "failed", Repositories: results}, err
+			return codeMultiRepositoryFailure(results, err), err
 		}
 	}
 	if err := completeCodeMultiRepositorySession(session); err != nil {
-		return codeGitDeliveryResult{Status: "failed", Repositories: results}, err
+		return codeMultiRepositoryFailure(results, err), err
 	}
 	if err := os.RemoveAll(workspaceDir); err != nil {
-		return codeGitDeliveryResult{Status: "failed", Repositories: results}, err
+		return codeMultiRepositoryFailure(results, err), err
 	}
-	return codeGitDeliveryResult{Status: "merged", Repositories: results}, nil
+	return codeGitDeliveryResult{Status: "merged", ResultType: codeMultiRepositoryResultType(results), Repositories: results}, nil
+}
+
+func codeStoredRepositoryDeliveryResult(repository *model.AIDevSessionRepository) codeRepositoryDeliveryResult {
+	pushStatus := repository.PushStatus
+	if !codeDeliveryHasRemote(repository.RemoteName, deliveryRemoteBranch(repository.RemoteBranch, repository.TargetBranch)) {
+		pushStatus = "local"
+	}
+	return codeRepositoryDeliveryResult{
+		RepositoryID: codeSessionRepositoryID(repository.ID), RepositoryName: repository.LinkName,
+		Status: repository.Status, Branch: repository.Branch, TargetBranch: repository.TargetBranch,
+		Remote: repository.RemoteName, RemoteBranch: deliveryRemoteBranch(repository.RemoteBranch, repository.TargetBranch),
+		Commit: repository.MergeCommit, PushStatus: pushStatus, PushedCommit: repository.PushedCommit,
+		ErrorMessage: repository.PushError,
+	}
+}
+
+func codeMultiRepositoryFailure(results []codeRepositoryDeliveryResult, err error) codeGitDeliveryResult {
+	status := codeDeliveryJobFailed
+	if hasCompletedCodeRepositoryResult(results) {
+		status = codeDeliveryJobPartial
+	}
+	return codeGitDeliveryResult{
+		Status: status, ResultType: codeMultiRepositoryResultType(results),
+		ErrorMessage: err.Error(), Repositories: results,
+	}
+}
+
+func hasCompletedCodeRepositoryResult(results []codeRepositoryDeliveryResult) bool {
+	for _, result := range results {
+		if result.Status == codeDeliveryMerged || result.Status == codeDeliveryCompleted || result.PushStatus == codePushPushed {
+			return true
+		}
+	}
+	return false
+}
+
+func codeMultiRepositoryResultType(results []codeRepositoryDeliveryResult) string {
+	hasLocal, hasRemote := false, false
+	for _, result := range results {
+		if result.PushStatus == codePushPushed {
+			hasRemote = true
+		} else if result.Status == codeDeliveryMerged || result.Status == codeDeliveryCompleted || result.PushStatus == "local" {
+			hasLocal = true
+		}
+	}
+	if hasLocal && hasRemote {
+		return "mixed"
+	}
+	if hasRemote {
+		return "remote_verified"
+	}
+	if hasLocal {
+		return "local"
+	}
+	return ""
 }

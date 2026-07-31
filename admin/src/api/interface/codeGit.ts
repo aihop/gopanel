@@ -51,7 +51,9 @@ export interface CodeGitDiff {
 }
 
 export interface CodeGitDeliveryResult {
-	status: "committed" | "merged" | "conflict" | "failed"
+	status: "committed" | "merged" | "partial" | "conflict" | "failed"
+	resultType?: "local" | "remote_verified" | "mixed"
+	errorMessage?: string
 	commit?: string
 	branch?: string
 	repositoryId?: string
@@ -60,11 +62,12 @@ export interface CodeGitDeliveryResult {
 	repositories?: CodeRepositoryDeliveryResult[]
 }
 
-export type CodeDeliveryJobStatus = "queued" | "running" | "completed" | "conflict" | "failed"
+export type CodeDeliveryJobStatus = "queued" | "running" | "completed" | "partial" | "conflict" | "failed"
 
 export interface CodeDeliveryJob {
 	id: number
 	sessionId: number
+	taskId?: number
 	status: CodeDeliveryJobStatus
 	stage: string
 	progress: number
@@ -72,6 +75,8 @@ export interface CodeDeliveryJob {
 	queuePosition: number
 	targetBranch?: string
 	resultCommit?: string
+	resultType?: "local" | "remote_verified" | "mixed"
+	repositories?: CodeRepositoryDeliveryResult[]
 	errorMessage?: string
 	conflictFiles: string[]
 	createdAt: string
@@ -102,6 +107,12 @@ export interface CodeRepositoryDeliveryResult {
 	repositoryName: string
 	status: string
 	branch: string
+	targetBranch: string
+	remote?: string
+	remoteBranch?: string
 	commit?: string
+	pushStatus: "pending" | "pushed" | "failed" | "local"
+	pushedCommit?: string
+	errorMessage?: string
 	conflictFiles?: string[]
 }

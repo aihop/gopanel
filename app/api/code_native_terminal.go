@@ -60,6 +60,9 @@ func (manager *nativeCodeTerminalManager) attach(
 	session *model.AIDevSession,
 	cols, rows uint16,
 ) (*nativeCodeTerminal, bool, error) {
+	if err := validateCodeSessionDevelopmentOpen(session); err != nil {
+		return nil, false, err
+	}
 	manager.mu.Lock()
 	defer manager.mu.Unlock()
 	if terminal := manager.sessions[session.ID]; terminal != nil {

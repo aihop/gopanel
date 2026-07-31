@@ -17,7 +17,10 @@ func integrateAndPushCodeDelivery(delivery *model.AICodeDelivery) (codeGitDelive
 }
 
 func integrateAndPushCodeDeliveryWithProgress(delivery *model.AICodeDelivery, report codeDeliveryProgressReporter) (codeGitDeliveryResult, error) {
-	result := codeGitDeliveryResult{Status: "merged", Commit: delivery.MergeCommit, Branch: delivery.WorktreeBranch}
+	result := codeGitDeliveryResult{Status: "merged", ResultType: "local", Commit: delivery.MergeCommit, Branch: delivery.WorktreeBranch}
+	if delivery.PushStatus == codePushPushed {
+		result.ResultType = "remote_verified"
+	}
 	for attempt := 0; attempt < codeDeliveryPushAttempts; attempt++ {
 		if delivery.Status == codeDeliveryPrepared {
 			merged, err := mergePreparedCodeDeliveryWithProgress(delivery, report)
@@ -41,6 +44,7 @@ func integrateAndPushCodeDeliveryWithProgress(delivery *model.AICodeDelivery, re
 			return codeGitDeliveryResult{}, persistErr
 		}
 		if err == nil {
+			result.ResultType = "remote_verified"
 			return result, nil
 		}
 		if !errors.Is(err, errCodePushRemoteAdvanced) || attempt == codeDeliveryPushAttempts-1 {
@@ -146,7 +150,10 @@ func integrateAndPushCodeRepository(session *model.AIDevSession, repository *mod
 func integrateAndPushCodeRepositoryWithProgress(session *model.AIDevSession, repository *model.AIDevSessionRepository, repositories []model.AIDevSessionRepository, report codeDeliveryProgressReporter) (codeRepositoryDeliveryResult, error) {
 	result := codeRepositoryDeliveryResult{
 		RepositoryID: codeSessionRepositoryID(repository.ID), RepositoryName: repository.LinkName,
-		Status: repository.Status, Branch: repository.Branch, Commit: repository.MergeCommit,
+		Status: repository.Status, Branch: repository.Branch, TargetBranch: repository.TargetBranch,
+		Remote: repository.RemoteName, RemoteBranch: deliveryRemoteBranch(repository.RemoteBranch, repository.TargetBranch),
+		Commit: repository.MergeCommit, PushStatus: repository.PushStatus,
+		PushedCommit: repository.PushedCommit, ErrorMessage: repository.PushError,
 	}
 	for attempt := 0; attempt < codeDeliveryPushAttempts; attempt++ {
 		if report != nil {
@@ -157,8 +164,12 @@ func integrateAndPushCodeRepositoryWithProgress(session *model.AIDevSession, rep
 			return merged, err
 		}
 		result = merged
+		result.TargetBranch = repository.TargetBranch
+		result.Remote = repository.RemoteName
+		result.RemoteBranch = deliveryRemoteBranch(repository.RemoteBranch, repository.TargetBranch)
 		remoteBranch := deliveryRemoteBranch(repository.RemoteBranch, repository.TargetBranch)
 		if !codeDeliveryHasRemote(repository.RemoteName, remoteBranch) {
+			result.PushStatus = "local"
 			return result, nil
 		}
 		if report != nil {
@@ -171,6 +182,7 @@ func integrateAndPushCodeRepositoryWithProgress(session *model.AIDevSession, rep
 		if err := persistCodeRepositoryPushResult(repository, pushResult); err != nil {
 			return result, err
 		}
+		result.PushStatus, result.PushedCommit, result.ErrorMessage = pushResult.Status, pushResult.Commit, pushResult.ErrorMessage
 		if pushErr == nil {
 			return result, nil
 		}

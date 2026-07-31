@@ -109,6 +109,7 @@ func DeleteAITask(c fiber.Ctx) error {
 			return c.JSON(e.Fail(err))
 		}
 		backgroundCodeRunner.cancel(task.SessionID)
+		backgroundCodeDelivery.cancelSession(task.SessionID)
 		stopContext, cancelStop := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancelStop()
 		codeExecutions.cancelSessionAndWait(stopContext, session.ID)

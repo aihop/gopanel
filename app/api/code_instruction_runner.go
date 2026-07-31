@@ -236,6 +236,9 @@ func RetryCodeInstruction(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
+	if err := validateCodeSessionDevelopmentOpen(session); err != nil {
+		return c.JSON(e.Fail(err))
+	}
 	task, err := repo.NewAITaskRepo().GetTaskByID(instruction.TaskID)
 	if err != nil {
 		return c.JSON(e.Fail(err))

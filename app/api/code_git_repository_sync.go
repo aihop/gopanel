@@ -92,6 +92,10 @@ func prepareCodeRepository(sourceDir string) (codePreparedRepository, error) {
 }
 
 func prepareCodeRepositoryCandidate(candidate codeRepositoryCandidate, includeUncommitted bool) (codePreparedRepository, error) {
+	return prepareCodeRepositoryCandidateForBranch(candidate, includeUncommitted, "")
+}
+
+func prepareCodeRepositoryCandidateForBranch(candidate codeRepositoryCandidate, includeUncommitted bool, deliveryBranch string) (codePreparedRepository, error) {
 	dirty := candidate.Dirty
 	if dirty && !includeUncommitted {
 		return codePreparedRepository{}, fmt.Errorf("源仓库 %s 存在未提交变更；如需保留这些修改，请启用未提交改动快照", filepath.Base(candidate.SourceDir))
@@ -99,6 +103,16 @@ func prepareCodeRepositoryCandidate(candidate codeRepositoryCandidate, includeUn
 	targetBranch, err := runCodeGit(candidate.SourceDir, "branch", "--show-current")
 	if err != nil || strings.TrimSpace(targetBranch) == "" {
 		return codePreparedRepository{}, fmt.Errorf("源仓库 %s 当前处于 detached HEAD，无法确定目标分支", filepath.Base(candidate.SourceDir))
+	}
+	if strings.TrimSpace(deliveryBranch) != "" {
+		targetBranch = strings.TrimSpace(deliveryBranch)
+		currentBranch, _ := runCodeGit(candidate.SourceDir, "branch", "--show-current")
+		if strings.TrimSpace(currentBranch) != targetBranch {
+			return codePreparedRepository{}, fmt.Errorf(
+				"主交付仓库当前分支为 %s，请先切换到交付分支 %s",
+				strings.TrimSpace(currentBranch), targetBranch,
+			)
+		}
 	}
 	prepared := codePreparedRepository{
 		SourceDir: candidate.SourceDir, ParentSourceDir: candidate.ParentSourceDir,
@@ -167,7 +181,11 @@ func codeRepositoryRemoteTracking(sourceDir, branch string) (string, string) {
 	if remoteName == "." {
 		return "", ""
 	}
-	upstream, _ := runCodeGit(sourceDir, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}")
+	mergeRef, _ := runCodeGit(sourceDir, "config", "--get", "branch."+branch+".merge")
+	upstream := ""
+	if remoteName != "" && strings.HasPrefix(strings.TrimSpace(mergeRef), "refs/heads/") {
+		upstream = remoteName + "/" + strings.TrimPrefix(strings.TrimSpace(mergeRef), "refs/heads/")
+	}
 	if remoteName != "" {
 		return remoteName, strings.TrimSpace(upstream)
 	}
@@ -275,6 +293,10 @@ func repositoryWithinSourceDirs(repository string, sourceDirs []string) bool {
 }
 
 func prepareDiscoveredCodeRepositories(sourceDirs []string, includeUncommitted ...bool) ([]codePreparedRepository, error) {
+	return prepareDiscoveredCodeRepositoriesWithPolicy(sourceDirs, codeDeliveryPolicy{}, includeUncommitted...)
+}
+
+func prepareDiscoveredCodeRepositoriesWithPolicy(sourceDirs []string, policy codeDeliveryPolicy, includeUncommitted ...bool) ([]codePreparedRepository, error) {
 	candidates, err := discoverCodeRepositoryCandidates(sourceDirs)
 	if err != nil {
 		return nil, err
@@ -285,7 +307,11 @@ func prepareDiscoveredCodeRepositories(sourceDirs []string, includeUncommitted .
 	allowSnapshot := len(includeUncommitted) > 0 && includeUncommitted[0]
 	prepared := make([]codePreparedRepository, 0, len(candidates))
 	for _, candidate := range candidates {
-		repository, err := prepareCodeRepositoryCandidate(candidate, allowSnapshot)
+		targetBranch := ""
+		if candidate.SourceDir == policy.PrimaryRepository {
+			targetBranch = policy.DeliveryBranch
+		}
+		repository, err := prepareCodeRepositoryCandidateForBranch(candidate, allowSnapshot, targetBranch)
 		if err != nil {
 			return nil, err
 		}

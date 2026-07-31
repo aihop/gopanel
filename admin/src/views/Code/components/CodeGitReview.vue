@@ -319,7 +319,7 @@ useIntervalFn(() => {
 				<div v-if="commitRepository" class="truncate text-[11px] text-slate-400">
 					{{ t("code.gitCommitRepository", { repository: commitRepository.name }) }}
 				</div>
-				<n-alert v-if="deliveryJob" :type="deliveryJob.status === 'failed' || deliveryJob.status === 'conflict' ? 'error' : deliveryJob.status === 'completed' ? 'success' : 'info'" :show-icon="false">
+				<n-alert v-if="deliveryJob" :type="deliveryJob.status === 'failed' || deliveryJob.status === 'conflict' || deliveryJob.status === 'partial' ? 'error' : deliveryJob.status === 'completed' ? 'success' : 'info'" :show-icon="false">
 					<div class="flex items-center justify-between gap-2 text-xs">
 						<span>{{ deliveryStatusLabel }}</span>
 						<span v-if="deliveryActive">{{ t(`code.gitDeliveryStage_${deliveryJob.stage}`) }}</span>

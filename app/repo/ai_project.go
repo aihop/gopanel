@@ -79,7 +79,7 @@ func (r *aiProjectRepo) LoadExecutionSummaries(projects []*model.AIProject, user
 	}
 
 	var activeTasks []*model.AITask
-	activeQuery := global.DB.Where("project_id IN ? AND status IN ?", projectIDs, []string{"queued", "running", "pending_approval"})
+	activeQuery := global.DB.Where("project_id IN ? AND status IN ?", projectIDs, []string{"queued", "running", "pending_approval", "delivering"})
 	if !includeAll {
 		activeQuery = activeQuery.Where("user_id = ?", userID)
 	}
@@ -111,7 +111,7 @@ func (r *aiProjectRepo) LoadExecutionSummaries(projects []*model.AIProject, user
 		if task.Status == "pending_approval" {
 			summary.PendingApprovalCount++
 		}
-		priority := map[string]int{"queued": 1, "running": 2, "pending_approval": 3}[task.Status]
+		priority := map[string]int{"queued": 1, "running": 2, "delivering": 3, "pending_approval": 4}[task.Status]
 		if priority <= currentPriorities[task.ProjectID] {
 			continue
 		}

@@ -25,6 +25,7 @@ const (
 	codeDeliveryJobQueued    = "queued"
 	codeDeliveryJobRunning   = "running"
 	codeDeliveryJobCompleted = "completed"
+	codeDeliveryJobPartial   = "partial"
 	codeDeliveryJobConflict  = "conflict"
 	codeDeliveryJobFailed    = "failed"
 
@@ -44,30 +45,36 @@ const (
 type codeDeliveryProgressReporter func(stage string, progress int)
 
 type codeDeliveryJobView struct {
-	ID            uint       `json:"id"`
-	SessionID     uint       `json:"sessionId"`
-	Status        string     `json:"status"`
-	Stage         string     `json:"stage"`
-	Progress      int        `json:"progress"`
-	Attempt       int        `json:"attempt"`
-	QueuePosition int        `json:"queuePosition"`
-	TargetBranch  string     `json:"targetBranch,omitempty"`
-	ResultCommit  string     `json:"resultCommit,omitempty"`
-	ErrorMessage  string     `json:"errorMessage,omitempty"`
-	ConflictFiles []string   `json:"conflictFiles"`
-	CreatedAt     time.Time  `json:"createdAt"`
-	UpdatedAt     time.Time  `json:"updatedAt"`
-	StartedAt     *time.Time `json:"startedAt,omitempty"`
-	CompletedAt   *time.Time `json:"completedAt,omitempty"`
+	ID            uint                           `json:"id"`
+	SessionID     uint                           `json:"sessionId"`
+	TaskID        uint                           `json:"taskId,omitempty"`
+	Status        string                         `json:"status"`
+	Stage         string                         `json:"stage"`
+	Progress      int                            `json:"progress"`
+	Attempt       int                            `json:"attempt"`
+	QueuePosition int                            `json:"queuePosition"`
+	TargetBranch  string                         `json:"targetBranch,omitempty"`
+	ResultCommit  string                         `json:"resultCommit,omitempty"`
+	ResultType    string                         `json:"resultType,omitempty"`
+	Repositories  []codeRepositoryDeliveryResult `json:"repositories,omitempty"`
+	ErrorMessage  string                         `json:"errorMessage,omitempty"`
+	ConflictFiles []string                       `json:"conflictFiles"`
+	CreatedAt     time.Time                      `json:"createdAt"`
+	UpdatedAt     time.Time                      `json:"updatedAt"`
+	StartedAt     *time.Time                     `json:"startedAt,omitempty"`
+	CompletedAt   *time.Time                     `json:"completedAt,omitempty"`
 }
 
 type codeDeliveryRunner struct {
-	mu     sync.Mutex
-	queued map[uint]struct{}
-	owner  string
+	mu        sync.Mutex
+	queued    map[uint]struct{}
+	cancelled map[uint]struct{}
+	owner     string
 }
 
-var backgroundCodeDelivery = &codeDeliveryRunner{queued: make(map[uint]struct{}), owner: newCodeDeliveryOwner()}
+var backgroundCodeDelivery = &codeDeliveryRunner{
+	queued: make(map[uint]struct{}), cancelled: make(map[uint]struct{}), owner: newCodeDeliveryOwner(),
+}
 var codeDeliveryRecoveryOnce sync.Once
 
 func newCodeDeliveryOwner() string {
@@ -137,33 +144,45 @@ func persistCodeDeliveryJob(session *model.AIDevSession, userID uint, requestIP 
 	encodedKeys, _ := json.Marshal(keys)
 	var job model.AICodeDeliveryJob
 	err = global.DB.Transaction(func(tx *gorm.DB) error {
+		var lockedSession model.AIDevSession
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&lockedSession, session.ID).Error; err != nil {
+			return err
+		}
 		queryErr := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("session_id = ?", session.ID).First(&job).Error
+		if queryErr == nil && (job.Status == codeDeliveryJobQueued || job.Status == codeDeliveryJobRunning || job.Status == codeDeliveryJobCompleted) {
+			return nil
+		}
+		if err := validateCodeSessionReadyForDelivery(tx, &lockedSession); err != nil {
+			return err
+		}
 		if errors.Is(queryErr, gorm.ErrRecordNotFound) {
 			job = model.AICodeDeliveryJob{
-				SessionID: session.ID, ProjectID: session.ProjectID, UserID: userID,
+				SessionID: session.ID, TaskID: session.LastTaskID, ProjectID: session.ProjectID, UserID: userID,
 				Status: codeDeliveryJobQueued, Stage: codeDeliveryStageQueued,
 				RepositoryKeys: string(encodedKeys), TargetBranch: targetBranch, RequestIP: requestIP,
 			}
-			return tx.Create(&job).Error
+			if err := tx.Create(&job).Error; err != nil {
+				return err
+			}
+			return markCodeSessionDelivering(tx, &lockedSession)
 		}
 		if queryErr != nil {
 			return queryErr
 		}
-		if job.Status == codeDeliveryJobQueued || job.Status == codeDeliveryJobRunning || job.Status == codeDeliveryJobCompleted {
-			return nil
-		}
 		updates := map[string]any{
 			"status": codeDeliveryJobQueued, "stage": codeDeliveryStageQueued, "progress": 0,
 			"repository_keys": string(encodedKeys), "target_branch": targetBranch,
-			"result_commit": "", "error_message": "", "conflict_files": "", "request_ip": requestIP,
+			"task_id": session.LastTaskID, "result_commit": "", "result_type": "", "repository_results": "",
+			"error_message": "", "conflict_files": "", "request_ip": requestIP,
 			"lease_owner": "", "lease_expires_at": nil, "started_at": nil, "completed_at": nil,
 		}
-		return tx.Model(&job).Updates(updates).Error
+		if err := tx.Model(&job).Updates(updates).Error; err != nil {
+			return err
+		}
+		return markCodeSessionDelivering(tx, &lockedSession)
 	})
 	if err != nil {
-		if loadErr := global.DB.Where("session_id = ?", session.ID).First(&job).Error; loadErr != nil {
-			return nil, err
-		}
+		return nil, err
 	}
 	return &job, nil
 }
@@ -190,6 +209,7 @@ func enqueuePersistedCodeDeliveries() {
 	if global.DB == nil {
 		return
 	}
+	restoreCodeDeliverySessionLifecycles()
 	var ids []uint
 	now := time.Now()
 	err := global.DB.Model(&model.AICodeDeliveryJob{}).Where(
@@ -310,15 +330,19 @@ func (runner *codeDeliveryRunner) updateProgress(jobID uint, stage string, progr
 
 func (runner *codeDeliveryRunner) finish(job *model.AICodeDeliveryJob, result codeGitDeliveryResult, runErr error) {
 	status, stage, progress := codeDeliveryJobCompleted, codeDeliveryStageCompleted, 100
-	if runErr != nil {
+	if result.Status == codeDeliveryJobPartial {
+		status, stage, progress = codeDeliveryJobPartial, codeDeliveryJobPartial, job.Progress
+	} else if runErr != nil {
 		status, stage, progress = codeDeliveryJobFailed, codeDeliveryJobFailed, job.Progress
 	} else if result.Status == codeDeliveryJobConflict {
 		status, stage, progress = codeDeliveryJobConflict, codeDeliveryJobConflict, job.Progress
 	}
 	conflicts, _ := json.Marshal(result.ConflictFiles)
+	repositories, _ := json.Marshal(result.Repositories)
 	now := time.Now()
 	updates := map[string]any{
 		"status": status, "stage": stage, "progress": progress, "result_commit": result.Commit,
+		"result_type": result.ResultType, "repository_results": string(repositories),
 		"conflict_files": string(conflicts), "lease_owner": "", "lease_expires_at": nil, "completed_at": now,
 	}
 	if runErr != nil {
@@ -326,10 +350,33 @@ func (runner *codeDeliveryRunner) finish(job *model.AICodeDeliveryJob, result co
 	} else {
 		updates["error_message"] = ""
 	}
-	_ = global.DB.Model(&model.AICodeDeliveryJob{}).Where("id = ? AND lease_owner = ?", job.ID, runner.owner).Updates(updates).Error
-	_ = global.DB.Where("job_id = ? AND lease_owner = ?", job.ID, runner.owner).Delete(&model.AICodeDeliveryLease{}).Error
+	finishErr := global.DB.Transaction(func(tx *gorm.DB) error {
+		updated := tx.Model(&model.AICodeDeliveryJob{}).Where("id = ? AND lease_owner = ?", job.ID, runner.owner).Updates(updates)
+		if updated.Error != nil {
+			return updated.Error
+		}
+		if updated.RowsAffected != 1 {
+			return errors.New("交付任务租约已失效")
+		}
+		if err := tx.Where("job_id = ? AND lease_owner = ?", job.ID, runner.owner).Delete(&model.AICodeDeliveryLease{}).Error; err != nil {
+			return err
+		}
+		if status == codeDeliveryJobCompleted {
+			return completeCodeSessionLifecycle(tx, job.SessionID, now)
+		}
+		return reopenCodeSessionLifecycle(tx, job.SessionID)
+	})
+	if finishErr != nil {
+		global.LOG.Errorf("Finish Code delivery %d failed: %v", job.ID, finishErr)
+		return
+	}
 	auditStatus, detail := "success", result.Status
-	if status == codeDeliveryJobConflict {
+	if status == codeDeliveryJobPartial {
+		auditStatus, detail = "partial", result.ErrorMessage
+		if runErr != nil {
+			detail = runErr.Error()
+		}
+	} else if status == codeDeliveryJobConflict {
 		auditStatus, detail = "conflict", strings.Join(result.ConflictFiles, ", ")
 	} else if runErr != nil {
 		auditStatus, detail = "failed", runErr.Error()
@@ -355,6 +402,9 @@ func (runner *codeDeliveryRunner) run(jobID uint) {
 		return
 	}
 	if !claimed {
+		return
+	}
+	if runner.isSessionCancelled(job.SessionID) {
 		return
 	}
 	acquired, err := runner.acquireRepositoryLeases(job, keys)
@@ -396,11 +446,15 @@ func (runner *codeDeliveryRunner) run(jobID uint) {
 		return
 	}
 	defer lease.Release()
+	lease.SetCancel(cancel)
 	var result codeGitDeliveryResult
 	if session.IsolationMode == codeIsolationMultiWorktree || hasCodeMultiRepositoryDelivery(session.ID) {
 		result, err = resumeCodeMultiRepositoryDeliveryWithProgress(&session, job.UserID, reporter)
 	} else {
 		result, err = resumeCodeSessionDeliveryWithProgress(&session, job.UserID, reporter)
+	}
+	if runner.isSessionCancelled(job.SessionID) {
+		return
 	}
 	runner.finish(job, result, err)
 }
@@ -412,6 +466,8 @@ func loadCodeDeliveryJobView(sessionID uint) (*codeDeliveryJobView, error) {
 	}
 	var conflicts []string
 	_ = json.Unmarshal([]byte(job.ConflictFiles), &conflicts)
+	var repositories []codeRepositoryDeliveryResult
+	_ = json.Unmarshal([]byte(job.RepositoryResults), &repositories)
 	position := 0
 	if job.Status == codeDeliveryJobQueued {
 		var count int64
@@ -422,8 +478,9 @@ func loadCodeDeliveryJobView(sessionID uint) (*codeDeliveryJobView, error) {
 		position = int(count) + 1
 	}
 	return &codeDeliveryJobView{
-		ID: job.ID, SessionID: job.SessionID, Status: job.Status, Stage: job.Stage, Progress: job.Progress,
+		ID: job.ID, SessionID: job.SessionID, TaskID: job.TaskID, Status: job.Status, Stage: job.Stage, Progress: job.Progress,
 		Attempt: job.Attempt, QueuePosition: position, TargetBranch: job.TargetBranch, ResultCommit: job.ResultCommit,
+		ResultType: job.ResultType, Repositories: repositories,
 		ErrorMessage: job.ErrorMessage, ConflictFiles: conflicts, CreatedAt: job.CreatedAt, UpdatedAt: job.UpdatedAt,
 		StartedAt: job.StartedAt, CompletedAt: job.CompletedAt,
 	}, nil

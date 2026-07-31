@@ -252,6 +252,9 @@ func CreateAISessionInstruction(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
+	if err := validateCodeSessionDevelopmentOpen(session); err != nil {
+		return c.JSON(e.Fail(err))
+	}
 	var req struct {
 		Content         string `json:"content"`
 		AllowCode       *bool  `json:"allowCode"`

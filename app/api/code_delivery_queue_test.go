@@ -2,6 +2,8 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -60,6 +62,96 @@ func TestCodeDeliveryEnqueueIsIdempotent(t *testing.T) {
 	}
 	if first.ID != second.ID || count != 1 {
 		t.Fatalf("duplicate enqueue created multiple jobs: %d, %d, %d", first.ID, second.ID, count)
+	}
+	var storedSession model.AIDevSession
+	if err := database.First(&storedSession, session.ID).Error; err != nil || storedSession.Status != codeSessionStatusDelivering {
+		t.Fatalf("session was not sealed for delivery: %#v, %v", storedSession, err)
+	}
+}
+
+func TestCodeDeliveryLifecycleCompletesAndReopens(t *testing.T) {
+	database := withCodeGovernanceDB(t)
+	session := &model.AIDevSession{ID: 908, UserID: 1, Status: codeSessionStatusDelivering, WorkDir: t.TempDir()}
+	task := &model.AITask{ID: 909, UserID: 1, SessionID: session.ID, Title: "delivery", WorkDir: session.WorkDir, Status: "running"}
+	if err := database.Create(session).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := database.Create(task).Error; err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	if err := completeCodeSessionLifecycle(database, session.ID, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.First(session, session.ID).Error; err != nil || session.Status != codeSessionStatusDelivered || session.DeliveredAt == nil {
+		t.Fatalf("session was not completed: %#v, %v", session, err)
+	}
+	if err := validateCodeSessionDevelopmentOpen(session); err == nil {
+		t.Fatal("delivered session should reject further development")
+	}
+	if err := database.Model(session).Updates(map[string]any{"status": codeSessionStatusDelivering, "delivered_at": nil}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := reopenCodeSessionLifecycle(database, session.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.First(session, session.ID).Error; err != nil || session.Status != codeSessionStatusActive {
+		t.Fatalf("failed delivery did not reopen session: %#v, %v", session, err)
+	}
+}
+
+func TestCodeDeliveryRecoveryRestoresSessionLifecycle(t *testing.T) {
+	database := withCodeGovernanceDB(t)
+	queuedSession := &model.AIDevSession{ID: 910, UserID: 1, Status: codeSessionStatusActive, WorkDir: t.TempDir()}
+	completedSession := &model.AIDevSession{ID: 911, UserID: 1, Status: codeSessionStatusActive, WorkDir: t.TempDir()}
+	for _, session := range []*model.AIDevSession{queuedSession, completedSession} {
+		if err := database.Create(session).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	queued := createCodeDeliveryQueueJob(t, queuedSession.ID, "queued-repository")
+	completed := createCodeDeliveryQueueJob(t, completedSession.ID, "completed-repository")
+	completedAt := time.Now()
+	if err := database.Model(completed).Updates(map[string]any{
+		"status": codeDeliveryJobCompleted, "completed_at": completedAt,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	restoreCodeDeliverySessionLifecycles()
+	if err := database.First(queuedSession, queuedSession.ID).Error; err != nil || queuedSession.Status != codeSessionStatusDelivering {
+		t.Fatalf("queued session lifecycle was not restored: %#v, %v", queuedSession, err)
+	}
+	if err := database.First(completedSession, completedSession.ID).Error; err != nil || completedSession.Status != codeSessionStatusDelivered {
+		t.Fatalf("completed session lifecycle was not restored: %#v, %v", completedSession, err)
+	}
+	if queued.Status != codeDeliveryJobQueued {
+		t.Fatalf("unexpected queued job mutation: %#v", queued)
+	}
+}
+
+func TestCodeMultiRepositoryResultType(t *testing.T) {
+	results := []codeRepositoryDeliveryResult{
+		{Status: codeDeliveryCompleted, PushStatus: codePushPushed},
+		{Status: codeDeliveryMerged, PushStatus: "local"},
+	}
+	if resultType := codeMultiRepositoryResultType(results); resultType != "mixed" {
+		t.Fatalf("unexpected mixed result type: %s", resultType)
+	}
+	partial := codeMultiRepositoryFailure(results[:1], errors.New("second repository failed"))
+	if partial.Status != codeDeliveryJobPartial || partial.ResultType != "remote_verified" {
+		t.Fatalf("unexpected partial result: %#v", partial)
+	}
+}
+
+func TestCodeStoredRepositoryDeliveryResultDoesNotNeedWorktree(t *testing.T) {
+	repository := &model.AIDevSessionRepository{
+		ID: 12, LinkName: "child", Status: codeDeliveryCompleted, TargetBranch: "main",
+		RemoteName: "origin", RemoteBranch: "main", MergeCommit: "merge", PushStatus: codePushPushed,
+		PushedCommit: "merge", WorktreeDir: filepath.Join(t.TempDir(), "missing"),
+	}
+	result := codeStoredRepositoryDeliveryResult(repository)
+	if result.Status != codeDeliveryCompleted || result.PushStatus != codePushPushed || result.PushedCommit != "merge" {
+		t.Fatalf("stored repository result was not reconstructed: %#v", result)
 	}
 }
 

@@ -20,6 +20,8 @@ import (
 
 type codeGitDeliveryResult struct {
 	Status         string                         `json:"status"`
+	ResultType     string                         `json:"resultType,omitempty"`
+	ErrorMessage   string                         `json:"errorMessage,omitempty"`
 	Commit         string                         `json:"commit,omitempty"`
 	Branch         string                         `json:"branch,omitempty"`
 	RepositoryID   string                         `json:"repositoryId,omitempty"`

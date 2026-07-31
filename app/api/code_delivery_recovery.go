@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -203,6 +204,7 @@ func resumeCodeSessionDeliveryWithProgress(session *model.AIDevSession, userID u
 	}
 	result, err := integrateAndPushCodeDeliveryWithProgress(delivery, report)
 	if err != nil || result.Status == "conflict" {
+		result.Repositories = []codeRepositoryDeliveryResult{codeSingleRepositoryDeliveryResult(delivery, result)}
 		return result, err
 	}
 	if delivery.Status == codeDeliveryMerged {
@@ -220,5 +222,20 @@ func resumeCodeSessionDeliveryWithProgress(session *model.AIDevSession, userID u
 		}
 		delivery.Status = codeDeliveryCompleted
 	}
+	result.Repositories = []codeRepositoryDeliveryResult{codeSingleRepositoryDeliveryResult(delivery, result)}
 	return result, nil
+}
+
+func codeSingleRepositoryDeliveryResult(delivery *model.AICodeDelivery, result codeGitDeliveryResult) codeRepositoryDeliveryResult {
+	pushStatus := delivery.PushStatus
+	if !codeDeliveryHasRemote(delivery.RemoteName, deliveryRemoteBranch(delivery.RemoteBranch, delivery.TargetBranch)) {
+		pushStatus = "local"
+	}
+	return codeRepositoryDeliveryResult{
+		RepositoryID: "session", RepositoryName: filepath.Base(delivery.SourceWorkDir), Status: result.Status,
+		Branch: delivery.WorktreeBranch, TargetBranch: delivery.TargetBranch, Remote: delivery.RemoteName,
+		RemoteBranch: deliveryRemoteBranch(delivery.RemoteBranch, delivery.TargetBranch), Commit: result.Commit,
+		PushStatus: pushStatus, PushedCommit: delivery.PushedCommit, ErrorMessage: delivery.PushError,
+		ConflictFiles: result.ConflictFiles,
+	}
 }

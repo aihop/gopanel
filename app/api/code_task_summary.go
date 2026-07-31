@@ -25,6 +25,7 @@ type codeTaskSummary struct {
 	DeliveryProgress      int    `json:"deliveryProgress"`
 	DeliveryQueuePosition int    `json:"deliveryQueuePosition"`
 	DeliveryAttempt       int    `json:"deliveryAttempt"`
+	DeliveryResultType    string `json:"deliveryResultType,omitempty"`
 	DeliveryError         string `json:"deliveryError,omitempty"`
 }
 
@@ -96,7 +97,7 @@ func loadCodeTaskDeliverySummaries(sessionIDs []uint, summaries map[uint]codeTas
 	}
 	for _, task := range tasks {
 		job, exists := jobsBySession[task.SessionID]
-		if !exists {
+		if !exists || (job.TaskID > 0 && job.TaskID != task.ID) {
 			continue
 		}
 		summary := summaries[task.ID]
@@ -104,6 +105,7 @@ func loadCodeTaskDeliverySummaries(sessionIDs []uint, summaries map[uint]codeTas
 		summary.DeliveryStage = job.Stage
 		summary.DeliveryProgress = job.Progress
 		summary.DeliveryAttempt = job.Attempt
+		summary.DeliveryResultType = job.ResultType
 		summary.DeliveryError = job.ErrorMessage
 		if job.Status == codeDeliveryJobQueued {
 			if view, err := loadCodeDeliveryJobView(job.SessionID); err == nil {

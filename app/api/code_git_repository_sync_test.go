@@ -86,6 +86,55 @@ func TestPrepareCodeRepositoryRejectsLocalAhead(t *testing.T) {
 	}
 }
 
+func TestCodeDeliveryPolicyDefaultsToMain(t *testing.T) {
+	repository := createCodeGitRepository(t)
+	currentBranch, err := runCodeGit(repository, "branch", "--show-current")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if currentBranch != "main" {
+		if _, err := runCodeGit(repository, "branch", "main"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	policy, err := normalizeCodeDeliveryPolicy([]string{repository}, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if policy.PrimaryRepository != repository || policy.DeliveryBranch != "main" {
+		t.Fatalf("unexpected default delivery policy: %#v", policy)
+	}
+}
+
+func TestCodeDeliveryPolicyRejectsMissingConfiguredBranch(t *testing.T) {
+	repository := createCodeGitRepository(t)
+	_, err := normalizeCodeDeliveryPolicy([]string{repository}, repository, "release")
+	if err == nil || !strings.Contains(err.Error(), "不存在配置的交付分支") {
+		t.Fatalf("missing configured branch should be rejected: %v", err)
+	}
+}
+
+func TestPrepareCodeRepositoryRequiresConfiguredBranchCheckout(t *testing.T) {
+	repository := createCodeGitRepository(t)
+	currentBranch, err := runCodeGit(repository, "branch", "--show-current")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(repository, "branch", "main"); err != nil && currentBranch != "main" {
+		t.Fatal(err)
+	}
+	if currentBranch == "main" {
+		if _, err := runCodeGit(repository, "switch", "-c", "develop"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	candidate := codeRepositoryCandidate{SourceDir: repository}
+	_, err = prepareCodeRepositoryCandidateForBranch(candidate, false, "main")
+	if err == nil || !strings.Contains(err.Error(), "请先切换到交付分支 main") {
+		t.Fatalf("unchecked delivery branch should be rejected: %v", err)
+	}
+}
+
 func TestRefreshCodeRepositoryTargetRejectsBranchSwitch(t *testing.T) {
 	repository := createCodeGitRepository(t)
 	targetBranch, err := runCodeGit(repository, "branch", "--show-current")
