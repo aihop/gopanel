@@ -24,6 +24,7 @@ import type {
 } from "../interface/code"
 import type { CodeProjectBranches } from "../interface/codeBranches"
 import type { CodeTaskListItem } from "../interface/codeTasks"
+import type { HostTerminalSession } from "../interface/hostTerminal"
 
 // === Project APIs ===
 
@@ -49,6 +50,10 @@ export function getCodeExecutors() {
 
 export function getCodeWorktreeCapability(projectId: number) {
 	return http.get<CodeWorktreeCapability>(`/code/projects/${projectId}/worktree-capability`)
+}
+
+export function openCodeProjectTerminal(projectId: number) {
+	return http.post<HostTerminalSession>(`/code/projects/${projectId}/terminal`)
 }
 
 export function createCodeSession(data: {

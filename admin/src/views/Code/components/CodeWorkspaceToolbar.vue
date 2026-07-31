@@ -14,7 +14,6 @@ const props = defineProps<{
 	sessionId: number | null
 	hasContext: boolean
 	isTerminalSession: boolean
-	terminalOpening: boolean
 	workspaceMode: CodeWorkspaceMode
 	embedded: boolean
 	fullscreenLabel: string
@@ -22,7 +21,6 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-	openTerminal: []
 	showStructure: []
 	takeTerminal: []
 	openHistory: []
@@ -62,20 +60,8 @@ const sessionIcon = computed(() => (props.isTerminalSession ? "mdi:console-line"
 		</div>
 
 		<div class="flex min-w-0 flex-wrap items-center gap-2 md:justify-end">
-			<n-button
-				size="small"
-				:type="isTerminalSession ? 'primary' : 'default'"
-				:secondary="!isTerminalSession"
-				:loading="terminalOpening"
-				class="!rounded-xl"
-				@click="emit('openTerminal')"
-			>
-				<template #icon><Icon name="mdi:console-line" /></template>
-				{{ t("code.projectTerminal") }}
-			</n-button>
-
 			<div
-				v-if="hasContext"
+				v-if="hasContext && !isTerminalSession"
 				class="rounded-xl border border-slate-200 bg-slate-50/80 p-0.5 dark:border-[var(--border-color)] dark:bg-white/5"
 			>
 				<WorkspaceModeSwitch :value="workspaceMode" @update:value="emit('updateMode', $event)" />

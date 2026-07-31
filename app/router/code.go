@@ -24,6 +24,7 @@ func CodeRouter(r fiber.Router) {
 		group.Get("/projects/:id/overview", api.GetCodeProjectOverview)
 		group.Get("/projects/:id/git/branches", api.GetCodeProjectBranches)
 		group.Get("/projects/:id/worktree-capability", api.GetCodeWorktreeCapability)
+		group.Post("/projects/:id/terminal", api.OpenCodeProjectTerminal)
 		group.Get("/projects/:id/database-accesses", api.GetCodeDatabaseAccesses)
 		group.Put("/projects/:id/database-accesses", api.SaveCodeDatabaseAccess)
 		group.Delete("/projects/:id/database-accesses/:accessId", api.DeleteCodeDatabaseAccess)

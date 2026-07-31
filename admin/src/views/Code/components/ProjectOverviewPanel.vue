@@ -12,7 +12,12 @@ import { getCodeProjectOverview } from "@/api/modules/codeOverview"
 import Icon from "@/components/common/Icon.vue"
 import { projectOverviewMessages } from "../projectOverviewMessages"
 
-const props = defineProps<{ project: AIProject | null; projectId: number; tasks: CodeTaskListItem[] }>()
+const props = defineProps<{
+	project: AIProject | null
+	projectId: number
+	tasks: CodeTaskListItem[]
+	terminalAvailable: boolean
+}>()
 const emit = defineEmits<{ createTask: []; openTerminal: []; selectTask: [task: CodeTaskListItem] }>()
 const { t } = useI18n({ messages: projectOverviewMessages })
 const message = useMessage()
@@ -189,7 +194,13 @@ useIntervalFn(() => void loadOverview(), 5000)
 								<template #icon><Icon name="mdi:robot-outline" /></template>
 								{{ t("code.newAiTask") }}
 							</n-button>
-							<n-button size="large" secondary class="!rounded-xl" @click="emit('openTerminal')">
+							<n-button
+								v-if="terminalAvailable"
+								size="large"
+								secondary
+								class="!rounded-xl"
+								@click="emit('openTerminal')"
+							>
 								<template #icon><Icon name="mdi:console-line" /></template>
 								{{ t("code.projectTerminal") }}
 							</n-button>
