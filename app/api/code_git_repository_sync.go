@@ -119,11 +119,16 @@ func prepareCodeRepositoryCandidateForBranch(candidate codeRepositoryCandidate, 
 		GitlinkPath: candidate.GitlinkPath, TargetBranch: targetBranch, SyncStatus: "local", Snapshot: dirty,
 	}
 	remoteName, remoteRef := codeRepositoryRemoteTracking(candidate.SourceDir, targetBranch)
+	localOnly := false
 	if remoteName != "" {
 		if _, err := fetchCodeRepository(candidate.SourceDir, remoteName); err != nil {
-			return codePreparedRepository{}, fmt.Errorf("同步仓库 %s 失败：%w", filepath.Base(candidate.SourceDir), err)
+			if !isCodeGitFetchUnavailable(err) {
+				return codePreparedRepository{}, fmt.Errorf("同步仓库 %s 失败：%w", filepath.Base(candidate.SourceDir), err)
+			}
+			localOnly = true
+			remoteRef = ""
 		}
-		if remoteRef == "" {
+		if remoteRef == "" && !localOnly {
 			candidate := "refs/remotes/" + remoteName + "/" + targetBranch
 			if _, err := runCodeGit(prepared.SourceDir, "show-ref", "--verify", candidate); err == nil {
 				remoteRef = candidate
@@ -141,7 +146,29 @@ func prepareCodeRepositoryCandidateForBranch(candidate codeRepositoryCandidate, 
 	prepared.RemoteBranch = codeRemoteBranch(remoteName, remoteRef, targetBranch)
 	prepared.RemoteCommit = remoteCommit
 	prepared.SyncStatus = syncStatus
+	if localOnly {
+		prepared.SyncStatus = "local_only"
+	}
 	return prepared, nil
+}
+
+func isCodeGitFetchUnavailable(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	for _, fragment := range []string{
+		"git 操作超时", "authentication failed", "unable to get password",
+		"could not read username", "terminal prompts disabled", "permission denied (publickey)",
+		"could not resolve host", "temporary failure in name resolution", "network is unreachable",
+		"no route to host", "failed to connect", "connection refused", "connection reset",
+		"connection timed out", "operation timed out", "connection closed by remote host",
+	} {
+		if strings.Contains(message, fragment) {
+			return true
+		}
+	}
+	return false
 }
 
 func codeRepositoryBaseline(sourceDir, targetBranch, remoteRef string, dirty bool) (string, string, string, error) {
