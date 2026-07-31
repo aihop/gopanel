@@ -29,12 +29,10 @@ func buildNativeCodexCommand(session *model.AIDevSession) (*exec.Cmd, error) {
 	if err != nil {
 		return nil, err
 	}
-	args := []string{
-		"--ask-for-approval", codexApprovalPolicy(session.ApprovalPolicy),
-		"--sandbox", "workspace-write",
+	args := append(codexSandboxArgs(session.ApprovalPolicy),
 		"--no-alt-screen",
 		"--cd", session.WorkDir,
-	}
+	)
 	writableDirs, err := codexWritableDirsForSession(session)
 	if err != nil {
 		return nil, err

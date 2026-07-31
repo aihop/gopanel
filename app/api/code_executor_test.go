@@ -60,7 +60,7 @@ func TestSubAdminCannotUseHostExecutor(t *testing.T) {
 func TestBuildCodeExecutorArgsPreservesPrompt(t *testing.T) {
 	prompt := `"; touch /tmp/PWNED; echo "`
 	tests := map[string][]string{
-		"codex":    {"--ask-for-approval", "on-request", "--sandbox", "workspace-write", "exec", "--json", "--skip-git-repo-check", prompt},
+		"codex":    {"-c", codexNetworkConfig, "--ask-for-approval", "on-request", "--sandbox", "workspace-write", "exec", "--json", "--skip-git-repo-check", prompt},
 		"opencode": {"run", "--format", "json", "--dangerously-skip-permissions", prompt},
 	}
 	for executorID, expected := range tests {
@@ -72,8 +72,9 @@ func TestBuildCodeExecutorArgsPreservesPrompt(t *testing.T) {
 			if !reflect.DeepEqual(args, expected) {
 				t.Fatalf("unexpected args: %#v", args)
 			}
-			for _, arg := range args {
-				if arg == "sh" || arg == "-c" {
+			for index, arg := range args {
+				validCodexConfig := executorID == "codex" && arg == "-c" && index+1 < len(args) && args[index+1] == codexNetworkConfig
+				if arg == "sh" || arg == "-c" && !validCodexConfig {
 					t.Fatalf("shell execution is not allowed: %#v", args)
 				}
 			}
@@ -84,7 +85,7 @@ func TestBuildCodeExecutorArgsPreservesPrompt(t *testing.T) {
 func TestBuildCodeExecutorArgsResumesNativeSession(t *testing.T) {
 	prompt := "continue"
 	tests := map[string][]string{
-		"codex":    {"--ask-for-approval", "on-request", "--sandbox", "workspace-write", "exec", "resume", "--json", "--skip-git-repo-check", "native-1", prompt},
+		"codex":    {"-c", codexNetworkConfig, "--ask-for-approval", "on-request", "--sandbox", "workspace-write", "exec", "resume", "--json", "--skip-git-repo-check", "native-1", prompt},
 		"claude":   {"--print", "--output-format", "json", "--permission-mode", "acceptEdits", "--resume", "native-1", prompt},
 		"opencode": {"run", "--format", "json", "--dangerously-skip-permissions", "--session", "native-1", prompt},
 	}
