@@ -29,12 +29,12 @@ class ContainerInfo {
 
   factory ContainerInfo.fromJson(Map<String, dynamic> json) {
     return ContainerInfo(
-      id: json['containerID'] ?? json['id'] ?? '', // 兼容可能存在的不同字段命名
-      name: json['name'] ?? '',
-      image: json['image'] ?? '',
-      state: json['state'] ?? 'unknown',
-      status: json['status'] ?? '',
-      created: json['created'] ?? '',
+      id: (json['containerID'] ?? json['id'] ?? '').toString(),
+      name: (json['name'] ?? '').toString(),
+      image: (json['imageName'] ?? json['image'] ?? '').toString(),
+      state: (json['state'] ?? 'unknown').toString(),
+      status: (json['runTime'] ?? json['status'] ?? '').toString(),
+      created: (json['createTime'] ?? json['created'] ?? '').toString(),
     );
   }
 

@@ -31,13 +31,13 @@ class AppInstallInfo {
 
   factory AppInstallInfo.fromJson(Map<String, dynamic> json) {
     return AppInstallInfo(
-      id: json['id'] as int? ?? 0, // 后端通常是自增主键
-      name: json['name'] ?? '',
-      version: json['version'] ?? '',
-      status: json['status'] ?? 'Unknown',
-      description: json['description'] ?? '',
-      icon: json['icon'] ?? '',
-      createdAt: json['createdAt'] ?? '',
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      name: (json['name'] ?? '').toString(),
+      version: (json['version'] ?? '').toString(),
+      status: (json['status'] ?? 'Unknown').toString(),
+      description: (json['appName'] ?? json['message'] ?? '').toString(),
+      icon: (json['icon'] ?? '').toString(),
+      createdAt: (json['createdAt'] ?? '').toString(),
     );
   }
 

@@ -1,21 +1,28 @@
 import '../../../core/network/api_client.dart';
 import '../models/website_info.dart';
 
+const websiteListPath = '/api/website/list';
+
+List<WebsiteInfo> parseWebsiteList(Map<String, dynamic>? data) {
+  final items = data?['items'];
+  if (items is! List) return [];
+  return items
+      .whereType<Map>()
+      .map((item) => WebsiteInfo.fromJson(item.cast<String, dynamic>()))
+      .toList();
+}
+
 class WebsiteRepository {
   final ApiClient _apiClient;
 
   WebsiteRepository(this._apiClient);
 
   Future<List<WebsiteInfo>> listWebsites() async {
-    final res = await _apiClient.post<List<dynamic>>(
-      '/api/website/list',
+    final res = await _apiClient.post<Map<String, dynamic>>(
+      websiteListPath,
       data: {},
     );
-    final data = res.data ?? const [];
-    return data
-        .whereType<Map>()
-        .map((e) => WebsiteInfo.fromJson(e.cast<String, dynamic>()))
-        .toList();
+    return parseWebsiteList(res.data);
   }
 
   Future<int> runPipeline(int pipelineId) async {
