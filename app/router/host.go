@@ -36,6 +36,8 @@ func HostRouter(r fiber.Router) {
 		hostRouter.Get("/terminal/capabilities", api.GetHostTerminalCapabilities)
 		hostRouter.Get("/terminal/sessions", api.ListHostTerminalSessions)
 		hostRouter.Post("/terminal/sessions/:id/stop", api.StopHostTerminalSession)
+		hostRouter.Post("/terminal/sessions/:id/reconnect", api.ReconnectHostTerminalSession)
+		hostRouter.Delete("/terminal/sessions/:id", api.DeleteHostTerminalSession)
 		hostRouter.Get("/terminal/sessions/:id/audit-events", api.GetHostTerminalAuditEvents)
 		hostRouter.Get("/terminal/sessions/:id/ws", middleware.HostTerminalSameOrigin, websocket.New(api.HostTerminalWebSocket))
 

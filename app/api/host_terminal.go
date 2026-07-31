@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"sync"
@@ -73,6 +74,55 @@ func StopHostTerminalSession(c fiber.Ctx) error {
 	}
 	recordHostTerminalAudit(record.ID, claims.UserId, "stop", "success", c.IP(), "用户停止终端会话")
 	return c.JSON(e.Succ(nil))
+}
+
+func ReconnectHostTerminalSession(c fiber.Ctx) error {
+	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
+	record, err := loadHostTerminalRecord(c.Params("id"), claims.UserId)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	if hostTerminals.get(record.ID) != nil {
+		recordHostTerminalAudit(record.ID, claims.UserId, "reconnect", "success", c.IP(), "重新连接现有终端进程")
+		return c.JSON(e.Succ(record))
+	}
+	if record.Status == "running" || record.Status == "starting" {
+		markHostTerminalInterrupted(record)
+	}
+	reconnected, err := hostTerminals.reconnect(record, claims.UserId, c.IP())
+	if err != nil {
+		recordHostTerminalAudit(record.ID, claims.UserId, "reconnect", "failed", c.IP(), err.Error())
+		return c.JSON(e.Fail(err))
+	}
+	recordHostTerminalAudit(record.ID, claims.UserId, "reconnect", "success", c.IP(), fmt.Sprintf("newSessionId=%d", reconnected.ID))
+	recordHostTerminalAudit(reconnected.ID, claims.UserId, "reconnect", "success", c.IP(), fmt.Sprintf("sourceSessionId=%d", record.ID))
+	return c.JSON(e.Succ(reconnected))
+}
+
+func DeleteHostTerminalSession(c fiber.Ctx) error {
+	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
+	record, err := loadHostTerminalRecord(c.Params("id"), claims.UserId)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	if hostTerminals.get(record.ID) != nil {
+		return c.JSON(e.Fail(errors.New("请先停止运行中的终端会话")))
+	}
+	if record.Status == "running" || record.Status == "starting" {
+		markHostTerminalInterrupted(record)
+	}
+	if err := deleteHostTerminalRecord(record); err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	recordHostTerminalAudit(record.ID, claims.UserId, "delete", "success", c.IP(), "用户删除终端会话记录")
+	return c.JSON(e.Succ(nil))
+}
+
+func deleteHostTerminalRecord(record *model.HostTerminalSession) error {
+	if record == nil {
+		return errors.New("终端会话不存在")
+	}
+	return global.DB.Delete(record).Error
 }
 
 func GetHostTerminalAuditEvents(c fiber.Ctx) error {
@@ -191,6 +241,9 @@ func markHostTerminalInterrupted(record *model.HostTerminalSession) {
 	}
 	now := time.Now()
 	_ = global.DB.Model(record).Updates(map[string]any{"status": "interrupted", "ended_at": now, "error_message": "服务重启或终端进程已丢失"}).Error
+	record.Status = "interrupted"
+	record.EndedAt = &now
+	record.ErrorMessage = "服务重启或终端进程已丢失"
 }
 
 func recordHostTerminalAudit(sessionID, userID uint, action, status, ip, detail string) {
