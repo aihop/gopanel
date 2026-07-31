@@ -1,11 +1,14 @@
 export interface AIProject {
 	id: number
 	createdAt: string
+	updatedAt?: string
 	name: string
 	description: string
 	workDir: string
 	sourceDirs: string[]
 	creatorId: number
+	primaryRepository?: string
+	deliveryBranch: string
 	requireQualityGate: boolean
 	monthlyTokenBudget: number
 	memberCount?: number
@@ -14,7 +17,7 @@ export interface AIProject {
 }
 
 export interface AIProjectExecutionSummary {
-	status: "idle" | "queued" | "running" | "pending_approval"
+	status: "idle" | "queued" | "running" | "delivering" | "pending_approval"
 	activeTaskCount: number
 	pendingApprovalCount: number
 	currentSessionId: number
@@ -75,6 +78,7 @@ export type CodeApprovalPolicy = "manual" | "safe_auto" | "full_auto"
 export interface CodeSession {
 	id: number
 	createdAt: string
+	updatedAt?: string
 	projectId: number
 	title: string
 	currentTaskTitle?: string
@@ -87,9 +91,10 @@ export interface CodeSession {
 	remoteName?: string
 	remoteBranch?: string
 	remoteCommit?: string
-	repositorySync?: "local" | "synced" | "fast_forwarded"
+	repositorySync?: "local" | "local_only" | "synced" | "fast_forwarded"
 	isolationMode?: "single_worktree" | "multi_worktree"
 	status: string
+	deliveredAt?: string
 	currentStage: string
 	approvalPolicy: CodeApprovalPolicy
 	providerBaseUrl?: string
@@ -102,6 +107,8 @@ export interface CodeWorktreeCapability {
 	sourceDir?: string
 	sourceDirs?: string[]
 	repositoryCount: number
+	dirtyRepositories?: string[]
+	snapshotSupported: boolean
 }
 
 export interface AIMessage {
@@ -243,6 +250,7 @@ export interface CodeSessionState {
 	changedFiles: string[]
 	latestRun: CodeExecutionRun | null
 	tokenUsage: CodeTokenUsageResponse
+	delivery: import("./codeGit").CodeDeliveryJob | null
 }
 
 export type CodeQualityKind = "test" | "lint" | "typecheck" | "build"

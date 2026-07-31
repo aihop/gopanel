@@ -123,3 +123,15 @@ func TestHostTerminalControlLeaseExpires(t *testing.T) {
 		t.Fatal("expired controller should not retain input access")
 	}
 }
+
+func TestHostTerminalResumeReturnsSameSession(t *testing.T) {
+	record := &model.HostTerminalSession{ID: 8, UserID: 1, Status: "running"}
+	manager := &hostTerminalManager{sessions: map[uint]*hostTerminal{record.ID: {record: record}}}
+	resumed, err := manager.resume(record.ID)
+	if err != nil || resumed.ID != record.ID {
+		t.Fatalf("existing terminal should resume with the same id: %#v, %v", resumed, err)
+	}
+	if _, err := manager.resume(99); err == nil {
+		t.Fatal("missing terminal process should not be recreated")
+	}
+}

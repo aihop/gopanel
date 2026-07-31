@@ -147,6 +147,14 @@
 			<template #prefix>{{ t("code.monthlyTokenBudget") }}</template>
 		  </n-input-number>
 		  <div class="-mt-3 text-xs text-[var(--n-text-color-3)]">{{ t("code.monthlyTokenBudgetHint") }}</div>
+		  <n-input v-model:value="projectForm.primaryRepository" :placeholder="t('code.primaryRepositoryPlaceholder')">
+			<template #prefix>{{ t("code.primaryRepository") }}</template>
+		  </n-input>
+		  <div class="-mt-3 text-xs text-[var(--n-text-color-3)]">{{ t("code.primaryRepositoryHint") }}</div>
+		  <n-input v-model:value="projectForm.deliveryBranch" :placeholder="t('code.deliveryBranchPlaceholder')">
+			<template #prefix>{{ t("code.deliveryBranch") }}</template>
+		  </n-input>
+		  <div class="-mt-3 text-xs text-[var(--n-text-color-3)]">{{ t("code.deliveryBranchHint") }}</div>
           <n-input
             v-model:value="projectForm.desc"
             type="textarea"
@@ -219,7 +227,7 @@ const showCreateProjectModal = ref(false)
 const showDirectoryPicker = ref(false)
 const creatingProject = ref(false)
 const editingProjectId = ref<number | null>(null)
-const projectForm = ref({ name: '', desc: '', workDir: '', sourceDirs: [] as string[], requireQualityGate: false, monthlyTokenBudget: 0 })
+const projectForm = ref({ name: '', desc: '', workDir: '', sourceDirs: [] as string[], primaryRepository: '', deliveryBranch: '', requireQualityGate: false, monthlyTokenBudget: 0 })
 
 const projects = ref<AIProject[]>([])
 const projectsLoading = ref(false)
@@ -269,8 +277,9 @@ const projectStatusMeta = (project: AIProject) => {
   const status = project.executionSummary.pendingApprovalCount > 0 ? "pending_approval" : project.executionSummary.status
   return {
     idle: { status: "idle", labelKey: "code.projectStatus_idle", icon: "mdi:circle-slice-8" },
-    queued: { status: "queued", labelKey: "code.projectStatus_queued", icon: "mdi:progress-clock" },
-    running: { status: "running", labelKey: "code.projectStatus_running", icon: "mdi:play-circle-outline" },
+	queued: { status: "queued", labelKey: "code.projectStatus_queued", icon: "mdi:progress-clock" },
+	running: { status: "running", labelKey: "code.projectStatus_running", icon: "mdi:play-circle-outline" },
+	delivering: { status: "running", labelKey: "code.projectStatus_delivering", icon: "mdi:source-merge" },
 	pending_approval: { status: "pending-approval", labelKey: "code.projectStatus_pendingApproval", icon: "mdi:shield-alert-outline" },
   }[status] || { status: "idle", labelKey: "code.projectStatus_idle", icon: "mdi:circle-slice-8" }
 }
@@ -284,14 +293,14 @@ const formatUpdatedAt = (value: string) => new Date(value).toLocaleString(undefi
 
 const openCreateProjectModal = () => {
   editingProjectId.value = null
-  projectForm.value = { name: '', desc: '', workDir: defaultWorkDir.value, sourceDirs: [], requireQualityGate: false, monthlyTokenBudget: 0 }
+  projectForm.value = { name: '', desc: '', workDir: defaultWorkDir.value, sourceDirs: [], primaryRepository: '', deliveryBranch: '', requireQualityGate: false, monthlyTokenBudget: 0 }
   showCreateProjectModal.value = true
 }
 
 const openEditProjectModal = (project: AIProject) => {
   editingProjectId.value = project.id
   const sourceDirs = project.sourceDirs?.length ? project.sourceDirs : project.workDir ? [project.workDir] : []
-  projectForm.value = { name: project.name, desc: project.description || '', workDir: sourceDirs[0] || defaultWorkDir.value, sourceDirs, requireQualityGate: Boolean(project.requireQualityGate), monthlyTokenBudget: project.monthlyTokenBudget || 0 }
+  projectForm.value = { name: project.name, desc: project.description || '', workDir: sourceDirs[0] || defaultWorkDir.value, sourceDirs, primaryRepository: project.primaryRepository || '', deliveryBranch: project.deliveryBranch || 'main', requireQualityGate: Boolean(project.requireQualityGate), monthlyTokenBudget: project.monthlyTokenBudget || 0 }
   showCreateProjectModal.value = true
 }
 
@@ -312,8 +321,10 @@ const submitProject = async () => {
   try {
     const payload = {
       name: projectForm.value.name.trim(),
-      description: projectForm.value.desc.trim(),
-      sourceDirs: projectForm.value.sourceDirs,
+	  description: projectForm.value.desc.trim(),
+	  sourceDirs: projectForm.value.sourceDirs,
+	  primaryRepository: projectForm.value.primaryRepository.trim(),
+	  deliveryBranch: projectForm.value.deliveryBranch.trim(),
       requireQualityGate: projectForm.value.requireQualityGate,
       monthlyTokenBudget: projectForm.value.monthlyTokenBudget || 0,
     }

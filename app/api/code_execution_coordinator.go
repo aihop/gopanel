@@ -17,6 +17,7 @@ import (
 const (
 	codeExecutionInteractive = "interactive"
 	codeExecutionInstruction = "instruction"
+	codeExecutionMutation    = "mutation"
 	codeExecutionQuality     = "quality"
 	codeExecutionDelivery    = "delivery"
 )
@@ -305,11 +306,24 @@ func (lease *codeExecutionLease) SetCancel(cancel context.CancelFunc) {
 }
 
 func (coordinator *codeExecutionCoordinator) cancelSessionAndWait(ctx context.Context, sessionID uint) bool {
+	return coordinator.cancelSessionKindAndWait(ctx, sessionID, "")
+}
+
+func (coordinator *codeExecutionCoordinator) hasSessionKind(sessionID uint, kind string) bool {
 	if sessionID == 0 {
 		return false
 	}
 	coordinator.mu.Lock()
-	leases := coordinator.sessionLeases(sessionID)
+	defer coordinator.mu.Unlock()
+	return len(coordinator.sessionLeases(sessionID, kind)) > 0
+}
+
+func (coordinator *codeExecutionCoordinator) cancelSessionKindAndWait(ctx context.Context, sessionID uint, kind string) bool {
+	if sessionID == 0 {
+		return false
+	}
+	coordinator.mu.Lock()
+	leases := coordinator.sessionLeases(sessionID, kind)
 	coordinator.mu.Unlock()
 	for _, lease := range leases {
 		coordinator.mu.Lock()
@@ -330,11 +344,11 @@ func (coordinator *codeExecutionCoordinator) cancelSessionAndWait(ctx context.Co
 	return len(leases) > 0
 }
 
-func (coordinator *codeExecutionCoordinator) sessionLeases(sessionID uint) []*codeExecutionLease {
+func (coordinator *codeExecutionCoordinator) sessionLeases(sessionID uint, kind string) []*codeExecutionLease {
 	seen := make(map[uint64]struct{})
 	leases := make([]*codeExecutionLease, 0)
 	for _, lease := range coordinator.active {
-		if lease.sessionID != sessionID {
+		if lease.sessionID != sessionID || (kind != "" && lease.kind != kind) {
 			continue
 		}
 		if _, exists := seen[lease.id]; exists {

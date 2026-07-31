@@ -81,6 +81,50 @@ func TestCreateMultiRepositorySessionWorktrees(t *testing.T) {
 	}
 }
 
+func TestCodexMultiWorktreeWritableDirsRepairsSameSessionBranch(t *testing.T) {
+	session, _, _ := createMultiRepositorySession(t, 134)
+	repositories, err := loadCodeSessionRepositories(session.ID)
+	if err != nil || len(repositories) == 0 {
+		t.Fatalf("load repositories: %#v, %v", repositories, err)
+	}
+	repository := repositories[0]
+	newBranch := "gopanel/code-134-recovered-1"
+	if _, err := runCodeGit(repository.WorktreeDir, "branch", "-m", newBranch); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := codexWritableDirsForSessionWithRepair(session); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := codeSessionRepositoryByCodeID(session.ID, codeSessionRepositoryID(repository.ID))
+	if err != nil || stored.Branch != newBranch {
+		t.Fatalf("stored repository branch = %q, err=%v", stored.Branch, err)
+	}
+	manifest, err := os.ReadFile(filepath.Join(session.WorkDir, codeSessionManifestName))
+	if err != nil || !strings.Contains(string(manifest), `"branch": "`+newBranch+`"`) {
+		t.Fatalf("session manifest was not repaired: %v, %s", err, manifest)
+	}
+}
+
+func TestRepairCodeMultiWorktreeSkipsCompletedRepository(t *testing.T) {
+	session, _, _ := createMultiRepositorySession(t, 137)
+	repositories, err := loadCodeSessionRepositories(session.ID)
+	if err != nil || len(repositories) < 2 {
+		t.Fatalf("load repositories: %#v, %v", repositories, err)
+	}
+	completed := repositories[0]
+	if _, err := runCodeGit(completed.SourceDir, "worktree", "remove", "--force", completed.WorktreeDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := global.DB.Model(&completed).Update("status", codeDeliveryCompleted).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	if err := repairCodeSessionWorktreeBranches(session); err != nil {
+		t.Fatalf("completed repository should not require a Worktree: %v", err)
+	}
+}
+
 func TestCreateMultiRepositorySessionDiscoversWorkspaceRepositories(t *testing.T) {
 	database := withCodeGovernanceDB(t)
 	withAIProjectBaseDir(t)
@@ -115,6 +159,179 @@ func TestCreateMultiRepositorySessionDiscoversWorkspaceRepositories(t *testing.T
 		if !repositoryWithinSourceDirs(repository.SourceDir, project.SourceDirs) {
 			t.Fatalf("repository escaped workspace boundary: %#v", repository)
 		}
+	}
+}
+
+func TestCreateGitlinkRepositorySnapshotPreservesSourceState(t *testing.T) {
+	database := withCodeGovernanceDB(t)
+	withAIProjectBaseDir(t)
+	parent, child := createGitlinkRepositoryTree(t)
+	if err := os.WriteFile(filepath.Join(child, "staged.txt"), []byte("staged snapshot\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(child, "add", "staged.txt"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(child, "working.txt"), []byte("working snapshot\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(child, "untracked.txt"), []byte("untracked snapshot\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	sourceStatus, err := runCodeGit(child, "status", "--porcelain")
+	if err != nil {
+		t.Fatal(err)
+	}
+	project := &model.AIProject{ID: 85, Name: "gitlink", CreatorID: 7, SourceDirs: []string{parent}, WorkDir: parent}
+	if err := database.Create(project).Error; err != nil {
+		t.Fatal(err)
+	}
+	session := &model.AIDevSession{ID: 85, UserID: 7, ProjectID: project.ID, WorkDir: parent}
+	if err := database.Create(session).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := createCodeSessionWorktree(session, project, true); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { rollbackCodeSessionWorktree(session) })
+	repositories, err := loadCodeSessionRepositories(session.ID)
+	if err != nil || len(repositories) != 2 {
+		t.Fatalf("unexpected repositories: %#v, %v", repositories, err)
+	}
+	var childWorktree string
+	for _, repository := range repositories {
+		if repository.SourceDir == child {
+			childWorktree = repository.WorktreeDir
+			if !repository.Snapshot || repository.ParentSourceDir != parent || repository.GitlinkPath != "themes/custom" {
+				t.Fatalf("snapshot metadata unavailable: %#v", repository)
+			}
+		}
+	}
+	if childWorktree == "" {
+		t.Fatal("child worktree unavailable")
+	}
+	for name, expected := range map[string]string{
+		"staged.txt": "staged snapshot\n", "working.txt": "working snapshot\n", "untracked.txt": "untracked snapshot\n",
+	} {
+		content, readErr := os.ReadFile(filepath.Join(childWorktree, name))
+		if readErr != nil || string(content) != expected {
+			t.Fatalf("snapshot file %s = %q, %v", name, content, readErr)
+		}
+	}
+	worktreeStatus, err := runCodeGit(childWorktree, "status", "--porcelain")
+	if err != nil || !strings.Contains(worktreeStatus, "M  staged.txt") || !strings.Contains(worktreeStatus, " M working.txt") || !strings.Contains(worktreeStatus, "?? untracked.txt") {
+		t.Fatalf("snapshot state not preserved: %q, %v", worktreeStatus, err)
+	}
+	unchangedStatus, err := runCodeGit(child, "status", "--porcelain")
+	if err != nil || unchangedStatus != sourceStatus {
+		t.Fatalf("source repository changed: before=%q after=%q err=%v", sourceStatus, unchangedStatus, err)
+	}
+}
+
+func TestSyncCodeSessionRepositoryGitlinksStagesChildCommitInParent(t *testing.T) {
+	database := withCodeGovernanceDB(t)
+	withAIProjectBaseDir(t)
+	parent, child := createGitlinkRepositoryTree(t)
+	project := &model.AIProject{ID: 86, Name: "gitlink", CreatorID: 7, SourceDirs: []string{parent}, WorkDir: parent}
+	if err := database.Create(project).Error; err != nil {
+		t.Fatal(err)
+	}
+	session := &model.AIDevSession{ID: 86, UserID: 7, ProjectID: project.ID, WorkDir: parent}
+	if err := database.Create(session).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := createCodeSessionWorktree(session, project); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { rollbackCodeSessionWorktree(session) })
+	repositories, err := loadCodeSessionRepositories(session.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var parentRepository, childRepository *model.AIDevSessionRepository
+	for index := range repositories {
+		repository := &repositories[index]
+		if repository.SourceDir == parent {
+			parentRepository = repository
+		}
+		if repository.SourceDir == child {
+			childRepository = repository
+		}
+	}
+	if parentRepository == nil || childRepository == nil {
+		t.Fatalf("repository relationship unavailable: %#v", repositories)
+	}
+	childCommit := commitCodeTestFile(t, childRepository.WorktreeDir, "delivery.txt", "delivery\n")
+	if err := syncCodeSessionRepositoryGitlinks(repositories); err != nil {
+		t.Fatal(err)
+	}
+	entry, err := runCodeGit(parentRepository.WorktreeDir, "ls-files", "-s", "--", childRepository.GitlinkPath)
+	if err != nil || !strings.Contains(entry, childCommit) {
+		t.Fatalf("parent gitlink entry = %q, want %s: %v", entry, childCommit, err)
+	}
+	staged, err := runCodeGit(parentRepository.WorktreeDir, "diff", "--cached", "--name-only")
+	if err != nil || strings.TrimSpace(staged) != childRepository.GitlinkPath {
+		t.Fatalf("parent gitlink was not staged: %q, %v", staged, err)
+	}
+}
+
+func TestCommitAndMergeGitlinkRepositorySession(t *testing.T) {
+	database := withCodeGovernanceDB(t)
+	withAIProjectBaseDir(t)
+	parent, child := createGitlinkRepositoryTree(t)
+	project := &model.AIProject{ID: 87, Name: "gitlink", CreatorID: 7, SourceDirs: []string{parent}, WorkDir: parent}
+	if err := database.Create(project).Error; err != nil {
+		t.Fatal(err)
+	}
+	session := &model.AIDevSession{ID: 87, UserID: 7, ProjectID: project.ID, WorkDir: parent}
+	if err := database.Create(session).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := createCodeSessionWorktree(session, project); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if _, statErr := os.Stat(session.WorkDir); statErr == nil && session.IsolationMode == codeIsolationMultiWorktree {
+			rollbackCodeSessionWorktree(session)
+		}
+	})
+	repositories, err := loadCodeSessionRepositories(session.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var parentRepository, childRepository *model.AIDevSessionRepository
+	for index := range repositories {
+		repository := &repositories[index]
+		if repository.SourceDir == parent {
+			parentRepository = repository
+		}
+		if repository.SourceDir == child {
+			childRepository = repository
+		}
+	}
+	if parentRepository == nil || childRepository == nil {
+		t.Fatalf("repository relationship unavailable: %#v", repositories)
+	}
+	if err := os.WriteFile(filepath.Join(childRepository.WorktreeDir, "delivery.txt"), []byte("delivery\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(childRepository.WorktreeDir, "add", "delivery.txt"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := commitCodeSessionRepository(session, codeSessionRepositoryID(childRepository.ID), "feat: child delivery"); err != nil {
+		t.Fatal(err)
+	}
+	result, err := resumeCodeMultiRepositoryDelivery(session, session.UserID)
+	if err != nil || result.Status != "merged" {
+		t.Fatalf("gitlink delivery failed: %#v, %v", result, err)
+	}
+	childHead, err := runCodeGit(child, "rev-parse", "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	parentEntry, err := runCodeGit(parent, "ls-files", "-s", "--", "themes/custom")
+	if err != nil || !strings.Contains(parentEntry, childHead) {
+		t.Fatalf("parent gitlink = %q, want child %s: %v", parentEntry, childHead, err)
 	}
 }
 

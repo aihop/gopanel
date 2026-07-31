@@ -31,23 +31,34 @@
 										</div>
 									</div>
 								</div>
-								<n-button
-									type="primary"
-									block
-									class="!h-10 !rounded-[14px] shadow-[0_12px_28px_rgba(37,99,235,0.18)]"
-									@click="createNewTask"
-								>
-									<template #icon><Icon name="mdi:plus" /></template>
-									{{ t("code.newSession") }}
-								</n-button>
+								<div class="grid gap-2" :class="projectTerminalAvailable ? 'grid-cols-2' : 'grid-cols-1'">
+									<n-button
+										v-if="projectTerminalAvailable"
+										type="primary"
+										class="!h-10 !rounded-[14px] shadow-[0_12px_28px_rgba(37,99,235,0.18)]"
+										@click="createNewTask"
+									>
+										<template #icon><Icon name="mdi:robot-outline" /></template>
+										{{ t("code.aiTaskShort") }}
+									</n-button>
+									<n-button
+										secondary
+										class="!h-10 !rounded-[14px]"
+										:loading="projectTerminalOpening"
+										@click="openProjectTerminal"
+									>
+										<template #icon><Icon name="mdi:console-line" /></template>
+										{{ t("code.terminalShort") }}
+									</n-button>
+								</div>
 							</div>
 						</div>
 					</div>
 
 					<ProjectTaskSidebar
 						:project-id="currentProjectId"
-						:tasks="tasks"
-						:task-total="taskTotal"
+						:tasks="aiTasks"
+						:task-total="aiTaskTotal"
 						:current-task-id="currentTaskId"
 						:task-action-options="taskActionOptions"
 						@select-task="selectTask"
@@ -62,75 +73,35 @@
 					class="ai-workspace-content-panel flex h-full min-h-0 flex-1 flex-col bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.08),transparent_28%)] p-2 md:p-3"
 					:class="isWorkspaceFullscreen ? 'fixed inset-0 z-[1000] bg-slate-50' : ''"
 				>
-					<div
-						class="ai-workspace-session-bar mb-2 flex shrink-0 items-center justify-between gap-3 px-2 py-1"
-					>
-						<div class="min-w-0">
-							<div class="truncate text-sm font-semibold text-slate-800">{{ sessionLabel }}</div>
-							<div class="truncate text-xs text-slate-400">
-								{{ activeFilePath || t("code.selectFileToEdit") }}
-							</div>
-						</div>
-						<div class="flex flex-wrap items-center justify-end gap-2">
-							<n-button
-								v-if="currentSessionId !== null && workspaceMode === 'editor'"
-								size="small"
-								quaternary
-								class="xl:hidden"
-								@click="showProjectStructure = true"
-							>
-								{{ t("code.projectStructure") }}
-							</n-button>
-							<CodeApprovalCenter :session-id="currentSessionId" @take-terminal="takeOverTerminal" />
-							<CodeDeliveryPanel
-								v-if="currentSessionId !== null"
-								:session-id="currentSessionId"
-								@open-file="openFile"
-							/>
-							<SessionApprovalPolicy v-if="currentSessionId !== null" :session-id="currentSessionId" />
-							<WorkspaceModeSwitch
-								v-if="currentSessionId !== null || currentTaskId !== null"
-								:value="workspaceMode"
-								@update:value="switchWorkspaceMode"
-							/>
-							<n-button
-								v-if="currentSessionId !== null || currentTaskId !== null"
-								size="small"
-								secondary
-								@click="showHistoryDrawer = true"
-							>
-								{{ t("code.conversationHistory") }}
-							</n-button>
-							<n-button
-								v-if="!embedded"
-								circle
-								secondary
-								:aria-label="fullscreenLabel"
-								:title="fullscreenLabel"
-								@click="toggleWorkspaceFullscreen"
-							>
-								<template #icon>
-									<Icon
-										:name="
-											isWorkspaceFullscreen
-												? 'fluent:full-screen-minimize-24-regular'
-												: 'fluent:full-screen-maximize-24-regular'
-										"
-									/>
-								</template>
-							</n-button>
-						</div>
-					</div>
+					<CodeWorkspaceToolbar
+						:session-label="sessionLabel"
+						:session-subtitle="sessionSubtitle"
+						:session-id="currentSessionId"
+						:has-context="hasWorkspaceContext"
+						:is-terminal-session="isTerminalSession"
+						:workspace-mode="workspaceMode"
+						:embedded="embedded"
+						:fullscreen-label="fullscreenLabel"
+						:is-fullscreen="isWorkspaceFullscreen"
+						@show-structure="showProjectStructure = true"
+						@take-terminal="takeOverTerminal"
+						@open-history="showHistoryDrawer = true"
+						@toggle-fullscreen="toggleWorkspaceFullscreen"
+						@open-file="openFile"
+						@update-mode="switchWorkspaceMode"
+					/>
 					<ProjectOverviewPanel
-						v-if="currentSessionId === null && currentTaskId === null"
+						v-if="currentSessionId === null && currentTaskId === null && !isProjectTerminalActive"
 						:project="projectInfo"
 						:project-id="currentProjectId"
-						:tasks="tasks"
+						:tasks="aiTasks"
+						:terminal-available="projectTerminalAvailable"
 						@create-task="createNewTask"
+						@open-terminal="openProjectTerminal"
 						@select-task="selectTask"
 					/>
 					<div
-						v-if="currentSessionId !== null"
+						v-if="currentSessionId !== null && !isProjectTerminalActive"
 						v-show="workspaceMode === 'changes'"
 						class="ai-workspace-editor-shell min-h-0 flex-1 overflow-hidden rounded-[20px] border border-slate-200/80 bg-white shadow-[0_24px_50px_rgba(15,23,42,0.14)]"
 					>
@@ -141,7 +112,7 @@
 						/>
 					</div>
 					<div
-						v-show="workspaceMode === 'editor'"
+						v-show="workspaceMode === 'editor' && !isProjectTerminalActive"
 						class="ai-workspace-editor-shell flex min-h-0 flex-1 overflow-hidden rounded-[20px] border border-slate-200/80 bg-white shadow-[0_24px_50px_rgba(15,23,42,0.14)]"
 					>
 						<div class="min-w-0 flex-1">
@@ -166,8 +137,16 @@
 						</aside>
 					</div>
 
+					<ProjectNativeTerminalPanel
+						v-if="isProjectTerminalActive"
+						:session-id="projectTerminalSessionId"
+						:opening="projectTerminalOpening"
+						@closed="handleProjectTerminalClosed"
+						@reopen="openProjectTerminal"
+					/>
+
 					<div
-						v-if="terminalMounted && (currentTaskId !== null || currentSessionId !== null)"
+						v-if="!isProjectTerminalActive && terminalMounted && (currentTaskId !== null || currentSessionId !== null)"
 						v-show="workspaceMode === 'terminal'"
 						class="ai-workspace-terminal-panel min-h-0 flex-1 overflow-hidden rounded border border-slate-700 bg-[#1e1e1e] shadow-lg"
 					>
@@ -225,25 +204,27 @@ import { computed, nextTick, onMounted, ref, watch } from "vue"
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from "vue-router"
 import { useDialog, useMessage } from "naive-ui"
 import { useI18n } from "vue-i18n"
+import { useAuthStore } from "@/store/auth"
 import { useHideLayoutFooter } from "@/composables/useHideLayoutFooter"
 import Icon from "@/components/common/Icon.vue"
 import CodeTerminal from "./components/CodeTerminal.vue"
 import NewSessionModal from "./components/NewSessionModal.vue"
-import SessionApprovalPolicy from "./components/SessionApprovalPolicy.vue"
-import CodeApprovalCenter from "./components/CodeApprovalCenter.vue"
-import CodeDeliveryPanel from "./components/CodeDeliveryPanel.vue"
+import CodeWorkspaceToolbar from "./components/CodeWorkspaceToolbar.vue"
+import ProjectNativeTerminalPanel from "./components/ProjectNativeTerminalPanel.vue"
 import SessionHistoryDrawer from "./components/SessionHistoryDrawer.vue"
 import ProjectStructurePanel from "./components/ProjectStructurePanel.vue"
 import SessionFileEditor from "./components/SessionFileEditor.vue"
 import ProjectTaskSidebar from "./components/ProjectTaskSidebar.vue"
 import ProjectOverviewPanel from "./components/ProjectOverviewPanel.vue"
 import CodeGitReview from "./components/CodeGitReview.vue"
-import WorkspaceModeSwitch, { type CodeWorkspaceMode } from "./components/WorkspaceModeSwitch.vue"
+import type { CodeWorkspaceMode } from "./components/WorkspaceModeSwitch.vue"
 import { useCodeTaskPolling } from "./useCodeTaskPolling"
 import { useCodeWorkspaceFullscreen } from "./useCodeWorkspaceFullscreen"
+import { useProjectTerminal } from "./useProjectTerminal"
 import { deleteAITask, getAIProjects, updateAITask } from "@/api/modules/code"
 import type { AIProject, AITask, CodeSession } from "@/api/interface/code"
 import type { CodeTaskListItem } from "@/api/interface/codeTasks"
+import type { HostTerminalSession } from "@/api/interface/hostTerminal"
 import { codeWorkspaceMessages } from "./codeWorkspaceMessages"
 
 const props = withDefaults(defineProps<{ projectId?: number; embedded?: boolean }>(), { embedded: false })
@@ -252,9 +233,11 @@ const route = useRoute()
 const router = useRouter()
 const message = useMessage()
 const dialog = useDialog()
+const authStore = useAuthStore()
 const { t } = useI18n({ messages: codeWorkspaceMessages })
 if (!props.embedded) useHideLayoutFooter()
 const currentProjectId = computed(() => props.projectId ?? Number(route.params.id))
+const projectTerminalAvailable = computed(() => authStore.role === "ADMIN" || authStore.role === "SUPER")
 const projectInfo = ref<AIProject | null>(null),
 	tasks = ref<CodeTaskListItem[]>([])
 const taskTotal = ref(0)
@@ -268,6 +251,9 @@ const workspaceMode = ref<CodeWorkspaceMode>("terminal")
 const terminalMounted = ref(false),
 	terminalKey = ref(0)
 const terminalTakeoverRequested = ref(false)
+const isProjectTerminalActive = ref(false)
+const projectTerminalSessionId = ref<number | null>(null)
+const projectTerminalWorkDir = ref("")
 const { isWorkspaceFullscreen, fullscreenLabel, toggleWorkspaceFullscreen } = useCodeWorkspaceFullscreen(t)
 const selectedFile = ref({ path: "", extension: "" })
 const activeFilePath = ref("")
@@ -275,9 +261,27 @@ const fileEditorRef = ref<{ hasUnsavedChanges: boolean } | null>(null)
 const editingTaskId = ref<number | null>(null),
 	editingTaskTitle = ref("")
 const renaming = ref(false)
+const aiTasks = computed(() => tasks.value.filter(task => task.agentName !== "terminal"))
+const aiTaskTotal = computed(() => Math.max(0, taskTotal.value - (tasks.value.length - aiTasks.value.length)))
 const currentTask = computed(() => tasks.value.find(task => task.id === currentTaskId.value) || null)
+const hasWorkspaceContext = computed(
+	() => isProjectTerminalActive.value || currentSessionId.value !== null || currentTaskId.value !== null
+)
+const isTerminalSession = computed(() => isProjectTerminalActive.value)
 const sessionLabel = computed(
-	() => currentTask.value?.title || (currentSessionId.value ? t("code.newSession") : t("code.selectTaskToStart"))
+	() =>
+		(isProjectTerminalActive.value
+			? t("code.projectTerminal")
+			: currentTask.value?.title ||
+				(currentSessionId.value
+					? t("code.newSession")
+					: t("code.selectTaskToStart")))
+)
+const sessionSubtitle = computed(
+	() =>
+		(isProjectTerminalActive.value
+			? projectTerminalWorkDir.value || t("code.projectTerminalHint")
+			: activeFilePath.value || t("code.selectFileToEdit"))
 )
 const taskActionOptions = computed(() => [
 	{ label: t("code.renameTask"), key: "rename" },
@@ -341,6 +345,7 @@ const handleSessionCreated = (session: CodeSession) => {
 	resetSelectedFile()
 	currentTaskId.value = null
 	currentSessionId.value = session.id
+	isProjectTerminalActive.value = false
 	terminalTakeoverRequested.value = false
 	workspaceMode.value = "terminal"
 	terminalMounted.value = true
@@ -348,17 +353,47 @@ const handleSessionCreated = (session: CodeSession) => {
 	void fetchTasks()
 }
 
+const activateTask = (task: AITask) => {
+	resetSelectedFile()
+	currentTaskId.value = task.id
+	currentSessionId.value = task.sessionId || null
+	isProjectTerminalActive.value = false
+	terminalTakeoverRequested.value = false
+	workspaceMode.value = "terminal"
+	terminalMounted.value = true
+	terminalKey.value++
+}
+
 const selectTask = (task: AITask) => {
 	if (currentTaskId.value === task.id && currentSessionId.value === task.sessionId) return
-	confirmDiscardEditorChanges(() => {
-		resetSelectedFile()
-		currentTaskId.value = task.id
-		currentSessionId.value = task.sessionId || null
-		terminalTakeoverRequested.value = false
-		workspaceMode.value = "terminal"
-		terminalMounted.value = true
-		terminalKey.value++
-	})
+	confirmDiscardEditorChanges(() => activateTask(task))
+}
+
+const activateProjectTerminal = (session: HostTerminalSession) => {
+	resetSelectedFile()
+	currentTaskId.value = null
+	currentSessionId.value = null
+	projectTerminalSessionId.value = session.id
+	projectTerminalWorkDir.value = session.workDir
+	isProjectTerminalActive.value = true
+	workspaceMode.value = "terminal"
+}
+
+const { opening: projectTerminalOpening, open: openNativeProjectTerminal } = useProjectTerminal(
+	currentProjectId,
+	activateProjectTerminal,
+	value => message.success(value),
+	value => message.error(value),
+	{
+		created: t("code.projectTerminalOpened"),
+		failed: t("code.projectTerminalOpenFailed"),
+		unavailable: t("code.projectTerminalUnavailable")
+	}
+)
+
+const openProjectTerminal = () => confirmDiscardEditorChanges(() => void openNativeProjectTerminal())
+const handleProjectTerminalClosed = () => {
+	projectTerminalSessionId.value = null
 }
 
 const takeOverTerminal = () => {
@@ -429,6 +464,9 @@ const submitRename = async () => {
 const resetWorkspace = () => {
 	currentTaskId.value = null
 	currentSessionId.value = null
+	isProjectTerminalActive.value = false
+	projectTerminalSessionId.value = null
+	projectTerminalWorkDir.value = ""
 	tasks.value = []
 	taskTotal.value = 0
 	showNewSessionModal.value = false

@@ -1,8 +1,20 @@
 import axios from "axios"
 import http from "@/api"
 import type { ResultData } from "@/api/interface"
-import type { AIProject, CodeApproval, CodeApprovalPolicy, CodeExecutor, CodeInstructionResponse, CodeSession, CodeSessionState } from "@/api/interface/code"
+import type {
+	AIProject,
+	CodeApproval,
+	CodeApprovalPolicy,
+	CodeExecutor,
+	CodeInstructionResponse,
+	CodeSession,
+	CodeSessionState,
+	CodeWorktreeCapability
+} from "@/api/interface/code"
 import type { Dashboard } from "@/api/interface/dashboard"
+import type { HostTerminalSession } from "@/api/interface/hostTerminal"
+import type { CodeProjectSyncStatus } from "@/api/interface/codeOverview"
+import type { CodeDeliveryJob } from "@/api/interface/codeGit"
 import type { NodeSummary, NodeWarning } from "./node"
 
 const mobileHttp = axios.create({
@@ -141,7 +153,9 @@ export function revokeMobileDevice(id: number) {
 }
 
 export function exchangeMobilePairing(code: string, deviceName: string) {
-	return mobileRequest(mobileHttp.post<ResultData<{ device: MobileDevice }>>("/mobile/pair/exchange", { code, deviceName }))
+	return mobileRequest(
+		mobileHttp.post<ResultData<{ device: MobileDevice }>>("/mobile/pair/exchange", { code, deviceName })
+	)
 }
 
 export function loginMobileDevice(data: {
@@ -204,10 +218,10 @@ export function getMobileNodes() {
 	return mobileRequest(mobileHttp.get<ResultData<MobileNode[]>>("/mobile/app/nodes"))
 }
 
-export function getMobileSessions(page = 1, limit = 20) {
+export function getMobileSessions(projectId: number, page = 1, limit = 50) {
 	return mobileRequest(
 		mobileHttp.get<ResultData<{ items: CodeSession[]; total: number }>>("/mobile/app/sessions", {
-			params: { page, limit }
+			params: { page, limit, projectId }
 		})
 	).then(result => ({
 		...result,
@@ -223,28 +237,76 @@ export function getMobileProjects() {
 	).then(result => ({ ...result, items: result.items || [] }))
 }
 
+export function getMobileProjectSyncStatus(projectId: number) {
+	return mobileRequest(
+		mobileHttp.get<ResultData<CodeProjectSyncStatus>>(`/mobile/app/projects/${projectId}/git/sync`)
+	)
+}
+
+export function syncMobileProject(projectId: number) {
+	return mobileRequest(
+		mobileHttp.post<ResultData<CodeProjectSyncStatus>>(
+			`/mobile/app/projects/${projectId}/git/sync`,
+			{ confirm: true },
+			{ timeout: 70000 }
+		)
+	)
+}
+
 export function getMobileExecutors() {
 	return mobileRequest(mobileHttp.get<ResultData<CodeExecutor[]>>("/mobile/app/executors"))
 }
 
-export function createMobileSession(data: { title: string; projectId: number; executorId: string; approvalPolicy: CodeApprovalPolicy }) {
+export function getMobileWorktreeCapability(projectId: number) {
+	return mobileRequest(
+		mobileHttp.get<ResultData<CodeWorktreeCapability>>(`/mobile/app/projects/${projectId}/worktree-capability`)
+	)
+}
+
+export function openMobileProjectTerminal(projectId: number) {
+	return mobileRequest(
+		mobileHttp.post<ResultData<HostTerminalSession>>(`/mobile/app/projects/${projectId}/terminal`, {})
+	)
+}
+
+export function createMobileSession(data: {
+	title: string
+	projectId: number
+	executorId: string
+	approvalPolicy: CodeApprovalPolicy
+}) {
 	return mobileRequest(
 		mobileHttp.post<ResultData<CodeSession>>("/mobile/app/sessions", {
 			...data,
 			workDir: "",
-			isolated: false
+			isolated: true,
+			includeUncommitted: true
+		})
+	)
+}
+
+export function updateMobileSessionTitle(sessionId: number, title: string) {
+	return mobileRequest(mobileHttp.put<ResultData<CodeSession>>(`/mobile/app/sessions/${sessionId}/title`, { title }))
+}
+
+export function deliverMobileSession(sessionId: number) {
+	return mobileRequest(
+		mobileHttp.post<ResultData<CodeDeliveryJob>>(`/mobile/app/sessions/${sessionId}/worktree/merge`, {
+			confirm: true
 		})
 	)
 }
 
 export function getMobileSessionState(sessionId: number) {
-	return mobileRequest(mobileHttp.get<ResultData<CodeSessionState>>(`/mobile/app/sessions/${sessionId}/state`)).then(result => ({
-		...result,
-		recentMessages: result.recentMessages || [],
-		previews: result.previews || [],
-		timelineEvents: result.timelineEvents || [],
-		changedFiles: result.changedFiles || []
-	}))
+	return mobileRequest(mobileHttp.get<ResultData<CodeSessionState>>(`/mobile/app/sessions/${sessionId}/state`)).then(
+		result => ({
+			...result,
+			recentMessages: result.recentMessages || [],
+			previews: result.previews || [],
+			timelineEvents: result.timelineEvents || [],
+			changedFiles: result.changedFiles || []
+		})
+	)
 }
 
 export function createMobileInstruction(sessionId: number, content: string) {
@@ -275,17 +337,22 @@ export function getMobileSessionFile(sessionId: number, path: string) {
 
 export function saveMobileSessionFile(sessionId: number, path: string, content: string, baseVersion: string) {
 	return mobileRequest(
-		mobileHttp.put<ResultData<{ path: string; size: number; version: string }>>(`/mobile/app/sessions/${sessionId}/file`, {
-			path,
-			content,
-			baseVersion
-		})
+		mobileHttp.put<ResultData<{ path: string; size: number; version: string }>>(
+			`/mobile/app/sessions/${sessionId}/file`,
+			{
+				path,
+				content,
+				baseVersion
+			}
+		)
 	)
 }
 
 export function decideMobileApproval(approvalId: number, approved: boolean, reason = "") {
 	const decision = approved ? "approve" : "reject"
-	return mobileRequest(mobileHttp.post<ResultData<void>>(`/mobile/app/approvals/${approvalId}/${decision}`, { reason }))
+	return mobileRequest(
+		mobileHttp.post<ResultData<void>>(`/mobile/app/approvals/${approvalId}/${decision}`, { reason })
+	)
 }
 
 export function stopMobileSession(sessionId: number) {

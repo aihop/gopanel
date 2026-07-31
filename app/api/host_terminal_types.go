@@ -4,7 +4,6 @@ import "time"
 
 const (
 	hostTerminalHistoryLimit = 1024 * 1024
-	hostTerminalIdleTimeout  = 10 * time.Minute
 	hostTerminalControlLease = 60 * time.Second
 )
 

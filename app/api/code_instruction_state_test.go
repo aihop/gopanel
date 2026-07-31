@@ -94,3 +94,33 @@ func TestCancelQueuedCodeInstructionsReconcilesTaskState(t *testing.T) {
 		t.Fatalf("session stage = %q, err = %v", session.CurrentStage, sessionErr)
 	}
 }
+
+func TestReconcileCodeTaskStateDoesNotReopenDeliveringSession(t *testing.T) {
+	database, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "sealed-state.db")), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := database.AutoMigrate(&model.AIDevSession{}, &model.AITask{}, &model.AIInstruction{}); err != nil {
+		t.Fatal(err)
+	}
+	session := &model.AIDevSession{UserID: 1, WorkDir: "/tmp", Status: codeSessionStatusDelivering, CurrentStage: "delivery_queued"}
+	if err := database.Create(session).Error; err != nil {
+		t.Fatal(err)
+	}
+	task := &model.AITask{UserID: 1, SessionID: session.ID, Title: "task", WorkDir: "/tmp", Status: codeSessionStatusDelivering}
+	if err := database.Create(task).Error; err != nil {
+		t.Fatal(err)
+	}
+	err = database.Transaction(func(tx *gorm.DB) error {
+		return reconcileCodeTaskState(tx, session, task, "completed", "completed")
+	})
+	if err == nil {
+		t.Fatal("delivering session was reopened by task reconciliation")
+	}
+	if err := database.First(session, session.ID).Error; err != nil || session.Status != codeSessionStatusDelivering || session.CurrentStage != "delivery_queued" {
+		t.Fatalf("sealed session changed: %#v, %v", session, err)
+	}
+	if err := database.First(task, task.ID).Error; err != nil || task.Status != codeSessionStatusDelivering {
+		t.Fatalf("task update was not rolled back: %#v, %v", task, err)
+	}
+}

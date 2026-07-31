@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -86,6 +87,92 @@ func TestPrepareCodeRepositoryRejectsLocalAhead(t *testing.T) {
 	}
 }
 
+func TestPrepareCodeRepositoryUsesLocalBaselineWhenFetchUnavailable(t *testing.T) {
+	localDir, _ := createCodeRemoteRepository(t)
+	localCommit, err := runCodeGit(localDir, "rev-parse", "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(localDir, "remote", "set-url", "origin", "https://127.0.0.1:1/gopanel.git"); err != nil {
+		t.Fatal(err)
+	}
+
+	prepared, err := prepareCodeRepository(localDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prepared.BaseCommit != localCommit || prepared.RemoteCommit != "" || prepared.SyncStatus != "local_only" {
+		t.Fatalf("unexpected local-only repository: %#v", prepared)
+	}
+	if prepared.RemoteName != "origin" || prepared.RemoteBranch == "" {
+		t.Fatalf("remote delivery metadata unavailable: %#v", prepared)
+	}
+}
+
+func TestCodeGitFetchUnavailableClassification(t *testing.T) {
+	for _, message := range []string{
+		"Git 操作失败：fatal: unable to get password from user",
+		"Git 操作失败：fatal: could not resolve host: codeup.aliyun.com",
+		"Git 操作超时",
+	} {
+		if !isCodeGitFetchUnavailable(errors.New(message)) {
+			t.Fatalf("fetch error should allow local fallback: %s", message)
+		}
+	}
+	if isCodeGitFetchUnavailable(errors.New("Git 操作失败：fatal: bad object refs/heads/main")) {
+		t.Fatal("repository corruption must not allow local fallback")
+	}
+}
+
+func TestCodeDeliveryPolicyDefaultsToMain(t *testing.T) {
+	repository := createCodeGitRepository(t)
+	currentBranch, err := runCodeGit(repository, "branch", "--show-current")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if currentBranch != "main" {
+		if _, err := runCodeGit(repository, "branch", "main"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	policy, err := normalizeCodeDeliveryPolicy([]string{repository}, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if policy.PrimaryRepository != repository || policy.DeliveryBranch != "main" {
+		t.Fatalf("unexpected default delivery policy: %#v", policy)
+	}
+}
+
+func TestCodeDeliveryPolicyRejectsMissingConfiguredBranch(t *testing.T) {
+	repository := createCodeGitRepository(t)
+	_, err := normalizeCodeDeliveryPolicy([]string{repository}, repository, "release")
+	if err == nil || !strings.Contains(err.Error(), "不存在配置的交付分支") {
+		t.Fatalf("missing configured branch should be rejected: %v", err)
+	}
+}
+
+func TestPrepareCodeRepositoryRequiresConfiguredBranchCheckout(t *testing.T) {
+	repository := createCodeGitRepository(t)
+	currentBranch, err := runCodeGit(repository, "branch", "--show-current")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(repository, "branch", "main"); err != nil && currentBranch != "main" {
+		t.Fatal(err)
+	}
+	if currentBranch == "main" {
+		if _, err := runCodeGit(repository, "switch", "-c", "develop"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	candidate := codeRepositoryCandidate{SourceDir: repository}
+	_, err = prepareCodeRepositoryCandidateForBranch(candidate, false, "main")
+	if err == nil || !strings.Contains(err.Error(), "请先切换到交付分支 main") {
+		t.Fatalf("unchecked delivery branch should be rejected: %v", err)
+	}
+}
+
 func TestRefreshCodeRepositoryTargetRejectsBranchSwitch(t *testing.T) {
 	repository := createCodeGitRepository(t)
 	targetBranch, err := runCodeGit(repository, "branch", "--show-current")
@@ -120,5 +207,123 @@ func TestSyncCodeWorktreeWithUpdatedTarget(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(session.WorkDir, "target.txt")); err != nil {
 		t.Fatalf("updated target content unavailable in worktree: %v", err)
+	}
+}
+
+func createGitlinkRepositoryTree(t *testing.T) (string, string) {
+	t.Helper()
+	parent := createCodeGitRepository(t)
+	child := filepath.Join(parent, "themes", "custom")
+	if err := os.MkdirAll(filepath.Dir(child), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(filepath.Dir(child), "init", child); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(child, "staged.txt"), []byte("base\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(child, "working.txt"), []byte("base\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(child, "add", "staged.txt", "working.txt"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(child, "-c", "user.name=GoPanel Test", "-c", "user.email=test@gopanel.local", "commit", "-m", "initial child"); err != nil {
+		t.Fatal(err)
+	}
+	childCommit, err := runCodeGit(child, "rev-parse", "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(parent, "update-index", "--add", "--cacheinfo", "160000,"+childCommit+",themes/custom"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(parent, "-c", "user.name=GoPanel Test", "-c", "user.email=test@gopanel.local", "commit", "-m", "track child gitlink"); err != nil {
+		t.Fatal(err)
+	}
+	return parent, child
+}
+
+func TestDiscoverCodeRepositoriesIncludesGitlinkWithoutGitmodules(t *testing.T) {
+	parent, child := createGitlinkRepositoryTree(t)
+	candidates, err := discoverCodeRepositoryCandidates([]string{parent})
+	if err != nil || len(candidates) != 2 {
+		t.Fatalf("unexpected candidates: %#v, %v", candidates, err)
+	}
+	var parentCandidate, childCandidate *codeRepositoryCandidate
+	for index := range candidates {
+		candidate := &candidates[index]
+		if candidate.SourceDir == parent {
+			parentCandidate = candidate
+		}
+		if candidate.SourceDir == child {
+			childCandidate = candidate
+		}
+	}
+	if parentCandidate == nil || parentCandidate.Dirty {
+		t.Fatalf("parent repository incorrectly dirty: %#v", parentCandidate)
+	}
+	if childCandidate == nil || childCandidate.ParentSourceDir != parent || childCandidate.GitlinkPath != "themes/custom" {
+		t.Fatalf("gitlink relationship unavailable: %#v", childCandidate)
+	}
+}
+
+func TestPrepareGitlinkRepositoriesRejectsDirtyChildByDefault(t *testing.T) {
+	parent, child := createGitlinkRepositoryTree(t)
+	if err := os.WriteFile(filepath.Join(child, "working.txt"), []byte("dirty\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := prepareDiscoveredCodeRepositories([]string{parent})
+	if err == nil || !strings.Contains(err.Error(), "源仓库 custom 存在未提交变更") {
+		t.Fatalf("dirty child should be rejected explicitly: %v", err)
+	}
+}
+
+func TestGitlinkPointerChangeKeepsParentDirty(t *testing.T) {
+	parent, child := createGitlinkRepositoryTree(t)
+	commitCodeTestFile(t, child, "next.txt", "next\n")
+	candidates, err := discoverCodeRepositoryCandidates([]string{parent})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, candidate := range candidates {
+		if candidate.SourceDir == parent {
+			if !candidate.Dirty {
+				t.Fatal("parent gitlink pointer change must remain visible")
+			}
+			return
+		}
+	}
+	t.Fatal("parent repository unavailable")
+}
+
+func TestCodeSnapshotRejectsSymlinkDestinationDirectory(t *testing.T) {
+	worktree := t.TempDir()
+	outside := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(worktree, "escape")); err != nil {
+		t.Fatal(err)
+	}
+	if err := ensureCodeSnapshotDestination(worktree, filepath.Join(worktree, "escape", "nested")); err == nil {
+		t.Fatal("snapshot destination escaped through symlink")
+	}
+}
+
+func TestCodeSnapshotRejectsOversizedFile(t *testing.T) {
+	worktree := t.TempDir()
+	source := filepath.Join(t.TempDir(), "large.bin")
+	file, err := os.Create(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Truncate(maxCodeSnapshotFileBytes + 1); err != nil {
+		file.Close()
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := copyCodeSnapshotFile(worktree, source, filepath.Join(worktree, "large.bin")); err == nil {
+		t.Fatal("oversized snapshot file should be rejected")
 	}
 }

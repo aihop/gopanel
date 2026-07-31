@@ -67,6 +67,15 @@ const formatTaskDuration = (durationMs: number) => {
 }
 
 const taskGitMeta = (task: CodeTaskListItem) =>
+	task.summary.deliveryStatus === "queued"
+		? { icon: "mdi:clock-outline", color: "text-amber-500" }
+		: task.summary.deliveryStatus === "running"
+			? { icon: "mdi:cloud-sync-outline", color: "text-blue-500" }
+			: task.summary.deliveryStatus === "failed"
+				? { icon: "mdi:cloud-alert-outline", color: "text-red-500" }
+				: task.summary.deliveryStatus === "conflict"
+					? { icon: "mdi:source-branch-alert", color: "text-red-500" }
+					:
 	({
 		working: { icon: "mdi:source-branch", color: "text-slate-400" },
 		committed: { icon: "mdi:source-commit", color: "text-blue-500" },
@@ -78,6 +87,14 @@ const taskGitMeta = (task: CodeTaskListItem) =>
 
 const taskTooltip = (task: CodeTaskListItem) =>
 	[
+		task.summary.deliveryStatus
+			? t(`code.deliveryStatus_${task.summary.deliveryStatus}`, {
+				position: task.summary.deliveryQueuePosition,
+				progress: task.summary.deliveryProgress
+			})
+			: "",
+		task.summary.deliveryStage ? t(`code.deliveryStage_${task.summary.deliveryStage}`) : "",
+		task.summary.deliveryError,
 		task.summary.gitStatus ? t(`code.taskGitStatus_${task.summary.gitStatus}`) : "",
 		task.summary.gitError,
 		task.summary.executor,
@@ -130,8 +147,14 @@ watch(
 							@click="emit('selectTask', task)"
 						>
 							<div class="min-w-0 flex-1">
-								<div class="truncate text-sm font-semibold text-slate-800" :title="task.title">
-									{{ task.title }}
+								<div class="flex min-w-0 items-center gap-1.5 text-sm font-semibold text-slate-800" :title="task.title">
+									<Icon
+										v-if="task.agentName === 'terminal'"
+										name="mdi:console-line"
+										:size="14"
+										class="shrink-0 text-slate-500"
+									/>
+									<span class="truncate">{{ task.title }}</span>
 								</div>
 								<div
 									class="mt-1.5 flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap text-[10px] text-slate-400"
@@ -312,6 +335,18 @@ watch(
 	background-color: rgba(100, 116, 139, 0.28) !important;
 }
 
+.ai-workspace-task-row--active::before {
+	position: absolute;
+	top: 8px;
+	bottom: 8px;
+	left: 0;
+	width: 4px;
+	border-radius: 0 9999px 9999px 0;
+	background-color: rgb(29, 78, 216);
+	box-shadow: 0 2px 8px rgba(29, 78, 216, 0.32);
+	content: "";
+}
+
 :global(.theme-dark) .ai-workspace-branches {
 	border-top-color: color-mix(in srgb, var(--border-color) 80%, transparent);
 	background-color: color-mix(in srgb, var(--bg-default-color) 76%, transparent);
@@ -323,6 +358,11 @@ watch(
 
 :global(.theme-dark) .ai-workspace-task-row--active {
 	background-color: color-mix(in srgb, var(--primary-color) 14%, transparent) !important;
+}
+
+:global(.theme-dark) .ai-workspace-task-row--active::before {
+	background-color: rgb(96, 165, 250);
+	box-shadow: 0 2px 8px rgba(96, 165, 250, 0.28);
 }
 
 :global(.theme-dark) .ai-workspace-task-btn {

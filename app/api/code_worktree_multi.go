@@ -20,16 +20,19 @@ const (
 )
 
 type codeSessionRepositoryManifest struct {
-	SourceDir    string `json:"sourceDir"`
-	WorktreeDir  string `json:"worktreeDir"`
-	LinkName     string `json:"linkName"`
-	Branch       string `json:"branch"`
-	TargetBranch string `json:"targetBranch"`
-	BaseCommit   string `json:"baseCommit"`
-	RemoteName   string `json:"remoteName,omitempty"`
-	RemoteBranch string `json:"remoteBranch,omitempty"`
-	RemoteCommit string `json:"remoteCommit,omitempty"`
-	SyncStatus   string `json:"syncStatus"`
+	SourceDir       string `json:"sourceDir"`
+	ParentSourceDir string `json:"parentSourceDir,omitempty"`
+	GitlinkPath     string `json:"gitlinkPath,omitempty"`
+	WorktreeDir     string `json:"worktreeDir"`
+	LinkName        string `json:"linkName"`
+	Branch          string `json:"branch"`
+	TargetBranch    string `json:"targetBranch"`
+	BaseCommit      string `json:"baseCommit"`
+	RemoteName      string `json:"remoteName,omitempty"`
+	RemoteBranch    string `json:"remoteBranch,omitempty"`
+	RemoteCommit    string `json:"remoteCommit,omitempty"`
+	SyncStatus      string `json:"syncStatus"`
+	Snapshot        bool   `json:"snapshot"`
 }
 
 type codeSessionWorkspaceManifest struct {
@@ -56,18 +59,36 @@ func writeCodeSessionManifest(workDir string, repositories []model.AIDevSessionR
 	manifest := codeSessionWorkspaceManifest{Version: 1, Repositories: make([]codeSessionRepositoryManifest, 0, len(repositories))}
 	for _, repository := range repositories {
 		manifest.Repositories = append(manifest.Repositories, codeSessionRepositoryManifest{
-			SourceDir: repository.SourceDir, WorktreeDir: repository.WorktreeDir,
+			SourceDir: repository.SourceDir, ParentSourceDir: repository.ParentSourceDir,
+			GitlinkPath: repository.GitlinkPath, WorktreeDir: repository.WorktreeDir,
 			LinkName: repository.LinkName, Branch: repository.Branch,
 			TargetBranch: repository.TargetBranch, BaseCommit: repository.BaseCommit,
 			RemoteName: repository.RemoteName, RemoteBranch: repository.RemoteBranch,
-			RemoteCommit: repository.RemoteCommit, SyncStatus: repository.SyncStatus,
+			RemoteCommit: repository.RemoteCommit, SyncStatus: repository.SyncStatus, Snapshot: repository.Snapshot,
 		})
 	}
 	content, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(workDir, codeSessionManifestName), content, 0600)
+	tempFile, err := os.CreateTemp(workDir, ".gopanel-session-*.tmp")
+	if err != nil {
+		return err
+	}
+	tempPath := tempFile.Name()
+	defer os.Remove(tempPath)
+	if err := tempFile.Chmod(0600); err != nil {
+		tempFile.Close()
+		return err
+	}
+	if _, err := tempFile.Write(content); err != nil {
+		tempFile.Close()
+		return err
+	}
+	if err := tempFile.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tempPath, filepath.Join(workDir, codeSessionManifestName))
 }
 
 func createCodeSessionRepositoryWorktrees(session *model.AIDevSession, project *model.AIProject, prepared []codePreparedRepository) error {
@@ -102,14 +123,28 @@ func createCodeSessionRepositoryWorktrees(session *model.AIDevSession, project *
 			rollback()
 			return err
 		}
+		if err := installCodeManagedPushGuard(worktreeDir); err != nil {
+			_, _ = runCodeGit(source.Path, "worktree", "remove", "--force", worktreeDir)
+			_, _ = runCodeGit(source.Path, "branch", "-D", "--", branch)
+			rollback()
+			return err
+		}
 		created = append(created, model.AIDevSessionRepository{
 			SessionID: session.ID, ProjectID: project.ID, SourceDir: source.Path,
+			ParentSourceDir: repository.ParentSourceDir, GitlinkPath: repository.GitlinkPath,
 			WorktreeDir: worktreeDir, LinkName: source.LinkName, Branch: branch,
 			TargetBranch: repository.TargetBranch, BaseCommit: repository.BaseCommit,
 			RemoteName: repository.RemoteName, RemoteCommit: repository.RemoteCommit,
 			RemoteBranch: repository.RemoteBranch,
-			SyncStatus:   repository.SyncStatus, Status: "active",
+			SyncStatus:   repository.SyncStatus, Snapshot: repository.Snapshot, Status: "active",
 		})
+	}
+	for _, repository := range created {
+		preparedRepository := preparedBySource[repository.SourceDir]
+		if err := applyCodeRepositorySnapshot(preparedRepository, repository.WorktreeDir, prepared); err != nil {
+			rollback()
+			return err
+		}
 	}
 	if err := writeCodeSessionManifest(workspaceDir, created); err != nil {
 		rollback()
@@ -171,7 +206,9 @@ func rollbackCodeSessionRepositoryWorktrees(session *model.AIDevSession) {
 	for index := len(repositories) - 1; index >= 0; index-- {
 		repository := repositories[index]
 		if _, err := runCodeGit(repository.SourceDir, "worktree", "remove", "--force", repository.WorktreeDir); err != nil {
-			global.LOG.Errorf("Rollback Code repository worktree %d failed: %v", repository.ID, err)
+			if global.LOG != nil {
+				global.LOG.Errorf("Rollback Code repository worktree %d failed: %v", repository.ID, err)
+			}
 			continue
 		}
 		_, _ = runCodeGit(repository.SourceDir, "branch", "-D", "--", repository.Branch)

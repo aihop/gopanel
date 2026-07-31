@@ -1,5 +1,5 @@
 import http from "@/api"
-import type { CodeDeliveryPushResult, CodeGitDeliveryResult, CodeGitDiff, CodeGitDiffKind, CodeGitStatus } from "../interface/codeGit"
+import type { CodeDeliveryJob, CodeDeliveryPushResult, CodeGitDeliveryResult, CodeGitDiff, CodeGitDiffKind, CodeGitStatus } from "../interface/codeGit"
 
 export function getCodeGitStatus(sessionId: number) {
 	return http.get<CodeGitStatus>(`/code/sessions/${sessionId}/git/status`, undefined, { timeout: 15000 })
@@ -10,7 +10,11 @@ export function commitCodeGitChanges(sessionId: number, repositoryId: string, me
 }
 
 export function mergeCodeSessionWorktree(sessionId: number) {
-	return http.post<CodeGitDeliveryResult>(`/code/sessions/${sessionId}/worktree/merge`, { confirm: true })
+	return http.post<CodeDeliveryJob>(`/code/sessions/${sessionId}/worktree/merge`, { confirm: true })
+}
+
+export function getCodeDeliveryJob(sessionId: number) {
+	return http.get<CodeDeliveryJob | null>(`/code/sessions/${sessionId}/delivery`, undefined, { timeout: 10000 })
 }
 
 export function getCodeDeliveryPushStatus(sessionId: number) {

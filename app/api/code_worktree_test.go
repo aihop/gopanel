@@ -106,6 +106,19 @@ func TestCreateAndRollbackCodeSessionWorktree(t *testing.T) {
 	}
 }
 
+func TestCodeSessionWorktreeBlocksDirectPush(t *testing.T) {
+	withAIProjectBaseDir(t)
+	repositoryDir, _ := createCodeRemoteRepository(t)
+	session := &model.AIDevSession{ID: 24, UserID: 7, WorkDir: repositoryDir}
+	if err := createCodeSessionWorktree(session, &model.AIProject{SourceDirs: []string{repositoryDir}}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { rollbackCodeSessionWorktree(session) })
+	if _, err := runCodeGit(session.WorkDir, "push", "origin", "HEAD:refs/heads/blocked-direct-push"); err == nil || !strings.Contains(err.Error(), "统一交付") {
+		t.Fatalf("direct worktree push should be blocked: %v", err)
+	}
+}
+
 func TestCleanupCodeSessionWorktreePreservesUncommittedChanges(t *testing.T) {
 	withAIProjectBaseDir(t)
 	repositoryDir := createCodeGitRepository(t)

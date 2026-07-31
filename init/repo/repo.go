@@ -119,8 +119,8 @@ func Init() {
 		sysLog.Println("Node table error", err)
 		return
 	}
-	if err := repo.DropLegacyAIProjectTable(global.DB); err != nil {
-		sysLog.Println("AIProject legacy table cleanup error", err)
+	if err := repo.MigrateLegacyAIProjects(global.DB); err != nil {
+		sysLog.Println("AIProject legacy data migration error", err)
 		return
 	}
 
@@ -135,6 +135,8 @@ func Init() {
 		&model.AIExecutionRun{},
 		&model.AICodeDatabaseAccess{},
 		&model.AICodeDelivery{},
+		&model.AICodeDeliveryJob{},
+		&model.AICodeDeliveryLease{},
 		&model.AICodeAuditEvent{},
 		&model.AIInstruction{},
 		&model.AIPreview{},

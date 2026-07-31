@@ -40,6 +40,7 @@ let autoTakeControlPending = Boolean(props.autoTakeControl)
 const nativeProtocol = ref(false)
 const hasTerminalControl = ref(true)
 const reconnecting = ref(false)
+const connectionFailed = ref(false)
 const runtimeState = ref<CodexRuntimeState | null>(null)
 const runtimeLoading = ref(false)
 const runtimeError = ref(false)
@@ -51,6 +52,14 @@ const sendTerminalAck = (sequence: number) => {
 	if (ws?.readyState === WebSocket.OPEN && sequence > 0) {
 		ws.send(JSON.stringify({ type: "ack", data: String(sequence) }))
 	}
+}
+
+const writeTerminalData = (data: string, forceBottom = false) => {
+	const buffer = term.buffer.active
+	const shouldFollow = forceBottom || buffer.baseY - buffer.viewportY <= 1
+	term.write(data, () => {
+		if (shouldFollow) term.scrollToBottom()
+	})
 }
 
 const requestTerminalResync = () => {
@@ -166,18 +175,21 @@ const connectWebSocket = () => {
 		initialReconnectAttempts = 0
 		if (typeof event.data === "string" && (event.data.includes("失败") || event.data.includes("错误"))) {
 			serverErrorShown = true
+			connectionFailed.value = true
 		}
 		try {
 			const msg = JSON.parse(event.data)
 			if (msg.type === "baseline") {
 				nativeProtocol.value = true
+				connectionFailed.value = false
 				if (pendingResyncId && msg.requestId !== pendingResyncId) return
 				autoTakeControlPending = false
 				const sequence = Number(msg.sequence) || 0
 				const chunkIndex = Number(msg.chunkIndex) || 0
 				const chunkCount = Number(msg.chunkCount) || 1
 				if (msg.truncated && chunkIndex === 0) term.reset()
-				if (msg.data) term.write(msg.data)
+				if (msg.data) writeTerminalData(msg.data, chunkIndex === chunkCount - 1)
+				else if (chunkIndex === chunkCount - 1) term.scrollToBottom()
 				if (chunkIndex === chunkCount - 1) {
 					lastSequence = sequence
 					pendingResyncId = ""
@@ -186,13 +198,14 @@ const connectWebSocket = () => {
 				}
 			} else if (msg.type === "output") {
 				nativeProtocol.value = true
+				connectionFailed.value = false
 				const sequence = Number(msg.sequence) || 0
 				if (pendingResyncId) return
 				if (lastSequence > 0 && sequence !== lastSequence + 1) {
 					requestTerminalResync()
 					return
 				}
-				if (msg.data) term.write(msg.data)
+				if (msg.data) writeTerminalData(msg.data)
 				lastSequence = sequence
 				sendTerminalAck(sequence)
 			} else if (msg.type === "resync_required") {
@@ -204,17 +217,17 @@ const connectWebSocket = () => {
 				intentionalClose = true
 				hasTerminalControl.value = false
 			} else if (msg.type === "cmd") {
-				term.write(msg.data)
+				writeTerminalData(msg.data)
 			} else if (msg.type === "meta" && msg.task_id) {
 				// 后端通知前端：新任务已创建，请更新 URL 或左侧列表
 				emit("task-created", msg.task_id)
 			} else if (msg.type === "pong") {
 				// do nothing
 			} else {
-				term.write(event.data)
+				writeTerminalData(event.data)
 			}
 		} catch (e) {
-			term.write(event.data)
+			writeTerminalData(event.data)
 		}
 	}
 
@@ -231,7 +244,7 @@ const connectWebSocket = () => {
 			term.writeln("\r\n\x1b[33m[系统] 终端连接已断开。\x1b[0m")
 		}
 		const canRetryInitialConnection = !receivedServerMessage && initialReconnectAttempts < 3
-		if ((nativeProtocol.value || canRetryInitialConnection) && !reconnectTimer) {
+		if (!connectionFailed.value && (nativeProtocol.value || canRetryInitialConnection) && !reconnectTimer) {
 			initialReconnectAttempts++
 			reconnecting.value = true
 			reconnectTimer = setTimeout(() => {
@@ -240,6 +253,23 @@ const connectWebSocket = () => {
 			}, 1500)
 		}
 	}
+}
+
+const reconnectTerminal = () => {
+	if (reconnectTimer) {
+		clearTimeout(reconnectTimer)
+		reconnectTimer = null
+	}
+	if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+		ws.onclose = null
+		ws.close()
+	}
+	serverErrorShown = false
+	receivedServerMessage = false
+	initialReconnectAttempts = 0
+	connectionFailed.value = false
+	reconnecting.value = true
+	connectWebSocket()
 }
 
 const takeTerminalControl = () => {
@@ -308,7 +338,10 @@ onBeforeUnmount(() => {
 				</span>
 			</div>
 			<div class="flex shrink-0 items-center gap-3 text-xs text-slate-400">
-				<n-tag v-if="reconnecting" size="small" type="warning" :bordered="false">
+				<n-button v-if="connectionFailed && !reconnecting" size="tiny" type="warning" @click="reconnectTerminal">
+					{{ t("code.reconnectTerminal") }}
+				</n-button>
+				<n-tag v-else-if="reconnecting" size="small" type="warning" :bordered="false">
 					{{ t("code.terminalReconnecting") }}
 				</n-tag>
 				<n-tag v-else-if="nativeProtocol && hasTerminalControl" size="small" type="success" :bordered="false">

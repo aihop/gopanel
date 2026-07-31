@@ -1,6 +1,7 @@
 package repo
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"testing"
 	"time"
@@ -111,7 +112,12 @@ func TestDeleteTaskAndSessionIsAtomic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := database.AutoMigrate(&model.AIDevSession{}, &model.AITask{}, &model.AIMessage{}, &model.AIInstruction{}, &model.AIApproval{}, &model.AIExecutionRun{}, &model.AIPreview{}, &model.AITimelineEvent{}); err != nil {
+	if err := database.AutoMigrate(
+		&model.AIDevSession{}, &model.AITask{}, &model.AIMessage{}, &model.AIInstruction{},
+		&model.AIApproval{}, &model.AIExecutionRun{}, &model.AIPreview{}, &model.AITimelineEvent{},
+		&model.AICodeDelivery{}, &model.AICodeDeliveryJob{}, &model.AICodeDeliveryLease{},
+		&model.AIDevSessionRepository{},
+	); err != nil {
 		t.Fatal(err)
 	}
 	global.DB = database
@@ -127,10 +133,24 @@ func TestDeleteTaskAndSessionIsAtomic(t *testing.T) {
 	if err := database.Create(message).Error; err != nil {
 		t.Fatal(err)
 	}
+	repositoryKeys, _ := json.Marshal([]string{"repository"})
+	job := &model.AICodeDeliveryJob{
+		SessionID: session.ID, ProjectID: 1, UserID: 1, Status: "running", Stage: "pushing",
+		RepositoryKeys: string(repositoryKeys), LeaseOwner: "runner",
+	}
+	if err := database.Create(job).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := database.Create(&model.AICodeDeliveryLease{RepositoryKey: "repository", JobID: job.ID, LeaseOwner: "runner"}).Error; err != nil {
+		t.Fatal(err)
+	}
 	if err := (&aiTaskRepo{}).DeleteTaskAndSession(task.ID, session.ID); err != nil {
 		t.Fatal(err)
 	}
-	for _, target := range []any{&model.AITask{}, &model.AIDevSession{}, &model.AIMessage{}} {
+	for _, target := range []any{
+		&model.AITask{}, &model.AIDevSession{}, &model.AIMessage{},
+		&model.AICodeDeliveryJob{}, &model.AICodeDeliveryLease{},
+	} {
 		var count int64
 		if err := database.Model(target).Count(&count).Error; err != nil || count != 0 {
 			t.Fatalf("remaining %T count = %d, err = %v", target, count, err)

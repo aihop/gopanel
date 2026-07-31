@@ -220,7 +220,7 @@ func buildCodeExecutorCommand(ctx context.Context, executorID, workDir, prompt, 
 		return nil, "", err
 	}
 	if definition.ID == "codex" {
-		writableDirs, writableErr := codexWritableDirsForSession(session)
+		writableDirs, writableErr := codexWritableDirsForSessionWithRepair(session)
 		if writableErr != nil {
 			return nil, "", writableErr
 		}

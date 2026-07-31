@@ -12,6 +12,8 @@ type AIProject struct {
 	WorkDir            string                     `gorm:"column:work_dir;type:varchar(1024);not null;default:''" json:"workDir"`
 	SourceDirs         []string                   `gorm:"column:source_dirs;serializer:json;type:text" json:"sourceDirs"`
 	CreatorID          uint                       `gorm:"column:creator_id;type:integer;not null;index" json:"creatorId"`
+	PrimaryRepository  string                     `gorm:"column:primary_repository;type:varchar(1024)" json:"primaryRepository,omitempty"`
+	DeliveryBranch     string                     `gorm:"column:delivery_branch;type:varchar(255);not null;default:''" json:"deliveryBranch"`
 	RequireQualityGate bool                       `gorm:"column:require_quality_gate;not null;default:false" json:"requireQualityGate"`
 	MonthlyTokenBudget int64                      `gorm:"column:monthly_token_budget;not null;default:0" json:"monthlyTokenBudget"`
 	TaskCount          int64                      `gorm:"-" json:"taskCount"`
@@ -96,6 +98,7 @@ type AIDevSession struct {
 	ProviderAPIKey    string     `gorm:"column:codex_api_key;type:text" json:"-"`
 	ApprovalPolicy    string     `gorm:"column:approval_policy;type:varchar(32);not null;default:'safe_auto'" json:"approvalPolicy"`
 	LastInstructionAt *time.Time `gorm:"column:last_instruction_at" json:"lastInstructionAt,omitempty"`
+	DeliveredAt       *time.Time `gorm:"column:delivered_at;index" json:"deliveredAt,omitempty"`
 	CurrentTaskTitle  string     `gorm:"-" json:"currentTaskTitle,omitempty"`
 }
 

@@ -2,6 +2,8 @@ package model
 
 import (
 	"time"
+
+	"gorm.io/gorm"
 )
 
 type OperationLog struct {
@@ -30,20 +32,21 @@ type LoginLog struct {
 }
 
 type HostTerminalSession struct {
-	ID           uint       `gorm:"primaryKey" json:"id"`
-	CreatedAt    time.Time  `json:"createdAt"`
-	UpdatedAt    time.Time  `json:"updatedAt"`
-	UserID       uint       `gorm:"column:user_id;not null;index" json:"userId"`
-	Status       string     `gorm:"column:status;type:varchar(32);not null;index" json:"status"`
-	Shell        string     `gorm:"column:shell;type:varchar(64);not null" json:"shell"`
-	WorkDir      string     `gorm:"column:work_dir;type:varchar(1024);not null" json:"workDir"`
-	PID          int        `gorm:"column:pid;not null;default:0" json:"pid"`
-	ExitCode     int        `gorm:"column:exit_code;not null;default:0" json:"exitCode"`
-	ClientIP     string     `gorm:"column:client_ip;type:varchar(64)" json:"clientIp"`
-	OutputBytes  int64      `gorm:"column:output_bytes;not null;default:0" json:"outputBytes"`
-	ErrorMessage string     `gorm:"column:error_message;type:varchar(500)" json:"errorMessage,omitempty"`
-	StartedAt    time.Time  `gorm:"column:started_at;not null" json:"startedAt"`
-	EndedAt      *time.Time `gorm:"column:ended_at" json:"endedAt,omitempty"`
+	ID           uint           `gorm:"primaryKey" json:"id"`
+	CreatedAt    time.Time      `json:"createdAt"`
+	UpdatedAt    time.Time      `json:"updatedAt"`
+	UserID       uint           `gorm:"column:user_id;not null;index" json:"userId"`
+	Status       string         `gorm:"column:status;type:varchar(32);not null;index" json:"status"`
+	Shell        string         `gorm:"column:shell;type:varchar(64);not null" json:"shell"`
+	WorkDir      string         `gorm:"column:work_dir;type:varchar(1024);not null" json:"workDir"`
+	PID          int            `gorm:"column:pid;not null;default:0" json:"pid"`
+	ExitCode     int            `gorm:"column:exit_code;not null;default:0" json:"exitCode"`
+	ClientIP     string         `gorm:"column:client_ip;type:varchar(64)" json:"clientIp"`
+	OutputBytes  int64          `gorm:"column:output_bytes;not null;default:0" json:"outputBytes"`
+	ErrorMessage string         `gorm:"column:error_message;type:varchar(500)" json:"errorMessage,omitempty"`
+	StartedAt    time.Time      `gorm:"column:started_at;not null" json:"startedAt"`
+	EndedAt      *time.Time     `gorm:"column:ended_at" json:"endedAt,omitempty"`
+	DeletedAt    gorm.DeletedAt `gorm:"column:deleted_at;index" json:"-"`
 }
 
 func (HostTerminalSession) TableName() string { return "host_terminal_sessions" }

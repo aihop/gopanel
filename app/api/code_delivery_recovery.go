@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -19,6 +20,10 @@ const (
 )
 
 func loadOrCreateCodeDelivery(session *model.AIDevSession, userID uint) (*model.AICodeDelivery, error) {
+	return loadOrCreateCodeDeliveryWithProgress(session, userID, nil)
+}
+
+func loadOrCreateCodeDeliveryWithProgress(session *model.AIDevSession, userID uint, report codeDeliveryProgressReporter) (*model.AICodeDelivery, error) {
 	var delivery model.AICodeDelivery
 	err := global.DB.Where("session_id = ?", session.ID).First(&delivery).Error
 	if err == nil {
@@ -37,6 +42,9 @@ func loadOrCreateCodeDelivery(session *model.AIDevSession, userID uint) (*model.
 	if strings.TrimSpace(status) != "" {
 		return nil, errors.New("Worktree 仍有未提交变更，请先提交")
 	}
+	if report != nil {
+		report(codeDeliveryStageSyncing, 20)
+	}
 	targetBranch := session.TargetBranch
 	if targetBranch == "" {
 		targetBranch, _ = runCodeGit(session.SourceWorkDir, "branch", "--show-current")
@@ -47,6 +55,9 @@ func loadOrCreateCodeDelivery(session *model.AIDevSession, userID uint) (*model.
 	}
 	if err := syncCodeWorktreeWithTarget(session.WorkDir, targetBranch); err != nil {
 		return nil, err
+	}
+	if report != nil {
+		report(codeDeliveryStageQualityCheck, 40)
 	}
 	if err := validateCodeQualityGate(session); err != nil {
 		return nil, err
@@ -83,7 +94,14 @@ func codeDeliverySessionSnapshot(delivery *model.AICodeDelivery) *model.AIDevSes
 }
 
 func mergePreparedCodeDelivery(delivery *model.AICodeDelivery) (codeGitDeliveryResult, error) {
+	return mergePreparedCodeDeliveryWithProgress(delivery, nil)
+}
+
+func mergePreparedCodeDeliveryWithProgress(delivery *model.AICodeDelivery, report codeDeliveryProgressReporter) (codeGitDeliveryResult, error) {
 	snapshot := codeDeliverySessionSnapshot(delivery)
+	if report != nil {
+		report(codeDeliveryStageSyncing, 20)
+	}
 	targetBranch := snapshot.TargetBranch
 	if targetBranch == "" {
 		targetBranch, _ = runCodeGit(snapshot.SourceWorkDir, "branch", "--show-current")
@@ -95,6 +113,9 @@ func mergePreparedCodeDelivery(delivery *model.AICodeDelivery) (codeGitDeliveryR
 	if _, err := runCodeGit(snapshot.WorkDir, "merge-base", "--is-ancestor", targetCommit, delivery.WorktreeCommit); err != nil {
 		if err := syncCodeWorktreeWithTarget(snapshot.WorkDir, targetBranch); err != nil {
 			return codeGitDeliveryResult{}, err
+		}
+		if report != nil {
+			report(codeDeliveryStageQualityCheck, 40)
 		}
 		if err := validateCodeQualityGate(snapshot); err != nil {
 			return codeGitDeliveryResult{}, err
@@ -109,6 +130,9 @@ func mergePreparedCodeDelivery(delivery *model.AICodeDelivery) (codeGitDeliveryR
 			return codeGitDeliveryResult{}, err
 		}
 		delivery.WorktreeCommit, delivery.RemoteCommit = worktreeCommit, targetCommit
+	}
+	if report != nil {
+		report(codeDeliveryStageMerging, 55)
 	}
 	if _, err := runCodeGit(snapshot.SourceWorkDir, "merge-base", "--is-ancestor", delivery.WorktreeCommit, "HEAD"); err != nil {
 		if _, err := runCodeGit(snapshot.SourceWorkDir, "merge", "--no-ff", "--no-edit", snapshot.WorktreeBranch); err != nil {
@@ -173,16 +197,18 @@ func cleanupCodeDeliveryWorktree(delivery *model.AICodeDelivery) error {
 }
 
 func resumeCodeSessionDelivery(session *model.AIDevSession, userID uint) (codeGitDeliveryResult, error) {
-	delivery, err := loadOrCreateCodeDelivery(session, userID)
+	return resumeCodeSessionDeliveryWithProgress(session, userID, nil)
+}
+
+func resumeCodeSessionDeliveryWithProgress(session *model.AIDevSession, userID uint, report codeDeliveryProgressReporter) (codeGitDeliveryResult, error) {
+	delivery, err := loadOrCreateCodeDeliveryWithProgress(session, userID, report)
 	if err != nil {
 		return codeGitDeliveryResult{}, err
 	}
-	result := codeGitDeliveryResult{Status: "merged", Commit: delivery.MergeCommit, Branch: delivery.WorktreeBranch}
-	if delivery.Status == codeDeliveryPrepared {
-		result, err = mergePreparedCodeDelivery(delivery)
-		if err != nil || result.Status == "conflict" {
-			return result, err
-		}
+	result, err := integrateAndPushCodeDeliveryWithProgress(delivery, report)
+	if err != nil || result.Status == "conflict" {
+		result.Repositories = []codeRepositoryDeliveryResult{codeSingleRepositoryDeliveryResult(delivery, result)}
+		return result, err
 	}
 	if delivery.Status == codeDeliveryMerged {
 		if err := updateCodeDeliveryMetadata(delivery); err != nil {
@@ -196,5 +222,20 @@ func resumeCodeSessionDelivery(session *model.AIDevSession, userID uint) (codeGi
 		}
 		delivery.Status = codeDeliveryCompleted
 	}
+	result.Repositories = []codeRepositoryDeliveryResult{codeSingleRepositoryDeliveryResult(delivery, result)}
 	return result, nil
+}
+
+func codeSingleRepositoryDeliveryResult(delivery *model.AICodeDelivery, result codeGitDeliveryResult) codeRepositoryDeliveryResult {
+	pushStatus := delivery.PushStatus
+	if !codeDeliveryHasRemote(delivery.RemoteName, deliveryRemoteBranch(delivery.RemoteBranch, delivery.TargetBranch)) {
+		pushStatus = "local"
+	}
+	return codeRepositoryDeliveryResult{
+		RepositoryID: "session", RepositoryName: filepath.Base(delivery.SourceWorkDir), Status: result.Status,
+		Branch: delivery.WorktreeBranch, TargetBranch: delivery.TargetBranch, Remote: delivery.RemoteName,
+		RemoteBranch: deliveryRemoteBranch(delivery.RemoteBranch, delivery.TargetBranch), Commit: result.Commit,
+		PushStatus: pushStatus, PushedCommit: delivery.PushedCommit, ErrorMessage: delivery.PushError,
+		ConflictFiles: result.ConflictFiles,
+	}
 }

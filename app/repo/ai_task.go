@@ -65,8 +65,8 @@ func (r *aiTaskRepo) GetTasksByProjectAndUserID(projectID, userID uint, page, li
 }
 
 func orderCodeTasks(db *gorm.DB) *gorm.DB {
-	return db.Order("CASE status WHEN 'pending_approval' THEN 0 WHEN 'running' THEN 1 WHEN 'queued' THEN 2 ELSE 3 END").
-		Order("CASE WHEN status IN ('pending_approval', 'running', 'queued') THEN updated_at ELSE created_at END desc")
+	return db.Order("CASE status WHEN 'pending_approval' THEN 0 WHEN 'delivering' THEN 1 WHEN 'running' THEN 2 WHEN 'queued' THEN 3 ELSE 4 END").
+		Order("CASE WHEN status IN ('pending_approval', 'delivering', 'running', 'queued') THEN updated_at ELSE created_at END desc")
 }
 
 func (r *aiTaskRepo) UpdateTask(task *model.AITask) error {
@@ -86,6 +86,24 @@ func (r *aiTaskRepo) DeleteTaskAndSession(taskID, sessionID uint) error {
 }
 
 func (r *aiTaskRepo) deleteTask(db *gorm.DB, taskID, sessionID uint) error {
+	if sessionID > 0 {
+		var jobIDs []uint
+		if err := db.Model(&model.AICodeDeliveryJob{}).Where("session_id = ?", sessionID).Pluck("id", &jobIDs).Error; err != nil {
+			return err
+		}
+		if len(jobIDs) > 0 {
+			if err := db.Where("job_id IN ?", jobIDs).Delete(&model.AICodeDeliveryLease{}).Error; err != nil {
+				return err
+			}
+		}
+		for _, target := range []any{
+			&model.AICodeDeliveryJob{}, &model.AICodeDelivery{}, &model.AIDevSessionRepository{},
+		} {
+			if err := db.Where("session_id = ?", sessionID).Delete(target).Error; err != nil {
+				return err
+			}
+		}
+	}
 	for _, target := range []any{
 		&model.AIMessage{}, &model.AIApproval{}, &model.AIExecutionRun{},
 		&model.AIPreview{}, &model.AITimelineEvent{}, &model.AIInstruction{},

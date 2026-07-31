@@ -111,6 +111,8 @@ func CreateAIProject(c fiber.Ctx) error {
 		Description        string   `json:"description"`
 		WorkDir            string   `json:"workDir"`
 		SourceDirs         []string `json:"sourceDirs"`
+		PrimaryRepository  *string  `json:"primaryRepository"`
+		DeliveryBranch     *string  `json:"deliveryBranch"`
 		RequireQualityGate bool     `json:"requireQualityGate"`
 		MonthlyTokenBudget int64    `json:"monthlyTokenBudget"`
 	}
@@ -132,7 +134,22 @@ func CreateAIProject(c fiber.Ctx) error {
 	if req.MonthlyTokenBudget < 0 {
 		return c.JSON(e.Fail(errors.New("Token 月度预算不能为负数")))
 	}
-	project := &model.AIProject{Name: name, Description: strings.TrimSpace(req.Description), SourceDirs: sourceDirs, CreatorID: claims.UserId, RequireQualityGate: req.RequireQualityGate, MonthlyTokenBudget: req.MonthlyTokenBudget}
+	primaryRepository, deliveryBranch := "", ""
+	if req.PrimaryRepository != nil {
+		primaryRepository = strings.TrimSpace(*req.PrimaryRepository)
+	}
+	if req.DeliveryBranch != nil {
+		deliveryBranch = strings.TrimSpace(*req.DeliveryBranch)
+	}
+	project := &model.AIProject{
+		Name: name, Description: strings.TrimSpace(req.Description), SourceDirs: sourceDirs,
+		CreatorID: claims.UserId, PrimaryRepository: primaryRepository,
+		DeliveryBranch: deliveryBranch, RequireQualityGate: req.RequireQualityGate,
+		MonthlyTokenBudget: req.MonthlyTokenBudget,
+	}
+	if err := applyCodeProjectDeliveryPolicy(project, sourceDirs); err != nil {
+		return c.JSON(e.Fail(err))
+	}
 	projectRepo := repo.NewAIProjectRepo()
 	if err := projectRepo.CreateProject(project); err != nil {
 		return c.JSON(e.Fail(err))
@@ -171,6 +188,8 @@ func UpdateAIProject(c fiber.Ctx) error {
 		Description        string   `json:"description"`
 		WorkDir            string   `json:"workDir"`
 		SourceDirs         []string `json:"sourceDirs"`
+		PrimaryRepository  *string  `json:"primaryRepository"`
+		DeliveryBranch     *string  `json:"deliveryBranch"`
 		RequireQualityGate bool     `json:"requireQualityGate"`
 		MonthlyTokenBudget int64    `json:"monthlyTokenBudget"`
 	}
@@ -197,11 +216,20 @@ func UpdateAIProject(c fiber.Ctx) error {
 	project.Description = strings.TrimSpace(req.Description)
 	project.WorkDir = workDir
 	project.SourceDirs = sourceDirs
+	if req.PrimaryRepository != nil {
+		project.PrimaryRepository = strings.TrimSpace(*req.PrimaryRepository)
+	}
+	if req.DeliveryBranch != nil {
+		project.DeliveryBranch = strings.TrimSpace(*req.DeliveryBranch)
+	}
 	if req.MonthlyTokenBudget < 0 {
 		return c.JSON(e.Fail(errors.New("Token 月度预算不能为负数")))
 	}
 	project.RequireQualityGate = req.RequireQualityGate
 	project.MonthlyTokenBudget = req.MonthlyTokenBudget
+	if err := applyCodeProjectDeliveryPolicy(project, sourceDirs); err != nil {
+		return c.JSON(e.Fail(err))
+	}
 	if err := projectRepo.UpdateProject(project); err != nil {
 		return c.JSON(e.Fail(err))
 	}
