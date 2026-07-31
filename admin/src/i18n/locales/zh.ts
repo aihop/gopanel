@@ -790,7 +790,7 @@ export default {
 		action: "操作",
 		noTable: "暂无数据库",
 		partialLoadTitle: "部分数据库服务器加载失败",
-		partialLoadDesc: "有 {count} 个服务器无法读取，其他可用数据库已正常显示。",
+		partialLoadDesc: "有 {count} 个服务器无法读取，其他可用数据库已正常显示",
 		selectTable: "请选择一个数据表",
 		addColumn: "添加字段",
 		importSql: "导入 SQL",
