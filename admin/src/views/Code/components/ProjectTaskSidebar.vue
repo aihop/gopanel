@@ -147,8 +147,14 @@ watch(
 							@click="emit('selectTask', task)"
 						>
 							<div class="min-w-0 flex-1">
-								<div class="truncate text-sm font-semibold text-slate-800" :title="task.title">
-									{{ task.title }}
+								<div class="flex min-w-0 items-center gap-1.5 text-sm font-semibold text-slate-800" :title="task.title">
+									<Icon
+										v-if="task.agentName === 'terminal'"
+										name="mdi:console-line"
+										:size="14"
+										class="shrink-0 text-slate-500"
+									/>
+									<span class="truncate">{{ task.title }}</span>
 								</div>
 								<div
 									class="mt-1.5 flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap text-[10px] text-slate-400"

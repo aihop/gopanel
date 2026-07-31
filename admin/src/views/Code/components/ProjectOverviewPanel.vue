@@ -13,7 +13,7 @@ import Icon from "@/components/common/Icon.vue"
 import { projectOverviewMessages } from "../projectOverviewMessages"
 
 const props = defineProps<{ project: AIProject | null; projectId: number; tasks: CodeTaskListItem[] }>()
-const emit = defineEmits<{ createTask: []; selectTask: [task: CodeTaskListItem] }>()
+const emit = defineEmits<{ createTask: []; openTerminal: []; selectTask: [task: CodeTaskListItem] }>()
 const { t } = useI18n({ messages: projectOverviewMessages })
 const message = useMessage()
 const overview = ref<CodeProjectOverview | null>(null)
@@ -175,7 +175,7 @@ useIntervalFn(() => void loadOverview(), 5000)
 								}}
 							</p>
 						</div>
-						<div class="flex shrink-0 flex-wrap gap-2">
+						<div class="flex shrink-0 flex-wrap gap-2 rounded-2xl bg-slate-50 p-1.5 dark:bg-white/5">
 							<n-button v-if="activeTask" type="primary" size="large" @click="continueTask">
 								<template #icon><Icon name="mdi:play-outline" /></template>
 								{{ t("code.continueTask") }}
@@ -183,10 +183,15 @@ useIntervalFn(() => void loadOverview(), 5000)
 							<n-button
 								:type="activeTask ? 'default' : 'primary'"
 								size="large"
+								class="!rounded-xl"
 								@click="emit('createTask')"
 							>
-								<template #icon><Icon name="mdi:plus" /></template>
-								{{ t("code.newSession") }}
+								<template #icon><Icon name="mdi:robot-outline" /></template>
+								{{ t("code.newAiTask") }}
+							</n-button>
+							<n-button size="large" secondary class="!rounded-xl" @click="emit('openTerminal')">
+								<template #icon><Icon name="mdi:console-line" /></template>
+								{{ t("code.projectTerminal") }}
 							</n-button>
 						</div>
 					</div>

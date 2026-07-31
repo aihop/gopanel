@@ -37,7 +37,8 @@ const loading = ref(false)
 const submitting = ref(false)
 const loadError = ref("")
 
-const availableExecutors = computed(() => executors.value.filter(executor => executor.available))
+const aiExecutors = computed(() => executors.value.filter(executor => executor.id !== "terminal"))
+const availableExecutors = computed(() => aiExecutors.value.filter(executor => executor.available))
 const selectedExecutor = computed(() => executors.value.find(executor => executor.id === selectedExecutorId.value))
 const supportsApproval = computed(() => (selectedExecutor.value?.approvalPolicies.length || 0) > 1)
 const approvalPolicies = computed<CodeApprovalPolicy[]>(() =>
@@ -151,7 +152,7 @@ const submit = async () => {
 		:show="show"
 		preset="card"
 		style="width: 720px"
-		:title="t('code.newSession')"
+		:title="t('code.newAiTask')"
 		:mask-closable="!submitting"
 		@update:show="emit('update:show', $event)"
 	>
@@ -164,7 +165,7 @@ const submit = async () => {
 					</div>
 				</n-alert>
 
-				<n-empty v-else-if="!loading && executors.length === 0" :description="t('code.noExecutors')" />
+				<n-empty v-else-if="!loading && aiExecutors.length === 0" :description="t('code.noExecutors')" />
 
 				<template v-else>
 					<div>
@@ -173,7 +174,7 @@ const submit = async () => {
 						</div>
 						<div class="grid gap-3 sm:grid-cols-2">
 							<button
-								v-for="executor in executors"
+								v-for="executor in aiExecutors"
 								:key="executor.id"
 								type="button"
 								class="rounded-2xl border p-4 text-left transition-all"

@@ -2,6 +2,8 @@ export const projectOverviewMessages = {
 	zh: {
 		code: {
 			newSession: "新会话",
+			newAiTask: "新建 AI 任务",
+			projectTerminal: "项目终端",
 			retry: "重试",
 			branchLoadFailed: "Git 分支加载失败",
 			overviewLoadFailed: "项目概览加载失败",
@@ -56,6 +58,8 @@ export const projectOverviewMessages = {
 	en: {
 		code: {
 			newSession: "New session",
+			newAiTask: "New AI task",
+			projectTerminal: "Project terminal",
 			retry: "Retry",
 			branchLoadFailed: "Failed to load Git branches",
 			overviewLoadFailed: "Failed to load project overview",

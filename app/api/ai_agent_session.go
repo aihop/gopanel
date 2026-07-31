@@ -207,10 +207,7 @@ func CreateAISession(c fiber.Ctx) error {
 	if err := sessionRepo.CreateSession(session); err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	useWorktree := req.Isolated
-	if project != nil {
-		useWorktree = inspectCodeWorktreeCapability(project).Available
-	}
+	useWorktree := shouldCreateCodeSessionWorktree(executorID, req.Isolated, project)
 	if useWorktree {
 		if project == nil {
 			_ = sessionRepo.DeleteSession(session.ID)
@@ -244,6 +241,17 @@ func CreateAISession(c fiber.Ctx) error {
 	}
 	return c.JSON(e.Succ(session))
 }
+
+func shouldCreateCodeSessionWorktree(executorID string, isolated bool, project *model.AIProject) bool {
+	if executorID == "terminal" {
+		return false
+	}
+	if project != nil {
+		return inspectCodeWorktreeCapability(project).Available
+	}
+	return isolated
+}
+
 func CreateAISessionInstruction(c fiber.Ctx) error {
 	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
 	sessionID, _ := strconv.Atoi(c.Params("id"))
