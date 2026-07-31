@@ -92,6 +92,7 @@ class CodeExecutor {
   final bool available;
   final String version;
   final String reason;
+  final bool nativeTerminal;
   final List<String> capabilities;
   final List<String> approvalPolicies;
 
@@ -102,6 +103,7 @@ class CodeExecutor {
     required this.available,
     required this.version,
     required this.reason,
+    required this.nativeTerminal,
     required this.capabilities,
     required this.approvalPolicies,
   });
@@ -116,6 +118,7 @@ class CodeExecutor {
       available: json['available'] == true,
       version: (json['version'] ?? '').toString(),
       reason: (json['reason'] ?? '').toString(),
+      nativeTerminal: json['nativeTerminal'] == true,
       capabilities: (json['capabilities'] as List<dynamic>? ?? const [])
           .map((item) => item.toString())
           .toList(),

@@ -47,9 +47,11 @@ class DashboardAiSummaryCard extends ConsumerWidget {
       title: const Text('AI 开发'),
       trailing: TextButton(
         onPressed: () {
-          ref.read(mainScaffoldIndexProvider.notifier).setIndex(2);
+          ref
+              .read(mainScaffoldIndexProvider.notifier)
+              .setIndex(MainScaffoldIndexController.codeIndex);
         },
-        child: const Text('任务中心'),
+        child: const Text('Code'),
       ),
       child: Column(
         children: [

@@ -72,7 +72,9 @@ class DatabaseDetailScreen extends ConsumerWidget {
         summary: database.server,
       );
       ref.read(taskCenterControllerProvider.notifier).addLocalTask(task);
-      ref.read(mainScaffoldIndexProvider.notifier).setIndex(2);
+      ref
+          .read(mainScaffoldIndexProvider.notifier)
+          .setIndex(MainScaffoldIndexController.codeIndex);
       if (!context.mounted) return;
       Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => TaskDetailScreen(task: task)),

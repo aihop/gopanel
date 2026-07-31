@@ -92,7 +92,9 @@ class WebsiteDetailScreen extends ConsumerWidget {
         summary: 'pipelineId=${website.pipelineId}',
       );
       ref.read(taskCenterControllerProvider.notifier).addLocalTask(task);
-      ref.read(mainScaffoldIndexProvider.notifier).setIndex(2);
+      ref
+          .read(mainScaffoldIndexProvider.notifier)
+          .setIndex(MainScaffoldIndexController.codeIndex);
       if (!context.mounted) return;
       Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => TaskDetailScreen(task: task)),
@@ -120,7 +122,9 @@ class WebsiteDetailScreen extends ConsumerWidget {
         summary: 'deploy trigger',
       );
       ref.read(taskCenterControllerProvider.notifier).addLocalTask(task);
-      ref.read(mainScaffoldIndexProvider.notifier).setIndex(2);
+      ref
+          .read(mainScaffoldIndexProvider.notifier)
+          .setIndex(MainScaffoldIndexController.codeIndex);
       if (!context.mounted) return;
       Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => TaskDetailScreen(task: task)),

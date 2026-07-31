@@ -57,7 +57,9 @@ class _AppsListScreenState extends ConsumerState<AppsListScreen> {
             summary: operation,
           );
           ref.read(taskCenterControllerProvider.notifier).addLocalTask(task);
-          ref.read(mainScaffoldIndexProvider.notifier).setIndex(2);
+          ref
+              .read(mainScaffoldIndexProvider.notifier)
+              .setIndex(MainScaffoldIndexController.codeIndex);
           Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => TaskDetailScreen(task: task)),
           );

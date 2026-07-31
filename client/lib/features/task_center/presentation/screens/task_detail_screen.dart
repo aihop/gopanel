@@ -198,7 +198,9 @@ class _TaskDetailScreenState extends ConsumerState<TaskDetailScreen> {
                             onPressed: () {
                               ref
                                   .read(mainScaffoldIndexProvider.notifier)
-                                  .setIndex(1);
+                                  .setIndex(
+                                    MainScaffoldIndexController.resourcesIndex,
+                                  );
                               Navigator.of(context).pop();
                             },
                             child: const Text('返回资源页'),
