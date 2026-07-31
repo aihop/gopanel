@@ -18,9 +18,8 @@
 			<n-button class="mt-3" size="small" @click="emit('refresh')">{{ t("controlPlane.retry") }}</n-button>
 		</n-alert>
 		<n-empty v-else-if="!status" class="mt-6" :description="t('controlPlane.empty')" />
-		<n-alert v-if="error && status" class="mt-6" type="error" :show-icon="true">{{ error }}</n-alert>
-
 		<template v-else>
+			<n-alert v-if="error" class="mt-6" type="error" :show-icon="true">{{ error }}</n-alert>
 			<div class="mt-6 grid gap-4 md:grid-cols-2">
 				<div v-for="component in components" :key="component.name" class="rounded-2xl border border-slate-100 bg-slate-50/75 p-5">
 					<div class="flex items-center justify-between gap-3">
