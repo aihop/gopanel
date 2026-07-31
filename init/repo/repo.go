@@ -144,6 +144,8 @@ func Init() {
 		&model.MobileDevice{},
 		&model.OperationLog{},
 		&model.LoginLog{},
+		&model.HostTerminalSession{},
+		&model.HostTerminalAuditEvent{},
 		&model.LegacyWebsiteDeploy{},
 	); err != nil {
 		sysLog.Println("AutoMigrate additional tables error", err)

@@ -156,6 +156,19 @@ export default function getItems(_: { mode: "vertical" | "horizontal"; collapsed
 							RouterLink,
 							{
 								to: {
+									name: "Host-Terminal"
+								}
+							},
+							{ default: () => t("menu.terminal") }
+						),
+					key: "Host-Terminal"
+				},
+				{
+					label: () =>
+						h(
+							RouterLink,
+							{
+								to: {
 									name: "Host-Files"
 								}
 							},

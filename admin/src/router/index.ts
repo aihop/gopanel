@@ -220,6 +220,12 @@ const router = createRouter({
 			},
 			children: [
 				{
+					path: "terminal",
+					name: "Host-Terminal",
+					component: () => import("@/views/Host/terminal/index.vue"),
+					meta: { title: t("menu.terminal"), titleKey: "menu.terminal", auth: true, roles: "all" }
+				},
+				{
 					path: "monitor",
 					name: "Host-Monitor",
 					component: () => import("@/views/Host/monitor.vue"),
