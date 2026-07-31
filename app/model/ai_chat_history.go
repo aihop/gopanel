@@ -4,16 +4,18 @@ import "time"
 
 // AIGroup 记录 Code 项目。保留原表名以兼容已有数据。
 type AIGroup struct {
-	ID               uint                       `gorm:"primaryKey" json:"id"`
-	CreatedAt        time.Time                  `json:"createdAt"`
-	UpdatedAt        time.Time                  `json:"updatedAt"`
-	Name             string                     `gorm:"column:name;type:varchar(255);not null" json:"name"`
-	Description      string                     `gorm:"column:description;type:text" json:"description"`
-	WorkDir          string                     `gorm:"column:work_dir;type:varchar(1024);not null;default:''" json:"workDir"`
-	SourceDirs       []string                   `gorm:"column:source_dirs;serializer:json;type:text" json:"sourceDirs"`
-	CreatorID        uint                       `gorm:"column:creator_id;type:integer;not null;index" json:"creatorId"`
-	TaskCount        int64                      `gorm:"-" json:"taskCount"`
-	ExecutionSummary *AIProjectExecutionSummary `gorm:"-" json:"executionSummary"`
+	ID                 uint                       `gorm:"primaryKey" json:"id"`
+	CreatedAt          time.Time                  `json:"createdAt"`
+	UpdatedAt          time.Time                  `json:"updatedAt"`
+	Name               string                     `gorm:"column:name;type:varchar(255);not null" json:"name"`
+	Description        string                     `gorm:"column:description;type:text" json:"description"`
+	WorkDir            string                     `gorm:"column:work_dir;type:varchar(1024);not null;default:''" json:"workDir"`
+	SourceDirs         []string                   `gorm:"column:source_dirs;serializer:json;type:text" json:"sourceDirs"`
+	CreatorID          uint                       `gorm:"column:creator_id;type:integer;not null;index" json:"creatorId"`
+	RequireQualityGate bool                       `gorm:"column:require_quality_gate;not null;default:false" json:"requireQualityGate"`
+	MonthlyTokenBudget int64                      `gorm:"column:monthly_token_budget;not null;default:0" json:"monthlyTokenBudget"`
+	TaskCount          int64                      `gorm:"-" json:"taskCount"`
+	ExecutionSummary   *AIProjectExecutionSummary `gorm:"-" json:"executionSummary"`
 }
 
 type AIProjectExecutionSummary struct {
@@ -96,9 +98,9 @@ func (AIDevSession) TableName() string {
 // AIExecutionRun 保存每轮执行的原始层数据，消息表仅承载适合界面展示的对话内容。
 type AIExecutionRun struct {
 	ID                uint       `gorm:"primaryKey" json:"id"`
-	CreatedAt         time.Time  `json:"createdAt"`
+	CreatedAt         time.Time  `gorm:"index:idx_ai_runs_session_created,priority:2" json:"createdAt"`
 	UpdatedAt         time.Time  `json:"updatedAt"`
-	SessionID         uint       `gorm:"column:session_id;type:integer;not null;index" json:"sessionId"`
+	SessionID         uint       `gorm:"column:session_id;type:integer;not null;index;index:idx_ai_runs_session_created,priority:1" json:"sessionId"`
 	TaskID            uint       `gorm:"column:task_id;type:integer;index" json:"taskId"`
 	InstructionID     uint       `gorm:"column:instruction_id;type:integer;index" json:"instructionId"`
 	ExecutorID        string     `gorm:"column:executor_id;type:varchar(64);not null;index" json:"executorId"`

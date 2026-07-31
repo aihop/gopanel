@@ -1,6 +1,9 @@
 package api
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func newNativeTerminalProtocolTestSubject() *nativeCodeTerminal {
 	return &nativeCodeTerminal{subscribers: make(map[string]*nativeTerminalSubscription)}
@@ -92,15 +95,23 @@ func TestNativeTerminalProtocolReplaysOnlyMissingOutput(t *testing.T) {
 	}
 }
 
-func TestNativeTerminalProtocolTransfersAndReleasesControl(t *testing.T) {
+func TestNativeTerminalProtocolPreventsControlLeasePreemption(t *testing.T) {
 	terminal := newNativeTerminalProtocolTestSubject()
 	first, firstBaseline := terminal.subscribe(0)
 	second, secondBaseline := terminal.subscribe(0)
 	if !firstBaseline.HasControl || secondBaseline.HasControl {
 		t.Fatalf("unexpected initial control: first=%v second=%v", firstBaseline.HasControl, secondBaseline.HasControl)
 	}
-	if !terminal.takeControl(second.ID) {
-		t.Fatal("second subscriber failed to take control")
+	if granted, _ := terminal.takeControl(second.ID); granted {
+		t.Fatal("second subscriber should not preempt active control lease")
+	}
+	if !terminal.releaseControl(first.ID) {
+		t.Fatal("first subscriber failed to release control")
+	}
+	<-first.Events
+	<-second.Events
+	if granted, reason := terminal.takeControl(second.ID); !granted || reason != "" {
+		t.Fatalf("second subscriber failed to acquire released control: %q", reason)
 	}
 	firstControl := <-first.Events
 	secondControl := <-second.Events
@@ -108,10 +119,6 @@ func TestNativeTerminalProtocolTransfersAndReleasesControl(t *testing.T) {
 		t.Fatalf("unexpected transferred control: first=%#v second=%#v", firstControl, secondControl)
 	}
 	terminal.unsubscribe(second)
-	firstControl = <-first.Events
-	if firstControl.HasControl || terminal.controllerID != "" {
-		t.Fatalf("control was not released: %#v", firstControl)
-	}
 	terminal.unsubscribe(first)
 }
 
@@ -129,6 +136,20 @@ func TestNativeTerminalProtocolCanReleaseReadOnlySubscriberControl(t *testing.T)
 		t.Fatalf("unexpected control event after release: %#v", control)
 	}
 	terminal.unsubscribe(subscription)
+}
+
+func TestNativeTerminalProtocolAllowsExpiredLeaseTakeover(t *testing.T) {
+	terminal := newNativeTerminalProtocolTestSubject()
+	first, _ := terminal.subscribe(0)
+	second, _ := terminal.subscribe(0)
+	terminal.mu.Lock()
+	terminal.controlExpiresAt = time.Now().Add(-time.Second)
+	terminal.mu.Unlock()
+	if granted, reason := terminal.takeControl(second.ID); !granted || reason != "" {
+		t.Fatalf("expired lease should be acquirable: %q", reason)
+	}
+	terminal.unsubscribe(second)
+	terminal.unsubscribe(first)
 }
 
 func TestNativeTerminalProtocolResetsStaleSequence(t *testing.T) {

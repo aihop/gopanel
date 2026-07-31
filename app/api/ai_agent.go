@@ -72,7 +72,7 @@ func AIAgentWsSSH(wsConn *websocket.Conn) {
 		return
 	}
 	if currentSession != nil && supportsNativeCodeTerminal(executorID) {
-		serveNativeCodeTerminal(wsConn, sessionRepo, currentSession, uint16(cols), uint16(rows))
+		serveNativeCodeTerminal(wsConn, currentSession, uint16(cols), uint16(rows), authClaims)
 		return
 	}
 	containerName, err := ensureAIAgentWorkspaceContainer(wsConn, workDir, authClaims)

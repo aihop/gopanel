@@ -19,6 +19,7 @@ import (
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
 	"github.com/aihop/gopanel/constant"
+	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/utils/token"
 	"github.com/gofiber/fiber/v3"
 )
@@ -51,6 +52,8 @@ type codeQualityCheckResult struct {
 	OutputTruncated bool      `json:"outputTruncated"`
 	StartedAt       time.Time `json:"startedAt"`
 	CompletedAt     time.Time `json:"completedAt"`
+	Revision        string    `json:"revision,omitempty"`
+	Current         bool      `json:"current"`
 }
 
 type codeQualityPackage struct {
@@ -103,7 +106,14 @@ func RunCodeQualityCheck(c fiber.Ctx) error {
 		return c.JSON(e.Fail(err))
 	}
 	defer lease.Release()
+	revision, err := codeQualityRevision(check.workDirPath)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
 	result := executeCodeQualityCheck(lease, *check)
+	currentRevision, currentErr := codeQualityRevision(check.workDirPath)
+	result.Revision = revision
+	result.Current = currentErr == nil && currentRevision == revision
 	if err := persistCodeQualityResult(session, claims.UserId, *check, result); err != nil {
 		return c.JSON(e.Fail(err))
 	}
@@ -317,7 +327,8 @@ func truncateCodeQualityOutput(output string, limit int) (string, bool) {
 }
 
 func loadCodeQualityResults(sessionID uint, checks []codeQualityCheck) {
-	events, err := repo.NewAIDevSessionRepo().GetTimelineEventsBySessionID(sessionID, 100)
+	var events []*model.AITimelineEvent
+	err := global.DB.Where("session_id = ? AND event_type = ?", sessionID, "quality_check").Order("created_at desc").Limit(1000).Find(&events).Error
 	if err != nil {
 		return
 	}
@@ -335,10 +346,50 @@ func loadCodeQualityResults(sessionID uint, checks []codeQualityCheck) {
 	}
 	for index := range checks {
 		if result, exists := byID[checks[index].ID]; exists {
+			revision, revisionErr := codeQualityRevision(checks[index].workDirPath)
+			result.Current = revisionErr == nil && result.Revision != "" && result.Revision == revision
 			resultCopy := result
 			checks[index].LastResult = &resultCopy
 		}
 	}
+}
+
+func codeQualityRevision(workDir string) (string, error) {
+	revision, err := runCodeGit(workDir, "rev-parse", "HEAD")
+	if err != nil {
+		return "", errors.New("质量检查需要有效的 Git 提交")
+	}
+	return strings.TrimSpace(revision), nil
+}
+
+func validateCodeQualityGate(session *model.AIDevSession) error {
+	if session == nil || session.ProjectID == 0 {
+		return nil
+	}
+	project, err := repo.NewAIGroupRepo().GetGroupByID(session.ProjectID)
+	if err != nil || !project.RequireQualityGate {
+		return err
+	}
+	checks, err := detectCodeQualityChecks(session)
+	if err != nil {
+		return err
+	}
+	if len(checks) == 0 {
+		return errors.New("项目已启用质量门禁，但未识别到可执行检查")
+	}
+	loadCodeQualityResults(session.ID, checks)
+	for _, check := range checks {
+		if check.LastResult == nil {
+			return fmt.Errorf("质量门禁未完成：%s 尚未运行", check.Label)
+		}
+		if !check.LastResult.Current {
+			return fmt.Errorf("质量门禁已过期：%s 需要针对当前提交重新运行", check.Label)
+		}
+		if check.LastResult.Status != "passed" {
+			return fmt.Errorf("质量门禁未通过：%s", check.Label)
+		}
+	}
+	return nil
 }
 
 func persistCodeQualityResult(session *model.AIDevSession, userID uint, check codeQualityCheck, result codeQualityCheckResult) error {

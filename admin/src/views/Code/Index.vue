@@ -137,6 +137,16 @@
             :placeholder="t('code.projectName')"
             placeholder-class="text-[var(--n-text-color-3)]"
           />
+		  <div class="rounded-xl bg-[var(--n-color-embedded)] p-3">
+			<div class="flex items-start justify-between gap-3">
+				<div><div class="text-sm font-medium">{{ t("code.requireQualityGate") }}</div><div class="mt-1 text-xs text-[var(--n-text-color-3)]">{{ t("code.requireQualityGateHint") }}</div></div>
+				<n-switch v-model:value="projectForm.requireQualityGate" />
+			</div>
+		  </div>
+		  <n-input-number v-model:value="projectForm.monthlyTokenBudget" :min="0" :step="100000" style="width: 100%" :placeholder="t('code.monthlyTokenBudget')">
+			<template #prefix>{{ t("code.monthlyTokenBudget") }}</template>
+		  </n-input-number>
+		  <div class="-mt-3 text-xs text-[var(--n-text-color-3)]">{{ t("code.monthlyTokenBudgetHint") }}</div>
           <n-input
             v-model:value="projectForm.desc"
             type="textarea"
@@ -197,6 +207,8 @@ import ProjectDirectoryPicker from './components/ProjectDirectoryPicker.vue'
 import ProjectQuickPanels from './components/ProjectQuickPanels.vue'
 import { codeProjectMessages } from '@/i18n/locales/codeProject'
 
+defineOptions({ name: "CodeIndex" })
+
 const AddIcon = () => '+'
 
 const message = useMessage()
@@ -207,7 +219,7 @@ const showCreateProjectModal = ref(false)
 const showDirectoryPicker = ref(false)
 const creatingProject = ref(false)
 const editingProjectId = ref<number | null>(null)
-const projectForm = ref({ name: '', desc: '', workDir: '', sourceDirs: [] as string[] })
+const projectForm = ref({ name: '', desc: '', workDir: '', sourceDirs: [] as string[], requireQualityGate: false, monthlyTokenBudget: 0 })
 
 const groups = ref<AIGroup[]>([])
 const groupsLoading = ref(false)
@@ -259,7 +271,7 @@ const projectStatusMeta = (group: AIGroup) => {
     idle: { status: "idle", labelKey: "code.projectStatus_idle", icon: "mdi:circle-slice-8" },
     queued: { status: "queued", labelKey: "code.projectStatus_queued", icon: "mdi:progress-clock" },
     running: { status: "running", labelKey: "code.projectStatus_running", icon: "mdi:play-circle-outline" },
-    pending_approval: { status: "pending-approval", labelKey: "code.projectStatus_pendingApproval", icon: "mdi:shield-alert-outline" }
+	pending_approval: { status: "pending-approval", labelKey: "code.projectStatus_pendingApproval", icon: "mdi:shield-alert-outline" },
   }[status] || { status: "idle", labelKey: "code.projectStatus_idle", icon: "mdi:circle-slice-8" }
 }
 
@@ -267,19 +279,19 @@ const formatUpdatedAt = (value: string) => new Date(value).toLocaleString(undefi
   month: "2-digit",
   day: "2-digit",
   hour: "2-digit",
-  minute: "2-digit"
+	minute: "2-digit",
 })
 
 const openCreateProjectModal = () => {
   editingProjectId.value = null
-  projectForm.value = { name: '', desc: '', workDir: defaultWorkDir.value, sourceDirs: [] }
+  projectForm.value = { name: '', desc: '', workDir: defaultWorkDir.value, sourceDirs: [], requireQualityGate: false, monthlyTokenBudget: 0 }
   showCreateProjectModal.value = true
 }
 
 const openEditProjectModal = (project: AIGroup) => {
   editingProjectId.value = project.id
   const sourceDirs = project.sourceDirs?.length ? project.sourceDirs : project.workDir ? [project.workDir] : []
-  projectForm.value = { name: project.name, desc: project.description || '', workDir: sourceDirs[0] || defaultWorkDir.value, sourceDirs }
+  projectForm.value = { name: project.name, desc: project.description || '', workDir: sourceDirs[0] || defaultWorkDir.value, sourceDirs, requireQualityGate: Boolean(project.requireQualityGate), monthlyTokenBudget: project.monthlyTokenBudget || 0 }
   showCreateProjectModal.value = true
 }
 
@@ -301,7 +313,9 @@ const submitProject = async () => {
     const payload = {
       name: projectForm.value.name.trim(),
       description: projectForm.value.desc.trim(),
-      sourceDirs: projectForm.value.sourceDirs
+      sourceDirs: projectForm.value.sourceDirs,
+      requireQualityGate: projectForm.value.requireQualityGate,
+      monthlyTokenBudget: projectForm.value.monthlyTokenBudget || 0,
     }
     const res = editingProjectId.value
       ? await updateAIGroup(editingProjectId.value, payload)

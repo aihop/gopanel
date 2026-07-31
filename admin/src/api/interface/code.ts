@@ -6,6 +6,8 @@ export interface AIGroup {
 	workDir: string
 	sourceDirs: string[]
 	creatorId: number
+	requireQualityGate: boolean
+	monthlyTokenBudget: number
 	memberCount?: number
 	taskCount?: number
 	executionSummary: AIProjectExecutionSummary
@@ -144,6 +146,15 @@ export interface CodeTokenUsageResponse {
 	session: CodeTokenUsage
 	project: CodeTokenUsage
 	daily: CodeDailyTokenUsage[]
+	models: Array<CodeTokenUsage & { model: string }>
+	budget: {
+		limitTokens: number
+		usedTokens: number
+		remainingTokens: number
+		usagePercent: number
+		exceeded: boolean
+		unlimited: boolean
+	}
 }
 
 export interface CodeSessionHistory {
@@ -236,6 +247,8 @@ export interface CodeQualityCheckResult {
 	outputTruncated: boolean
 	startedAt: string
 	completedAt: string
+	revision?: string
+	current: boolean
 }
 
 export interface CodeQualityCheck {
@@ -245,6 +258,21 @@ export interface CodeQualityCheck {
 	command: string
 	workDir: string
 	lastResult?: CodeQualityCheckResult
+}
+
+export interface CodeAuditEvent {
+	id: number
+	createdAt: string
+	userId: number
+	projectId: number
+	sessionId: number
+	action: string
+	status: string
+	resource: string
+	detail: string
+	ip: string
+	durationMs: number
+	meta: string
 }
 
 export interface CodeInstructionResponse {

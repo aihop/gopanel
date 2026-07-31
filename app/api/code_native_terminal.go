@@ -12,10 +12,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/aihop/gopanel/app/middleware"
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
 	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/pkg/websocket"
+	"github.com/aihop/gopanel/utils/token"
 )
 
 const (
@@ -26,6 +28,7 @@ const (
 type nativeCodeTerminal struct {
 	mu               sync.Mutex
 	sessionID        uint
+	projectID        uint
 	command          *exec.Cmd
 	ptmx             nativeTerminal
 	sequence         uint64
@@ -34,6 +37,8 @@ type nativeCodeTerminal struct {
 	historyTruncated bool
 	subscribers      map[string]*nativeTerminalSubscription
 	controllerID     string
+	controlExpiresAt time.Time
+	controlTimer     *time.Timer
 	done             chan struct{}
 	lease            *codeExecutionLease
 	executorName     string
@@ -60,6 +65,9 @@ func (manager *nativeCodeTerminalManager) attach(
 	if terminal := manager.sessions[session.ID]; terminal != nil {
 		return terminal, false, nil
 	}
+	if err := validateCodeTokenBudget(session); err != nil {
+		return nil, false, err
+	}
 	lease, err := codeExecutions.acquireSession(context.Background(), session, codeExecutionInteractive, false)
 	if err != nil {
 		return nil, false, err
@@ -77,6 +85,7 @@ func (manager *nativeCodeTerminalManager) attach(
 	}
 	terminal := &nativeCodeTerminal{
 		sessionID:    session.ID,
+		projectID:    session.ProjectID,
 		command:      command,
 		ptmx:         ptmx,
 		subscribers:  make(map[string]*nativeTerminalSubscription),
@@ -176,9 +185,10 @@ func (terminal *nativeCodeTerminal) publish(output []byte) {
 func (terminal *nativeCodeTerminal) write(subscriptionID string, data []byte) error {
 	terminal.mu.Lock()
 	defer terminal.mu.Unlock()
-	if terminal.controllerID != subscriptionID {
+	if terminal.controllerID != subscriptionID || terminal.controlExpiredLocked(time.Now()) {
 		return errors.New("当前连接没有终端输入权")
 	}
+	terminal.renewControlLeaseLocked(time.Now())
 	_, err := terminal.ptmx.Write(data)
 	return err
 }
@@ -192,6 +202,12 @@ func (terminal *nativeCodeTerminal) wait(manager *nativeCodeTerminalManager) {
 	_ = terminal.ptmx.Close()
 	terminal.publish([]byte(fmt.Sprintf("\r\n\x1b[33m[GoPanel] %s 会话已退出: %v\x1b[0m\r\n", terminal.executorName, err)))
 	terminal.mu.Lock()
+	if terminal.controlTimer != nil {
+		terminal.controlTimer.Stop()
+		terminal.controlTimer = nil
+	}
+	terminal.controllerID = ""
+	terminal.controlExpiresAt = time.Time{}
 	closedEvent := nativeTerminalEvent{Type: "closed", Sequence: terminal.sequence}
 	for subscriptionID, subscription := range terminal.subscribers {
 		select {
@@ -214,9 +230,9 @@ func (terminal *nativeCodeTerminal) wait(manager *nativeCodeTerminalManager) {
 
 func serveNativeCodeTerminal(
 	wsConn *websocket.Conn,
-	_ repo.IAIDevSessionRepo,
 	session *model.AIDevSession,
 	cols, rows uint16,
+	claims *token.CustomClaims,
 ) {
 	terminal, _, err := codeNativeTerminals.attach(session, cols, rows)
 	if err != nil {
@@ -225,14 +241,34 @@ func serveNativeCodeTerminal(
 	}
 	afterSequence, _ := strconv.ParseUint(wsConn.Query("after_sequence", "0"), 10, 64)
 	subscription, baseline := terminal.subscribe(afterSequence)
+	subscription.UserID = claims.UserId
+	subscription.IP = wsConn.IP()
+	subscription.ReadOnly = wsConn.Query("read_only") == "1"
+	subscription.DeviceID, _ = wsConn.Locals(middleware.MobileDeviceIDKey).(uint)
+	if baseline.HasControl && wsConn.Query("read_only") != "1" && wsConn.Query("take_control") != "1" {
+		recordCodeAudit(claims.UserId, session.ProjectID, session.ID, "terminal_control_acquire", "success", subscription.ID, "连接自动获得控制权", wsConn.IP(), time.Now(), codeAuditMeta{"deviceId": subscription.DeviceID, "automatic": true})
+	}
 	if wsConn.Query("read_only") == "1" && baseline.HasControl {
 		terminal.releaseControl(subscription.ID)
 		baseline.HasControl = false
 	} else if wsConn.Query("take_control") == "1" {
-		terminal.takeControl(subscription.ID)
-		baseline.HasControl = true
+		startedAt := time.Now()
+		granted, reason := terminal.takeControl(subscription.ID)
+		baseline.HasControl = granted
+		baseline.ControlReason = reason
+		status := "success"
+		if !granted {
+			status = "denied"
+		}
+		recordCodeAudit(claims.UserId, session.ProjectID, session.ID, "terminal_control_acquire", status, subscription.ID, reason, wsConn.IP(), startedAt, codeAuditMeta{"deviceId": subscription.DeviceID, "automatic": true})
 	}
-	defer terminal.unsubscribe(subscription)
+	defer func() {
+		controlled, _ := terminal.controlState(subscription.ID)
+		terminal.unsubscribe(subscription)
+		if controlled {
+			recordCodeAudit(claims.UserId, session.ProjectID, session.ID, "terminal_control_release", "success", subscription.ID, "连接断开并释放控制权", wsConn.IP(), time.Now(), codeAuditMeta{"deviceId": subscription.DeviceID, "automatic": true})
+		}
+	}()
 	var writeMu sync.Mutex
 	writeEvent := func(event nativeTerminalEvent) error {
 		writeMu.Lock()
@@ -240,17 +276,19 @@ func serveNativeCodeTerminal(
 		chunks := splitNativeTerminalBaseline(event)
 		for index, chunk := range chunks {
 			payload, _ := json.Marshal(struct {
-				Type          string `json:"type"`
-				Sequence      uint64 `json:"sequence"`
-				StartSequence uint64 `json:"startSequence,omitempty"`
-				RequestID     string `json:"requestId,omitempty"`
-				Data          string `json:"data,omitempty"`
-				HasControl    bool   `json:"hasControl"`
-				Truncated     bool   `json:"truncated,omitempty"`
-				ChunkIndex    int    `json:"chunkIndex,omitempty"`
-				ChunkCount    int    `json:"chunkCount,omitempty"`
+				Type           string `json:"type"`
+				Sequence       uint64 `json:"sequence"`
+				StartSequence  uint64 `json:"startSequence,omitempty"`
+				RequestID      string `json:"requestId,omitempty"`
+				Data           string `json:"data,omitempty"`
+				HasControl     bool   `json:"hasControl"`
+				ControlReason  string `json:"controlReason,omitempty"`
+				LeaseExpiresAt int64  `json:"leaseExpiresAt,omitempty"`
+				Truncated      bool   `json:"truncated,omitempty"`
+				ChunkIndex     int    `json:"chunkIndex,omitempty"`
+				ChunkCount     int    `json:"chunkCount,omitempty"`
 			}{Type: chunk.Type, Sequence: chunk.Sequence, StartSequence: chunk.StartSequence, RequestID: chunk.RequestID,
-				Data: string(chunk.Data), HasControl: chunk.HasControl, Truncated: chunk.Truncated && index == 0,
+				Data: string(chunk.Data), HasControl: chunk.HasControl, ControlReason: chunk.ControlReason, LeaseExpiresAt: chunk.LeaseExpiresAt, Truncated: chunk.Truncated && index == 0,
 				ChunkIndex: index, ChunkCount: len(chunks)})
 			if err := wsConn.WriteMessage(websocket.TextMessage, payload); err != nil {
 				return err
@@ -286,9 +324,25 @@ func serveNativeCodeTerminal(
 				_ = writeEvent(nativeTerminalEvent{Type: "control", HasControl: false})
 			}
 		case "take_control":
-			terminal.takeControl(subscription.ID)
+			startedAt := time.Now()
+			granted, reason := terminal.takeControl(subscription.ID)
+			status := "success"
+			if !granted {
+				status = "denied"
+			}
+			recordCodeAudit(claims.UserId, session.ProjectID, session.ID, "terminal_control_acquire", status, subscription.ID, reason, wsConn.IP(), startedAt, codeAuditMeta{"deviceId": subscription.DeviceID, "readOnly": subscription.ReadOnly})
+			if !granted {
+				_, expiresAt := terminal.controlState(subscription.ID)
+				_ = writeEvent(nativeTerminalEvent{Type: "control", HasControl: false, ControlReason: reason, LeaseExpiresAt: expiresAt})
+			}
 		case "release_control":
-			terminal.releaseControl(subscription.ID)
+			startedAt := time.Now()
+			released := terminal.releaseControl(subscription.ID)
+			status, detail := "success", "控制权已释放"
+			if !released {
+				status, detail = "denied", "当前连接没有终端控制权"
+			}
+			recordCodeAudit(claims.UserId, session.ProjectID, session.ID, "terminal_control_release", status, subscription.ID, detail, wsConn.IP(), startedAt, codeAuditMeta{"deviceId": subscription.DeviceID})
 		case "ack":
 			if sequence, parseErr := strconv.ParseUint(message.Data, 10, 64); parseErr == nil {
 				terminal.acknowledge(subscription.ID, sequence)
@@ -304,6 +358,7 @@ func serveNativeCodeTerminal(
 				Rows uint16 `json:"rows"`
 			}
 			if json.Unmarshal([]byte(message.Data), &size) == nil && terminal.hasControl(subscription.ID) {
+				terminal.renewControlLease(subscription.ID)
 				_ = terminal.resize(size.Cols, size.Rows)
 			}
 		case "ping":

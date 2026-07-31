@@ -41,10 +41,11 @@ function fit() {
 		if (socket?.readyState === WebSocket.OPEN && hasControl.value && terminal) {
 			socket.send(JSON.stringify({
 				type: "resize",
-				data: JSON.stringify({ cols: terminal.cols, rows: terminal.rows })
+				data: JSON.stringify({ cols: terminal.cols, rows: terminal.rows }),
 			}))
 		}
-	} catch {
+	} catch (error) {
+		void error
 	}
 }
 
@@ -83,6 +84,7 @@ function connect() {
 				requestResync()
 			} else if (message.type === "control") {
 				hasControl.value = Boolean(message.hasControl)
+				if (message.controlReason) terminal?.writeln(`\r\n\x1b[33m[GoPanel] ${t("mobile.terminalControlBusy")}\x1b[0m`)
 				if (hasControl.value) nextTick(() => terminal?.focus())
 			} else if (message.type === "closed") {
 				closing = true
@@ -122,7 +124,7 @@ function openTerminal() {
 		fontSize: window.innerWidth < 640 ? 12 : 14,
 		fontFamily: 'Menlo, Monaco, "Courier New", monospace',
 		scrollback: 5000,
-		theme: { background: "#0b1020", foreground: "#d4d4d8", cursor: "#60a5fa" }
+		theme: { background: "#0b1020", foreground: "#d4d4d8", cursor: "#60a5fa" },
 	})
 	fitAddon = new FitAddon()
 	terminal.loadAddon(fitAddon)
@@ -178,7 +180,7 @@ watch(
 		closeTerminal()
 		nextTick(openTerminal)
 	},
-	{ immediate: true }
+	{ immediate: true },
 )
 
 onBeforeUnmount(closeTerminal)
