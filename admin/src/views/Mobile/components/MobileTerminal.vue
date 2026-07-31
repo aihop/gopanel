@@ -274,11 +274,11 @@ onBeforeUnmount(closeTerminal)
 			<div class="flex shrink-0 items-center gap-1.5">
 				<span class="max-w-[30vw] truncate text-right text-xs text-slate-400" :title="projectName">{{ projectName }}</span>
 				<span class="h-2 w-2 rounded-full" :class="connected ? 'bg-emerald-400' : reconnecting ? 'bg-amber-400' : 'bg-slate-500'" :title="connected ? t('mobile.connected') : reconnecting ? t('mobile.reconnecting') : t('mobile.disconnected')" />
-				<n-button size="small" quaternary circle text-color="#cbd5e1" :title="t('mobile.taskStatus')" :aria-label="t('mobile.taskStatus')" @click="emit('openStatus')">
-					<template #icon><Icon name="mdi:timeline-clock-outline" :size="19" /></template>
+				<n-button size="small" quaternary circle :title="t('mobile.taskStatus')" :aria-label="t('mobile.taskStatus')" @click="emit('openStatus')">
+					<template #icon><Icon name="mdi:timeline-clock-outline" :size="19" color="#cbd5e1" /></template>
 				</n-button>
-				<n-button size="small" quaternary circle text-color="#cbd5e1" :title="t('mobile.files')" :aria-label="t('mobile.files')" @click="emit('openFiles')">
-					<template #icon><Icon name="mdi:folder-outline" :size="19" /></template>
+				<n-button size="small" quaternary circle :title="t('mobile.files')" :aria-label="t('mobile.files')" @click="emit('openFiles')">
+					<template #icon><Icon name="mdi:folder-outline" :size="19" color="#cbd5e1" /></template>
 				</n-button>
 			</div>
 		</header>
