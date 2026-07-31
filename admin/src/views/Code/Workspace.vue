@@ -26,10 +26,7 @@
 										<template #icon><Icon name="mdi:arrow-left" /></template>
 									</n-button>
 									<div class="min-w-0">
-										<div class="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">
-											{{ t("code.workspace") }}
-										</div>
-										<div class="truncate text-sm font-semibold text-[var(--n-text-color)]">
+										<div class="truncate text-lg font-semibold text-[var(--n-text-color)]">
 											{{ groupInfo?.name || t("code.projectFallback") }}
 										</div>
 									</div>
@@ -84,7 +81,11 @@
 								{{ t("code.projectStructure") }}
 							</n-button>
 							<CodeApprovalCenter :session-id="currentSessionId" @take-terminal="takeOverTerminal" />
-							<CodeDeliveryPanel v-if="currentSessionId !== null" :session-id="currentSessionId" @open-file="openFile" />
+							<CodeDeliveryPanel
+								v-if="currentSessionId !== null"
+								:session-id="currentSessionId"
+								@open-file="openFile"
+							/>
 							<SessionApprovalPolicy v-if="currentSessionId !== null" :session-id="currentSessionId" />
 							<WorkspaceModeSwitch
 								v-if="currentSessionId !== null || currentTaskId !== null"
@@ -119,6 +120,14 @@
 							</n-button>
 						</div>
 					</div>
+					<ProjectOverviewPanel
+						v-if="currentSessionId === null && currentTaskId === null"
+						:project="groupInfo"
+						:project-id="currentGroupId"
+						:tasks="tasks"
+						@create-task="createNewTask"
+						@select-task="selectTask"
+					/>
 					<div
 						v-if="currentSessionId !== null"
 						v-show="workspaceMode === 'changes'"
@@ -226,12 +235,14 @@ import SessionHistoryDrawer from "./components/SessionHistoryDrawer.vue"
 import ProjectStructurePanel from "./components/ProjectStructurePanel.vue"
 import SessionFileEditor from "./components/SessionFileEditor.vue"
 import ProjectTaskSidebar from "./components/ProjectTaskSidebar.vue"
+import ProjectOverviewPanel from "./components/ProjectOverviewPanel.vue"
 import CodeGitReview from "./components/CodeGitReview.vue"
 import WorkspaceModeSwitch, { type CodeWorkspaceMode } from "./components/WorkspaceModeSwitch.vue"
 import { useCodeTaskPolling } from "./useCodeTaskPolling"
 import { useCodeWorkspaceFullscreen } from "./useCodeWorkspaceFullscreen"
 import { deleteAITask, getAIGroups, updateAITask } from "@/api/modules/code"
 import type { AIGroup, AITask, CodeSession } from "@/api/interface/code"
+import type { CodeTaskListItem } from "@/api/interface/codeTasks"
 import { codeWorkspaceMessages } from "./codeWorkspaceMessages"
 
 const props = withDefaults(defineProps<{ projectId?: number; embedded?: boolean }>(), { embedded: false })
@@ -243,18 +254,24 @@ const dialog = useDialog()
 const { t } = useI18n({ messages: codeWorkspaceMessages })
 if (!props.embedded) useHideLayoutFooter()
 const currentGroupId = computed(() => props.projectId ?? Number(route.params.id))
-const groupInfo = ref<AIGroup | null>(null), tasks = ref<AITask[]>([])
-const currentTaskId = ref<number | null>(null), currentSessionId = ref<number | null>(null)
-const showNewSessionModal = ref(false), showHistoryDrawer = ref(false)
-const showProjectStructure = ref(false), showRenameModal = ref(false)
+const groupInfo = ref<AIGroup | null>(null),
+	tasks = ref<CodeTaskListItem[]>([])
+const currentTaskId = ref<number | null>(null),
+	currentSessionId = ref<number | null>(null)
+const showNewSessionModal = ref(false),
+	showHistoryDrawer = ref(false)
+const showProjectStructure = ref(false),
+	showRenameModal = ref(false)
 const workspaceMode = ref<CodeWorkspaceMode>("terminal")
-const terminalMounted = ref(false), terminalKey = ref(0)
+const terminalMounted = ref(false),
+	terminalKey = ref(0)
 const terminalTakeoverRequested = ref(false)
 const { isWorkspaceFullscreen, fullscreenLabel, toggleWorkspaceFullscreen } = useCodeWorkspaceFullscreen(t)
 const selectedFile = ref({ path: "", extension: "" })
 const activeFilePath = ref("")
 const fileEditorRef = ref<{ hasUnsavedChanges: boolean } | null>(null)
-const editingTaskId = ref<number | null>(null), editingTaskTitle = ref("")
+const editingTaskId = ref<number | null>(null),
+	editingTaskTitle = ref("")
 const renaming = ref(false)
 const currentTask = computed(() => tasks.value.find(task => task.id === currentTaskId.value) || null)
 const sessionLabel = computed(
@@ -360,7 +377,7 @@ const handleTaskCreated = (taskId: number) => {
 	void fetchTasks()
 }
 
-const handleTaskAction = (key: string, task: AITask) => {
+const handleTaskAction = (key: string, task: CodeTaskListItem) => {
 	if (key === "rename") {
 		editingTaskId.value = task.id
 		editingTaskTitle.value = task.title
@@ -419,7 +436,7 @@ const resetWorkspace = () => {
 	resetSelectedFile()
 }
 
-const backToLobby = () => props.embedded ? emit("close") : router.push("/code/index")
+const backToLobby = () => (props.embedded ? emit("close") : router.push("/code/index"))
 const confirmLeaveWorkspace = () =>
 	!fileEditorRef.value?.hasUnsavedChanges || window.confirm(t("code.switchSessionUnsavedHint"))
 defineExpose({ confirmClose: confirmLeaveWorkspace })
@@ -430,15 +447,12 @@ onMounted(() => {
 	void fetchGroupInfo()
 	void fetchTasks()
 })
-watch(
-	currentGroupId,
-	newId => {
-		if (!newId) return
-		resetWorkspace()
-		void fetchGroupInfo()
-		void fetchTasks()
-	}
-)
+watch(currentGroupId, newId => {
+	if (!newId) return
+	resetWorkspace()
+	void fetchGroupInfo()
+	void fetchTasks()
+})
 </script>
 
 <style scoped src="./workspace.css"></style>
