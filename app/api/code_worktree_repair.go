@@ -46,7 +46,7 @@ func repairCodeSingleWorktreeBranch(session *model.AIDevSession) error {
 	if err != nil {
 		return err
 	}
-	branch, changed, err := reconcileCodeWorktreeBranch(session.ID, session.WorktreeBranch, currentBranch)
+	branch, changed, err := reconcileCodeWorktreeBranch(session.ID, session.WorkDir, session.WorktreeBranch, currentBranch)
 	if err != nil || !changed {
 		return err
 	}
@@ -141,7 +141,7 @@ func repairCodeMultiWorktreeBranches(session *model.AIDevSession) error {
 		if inspectErr != nil {
 			return inspectErr
 		}
-		branch, changed, reconcileErr := reconcileCodeWorktreeBranch(session.ID, repository.Branch, currentBranch)
+		branch, changed, reconcileErr := reconcileCodeWorktreeBranch(session.ID, repository.WorktreeDir, repository.Branch, currentBranch)
 		if reconcileErr != nil {
 			return reconcileErr
 		}
@@ -190,14 +190,33 @@ func repairCodeMultiWorktreeBranches(session *model.AIDevSession) error {
 	return nil
 }
 
-func reconcileCodeWorktreeBranch(sessionID uint, recordedBranch, currentBranch string) (string, bool, error) {
+func reconcileCodeWorktreeBranch(sessionID uint, worktreeDir, recordedBranch, currentBranch string) (string, bool, error) {
 	if currentBranch == recordedBranch {
 		return recordedBranch, false, nil
 	}
-	if !isCodeSessionWorktreeBranch(currentBranch, sessionID) {
+	if isCodeSessionWorktreeBranch(currentBranch, sessionID) {
+		return currentBranch, true, nil
+	}
+	if !codeWorktreeBranchExists(worktreeDir, recordedBranch) || !codeWorktreeIsClean(worktreeDir) {
 		return "", false, errCodeWorktreeBranchMismatch
 	}
-	return currentBranch, true, nil
+	if _, err := runCodeGit(worktreeDir, "switch", "--", recordedBranch); err != nil {
+		return "", false, fmt.Errorf("恢复会话 Worktree 分支失败：%w", err)
+	}
+	return recordedBranch, true, nil
+}
+
+func codeWorktreeBranchExists(worktreeDir, branch string) bool {
+	if strings.TrimSpace(branch) == "" {
+		return false
+	}
+	_, err := runCodeGit(worktreeDir, "show-ref", "--verify", "refs/heads/"+branch)
+	return err == nil
+}
+
+func codeWorktreeIsClean(worktreeDir string) bool {
+	status, err := runCodeGit(worktreeDir, "status", "--porcelain")
+	return err == nil && strings.TrimSpace(status) == ""
 }
 
 func isCodeSessionWorktreeBranch(branch string, sessionID uint) bool {

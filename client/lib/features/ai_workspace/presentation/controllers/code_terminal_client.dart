@@ -6,6 +6,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:xterm/xterm.dart';
 
 import '../../../../core/storage/storage_service.dart';
+import 'code_terminal_socket.dart';
 
 class CodeTerminalClient extends ChangeNotifier {
   CodeTerminalClient({
@@ -27,6 +28,7 @@ class CodeTerminalClient extends ChangeNotifier {
   Timer? _pingTimer;
   bool _connected = false;
   bool _reconnecting = false;
+  bool _connectionFailed = false;
   bool _hasControl = false;
   bool _closing = false;
   bool _disposed = false;
@@ -38,6 +40,7 @@ class CodeTerminalClient extends ChangeNotifier {
 
   bool get connected => _connected;
   bool get reconnecting => _reconnecting;
+  bool get connectionFailed => _connectionFailed;
   bool get hasControl => _hasControl;
   bool get canInput => _connected && _hasControl;
 
@@ -77,7 +80,11 @@ class CodeTerminalClient extends ChangeNotifier {
     _subscription = null;
     previousChannel?.sink.close();
 
-    final channel = WebSocketChannel.connect(uri);
+    final channel = connectCodeTerminalSocket(
+      uri,
+      token: StorageService.activeServerToken!,
+      cookie: StorageService.activeServerCookie,
+    );
     _channel = channel;
     _subscription = channel.stream.listen(
       (event) => _handleMessage(channel, event),
@@ -105,6 +112,17 @@ class CodeTerminalClient extends ChangeNotifier {
     }
   }
 
+  void reconnect() {
+    if (_disposed) return;
+    _closing = false;
+    _connectionFailed = false;
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+    _reconnecting = true;
+    _notify();
+    connect();
+  }
+
   void _handleMessage(WebSocketChannel channel, dynamic event) {
     if (_channel != channel || _disposed) return;
     if (!_connected) {
@@ -113,6 +131,16 @@ class CodeTerminalClient extends ChangeNotifier {
       _notify();
     }
     final text = event is List<int> ? utf8.decode(event) : event.toString();
+    if (text.contains('启动原生') && text.contains('会话失败')) {
+      _pingTimer?.cancel();
+      _connected = false;
+      _connectionFailed = true;
+      _reconnecting = false;
+      _updateControl(false);
+      terminal.write('$text\r\n');
+      _notify();
+      return;
+    }
     try {
       final message = jsonDecode(text) as Map<String, dynamic>;
       switch ((message['type'] ?? '').toString()) {
@@ -153,6 +181,7 @@ class CodeTerminalClient extends ChangeNotifier {
   }
 
   void _handleBaseline(Map<String, dynamic> message) {
+    _connectionFailed = false;
     final requestId = (message['requestId'] ?? '').toString();
     if (_pendingResyncId.isNotEmpty && requestId != _pendingResyncId) return;
     final chunkIndex = (message['chunkIndex'] as num?)?.toInt() ?? 0;
@@ -171,6 +200,7 @@ class CodeTerminalClient extends ChangeNotifier {
   }
 
   void _handleOutput(Map<String, dynamic> message) {
+    _connectionFailed = false;
     if (_pendingResyncId.isNotEmpty) return;
     final sequence = (message['sequence'] as num?)?.toInt() ?? 0;
     if (_lastSequence > 0 && sequence != _lastSequence + 1) {
@@ -191,7 +221,9 @@ class CodeTerminalClient extends ChangeNotifier {
     _hasControl = false;
     _pendingResyncId = '';
     _notify();
-    if (_closing || _disposed || _reconnectTimer != null) return;
+    if (_closing || _disposed || _connectionFailed || _reconnectTimer != null) {
+      return;
+    }
     _reconnecting = true;
     _notify();
     _reconnectTimer = Timer(const Duration(milliseconds: 1500), () {

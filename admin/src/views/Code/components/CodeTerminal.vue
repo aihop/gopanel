@@ -40,6 +40,7 @@ let autoTakeControlPending = Boolean(props.autoTakeControl)
 const nativeProtocol = ref(false)
 const hasTerminalControl = ref(true)
 const reconnecting = ref(false)
+const connectionFailed = ref(false)
 const runtimeState = ref<CodexRuntimeState | null>(null)
 const runtimeLoading = ref(false)
 const runtimeError = ref(false)
@@ -166,11 +167,13 @@ const connectWebSocket = () => {
 		initialReconnectAttempts = 0
 		if (typeof event.data === "string" && (event.data.includes("失败") || event.data.includes("错误"))) {
 			serverErrorShown = true
+			connectionFailed.value = true
 		}
 		try {
 			const msg = JSON.parse(event.data)
 			if (msg.type === "baseline") {
 				nativeProtocol.value = true
+				connectionFailed.value = false
 				if (pendingResyncId && msg.requestId !== pendingResyncId) return
 				autoTakeControlPending = false
 				const sequence = Number(msg.sequence) || 0
@@ -186,6 +189,7 @@ const connectWebSocket = () => {
 				}
 			} else if (msg.type === "output") {
 				nativeProtocol.value = true
+				connectionFailed.value = false
 				const sequence = Number(msg.sequence) || 0
 				if (pendingResyncId) return
 				if (lastSequence > 0 && sequence !== lastSequence + 1) {
@@ -231,7 +235,7 @@ const connectWebSocket = () => {
 			term.writeln("\r\n\x1b[33m[系统] 终端连接已断开。\x1b[0m")
 		}
 		const canRetryInitialConnection = !receivedServerMessage && initialReconnectAttempts < 3
-		if ((nativeProtocol.value || canRetryInitialConnection) && !reconnectTimer) {
+		if (!connectionFailed.value && (nativeProtocol.value || canRetryInitialConnection) && !reconnectTimer) {
 			initialReconnectAttempts++
 			reconnecting.value = true
 			reconnectTimer = setTimeout(() => {
@@ -240,6 +244,23 @@ const connectWebSocket = () => {
 			}, 1500)
 		}
 	}
+}
+
+const reconnectTerminal = () => {
+	if (reconnectTimer) {
+		clearTimeout(reconnectTimer)
+		reconnectTimer = null
+	}
+	if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+		ws.onclose = null
+		ws.close()
+	}
+	serverErrorShown = false
+	receivedServerMessage = false
+	initialReconnectAttempts = 0
+	connectionFailed.value = false
+	reconnecting.value = true
+	connectWebSocket()
 }
 
 const takeTerminalControl = () => {
@@ -308,7 +329,10 @@ onBeforeUnmount(() => {
 				</span>
 			</div>
 			<div class="flex shrink-0 items-center gap-3 text-xs text-slate-400">
-				<n-tag v-if="reconnecting" size="small" type="warning" :bordered="false">
+				<n-button v-if="connectionFailed && !reconnecting" size="tiny" type="warning" @click="reconnectTerminal">
+					{{ t("code.reconnectTerminal") }}
+				</n-button>
+				<n-tag v-else-if="reconnecting" size="small" type="warning" :bordered="false">
 					{{ t("code.terminalReconnecting") }}
 				</n-tag>
 				<n-tag v-else-if="nativeProtocol && hasTerminalControl" size="small" type="success" :bordered="false">

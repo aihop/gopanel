@@ -152,6 +152,15 @@ class _CodeTerminalScreenState extends State<CodeTerminalScreen> {
             connected: _client.connected,
             reconnecting: _client.reconnecting,
           ),
+          if (_client.connectionFailed)
+            IconButton(
+              tooltip: '重新连接',
+              onPressed: _client.reconnect,
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+              icon: const Icon(Icons.refresh_rounded, color: Color(0xFFFBBF24)),
+            ),
           if (widget.nativeProtocol)
             IconButton(
               tooltip: _client.hasControl ? '释放终端控制' : '接管终端',

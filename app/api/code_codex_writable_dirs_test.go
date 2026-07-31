@@ -180,6 +180,9 @@ func TestCodexWorktreeWritableDirsRejectsUnmanagedBranchRepair(t *testing.T) {
 	if _, err := runCodeGit(session.WorkDir, "switch", "-c", "manual-branch"); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(session.WorkDir, "unfinished.txt"), []byte("unfinished\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := codexWritableDirsForSessionWithRepair(session); !errors.Is(err, errCodeWorktreeBranchMismatch) {
 		t.Fatalf("expected branch mismatch, got %v", err)
@@ -215,6 +218,31 @@ func TestRepairCodeSessionWorktreeSkipsCleanedDelivery(t *testing.T) {
 
 	if err := repairCodeSessionWorktreeBranches(session); err != nil {
 		t.Fatalf("cleaned delivery should resume without Worktree: %v", err)
+	}
+}
+
+func TestCodexWorktreeWritableDirsRestoresCleanDetachedHead(t *testing.T) {
+	database := withCodeGovernanceDB(t)
+	withAIProjectBaseDir(t)
+	repositoryDir := createCodeGitRepository(t)
+	session := &model.AIDevSession{ID: 136, UserID: 7, ProjectID: 9, Title: "detached", WorkDir: repositoryDir}
+	if err := createCodeSessionWorktree(session, &model.AIProject{SourceDirs: []string{repositoryDir}}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { rollbackCodeSessionWorktree(session) })
+	if err := database.Create(session).Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(session.WorkDir, "checkout", "--detach"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := codexWritableDirsForSessionWithRepair(session); err != nil {
+		t.Fatal(err)
+	}
+	branch, err := runCodeGit(session.WorkDir, "symbolic-ref", "--quiet", "--short", "HEAD")
+	if err != nil || branch != session.WorktreeBranch {
+		t.Fatalf("worktree branch = %q, want %q, err=%v", branch, session.WorktreeBranch, err)
 	}
 }
 
