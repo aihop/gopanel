@@ -37,6 +37,17 @@ func loadOrCreateCodeDelivery(session *model.AIDevSession, userID uint) (*model.
 	if strings.TrimSpace(status) != "" {
 		return nil, errors.New("Worktree 仍有未提交变更，请先提交")
 	}
+	targetBranch := session.TargetBranch
+	if targetBranch == "" {
+		targetBranch, _ = runCodeGit(session.SourceWorkDir, "branch", "--show-current")
+	}
+	targetCommit, err := refreshCodeRepositoryTarget(session.SourceWorkDir, targetBranch, session.RemoteName)
+	if err != nil {
+		return nil, err
+	}
+	if err := syncCodeWorktreeWithTarget(session.WorkDir, targetBranch); err != nil {
+		return nil, err
+	}
 	if err := validateCodeQualityGate(session); err != nil {
 		return nil, err
 	}
@@ -48,6 +59,8 @@ func loadOrCreateCodeDelivery(session *model.AIDevSession, userID uint) (*model.
 		SessionID: session.ID, ProjectID: session.ProjectID, UserID: userID,
 		Status: codeDeliveryPrepared, SourceWorkDir: session.SourceWorkDir,
 		WorkDir: session.WorkDir, WorktreeBranch: session.WorktreeBranch,
+		TargetBranch: targetBranch, BaseCommit: session.BaseCommit,
+		RemoteName: session.RemoteName, RemoteCommit: targetCommit,
 		WorktreeCommit: commit,
 	}
 	if err := global.DB.Create(&delivery).Error; err != nil {
@@ -63,16 +76,40 @@ func codeDeliverySessionSnapshot(delivery *model.AICodeDelivery) *model.AIDevSes
 	return &model.AIDevSession{
 		ID: delivery.SessionID, UserID: delivery.UserID, ProjectID: delivery.ProjectID,
 		WorkDir: delivery.WorkDir, SourceWorkDir: delivery.SourceWorkDir,
-		WorktreeBranch: delivery.WorktreeBranch,
+		WorktreeBranch: delivery.WorktreeBranch, TargetBranch: delivery.TargetBranch,
+		BaseCommit: delivery.BaseCommit, RemoteName: delivery.RemoteName, RemoteCommit: delivery.RemoteCommit,
 	}
 }
 
 func mergePreparedCodeDelivery(delivery *model.AICodeDelivery) (codeGitDeliveryResult, error) {
 	snapshot := codeDeliverySessionSnapshot(delivery)
-	if _, err := runCodeGit(snapshot.SourceWorkDir, "merge-base", "--is-ancestor", delivery.WorktreeCommit, "HEAD"); err != nil {
-		if status, statusErr := runCodeGit(snapshot.SourceWorkDir, "status", "--porcelain"); statusErr != nil || strings.TrimSpace(status) != "" {
-			return codeGitDeliveryResult{}, errors.New("源仓库存在未提交变更，无法安全合并")
+	targetBranch := snapshot.TargetBranch
+	if targetBranch == "" {
+		targetBranch, _ = runCodeGit(snapshot.SourceWorkDir, "branch", "--show-current")
+	}
+	targetCommit, err := refreshCodeRepositoryTarget(snapshot.SourceWorkDir, targetBranch, snapshot.RemoteName)
+	if err != nil {
+		return codeGitDeliveryResult{}, err
+	}
+	if _, err := runCodeGit(snapshot.WorkDir, "merge-base", "--is-ancestor", targetCommit, delivery.WorktreeCommit); err != nil {
+		if err := syncCodeWorktreeWithTarget(snapshot.WorkDir, targetBranch); err != nil {
+			return codeGitDeliveryResult{}, err
 		}
+		if err := validateCodeQualityGate(snapshot); err != nil {
+			return codeGitDeliveryResult{}, err
+		}
+		worktreeCommit, err := runCodeGit(snapshot.WorkDir, "rev-parse", "HEAD")
+		if err != nil {
+			return codeGitDeliveryResult{}, err
+		}
+		if err := global.DB.Model(delivery).Updates(map[string]any{
+			"worktree_commit": worktreeCommit, "remote_commit": targetCommit,
+		}).Error; err != nil {
+			return codeGitDeliveryResult{}, err
+		}
+		delivery.WorktreeCommit, delivery.RemoteCommit = worktreeCommit, targetCommit
+	}
+	if _, err := runCodeGit(snapshot.SourceWorkDir, "merge-base", "--is-ancestor", delivery.WorktreeCommit, "HEAD"); err != nil {
 		if _, err := runCodeGit(snapshot.SourceWorkDir, "merge", "--no-ff", "--no-edit", snapshot.WorktreeBranch); err != nil {
 			conflicts := codeGitConflictFiles(snapshot.SourceWorkDir)
 			_, _ = runCodeGit(snapshot.SourceWorkDir, "merge", "--abort")

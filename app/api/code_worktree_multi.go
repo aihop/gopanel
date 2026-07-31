@@ -20,10 +20,15 @@ const (
 )
 
 type codeSessionRepositoryManifest struct {
-	SourceDir   string `json:"sourceDir"`
-	WorktreeDir string `json:"worktreeDir"`
-	LinkName    string `json:"linkName"`
-	Branch      string `json:"branch"`
+	SourceDir    string `json:"sourceDir"`
+	WorktreeDir  string `json:"worktreeDir"`
+	LinkName     string `json:"linkName"`
+	Branch       string `json:"branch"`
+	TargetBranch string `json:"targetBranch"`
+	BaseCommit   string `json:"baseCommit"`
+	RemoteName   string `json:"remoteName,omitempty"`
+	RemoteCommit string `json:"remoteCommit,omitempty"`
+	SyncStatus   string `json:"syncStatus"`
 }
 
 type codeSessionWorkspaceManifest struct {
@@ -52,6 +57,8 @@ func writeCodeSessionManifest(workDir string, repositories []model.AIDevSessionR
 		manifest.Repositories = append(manifest.Repositories, codeSessionRepositoryManifest{
 			SourceDir: repository.SourceDir, WorktreeDir: repository.WorktreeDir,
 			LinkName: repository.LinkName, Branch: repository.Branch,
+			TargetBranch: repository.TargetBranch, BaseCommit: repository.BaseCommit,
+			RemoteName: repository.RemoteName, RemoteCommit: repository.RemoteCommit, SyncStatus: repository.SyncStatus,
 		})
 	}
 	content, err := json.MarshalIndent(manifest, "", "  ")
@@ -61,7 +68,7 @@ func writeCodeSessionManifest(workDir string, repositories []model.AIDevSessionR
 	return os.WriteFile(filepath.Join(workDir, codeSessionManifestName), content, 0600)
 }
 
-func createCodeSessionRepositoryWorktrees(session *model.AIDevSession, project *model.AIGroup, sourceDirs []string) error {
+func createCodeSessionRepositoryWorktrees(session *model.AIDevSession, project *model.AIGroup, prepared []codePreparedRepository) error {
 	workspaceDir := aiSessionWorktreeDir(session.UserID, session.ID)
 	if _, err := os.Lstat(workspaceDir); !errors.Is(err, os.ErrNotExist) {
 		return errors.New("会话 Worktree 目录已存在")
@@ -69,7 +76,7 @@ func createCodeSessionRepositoryWorktrees(session *model.AIDevSession, project *
 	if err := os.MkdirAll(workspaceDir, 0750); err != nil {
 		return fmt.Errorf("创建会话工作区失败：%w", err)
 	}
-	created := make([]model.AIDevSessionRepository, 0, len(sourceDirs))
+	created := make([]model.AIDevSessionRepository, 0, len(prepared))
 	rollback := func() {
 		for index := len(created) - 1; index >= 0; index-- {
 			repository := created[index]
@@ -79,22 +86,26 @@ func createCodeSessionRepositoryWorktrees(session *model.AIDevSession, project *
 		_ = os.RemoveAll(workspaceDir)
 	}
 	stamp := time.Now().Unix()
+	sourceDirs := make([]string, 0, len(prepared))
+	preparedBySource := make(map[string]codePreparedRepository, len(prepared))
+	for _, repository := range prepared {
+		sourceDirs = append(sourceDirs, repository.SourceDir)
+		preparedBySource[repository.SourceDir] = repository
+	}
 	for index, source := range sessionRepositoryLinkNames(sourceDirs) {
+		repository := preparedBySource[source.Path]
 		branch := fmt.Sprintf("gopanel/code-%d-%d-%d", session.ID, stamp, index+1)
 		worktreeDir := filepath.Join(workspaceDir, source.LinkName)
-		baseCommit, err := runCodeGit(source.Path, "rev-parse", "HEAD")
-		if err != nil {
-			rollback()
-			return err
-		}
-		if _, err := runCodeGit(source.Path, "worktree", "add", "-b", branch, worktreeDir, "HEAD"); err != nil {
+		if _, err := runCodeGit(source.Path, "worktree", "add", "-b", branch, worktreeDir, repository.BaseCommit); err != nil {
 			rollback()
 			return err
 		}
 		created = append(created, model.AIDevSessionRepository{
 			SessionID: session.ID, ProjectID: project.ID, SourceDir: source.Path,
 			WorktreeDir: worktreeDir, LinkName: source.LinkName, Branch: branch,
-			BaseCommit: baseCommit, Status: "active",
+			TargetBranch: repository.TargetBranch, BaseCommit: repository.BaseCommit,
+			RemoteName: repository.RemoteName, RemoteCommit: repository.RemoteCommit,
+			SyncStatus: repository.SyncStatus, Status: "active",
 		})
 	}
 	if err := writeCodeSessionManifest(workspaceDir, created); err != nil {

@@ -12,7 +12,11 @@ type AIDevSessionRepository struct {
 	WorktreeDir    string     `gorm:"column:worktree_dir;type:varchar(1024);not null" json:"worktreeDir"`
 	LinkName       string     `gorm:"column:link_name;type:varchar(255);not null;uniqueIndex:idx_ai_session_repository" json:"linkName"`
 	Branch         string     `gorm:"column:branch;type:varchar(255);not null" json:"branch"`
+	TargetBranch   string     `gorm:"column:target_branch;type:varchar(255);not null;default:''" json:"targetBranch"`
 	BaseCommit     string     `gorm:"column:base_commit;type:varchar(64);not null" json:"baseCommit"`
+	RemoteName     string     `gorm:"column:remote_name;type:varchar(255)" json:"remoteName,omitempty"`
+	RemoteCommit   string     `gorm:"column:remote_commit;type:varchar(64)" json:"remoteCommit,omitempty"`
+	SyncStatus     string     `gorm:"column:sync_status;type:varchar(32);not null;default:'local'" json:"syncStatus"`
 	WorktreeCommit string     `gorm:"column:worktree_commit;type:varchar(64)" json:"worktreeCommit,omitempty"`
 	MergeCommit    string     `gorm:"column:merge_commit;type:varchar(64)" json:"mergeCommit,omitempty"`
 	Status         string     `gorm:"column:status;type:varchar(32);not null;index" json:"status"`

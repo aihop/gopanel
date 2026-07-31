@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/aihop/gopanel/app/model"
@@ -60,6 +61,9 @@ func TestCreateMultiRepositorySessionWorktrees(t *testing.T) {
 		if !isPathInside(repository.WorktreeDir, session.WorkDir) {
 			t.Fatalf("worktree outside session workspace: %#v", repository)
 		}
+		if repository.TargetBranch == "" || repository.BaseCommit == "" || repository.SyncStatus != "local" {
+			t.Fatalf("repository baseline metadata unavailable: %#v", repository)
+		}
 		if _, err := os.Stat(filepath.Join(repository.WorktreeDir, "README.md")); err != nil {
 			t.Fatalf("worktree content unavailable: %v", err)
 		}
@@ -73,6 +77,43 @@ func TestCreateMultiRepositorySessionWorktrees(t *testing.T) {
 			if writableDir == sourceDir {
 				t.Fatalf("source directory was exposed as writable: %s", sourceDir)
 			}
+		}
+	}
+}
+
+func TestCreateMultiRepositorySessionDiscoversWorkspaceRepositories(t *testing.T) {
+	database := withCodeGovernanceDB(t)
+	withAIProjectBaseDir(t)
+	workspace := t.TempDir()
+	sourceDirs := []string{filepath.Join(workspace, "backend"), filepath.Join(workspace, "admin")}
+	for _, sourceDir := range sourceDirs {
+		if err := os.MkdirAll(sourceDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := runCodeGit(sourceDir, "init"); err != nil {
+			t.Fatal(err)
+		}
+		commitCodeTestFile(t, sourceDir, "README.md", "test\n")
+	}
+	project := &model.AIGroup{ID: 84, Name: "workspace", CreatorID: 7, SourceDirs: []string{workspace}, WorkDir: workspace}
+	if err := database.Create(project).Error; err != nil {
+		t.Fatal(err)
+	}
+	session := &model.AIDevSession{ID: 84, UserID: 7, ProjectID: project.ID, WorkDir: workspace}
+	if err := database.Create(session).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := createCodeSessionWorktree(session, project); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { rollbackCodeSessionWorktree(session) })
+	repositories, err := loadCodeSessionRepositories(session.ID)
+	if err != nil || len(repositories) != 2 || session.IsolationMode != codeIsolationMultiWorktree {
+		t.Fatalf("workspace repositories were not isolated: %#v, %v", repositories, err)
+	}
+	for _, repository := range repositories {
+		if !repositoryWithinSourceDirs(repository.SourceDir, project.SourceDirs) {
+			t.Fatalf("repository escaped workspace boundary: %#v", repository)
 		}
 	}
 }
@@ -147,14 +188,20 @@ func TestMultiRepositoryDeliveryResumesAfterConflict(t *testing.T) {
 	}
 
 	first, err := resumeCodeMultiRepositoryDelivery(session, session.UserID)
-	if err != nil || first.Status != "conflict" || first.RepositoryName != conflictRepository.LinkName {
+	if err == nil || !strings.Contains(err.Error(), "隔离工作区解决") || first.Status != "" {
 		t.Fatalf("unexpected conflict result: %#v, %v", first, err)
 	}
 	stored, err := loadCodeSessionRepositories(session.ID)
-	if err != nil || stored[0].Status != codeDeliveryCompleted || stored[1].Status != "conflict" {
+	if err != nil || stored[0].Status != "committed" || stored[1].Status != "committed" {
 		t.Fatalf("unexpected persisted delivery state: %#v, %v", stored, err)
 	}
-	if _, err := runCodeGit(conflictRepository.SourceDir, "merge", "-s", "ours", "--no-edit", conflictRepository.Branch); err != nil {
+	if err := os.WriteFile(filepath.Join(conflictRepository.WorktreeDir, "README.md"), []byte("resolved\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(conflictRepository.WorktreeDir, "add", "README.md"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(conflictRepository.WorktreeDir, "-c", "user.name=GoPanel Test", "-c", "user.email=test@gopanel.local", "commit", "--no-edit"); err != nil {
 		t.Fatal(err)
 	}
 

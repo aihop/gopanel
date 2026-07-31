@@ -82,12 +82,15 @@ func mergeCodeSessionWorktree(session *model.AIDevSession) (codeGitDeliveryResul
 	if strings.TrimSpace(worktreeStatus) != "" {
 		return codeGitDeliveryResult{}, errors.New("Worktree 仍有未提交变更，请先提交")
 	}
-	sourceStatus, err := runCodeGit(session.SourceWorkDir, "status", "--porcelain")
-	if err != nil {
+	targetBranch := session.TargetBranch
+	if targetBranch == "" {
+		targetBranch, _ = runCodeGit(session.SourceWorkDir, "branch", "--show-current")
+	}
+	if _, err := refreshCodeRepositoryTarget(session.SourceWorkDir, targetBranch, session.RemoteName); err != nil {
 		return codeGitDeliveryResult{}, err
 	}
-	if strings.TrimSpace(sourceStatus) != "" {
-		return codeGitDeliveryResult{}, errors.New("源仓库存在未提交变更，无法安全合并")
+	if err := syncCodeWorktreeWithTarget(session.WorkDir, targetBranch); err != nil {
+		return codeGitDeliveryResult{}, err
 	}
 	if _, err := runCodeGit(session.SourceWorkDir, "merge", "--no-ff", "--no-edit", session.WorktreeBranch); err != nil {
 		conflicts := codeGitConflictFiles(session.SourceWorkDir)
@@ -177,12 +180,11 @@ func getCodeDeliverySessionContext(c fiber.Ctx) (*model.AIDevSession, error) {
 		return nil, errors.New("交付记录与当前会话不匹配")
 	}
 	sourceDirs, err := getAISessionSourceDirs(session.ProjectID, claims)
-	if err != nil || len(sourceDirs) != 1 {
+	if err != nil || len(sourceDirs) == 0 {
 		return nil, errors.New("交付源目录不可用")
 	}
 	storedSource, storedErr := filepath.EvalSymlinks(filepath.Clean(delivery.SourceWorkDir))
-	projectSource, projectErr := filepath.EvalSymlinks(filepath.Clean(sourceDirs[0]))
-	if storedErr != nil || projectErr != nil || storedSource != projectSource {
+	if storedErr != nil || !repositoryWithinSourceDirs(storedSource, sourceDirs) {
 		return nil, errors.New("交付源目录与项目配置不一致")
 	}
 	if err := validateAIProjectWorkDirForClaims(storedSource, claims); err != nil {

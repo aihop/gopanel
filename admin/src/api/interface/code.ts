@@ -82,6 +82,11 @@ export interface CodeSession {
 	workDir: string
 	sourceWorkDir?: string
 	worktreeBranch?: string
+	targetBranch?: string
+	baseCommit?: string
+	remoteName?: string
+	remoteCommit?: string
+	repositorySync?: "local" | "synced" | "fast_forwarded"
 	isolationMode?: "single_worktree" | "multi_worktree"
 	status: string
 	currentStage: string
@@ -92,7 +97,7 @@ export interface CodeSession {
 
 export interface CodeWorktreeCapability {
 	available: boolean
-	reason: "" | "source_unavailable" | "not_git" | "not_git_root"
+	reason: "" | "source_unavailable" | "not_git"
 	sourceDir?: string
 	sourceDirs?: string[]
 	repositoryCount: number

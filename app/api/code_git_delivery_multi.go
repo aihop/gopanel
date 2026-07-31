@@ -37,23 +37,15 @@ func validateCodeMultiWorktreeDeliverySession(session *model.AIDevSession, claim
 		return err
 	}
 	repositories, err := loadCodeSessionRepositories(session.ID)
-	if err != nil || len(repositories) != len(sourceDirs) {
+	if err != nil || len(repositories) == 0 {
 		return errors.New("会话多仓库 Worktree 元数据不完整")
-	}
-	allowed := make(map[string]struct{}, len(sourceDirs))
-	for _, sourceDir := range sourceDirs {
-		resolved, resolveErr := filepath.EvalSymlinks(filepath.Clean(sourceDir))
-		if resolveErr != nil {
-			return errors.New("项目源目录不可用")
-		}
-		allowed[resolved] = struct{}{}
 	}
 	for _, repository := range repositories {
 		resolved, resolveErr := filepath.EvalSymlinks(filepath.Clean(repository.SourceDir))
 		if resolveErr != nil {
 			return errors.New("会话仓库源目录不可用")
 		}
-		if _, exists := allowed[resolved]; !exists || !isPathInside(repository.WorktreeDir, session.WorkDir) {
+		if !repositoryWithinSourceDirs(resolved, sourceDirs) || !isPathInside(repository.WorktreeDir, session.WorkDir) {
 			return errors.New("会话仓库与项目配置不一致")
 		}
 		if repository.Status != codeDeliveryCompleted {
@@ -127,9 +119,6 @@ func commitCodeSessionRepository(session *model.AIDevSession, repositoryID, mess
 }
 
 func prepareCodeMultiRepositoryDelivery(session *model.AIDevSession, repositories []model.AIDevSessionRepository) error {
-	if err := validateCodeQualityGate(session); err != nil {
-		return err
-	}
 	for index := range repositories {
 		repository := &repositories[index]
 		if repository.Status == codeDeliveryCompleted || repository.Status == codeDeliveryMerged {
@@ -139,21 +128,40 @@ func prepareCodeMultiRepositoryDelivery(session *model.AIDevSession, repositorie
 		if err != nil || strings.TrimSpace(status) != "" {
 			return fmt.Errorf("仓库 %s 仍有未提交变更，请先提交", repository.LinkName)
 		}
-		sourceStatus, err := runCodeGit(repository.SourceDir, "status", "--porcelain")
-		if err != nil || strings.TrimSpace(sourceStatus) != "" {
-			return fmt.Errorf("源仓库 %s 存在未提交变更，无法安全合并", repository.LinkName)
+		targetBranch := repository.TargetBranch
+		if targetBranch == "" {
+			targetBranch, _ = runCodeGit(repository.SourceDir, "branch", "--show-current")
+		}
+		targetCommit, err := refreshCodeRepositoryTarget(repository.SourceDir, targetBranch, repository.RemoteName)
+		if err != nil {
+			return fmt.Errorf("仓库 %s 同步失败：%w", repository.LinkName, err)
+		}
+		if err := syncCodeWorktreeWithTarget(repository.WorktreeDir, targetBranch); err != nil {
+			return fmt.Errorf("仓库 %s 同步失败：%w", repository.LinkName, err)
 		}
 		commit, err := runCodeGit(repository.WorktreeDir, "rev-parse", "HEAD")
 		if err != nil {
 			return err
 		}
+		repository.TargetBranch, repository.RemoteCommit = targetBranch, targetCommit
+		repository.WorktreeCommit = commit
+	}
+	if err := validateCodeQualityGate(session); err != nil {
+		return err
+	}
+	for index := range repositories {
+		repository := &repositories[index]
+		if repository.Status == codeDeliveryCompleted || repository.Status == codeDeliveryMerged {
+			continue
+		}
 		if err := global.DB.Model(repository).Updates(map[string]any{
-			"status": codeDeliveryPrepared, "worktree_commit": commit, "error_message": "",
+			"status": codeDeliveryPrepared, "target_branch": repository.TargetBranch,
+			"remote_commit": repository.RemoteCommit, "worktree_commit": repository.WorktreeCommit,
+			"error_message": "",
 		}).Error; err != nil {
 			return err
 		}
 		repository.Status = codeDeliveryPrepared
-		repository.WorktreeCommit = commit
 	}
 	return nil
 }

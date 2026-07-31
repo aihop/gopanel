@@ -80,6 +80,11 @@ type AIDevSession struct {
 	WorkDir           string     `gorm:"column:work_dir;type:varchar(255);not null" json:"workDir"`
 	SourceWorkDir     string     `gorm:"column:source_work_dir;type:varchar(255)" json:"sourceWorkDir,omitempty"`
 	WorktreeBranch    string     `gorm:"column:worktree_branch;type:varchar(255)" json:"worktreeBranch,omitempty"`
+	TargetBranch      string     `gorm:"column:target_branch;type:varchar(255)" json:"targetBranch,omitempty"`
+	BaseCommit        string     `gorm:"column:base_commit;type:varchar(64)" json:"baseCommit,omitempty"`
+	RemoteName        string     `gorm:"column:remote_name;type:varchar(255)" json:"remoteName,omitempty"`
+	RemoteCommit      string     `gorm:"column:remote_commit;type:varchar(64)" json:"remoteCommit,omitempty"`
+	RepositorySync    string     `gorm:"column:repository_sync;type:varchar(32)" json:"repositorySync,omitempty"`
 	IsolationMode     string     `gorm:"column:isolation_mode;type:varchar(32);not null;default:''" json:"isolationMode,omitempty"`
 	Status            string     `gorm:"column:status;type:varchar(32);default:'active'" json:"status"`
 	CurrentStage      string     `gorm:"column:current_stage;type:varchar(64);default:'idle'" json:"currentStage"`

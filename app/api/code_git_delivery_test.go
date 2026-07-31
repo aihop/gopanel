@@ -50,7 +50,7 @@ func TestCommitAndMergeCodeSessionWorktree(t *testing.T) {
 	}
 }
 
-func TestMergeCodeSessionWorktreeReportsAndAbortsConflict(t *testing.T) {
+func TestMergeCodeSessionWorktreeKeepsTargetConflictIsolated(t *testing.T) {
 	session, sourceDir := createDeliveryWorktree(t, 32)
 	if err := os.WriteFile(filepath.Join(session.WorkDir, "README.md"), []byte("worktree\n"), 0600); err != nil {
 		t.Fatal(err)
@@ -70,13 +70,17 @@ func TestMergeCodeSessionWorktreeReportsAndAbortsConflict(t *testing.T) {
 	if _, err := runCodeGit(sourceDir, "commit", "-m", "source change"); err != nil {
 		t.Fatal(err)
 	}
-	result, err := mergeCodeSessionWorktree(session)
-	if err != nil || result.Status != "conflict" || len(result.ConflictFiles) != 1 || result.ConflictFiles[0] != "README.md" {
-		t.Fatalf("unexpected conflict result: %#v, %v", result, err)
+	_, err := mergeCodeSessionWorktree(session)
+	if err == nil || !strings.Contains(err.Error(), "隔离工作区解决") {
+		t.Fatalf("target conflict should stay in worktree: %v", err)
 	}
 	status, err := runCodeGit(sourceDir, "status", "--porcelain")
 	if err != nil || strings.TrimSpace(status) != "" {
-		t.Fatalf("source repository was not restored after conflict: %q, %v", status, err)
+		t.Fatalf("source repository was modified by conflict: %q, %v", status, err)
+	}
+	conflicts := codeGitConflictFiles(session.WorkDir)
+	if len(conflicts) != 1 || conflicts[0] != "README.md" {
+		t.Fatalf("worktree conflict was not preserved: %#v", conflicts)
 	}
 }
 

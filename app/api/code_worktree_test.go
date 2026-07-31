@@ -51,8 +51,29 @@ func TestInspectCodeWorktreeCapability(t *testing.T) {
 		t.Fatal(err)
 	}
 	notRoot := inspectCodeWorktreeCapability(&model.AIGroup{SourceDirs: []string{subdirectory}})
-	if notRoot.Available || notRoot.Reason != "not_git_root" {
+	if notRoot.Available || notRoot.Reason != "not_git" {
 		t.Fatalf("unexpected nested repository capability: %#v", notRoot)
+	}
+}
+
+func TestInspectCodeWorktreeCapabilityDiscoversNestedRepositories(t *testing.T) {
+	workspace := t.TempDir()
+	first := filepath.Join(workspace, "apps", "api")
+	second := filepath.Join(workspace, "services", "worker")
+	if err := os.MkdirAll(first, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(second, 0755); err != nil {
+		t.Fatal(err)
+	}
+	for _, repository := range []string{first, second} {
+		if _, err := runCodeGit(repository, "init"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	capability := inspectCodeWorktreeCapability(&model.AIGroup{SourceDirs: []string{workspace}})
+	if !capability.Available || capability.RepositoryCount != 2 {
+		t.Fatalf("nested repositories were not discovered: %#v", capability)
 	}
 }
 

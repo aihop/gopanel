@@ -13,6 +13,10 @@ type AICodeDelivery struct {
 	SourceWorkDir  string     `gorm:"column:source_work_dir;type:varchar(1024);not null" json:"sourceWorkDir"`
 	WorkDir        string     `gorm:"column:work_dir;type:varchar(1024);not null" json:"workDir"`
 	WorktreeBranch string     `gorm:"column:worktree_branch;type:varchar(255);not null" json:"worktreeBranch"`
+	TargetBranch   string     `gorm:"column:target_branch;type:varchar(255)" json:"targetBranch,omitempty"`
+	BaseCommit     string     `gorm:"column:base_commit;type:varchar(64)" json:"baseCommit,omitempty"`
+	RemoteName     string     `gorm:"column:remote_name;type:varchar(255)" json:"remoteName,omitempty"`
+	RemoteCommit   string     `gorm:"column:remote_commit;type:varchar(64)" json:"remoteCommit,omitempty"`
 	WorktreeCommit string     `gorm:"column:worktree_commit;type:varchar(64)" json:"worktreeCommit"`
 	MergeCommit    string     `gorm:"column:merge_commit;type:varchar(64)" json:"mergeCommit"`
 	ErrorMessage   string     `gorm:"column:error_message;type:text" json:"errorMessage"`
