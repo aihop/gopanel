@@ -33,10 +33,22 @@ type codeDailyTokenUsage struct {
 	Runs              int64  `json:"runs"`
 }
 
+type codeModelTokenUsage struct {
+	Model             string `json:"model"`
+	InputTokens       int64  `json:"inputTokens"`
+	OutputTokens      int64  `json:"outputTokens"`
+	CachedInputTokens int64  `json:"cachedInputTokens"`
+	ReasoningTokens   int64  `json:"reasoningTokens"`
+	TotalTokens       int64  `json:"totalTokens"`
+	Runs              int64  `json:"runs"`
+}
+
 type codeTokenUsageResponse struct {
 	Session codeTokenUsage        `json:"session"`
 	Project codeTokenUsage        `json:"project"`
 	Daily   []codeDailyTokenUsage `json:"daily"`
+	Models  []codeModelTokenUsage `json:"models"`
+	Budget  codeTokenBudget       `json:"budget"`
 }
 
 func sumCodeTokenUsage(query *gorm.DB) (codeTokenUsage, error) {
@@ -98,7 +110,26 @@ func loadCodeTokenUsage(session *model.AIDevSession) (codeTokenUsageResponse, er
 	for _, date := range order {
 		daily = append(daily, *dailyByDate[date])
 	}
-	return codeTokenUsageResponse{Session: sessionUsage, Project: projectUsage, Daily: daily}, nil
+	modelQuery := global.DB.Model(&model.AIExecutionRun{}).Where("session_id = ?", session.ID)
+	if session.ProjectID > 0 {
+		modelQuery = global.DB.Model(&model.AIExecutionRun{}).
+			Joins("JOIN ai_dev_sessions ON ai_dev_sessions.id = ai_execution_runs.session_id").
+			Where("ai_dev_sessions.project_id = ?", session.ProjectID)
+	}
+	var models []codeModelTokenUsage
+	if err := modelQuery.Select(`COALESCE(NULLIF(model, ''), executor_id) AS model,
+		COALESCE(SUM(input_tokens), 0) AS input_tokens, COALESCE(SUM(output_tokens), 0) AS output_tokens,
+		COALESCE(SUM(cached_input_tokens), 0) AS cached_input_tokens,
+		COALESCE(SUM(reasoning_tokens), 0) AS reasoning_tokens,
+		COALESCE(SUM(total_tokens), 0) AS total_tokens, COUNT(*) AS runs`).
+		Group("COALESCE(NULLIF(model, ''), executor_id)").Order("total_tokens desc").Scan(&models).Error; err != nil {
+		return codeTokenUsageResponse{}, err
+	}
+	budget, err := loadCodeTokenBudget(session.ProjectID, time.Now())
+	if err != nil {
+		return codeTokenUsageResponse{}, err
+	}
+	return codeTokenUsageResponse{Session: sessionUsage, Project: projectUsage, Daily: daily, Models: models, Budget: budget}, nil
 }
 
 func GetCodeTokenUsage(c fiber.Ctx) error {

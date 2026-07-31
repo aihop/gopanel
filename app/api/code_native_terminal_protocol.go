@@ -3,7 +3,10 @@ package api
 import (
 	"strconv"
 	"sync/atomic"
+	"time"
 )
+
+const nativeTerminalControlLease = 60 * time.Second
 
 type nativeTerminalChunk struct {
 	Sequence uint64
@@ -11,13 +14,15 @@ type nativeTerminalChunk struct {
 }
 
 type nativeTerminalEvent struct {
-	Type          string
-	Sequence      uint64
-	StartSequence uint64
-	RequestID     string
-	Data          []byte
-	HasControl    bool
-	Truncated     bool
+	Type           string
+	Sequence       uint64
+	StartSequence  uint64
+	RequestID      string
+	Data           []byte
+	HasControl     bool
+	Truncated      bool
+	ControlReason  string
+	LeaseExpiresAt int64
 }
 
 type nativeTerminalSubscription struct {
@@ -25,6 +30,10 @@ type nativeTerminalSubscription struct {
 	Events      chan nativeTerminalEvent
 	AckSequence uint64
 	NeedsResync bool
+	UserID      uint
+	DeviceID    uint
+	IP          string
+	ReadOnly    bool
 }
 
 type nativeTerminalResyncRequest struct {
@@ -49,11 +58,13 @@ func (terminal *nativeCodeTerminal) subscribe(afterSequence uint64) (*nativeTerm
 		afterSequence = 0
 	}
 	terminal.subscribers[subscription.ID] = subscription
-	if terminal.controllerID == "" {
+	if terminal.controllerID == "" || terminal.controlExpiredLocked(time.Now()) {
 		terminal.controllerID = subscription.ID
+		terminal.renewControlLeaseLocked(time.Now())
 	}
 	baseline := terminal.baselineAfter(afterSequence, "")
 	baseline.HasControl = terminal.controllerID == subscription.ID
+	baseline.LeaseExpiresAt = terminal.controlExpiresAt.UnixMilli()
 	subscription.AckSequence = afterSequence
 	terminal.mu.Unlock()
 	return subscription, baseline
@@ -115,6 +126,11 @@ func (terminal *nativeCodeTerminal) unsubscribe(subscription *nativeTerminalSubs
 	controlChanged := terminal.controllerID == subscription.ID
 	if controlChanged {
 		terminal.controllerID = ""
+		terminal.controlExpiresAt = time.Time{}
+		if terminal.controlTimer != nil {
+			terminal.controlTimer.Stop()
+			terminal.controlTimer = nil
+		}
 	}
 	terminal.mu.Unlock()
 	if controlChanged {
@@ -122,19 +138,25 @@ func (terminal *nativeCodeTerminal) unsubscribe(subscription *nativeTerminalSubs
 	}
 }
 
-func (terminal *nativeCodeTerminal) takeControl(subscriptionID string) bool {
+func (terminal *nativeCodeTerminal) takeControl(subscriptionID string) (bool, string) {
 	terminal.mu.Lock()
 	if _, exists := terminal.subscribers[subscriptionID]; !exists {
 		terminal.mu.Unlock()
-		return false
+		return false, "连接不存在"
+	}
+	now := time.Now()
+	if terminal.controllerID != "" && terminal.controllerID != subscriptionID && !terminal.controlExpiredLocked(now) {
+		terminal.mu.Unlock()
+		return false, "其他设备正在控制终端"
 	}
 	changed := terminal.controllerID != subscriptionID
 	terminal.controllerID = subscriptionID
+	terminal.renewControlLeaseLocked(now)
 	terminal.mu.Unlock()
 	if changed {
 		terminal.broadcastControl()
 	}
-	return true
+	return true, ""
 }
 
 func (terminal *nativeCodeTerminal) releaseControl(subscriptionID string) bool {
@@ -144,6 +166,11 @@ func (terminal *nativeCodeTerminal) releaseControl(subscriptionID string) bool {
 		return false
 	}
 	terminal.controllerID = ""
+	terminal.controlExpiresAt = time.Time{}
+	if terminal.controlTimer != nil {
+		terminal.controlTimer.Stop()
+		terminal.controlTimer = nil
+	}
 	terminal.mu.Unlock()
 	terminal.broadcastControl()
 	return true
@@ -152,6 +179,9 @@ func (terminal *nativeCodeTerminal) releaseControl(subscriptionID string) bool {
 func (terminal *nativeCodeTerminal) hasControl(subscriptionID string) bool {
 	terminal.mu.Lock()
 	defer terminal.mu.Unlock()
+	if terminal.controlExpiredLocked(time.Now()) {
+		return false
+	}
 	return terminal.controllerID == subscriptionID
 }
 
@@ -159,12 +189,67 @@ func (terminal *nativeCodeTerminal) broadcastControl() {
 	terminal.mu.Lock()
 	defer terminal.mu.Unlock()
 	for subscriptionID, subscription := range terminal.subscribers {
-		event := nativeTerminalEvent{Type: "control", Sequence: terminal.sequence, HasControl: terminal.controllerID == subscriptionID}
+		event := nativeTerminalEvent{Type: "control", Sequence: terminal.sequence, HasControl: terminal.controllerID == subscriptionID, LeaseExpiresAt: terminal.controlExpiresAt.UnixMilli()}
 		select {
 		case subscription.Events <- event:
 		default:
 		}
 	}
+}
+
+func (terminal *nativeCodeTerminal) renewControlLease(subscriptionID string) bool {
+	terminal.mu.Lock()
+	defer terminal.mu.Unlock()
+	if terminal.controllerID != subscriptionID || terminal.controlExpiredLocked(time.Now()) {
+		return false
+	}
+	terminal.renewControlLeaseLocked(time.Now())
+	return true
+}
+
+func (terminal *nativeCodeTerminal) controlState(subscriptionID string) (bool, int64) {
+	terminal.mu.Lock()
+	defer terminal.mu.Unlock()
+	if terminal.controlExpiredLocked(time.Now()) {
+		return false, terminal.controlExpiresAt.UnixMilli()
+	}
+	return terminal.controllerID == subscriptionID, terminal.controlExpiresAt.UnixMilli()
+}
+
+func (terminal *nativeCodeTerminal) renewControlLeaseLocked(now time.Time) {
+	terminal.controlExpiresAt = now.Add(nativeTerminalControlLease)
+	if terminal.controlTimer != nil {
+		terminal.controlTimer.Stop()
+	}
+	expectedController := terminal.controllerID
+	terminal.controlTimer = time.AfterFunc(nativeTerminalControlLease, func() {
+		terminal.expireControl(expectedController)
+	})
+}
+
+func (terminal *nativeCodeTerminal) controlExpiredLocked(now time.Time) bool {
+	return terminal.controllerID != "" && !terminal.controlExpiresAt.IsZero() && !now.Before(terminal.controlExpiresAt)
+}
+
+func (terminal *nativeCodeTerminal) clearExpiredControlLocked() {
+	terminal.controllerID = ""
+	terminal.controlExpiresAt = time.Time{}
+	terminal.controlTimer = nil
+}
+
+func (terminal *nativeCodeTerminal) expireControl(expectedController string) {
+	terminal.mu.Lock()
+	if terminal.controllerID != expectedController || !terminal.controlExpiredLocked(time.Now()) {
+		terminal.mu.Unlock()
+		return
+	}
+	subscription := terminal.subscribers[expectedController]
+	terminal.clearExpiredControlLocked()
+	terminal.mu.Unlock()
+	if subscription != nil {
+		recordCodeAudit(subscription.UserID, terminal.projectID, terminal.sessionID, "terminal_control_expire", "success", subscription.ID, "终端控制租约因空闲自动过期", subscription.IP, time.Now(), codeAuditMeta{"deviceId": subscription.DeviceID, "automatic": true})
+	}
+	terminal.broadcastControl()
 }
 
 func (terminal *nativeCodeTerminal) acknowledge(subscriptionID string, sequence uint64) {
@@ -190,6 +275,7 @@ func (terminal *nativeCodeTerminal) resync(subscriptionID string, afterSequence 
 	subscription.AckSequence = afterSequence
 	baseline := terminal.baselineAfter(afterSequence, requestID)
 	baseline.HasControl = terminal.controllerID == subscriptionID
+	baseline.LeaseExpiresAt = terminal.controlExpiresAt.UnixMilli()
 	subscription.Events <- baseline
 	return true
 }

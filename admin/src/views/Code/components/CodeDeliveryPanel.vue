@@ -4,13 +4,14 @@ import { useIntervalFn } from "@vueuse/core"
 import { useDialog, useMessage } from "naive-ui"
 import { useI18n } from "vue-i18n"
 import Icon from "@/components/common/Icon.vue"
-import { getCodeQualityChecks, getCodeSessionState, runCodeQualityCheck } from "@/api/modules/code"
+import { getCodeAuditEvents, getCodeQualityChecks, getCodeSessionState, runCodeQualityCheck } from "@/api/modules/code"
 import type {
+	CodeAuditEvent,
 	CodePreview,
 	CodeQualityCheck,
 	CodeQualityCheckResult,
 	CodeQualityStatus,
-	CodeSessionState
+	CodeSessionState,
 } from "@/api/interface/code"
 import { codeDeliveryMessages } from "../codeDeliveryMessages"
 
@@ -23,8 +24,10 @@ const show = ref(false)
 const loading = ref(false)
 const stateError = ref(false)
 const qualityError = ref(false)
+const auditError = ref(false)
 const state = ref<CodeSessionState | null>(null)
 const checks = ref<CodeQualityCheck[]>([])
+const auditEvents = ref<CodeAuditEvent[]>([])
 const runningCheckId = ref("")
 const showOutput = ref(false)
 const selectedResult = ref<CodeQualityCheckResult | null>(null)
@@ -41,7 +44,7 @@ const buttonType = computed(() => {
 const stageLabel = computed(() => {
 	const knownStages = [
 		"idle", "task_ready", "instruction_queued", "awaiting_approval", "executing", "interactive",
-		"completed", "preview_ready", "failed", "cancelled", "approval_rejected", "quality_check"
+		"completed", "preview_ready", "failed", "cancelled", "approval_rejected", "quality_check",
 	]
 	const stage = state.value?.currentStage || "idle"
 	return knownStages.includes(stage) ? t(`code.deliveryStage_${stage}`) : t("code.deliveryStage_unknown")
@@ -83,10 +86,22 @@ const loadChecks = async (notify = false) => {
 	}
 }
 
+const loadAudit = async (notify = false) => {
+	if (!props.sessionId) return
+	try {
+		const response = await getCodeAuditEvents(props.sessionId)
+		auditEvents.value = response.data.items || []
+		auditError.value = false
+	} catch (error) {
+		auditError.value = true
+		if (notify) message.error(error instanceof Error ? error.message : t("code.auditLoadFailed"))
+	}
+}
+
 const loadDelivery = async (notify = false) => {
 	if (!props.sessionId) return
 	loading.value = true
-	await Promise.all([loadState(notify), loadChecks(notify)])
+	await Promise.all([loadState(notify), loadChecks(notify), loadAudit(notify)])
 	loading.value = false
 }
 
@@ -100,7 +115,7 @@ const confirmRun = (check: CodeQualityCheck) => {
 		content: t("code.runQualityConfirm", { command: check.command, workDir: check.workDir }),
 		positiveText: t("code.confirm"),
 		negativeText: t("code.cancel"),
-		onPositiveClick: () => runCheck(check)
+		onPositiveClick: () => runCheck(check),
 	})
 }
 
@@ -139,16 +154,26 @@ const qualityType = (status?: CodeQualityStatus) => {
 	if (status === "failed" || status === "timed_out") return "error"
 	return "default"
 }
+
+const qualityStatusLabel = (check: CodeQualityCheck) => {
+	if (!check.lastResult) return t("code.qualityNeverRun")
+	if (!check.lastResult.current) return t("code.qualityStale")
+	return t(`code.qualityStatus_${check.lastResult.status}`)
+}
 const durationLabel = (milliseconds: number) => milliseconds < 1000
 	? `${milliseconds} ms`
 	: `${(milliseconds / 1000).toFixed(milliseconds < 10000 ? 1 : 0)} s`
 const tokenLabel = (count: number) => new Intl.NumberFormat().format(count || 0)
+const auditActionLabel = (action: string) => t(`code.auditAction_${action}`)
+const auditStatusLabel = (status: string) => t(`code.auditStatus_${status}`)
 
 watch(() => props.sessionId, () => {
 	state.value = null
 	checks.value = []
+	auditEvents.value = []
 	stateError.value = false
 	qualityError.value = false
+	auditError.value = false
 	if (show.value) void loadDelivery()
 })
 watch(show, value => {
@@ -195,6 +220,10 @@ useIntervalFn(() => {
 							<div class="rounded-xl bg-emerald-50 p-3"><div class="text-lg font-semibold text-emerald-700">{{ tokenLabel(state.tokenUsage.project.totalTokens) }}</div><div class="text-xs text-slate-500">{{ t("code.projectTokens") }}</div></div>
 						</div>
 						<div v-if="state?.tokenUsage.project.runs" class="mt-3 text-xs text-slate-400">{{ t("code.tokenBreakdown", { input: tokenLabel(state.tokenUsage.project.inputTokens), output: tokenLabel(state.tokenUsage.project.outputTokens), cached: tokenLabel(state.tokenUsage.project.cachedInputTokens), reasoning: tokenLabel(state.tokenUsage.project.reasoningTokens) }) }}</div>
+						<div v-if="state && !state.tokenUsage.budget.unlimited" class="mt-3">
+							<n-alert v-if="state.tokenUsage.budget.exceeded" type="error" :show-icon="false">{{ t("code.tokenBudgetExceeded") }}</n-alert>
+							<div v-else><div class="mb-1 text-xs text-slate-500">{{ t("code.tokenBudget", { used: tokenLabel(state.tokenUsage.budget.usedTokens), limit: tokenLabel(state.tokenUsage.budget.limitTokens) }) }}</div><n-progress type="line" :percentage="Math.min(100, Math.round(state.tokenUsage.budget.usagePercent))" :show-indicator="false" /></div>
+						</div>
 					</section>
 
 					<section class="rounded-2xl border border-slate-200 bg-white p-4">
@@ -222,7 +251,7 @@ useIntervalFn(() => {
 						<n-empty v-else-if="checks.length === 0" size="small" :description="t('code.noQualityChecks')" class="py-6" />
 						<div v-else class="mt-3 space-y-2">
 							<div v-for="check in checks" :key="check.id" class="rounded-xl border border-slate-200 p-3">
-								<div class="flex items-start justify-between gap-3"><div class="min-w-0"><div class="flex items-center gap-2"><span class="text-sm font-semibold text-slate-800">{{ t(`code.qualityKind_${check.kind}`) }}</span><n-tag size="small" :type="qualityType(check.lastResult?.status)" :bordered="false">{{ check.lastResult ? t(`code.qualityStatus_${check.lastResult.status}`) : t("code.qualityNeverRun") }}</n-tag></div><div class="mt-1 truncate font-mono text-xs text-slate-500" :title="`${check.workDir}: ${check.command}`">{{ check.workDir }} · {{ check.command }}</div></div><n-button size="small" type="primary" secondary :loading="runningCheckId === check.id" :disabled="Boolean(runningCheckId && runningCheckId !== check.id)" @click="confirmRun(check)">{{ t("code.runQualityCheck") }}</n-button></div>
+								<div class="flex items-start justify-between gap-3"><div class="min-w-0"><div class="flex items-center gap-2"><span class="text-sm font-semibold text-slate-800">{{ t(`code.qualityKind_${check.kind}`) }}</span><n-tag size="small" :type="check.lastResult && !check.lastResult.current ? 'warning' : qualityType(check.lastResult?.status)" :bordered="false">{{ qualityStatusLabel(check) }}</n-tag></div><div class="mt-1 truncate font-mono text-xs text-slate-500" :title="`${check.workDir}: ${check.command}`">{{ check.workDir }} · {{ check.command }}</div></div><n-button size="small" type="primary" secondary :loading="runningCheckId === check.id" :disabled="Boolean(runningCheckId && runningCheckId !== check.id)" @click="confirmRun(check)">{{ t("code.runQualityCheck") }}</n-button></div>
 								<div v-if="check.lastResult" class="mt-2 flex items-center gap-3 text-xs text-slate-400"><span>{{ t("code.duration", { duration: durationLabel(check.lastResult.durationMs) }) }}</span><span>{{ t("code.exitCode", { code: check.lastResult.exitCode }) }}</span><n-button v-if="check.lastResult.output" text type="primary" size="tiny" @click="openResult(check)">{{ t("code.viewOutput") }}</n-button></div>
 							</div>
 						</div>
@@ -232,6 +261,13 @@ useIntervalFn(() => {
 						<strong class="text-sm text-slate-800">{{ t("code.timeline") }}</strong>
 						<n-empty v-if="!state?.timelineEvents.length" size="small" :description="t('code.noTimeline')" class="py-6" />
 						<div v-else class="mt-4 space-y-4"><div v-for="event in state.timelineEvents" :key="event.id" class="border-l-2 border-blue-200 pl-3"><div class="flex items-center justify-between gap-3"><span class="text-sm font-medium text-slate-800">{{ event.title }}</span><span class="text-xs text-slate-400">{{ new Date(event.createdAt).toLocaleString() }}</span></div><div v-if="event.content" class="mt-1 whitespace-pre-wrap break-words text-xs leading-5 text-slate-500">{{ event.content }}</div></div></div>
+					</section>
+
+					<section class="rounded-2xl border border-slate-200 bg-white p-4">
+						<strong class="text-sm text-slate-800">{{ t("code.securityAudit") }}</strong>
+						<n-alert v-if="auditError" type="error" :show-icon="false" class="mt-3">{{ t("code.auditLoadFailed") }}</n-alert>
+						<n-empty v-else-if="!auditEvents.length" size="small" :description="t('code.noAuditEvents')" class="py-6" />
+						<div v-else class="mt-3 space-y-2"><div v-for="event in auditEvents" :key="event.id" class="rounded-xl bg-slate-50 p-3"><div class="flex items-center justify-between gap-3"><span class="text-sm font-medium text-slate-700">{{ auditActionLabel(event.action) }}</span><n-tag size="small" :type="event.status === 'success' ? 'success' : event.status === 'denied' ? 'warning' : 'error'" :bordered="false">{{ auditStatusLabel(event.status) }}</n-tag></div><div class="mt-1 flex flex-wrap gap-x-3 text-xs text-slate-400"><span>{{ t("code.auditUser", { id: event.userId }) }}</span><span>{{ new Date(event.createdAt).toLocaleString() }}</span><span>{{ event.durationMs }} ms</span></div><div v-if="event.detail" class="mt-1 truncate text-xs text-slate-500" :title="event.detail">{{ event.detail }}</div></div></div>
 					</section>
 				</div>
 			</n-spin>

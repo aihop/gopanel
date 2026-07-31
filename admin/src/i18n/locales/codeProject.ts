@@ -12,6 +12,10 @@ export const codeProjectMessages = {
 			projectDirectoryRequired: "请选择至少一个项目目录",
 			projectDirectoryCount: "已聚合 {count} 个目录",
 			projectDirectoriesHint: "所选目录会通过软连接聚合到工作区，不会复制或删除源文件",
+			requireQualityGate: "合并前强制质量门禁",
+			requireQualityGateHint: "当前提交的全部测试、Lint、类型检查和构建通过后才允许合并",
+			monthlyTokenBudget: "月度 Token 预算",
+			monthlyTokenBudgetHint: "填 0 表示不限额；达到预算后停止新的 AI 执行，不影响查看和交付",
 			selectProjectDirectory: "选择项目目录",
 			browseDirectory: "选择目录",
 			parentDirectory: "上一级",
@@ -85,6 +89,7 @@ export const codeProjectMessages = {
 			terminalReconnecting: "正在增量重连",
 			terminalControlling: "当前设备可输入",
 			takeTerminalControl: "接管终端",
+			terminalControlBusy: "其他设备正在控制终端，请稍后重试",
 			approvalCenter: "待审批",
 			approvalLoadFailed: "待审批任务加载失败",
 			approvalApproved: "已允许执行",
@@ -93,8 +98,8 @@ export const codeProjectMessages = {
 			nativeApproval: "原生 Codex 确认",
 			approveApproval: "允许执行",
 			rejectApproval: "拒绝",
-			noPendingApprovals: "当前没有待审批任务"
-		}
+			noPendingApprovals: "当前没有待审批任务",
+		},
 	},
 	en: {
 		code: {
@@ -109,6 +114,10 @@ export const codeProjectMessages = {
 			projectDirectoryRequired: "Select at least one project directory",
 			projectDirectoryCount: "{count} directories linked",
 			projectDirectoriesHint: "Selected directories are linked into the GoPanel Code workspace. Source files are not copied or deleted.",
+			requireQualityGate: "Require quality gate before merge",
+			requireQualityGateHint: "All detected tests, lint, type checks, and builds must pass for the current commit",
+			monthlyTokenBudget: "Monthly token budget",
+			monthlyTokenBudgetHint: "Use 0 for unlimited. Reaching the budget blocks new AI runs but not review or delivery.",
 			selectProjectDirectory: "Select Project Directory",
 			browseDirectory: "Browse",
 			parentDirectory: "Parent",
@@ -183,6 +192,7 @@ export const codeProjectMessages = {
 			terminalReconnecting: "Reconnecting incrementally",
 			terminalControlling: "This device controls input",
 			takeTerminalControl: "Take control",
+			terminalControlBusy: "Another device controls the terminal. Try again later.",
 			approvalCenter: "Approvals",
 			approvalLoadFailed: "Failed to load pending approvals",
 			approvalApproved: "Execution approved",
@@ -191,7 +201,7 @@ export const codeProjectMessages = {
 			nativeApproval: "Native Codex approval",
 			approveApproval: "Approve",
 			rejectApproval: "Reject",
-			noPendingApprovals: "No pending approvals"
-		}
-	}
+			noPendingApprovals: "No pending approvals",
+		},
+	},
 } as const

@@ -42,6 +42,10 @@ func executeCodeInstruction(
 	if err := executionContext.Err(); err != nil {
 		return codeInstructionResult{Err: err}
 	}
+	if err := validateCodeTokenBudget(session); err != nil {
+		finishErr := finishCodeInstruction(session, task, instruction, err.Error(), nil, err, false)
+		return codeInstructionResult{Output: err.Error(), Err: errors.Join(err, finishErr)}
+	}
 	if err := startCodeInstructionExecution(session, task, instruction, claim); err != nil {
 		return codeInstructionResult{Err: err}
 	}

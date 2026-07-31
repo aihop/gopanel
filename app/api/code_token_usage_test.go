@@ -19,7 +19,7 @@ func TestLoadCodeTokenUsageAggregatesSessionProjectAndDay(t *testing.T) {
 	}
 	global.DB = database
 	t.Cleanup(func() { global.DB = oldDB })
-	if err := database.AutoMigrate(&model.AIDevSession{}, &model.AIExecutionRun{}); err != nil {
+	if err := database.AutoMigrate(&model.AIGroup{}, &model.AIDevSession{}, &model.AIExecutionRun{}); err != nil {
 		t.Fatal(err)
 	}
 	first := model.AIDevSession{UserID: 1, ProjectID: 9, Title: "one", WorkDir: t.TempDir()}

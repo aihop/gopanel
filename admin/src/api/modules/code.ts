@@ -10,6 +10,7 @@ import type {
 	CodeInstructionResponse,
 	CodeApproval,
 	CodeApprovalPolicy,
+	CodeAuditEvent,
 	CodeQualityCheck,
 	CodeQualityCheckResult,
 	CodeWorktreeCapability,
@@ -19,7 +20,7 @@ import type {
 	CodeSessionState,
 	CodeStructureResult,
 	CodexRuntimeState,
-	CodeTokenUsageResponse
+	CodeTokenUsageResponse,
 } from "../interface/code"
 
 // === Group APIs ===
@@ -28,11 +29,11 @@ export function getAIGroups(params: { page: number; limit: number }) {
 	return http.get<{ items: AIGroup[]; total: number }>("/code/groups", params)
 }
 
-export function createAIGroup(data: { name: string; description: string; sourceDirs: string[] }) {
+export function createAIGroup(data: { name: string; description: string; sourceDirs: string[]; requireQualityGate: boolean; monthlyTokenBudget: number }) {
 	return http.post<AIGroup>("/code/groups", data)
 }
 
-export function updateAIGroup(id: number, data: { name: string; description: string; sourceDirs: string[] }) {
+export function updateAIGroup(id: number, data: { name: string; description: string; sourceDirs: string[]; requireQualityGate: boolean; monthlyTokenBudget: number }) {
 	return http.put<AIGroup>(`/code/groups/${id}`, data)
 }
 
@@ -90,7 +91,7 @@ export function saveCodeSessionFile(sessionId: number, path: string, content: st
 
 export function getCodexRuntimeState(sessionId: number) {
 	return http.get<CodexRuntimeState | null>(`/code/sessions/${sessionId}/codex-runtime`, undefined, {
-		timeout: 10000
+		timeout: 10000,
 	})
 }
 
@@ -98,9 +99,13 @@ export function getCodeTokenUsage(sessionId: number) {
 	return http.get<CodeTokenUsageResponse>(`/code/sessions/${sessionId}/token-usage`, undefined, { timeout: 10000 })
 }
 
+export function getCodeAuditEvents(sessionId: number) {
+	return http.get<{ items: CodeAuditEvent[]; total: number }>(`/code/sessions/${sessionId}/audit-events`, { page: 1, limit: 20 }, { timeout: 10000 })
+}
+
 export function getCodeQualityChecks(sessionId: number) {
 	return http.get<{ items: CodeQualityCheck[] }>(`/code/sessions/${sessionId}/quality-checks`, undefined, {
-		timeout: 15000
+		timeout: 15000,
 	})
 }
 
@@ -112,7 +117,7 @@ export function createCodeInstruction(sessionId: number, content: string) {
 	return http.post<CodeInstructionResponse>(`/code/sessions/${sessionId}/instructions`, {
 		content,
 		allowCode: true,
-		autoPreview: true
+		autoPreview: true,
 	})
 }
 

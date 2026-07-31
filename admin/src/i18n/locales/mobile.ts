@@ -137,6 +137,8 @@ export const mobileMessages = {
 			latestRunTokens: "本轮",
 			sessionTokens: "会话",
 			projectTokens: "项目",
+			tokenBudget: "本月预算 {percent}%",
+			tokenBudgetExceeded: "Token 预算已用尽，新的 AI 执行已暂停",
 			approvalReason: "审批理由（可选）",
 			instructionPlaceholder: "告诉 AI 接下来要完成什么…",
 			sendInstruction: "发送任务指令",
@@ -151,6 +153,7 @@ export const mobileMessages = {
 			sharedTerminal: "共享终端",
 			terminalReadOnly: "正在同步电脑端终端，当前只读",
 			terminalControlling: "当前手机可以输入命令",
+			terminalControlBusy: "其他设备正在控制终端，请稍后重试",
 			takeTerminalControl: "接管输入",
 			releaseTerminalControl: "释放输入",
 			connected: "已连接",
@@ -195,8 +198,8 @@ export const mobileMessages = {
 			updateConnectionLost: "日志连接已断开，正在确认更新结果…",
 			updateCompleteLog: "系统已更新并恢复服务。",
 			updateVerifyFailed: "暂时无法确认新版本，请稍后重新检查。",
-			stage: "状态"
-		}
+			stage: "状态",
+		},
 	},
 	en: {
 		mobile: {
@@ -336,6 +339,8 @@ export const mobileMessages = {
 			latestRunTokens: "Latest",
 			sessionTokens: "Session",
 			projectTokens: "Project",
+			tokenBudget: "Monthly budget {percent}%",
+			tokenBudgetExceeded: "The token budget is exhausted; new AI runs are paused",
 			approvalReason: "Approval reason (optional)",
 			instructionPlaceholder: "Tell the agent what to do next…",
 			sendInstruction: "Send task instruction",
@@ -350,6 +355,7 @@ export const mobileMessages = {
 			sharedTerminal: "Shared terminal",
 			terminalReadOnly: "Mirroring the desktop terminal in read-only mode",
 			terminalControlling: "This phone controls terminal input",
+			terminalControlBusy: "Another device controls the terminal. Try again later.",
 			takeTerminalControl: "Take control",
 			releaseTerminalControl: "Release control",
 			connected: "Connected",
@@ -394,7 +400,7 @@ export const mobileMessages = {
 			updateConnectionLost: "The log connection closed. Verifying the update…",
 			updateCompleteLog: "The system is updated and back online.",
 			updateVerifyFailed: "The new version could not be verified yet. Check again later.",
-			stage: "Status"
-		}
-	}
+			stage: "Status",
+		},
+	},
 } as const

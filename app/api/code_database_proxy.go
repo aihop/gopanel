@@ -1,9 +1,12 @@
 package api
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/aihop/gopanel/app/e"
 	"github.com/aihop/gopanel/app/model"
@@ -148,6 +151,7 @@ func DeleteCodeDatabaseAccess(c fiber.Ctx) error {
 }
 
 func ExecuteCodeDatabaseQuery(c fiber.Ctx) error {
+	startedAt := time.Now()
 	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
 	sessionID, err := strconv.ParseUint(c.Params("id"), 10, 64)
 	if err != nil || sessionID == 0 {
@@ -168,9 +172,22 @@ func ExecuteCodeDatabaseQuery(c fiber.Ctx) error {
 	if err := global.DB.Where("id = ? AND project_id = ? AND read_only = ?", req.AccessID, session.ProjectID, true).First(&access).Error; err != nil {
 		return c.JSON(e.Fail(errors.New("数据库授权不存在或不属于当前项目")))
 	}
-	result, err := service.NewDBManagerService().ExecCodeReadOnlySQL(access.ServerID, access.DatabaseName, req.SQL)
-	if err != nil {
+	fingerprint := codeDatabaseSQLFingerprint(req.SQL)
+	if err := allowCodeDatabaseQuery(claims.UserId, session.ProjectID); err != nil {
+		recordCodeAudit(claims.UserId, session.ProjectID, session.ID, "database_query", "denied", access.Alias, err.Error(), c.IP(), startedAt, codeAuditMeta{"sqlFingerprint": fingerprint})
 		return c.JSON(e.Fail(err))
 	}
+	result, err := service.NewDBManagerService().ExecCodeReadOnlySQL(access.ServerID, access.DatabaseName, req.SQL)
+	if err != nil {
+		recordCodeAudit(claims.UserId, session.ProjectID, session.ID, "database_query", "failed", access.Alias, err.Error(), c.IP(), startedAt, codeAuditMeta{"sqlFingerprint": fingerprint})
+		return c.JSON(e.Fail(err))
+	}
+	recordCodeAudit(claims.UserId, session.ProjectID, session.ID, "database_query", "success", access.Alias, "只读查询完成", c.IP(), startedAt, codeAuditMeta{"sqlFingerprint": fingerprint, "truncated": result["truncated"], "limit": result["limit"]})
 	return c.JSON(e.Succ(result))
+}
+
+func codeDatabaseSQLFingerprint(statement string) string {
+	normalized := strings.Join(strings.Fields(strings.ToLower(strings.TrimSpace(statement))), " ")
+	digest := sha256.Sum256([]byte(normalized))
+	return hex.EncodeToString(digest[:])
 }

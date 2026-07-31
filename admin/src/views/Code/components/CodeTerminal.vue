@@ -103,8 +103,8 @@ const initTerminal = () => {
 		fontFamily: 'Menlo, Monaco, "Courier New", monospace',
 		theme: {
 			background: "#1e1e1e",
-			foreground: "#d4d4d4"
-		}
+			foreground: "#d4d4d4",
+		},
 	})
 
 	fitAddon = new FitAddon()
@@ -199,6 +199,7 @@ const connectWebSocket = () => {
 				requestTerminalResync()
 			} else if (msg.type === "control") {
 				hasTerminalControl.value = Boolean(msg.hasControl)
+				if (msg.controlReason) term.writeln(`\r\n\x1b[33m[GoPanel] ${t("code.terminalControlBusy")}\x1b[0m`)
 			} else if (msg.type === "closed") {
 				intentionalClose = true
 				hasTerminalControl.value = false

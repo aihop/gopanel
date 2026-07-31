@@ -270,6 +270,9 @@ func CreateAISessionInstruction(c fiber.Ctx) error {
 	if session.AgentName == "terminal" {
 		return c.JSON(e.Fail(errors.New("纯终端会话不支持后台对话执行，请切换到高级终端")))
 	}
+	if err := validateCodeTokenBudget(session); err != nil {
+		return c.JSON(e.Fail(err))
+	}
 	requireApproval := codeSessionRequiresRiskApproval(session)
 	needsApproval := shouldRequireAIApproval(content, requireApproval)
 	instructionStatus := "queued"
