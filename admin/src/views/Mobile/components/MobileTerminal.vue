@@ -240,8 +240,9 @@ onBeforeUnmount(closeTerminal)
 				</n-button>
 			</div>
 		</header>
-		<div ref="terminalElement" class="min-h-0 w-full flex-1 bg-[#0b1020] pb-[env(safe-area-inset-bottom)]" />
+		<div ref="terminalElement" class="min-h-0 w-full flex-1 bg-[#0b1020]" />
 		<slot name="footer" :connected="connected" :has-control="hasControl" :take-control="takeControl" :release-control="releaseControl" />
+		<div class="h-[max(8px,env(safe-area-inset-bottom))] shrink-0 bg-slate-950" aria-hidden="true" />
 	</section>
 </template>
 

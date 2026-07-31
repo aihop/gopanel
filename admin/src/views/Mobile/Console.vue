@@ -432,7 +432,7 @@ onBeforeUnmount(() => {
 					<template v-else-if="selectedSession">
 						<MobileTerminal :session-id="selectedSessionId" :project-name="sessionProjectName(selectedSession)" :project-description="sessionProjectDescription(selectedSession)" @back="leaveTaskDetail" @open-files="showFiles = true" @open-status="showTaskStatus = true">
 							<template #footer="{ connected, hasControl, takeControl, releaseControl }">
-								<div v-if="connected" class="flex items-center justify-between border-t border-white/10 bg-slate-950 px-3 pb-[max(6px,env(safe-area-inset-bottom))] pt-1.5 text-[11px] text-slate-400">
+								<div v-if="connected" class="flex items-center justify-between border-t border-white/10 bg-slate-950 px-3 py-1.5 text-[11px] text-slate-400">
 									<span>{{ hasControl ? t("mobile.terminalControlling") : t("mobile.terminalReadOnly") }}</span>
 									<n-button size="tiny" text type="primary" @click="hasControl ? releaseControl() : takeControl()">{{ hasControl ? t("mobile.releaseTerminalControl") : t("mobile.takeTerminalControl") }}</n-button>
 								</div>
