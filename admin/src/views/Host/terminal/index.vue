@@ -12,6 +12,7 @@ const message = useMessage()
 const dialog = useDialog()
 const sessions = ref<HostTerminalSession[]>([])
 const selectedId = ref<number | null>(null)
+const connectedSessionId = ref<number | null>(null)
 const loading = ref(false)
 const creating = ref(false)
 const loadError = ref("")
@@ -51,6 +52,9 @@ async function loadSessions(silent = false) {
 		if (!selectedId.value) {
 			selectedId.value = sessions.value.find(item => item.status === "running")?.id || sessions.value[0]?.id || null
 		}
+		if (connectedSessionId.value && !sessions.value.some(item => item.id === connectedSessionId.value && item.status === "running")) {
+			connectedSessionId.value = null
+		}
 	} catch (error) {
 		loadError.value = error instanceof Error ? error.message : t("terminal.loadFailed")
 		message.error(loadError.value)
@@ -65,6 +69,7 @@ async function createSession() {
 		const response = await createHostTerminalSession({ shell: shell.value, workDir: workDir.value.trim(), cols: 120, rows: 32 })
 		sessions.value.unshift(response.data)
 		selectedId.value = response.data.id
+		connectedSessionId.value = response.data.id
 		message.success(t("terminal.createSuccess"))
 	} catch (error) {
 		message.error(error instanceof Error ? error.message : t("terminal.createFailed"))
@@ -73,18 +78,36 @@ async function createSession() {
 	}
 }
 
-async function stopSession(session: HostTerminalSession) {
+async function endSession(session: HostTerminalSession) {
 	if (session.status !== "running") return
 	stoppingId.value = session.id
 	try {
 		await stopHostTerminalSession(session.id)
-		message.success(t("terminal.stopSuccess"))
+		if (connectedSessionId.value === session.id) connectedSessionId.value = null
+		message.success(t("terminal.endSuccess"))
 		await loadSessions(true)
 	} catch (error) {
-		message.error(error instanceof Error ? error.message : t("terminal.stopFailed"))
+		message.error(error instanceof Error ? error.message : t("terminal.endFailed"))
 	} finally {
 		stoppingId.value = null
 	}
+}
+
+function confirmEndSession(session: HostTerminalSession) {
+	dialog.warning({
+		title: t("terminal.endSession"),
+		content: t("terminal.endConfirm"),
+		positiveText: t("terminal.endSession"),
+		negativeText: t("commons.button.cancel"),
+		onPositiveClick: () => endSession(session)
+	})
+}
+
+function disconnectSession(session: HostTerminalSession) {
+	if (connectedSessionId.value !== session.id) return
+	connectedSessionId.value = null
+	selectedId.value = session.id
+	message.success(t("terminal.disconnectSuccess"))
 }
 
 async function reconnectSession(session: HostTerminalSession) {
@@ -93,6 +116,7 @@ async function reconnectSession(session: HostTerminalSession) {
 		const response = await reconnectHostTerminalSession(session.id)
 		await loadSessions(true)
 		selectedId.value = response.data.id
+		connectedSessionId.value = response.data.id
 		message.success(t("terminal.reconnectSuccess"))
 	} catch (error) {
 		message.error(error instanceof Error ? error.message : t("terminal.reconnectFailed"))
@@ -139,11 +163,22 @@ async function openAudit(session: HostTerminalSession) {
 	}
 }
 
+function selectSession(session: HostTerminalSession) {
+	if (connectedSessionId.value !== session.id) connectedSessionId.value = null
+	selectedId.value = session.id
+}
+
 function handleClosed() {
+	connectedSessionId.value = null
 	void loadSessions(true)
 }
 
-onMounted(() => loadSessions())
+onMounted(async () => {
+	await loadSessions()
+	if (sessions.value.some(item => item.id === selectedId.value && item.status === "running")) {
+		connectedSessionId.value = selectedId.value
+	}
+})
 </script>
 
 <template>
@@ -168,7 +203,7 @@ onMounted(() => loadSessions())
 					<n-empty v-else-if="!sessions.length" class="mt-20" :description="t('terminal.emptyTerminal')" />
 					<n-scrollbar v-else class="h-full">
 						<div v-for="session in sessions" :key="session.id" class="group flex items-center border-b border-slate-100 pr-2 transition-colors hover:bg-slate-50" :class="selectedId === session.id ? 'bg-blue-50 hover:bg-blue-50' : ''">
-							<button type="button" class="min-w-0 flex-1 px-4 py-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500" @click="selectedId = session.id">
+							<button type="button" class="min-w-0 flex-1 px-4 py-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500" @click="selectSession(session)">
 								<div class="flex items-center justify-between gap-2">
 									<span class="truncate text-sm font-medium text-slate-700">{{ session.shell }} #{{ session.id }}</span>
 									<n-tag size="small" :type="statusType(session.status)" :bordered="false">{{ t(`terminal.status_${session.status}`) }}</n-tag>
@@ -185,23 +220,31 @@ onMounted(() => loadSessions())
 									</template>
 									{{ t("terminal.audit") }}
 								</n-tooltip>
+								<n-tooltip v-if="session.status === 'running' && connectedSessionId === session.id" placement="right" trigger="hover">
+									<template #trigger>
+										<n-button quaternary circle size="tiny" :disabled="sessionActionBusy(session.id)" :aria-label="t('terminal.disconnectSession')" @click="disconnectSession(session)">
+											<template #icon><Icon name="mdi:lan-disconnect" :size="15" /></template>
+										</n-button>
+									</template>
+									{{ t("terminal.disconnectSession") }}
+								</n-tooltip>
+								<n-tooltip v-if="session.status === 'running' && connectedSessionId !== session.id" placement="right" trigger="hover">
+									<template #trigger>
+										<n-button quaternary circle size="tiny" type="primary" :loading="reconnectingId === session.id" :disabled="sessionActionBusy(session.id)" :aria-label="t('terminal.reconnectSession')" @click="reconnectSession(session)">
+											<template #icon><Icon name="mdi:connection" :size="15" /></template>
+										</n-button>
+									</template>
+									{{ t("terminal.reconnectSession") }}
+								</n-tooltip>
 								<n-tooltip v-if="session.status === 'running'" placement="right" trigger="hover">
 									<template #trigger>
-										<n-button quaternary circle size="tiny" type="error" :loading="stoppingId === session.id" :disabled="sessionActionBusy(session.id)" :aria-label="t('terminal.stopSession')" @click="stopSession(session)">
+										<n-button quaternary circle size="tiny" type="error" :loading="stoppingId === session.id" :disabled="sessionActionBusy(session.id)" :aria-label="t('terminal.endSession')" @click="confirmEndSession(session)">
 											<template #icon><Icon name="mdi:stop-circle-outline" :size="15" /></template>
 										</n-button>
 									</template>
-									{{ t("terminal.stopSession") }}
+									{{ t("terminal.endSession") }}
 								</n-tooltip>
-								<template v-else-if="session.status !== 'starting'">
-									<n-tooltip placement="right" trigger="hover">
-										<template #trigger>
-											<n-button quaternary circle size="tiny" type="primary" :loading="reconnectingId === session.id" :disabled="sessionActionBusy(session.id)" :aria-label="t('terminal.reconnectSession')" @click="reconnectSession(session)">
-												<template #icon><Icon name="mdi:restart" :size="15" /></template>
-											</n-button>
-										</template>
-										{{ t("terminal.reconnectSession") }}
-									</n-tooltip>
+								<template v-if="session.status !== 'running' && session.status !== 'starting'">
 									<n-tooltip placement="right" trigger="hover">
 										<template #trigger>
 											<n-button quaternary circle size="tiny" type="error" :loading="deletingId === session.id" :disabled="sessionActionBusy(session.id)" :aria-label="t('terminal.deleteSession')" @click="confirmDeleteSession(session)">
@@ -218,7 +261,10 @@ onMounted(() => loadSessions())
 			</aside>
 
 			<main class="min-h-0 min-w-0">
-				<HostTerminalPanel v-if="selectedSession?.status === 'running'" :key="selectedSession.id" :session-id="selectedSession.id" @closed="handleClosed" @status="handleClosed" />
+				<HostTerminalPanel v-if="selectedSession?.status === 'running' && connectedSessionId === selectedSession.id" :key="selectedSession.id" :session-id="selectedSession.id" @closed="handleClosed" @status="handleClosed" />
+				<div v-else-if="selectedSession?.status === 'running'" class="flex h-full items-center justify-center rounded-xl border border-slate-200 bg-white">
+					<n-result status="info" :title="t('terminal.disconnected')" :description="t('terminal.disconnectedHint')" />
+				</div>
 				<div v-else-if="selectedSession" class="flex h-full items-center justify-center rounded-xl border border-slate-200 bg-white">
 					<n-result :status="selectedSession.status === 'failed' || selectedSession.status === 'interrupted' ? 'error' : 'info'" :title="t(`terminal.status_${selectedSession.status}`)" :description="selectedSession.errorMessage || t('terminal.sessionEnded')" />
 				</div>
