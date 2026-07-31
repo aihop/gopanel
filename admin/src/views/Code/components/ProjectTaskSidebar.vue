@@ -132,8 +132,8 @@ watch(
 				{{ t("code.noGitRepositories") }}
 			</div>
 			<n-scrollbar v-else trigger="none" class="ai-workspace-branch-scrollbar min-h-0 flex-1">
-				<div class="space-y-2 px-3 pb-3">
-					<div v-for="repository in branchState.repositories" :key="repository.path" class="rounded-xl border border-slate-200/80 bg-white/85 p-2.5">
+				<div class="space-y-3 px-4 pb-3">
+					<div v-for="repository in branchState.repositories" :key="repository.path">
 						<div class="flex items-center justify-between gap-2">
 							<div class="flex min-w-0 items-center gap-1.5 text-xs font-semibold text-slate-700" :title="repository.path">
 								<Icon name="mdi:source-repository" :size="14" class="shrink-0 text-slate-400" />
@@ -143,10 +143,10 @@ watch(
 								{{ t("code.changedFiles", { count: repository.changedFiles }) }}
 							</span>
 						</div>
-						<div class="mt-2 space-y-1">
-							<div v-for="branch in repository.branches" :key="branch.ref" class="rounded-lg px-2 py-1.5" :class="branch.current ? 'bg-blue-50' : 'bg-slate-50/80'">
+						<div class="mt-1.5 space-y-0.5 pl-1">
+							<div v-for="branch in repository.branches" :key="branch.ref" class="py-1.5 pl-4" :class="branch.current ? 'text-blue-600' : ''">
 								<div class="flex items-center justify-between gap-2">
-									<div class="flex min-w-0 items-center gap-1.5 text-[11px] font-medium text-slate-700" :title="branch.name">
+									<div class="flex min-w-0 items-center gap-1.5 text-[11px] font-medium" :class="branch.current ? 'text-blue-700' : 'text-slate-700'" :title="branch.name">
 										<Icon :name="branch.current ? 'mdi:source-branch-check' : 'mdi:source-branch'" :size="13" :class="branch.current ? 'text-blue-600' : 'text-slate-400'" />
 										<span class="truncate">{{ branch.name }}</span>
 									</div>
