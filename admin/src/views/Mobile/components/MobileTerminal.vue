@@ -19,6 +19,9 @@ const props = withDefaults(
 const emit = defineEmits<{ back: []; openFiles: []; openStatus: [] }>()
 const { t } = useI18n({ messages: mobileMessages })
 const terminalElement = ref<HTMLElement | null>(null)
+const commandInput = ref<HTMLInputElement | null>(null)
+const commandDraft = ref("")
+const commandComposing = ref(false)
 const connected = ref(false)
 const connecting = ref(true)
 const reconnecting = ref(false)
@@ -89,6 +92,15 @@ function sendTerminalInput(data: string) {
 	socket.send(JSON.stringify({ type: "cmd", data }))
 }
 
+function writeTerminalData(data: string, forceBottom = false) {
+	if (!terminal) return
+	const buffer = terminal.buffer.active
+	const shouldFollow = forceBottom || buffer.baseY - buffer.viewportY <= 1
+	terminal.write(data, () => {
+		if (shouldFollow) terminal?.scrollToBottom()
+	})
+}
+
 function applyCtrlModifier(data: string) {
 	if (!ctrlActive.value) return data
 	ctrlActive.value = false
@@ -102,6 +114,25 @@ function sendShortcut(data: string) {
 	ctrlActive.value = false
 	sendTerminalInput(data)
 	nextTick(() => terminal?.focus())
+}
+
+function insertCommandSymbol(symbol: string) {
+	if (!hasControl.value) return
+	const input = commandInput.value
+	const start = input?.selectionStart ?? commandDraft.value.length
+	const end = input?.selectionEnd ?? start
+	commandDraft.value = `${commandDraft.value.slice(0, start)}${symbol}${commandDraft.value.slice(end)}`
+	nextTick(() => {
+		commandInput.value?.focus()
+		commandInput.value?.setSelectionRange(start + symbol.length, start + symbol.length)
+	})
+}
+
+function submitCommand() {
+	if (commandComposing.value || !commandDraft.value || !hasControl.value) return
+	sendTerminalInput(`${commandDraft.value}\r`)
+	commandDraft.value = ""
+	nextTick(() => commandInput.value?.focus())
 }
 
 function toggleCtrl() {
@@ -147,7 +178,8 @@ function connect() {
 				const chunkIndex = Number(message.chunkIndex) || 0
 				const chunkCount = Number(message.chunkCount) || 1
 				if ((props.mode === "native" || message.truncated) && chunkIndex === 0) terminal?.reset()
-				if (message.data) terminal?.write(message.data)
+				if (message.data) writeTerminalData(message.data, chunkIndex === chunkCount - 1)
+				else if (chunkIndex === chunkCount - 1) terminal?.scrollToBottom()
 				if (chunkIndex === chunkCount - 1) {
 					lastSequence = sequence
 					pendingResyncId = ""
@@ -161,7 +193,7 @@ function connect() {
 					requestResync()
 					return
 				}
-				if (message.data) terminal?.write(message.data)
+				if (message.data) writeTerminalData(message.data)
 				lastSequence = sequence
 				sendAck(sequence)
 			} else if (message.type === "resync_required") {
@@ -181,10 +213,10 @@ function connect() {
 				updateControl(false)
 				if (message.data) terminal?.writeln(`\r\n\x1b[31m[GoPanel] ${message.data}\x1b[0m`)
 			} else if (message.type === "cmd" && message.data) {
-				terminal?.write(message.data)
+				writeTerminalData(message.data)
 			}
 		} catch {
-			terminal?.write(event.data)
+			writeTerminalData(event.data)
 		}
 	}
 	currentSocket.onclose = () => {
@@ -224,6 +256,13 @@ function openTerminal() {
 	fitAddon = new FitAddon()
 	terminal.loadAddon(fitAddon)
 	terminal.open(terminalElement.value)
+	if (terminal.textarea) {
+		terminal.textarea.inputMode = "text"
+		terminal.textarea.autocapitalize = "none"
+		terminal.textarea.autocomplete = "off"
+		terminal.textarea.spellcheck = false
+		terminal.textarea.setAttribute("autocorrect", "off")
+	}
 	terminal.onData(data => {
 		sendTerminalInput(applyCtrlModifier(data))
 	})
@@ -318,10 +357,17 @@ onBeforeUnmount(closeTerminal)
 				{{ hasControl ? t("mobile.releaseTerminalControl") : t("mobile.takeTerminalControl") }}
 			</n-button>
 		</div>
+		<form class="flex shrink-0 items-center gap-2 border-t border-white/10 bg-slate-950 px-2 py-2" @submit.prevent="submitCommand">
+			<input ref="commandInput" v-model="commandDraft" type="text" inputmode="text" enterkeyhint="send" autocapitalize="none" autocomplete="off" autocorrect="off" :spellcheck="false" :disabled="!hasControl" :placeholder="hasControl ? t('mobile.terminalInputPlaceholder') : t('mobile.terminalReadOnly')" class="h-10 min-w-0 flex-1 rounded-xl border border-white/10 bg-white/5 px-3 text-base text-white outline-none transition placeholder:text-slate-500 focus:border-blue-400/70 focus:bg-white/[0.08] disabled:cursor-not-allowed" @compositionstart="commandComposing = true" @compositionend="commandComposing = false" />
+			<button type="submit" :disabled="!hasControl || !commandDraft" class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-blue-400/30 bg-blue-500/20 text-blue-100 transition active:scale-95 active:bg-blue-500/35 disabled:border-white/5 disabled:bg-white/5 disabled:text-slate-600" :title="t('mobile.sendTerminalInput')" :aria-label="t('mobile.sendTerminalInput')">
+				<Icon name="mdi:send" :size="19" />
+			</button>
+		</form>
 		<div class="flex shrink-0 items-center gap-1.5 overflow-x-auto border-t border-white/10 bg-slate-950 px-2 py-2 transition-opacity [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" :class="hasControl ? '' : 'opacity-50'" role="toolbar" :aria-label="t('mobile.terminal')">
 			<button type="button" :disabled="!hasControl" class="flex h-10 min-w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-2 font-mono text-sm font-medium text-slate-200 transition active:scale-95 active:bg-white/15 disabled:cursor-not-allowed" aria-label="Esc" @pointerdown.prevent @click="sendShortcut('\x1b')">Esc</button>
 			<button type="button" :disabled="!hasControl" class="flex h-10 min-w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-2 font-mono text-sm font-medium text-slate-200 transition active:scale-95 active:bg-white/15 disabled:cursor-not-allowed" aria-label="Tab" @pointerdown.prevent @click="sendShortcut('\t')">Tab</button>
 			<button type="button" :disabled="!hasControl" class="flex h-10 min-w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-2 font-mono text-sm font-medium text-slate-200 transition active:scale-95 active:bg-white/15 disabled:cursor-not-allowed" :class="ctrlActive ? 'border-blue-400 bg-blue-500/25 text-blue-200' : ''" aria-label="Ctrl" :aria-pressed="ctrlActive" @pointerdown.prevent @click="toggleCtrl">Ctrl</button>
+			<button v-for="symbol in ['/', '-', '_', '.', '~', '|']" :key="symbol" type="button" :disabled="!hasControl" class="flex h-10 min-w-10 shrink-0 items-center justify-center rounded-xl border border-blue-400/20 bg-blue-500/10 px-2 font-mono text-base font-medium text-blue-200 transition active:scale-95 active:bg-blue-500/25 disabled:cursor-not-allowed" :aria-label="`${t('mobile.insertTerminalSymbol')} ${symbol}`" @pointerdown.prevent @click="insertCommandSymbol(symbol)">{{ symbol }}</button>
 			<button type="button" :disabled="!hasControl" class="flex h-10 min-w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-2 font-mono text-sm font-medium text-slate-200 transition active:scale-95 active:bg-white/15 disabled:cursor-not-allowed" aria-label="←" @pointerdown.prevent @click="sendShortcut('\x1b[D')">←</button>
 			<button type="button" :disabled="!hasControl" class="flex h-10 min-w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-2 font-mono text-sm font-medium text-slate-200 transition active:scale-95 active:bg-white/15 disabled:cursor-not-allowed" aria-label="↑" @pointerdown.prevent @click="sendShortcut('\x1b[A')">↑</button>
 			<button type="button" :disabled="!hasControl" class="flex h-10 min-w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-2 font-mono text-sm font-medium text-slate-200 transition active:scale-95 active:bg-white/15 disabled:cursor-not-allowed" aria-label="↓" @pointerdown.prevent @click="sendShortcut('\x1b[B')">↓</button>
