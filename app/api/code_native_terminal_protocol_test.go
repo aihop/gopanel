@@ -122,14 +122,43 @@ func TestNativeTerminalProtocolPreventsControlLeasePreemption(t *testing.T) {
 	terminal.unsubscribe(first)
 }
 
-func TestNativeTerminalProtocolReadOnlySubscriberNeverGetsControl(t *testing.T) {
+func TestNativeTerminalProtocolReadOnlySubscriberRequiresExplicitControl(t *testing.T) {
 	terminal := newNativeTerminalProtocolTestSubject()
 	subscription, baseline := terminal.subscribe(0, true)
 	if baseline.HasControl || terminal.controllerID != "" {
 		t.Fatal("read-only subscriber should not receive terminal control")
 	}
 	if granted, reason := terminal.takeControl(subscription.ID); granted || reason != "只读连接不能接管终端输入" {
-		t.Fatalf("read-only subscriber took control: granted=%v reason=%q", granted, reason)
+		t.Fatalf("untrusted read-only subscriber took control: granted=%v reason=%q", granted, reason)
+	}
+	subscription.AllowControl = true
+	if granted, reason := terminal.takeControl(subscription.ID); !granted || reason != "" {
+		t.Fatalf("read-only subscriber failed to explicitly take control: granted=%v reason=%q", granted, reason)
+	}
+	if subscription.ReadOnly {
+		t.Fatal("controlled subscriber should accept terminal input")
+	}
+	if !terminal.releaseControl(subscription.ID) || !subscription.ReadOnly {
+		t.Fatal("released subscriber should return to its default read-only state")
+	}
+	<-subscription.Events
+	<-subscription.Events
+	terminal.unsubscribe(subscription)
+}
+
+func TestNativeTerminalProtocolExpiredControlRestoresReadOnlyState(t *testing.T) {
+	terminal := newNativeTerminalProtocolTestSubject()
+	subscription, _ := terminal.subscribe(0, true)
+	subscription.AllowControl = true
+	if granted, reason := terminal.takeControl(subscription.ID); !granted || reason != "" {
+		t.Fatalf("take control failed: %q", reason)
+	}
+	terminal.mu.Lock()
+	terminal.controlExpiresAt = time.Now().Add(-time.Second)
+	terminal.mu.Unlock()
+	terminal.expireControl(subscription.ID)
+	if !subscription.ReadOnly || terminal.controllerID != "" {
+		t.Fatal("expired control should restore the subscriber's read-only state")
 	}
 	terminal.unsubscribe(subscription)
 }

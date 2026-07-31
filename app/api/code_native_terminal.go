@@ -185,7 +185,8 @@ func (terminal *nativeCodeTerminal) publish(output []byte) {
 func (terminal *nativeCodeTerminal) write(subscriptionID string, data []byte) error {
 	terminal.mu.Lock()
 	defer terminal.mu.Unlock()
-	if terminal.controllerID != subscriptionID || terminal.controlExpiredLocked(time.Now()) {
+	subscription := terminal.subscribers[subscriptionID]
+	if subscription == nil || subscription.ReadOnly || terminal.controllerID != subscriptionID || terminal.controlExpiredLocked(time.Now()) {
 		return errors.New("当前连接没有终端输入权")
 	}
 	terminal.renewControlLeaseLocked(time.Now())
@@ -245,6 +246,7 @@ func serveNativeCodeTerminal(
 	subscription.UserID = claims.UserId
 	subscription.IP = wsConn.IP()
 	subscription.DeviceID, _ = wsConn.Locals(middleware.MobileDeviceIDKey).(uint)
+	subscription.AllowControl = subscription.DeviceID > 0
 	if baseline.HasControl && !readOnly && wsConn.Query("take_control") != "1" {
 		recordCodeAudit(claims.UserId, session.ProjectID, session.ID, "terminal_control_acquire", "success", subscription.ID, "连接自动获得控制权", wsConn.IP(), time.Now(), codeAuditMeta{"deviceId": subscription.DeviceID, "automatic": true})
 	}
@@ -320,10 +322,6 @@ func serveNativeCodeTerminal(
 		}
 		switch message.Type {
 		case "cmd":
-			if subscription.ReadOnly {
-				_ = writeEvent(nativeTerminalEvent{Type: "control", HasControl: false, ControlReason: "只读连接不能输入终端命令"})
-				continue
-			}
 			if writeErr := terminal.write(subscription.ID, []byte(message.Data)); writeErr != nil {
 				_ = writeEvent(nativeTerminalEvent{Type: "control", HasControl: false})
 			}
@@ -334,7 +332,7 @@ func serveNativeCodeTerminal(
 			if !granted {
 				status = "denied"
 			}
-			recordCodeAudit(claims.UserId, session.ProjectID, session.ID, "terminal_control_acquire", status, subscription.ID, reason, wsConn.IP(), startedAt, codeAuditMeta{"deviceId": subscription.DeviceID, "readOnly": subscription.ReadOnly})
+			recordCodeAudit(claims.UserId, session.ProjectID, session.ID, "terminal_control_acquire", status, subscription.ID, reason, wsConn.IP(), startedAt, codeAuditMeta{"deviceId": subscription.DeviceID, "readOnly": subscription.DefaultReadOnly})
 			if !granted {
 				_, expiresAt := terminal.controlState(subscription.ID)
 				_ = writeEvent(nativeTerminalEvent{Type: "control", HasControl: false, ControlReason: reason, LeaseExpiresAt: expiresAt})

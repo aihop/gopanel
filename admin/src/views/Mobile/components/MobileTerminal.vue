@@ -14,6 +14,7 @@ const terminalElement = ref<HTMLElement | null>(null)
 const connected = ref(false)
 const connecting = ref(true)
 const reconnecting = ref(false)
+const hasControl = ref(false)
 let terminal: Terminal | null = null
 let fitAddon: FitAddon | null = null
 let socket: WebSocket | null = null
@@ -46,9 +47,26 @@ function requestResync() {
 function fit() {
 	try {
 		fitAddon?.fit()
+		if (socket?.readyState === WebSocket.OPEN && hasControl.value && terminal && (terminal.cols !== reportedCols || terminal.rows !== reportedRows)) {
+			socket.send(JSON.stringify({
+				type: "resize",
+				data: JSON.stringify({ cols: terminal.cols, rows: terminal.rows }),
+			}))
+			reportedCols = terminal.cols
+			reportedRows = terminal.rows
+		}
 	} catch (error) {
 		void error
 	}
+}
+
+function updateControl(value: boolean) {
+	hasControl.value = value
+	if (terminal) terminal.options.disableStdin = !value
+	if (value) nextTick(() => {
+		terminal?.focus()
+		scheduleFit()
+	})
 }
 
 function scheduleFit() {
@@ -88,6 +106,7 @@ function connect() {
 				if (chunkIndex === chunkCount - 1) {
 					lastSequence = sequence
 					pendingResyncId = ""
+					updateControl(Boolean(message.hasControl))
 					sendAck(sequence)
 				}
 			} else if (message.type === "output") {
@@ -102,10 +121,14 @@ function connect() {
 				sendAck(sequence)
 			} else if (message.type === "resync_required") {
 				requestResync()
+			} else if (message.type === "control") {
+				updateControl(Boolean(message.hasControl))
+				if (message.controlReason) terminal?.writeln(`\r\n\x1b[33m[GoPanel] ${t("mobile.terminalControlBusy")}\x1b[0m`)
 			} else if (message.type === "closed") {
 				closing = true
 				connected.value = false
 				connecting.value = false
+				updateControl(false)
 			} else if (message.type === "cmd" && message.data) {
 				terminal?.write(message.data)
 			}
@@ -117,6 +140,7 @@ function connect() {
 		if (socket !== currentSocket) return
 		socket = null
 		connected.value = false
+		updateControl(false)
 		pendingResyncId = ""
 		if (!closing && !reconnectTimer) {
 			connecting.value = true
@@ -149,6 +173,11 @@ function openTerminal() {
 	fitAddon = new FitAddon()
 	terminal.loadAddon(fitAddon)
 	terminal.open(terminalElement.value)
+	terminal.onData(data => {
+		if (hasControl.value && socket?.readyState === WebSocket.OPEN) {
+			socket.send(JSON.stringify({ type: "cmd", data }))
+		}
+	})
 	resizeObserver = new ResizeObserver(scheduleFit)
 	resizeObserver.observe(terminalElement.value)
 	nextTick(() => {
@@ -164,6 +193,7 @@ function closeTerminal() {
 	closing = true
 	connected.value = false
 	connecting.value = false
+	updateControl(false)
 	pendingResyncId = ""
 	if (reconnectTimer) clearTimeout(reconnectTimer)
 	if (pingTimer) clearInterval(pingTimer)
@@ -179,6 +209,16 @@ function closeTerminal() {
 	terminal?.dispose()
 	terminal = null
 	fitAddon = null
+}
+
+function takeControl() {
+	if (socket?.readyState !== WebSocket.OPEN) return
+	socket.send(JSON.stringify({ type: "take_control", data: "" }))
+}
+
+function releaseControl() {
+	if (socket?.readyState !== WebSocket.OPEN) return
+	socket.send(JSON.stringify({ type: "release_control", data: "" }))
 }
 
 watch(
@@ -223,7 +263,7 @@ onBeforeUnmount(closeTerminal)
 				<span>{{ reconnecting ? t("mobile.reconnecting") : t("mobile.terminalConnecting") }}</span>
 			</div>
 		</div>
-		<slot name="footer" :connected="connected" />
+		<slot name="footer" :connected="connected" :has-control="hasControl" :take-control="takeControl" :release-control="releaseControl" />
 		<div class="h-[max(8px,env(safe-area-inset-bottom))] shrink-0 bg-slate-950" aria-hidden="true" />
 	</section>
 </template>
@@ -231,7 +271,7 @@ onBeforeUnmount(closeTerminal)
 <style scoped>
 :deep(.xterm) {
 	height: 100%;
-	padding: 12px;
+	padding: 12px 2px 12px 10px;
 }
 
 :deep(.xterm-viewport) {
