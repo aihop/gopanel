@@ -122,3 +122,121 @@ func TestSyncCodeWorktreeWithUpdatedTarget(t *testing.T) {
 		t.Fatalf("updated target content unavailable in worktree: %v", err)
 	}
 }
+
+func createGitlinkRepositoryTree(t *testing.T) (string, string) {
+	t.Helper()
+	parent := createCodeGitRepository(t)
+	child := filepath.Join(parent, "themes", "custom")
+	if err := os.MkdirAll(filepath.Dir(child), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(filepath.Dir(child), "init", child); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(child, "staged.txt"), []byte("base\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(child, "working.txt"), []byte("base\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(child, "add", "staged.txt", "working.txt"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(child, "-c", "user.name=GoPanel Test", "-c", "user.email=test@gopanel.local", "commit", "-m", "initial child"); err != nil {
+		t.Fatal(err)
+	}
+	childCommit, err := runCodeGit(child, "rev-parse", "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(parent, "update-index", "--add", "--cacheinfo", "160000,"+childCommit+",themes/custom"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(parent, "-c", "user.name=GoPanel Test", "-c", "user.email=test@gopanel.local", "commit", "-m", "track child gitlink"); err != nil {
+		t.Fatal(err)
+	}
+	return parent, child
+}
+
+func TestDiscoverCodeRepositoriesIncludesGitlinkWithoutGitmodules(t *testing.T) {
+	parent, child := createGitlinkRepositoryTree(t)
+	candidates, err := discoverCodeRepositoryCandidates([]string{parent})
+	if err != nil || len(candidates) != 2 {
+		t.Fatalf("unexpected candidates: %#v, %v", candidates, err)
+	}
+	var parentCandidate, childCandidate *codeRepositoryCandidate
+	for index := range candidates {
+		candidate := &candidates[index]
+		if candidate.SourceDir == parent {
+			parentCandidate = candidate
+		}
+		if candidate.SourceDir == child {
+			childCandidate = candidate
+		}
+	}
+	if parentCandidate == nil || parentCandidate.Dirty {
+		t.Fatalf("parent repository incorrectly dirty: %#v", parentCandidate)
+	}
+	if childCandidate == nil || childCandidate.ParentSourceDir != parent || childCandidate.GitlinkPath != "themes/custom" {
+		t.Fatalf("gitlink relationship unavailable: %#v", childCandidate)
+	}
+}
+
+func TestPrepareGitlinkRepositoriesRejectsDirtyChildByDefault(t *testing.T) {
+	parent, child := createGitlinkRepositoryTree(t)
+	if err := os.WriteFile(filepath.Join(child, "working.txt"), []byte("dirty\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := prepareDiscoveredCodeRepositories([]string{parent})
+	if err == nil || !strings.Contains(err.Error(), "源仓库 custom 存在未提交变更") {
+		t.Fatalf("dirty child should be rejected explicitly: %v", err)
+	}
+}
+
+func TestGitlinkPointerChangeKeepsParentDirty(t *testing.T) {
+	parent, child := createGitlinkRepositoryTree(t)
+	commitCodeTestFile(t, child, "next.txt", "next\n")
+	candidates, err := discoverCodeRepositoryCandidates([]string{parent})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, candidate := range candidates {
+		if candidate.SourceDir == parent {
+			if !candidate.Dirty {
+				t.Fatal("parent gitlink pointer change must remain visible")
+			}
+			return
+		}
+	}
+	t.Fatal("parent repository unavailable")
+}
+
+func TestCodeSnapshotRejectsSymlinkDestinationDirectory(t *testing.T) {
+	worktree := t.TempDir()
+	outside := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(worktree, "escape")); err != nil {
+		t.Fatal(err)
+	}
+	if err := ensureCodeSnapshotDestination(worktree, filepath.Join(worktree, "escape", "nested")); err == nil {
+		t.Fatal("snapshot destination escaped through symlink")
+	}
+}
+
+func TestCodeSnapshotRejectsOversizedFile(t *testing.T) {
+	worktree := t.TempDir()
+	source := filepath.Join(t.TempDir(), "large.bin")
+	file, err := os.Create(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Truncate(maxCodeSnapshotFileBytes + 1); err != nil {
+		file.Close()
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := copyCodeSnapshotFile(worktree, source, filepath.Join(worktree, "large.bin")); err == nil {
+		t.Fatal("oversized snapshot file should be rejected")
+	}
+}

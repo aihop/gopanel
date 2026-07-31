@@ -132,13 +132,13 @@ func resetCodeRepositoryToRemote(repository *model.AIDevSessionRepository) error
 	return nil
 }
 
-func integrateAndPushCodeRepository(session *model.AIDevSession, repository *model.AIDevSessionRepository) (codeRepositoryDeliveryResult, error) {
+func integrateAndPushCodeRepository(session *model.AIDevSession, repository *model.AIDevSessionRepository, repositories []model.AIDevSessionRepository) (codeRepositoryDeliveryResult, error) {
 	result := codeRepositoryDeliveryResult{
 		RepositoryID: codeSessionRepositoryID(repository.ID), RepositoryName: repository.LinkName,
 		Status: repository.Status, Branch: repository.Branch, Commit: repository.MergeCommit,
 	}
 	for attempt := 0; attempt < codeDeliveryPushAttempts; attempt++ {
-		merged, err := mergeCodeSessionRepository(repository)
+		merged, err := mergeCodeSessionRepository(repository, repositories)
 		if err != nil || merged.Status == "conflict" {
 			return merged, err
 		}
