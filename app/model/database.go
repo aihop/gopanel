@@ -37,6 +37,20 @@ type Database struct {
 	Comment  string       `json:"comment"`
 }
 
+type DatabaseListWarning struct {
+	ServerID   uint         `json:"serverId"`
+	ServerName string       `json:"serverName"`
+	ServerType DatabaseType `json:"serverType"`
+	Code       string       `json:"code"`
+	Message    string       `json:"message"`
+}
+
+type DatabaseListResult struct {
+	Total    int64                 `json:"total"`
+	Items    []*Database           `json:"items"`
+	Warnings []DatabaseListWarning `json:"warnings"`
+}
+
 type DatabaseServer struct {
 	ID        uint                 `gorm:"primaryKey" json:"id"`
 	Name      string               `gorm:"not null;default:'';unique" json:"name"`

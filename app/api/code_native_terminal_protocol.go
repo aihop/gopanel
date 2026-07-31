@@ -60,15 +60,22 @@ func (terminal *nativeCodeTerminal) subscribe(afterSequence uint64) (*nativeTerm
 }
 
 func (terminal *nativeCodeTerminal) baselineAfter(afterSequence uint64, requestID string) nativeTerminalEvent {
-	startSequence, truncated := afterSequence+1, false
+	startSequence := afterSequence + 1
+	truncated := false
 	if len(terminal.history) > 0 {
-		oldest := terminal.history[0].Sequence
-		truncated = terminal.historyTruncated && afterSequence < oldest || afterSequence > 0 && oldest > afterSequence+1
+		oldestSequence := terminal.history[0].Sequence
+		truncated = terminal.historyTruncated && afterSequence < oldestSequence
+		if afterSequence > 0 && oldestSequence > afterSequence+1 {
+			truncated = true
+		}
 		if truncated || afterSequence == 0 {
-			startSequence = oldest
+			startSequence = oldestSequence
 		}
 	}
-	return nativeTerminalEvent{Type: "baseline", Sequence: terminal.sequence, StartSequence: startSequence, RequestID: requestID, Data: terminal.historyAfter(afterSequence), Truncated: truncated}
+	return nativeTerminalEvent{
+		Type: "baseline", Sequence: terminal.sequence, StartSequence: startSequence,
+		RequestID: requestID, Data: terminal.historyAfter(afterSequence), Truncated: truncated,
+	}
 }
 
 func splitNativeTerminalBaseline(event nativeTerminalEvent) []nativeTerminalEvent {

@@ -8,7 +8,7 @@ import ServerList from "./src/ServerList.vue"
 import UserList from "./src/UserList.vue"
 import DatabaseManager from "./src/DatabaseManager.vue"
 import { NButton, NSelect } from "naive-ui"
-import { computed, ref, onMounted } from "vue"
+import { computed, ref, onMounted, provide } from "vue"
 import CommonPage from "@/components/page/Common.vue"
 import { databaseServerListAPI } from "@/api/modules/database"
 import { useI18n } from "vue-i18n"
@@ -42,8 +42,6 @@ const fetchServers = async () => {
 		console.error(error)
 	}
 }
-
-import { provide } from "vue"
 
 onMounted(() => {
 	fetchServers()
@@ -93,11 +91,6 @@ const openImportSqliteModal = () => {
 	importSqliteModalShow.value = true
 }
 
-onMounted(() => {
-	fetchServers()
-})
-
-provide("globalSelectedServerId", globalSelectedServerId)
 </script>
 <template>
   <div class="mt-4">

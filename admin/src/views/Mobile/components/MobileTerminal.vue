@@ -26,13 +26,18 @@ let pendingResyncId = ""
 let closing = false
 
 function sendAck(sequence: number) {
-	if (socket?.readyState === WebSocket.OPEN && sequence > 0) socket.send(JSON.stringify({ type: "ack", data: String(sequence) }))
+	if (socket?.readyState === WebSocket.OPEN && sequence > 0) {
+		socket.send(JSON.stringify({ type: "ack", data: String(sequence) }))
+	}
 }
 
 function requestResync() {
 	if (socket?.readyState !== WebSocket.OPEN || pendingResyncId) return
 	pendingResyncId = `${Date.now()}-${++resyncRequest}`
-	socket.send(JSON.stringify({ type: "resync", data: JSON.stringify({ sequence: lastSequence, requestId: pendingResyncId }) }))
+	socket.send(JSON.stringify({
+		type: "resync",
+		data: JSON.stringify({ sequence: lastSequence, requestId: pendingResyncId })
+	}))
 }
 
 function fit() {
@@ -72,13 +77,22 @@ function connect() {
 				const chunkCount = Number(message.chunkCount) || 1
 				if (message.truncated && chunkIndex === 0) terminal?.reset()
 				if (message.data) terminal?.write(message.data)
-				if (chunkIndex === chunkCount - 1) { lastSequence = sequence; pendingResyncId = ""; hasControl.value = Boolean(message.hasControl); sendAck(sequence) }
+				if (chunkIndex === chunkCount - 1) {
+					lastSequence = sequence
+					pendingResyncId = ""
+					hasControl.value = Boolean(message.hasControl)
+					sendAck(sequence)
+				}
 			} else if (message.type === "output") {
 				const sequence = Number(message.sequence) || 0
 				if (pendingResyncId) return
-				if (lastSequence > 0 && sequence !== lastSequence + 1) { requestResync(); return }
+				if (lastSequence > 0 && sequence !== lastSequence + 1) {
+					requestResync()
+					return
+				}
 				if (message.data) terminal?.write(message.data)
-				lastSequence = sequence; sendAck(sequence)
+				lastSequence = sequence
+				sendAck(sequence)
 			} else if (message.type === "resync_required") {
 				requestResync()
 			} else if (message.type === "control") {

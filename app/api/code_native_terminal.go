@@ -249,9 +249,11 @@ func serveNativeCodeTerminal(
 				Truncated     bool   `json:"truncated,omitempty"`
 				ChunkIndex    int    `json:"chunkIndex,omitempty"`
 				ChunkCount    int    `json:"chunkCount,omitempty"`
-			}{Type: chunk.Type, Sequence: chunk.Sequence, StartSequence: chunk.StartSequence, RequestID: chunk.RequestID,
-				Data: string(chunk.Data), HasControl: chunk.HasControl, Truncated: chunk.Truncated && index == 0,
-				ChunkIndex: index, ChunkCount: len(chunks)})
+			}{
+				Type: chunk.Type, Sequence: chunk.Sequence, StartSequence: chunk.StartSequence,
+				RequestID: chunk.RequestID, Data: string(chunk.Data), HasControl: chunk.HasControl,
+				Truncated: chunk.Truncated && index == 0, ChunkIndex: index, ChunkCount: len(chunks),
+			})
 			if err := wsConn.WriteMessage(websocket.TextMessage, payload); err != nil {
 				return err
 			}

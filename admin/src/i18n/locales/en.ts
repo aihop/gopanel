@@ -809,6 +809,8 @@ export default {
 		insert: "Insert",
 		action: "Action",
 		noTable: "No database table",
+		partialLoadTitle: "Some database servers failed to load",
+		partialLoadDesc: "{count} server(s) could not be read. Databases from available servers are still shown.",
 		selectTable: "Please select a database table",
 		addColumn: "Add column",
 		importSql: "Import SQL",

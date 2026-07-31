@@ -21,7 +21,7 @@ type DatabaseService struct {
 	repo *repo.DatabaseRepo
 }
 
-func (s *DatabaseService) List(ctx *gormx.Contextx) (res []*model.Database, err error) {
+func (s *DatabaseService) List(ctx *gormx.Contextx) (res *model.DatabaseListResult, err error) {
 	res, err = s.repo.List(ctx)
 	return
 }

@@ -48,13 +48,18 @@ const executorId = ref("")
 let runtimePollInterval: ReturnType<typeof setInterval> | null = null
 
 const sendTerminalAck = (sequence: number) => {
-	if (ws?.readyState === WebSocket.OPEN && sequence > 0) ws.send(JSON.stringify({ type: "ack", data: String(sequence) }))
+	if (ws?.readyState === WebSocket.OPEN && sequence > 0) {
+		ws.send(JSON.stringify({ type: "ack", data: String(sequence) }))
+	}
 }
 
 const requestTerminalResync = () => {
 	if (ws?.readyState !== WebSocket.OPEN || pendingResyncId) return
 	pendingResyncId = `${Date.now()}-${++resyncRequest}`
-	ws.send(JSON.stringify({ type: "resync", data: JSON.stringify({ sequence: lastSequence, requestId: pendingResyncId }) }))
+	ws.send(JSON.stringify({
+		type: "resync",
+		data: JSON.stringify({ sequence: lastSequence, requestId: pendingResyncId })
+	}))
 }
 
 const runtimeTagType = computed(() => {
@@ -173,14 +178,23 @@ const connectWebSocket = () => {
 				const chunkCount = Number(msg.chunkCount) || 1
 				if (msg.truncated && chunkIndex === 0) term.reset()
 				if (msg.data) term.write(msg.data)
-				if (chunkIndex === chunkCount - 1) { lastSequence = sequence; pendingResyncId = ""; hasTerminalControl.value = Boolean(msg.hasControl); sendTerminalAck(sequence) }
+				if (chunkIndex === chunkCount - 1) {
+					lastSequence = sequence
+					pendingResyncId = ""
+					hasTerminalControl.value = Boolean(msg.hasControl)
+					sendTerminalAck(sequence)
+				}
 			} else if (msg.type === "output") {
 				nativeProtocol.value = true
 				const sequence = Number(msg.sequence) || 0
 				if (pendingResyncId) return
-				if (lastSequence > 0 && sequence !== lastSequence + 1) { requestTerminalResync(); return }
+				if (lastSequence > 0 && sequence !== lastSequence + 1) {
+					requestTerminalResync()
+					return
+				}
 				if (msg.data) term.write(msg.data)
-				lastSequence = sequence; sendTerminalAck(sequence)
+				lastSequence = sequence
+				sendTerminalAck(sequence)
 			} else if (msg.type === "resync_required") {
 				requestTerminalResync()
 			} else if (msg.type === "control") {

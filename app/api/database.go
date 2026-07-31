@@ -1,7 +1,6 @@
 package api
 
 import (
-	"github.com/aihop/gopanel/app/dto"
 	"github.com/aihop/gopanel/app/dto/request"
 	"github.com/aihop/gopanel/app/e"
 	"github.com/aihop/gopanel/app/service"
@@ -19,7 +18,7 @@ func DatabaseList(c fiber.Ctx) error {
 		return c.JSON(e.Result(buserr.Err(err)))
 	}
 
-	return c.JSON(e.Succ(dto.PageResult{Total: int64(len(data)), Items: data}))
+	return c.JSON(e.Succ(data))
 }
 
 // @Tags Database

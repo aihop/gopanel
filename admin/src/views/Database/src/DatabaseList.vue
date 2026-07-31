@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { NButton, NInput, NPopconfirm, NTag } from "naive-ui"
+import { NAlert, NButton, NInput, NPopconfirm, NTag } from "naive-ui"
 import { useI18n } from "vue-i18n"
 import { useTable } from "@/composables/useTable"
-import { databaseListAPI, databaseCountAPI, databaseCommentAPI, databaseDeleteAPI } from "@/api/modules/database"
+import { databaseListAPI, databaseCommentAPI, databaseDeleteAPI, type DatabaseListWarning } from "@/api/modules/database"
 import { reactive, h, onMounted, onUnmounted, ref, watch, inject, Ref } from "vue"
 import emitter from "@/utils/emitter"
 import Backup from "@/components/Backup.vue"
@@ -20,6 +20,7 @@ const page = ref(1)
 const managerModalShow = ref(false)
 const managerServerId = ref<number | null>(null)
 const managerDatabaseName = ref<string | null>(null)
+const loadWarnings = ref<DatabaseListWarning[]>([])
 
 const openManager = (row: any) => {
 	managerServerId.value = row.serverId
@@ -163,6 +164,17 @@ const columns: any = [
 
 const globalSelectedServerId = inject<Ref<number | null>>("globalSelectedServerId")
 
+const loadDatabaseList = async (request: any) => {
+	try {
+		const response = await databaseListAPI(request)
+		loadWarnings.value = response.data?.warnings || []
+		return response
+	} catch (error) {
+		loadWarnings.value = []
+		throw error
+	}
+}
+
 const buildWheres = (serverId: number | null) => {
 	if (!serverId) return []
 	return [
@@ -175,8 +187,7 @@ const buildWheres = (serverId: number | null) => {
 }
 
 const params = reactive({
-	listAPI: databaseListAPI,
-	countAPI: databaseCountAPI,
+	listAPI: loadDatabaseList,
 	params: {
 		wheres: buildWheres(globalSelectedServerId?.value || null)
 	}
@@ -256,6 +267,22 @@ onUnmounted(() => {
 </script>
 
 <template>
+  <n-alert
+    v-if="loadWarnings.length"
+    type="warning"
+    :title="$t('database.partialLoadTitle')"
+    class="mb-4"
+  >
+    <div>{{ $t('database.partialLoadDesc', { count: loadWarnings.length }) }}</div>
+    <ul class="mt-2 list-disc space-y-1 pl-5">
+      <li
+        v-for="warning in loadWarnings"
+        :key="`${warning.serverId}:${warning.code}`"
+      >
+        {{ warning.serverName }} ({{ warning.serverType }}): {{ warning.message }}
+      </li>
+    </ul>
+  </n-alert>
   <n-data-table
     striped
     remote

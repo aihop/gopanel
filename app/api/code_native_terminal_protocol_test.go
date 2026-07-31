@@ -68,7 +68,7 @@ func TestNativeTerminalProtocolSplitsLargeBaseline(t *testing.T) {
 	event := nativeTerminalEvent{Type: "baseline", Data: make([]byte, nativeTerminalBaselineChunkLimit+1)}
 	chunks := splitNativeTerminalBaseline(event)
 	if len(chunks) != 2 || len(chunks[0].Data) != nativeTerminalBaselineChunkLimit || len(chunks[1].Data) != 1 {
-		t.Fatalf("unexpected baseline chunks")
+		t.Fatalf("unexpected baseline chunks: %d, %d, %d", len(chunks), len(chunks[0].Data), len(chunks[1].Data))
 	}
 }
 

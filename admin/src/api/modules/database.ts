@@ -5,6 +5,20 @@ type DBManagerImportResult = {
 	imported: number
 }
 
+export type DatabaseListWarning = {
+	serverId: number
+	serverName: string
+	serverType: string
+	code: "connection_failed" | "query_failed"
+	message: string
+}
+
+export type DatabaseListResult = {
+	items: any[]
+	total: number
+	warnings: DatabaseListWarning[]
+}
+
 export type DatabaseContainerSyncResult = {
 	scanned: number
 	detected: number
@@ -21,7 +35,7 @@ export type DatabaseContainerSyncResult = {
 }
 
 export const databaseListAPI = (params: any) => {
-	return http.post(`/database/list`, params)
+	return http.post<DatabaseListResult>(`/database/list`, params)
 }
 
 export const databaseCountAPI = (params: any) => {
