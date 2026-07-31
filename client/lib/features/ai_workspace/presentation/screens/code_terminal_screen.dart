@@ -125,32 +125,31 @@ class _CodeTerminalScreenState extends State<CodeTerminalScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF0B1020),
       appBar: AppBar(
-        toolbarHeight: 52,
+        toolbarHeight: 44,
+        leadingWidth: 44,
         backgroundColor: const Color(0xFF0F172A),
         foregroundColor: Colors.white,
         titleSpacing: 0,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-            ),
-            Text(
-              widget.projectName,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 10, color: Colors.white54),
-            ),
-          ],
+        iconTheme: const IconThemeData(size: 20),
+        title: Text(
+          title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
         ),
         actions: [
+          CodeTerminalProjectLabel(projectName: widget.projectName),
+          CodeTerminalConnectionDot(
+            connected: _client.connected,
+            reconnecting: _client.reconnecting,
+          ),
           if (widget.nativeProtocol)
             IconButton(
               tooltip: _client.hasControl ? '释放终端控制' : '接管终端',
               onPressed: _client.connected ? _toggleControl : null,
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: 36, height: 36),
               icon: Icon(
                 _client.hasControl
                     ? Icons.lock_open_rounded
@@ -161,19 +160,22 @@ class _CodeTerminalScreenState extends State<CodeTerminalScreen> {
               ),
             ),
           IconButton(
-            tooltip: '文件',
-            onPressed: _openFiles,
-            icon: const Icon(Icons.folder_outlined),
-          ),
-          IconButton(
             tooltip: '会话状态与指令',
             onPressed: _openSessionStatus,
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints.tightFor(width: 36, height: 36),
             icon: const Icon(Icons.timeline_rounded),
           ),
-          CodeTerminalConnectionDot(
-            connected: _client.connected,
-            reconnecting: _client.reconnecting,
+          IconButton(
+            tooltip: '文件',
+            onPressed: _openFiles,
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+            icon: const Icon(Icons.folder_outlined),
           ),
+          const SizedBox(width: 4),
         ],
       ),
       body: Column(
@@ -185,8 +187,8 @@ class _CodeTerminalScreenState extends State<CodeTerminalScreen> {
               focusNode: _terminalFocusNode,
               theme: _terminalTheme,
               textStyle: const TerminalStyle(
-                fontSize: 12.5,
-                height: 1.25,
+                fontSize: 12,
+                height: 1.2,
                 fontFamily: 'Menlo',
                 fontFamilyFallback: [
                   'PingFang SC',
@@ -197,7 +199,7 @@ class _CodeTerminalScreenState extends State<CodeTerminalScreen> {
                   'sans-serif',
                 ],
               ),
-              padding: const EdgeInsets.fromLTRB(8, 8, 8, 6),
+              padding: const EdgeInsets.fromLTRB(8, 6, 6, 4),
               readOnly: !_client.canInput,
               deleteDetection: true,
               cursorType: TerminalCursorType.verticalBar,
