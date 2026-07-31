@@ -58,6 +58,7 @@ export function createCodeSession(data: {
 	executorId: string
 	approvalPolicy: CodeApprovalPolicy
 	isolated: boolean
+	includeUncommitted: boolean
 	provider?: CodeExecutorConfig
 }) {
 	return http.post<CodeSession>("/code/sessions", data)

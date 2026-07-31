@@ -2,8 +2,8 @@
 import { computed, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 import { useMessage } from "naive-ui"
-import { createMobileSession, getMobileExecutors, getMobileProjects } from "@/api/modules/mobile"
-import type { AIProject, CodeApprovalPolicy, CodeExecutor, CodeSession } from "@/api/interface/code"
+import { createMobileSession, getMobileExecutors, getMobileProjects, getMobileWorktreeCapability } from "@/api/modules/mobile"
+import type { AIProject, CodeApprovalPolicy, CodeExecutor, CodeSession, CodeWorktreeCapability } from "@/api/interface/code"
 import { mobileMessages } from "@/i18n/locales/mobile"
 
 const props = defineProps<{ show: boolean }>()
@@ -23,6 +23,8 @@ const approvalPolicy = ref<CodeApprovalPolicy>("safe_auto")
 const loading = ref(false)
 const submitting = ref(false)
 const loadError = ref("")
+const worktreeCapability = ref<CodeWorktreeCapability | null>(null)
+const capabilityLoading = ref(false)
 
 const projectOptions = computed(() => projects.value.map(project => ({ label: project.name, value: project.id })))
 const availableExecutors = computed(() => executors.value.filter(executor => executor.available && executor.id !== "terminal"))
@@ -35,6 +37,21 @@ const approvalPolicies = computed<CodeApprovalPolicy[]>(() =>
 	selectedExecutor.value?.approvalPolicies.length ? selectedExecutor.value.approvalPolicies : ["full_auto"]
 )
 const supportsApproval = computed(() => approvalPolicies.value.length > 1)
+const dirtyRepositories = computed(() => worktreeCapability.value?.dirtyRepositories || [])
+const canCreate = computed(() => Boolean(projectId.value && executorId.value && worktreeCapability.value?.available && !dirtyRepositories.value.length))
+
+async function loadWorktreeCapability() {
+	worktreeCapability.value = null
+	if (!projectId.value) return
+	capabilityLoading.value = true
+	try {
+		worktreeCapability.value = await getMobileWorktreeCapability(projectId.value)
+	} catch (error) {
+		message.error(error instanceof Error ? error.message : t("mobile.worktreeCheckFailed"))
+	} finally {
+		capabilityLoading.value = false
+	}
+}
 
 async function loadOptions() {
 	loading.value = true
@@ -43,6 +60,7 @@ async function loadOptions() {
 		const [projectResult, executorResult] = await Promise.all([getMobileProjects(), getMobileExecutors()])
 		projects.value = projectResult.items
 		executors.value = executorResult || []
+		projectId.value = null
 		projectId.value = projects.value[0]?.id || null
 		executorId.value = availableExecutors.value.find(item => item.id === "codex")?.id || availableExecutors.value[0]?.id || ""
 	} catch (error) {
@@ -53,7 +71,7 @@ async function loadOptions() {
 }
 
 async function submit() {
-	if (!projectId.value || !executorId.value || submitting.value) return
+	if (!canCreate.value || submitting.value) return
 	submitting.value = true
 	try {
 		const session = await createMobileSession({
@@ -89,6 +107,8 @@ watch(executorId, value => {
 			: approvalPolicies.value[0] || "full_auto"
 	}
 })
+
+watch(projectId, () => void loadWorktreeCapability())
 </script>
 
 <template>
@@ -106,8 +126,14 @@ watch(executorId, value => {
 					<template v-else>
 						<n-form label-placement="top">
 							<n-form-item :label="t('mobile.project')">
-								<n-select v-model:value="projectId" :options="projectOptions" />
+								<n-select v-model:value="projectId" :options="projectOptions" :loading="capabilityLoading" />
 							</n-form-item>
+							<n-alert v-if="dirtyRepositories.length" type="warning" :show-icon="false">
+								{{ t("mobile.worktreeDirtyDesktopHint", { repositories: dirtyRepositories.join(", ") }) }}
+							</n-alert>
+							<n-alert v-else-if="worktreeCapability && !worktreeCapability.available" type="error" :show-icon="false">
+								{{ t("mobile.worktreeUnavailable") }}
+							</n-alert>
 							<n-form-item :label="t('mobile.executor')">
 								<n-select v-model:value="executorId" :options="executorOptions" :placeholder="t('mobile.noExecutor')" />
 							</n-form-item>
@@ -131,7 +157,7 @@ watch(executorId, value => {
 				</div>
 			</n-spin>
 			<template #footer>
-				<n-button type="primary" block size="large" :loading="submitting" :disabled="loading || !!loadError || !projectId || !executorId" @click="submit">
+				<n-button type="primary" block size="large" :loading="submitting" :disabled="loading || capabilityLoading || !!loadError || !canCreate" @click="submit">
 					{{ t("mobile.createAndOpen") }}
 				</n-button>
 			</template>

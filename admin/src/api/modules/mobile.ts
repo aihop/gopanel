@@ -1,7 +1,7 @@
 import axios from "axios"
 import http from "@/api"
 import type { ResultData } from "@/api/interface"
-import type { AIProject, CodeApproval, CodeApprovalPolicy, CodeExecutor, CodeInstructionResponse, CodeSession, CodeSessionState } from "@/api/interface/code"
+import type { AIProject, CodeApproval, CodeApprovalPolicy, CodeExecutor, CodeInstructionResponse, CodeSession, CodeSessionState, CodeWorktreeCapability } from "@/api/interface/code"
 import type { Dashboard } from "@/api/interface/dashboard"
 import type { NodeSummary, NodeWarning } from "./node"
 
@@ -227,12 +227,17 @@ export function getMobileExecutors() {
 	return mobileRequest(mobileHttp.get<ResultData<CodeExecutor[]>>("/mobile/app/executors"))
 }
 
+export function getMobileWorktreeCapability(projectId: number) {
+	return mobileRequest(mobileHttp.get<ResultData<CodeWorktreeCapability>>(`/mobile/app/projects/${projectId}/worktree-capability`))
+}
+
 export function createMobileSession(data: { title: string; projectId: number; executorId: string; approvalPolicy: CodeApprovalPolicy }) {
 	return mobileRequest(
 		mobileHttp.post<ResultData<CodeSession>>("/mobile/app/sessions", {
 			...data,
 			workDir: "",
-			isolated: false
+			isolated: true,
+			includeUncommitted: false
 		})
 	)
 }

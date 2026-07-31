@@ -23,11 +23,13 @@ import (
 const codeWorktreeCommandTimeout = 15 * time.Second
 
 type codeWorktreeCapability struct {
-	Available       bool     `json:"available"`
-	Reason          string   `json:"reason"`
-	SourceDir       string   `json:"sourceDir,omitempty"`
-	SourceDirs      []string `json:"sourceDirs,omitempty"`
-	RepositoryCount int      `json:"repositoryCount"`
+	Available         bool     `json:"available"`
+	Reason            string   `json:"reason"`
+	SourceDir         string   `json:"sourceDir,omitempty"`
+	SourceDirs        []string `json:"sourceDirs,omitempty"`
+	RepositoryCount   int      `json:"repositoryCount"`
+	DirtyRepositories []string `json:"dirtyRepositories,omitempty"`
+	SnapshotSupported bool     `json:"snapshotSupported"`
 }
 
 func aiProjectWorktreeRoot(userID uint) string {
@@ -83,21 +85,28 @@ func inspectCodeWorktreeCapability(project *model.AIProject) codeWorktreeCapabil
 	if len(sourceDirs) == 0 {
 		return codeWorktreeCapability{Reason: "source_unavailable"}
 	}
-	resolvedDirs, err := discoverCodeRepositoryRoots(sourceDirs)
+	candidates, err := discoverCodeRepositoryCandidates(sourceDirs)
 	if err != nil {
 		return codeWorktreeCapability{Reason: "source_unavailable"}
 	}
-	if len(resolvedDirs) == 0 {
+	if len(candidates) == 0 {
 		return codeWorktreeCapability{Reason: "not_git"}
 	}
-	result := codeWorktreeCapability{Available: true, SourceDirs: resolvedDirs, RepositoryCount: len(resolvedDirs)}
-	if len(resolvedDirs) == 1 {
-		result.SourceDir = resolvedDirs[0]
+	resolvedDirs := make([]string, len(candidates))
+	for index, candidate := range candidates {
+		resolvedDirs[index] = candidate.SourceDir
+	}
+	result := codeWorktreeCapability{
+		Available: true, SourceDirs: resolvedDirs, RepositoryCount: len(resolvedDirs),
+		DirtyRepositories: codeCandidateNames(candidates), SnapshotSupported: true,
+	}
+	if len(candidates) == 1 {
+		result.SourceDir = candidates[0].SourceDir
 	}
 	return result
 }
 
-func createCodeSessionWorktree(session *model.AIDevSession, project *model.AIProject) error {
+func createCodeSessionWorktree(session *model.AIDevSession, project *model.AIProject, includeUncommitted ...bool) error {
 	sourceDirs := project.SourceDirs
 	if len(sourceDirs) == 0 && strings.TrimSpace(project.WorkDir) != "" {
 		sourceDirs = aiProjectWorkspaceSourceDirs(project.WorkDir)
@@ -105,7 +114,7 @@ func createCodeSessionWorktree(session *model.AIDevSession, project *model.AIPro
 			sourceDirs = []string{project.WorkDir}
 		}
 	}
-	prepared, err := prepareDiscoveredCodeRepositories(sourceDirs)
+	prepared, err := prepareDiscoveredCodeRepositories(sourceDirs, includeUncommitted...)
 	if err != nil {
 		return fmt.Errorf("当前项目不支持 Git Worktree 隔离：%w", err)
 	}
@@ -122,6 +131,11 @@ func createCodeSessionWorktree(session *model.AIDevSession, project *model.AIPro
 	}
 	branch := fmt.Sprintf("gopanel/code-%d-%d", session.ID, time.Now().Unix())
 	if _, err := runCodeGit(repository.SourceDir, "worktree", "add", "-b", branch, worktreeDir, repository.BaseCommit); err != nil {
+		return err
+	}
+	if err := applyCodeRepositorySnapshot(repository, worktreeDir, prepared); err != nil {
+		_, _ = runCodeGit(repository.SourceDir, "worktree", "remove", "--force", worktreeDir)
+		_, _ = runCodeGit(repository.SourceDir, "branch", "-D", "--", branch)
 		return err
 	}
 	session.SourceWorkDir = repository.SourceDir

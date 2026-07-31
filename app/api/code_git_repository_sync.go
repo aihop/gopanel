@@ -23,13 +23,16 @@ var codeGitScanExcludedDirectories = map[string]struct{}{
 }
 
 type codePreparedRepository struct {
-	SourceDir    string
-	TargetBranch string
-	BaseCommit   string
-	RemoteName   string
-	RemoteBranch string
-	RemoteCommit string
-	SyncStatus   string
+	SourceDir       string
+	ParentSourceDir string
+	GitlinkPath     string
+	TargetBranch    string
+	BaseCommit      string
+	RemoteName      string
+	RemoteBranch    string
+	RemoteCommit    string
+	SyncStatus      string
+	Snapshot        bool
 }
 
 func discoverCodeRepositoryRoots(sourceDirs []string) ([]string, error) {
@@ -63,9 +66,6 @@ func discoverCodeRepositoryRoots(sourceDirs []string) ([]string, error) {
 			if err != nil || root != path {
 				return nil
 			}
-			if superproject, _ := runCodeGit(path, "rev-parse", "--show-superproject-working-tree"); strings.TrimSpace(superproject) != "" {
-				return filepath.SkipDir
-			}
 			if _, exists := seen[root]; !exists {
 				seen[root] = struct{}{}
 				repositories = append(repositories, root)
@@ -84,33 +84,41 @@ func discoverCodeRepositoryRoots(sourceDirs []string) ([]string, error) {
 }
 
 func prepareCodeRepository(sourceDir string) (codePreparedRepository, error) {
-	status, err := runCodeGit(sourceDir, "status", "--porcelain")
+	status, err := codeRepositoryStatus(sourceDir, false)
 	if err != nil {
 		return codePreparedRepository{}, err
 	}
-	if strings.TrimSpace(status) != "" {
-		return codePreparedRepository{}, fmt.Errorf("源仓库 %s 存在未提交变更", filepath.Base(sourceDir))
+	return prepareCodeRepositoryCandidate(codeRepositoryCandidate{SourceDir: sourceDir, Dirty: strings.TrimSpace(status) != ""}, false)
+}
+
+func prepareCodeRepositoryCandidate(candidate codeRepositoryCandidate, includeUncommitted bool) (codePreparedRepository, error) {
+	dirty := candidate.Dirty
+	if dirty && !includeUncommitted {
+		return codePreparedRepository{}, fmt.Errorf("源仓库 %s 存在未提交变更；如需保留这些修改，请启用未提交改动快照", filepath.Base(candidate.SourceDir))
 	}
-	targetBranch, err := runCodeGit(sourceDir, "branch", "--show-current")
+	targetBranch, err := runCodeGit(candidate.SourceDir, "branch", "--show-current")
 	if err != nil || strings.TrimSpace(targetBranch) == "" {
-		return codePreparedRepository{}, fmt.Errorf("源仓库 %s 当前处于 detached HEAD，无法确定目标分支", filepath.Base(sourceDir))
+		return codePreparedRepository{}, fmt.Errorf("源仓库 %s 当前处于 detached HEAD，无法确定目标分支", filepath.Base(candidate.SourceDir))
 	}
-	prepared := codePreparedRepository{SourceDir: sourceDir, TargetBranch: targetBranch, SyncStatus: "local"}
-	remoteName, remoteRef := codeRepositoryRemoteTracking(sourceDir, targetBranch)
+	prepared := codePreparedRepository{
+		SourceDir: candidate.SourceDir, ParentSourceDir: candidate.ParentSourceDir,
+		GitlinkPath: candidate.GitlinkPath, TargetBranch: targetBranch, SyncStatus: "local", Snapshot: dirty,
+	}
+	remoteName, remoteRef := codeRepositoryRemoteTracking(candidate.SourceDir, targetBranch)
 	if remoteName != "" {
-		if _, err := fetchCodeRepository(sourceDir, remoteName); err != nil {
-			return codePreparedRepository{}, fmt.Errorf("同步仓库 %s 失败：%w", filepath.Base(sourceDir), err)
+		if _, err := fetchCodeRepository(candidate.SourceDir, remoteName); err != nil {
+			return codePreparedRepository{}, fmt.Errorf("同步仓库 %s 失败：%w", filepath.Base(candidate.SourceDir), err)
 		}
 		if remoteRef == "" {
 			candidate := "refs/remotes/" + remoteName + "/" + targetBranch
-			if _, err := runCodeGit(sourceDir, "show-ref", "--verify", candidate); err == nil {
+			if _, err := runCodeGit(prepared.SourceDir, "show-ref", "--verify", candidate); err == nil {
 				remoteRef = candidate
 			} else {
 				remoteName = ""
 			}
 		}
 	}
-	baseCommit, remoteCommit, syncStatus, err := fastForwardCodeRepository(sourceDir, targetBranch, remoteRef)
+	baseCommit, remoteCommit, syncStatus, err := codeRepositoryBaseline(prepared.SourceDir, targetBranch, remoteRef, dirty)
 	if err != nil {
 		return codePreparedRepository{}, err
 	}
@@ -120,6 +128,27 @@ func prepareCodeRepository(sourceDir string) (codePreparedRepository, error) {
 	prepared.RemoteCommit = remoteCommit
 	prepared.SyncStatus = syncStatus
 	return prepared, nil
+}
+
+func codeRepositoryBaseline(sourceDir, targetBranch, remoteRef string, dirty bool) (string, string, string, error) {
+	if dirty {
+		localCommit, err := runCodeGit(sourceDir, "rev-parse", targetBranch)
+		if err != nil {
+			return "", "", "", err
+		}
+		if remoteRef == "" {
+			return localCommit, "", "snapshot", nil
+		}
+		remoteCommit, err := runCodeGit(sourceDir, "rev-parse", remoteRef)
+		if err != nil {
+			return "", "", "", fmt.Errorf("远端目标分支不可用：%s", remoteRef)
+		}
+		if localCommit != remoteCommit {
+			return "", "", "", fmt.Errorf("源仓库 %s 存在未提交变更且本地分支未与远端同步，请先处理分支差异", filepath.Base(sourceDir))
+		}
+		return localCommit, remoteCommit, "snapshot", nil
+	}
+	return fastForwardCodeRepository(sourceDir, targetBranch, remoteRef)
 }
 
 func codeRemoteBranch(remoteName, remoteRef, fallback string) string {
@@ -245,17 +274,18 @@ func repositoryWithinSourceDirs(repository string, sourceDirs []string) bool {
 	return false
 }
 
-func prepareDiscoveredCodeRepositories(sourceDirs []string) ([]codePreparedRepository, error) {
-	roots, err := discoverCodeRepositoryRoots(sourceDirs)
+func prepareDiscoveredCodeRepositories(sourceDirs []string, includeUncommitted ...bool) ([]codePreparedRepository, error) {
+	candidates, err := discoverCodeRepositoryCandidates(sourceDirs)
 	if err != nil {
 		return nil, err
 	}
-	if len(roots) == 0 {
+	if len(candidates) == 0 {
 		return nil, errors.New("项目目录中未发现 Git 仓库")
 	}
-	prepared := make([]codePreparedRepository, 0, len(roots))
-	for _, root := range roots {
-		repository, err := prepareCodeRepository(root)
+	allowSnapshot := len(includeUncommitted) > 0 && includeUncommitted[0]
+	prepared := make([]codePreparedRepository, 0, len(candidates))
+	for _, candidate := range candidates {
+		repository, err := prepareCodeRepositoryCandidate(candidate, allowSnapshot)
 		if err != nil {
 			return nil, err
 		}
