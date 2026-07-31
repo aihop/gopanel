@@ -368,7 +368,7 @@ const defaultViewport = viewportMeta?.content || "initial-scale=1, minimum-scale
 router.afterEach(route => {
 	if (!viewportMeta) return
 	viewportMeta.content = route.path === "/mobile" || route.path.startsWith("/mobile/")
-		? "width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no"
+		? "width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
 		: defaultViewport
 })
 
