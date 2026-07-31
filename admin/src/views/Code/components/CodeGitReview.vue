@@ -5,9 +5,9 @@ import { useI18n } from "vue-i18n"
 import { useDialog, useMessage } from "naive-ui"
 import Icon from "@/components/common/Icon.vue"
 import CodeDeliveryPush from "./CodeDeliveryPush.vue"
-import { commitCodeGitChanges, getCodeGitDiff, getCodeGitStatus, mergeCodeSessionWorktree, updateCodeGitStage } from "@/api/modules/codeGit"
+import { commitCodeGitChanges, getCodeDeliveryJob, getCodeGitDiff, getCodeGitStatus, mergeCodeSessionWorktree, updateCodeGitStage } from "@/api/modules/codeGit"
 import { getCodeSession } from "@/api/modules/code"
-import type { CodeGitDiffKind, CodeGitFile, CodeGitRepository, CodeGitStatus } from "@/api/interface/codeGit"
+import type { CodeDeliveryJob, CodeGitDiffKind, CodeGitFile, CodeGitRepository, CodeGitStatus } from "@/api/interface/codeGit"
 import { codeGitReviewMessages } from "../codeGitReviewMessages"
 
 const props = defineProps<{ sessionId: number | null; active: boolean }>()
@@ -29,6 +29,7 @@ const isolationMode = ref("")
 const commitMessage = ref("")
 const deliveryLoading = ref(false)
 const deliveryPushKey = ref(0)
+const deliveryJob = ref<CodeDeliveryJob | null>(null)
 let statusPending = false
 let diffSequence = 0
 
@@ -63,8 +64,16 @@ const commitRepository = computed(() => {
 	return isolatedRepositories.value.find(repository => repository.stagedCount > 0) || null
 })
 const hasIsolation = computed(() => Boolean(worktreeBranch.value || isolationMode.value === "multi_worktree"))
-const canCommit = computed(() => Boolean(hasIsolation.value && commitRepository.value && commitMessage.value.trim()))
-const canMerge = computed(() => Boolean(hasIsolation.value && status.value && status.value.files === 0))
+const deliveryActive = computed(() => ["queued", "running"].includes(deliveryJob.value?.status || ""))
+const canCommit = computed(() => Boolean(hasIsolation.value && !deliveryActive.value && commitRepository.value && commitMessage.value.trim()))
+const canMerge = computed(() => Boolean(hasIsolation.value && !deliveryActive.value && status.value && status.value.files === 0))
+const deliveryStatusLabel = computed(() => {
+	if (!deliveryJob.value) return ""
+	return t(`code.gitDeliveryStatus_${deliveryJob.value.status}`, {
+		position: deliveryJob.value.queuePosition,
+		progress: deliveryJob.value.progress
+	})
+})
 const deliveryLabel = computed(() => {
 	if (isolationMode.value === "multi_worktree") {
 		return t("code.gitMultiWorktree", { count: isolatedRepositories.value.length })
@@ -130,10 +139,11 @@ const loadStatus = async (silent = false) => {
 	if (!silent) loading.value = true
 	else refreshing.value = true
 	try {
-		const [response, sessionResponse] = await Promise.all([
-			getCodeGitStatus(props.sessionId), getCodeSession(props.sessionId)
+		const [response, sessionResponse, deliveryResponse] = await Promise.all([
+			getCodeGitStatus(props.sessionId), getCodeSession(props.sessionId), getCodeDeliveryJob(props.sessionId)
 		])
 		status.value = response.data
+		deliveryJob.value = deliveryResponse.data
 		worktreeBranch.value = sessionResponse.data.session.worktreeBranch || ""
 		isolationMode.value = sessionResponse.data.session.isolationMode || ""
 		loadError.value = ""
@@ -176,16 +186,8 @@ const mergeWorktree = () => {
 			deliveryLoading.value = true
 			try {
 				const response = await mergeCodeSessionWorktree(props.sessionId as number)
-				if (response.data.status === "conflict") {
-					message.error(t("code.gitMergeConflict", {
-						repository: response.data.repositoryName || "-", files: response.data.conflictFiles?.join(", ") || "-"
-					}))
-					return
-				}
-				worktreeBranch.value = ""
-				isolationMode.value = ""
-				deliveryPushKey.value++
-				message.success(t("code.gitMergeSuccess"))
+				deliveryJob.value = response.data
+				message.success(t("code.gitDeliveryQueued"))
 				await loadStatus(true)
 			} catch (error) {
 				message.error(error instanceof Error ? error.message : t("code.gitMergeFailed"))
@@ -225,6 +227,7 @@ watch(
 	() => props.sessionId,
 	() => {
 		status.value = null
+		deliveryJob.value = null
 		selectedKey.value = ""
 		diffContent.value = ""
 		loadError.value = ""
@@ -275,6 +278,14 @@ useIntervalFn(() => {
 				<div v-if="commitRepository" class="truncate text-[11px] text-slate-400">
 					{{ t("code.gitCommitRepository", { repository: commitRepository.name }) }}
 				</div>
+				<n-alert v-if="deliveryJob" :type="deliveryJob.status === 'failed' || deliveryJob.status === 'conflict' ? 'error' : deliveryJob.status === 'completed' ? 'success' : 'info'" :show-icon="false">
+					<div class="flex items-center justify-between gap-2 text-xs">
+						<span>{{ deliveryStatusLabel }}</span>
+						<span v-if="deliveryActive">{{ t(`code.gitDeliveryStage_${deliveryJob.stage}`) }}</span>
+					</div>
+					<n-progress v-if="deliveryActive" class="mt-2" type="line" :percentage="deliveryJob.progress" :show-indicator="false" />
+					<div v-if="deliveryJob.errorMessage" class="mt-2 break-words text-xs">{{ deliveryJob.errorMessage }}</div>
+				</n-alert>
 				<n-input v-model:value="commitMessage" size="small" :placeholder="t('code.gitCommitPlaceholder')" :disabled="deliveryLoading" @keyup.enter="commitChanges" />
 				<div class="grid grid-cols-2 gap-2">
 					<n-button size="small" type="primary" :disabled="!canCommit" :loading="deliveryLoading" @click="commitChanges">{{ t("code.gitCommit") }}</n-button>

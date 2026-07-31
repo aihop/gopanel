@@ -407,6 +407,15 @@ func GetAISessionState(c fiber.Ctx) error {
 			recentMessages = messages
 		}
 	}
+	var deliveryJob *codeDeliveryJobView
+	deliveryJob, err = loadCodeDeliveryJobView(session.ID)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		deliveryJob = nil
+		err = nil
+	}
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
 	return c.JSON(e.Succ(fiber.Map{
 		"session":           session,
 		"codexRuntime":      getCodexRuntimeState(session),
@@ -422,5 +431,6 @@ func GetAISessionState(c fiber.Ctx) error {
 		"changedFiles":      changedFiles,
 		"latestRun":         latestRun,
 		"tokenUsage":        tokenUsage,
+		"delivery":          deliveryJob,
 	}))
 }

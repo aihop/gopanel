@@ -10,16 +10,22 @@ import (
 )
 
 type codeTaskSummary struct {
-	DurationMS   int64  `json:"durationMs"`
-	Executor     string `json:"executor,omitempty"`
-	Model        string `json:"model,omitempty"`
-	GitStatus    string `json:"gitStatus,omitempty"`
-	GitError     string `json:"gitError,omitempty"`
-	Branch       string `json:"branch,omitempty"`
-	Additions    int    `json:"additions"`
-	Deletions    int    `json:"deletions"`
-	ChangedFiles int    `json:"changedFiles"`
-	HasDiff      bool   `json:"hasDiff"`
+	DurationMS            int64  `json:"durationMs"`
+	Executor              string `json:"executor,omitempty"`
+	Model                 string `json:"model,omitempty"`
+	GitStatus             string `json:"gitStatus,omitempty"`
+	GitError              string `json:"gitError,omitempty"`
+	Branch                string `json:"branch,omitempty"`
+	Additions             int    `json:"additions"`
+	Deletions             int    `json:"deletions"`
+	ChangedFiles          int    `json:"changedFiles"`
+	HasDiff               bool   `json:"hasDiff"`
+	DeliveryStatus        string `json:"deliveryStatus,omitempty"`
+	DeliveryStage         string `json:"deliveryStage,omitempty"`
+	DeliveryProgress      int    `json:"deliveryProgress"`
+	DeliveryQueuePosition int    `json:"deliveryQueuePosition"`
+	DeliveryAttempt       int    `json:"deliveryAttempt"`
+	DeliveryError         string `json:"deliveryError,omitempty"`
 }
 
 type codeTaskListItem struct {
@@ -62,6 +68,9 @@ func buildCodeTaskListItems(tasks []*model.AITask, includeGit bool) ([]codeTaskL
 	if err := loadCodeTaskRunSummaries(taskIDs, summaries); err != nil {
 		return nil, err
 	}
+	if err := loadCodeTaskDeliverySummaries(sessionIDs, summaries, tasks); err != nil {
+		return nil, err
+	}
 	if includeGit {
 		if err := loadCodeTaskGitSummaries(tasks, sessionIDs, summaries, make(map[string]codeTaskDiffStats)); err != nil {
 			return nil, err
@@ -71,6 +80,39 @@ func buildCodeTaskListItems(tasks []*model.AITask, includeGit bool) ([]codeTaskL
 		items = append(items, codeTaskListItem{AITask: task, Summary: summaries[task.ID]})
 	}
 	return items, nil
+}
+
+func loadCodeTaskDeliverySummaries(sessionIDs []uint, summaries map[uint]codeTaskSummary, tasks []*model.AITask) error {
+	if len(sessionIDs) == 0 {
+		return nil
+	}
+	var jobs []model.AICodeDeliveryJob
+	if err := global.DB.Where("session_id IN ?", sessionIDs).Find(&jobs).Error; err != nil {
+		return err
+	}
+	jobsBySession := make(map[uint]model.AICodeDeliveryJob, len(jobs))
+	for _, job := range jobs {
+		jobsBySession[job.SessionID] = job
+	}
+	for _, task := range tasks {
+		job, exists := jobsBySession[task.SessionID]
+		if !exists {
+			continue
+		}
+		summary := summaries[task.ID]
+		summary.DeliveryStatus = job.Status
+		summary.DeliveryStage = job.Stage
+		summary.DeliveryProgress = job.Progress
+		summary.DeliveryAttempt = job.Attempt
+		summary.DeliveryError = job.ErrorMessage
+		if job.Status == codeDeliveryJobQueued {
+			if view, err := loadCodeDeliveryJobView(job.SessionID); err == nil {
+				summary.DeliveryQueuePosition = view.QueuePosition
+			}
+		}
+		summaries[task.ID] = summary
+	}
+	return nil
 }
 
 func loadCodeTaskRunSummaries(taskIDs []uint, summaries map[uint]codeTaskSummary) error {
