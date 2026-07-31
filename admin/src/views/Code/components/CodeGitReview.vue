@@ -250,7 +250,48 @@ useIntervalFn(() => {
 
 <template>
 	<div class="flex h-full min-h-0 bg-white">
-		<aside class="flex w-80 shrink-0 flex-col border-r border-slate-200 bg-slate-50/70">
+		<section class="flex min-w-0 flex-1 flex-col bg-[#0f172a] text-slate-100">
+			<div
+				v-if="selectedEntry"
+				class="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-slate-700 px-4"
+			>
+				<div class="min-w-0">
+					<div class="truncate text-sm font-semibold">{{ selectedEntry.file.path }}</div>
+					<div class="text-[11px] text-slate-400">
+						{{ t(selectedEntry.kind === "staged" ? "code.gitStagedDiff" : "code.gitWorkingDiff") }}
+					</div>
+				</div>
+				<n-button
+					v-if="selectedEntry.file.indexStatus !== 'D' && selectedEntry.file.worktreeStatus !== 'D'"
+					size="small"
+					secondary
+					@click="openSelectedFile"
+				>
+					{{ t("code.gitOpenFile") }}
+				</n-button>
+			</div>
+			<n-spin :show="diffLoading" class="min-h-0 flex-1">
+				<div v-if="!selectedEntry" class="flex h-full items-center justify-center">
+					<n-empty :description="t('code.gitSelectFile')" />
+				</div>
+				<div v-else-if="!diffLoading && !diffContent" class="flex h-full items-center justify-center">
+					<n-empty :description="t('code.gitDiffEmpty')" />
+				</div>
+				<div v-else class="flex h-full min-h-0 flex-col">
+					<n-alert v-if="diffTruncated" type="warning" :show-icon="false" class="m-3 mb-0">
+						{{ t("code.gitDiffTruncated") }}
+					</n-alert>
+					<pre class="min-h-0 flex-1 overflow-auto p-4 font-mono text-xs leading-5"><span
+						v-for="(line, index) in diffLines"
+						:key="index"
+						class="block min-w-max px-1"
+						:class="diffLineClass(line)"
+					>{{ line || " " }}</span></pre>
+				</div>
+			</n-spin>
+		</section>
+
+		<aside class="flex w-80 shrink-0 flex-col border-l border-slate-200 bg-slate-50/70">
 			<div class="border-b border-slate-200 p-3">
 				<div class="flex items-center justify-between gap-3">
 					<div>
@@ -377,47 +418,6 @@ useIntervalFn(() => {
 				</n-scrollbar>
 			</n-spin>
 		</aside>
-
-		<section class="flex min-w-0 flex-1 flex-col bg-[#0f172a] text-slate-100">
-			<div
-				v-if="selectedEntry"
-				class="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-slate-700 px-4"
-			>
-				<div class="min-w-0">
-					<div class="truncate text-sm font-semibold">{{ selectedEntry.file.path }}</div>
-					<div class="text-[11px] text-slate-400">
-						{{ t(selectedEntry.kind === "staged" ? "code.gitStagedDiff" : "code.gitWorkingDiff") }}
-					</div>
-				</div>
-				<n-button
-					v-if="selectedEntry.file.indexStatus !== 'D' && selectedEntry.file.worktreeStatus !== 'D'"
-					size="small"
-					secondary
-					@click="openSelectedFile"
-				>
-					{{ t("code.gitOpenFile") }}
-				</n-button>
-			</div>
-			<n-spin :show="diffLoading" class="min-h-0 flex-1">
-				<div v-if="!selectedEntry" class="flex h-full items-center justify-center">
-					<n-empty :description="t('code.gitSelectFile')" />
-				</div>
-				<div v-else-if="!diffLoading && !diffContent" class="flex h-full items-center justify-center">
-					<n-empty :description="t('code.gitDiffEmpty')" />
-				</div>
-				<div v-else class="flex h-full min-h-0 flex-col">
-					<n-alert v-if="diffTruncated" type="warning" :show-icon="false" class="m-3 mb-0">
-						{{ t("code.gitDiffTruncated") }}
-					</n-alert>
-					<pre class="min-h-0 flex-1 overflow-auto p-4 font-mono text-xs leading-5"><span
-						v-for="(line, index) in diffLines"
-						:key="index"
-						class="block min-w-max px-1"
-						:class="diffLineClass(line)"
-					>{{ line || " " }}</span></pre>
-				</div>
-			</n-spin>
-		</section>
 	</div>
 </template>
 
