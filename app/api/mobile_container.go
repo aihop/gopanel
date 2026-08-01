@@ -43,8 +43,20 @@ type mobileContainerPublishWebsite struct {
 	PrimaryDomain string `json:"primaryDomain"`
 }
 
+type mobileContainerListReader interface {
+	Page(req *dto.PageContainer) (int64, interface{}, error)
+	ContainerListStats() ([]dto.ContainerListStats, error)
+}
+
 func GetMobileContainers(c fiber.Ctx) error {
-	containerManager := service.NewIContainerService()
+	data, err := loadMobileContainerList(service.NewIContainerService())
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	return c.JSON(e.Succ(data))
+}
+
+func loadMobileContainerList(containerManager mobileContainerListReader) (fiber.Map, error) {
 	total, result, err := containerManager.Page(&dto.PageContainer{
 		PageInfo: dto.PageInfo{Page: 1, Limit: 1000},
 		State:    "all",
@@ -52,16 +64,13 @@ func GetMobileContainers(c fiber.Ctx) error {
 		Order:    "ascending",
 	})
 	if err != nil {
-		return c.JSON(e.Fail(err))
+		return nil, err
 	}
 	containers, ok := result.([]dto.ContainerInfo)
 	if !ok {
-		return c.JSON(e.Fail(errors.New("容器列表格式无效")))
+		return nil, errors.New("容器列表格式无效")
 	}
-	stats, err := containerManager.ContainerListStats()
-	if err != nil {
-		return c.JSON(e.Fail(err))
-	}
+	stats, _ := containerManager.ContainerListStats()
 	statsByID := make(map[string]dto.ContainerListStats, len(stats))
 	for _, stat := range stats {
 		statsByID[stat.ContainerID] = stat
@@ -89,12 +98,12 @@ func GetMobileContainers(c fiber.Ctx) error {
 			MemoryPercent: stat.MemoryPercent,
 		})
 	}
-	return c.JSON(e.Succ(fiber.Map{
+	return fiber.Map{
 		"items":   items,
 		"total":   total,
 		"running": running,
 		"stopped": int(total) - running,
-	}))
+	}, nil
 }
 
 func OperateMobileContainer(c fiber.Ctx) error {
