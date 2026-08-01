@@ -2,6 +2,7 @@ import { codeProjectMessages } from "@/i18n/locales/codeProject"
 
 const providerMessages = {
 	zh: {
+		newAiTask: "新建 AI 任务",
 		provider: "模型连接",
 		providerDefault: "沿用终端默认",
 		providerCustom: "本会话自定义",
@@ -17,6 +18,7 @@ const providerMessages = {
 		executorFullAutoOnly: "该代码助手暂不支持交互式审批，只能使用完全自动模式。"
 	},
 	en: {
+		newAiTask: "New AI task",
 		provider: "Model connection",
 		providerDefault: "Use terminal default",
 		providerCustom: "Customize this session",

@@ -86,6 +86,14 @@ type WebsiteUpdate struct {
 	Upstreams  []WebsiteUpstream `json:"upstreams"`
 }
 
+type WebsiteDomainBindingUpdate struct {
+	WebsiteID                uint   `json:"websiteId" validate:"required"`
+	PrimaryDomain            string `json:"primaryDomain" validate:"required"`
+	OtherDomains             string `json:"otherDomains"`
+	RedirectDomainsToPrimary bool   `json:"redirectDomainsToPrimary"`
+	Confirm                  bool   `json:"confirm" validate:"required"`
+}
+
 type WebsiteLogRead struct {
 	WebsiteID uint   `json:"websiteId" validate:"required"`
 	Page      int    `json:"page" validate:"required"`

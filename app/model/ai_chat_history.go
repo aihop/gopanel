@@ -2,8 +2,8 @@ package model
 
 import "time"
 
-// AIGroup 记录 Code 项目。保留原表名以兼容已有数据。
-type AIGroup struct {
+// AIProject 记录 Code 项目。
+type AIProject struct {
 	ID                 uint                       `gorm:"primaryKey" json:"id"`
 	CreatedAt          time.Time                  `json:"createdAt"`
 	UpdatedAt          time.Time                  `json:"updatedAt"`
@@ -12,6 +12,8 @@ type AIGroup struct {
 	WorkDir            string                     `gorm:"column:work_dir;type:varchar(1024);not null;default:''" json:"workDir"`
 	SourceDirs         []string                   `gorm:"column:source_dirs;serializer:json;type:text" json:"sourceDirs"`
 	CreatorID          uint                       `gorm:"column:creator_id;type:integer;not null;index" json:"creatorId"`
+	PrimaryRepository  string                     `gorm:"column:primary_repository;type:varchar(1024)" json:"primaryRepository,omitempty"`
+	DeliveryBranch     string                     `gorm:"column:delivery_branch;type:varchar(255);not null;default:''" json:"deliveryBranch"`
 	RequireQualityGate bool                       `gorm:"column:require_quality_gate;not null;default:false" json:"requireQualityGate"`
 	MonthlyTokenBudget int64                      `gorm:"column:monthly_token_budget;not null;default:0" json:"monthlyTokenBudget"`
 	TaskCount          int64                      `gorm:"-" json:"taskCount"`
@@ -29,8 +31,8 @@ type AIProjectExecutionSummary struct {
 	UpdatedAt            *time.Time `json:"updatedAt,omitempty"`
 }
 
-func (AIGroup) TableName() string {
-	return "ai_groups"
+func (AIProject) TableName() string {
+	return "ai_projects"
 }
 
 // AITask 记录一次 AI 终端的会话/任务，允许用户后续根据 ID 恢复任务
@@ -40,7 +42,7 @@ type AITask struct {
 	UpdatedAt       time.Time `json:"updatedAt"`
 	UserID          uint      `gorm:"column:user_id;type:integer;not null;index" json:"userId"`
 	SessionID       uint      `gorm:"column:session_id;type:integer;index" json:"sessionId"`
-	ProjectID       uint      `gorm:"column:project_id;type:integer;index;comment:所属项目/团队组ID，用于未来的团队共享记忆库" json:"projectId"`
+	ProjectID       uint      `gorm:"column:project_id;type:integer;index;comment:所属项目ID" json:"projectId"`
 	Title           string    `gorm:"column:title;type:varchar(255);not null" json:"title"`
 	AgentName       string    `gorm:"column:agent_name;type:varchar(64)" json:"agentName"`
 	NativeSessionID string    `gorm:"column:native_session_id;type:varchar(255)" json:"nativeSessionId"`
@@ -80,6 +82,13 @@ type AIDevSession struct {
 	WorkDir           string     `gorm:"column:work_dir;type:varchar(255);not null" json:"workDir"`
 	SourceWorkDir     string     `gorm:"column:source_work_dir;type:varchar(255)" json:"sourceWorkDir,omitempty"`
 	WorktreeBranch    string     `gorm:"column:worktree_branch;type:varchar(255)" json:"worktreeBranch,omitempty"`
+	TargetBranch      string     `gorm:"column:target_branch;type:varchar(255)" json:"targetBranch,omitempty"`
+	BaseCommit        string     `gorm:"column:base_commit;type:varchar(64)" json:"baseCommit,omitempty"`
+	RemoteName        string     `gorm:"column:remote_name;type:varchar(255)" json:"remoteName,omitempty"`
+	RemoteBranch      string     `gorm:"column:remote_branch;type:varchar(255)" json:"remoteBranch,omitempty"`
+	RemoteCommit      string     `gorm:"column:remote_commit;type:varchar(64)" json:"remoteCommit,omitempty"`
+	RepositorySync    string     `gorm:"column:repository_sync;type:varchar(32)" json:"repositorySync,omitempty"`
+	IsolationMode     string     `gorm:"column:isolation_mode;type:varchar(32);not null;default:''" json:"isolationMode,omitempty"`
 	Status            string     `gorm:"column:status;type:varchar(32);default:'active'" json:"status"`
 	CurrentStage      string     `gorm:"column:current_stage;type:varchar(64);default:'idle'" json:"currentStage"`
 	LastTaskID        uint       `gorm:"column:last_task_id;type:integer;index" json:"lastTaskId"`
@@ -89,6 +98,8 @@ type AIDevSession struct {
 	ProviderAPIKey    string     `gorm:"column:codex_api_key;type:text" json:"-"`
 	ApprovalPolicy    string     `gorm:"column:approval_policy;type:varchar(32);not null;default:'safe_auto'" json:"approvalPolicy"`
 	LastInstructionAt *time.Time `gorm:"column:last_instruction_at" json:"lastInstructionAt,omitempty"`
+	DeliveredAt       *time.Time `gorm:"column:delivered_at;index" json:"deliveredAt,omitempty"`
+	CurrentTaskTitle  string     `gorm:"-" json:"currentTaskTitle,omitempty"`
 }
 
 func (AIDevSession) TableName() string {

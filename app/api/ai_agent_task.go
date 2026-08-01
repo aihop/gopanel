@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"strconv"
 	"time"
 
 	"github.com/aihop/gopanel/app/e"
@@ -12,7 +13,6 @@ import (
 	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/utils/token"
 	"github.com/gofiber/fiber/v3"
-	"strconv"
 )
 
 func GetAITasks(c fiber.Ctx) error {
@@ -21,19 +21,32 @@ func GetAITasks(c fiber.Ctx) error {
 	limit, _ := strconv.Atoi(c.Query("limit", "20"))
 	page, limit = normalizeCodePage(page, limit, 20)
 	projectID, _ := strconv.Atoi(c.Query("projectId", "0"))
+	includeGit := c.Query("includeGit") != "false"
 	aiRepo := repo.NewAITaskRepo()
 	var tasks []*model.AITask
 	var total int64
 	var err error
 	if projectID > 0 {
-		tasks, total, err = aiRepo.GetTasksByProjectAndUserID(uint(projectID), claims.UserId, page, limit)
+		project, projectErr := getCodeProjectWithPermission(uint(projectID), claims)
+		if projectErr != nil {
+			return c.JSON(e.Fail(projectErr))
+		}
+		if claims.Role == constant.UserRoleSuper {
+			tasks, total, err = aiRepo.GetTasksByProjectID(project.ID, page, limit)
+		} else {
+			tasks, total, err = aiRepo.GetTasksByProjectAndUserID(project.ID, claims.UserId, page, limit)
+		}
 	} else {
 		tasks, total, err = aiRepo.GetTasksByUserID(claims.UserId, page, limit)
 	}
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	return c.JSON(e.Succ(fiber.Map{"items": tasks, "total": total}))
+	items, err := buildCodeTaskListItems(tasks, includeGit)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	return c.JSON(e.Succ(fiber.Map{"items": items, "total": total}))
 }
 func GetAITaskMessages(c fiber.Ctx) error {
 	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
@@ -96,11 +109,15 @@ func DeleteAITask(c fiber.Ctx) error {
 			return c.JSON(e.Fail(err))
 		}
 		backgroundCodeRunner.cancel(task.SessionID)
+		backgroundCodeDelivery.cancelSession(task.SessionID)
 		stopContext, cancelStop := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancelStop()
 		codeExecutions.cancelSessionAndWait(stopContext, session.ID)
 		if !backgroundCodeRunner.wait(stopContext, task.SessionID) || stopContext.Err() != nil {
 			return c.JSON(e.Fail(errors.New("停止 Code 会话超时，请稍后重试")))
+		}
+		if err := cleanupDeliveredCodeSessionWorktrees(session); err != nil {
+			global.LOG.Warnf("Cleanup delivered Code worktrees %d skipped: %v", session.ID, err)
 		}
 		if err := aiRepo.DeleteTaskAndSession(uint(taskID), session.ID); err != nil {
 			return c.JSON(e.Fail(err))

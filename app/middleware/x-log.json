@@ -264,6 +264,17 @@
 		"formatZH": "手机端容器 [containerID] 执行 [operation]",
 		"formatEN": "mobile container [containerID] [operation]"
 	},
+	"/mobile/app/resources/websites/domains": {
+		"bodyKeys": [
+			"websiteId",
+			"primaryDomain",
+			"otherDomains"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "手机端修改网站 [websiteId] 域名绑定：[primaryDomain] [otherDomains]",
+		"formatEN": "mobile update website [websiteId] domain bindings: [primaryDomain] [otherDomains]"
+	},
 	"/container/prune": {
 		"bodyKeys": [
 			"pruneType"

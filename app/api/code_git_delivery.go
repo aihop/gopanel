@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"errors"
-	"fmt"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -19,11 +18,18 @@ import (
 )
 
 type codeGitDeliveryResult struct {
-	Status        string   `json:"status"`
-	Commit        string   `json:"commit,omitempty"`
-	Branch        string   `json:"branch,omitempty"`
-	ConflictFiles []string `json:"conflictFiles,omitempty"`
+	Status         string                         `json:"status"`
+	ResultType     string                         `json:"resultType,omitempty"`
+	ErrorMessage   string                         `json:"errorMessage,omitempty"`
+	Commit         string                         `json:"commit,omitempty"`
+	Branch         string                         `json:"branch,omitempty"`
+	RepositoryID   string                         `json:"repositoryId,omitempty"`
+	RepositoryName string                         `json:"repositoryName,omitempty"`
+	ConflictFiles  []string                       `json:"conflictFiles,omitempty"`
+	Repositories   []codeRepositoryDeliveryResult `json:"repositories,omitempty"`
 }
+
+const codeDeliveryQueueTimeout = 2 * time.Minute
 
 func validateCodeGitCommitMessage(message string) (string, error) {
 	message = strings.TrimSpace(message)
@@ -79,12 +85,15 @@ func mergeCodeSessionWorktree(session *model.AIDevSession) (codeGitDeliveryResul
 	if strings.TrimSpace(worktreeStatus) != "" {
 		return codeGitDeliveryResult{}, errors.New("Worktree 仍有未提交变更，请先提交")
 	}
-	sourceStatus, err := runCodeGit(session.SourceWorkDir, "status", "--porcelain")
-	if err != nil {
+	targetBranch := session.TargetBranch
+	if targetBranch == "" {
+		targetBranch, _ = runCodeGit(session.SourceWorkDir, "branch", "--show-current")
+	}
+	if _, err := refreshCodeRepositoryTarget(session.SourceWorkDir, targetBranch, session.RemoteName); err != nil {
 		return codeGitDeliveryResult{}, err
 	}
-	if strings.TrimSpace(sourceStatus) != "" {
-		return codeGitDeliveryResult{}, errors.New("源仓库存在未提交变更，无法安全合并")
+	if err := syncCodeWorktreeWithTarget(session.WorkDir, targetBranch); err != nil {
+		return codeGitDeliveryResult{}, err
 	}
 	if _, err := runCodeGit(session.SourceWorkDir, "merge", "--no-ff", "--no-edit", session.WorktreeBranch); err != nil {
 		conflicts := codeGitConflictFiles(session.SourceWorkDir)
@@ -97,9 +106,6 @@ func mergeCodeSessionWorktree(session *model.AIDevSession) (codeGitDeliveryResul
 	commit, err := runCodeGit(session.SourceWorkDir, "rev-parse", "HEAD")
 	if err != nil {
 		return codeGitDeliveryResult{}, err
-	}
-	if err := cleanupCodeSessionWorktree(session); err != nil {
-		return codeGitDeliveryResult{}, fmt.Errorf("合并成功，但清理 Worktree 失败：%w", err)
 	}
 	return codeGitDeliveryResult{Status: "merged", Commit: commit, Branch: session.WorktreeBranch}, nil
 }
@@ -123,12 +129,12 @@ func runCodeGitDelivery(c fiber.Ctx, action string, operation func(*model.AIDevS
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	lease, err := codeExecutions.acquireSession(context.Background(), session, codeExecutionDelivery, false)
-	if err != nil {
-		return c.JSON(e.Fail(err))
-	}
-	defer lease.Release()
-	result, err := operation(session)
+	var result codeGitDeliveryResult
+	err = runCodeSessionWorkspaceMutation(session, func(current *model.AIDevSession) error {
+		var operationErr error
+		result, operationErr = operation(current)
+		return operationErr
+	})
 	if err != nil {
 		recordCodeAudit(claims.UserId, session.ProjectID, session.ID, action, "failed", session.WorktreeBranch, err.Error(), c.IP(), startedAt, nil)
 		return c.JSON(e.Fail(err))
@@ -151,6 +157,15 @@ func getCodeDeliverySessionContext(c fiber.Ctx) (*model.AIDevSession, error) {
 	if err != nil {
 		return nil, err
 	}
+	if session.IsolationMode == codeIsolationMultiWorktree {
+		if err := validateCodeMultiWorktreeDeliverySession(session, claims); err != nil {
+			return nil, err
+		}
+		return session, nil
+	}
+	if hasCodeMultiRepositoryDelivery(session.ID) {
+		return session, nil
+	}
 	var delivery model.AICodeDelivery
 	if err := global.DB.Where("session_id = ?", session.ID).First(&delivery).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -165,12 +180,11 @@ func getCodeDeliverySessionContext(c fiber.Ctx) (*model.AIDevSession, error) {
 		return nil, errors.New("交付记录与当前会话不匹配")
 	}
 	sourceDirs, err := getAISessionSourceDirs(session.ProjectID, claims)
-	if err != nil || len(sourceDirs) != 1 {
+	if err != nil || len(sourceDirs) == 0 {
 		return nil, errors.New("交付源目录不可用")
 	}
 	storedSource, storedErr := filepath.EvalSymlinks(filepath.Clean(delivery.SourceWorkDir))
-	projectSource, projectErr := filepath.EvalSymlinks(filepath.Clean(sourceDirs[0]))
-	if storedErr != nil || projectErr != nil || storedSource != projectSource {
+	if storedErr != nil || !repositoryWithinSourceDirs(storedSource, sourceDirs) {
 		return nil, errors.New("交付源目录与项目配置不一致")
 	}
 	if err := validateAIProjectWorkDirForClaims(storedSource, claims); err != nil {
@@ -206,12 +220,16 @@ func runCodeWorktreeMerge(c fiber.Ctx, operation func(*model.AIDevSession) (code
 
 func CommitCodeGitChanges(c fiber.Ctx) error {
 	var req struct {
-		Message string `json:"message"`
+		Message      string `json:"message"`
+		RepositoryID string `json:"repositoryId"`
 	}
 	if err := c.Bind().JSON(&req); err != nil {
 		return c.JSON(e.Fail(err))
 	}
 	return runCodeGitDelivery(c, "git_commit", func(session *model.AIDevSession) (codeGitDeliveryResult, error) {
+		if session.IsolationMode == codeIsolationMultiWorktree {
+			return commitCodeSessionRepository(session, req.RepositoryID, req.Message)
+		}
 		return commitCodeSessionWorktree(session, req.Message)
 	})
 }
@@ -227,7 +245,36 @@ func MergeCodeSessionWorktree(c fiber.Ctx) error {
 	if !req.Confirm {
 		return c.JSON(e.Fail(errors.New("合并操作需要明确确认")))
 	}
-	return runCodeWorktreeMerge(c, func(session *model.AIDevSession) (codeGitDeliveryResult, error) {
-		return resumeCodeSessionDelivery(session, claims.UserId)
-	})
+	session, err := getCodeDeliverySessionContext(c)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	job, err := enqueueCodeDeliveryJob(session, claims.UserId, c.IP())
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	view, err := loadCodeDeliveryJobView(job.SessionID)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	return c.JSON(e.Succ(view))
+}
+
+func GetCodeDeliveryJob(c fiber.Ctx) error {
+	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
+	session, err := getCodeDeliverySessionContext(c)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	if session.UserID != claims.UserId && claims.Role != constant.UserRoleSuper {
+		return c.JSON(e.Fail(errors.New("无权访问该交付任务")))
+	}
+	view, err := loadCodeDeliveryJobView(session.ID)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return c.JSON(e.Succ(nil))
+	}
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	return c.JSON(e.Succ(view))
 }

@@ -33,6 +33,7 @@ const showOutput = ref(false)
 const selectedResult = ref<CodeQualityCheckResult | null>(null)
 const selectedCheck = ref<CodeQualityCheck | null>(null)
 let statePending = false
+let deliveryPending = false
 
 const buttonType = computed(() => {
 	if (state.value?.errorSummary || checks.value.some(check => check.lastResult && check.lastResult.status !== "passed")) return "error"
@@ -99,10 +100,16 @@ const loadAudit = async (notify = false) => {
 }
 
 const loadDelivery = async (notify = false) => {
-	if (!props.sessionId) return
+	if (!props.sessionId || deliveryPending) return
+	deliveryPending = true
 	loading.value = true
-	await Promise.all([loadState(notify), loadChecks(notify), loadAudit(notify)])
-	loading.value = false
+	try {
+		await loadState(notify)
+	} finally {
+		loading.value = false
+		deliveryPending = false
+	}
+	void Promise.all([loadChecks(notify), loadAudit(notify)])
 }
 
 const confirmRun = (check: CodeQualityCheck) => {
@@ -228,7 +235,7 @@ useIntervalFn(() => {
 
 					<section class="rounded-2xl border border-slate-200 bg-white p-4">
 						<strong class="text-sm text-slate-800">{{ t("code.changedFiles") }}</strong>
-						<n-empty v-if="!state?.changedFiles.length" size="small" :description="t('code.noChangedFiles')" class="py-6" />
+						<n-empty v-if="!state?.changedFiles?.length" size="small" :description="t('code.noChangedFiles')" class="py-6" />
 						<div v-else class="mt-3 space-y-1.5">
 							<button v-for="file in state.changedFiles" :key="file" type="button" class="flex w-full items-center gap-2 rounded-xl bg-slate-50 px-3 py-2 text-left text-sm text-slate-600 hover:bg-blue-50 hover:text-blue-700" @click="openChangedFile(file)">
 								<Icon name="mdi:file-code-outline" :size="17" /><span class="min-w-0 flex-1 truncate">{{ file }}</span><Icon name="mdi:open-in-new" :size="15" />
@@ -236,7 +243,7 @@ useIntervalFn(() => {
 						</div>
 					</section>
 
-					<section v-if="state?.previews.length" class="rounded-2xl border border-slate-200 bg-white p-4">
+					<section v-if="state?.previews?.length" class="rounded-2xl border border-slate-200 bg-white p-4">
 						<strong class="text-sm text-slate-800">{{ t("code.previews") }}</strong>
 						<div class="mt-3 space-y-2">
 							<a v-for="preview in state.previews" :key="preview.id" :href="previewCanOpen(preview) ? preview.url : undefined" :target="previewCanOpen(preview) ? '_blank' : undefined" rel="noopener noreferrer" class="flex items-center gap-3 rounded-xl bg-slate-50 p-3" :class="previewCanOpen(preview) ? 'hover:bg-blue-50' : 'cursor-not-allowed opacity-60'">
@@ -259,7 +266,7 @@ useIntervalFn(() => {
 
 					<section class="rounded-2xl border border-slate-200 bg-white p-4">
 						<strong class="text-sm text-slate-800">{{ t("code.timeline") }}</strong>
-						<n-empty v-if="!state?.timelineEvents.length" size="small" :description="t('code.noTimeline')" class="py-6" />
+						<n-empty v-if="!state?.timelineEvents?.length" size="small" :description="t('code.noTimeline')" class="py-6" />
 						<div v-else class="mt-4 space-y-4"><div v-for="event in state.timelineEvents" :key="event.id" class="border-l-2 border-blue-200 pl-3"><div class="flex items-center justify-between gap-3"><span class="text-sm font-medium text-slate-800">{{ event.title }}</span><span class="text-xs text-slate-400">{{ new Date(event.createdAt).toLocaleString() }}</span></div><div v-if="event.content" class="mt-1 whitespace-pre-wrap break-words text-xs leading-5 text-slate-500">{{ event.content }}</div></div></div>
 					</section>
 

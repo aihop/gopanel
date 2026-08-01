@@ -106,10 +106,17 @@ func decideAIApproval(c fiber.Ctx, decision string) error {
 	if approval.Status != "pending" {
 		return c.JSON(e.Fail(errors.New("该审批已处理")))
 	}
+	unlockLifecycle := codeSessionLifecycles.lock(approval.SessionID)
+	defer unlockLifecycle()
 
 	var instruction model.AIInstruction
 	var session model.AIDevSession
 	if err := global.DB.Transaction(func(tx *gorm.DB) error {
+		lockedSession, err := lockCodeSessionForDevelopment(tx, approval.SessionID)
+		if err != nil {
+			return err
+		}
+		session = *lockedSession
 		result := tx.Model(&model.AIApproval{}).
 			Where("id = ? AND status = ?", approval.ID, "pending").
 			Updates(map[string]any{
@@ -124,9 +131,6 @@ func decideAIApproval(c fiber.Ctx, decision string) error {
 		}
 		if err := tx.Where("id = ? AND session_id = ?", approval.InstructionID, approval.SessionID).First(&instruction).Error; err != nil {
 			return errors.New("对应指令不存在")
-		}
-		if err := tx.First(&session, approval.SessionID).Error; err != nil {
-			return err
 		}
 		var task model.AITask
 		if approval.TaskID > 0 {

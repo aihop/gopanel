@@ -4,9 +4,10 @@ import { useIntervalFn } from "@vueuse/core"
 import { useI18n } from "vue-i18n"
 import { useDialog, useMessage } from "naive-ui"
 import Icon from "@/components/common/Icon.vue"
-import { commitCodeGitChanges, getCodeGitDiff, getCodeGitStatus, mergeCodeSessionWorktree, updateCodeGitStage } from "@/api/modules/codeGit"
+import CodeDeliveryPush from "./CodeDeliveryPush.vue"
+import { commitCodeGitChanges, getCodeDeliveryJob, getCodeGitDiff, getCodeGitStatus, mergeCodeSessionWorktree, updateCodeGitStage } from "@/api/modules/codeGit"
 import { getCodeSession } from "@/api/modules/code"
-import type { CodeGitDiffKind, CodeGitFile, CodeGitRepository, CodeGitStatus } from "@/api/interface/codeGit"
+import type { CodeDeliveryJob, CodeGitDiffKind, CodeGitFile, CodeGitRepository, CodeGitStatus } from "@/api/interface/codeGit"
 import { codeGitReviewMessages } from "../codeGitReviewMessages"
 
 const props = defineProps<{ sessionId: number | null; active: boolean }>()
@@ -24,8 +25,11 @@ const diffTruncated = ref(false)
 const diffLoading = ref(false)
 const stagingKey = ref("")
 const worktreeBranch = ref("")
+const isolationMode = ref("")
 const commitMessage = ref("")
 const deliveryLoading = ref(false)
+const deliveryPushKey = ref(0)
+const deliveryJob = ref<CodeDeliveryJob | null>(null)
 let statusPending = false
 let diffSequence = 0
 
@@ -54,8 +58,28 @@ const selectedEntry = computed(() => entries.value.find(entry => entry.key === s
 const hasChanges = computed(() => entries.value.length > 0)
 const totalAdditions = computed(() => (status.value?.additions || 0) + (status.value?.stagedAdditions || 0))
 const totalDeletions = computed(() => (status.value?.deletions || 0) + (status.value?.stagedDeletions || 0))
-const canCommit = computed(() => Boolean(worktreeBranch.value && status.value?.staged && commitMessage.value.trim()))
-const canMerge = computed(() => Boolean(worktreeBranch.value && status.value && status.value.files === 0))
+const isolatedRepositories = computed(() => (status.value?.repositories || []).filter(repository => repository.isolated))
+const commitRepository = computed(() => {
+	if (selectedEntry.value?.repository.stagedCount) return selectedEntry.value.repository
+	return isolatedRepositories.value.find(repository => repository.stagedCount > 0) || null
+})
+const hasIsolation = computed(() => Boolean(worktreeBranch.value || isolationMode.value === "multi_worktree"))
+const deliveryActive = computed(() => ["queued", "running"].includes(deliveryJob.value?.status || ""))
+const canCommit = computed(() => Boolean(hasIsolation.value && !deliveryActive.value && commitRepository.value && commitMessage.value.trim()))
+const canMerge = computed(() => Boolean(hasIsolation.value && !deliveryActive.value && status.value && status.value.files === 0))
+const deliveryStatusLabel = computed(() => {
+	if (!deliveryJob.value) return ""
+	return t(`code.gitDeliveryStatus_${deliveryJob.value.status}`, {
+		position: deliveryJob.value.queuePosition,
+		progress: deliveryJob.value.progress
+	})
+})
+const deliveryLabel = computed(() => {
+	if (isolationMode.value === "multi_worktree") {
+		return t("code.gitMultiWorktree", { count: isolatedRepositories.value.length })
+	}
+	return t("code.gitWorktreeBranch", { branch: worktreeBranch.value })
+})
 const diffLines = computed(() => diffContent.value.split("\n"))
 const diffLineClass = (line: string) => {
 	if (line.startsWith("+++") || line.startsWith("---")) return "text-slate-400"
@@ -115,11 +139,13 @@ const loadStatus = async (silent = false) => {
 	if (!silent) loading.value = true
 	else refreshing.value = true
 	try {
-		const [response, sessionResponse] = await Promise.all([
-			getCodeGitStatus(props.sessionId), getCodeSession(props.sessionId)
+		const [response, sessionResponse, deliveryResponse] = await Promise.all([
+			getCodeGitStatus(props.sessionId), getCodeSession(props.sessionId), getCodeDeliveryJob(props.sessionId)
 		])
 		status.value = response.data
+		deliveryJob.value = deliveryResponse.data
 		worktreeBranch.value = sessionResponse.data.session.worktreeBranch || ""
+		isolationMode.value = sessionResponse.data.session.isolationMode || ""
 		loadError.value = ""
 		await reconcileSelection()
 	} catch (error) {
@@ -136,7 +162,7 @@ const commitChanges = async () => {
 	if (!props.sessionId || !canCommit.value) return
 	deliveryLoading.value = true
 	try {
-		await commitCodeGitChanges(props.sessionId, commitMessage.value.trim())
+		await commitCodeGitChanges(props.sessionId, commitRepository.value?.id || "", commitMessage.value.trim())
 		commitMessage.value = ""
 		message.success(t("code.gitCommitSuccess"))
 		await loadStatus(true)
@@ -151,19 +177,17 @@ const mergeWorktree = () => {
 	if (!props.sessionId || !canMerge.value) return
 	dialog.warning({
 		title: t("code.gitMergeTitle"),
-		content: t("code.gitMergeConfirm", { branch: worktreeBranch.value }),
+		content: t(isolationMode.value === "multi_worktree" ? "code.gitMultiMergeConfirm" : "code.gitMergeConfirm", {
+			branch: worktreeBranch.value, count: isolatedRepositories.value.length
+		}),
 		positiveText: t("code.gitMerge"),
 		negativeText: t("code.gitCancel"),
 		onPositiveClick: async () => {
 			deliveryLoading.value = true
 			try {
 				const response = await mergeCodeSessionWorktree(props.sessionId as number)
-				if (response.data.status === "conflict") {
-					message.error(t("code.gitMergeConflict", { files: response.data.conflictFiles?.join(", ") || "-" }))
-					return
-				}
-				worktreeBranch.value = ""
-				message.success(t("code.gitMergeSuccess"))
+				deliveryJob.value = response.data
+				message.success(t("code.gitDeliveryQueued"))
 				await loadStatus(true)
 			} catch (error) {
 				message.error(error instanceof Error ? error.message : t("code.gitMergeFailed"))
@@ -203,10 +227,12 @@ watch(
 	() => props.sessionId,
 	() => {
 		status.value = null
+		deliveryJob.value = null
 		selectedKey.value = ""
 		diffContent.value = ""
 		loadError.value = ""
 		worktreeBranch.value = ""
+		isolationMode.value = ""
 		commitMessage.value = ""
 		if (props.active) void loadStatus()
 	}
@@ -224,7 +250,48 @@ useIntervalFn(() => {
 
 <template>
 	<div class="flex h-full min-h-0 bg-white">
-		<aside class="flex w-80 shrink-0 flex-col border-r border-slate-200 bg-slate-50/70">
+		<section class="flex min-w-0 flex-1 flex-col bg-[#0f172a] text-slate-100">
+			<div
+				v-if="selectedEntry"
+				class="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-slate-700 px-4"
+			>
+				<div class="min-w-0">
+					<div class="truncate text-sm font-semibold">{{ selectedEntry.file.path }}</div>
+					<div class="text-[11px] text-slate-400">
+						{{ t(selectedEntry.kind === "staged" ? "code.gitStagedDiff" : "code.gitWorkingDiff") }}
+					</div>
+				</div>
+				<n-button
+					v-if="selectedEntry.file.indexStatus !== 'D' && selectedEntry.file.worktreeStatus !== 'D'"
+					size="small"
+					secondary
+					@click="openSelectedFile"
+				>
+					{{ t("code.gitOpenFile") }}
+				</n-button>
+			</div>
+			<n-spin :show="diffLoading" class="min-h-0 flex-1">
+				<div v-if="!selectedEntry" class="flex h-full items-center justify-center">
+					<n-empty :description="t('code.gitSelectFile')" />
+				</div>
+				<div v-else-if="!diffLoading && !diffContent" class="flex h-full items-center justify-center">
+					<n-empty :description="t('code.gitDiffEmpty')" />
+				</div>
+				<div v-else class="flex h-full min-h-0 flex-col">
+					<n-alert v-if="diffTruncated" type="warning" :show-icon="false" class="m-3 mb-0">
+						{{ t("code.gitDiffTruncated") }}
+					</n-alert>
+					<pre class="min-h-0 flex-1 overflow-auto p-4 font-mono text-xs leading-5"><span
+						v-for="(line, index) in diffLines"
+						:key="index"
+						class="block min-w-max px-1"
+						:class="diffLineClass(line)"
+					>{{ line || " " }}</span></pre>
+				</div>
+			</n-spin>
+		</section>
+
+		<aside class="flex w-80 shrink-0 flex-col border-l border-slate-200 bg-slate-50/70">
 			<div class="border-b border-slate-200 p-3">
 				<div class="flex items-center justify-between gap-3">
 					<div>
@@ -247,8 +314,19 @@ useIntervalFn(() => {
 					</n-button>
 				</div>
 			</div>
-			<div v-if="worktreeBranch" class="space-y-2 border-b border-slate-200 p-3">
-				<div class="truncate text-xs text-slate-500" :title="worktreeBranch">{{ t("code.gitWorktreeBranch", { branch: worktreeBranch }) }}</div>
+			<div v-if="hasIsolation" class="space-y-2 border-b border-slate-200 p-3">
+				<div class="truncate text-xs text-slate-500" :title="deliveryLabel">{{ deliveryLabel }}</div>
+				<div v-if="commitRepository" class="truncate text-[11px] text-slate-400">
+					{{ t("code.gitCommitRepository", { repository: commitRepository.name }) }}
+				</div>
+				<n-alert v-if="deliveryJob" :type="deliveryJob.status === 'failed' || deliveryJob.status === 'conflict' || deliveryJob.status === 'partial' ? 'error' : deliveryJob.status === 'completed' ? 'success' : 'info'" :show-icon="false">
+					<div class="flex items-center justify-between gap-2 text-xs">
+						<span>{{ deliveryStatusLabel }}</span>
+						<span v-if="deliveryActive">{{ t(`code.gitDeliveryStage_${deliveryJob.stage}`) }}</span>
+					</div>
+					<n-progress v-if="deliveryActive" class="mt-2" type="line" :percentage="deliveryJob.progress" :show-indicator="false" />
+					<div v-if="deliveryJob.errorMessage" class="mt-2 break-words text-xs">{{ deliveryJob.errorMessage }}</div>
+				</n-alert>
 				<n-input v-model:value="commitMessage" size="small" :placeholder="t('code.gitCommitPlaceholder')" :disabled="deliveryLoading" @keyup.enter="commitChanges" />
 				<div class="grid grid-cols-2 gap-2">
 					<n-button size="small" type="primary" :disabled="!canCommit" :loading="deliveryLoading" @click="commitChanges">{{ t("code.gitCommit") }}</n-button>
@@ -256,6 +334,7 @@ useIntervalFn(() => {
 				</div>
 				<p class="text-[11px] leading-4 text-slate-400">{{ t(canMerge ? "code.gitMergeReady" : "code.gitMergeHint") }}</p>
 			</div>
+			<CodeDeliveryPush v-if="!hasIsolation && sessionId" :session-id="sessionId" :refresh-key="deliveryPushKey" />
 			<n-spin :show="loading" class="min-h-0 flex-1">
 				<div v-if="loadError" class="p-4">
 					<n-alert type="error" :title="t('code.gitLoadFailed')">{{ loadError }}</n-alert>
@@ -339,47 +418,6 @@ useIntervalFn(() => {
 				</n-scrollbar>
 			</n-spin>
 		</aside>
-
-		<section class="flex min-w-0 flex-1 flex-col bg-[#0f172a] text-slate-100">
-			<div
-				v-if="selectedEntry"
-				class="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-slate-700 px-4"
-			>
-				<div class="min-w-0">
-					<div class="truncate text-sm font-semibold">{{ selectedEntry.file.path }}</div>
-					<div class="text-[11px] text-slate-400">
-						{{ t(selectedEntry.kind === "staged" ? "code.gitStagedDiff" : "code.gitWorkingDiff") }}
-					</div>
-				</div>
-				<n-button
-					v-if="selectedEntry.file.indexStatus !== 'D' && selectedEntry.file.worktreeStatus !== 'D'"
-					size="small"
-					secondary
-					@click="openSelectedFile"
-				>
-					{{ t("code.gitOpenFile") }}
-				</n-button>
-			</div>
-			<n-spin :show="diffLoading" class="min-h-0 flex-1">
-				<div v-if="!selectedEntry" class="flex h-full items-center justify-center">
-					<n-empty :description="t('code.gitSelectFile')" />
-				</div>
-				<div v-else-if="!diffLoading && !diffContent" class="flex h-full items-center justify-center">
-					<n-empty :description="t('code.gitDiffEmpty')" />
-				</div>
-				<div v-else class="flex h-full min-h-0 flex-col">
-					<n-alert v-if="diffTruncated" type="warning" :show-icon="false" class="m-3 mb-0">
-						{{ t("code.gitDiffTruncated") }}
-					</n-alert>
-					<pre class="min-h-0 flex-1 overflow-auto p-4 font-mono text-xs leading-5"><span
-						v-for="(line, index) in diffLines"
-						:key="index"
-						class="block min-w-max px-1"
-						:class="diffLineClass(line)"
-					>{{ line || " " }}</span></pre>
-				</div>
-			</n-spin>
-		</section>
 	</div>
 </template>
 

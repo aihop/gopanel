@@ -26,92 +26,45 @@
 										<template #icon><Icon name="mdi:arrow-left" /></template>
 									</n-button>
 									<div class="min-w-0">
-										<div class="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">
-											{{ t("code.workspace") }}
-										</div>
-										<div class="truncate text-sm font-semibold text-[var(--n-text-color)]">
-											{{ groupInfo?.name || t("code.projectFallback") }}
+										<div class="truncate text-lg font-semibold text-[var(--n-text-color)]">
+											{{ projectInfo?.name || t("code.projectFallback") }}
 										</div>
 									</div>
 								</div>
-								<n-button
-									type="primary"
-									block
-									class="!h-10 !rounded-[14px] shadow-[0_12px_28px_rgba(37,99,235,0.18)]"
-									@click="createNewTask"
-								>
-									<template #icon><Icon name="mdi:plus" /></template>
-									{{ t("code.newSession") }}
-								</n-button>
+								<div class="grid gap-2" :class="projectTerminalAvailable ? 'grid-cols-2' : 'grid-cols-1'">
+									<n-button
+										v-if="projectTerminalAvailable"
+										type="primary"
+										class="!h-10 !rounded-[14px] shadow-[0_12px_28px_rgba(37,99,235,0.18)]"
+										@click="createNewTask"
+									>
+										<template #icon><Icon name="mdi:robot-outline" /></template>
+										{{ t("code.aiTaskShort") }}
+									</n-button>
+									<n-button
+										secondary
+										class="!h-10 !rounded-[14px]"
+										:loading="projectTerminalOpening"
+										@click="openProjectTerminal"
+									>
+										<template #icon><Icon name="mdi:console-line" /></template>
+										{{ t("code.terminalShort") }}
+									</n-button>
+								</div>
 							</div>
 						</div>
 					</div>
 
-					<div class="ai-workspace-task-history mt-3 flex min-h-0 flex-1 flex-col overflow-hidden">
-						<div class="flex items-center justify-between px-4 pb-2 pt-1">
-							<div class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-								{{ t("code.taskHistory") }}
-							</div>
-							<div class="text-xs text-slate-400">{{ t("code.taskCount", { count: tasks.length }) }}</div>
-						</div>
-						<n-scrollbar class="ai-workspace-task-scrollbar min-h-0 flex-1">
-							<div class="px-2.5 pb-3 pr-3.5">
-								<div
-									v-if="tasks.length === 0"
-									class="ai-workspace-task-empty flex min-h-[180px] items-center justify-center"
-								>
-									<n-empty :description="t('code.noProjectHistory')" />
-								</div>
-								<div v-else class="space-y-1">
-									<div
-										v-for="task in tasks"
-										:key="task.id"
-										class="ai-workspace-task-row group/task relative flex cursor-pointer items-start justify-between gap-3 rounded-xl px-3 py-2.5 transition-colors duration-200 hover:bg-slate-200/45"
-										:class="
-											currentTaskId === task.id
-												? 'ai-workspace-task-row--active bg-blue-50/80'
-												: ''
-										"
-										@click="selectTask(task)"
-									>
-										<div class="min-w-0 flex-1">
-											<div
-												class="truncate text-sm font-semibold text-slate-800"
-												:title="task.title"
-											>
-												{{ task.title }}
-											</div>
-											<div class="mt-1.5 flex items-center gap-2">
-												<TaskApprovalAction :task="task" @approved="fetchTasks()" />
-												<span class="text-xs text-slate-400">
-													{{ new Date(task.createdAt).toLocaleDateString() }}
-												</span>
-											</div>
-										</div>
-										<div
-											class="opacity-100 transition-opacity md:opacity-0 md:group-hover/task:opacity-100"
-											@click.stop
-										>
-											<n-dropdown
-												trigger="click"
-												:options="taskActionOptions"
-												@select="key => handleTaskAction(key, task)"
-											>
-												<n-button
-													quaternary
-													circle
-													size="small"
-													class="ai-workspace-task-btn !bg-transparent"
-												>
-													<template #icon><Icon name="mdi:dots-horizontal" /></template>
-												</n-button>
-											</n-dropdown>
-										</div>
-									</div>
-								</div>
-							</div>
-						</n-scrollbar>
-					</div>
+					<ProjectTaskSidebar
+						:project-id="currentProjectId"
+						:tasks="aiTasks"
+						:task-total="aiTaskTotal"
+						:current-task-id="currentTaskId"
+						:task-action-options="taskActionOptions"
+						@select-task="selectTask"
+						@task-action="handleTaskAction"
+						@refresh-tasks="fetchTasks()"
+					/>
 				</div>
 			</n-layout-sider>
 
@@ -120,63 +73,35 @@
 					class="ai-workspace-content-panel flex h-full min-h-0 flex-1 flex-col bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.08),transparent_28%)] p-2 md:p-3"
 					:class="isWorkspaceFullscreen ? 'fixed inset-0 z-[1000] bg-slate-50' : ''"
 				>
+					<CodeWorkspaceToolbar
+						:session-label="sessionLabel"
+						:session-subtitle="sessionSubtitle"
+						:session-id="currentSessionId"
+						:has-context="hasWorkspaceContext"
+						:is-terminal-session="isTerminalSession"
+						:workspace-mode="workspaceMode"
+						:embedded="embedded"
+						:fullscreen-label="fullscreenLabel"
+						:is-fullscreen="isWorkspaceFullscreen"
+						@show-structure="showProjectStructure = true"
+						@take-terminal="takeOverTerminal"
+						@open-history="showHistoryDrawer = true"
+						@toggle-fullscreen="toggleWorkspaceFullscreen"
+						@open-file="openFile"
+						@update-mode="switchWorkspaceMode"
+					/>
+					<ProjectOverviewPanel
+						v-if="currentSessionId === null && currentTaskId === null && !isProjectTerminalActive"
+						:project="projectInfo"
+						:project-id="currentProjectId"
+						:tasks="aiTasks"
+						:terminal-available="projectTerminalAvailable"
+						@create-task="createNewTask"
+						@open-terminal="openProjectTerminal"
+						@select-task="selectTask"
+					/>
 					<div
-						class="ai-workspace-session-bar mb-2 flex shrink-0 items-center justify-between gap-3 px-2 py-1"
-					>
-						<div class="min-w-0">
-							<div class="truncate text-sm font-semibold text-slate-800">{{ sessionLabel }}</div>
-							<div class="truncate text-xs text-slate-400">
-								{{ activeFilePath || t("code.selectFileToEdit") }}
-							</div>
-						</div>
-						<div class="flex flex-wrap items-center justify-end gap-2">
-							<n-button
-								v-if="currentSessionId !== null && workspaceMode === 'editor'"
-								size="small"
-								quaternary
-								class="xl:hidden"
-								@click="showProjectStructure = true"
-							>
-								{{ t("code.projectStructure") }}
-							</n-button>
-							<CodeApprovalCenter :session-id="currentSessionId" @take-terminal="takeOverTerminal" />
-							<CodeDeliveryPanel v-if="currentSessionId !== null" :session-id="currentSessionId" @open-file="openFile" />
-							<SessionApprovalPolicy v-if="currentSessionId !== null" :session-id="currentSessionId" />
-							<WorkspaceModeSwitch
-								v-if="currentSessionId !== null || currentTaskId !== null"
-								:value="workspaceMode"
-								@update:value="switchWorkspaceMode"
-							/>
-							<n-button
-								v-if="currentSessionId !== null || currentTaskId !== null"
-								size="small"
-								secondary
-								@click="showHistoryDrawer = true"
-							>
-								{{ t("code.conversationHistory") }}
-							</n-button>
-							<n-button
-								v-if="!embedded"
-								circle
-								secondary
-								:aria-label="fullscreenLabel"
-								:title="fullscreenLabel"
-								@click="toggleWorkspaceFullscreen"
-							>
-								<template #icon>
-									<Icon
-										:name="
-											isWorkspaceFullscreen
-												? 'fluent:full-screen-minimize-24-regular'
-												: 'fluent:full-screen-maximize-24-regular'
-										"
-									/>
-								</template>
-							</n-button>
-						</div>
-					</div>
-					<div
-						v-if="currentSessionId !== null"
+						v-if="currentSessionId !== null && !isProjectTerminalActive"
 						v-show="workspaceMode === 'changes'"
 						class="ai-workspace-editor-shell min-h-0 flex-1 overflow-hidden rounded-[20px] border border-slate-200/80 bg-white shadow-[0_24px_50px_rgba(15,23,42,0.14)]"
 					>
@@ -187,7 +112,7 @@
 						/>
 					</div>
 					<div
-						v-show="workspaceMode === 'editor'"
+						v-show="workspaceMode === 'editor' && !isProjectTerminalActive"
 						class="ai-workspace-editor-shell flex min-h-0 flex-1 overflow-hidden rounded-[20px] border border-slate-200/80 bg-white shadow-[0_24px_50px_rgba(15,23,42,0.14)]"
 					>
 						<div class="min-w-0 flex-1">
@@ -212,8 +137,16 @@
 						</aside>
 					</div>
 
+					<ProjectNativeTerminalPanel
+						v-if="isProjectTerminalActive"
+						:session-id="projectTerminalSessionId"
+						:opening="projectTerminalOpening"
+						@closed="handleProjectTerminalClosed"
+						@reopen="openProjectTerminal"
+					/>
+
 					<div
-						v-if="terminalMounted && (currentTaskId !== null || currentSessionId !== null)"
+						v-if="!isProjectTerminalActive && terminalMounted && (currentTaskId !== null || currentSessionId !== null)"
 						v-show="workspaceMode === 'terminal'"
 						class="ai-workspace-terminal-panel min-h-0 flex-1 overflow-hidden rounded border border-slate-700 bg-[#1e1e1e] shadow-lg"
 					>
@@ -245,7 +178,7 @@
 
 		<NewSessionModal
 			v-model:show="showNewSessionModal"
-			:project-id="currentGroupId"
+			:project-id="currentProjectId"
 			@created="handleSessionCreated"
 		/>
 		<SessionHistoryDrawer
@@ -271,23 +204,27 @@ import { computed, nextTick, onMounted, ref, watch } from "vue"
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from "vue-router"
 import { useDialog, useMessage } from "naive-ui"
 import { useI18n } from "vue-i18n"
+import { useAuthStore } from "@/store/auth"
 import { useHideLayoutFooter } from "@/composables/useHideLayoutFooter"
 import Icon from "@/components/common/Icon.vue"
 import CodeTerminal from "./components/CodeTerminal.vue"
 import NewSessionModal from "./components/NewSessionModal.vue"
-import SessionApprovalPolicy from "./components/SessionApprovalPolicy.vue"
-import CodeApprovalCenter from "./components/CodeApprovalCenter.vue"
-import CodeDeliveryPanel from "./components/CodeDeliveryPanel.vue"
+import CodeWorkspaceToolbar from "./components/CodeWorkspaceToolbar.vue"
+import ProjectNativeTerminalPanel from "./components/ProjectNativeTerminalPanel.vue"
 import SessionHistoryDrawer from "./components/SessionHistoryDrawer.vue"
 import ProjectStructurePanel from "./components/ProjectStructurePanel.vue"
 import SessionFileEditor from "./components/SessionFileEditor.vue"
-import TaskApprovalAction from "./components/TaskApprovalAction.vue"
+import ProjectTaskSidebar from "./components/ProjectTaskSidebar.vue"
+import ProjectOverviewPanel from "./components/ProjectOverviewPanel.vue"
 import CodeGitReview from "./components/CodeGitReview.vue"
-import WorkspaceModeSwitch, { type CodeWorkspaceMode } from "./components/WorkspaceModeSwitch.vue"
+import type { CodeWorkspaceMode } from "./components/WorkspaceModeSwitch.vue"
 import { useCodeTaskPolling } from "./useCodeTaskPolling"
 import { useCodeWorkspaceFullscreen } from "./useCodeWorkspaceFullscreen"
-import { deleteAITask, getAIGroups, updateAITask } from "@/api/modules/code"
-import type { AIGroup, AITask, CodeSession } from "@/api/interface/code"
+import { useProjectTerminal } from "./useProjectTerminal"
+import { deleteAITask, getAIProjects, updateAITask } from "@/api/modules/code"
+import type { AIProject, AITask, CodeSession } from "@/api/interface/code"
+import type { CodeTaskListItem } from "@/api/interface/codeTasks"
+import type { HostTerminalSession } from "@/api/interface/hostTerminal"
 import { codeWorkspaceMessages } from "./codeWorkspaceMessages"
 
 const props = withDefaults(defineProps<{ projectId?: number; embedded?: boolean }>(), { embedded: false })
@@ -296,42 +233,72 @@ const route = useRoute()
 const router = useRouter()
 const message = useMessage()
 const dialog = useDialog()
+const authStore = useAuthStore()
 const { t } = useI18n({ messages: codeWorkspaceMessages })
 if (!props.embedded) useHideLayoutFooter()
-const currentGroupId = computed(() => props.projectId ?? Number(route.params.id))
-const groupInfo = ref<AIGroup | null>(null), tasks = ref<AITask[]>([])
-const currentTaskId = ref<number | null>(null), currentSessionId = ref<number | null>(null)
-const showNewSessionModal = ref(false), showHistoryDrawer = ref(false)
-const showProjectStructure = ref(false), showRenameModal = ref(false)
+const currentProjectId = computed(() => props.projectId ?? Number(route.params.id))
+const projectTerminalAvailable = computed(() => authStore.role === "ADMIN" || authStore.role === "SUPER")
+const projectInfo = ref<AIProject | null>(null),
+	tasks = ref<CodeTaskListItem[]>([])
+const taskTotal = ref(0)
+const currentTaskId = ref<number | null>(null),
+	currentSessionId = ref<number | null>(null)
+const showNewSessionModal = ref(false),
+	showHistoryDrawer = ref(false)
+const showProjectStructure = ref(false),
+	showRenameModal = ref(false)
 const workspaceMode = ref<CodeWorkspaceMode>("terminal")
-const terminalMounted = ref(false), terminalKey = ref(0)
+const terminalMounted = ref(false),
+	terminalKey = ref(0)
 const terminalTakeoverRequested = ref(false)
+const isProjectTerminalActive = ref(false)
+const projectTerminalSessionId = ref<number | null>(null)
+const projectTerminalWorkDir = ref("")
 const { isWorkspaceFullscreen, fullscreenLabel, toggleWorkspaceFullscreen } = useCodeWorkspaceFullscreen(t)
 const selectedFile = ref({ path: "", extension: "" })
 const activeFilePath = ref("")
 const fileEditorRef = ref<{ hasUnsavedChanges: boolean } | null>(null)
-const editingTaskId = ref<number | null>(null), editingTaskTitle = ref("")
+const editingTaskId = ref<number | null>(null),
+	editingTaskTitle = ref("")
 const renaming = ref(false)
+const aiTasks = computed(() => tasks.value.filter(task => task.agentName !== "terminal"))
+const aiTaskTotal = computed(() => Math.max(0, taskTotal.value - (tasks.value.length - aiTasks.value.length)))
 const currentTask = computed(() => tasks.value.find(task => task.id === currentTaskId.value) || null)
+const hasWorkspaceContext = computed(
+	() => isProjectTerminalActive.value || currentSessionId.value !== null || currentTaskId.value !== null
+)
+const isTerminalSession = computed(() => isProjectTerminalActive.value)
 const sessionLabel = computed(
-	() => currentTask.value?.title || (currentSessionId.value ? t("code.newSession") : t("code.selectTaskToStart"))
+	() =>
+		(isProjectTerminalActive.value
+			? t("code.projectTerminal")
+			: currentTask.value?.title ||
+				(currentSessionId.value
+					? t("code.newSession")
+					: t("code.selectTaskToStart")))
+)
+const sessionSubtitle = computed(
+	() =>
+		(isProjectTerminalActive.value
+			? projectTerminalWorkDir.value || t("code.projectTerminalHint")
+			: activeFilePath.value || t("code.selectFileToEdit"))
 )
 const taskActionOptions = computed(() => [
 	{ label: t("code.renameTask"), key: "rename" },
 	{ label: t("code.deleteTask"), key: "delete", style: "color: red;" }
 ])
 
-const fetchGroupInfo = async () => {
+const fetchProjectInfo = async () => {
 	try {
-		const response = await getAIGroups({ page: 1, limit: 50 })
-		groupInfo.value =
-			response.code === 0 ? response.data.items.find(group => group.id === currentGroupId.value) || null : null
+		const response = await getAIProjects({ page: 1, limit: 50 })
+		projectInfo.value =
+			response.code === 0 ? response.data.items.find(project => project.id === currentProjectId.value) || null : null
 	} catch (error) {
 		message.error(error instanceof Error ? error.message : t("code.projectLoadFailed"))
 	}
 }
 
-const { fetchTasks } = useCodeTaskPolling(currentGroupId, tasks, error => {
+const { fetchTasks } = useCodeTaskPolling(currentProjectId, tasks, taskTotal, error => {
 	message.error(error instanceof Error ? error.message : t("code.taskLoadFailed"))
 })
 
@@ -378,6 +345,7 @@ const handleSessionCreated = (session: CodeSession) => {
 	resetSelectedFile()
 	currentTaskId.value = null
 	currentSessionId.value = session.id
+	isProjectTerminalActive.value = false
 	terminalTakeoverRequested.value = false
 	workspaceMode.value = "terminal"
 	terminalMounted.value = true
@@ -385,17 +353,47 @@ const handleSessionCreated = (session: CodeSession) => {
 	void fetchTasks()
 }
 
+const activateTask = (task: AITask) => {
+	resetSelectedFile()
+	currentTaskId.value = task.id
+	currentSessionId.value = task.sessionId || null
+	isProjectTerminalActive.value = false
+	terminalTakeoverRequested.value = false
+	workspaceMode.value = "terminal"
+	terminalMounted.value = true
+	terminalKey.value++
+}
+
 const selectTask = (task: AITask) => {
 	if (currentTaskId.value === task.id && currentSessionId.value === task.sessionId) return
-	confirmDiscardEditorChanges(() => {
-		resetSelectedFile()
-		currentTaskId.value = task.id
-		currentSessionId.value = task.sessionId || null
-		terminalTakeoverRequested.value = false
-		workspaceMode.value = "terminal"
-		terminalMounted.value = true
-		terminalKey.value++
-	})
+	confirmDiscardEditorChanges(() => activateTask(task))
+}
+
+const activateProjectTerminal = (session: HostTerminalSession) => {
+	resetSelectedFile()
+	currentTaskId.value = null
+	currentSessionId.value = null
+	projectTerminalSessionId.value = session.id
+	projectTerminalWorkDir.value = session.workDir
+	isProjectTerminalActive.value = true
+	workspaceMode.value = "terminal"
+}
+
+const { opening: projectTerminalOpening, open: openNativeProjectTerminal } = useProjectTerminal(
+	currentProjectId,
+	activateProjectTerminal,
+	value => message.success(value),
+	value => message.error(value),
+	{
+		created: t("code.projectTerminalOpened"),
+		failed: t("code.projectTerminalOpenFailed"),
+		unavailable: t("code.projectTerminalUnavailable")
+	}
+)
+
+const openProjectTerminal = () => confirmDiscardEditorChanges(() => void openNativeProjectTerminal())
+const handleProjectTerminalClosed = () => {
+	projectTerminalSessionId.value = null
 }
 
 const takeOverTerminal = () => {
@@ -416,7 +414,7 @@ const handleTaskCreated = (taskId: number) => {
 	void fetchTasks()
 }
 
-const handleTaskAction = (key: string, task: AITask) => {
+const handleTaskAction = (key: string, task: CodeTaskListItem) => {
 	if (key === "rename") {
 		editingTaskId.value = task.id
 		editingTaskTitle.value = task.title
@@ -466,6 +464,11 @@ const submitRename = async () => {
 const resetWorkspace = () => {
 	currentTaskId.value = null
 	currentSessionId.value = null
+	isProjectTerminalActive.value = false
+	projectTerminalSessionId.value = null
+	projectTerminalWorkDir.value = ""
+	tasks.value = []
+	taskTotal.value = 0
 	showNewSessionModal.value = false
 	showHistoryDrawer.value = false
 	showProjectStructure.value = false
@@ -475,7 +478,7 @@ const resetWorkspace = () => {
 	resetSelectedFile()
 }
 
-const backToLobby = () => props.embedded ? emit("close") : router.push("/code/index")
+const backToLobby = () => (props.embedded ? emit("close") : router.push("/code/index"))
 const confirmLeaveWorkspace = () =>
 	!fileEditorRef.value?.hasUnsavedChanges || window.confirm(t("code.switchSessionUnsavedHint"))
 defineExpose({ confirmClose: confirmLeaveWorkspace })
@@ -483,18 +486,15 @@ onBeforeRouteLeave(() => props.embedded || confirmLeaveWorkspace())
 onBeforeRouteUpdate(() => props.embedded || confirmLeaveWorkspace())
 
 onMounted(() => {
-	void fetchGroupInfo()
+	void fetchProjectInfo()
 	void fetchTasks()
 })
-watch(
-	currentGroupId,
-	newId => {
-		if (!newId) return
-		resetWorkspace()
-		void fetchGroupInfo()
-		void fetchTasks()
-	}
-)
+watch(currentProjectId, newId => {
+	if (!newId) return
+	resetWorkspace()
+	void fetchProjectInfo()
+	void fetchTasks()
+})
 </script>
 
 <style scoped src="./workspace.css"></style>

@@ -61,6 +61,26 @@ func TestCodeExecutionCoordinatorWaitsWithoutPreemptingInteractiveLease(t *testi
 	}
 }
 
+func TestCodeExecutionCoordinatorDeliveryDoesNotWaitForInteractiveWorktree(t *testing.T) {
+	coordinator := newCodeExecutionCoordinator(2)
+	session := &model.AIDevSession{ID: 31, WorkDir: "/workspace/session", SourceWorkDir: "/workspace/source"}
+	interactive, err := coordinator.acquireSession(context.Background(), session, codeExecutionInteractive, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer interactive.Release()
+	var cancelled atomic.Bool
+	interactive.SetCancel(func() { cancelled.Store(true) })
+	delivery, err := coordinator.acquireSession(context.Background(), session, codeExecutionDelivery, false)
+	if err != nil {
+		t.Fatalf("delivery should lock only the source repository: %v", err)
+	}
+	delivery.Release()
+	if cancelled.Load() {
+		t.Fatal("delivery cancelled the interactive terminal")
+	}
+}
+
 func TestCodeExecutionCoordinatorNewSessionDoesNotInterruptSharedWorkspace(t *testing.T) {
 	coordinator := newCodeExecutionCoordinator(2)
 	firstSession := &model.AIDevSession{ID: 21, WorkDir: "/workspace/shared"}
@@ -153,4 +173,31 @@ func TestCodeExecutionCoordinatorCancelsOnlyTargetSession(t *testing.T) {
 	if !secondCancelled.Load() {
 		t.Fatal("target session cancel handler was not called")
 	}
+}
+
+func TestCodeExecutionCoordinatorCancelsOnlyRequestedSessionKind(t *testing.T) {
+	coordinator := newCodeExecutionCoordinator(2)
+	interactive, err := coordinator.acquireOwned(context.Background(), 21, []string{"/workspace/interactive"}, codeExecutionInteractive, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	instruction, err := coordinator.acquireOwned(context.Background(), 21, []string{"/workspace/instruction"}, codeExecutionInstruction, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	interactive.SetCancel(func() { interactive.Release() })
+	var instructionCancelled atomic.Bool
+	instruction.SetCancel(func() {
+		instructionCancelled.Store(true)
+		instruction.Release()
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if !coordinator.cancelSessionKindAndWait(ctx, 21, codeExecutionInteractive) {
+		t.Fatal("interactive lease was not cancelled")
+	}
+	if instructionCancelled.Load() {
+		t.Fatal("instruction lease was cancelled with interactive terminal")
+	}
+	instruction.Release()
 }

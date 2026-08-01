@@ -1,6 +1,6 @@
 import http from "@/api"
 import type {
-	AIGroup,
+	AIProject,
 	AITask,
 	AIMessage,
 	CodeExecutor,
@@ -22,19 +22,26 @@ import type {
 	CodexRuntimeState,
 	CodeTokenUsageResponse,
 } from "../interface/code"
+import type { CodeProjectBranches } from "../interface/codeBranches"
+import type { CodeTaskListItem } from "../interface/codeTasks"
+import type { HostTerminalSession } from "../interface/hostTerminal"
 
-// === Group APIs ===
+// === Project APIs ===
 
-export function getAIGroups(params: { page: number; limit: number }) {
-	return http.get<{ items: AIGroup[]; total: number }>("/code/groups", params)
+export function getAIProjects(params: { page: number; limit: number }) {
+	return http.get<{ items: AIProject[]; total: number }>("/code/projects", params)
 }
 
-export function createAIGroup(data: { name: string; description: string; sourceDirs: string[]; requireQualityGate: boolean; monthlyTokenBudget: number }) {
-	return http.post<AIGroup>("/code/groups", data)
+export function createAIProject(data: { name: string; description: string; sourceDirs: string[]; primaryRepository: string; deliveryBranch: string; requireQualityGate: boolean; monthlyTokenBudget: number }) {
+	return http.post<AIProject>("/code/projects", data)
 }
 
-export function updateAIGroup(id: number, data: { name: string; description: string; sourceDirs: string[]; requireQualityGate: boolean; monthlyTokenBudget: number }) {
-	return http.put<AIGroup>(`/code/groups/${id}`, data)
+export function updateAIProject(id: number, data: { name: string; description: string; sourceDirs: string[]; primaryRepository: string; deliveryBranch: string; requireQualityGate: boolean; monthlyTokenBudget: number }) {
+	return http.put<AIProject>(`/code/projects/${id}`, data)
+}
+
+export function getCodeProjectBranches(projectId: number) {
+	return http.get<CodeProjectBranches>(`/code/projects/${projectId}/git/branches`, undefined, { timeout: 15000 })
 }
 
 export function getCodeExecutors() {
@@ -42,7 +49,11 @@ export function getCodeExecutors() {
 }
 
 export function getCodeWorktreeCapability(projectId: number) {
-	return http.get<CodeWorktreeCapability>(`/code/groups/${projectId}/worktree-capability`)
+	return http.get<CodeWorktreeCapability>(`/code/projects/${projectId}/worktree-capability`)
+}
+
+export function openCodeProjectTerminal(projectId: number) {
+	return http.post<HostTerminalSession>(`/code/projects/${projectId}/terminal`)
 }
 
 export function createCodeSession(data: {
@@ -52,6 +63,7 @@ export function createCodeSession(data: {
 	executorId: string
 	approvalPolicy: CodeApprovalPolicy
 	isolated: boolean
+	includeUncommitted: boolean
 	provider?: CodeExecutorConfig
 }) {
 	return http.post<CodeSession>("/code/sessions", data)
@@ -74,7 +86,16 @@ export function getCodeExecutionRun(runId: number) {
 }
 
 export function getCodeSessionState(sessionId: number) {
-	return http.get<CodeSessionState>(`/code/sessions/${sessionId}/state`, undefined, { timeout: 10000 })
+	return http.get<CodeSessionState>(`/code/sessions/${sessionId}/state`, undefined, { timeout: 10000 }).then(response => ({
+		...response,
+		data: {
+			...response.data,
+			recentMessages: response.data.recentMessages || [],
+			previews: response.data.previews || [],
+			timelineEvents: response.data.timelineEvents || [],
+			changedFiles: response.data.changedFiles || [],
+		}
+	}))
 }
 
 export function getCodeSessionStructure(sessionId: number, path = "") {
@@ -144,8 +165,8 @@ export function retryCodeInstruction(instructionId: number) {
 // === Task APIs ===
 
 // 获取任务列表
-export function getAITasks(params: { page: number; limit: number; projectId?: number }) {
-	return http.get<{ items: AITask[]; total: number }>("/code/tasks", params)
+export function getAITasks(params: { page: number; limit: number; projectId?: number; includeGit?: boolean }) {
+	return http.get<{ items: CodeTaskListItem[]; total: number }>("/code/tasks", params)
 }
 
 // 获取某个任务的消息记录

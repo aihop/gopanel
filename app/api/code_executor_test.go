@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/constant"
 )
 
@@ -59,7 +60,7 @@ func TestSubAdminCannotUseHostExecutor(t *testing.T) {
 func TestBuildCodeExecutorArgsPreservesPrompt(t *testing.T) {
 	prompt := `"; touch /tmp/PWNED; echo "`
 	tests := map[string][]string{
-		"codex":    {"--ask-for-approval", "on-request", "--sandbox", "workspace-write", "exec", "--json", "--skip-git-repo-check", prompt},
+		"codex":    {"-c", codexNetworkConfig, "--ask-for-approval", "on-request", "--sandbox", "workspace-write", "exec", "--json", "--skip-git-repo-check", prompt},
 		"opencode": {"run", "--format", "json", "--dangerously-skip-permissions", prompt},
 	}
 	for executorID, expected := range tests {
@@ -71,8 +72,9 @@ func TestBuildCodeExecutorArgsPreservesPrompt(t *testing.T) {
 			if !reflect.DeepEqual(args, expected) {
 				t.Fatalf("unexpected args: %#v", args)
 			}
-			for _, arg := range args {
-				if arg == "sh" || arg == "-c" {
+			for index, arg := range args {
+				validCodexConfig := executorID == "codex" && arg == "-c" && index+1 < len(args) && args[index+1] == codexNetworkConfig
+				if arg == "sh" || arg == "-c" && !validCodexConfig {
 					t.Fatalf("shell execution is not allowed: %#v", args)
 				}
 			}
@@ -83,7 +85,7 @@ func TestBuildCodeExecutorArgsPreservesPrompt(t *testing.T) {
 func TestBuildCodeExecutorArgsResumesNativeSession(t *testing.T) {
 	prompt := "continue"
 	tests := map[string][]string{
-		"codex":    {"--ask-for-approval", "on-request", "--sandbox", "workspace-write", "exec", "resume", "--json", "--skip-git-repo-check", "native-1", prompt},
+		"codex":    {"-c", codexNetworkConfig, "--ask-for-approval", "on-request", "--sandbox", "workspace-write", "exec", "resume", "--json", "--skip-git-repo-check", "native-1", prompt},
 		"claude":   {"--print", "--output-format", "json", "--permission-mode", "acceptEdits", "--resume", "native-1", prompt},
 		"opencode": {"run", "--format", "json", "--dangerously-skip-permissions", "--session", "native-1", prompt},
 	}
@@ -164,4 +166,23 @@ func TestBuildCodeExecutorCommandUsesWorkDir(t *testing.T) {
 	if command.Dir == "" {
 		t.Fatal("expected command working directory")
 	}
+}
+
+func TestBuildCodeExecutorCommandAddsWorktreeGitWritableDirs(t *testing.T) {
+	withAIProjectBaseDir(t)
+	repositoryDir := createCodeGitRepository(t)
+	session := &model.AIDevSession{ID: 35, UserID: 7, ProjectID: 9, ApprovalPolicy: codeApprovalPolicySafeAuto}
+	if err := createCodeSessionWorktree(session, &model.AIProject{SourceDirs: []string{repositoryDir}}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { rollbackCodeSessionWorktree(session) })
+	writableDirs, err := codexWritableDirsForSession(session)
+	if err != nil {
+		t.Fatal(err)
+	}
+	command, _, err := buildCodeExecutorCommand(context.Background(), "codex", session.WorkDir, "inspect only", "", session.ID, session)
+	if err != nil {
+		t.Skipf("codex is not installed: %v", err)
+	}
+	assertCodexWritableDirArgs(t, command.Args, writableDirs)
 }

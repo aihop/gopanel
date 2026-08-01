@@ -119,6 +119,7 @@ func TestBuildNativeCodexCommandStartsAndResumesInteractiveSession(t *testing.T)
 	}
 	expected := []string{
 		command.Path,
+		"-c", codexNetworkConfig,
 		"--ask-for-approval", "on-request",
 		"--sandbox", "workspace-write",
 		"--no-alt-screen",
@@ -135,6 +136,60 @@ func TestBuildNativeCodexCommandStartsAndResumesInteractiveSession(t *testing.T)
 	}
 	if got := command.Args[len(command.Args)-2:]; !reflect.DeepEqual(got, []string{"resume", "native-session"}) {
 		t.Fatalf("unexpected resume args: %#v", command.Args)
+	}
+}
+
+func TestBuildNativeCodexCommandAddsWorktreeGitWritableDirs(t *testing.T) {
+	withAIProjectBaseDir(t)
+	repositoryDir := createCodeGitRepository(t)
+	session := &model.AIDevSession{ID: 34, UserID: 7, ProjectID: 9, ApprovalPolicy: codeApprovalPolicySafeAuto}
+	if err := createCodeSessionWorktree(session, &model.AIProject{SourceDirs: []string{repositoryDir}}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { rollbackCodeSessionWorktree(session) })
+	writableDirs, err := codexWritableDirsForSession(session)
+	if err != nil {
+		t.Fatal(err)
+	}
+	command, err := buildNativeCodexCommand(session)
+	if err != nil {
+		t.Skipf("codex is not installed: %v", err)
+	}
+	assertCodexWritableDirArgs(t, command.Args, writableDirs)
+}
+
+func TestBuildNativeCodexCommandRepairsWorktreeAndResumesSession(t *testing.T) {
+	database := withCodeGovernanceDB(t)
+	withAIProjectBaseDir(t)
+	repositoryDir := createCodeGitRepository(t)
+	session := &model.AIDevSession{
+		ID: 135, UserID: 7, ProjectID: 9, Title: "resume", AgentName: "codex",
+		WorkDir: repositoryDir, NativeSessionID: "native-session", ApprovalPolicy: codeApprovalPolicySafeAuto,
+	}
+	if err := createCodeSessionWorktree(session, &model.AIProject{SourceDirs: []string{repositoryDir}}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_, _ = runCodeGit(repositoryDir, "worktree", "remove", "--force", session.WorkDir)
+		_, _ = runCodeGit(repositoryDir, "branch", "-D", "--", session.WorktreeBranch)
+	})
+	if err := database.Create(session).Error; err != nil {
+		t.Fatal(err)
+	}
+	newBranch := "gopanel/code-135-recovered"
+	if _, err := runCodeGit(session.WorkDir, "branch", "-m", newBranch); err != nil {
+		t.Fatal(err)
+	}
+
+	command, err := buildNativeCodexCommand(session)
+	if err != nil {
+		t.Skipf("codex is not installed: %v", err)
+	}
+	if session.WorktreeBranch != newBranch {
+		t.Fatalf("session branch = %q, want %q", session.WorktreeBranch, newBranch)
+	}
+	if got := command.Args[len(command.Args)-2:]; !reflect.DeepEqual(got, []string{"resume", "native-session"}) {
+		t.Fatalf("Codex did not resume the existing session: %#v", command.Args)
 	}
 }
 
@@ -257,7 +312,7 @@ func TestNativeCodeTerminalKeepsBoundedReconnectHistory(t *testing.T) {
 	terminal := newNativeTerminalProtocolTestSubject()
 	terminal.publish([]byte(strings.Repeat("a", nativeTerminalHistoryLimit)))
 	terminal.publish([]byte("tail"))
-	subscription, baseline := terminal.subscribe(0)
+	subscription, baseline := terminal.subscribe(0, false)
 	defer terminal.unsubscribe(subscription)
 	if len(baseline.Data) != nativeTerminalHistoryLimit || string(baseline.Data[len(baseline.Data)-4:]) != "tail" {
 		t.Fatalf("unexpected reconnect history: len=%d tail=%q", len(baseline.Data), baseline.Data[len(baseline.Data)-4:])

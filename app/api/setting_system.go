@@ -24,6 +24,11 @@ type SettingApiTokenReq struct {
 	ApiKey             string `json:"apiKey"`
 }
 
+var (
+	settingRestartGoPanel = cmd.RestartGoPanel
+	settingRestartServer  = cmd.RestartServer
+)
+
 // 更新API Token配置
 func SettingSystemApiTokenUpdate(c fiber.Ctx) error {
 	req, err := e.BodyToStruct[SettingApiTokenReq](c.Body())
@@ -86,9 +91,9 @@ func SettingSystemRestart(c fiber.Ctx) error {
 	var err error
 	switch operation {
 	case "panel":
-		err = cmd.RestartGoPanel()
+		err = settingRestartGoPanel()
 	case "server", "system":
-		err = cmd.RestartServer()
+		err = settingRestartServer()
 	default:
 		err = fmt.Errorf("unsupported restart operation: %s", operation)
 	}

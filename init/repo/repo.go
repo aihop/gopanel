@@ -119,17 +119,24 @@ func Init() {
 		sysLog.Println("Node table error", err)
 		return
 	}
+	if err := repo.MigrateLegacyAIProjects(global.DB); err != nil {
+		sysLog.Println("AIProject legacy data migration error", err)
+		return
+	}
 
 	if err := global.DB.AutoMigrate(
 		&model.Firewall{},
 		&model.Forward{},
-		&model.AIGroup{},
+		&model.AIProject{},
 		&model.AITask{},
 		&model.AIMessage{},
 		&model.AIDevSession{},
+		&model.AIDevSessionRepository{},
 		&model.AIExecutionRun{},
 		&model.AICodeDatabaseAccess{},
 		&model.AICodeDelivery{},
+		&model.AICodeDeliveryJob{},
+		&model.AICodeDeliveryLease{},
 		&model.AICodeAuditEvent{},
 		&model.AIInstruction{},
 		&model.AIPreview{},
@@ -139,6 +146,8 @@ func Init() {
 		&model.MobileDevice{},
 		&model.OperationLog{},
 		&model.LoginLog{},
+		&model.HostTerminalSession{},
+		&model.HostTerminalAuditEvent{},
 		&model.LegacyWebsiteDeploy{},
 	); err != nil {
 		sysLog.Println("AutoMigrate additional tables error", err)

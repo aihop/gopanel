@@ -45,12 +45,12 @@ export function getDefaultState() {
 					mobile: 20 // View padding for mobile devices
 				},
 				toolbarHeight: {
-					desk: 70, // Height of the toolbar for desktop
-					mobile: 60 // Height of the toolbar for mobile devices
+					desk: 60, // Height of the toolbar for desktop
+					mobile: 50 // Height of the toolbar for mobile devices
 				}
 			}
 		},
-		toolbarHeight: 70, // Default toolbar height (in pixels)
+		toolbarHeight: 60, // Default toolbar height (in pixels)
 		viewPadding: 40, // Default view padding (in pixels)
 		headerBarHeight: 60, // Height of the header bar (in pixels)
 		colors: tokens.colors, // Color definitions from the token

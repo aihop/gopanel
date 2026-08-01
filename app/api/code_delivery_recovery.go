@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -19,6 +20,10 @@ const (
 )
 
 func loadOrCreateCodeDelivery(session *model.AIDevSession, userID uint) (*model.AICodeDelivery, error) {
+	return loadOrCreateCodeDeliveryWithProgress(session, userID, nil)
+}
+
+func loadOrCreateCodeDeliveryWithProgress(session *model.AIDevSession, userID uint, report codeDeliveryProgressReporter) (*model.AICodeDelivery, error) {
 	var delivery model.AICodeDelivery
 	err := global.DB.Where("session_id = ?", session.ID).First(&delivery).Error
 	if err == nil {
@@ -30,30 +35,10 @@ func loadOrCreateCodeDelivery(session *model.AIDevSession, userID uint) (*model.
 	if err := validateCodeWorktreeDeliverySession(session); err != nil {
 		return nil, err
 	}
-	status, err := runCodeGit(session.WorkDir, "status", "--porcelain")
-	if err != nil {
+	if err := captureCodeDeliverySnapshot(session, userID); err != nil {
 		return nil, err
 	}
-	if strings.TrimSpace(status) != "" {
-		return nil, errors.New("Worktree 仍有未提交变更，请先提交")
-	}
-	if err := validateCodeQualityGate(session); err != nil {
-		return nil, err
-	}
-	commit, err := runCodeGit(session.WorkDir, "rev-parse", "HEAD")
-	if err != nil {
-		return nil, err
-	}
-	delivery = model.AICodeDelivery{
-		SessionID: session.ID, ProjectID: session.ProjectID, UserID: userID,
-		Status: codeDeliveryPrepared, SourceWorkDir: session.SourceWorkDir,
-		WorkDir: session.WorkDir, WorktreeBranch: session.WorktreeBranch,
-		WorktreeCommit: commit,
-	}
-	if err := global.DB.Create(&delivery).Error; err != nil {
-		if loadErr := global.DB.Where("session_id = ?", session.ID).First(&delivery).Error; loadErr == nil {
-			return &delivery, nil
-		}
+	if err := global.DB.Where("session_id = ?", session.ID).First(&delivery).Error; err != nil {
 		return nil, err
 	}
 	return &delivery, nil
@@ -63,17 +48,38 @@ func codeDeliverySessionSnapshot(delivery *model.AICodeDelivery) *model.AIDevSes
 	return &model.AIDevSession{
 		ID: delivery.SessionID, UserID: delivery.UserID, ProjectID: delivery.ProjectID,
 		WorkDir: delivery.WorkDir, SourceWorkDir: delivery.SourceWorkDir,
-		WorktreeBranch: delivery.WorktreeBranch,
+		WorktreeBranch: delivery.WorktreeBranch, TargetBranch: delivery.TargetBranch,
+		BaseCommit: delivery.BaseCommit, RemoteName: delivery.RemoteName,
+		RemoteBranch: delivery.RemoteBranch, RemoteCommit: delivery.RemoteCommit,
 	}
 }
 
 func mergePreparedCodeDelivery(delivery *model.AICodeDelivery) (codeGitDeliveryResult, error) {
+	return mergePreparedCodeDeliveryWithProgress(delivery, nil)
+}
+
+func mergePreparedCodeDeliveryWithProgress(delivery *model.AICodeDelivery, report codeDeliveryProgressReporter) (codeGitDeliveryResult, error) {
 	snapshot := codeDeliverySessionSnapshot(delivery)
+	if report != nil {
+		report(codeDeliveryStageSyncing, 20)
+	}
+	targetBranch := snapshot.TargetBranch
+	if targetBranch == "" {
+		targetBranch, _ = runCodeGit(snapshot.SourceWorkDir, "branch", "--show-current")
+	}
+	targetCommit, err := refreshCodeRepositoryTarget(snapshot.SourceWorkDir, targetBranch, snapshot.RemoteName)
+	if err != nil {
+		return codeGitDeliveryResult{}, err
+	}
+	if err := global.DB.Model(delivery).Update("remote_commit", targetCommit).Error; err != nil {
+		return codeGitDeliveryResult{}, err
+	}
+	delivery.RemoteCommit = targetCommit
+	if report != nil {
+		report(codeDeliveryStageMerging, 55)
+	}
 	if _, err := runCodeGit(snapshot.SourceWorkDir, "merge-base", "--is-ancestor", delivery.WorktreeCommit, "HEAD"); err != nil {
-		if status, statusErr := runCodeGit(snapshot.SourceWorkDir, "status", "--porcelain"); statusErr != nil || strings.TrimSpace(status) != "" {
-			return codeGitDeliveryResult{}, errors.New("源仓库存在未提交变更，无法安全合并")
-		}
-		if _, err := runCodeGit(snapshot.SourceWorkDir, "merge", "--no-ff", "--no-edit", snapshot.WorktreeBranch); err != nil {
+		if _, err := runCodeGit(snapshot.SourceWorkDir, "merge", "--no-ff", "--no-edit", delivery.WorktreeCommit); err != nil {
 			conflicts := codeGitConflictFiles(snapshot.SourceWorkDir)
 			_, _ = runCodeGit(snapshot.SourceWorkDir, "merge", "--abort")
 			if len(conflicts) > 0 {
@@ -97,19 +103,22 @@ func mergePreparedCodeDelivery(delivery *model.AICodeDelivery) (codeGitDeliveryR
 }
 
 func updateCodeDeliveryMetadata(delivery *model.AICodeDelivery) error {
-	return global.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(&model.AIDevSession{}).Where("id = ?", delivery.SessionID).Updates(map[string]any{
-			"work_dir": delivery.SourceWorkDir, "source_work_dir": "", "worktree_branch": "",
-		}).Error; err != nil {
-			return err
-		}
-		if err := tx.Model(&model.AITask{}).Where("session_id = ?", delivery.SessionID).
-			Update("work_dir", delivery.SourceWorkDir).Error; err != nil {
-			return err
-		}
-		now := time.Now()
-		return tx.Model(delivery).Updates(map[string]any{"status": codeDeliveryCompleted, "completed_at": now, "error_message": ""}).Error
-	})
+	now := time.Now()
+	if delivery.Status == codeDeliveryWorktreeCleaned {
+		return global.DB.Transaction(func(tx *gorm.DB) error {
+			if err := tx.Model(&model.AIDevSession{}).Where("id = ?", delivery.SessionID).Updates(map[string]any{
+				"work_dir": delivery.SourceWorkDir, "source_work_dir": "", "worktree_branch": "", "isolation_mode": "",
+			}).Error; err != nil {
+				return err
+			}
+			if err := tx.Model(&model.AITask{}).Where("session_id = ?", delivery.SessionID).
+				Update("work_dir", delivery.SourceWorkDir).Error; err != nil {
+				return err
+			}
+			return tx.Model(delivery).Updates(map[string]any{"status": codeDeliveryCompleted, "completed_at": now, "error_message": ""}).Error
+		})
+	}
+	return global.DB.Model(delivery).Updates(map[string]any{"status": codeDeliveryCompleted, "completed_at": now, "error_message": ""}).Error
 }
 
 func cleanupCodeDeliveryWorktree(delivery *model.AICodeDelivery) error {
@@ -126,28 +135,33 @@ func cleanupCodeDeliveryWorktree(delivery *model.AICodeDelivery) error {
 			return err
 		}
 	}
+	if delivery.Status == codeDeliveryCompleted {
+		return nil
+	}
 	return global.DB.Model(delivery).Updates(map[string]any{
 		"status": codeDeliveryWorktreeCleaned, "error_message": "",
 	}).Error
 }
 
 func resumeCodeSessionDelivery(session *model.AIDevSession, userID uint) (codeGitDeliveryResult, error) {
-	delivery, err := loadOrCreateCodeDelivery(session, userID)
+	return resumeCodeSessionDeliveryWithProgress(session, userID, nil)
+}
+
+func resumeCodeSessionDeliveryWithProgress(session *model.AIDevSession, userID uint, report codeDeliveryProgressReporter) (codeGitDeliveryResult, error) {
+	delivery, err := loadOrCreateCodeDeliveryWithProgress(session, userID, report)
 	if err != nil {
 		return codeGitDeliveryResult{}, err
 	}
-	result := codeGitDeliveryResult{Status: "merged", Commit: delivery.MergeCommit, Branch: delivery.WorktreeBranch}
-	if delivery.Status == codeDeliveryPrepared {
-		result, err = mergePreparedCodeDelivery(delivery)
-		if err != nil || result.Status == "conflict" {
-			return result, err
-		}
+	result, err := integrateAndPushCodeDeliveryWithProgress(delivery, report)
+	if err != nil || result.Status == "conflict" {
+		result.Repositories = []codeRepositoryDeliveryResult{codeSingleRepositoryDeliveryResult(delivery, result)}
+		return result, err
 	}
 	if delivery.Status == codeDeliveryMerged {
-		if err := cleanupCodeDeliveryWorktree(delivery); err != nil {
+		if err := updateCodeDeliveryMetadata(delivery); err != nil {
 			return codeGitDeliveryResult{}, err
 		}
-		delivery.Status = codeDeliveryWorktreeCleaned
+		delivery.Status = codeDeliveryCompleted
 	}
 	if delivery.Status == codeDeliveryWorktreeCleaned {
 		if err := updateCodeDeliveryMetadata(delivery); err != nil {
@@ -155,5 +169,20 @@ func resumeCodeSessionDelivery(session *model.AIDevSession, userID uint) (codeGi
 		}
 		delivery.Status = codeDeliveryCompleted
 	}
+	result.Repositories = []codeRepositoryDeliveryResult{codeSingleRepositoryDeliveryResult(delivery, result)}
 	return result, nil
+}
+
+func codeSingleRepositoryDeliveryResult(delivery *model.AICodeDelivery, result codeGitDeliveryResult) codeRepositoryDeliveryResult {
+	pushStatus := delivery.PushStatus
+	if !codeDeliveryHasRemote(delivery.RemoteName, deliveryRemoteBranch(delivery.RemoteBranch, delivery.TargetBranch)) {
+		pushStatus = "local"
+	}
+	return codeRepositoryDeliveryResult{
+		RepositoryID: "session", RepositoryName: filepath.Base(delivery.SourceWorkDir), Status: result.Status,
+		Branch: delivery.WorktreeBranch, TargetBranch: delivery.TargetBranch, Remote: delivery.RemoteName,
+		RemoteBranch: deliveryRemoteBranch(delivery.RemoteBranch, delivery.TargetBranch), Commit: result.Commit,
+		PushStatus: pushStatus, PushedCommit: delivery.PushedCommit, ErrorMessage: delivery.PushError,
+		ConflictFiles: result.ConflictFiles,
+	}
 }

@@ -11,6 +11,7 @@ type IAIDevSessionRepo interface {
 	GetSessionByID(id uint) (*model.AIDevSession, error)
 	GetSessionsByUserID(userID, projectID uint, page, limit int) ([]*model.AIDevSession, int64, error)
 	UpdateSession(session *model.AIDevSession) error
+	UpdateSessionTitle(id uint, title string) error
 	UpdateSessionApprovalPolicy(id uint, approvalPolicy string) error
 	CreateExecutionRun(run *model.AIExecutionRun) error
 	UpdateExecutionRun(run *model.AIExecutionRun) error
@@ -74,11 +75,38 @@ func (r *aiDevSessionRepo) GetSessionsByUserID(userID, projectID uint, page, lim
 
 	db.Count(&total)
 	err := db.Order("updated_at desc").Offset((page - 1) * limit).Limit(limit).Find(&sessions).Error
+	if err != nil || len(sessions) == 0 {
+		return sessions, total, err
+	}
+	taskIDs := make([]uint, 0, len(sessions))
+	for _, session := range sessions {
+		if session.LastTaskID > 0 {
+			taskIDs = append(taskIDs, session.LastTaskID)
+		}
+	}
+	if len(taskIDs) == 0 {
+		return sessions, total, nil
+	}
+	var tasks []*model.AITask
+	if err = global.DB.Select("id", "title").Where("id IN ? AND user_id = ?", taskIDs, userID).Find(&tasks).Error; err != nil {
+		return nil, 0, err
+	}
+	titles := make(map[uint]string, len(tasks))
+	for _, task := range tasks {
+		titles[task.ID] = task.Title
+	}
+	for _, session := range sessions {
+		session.CurrentTaskTitle = titles[session.LastTaskID]
+	}
 	return sessions, total, err
 }
 
 func (r *aiDevSessionRepo) UpdateSession(session *model.AIDevSession) error {
 	return global.DB.Save(session).Error
+}
+
+func (r *aiDevSessionRepo) UpdateSessionTitle(id uint, title string) error {
+	return global.DB.Model(&model.AIDevSession{}).Where("id = ?", id).Update("title", title).Error
 }
 
 func (r *aiDevSessionRepo) UpdateSessionApprovalPolicy(id uint, approvalPolicy string) error {

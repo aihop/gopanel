@@ -172,6 +172,24 @@ func detectCodeQualityChecks(session *model.AIDevSession) ([]codeQualityCheck, e
 }
 
 func codeQualityRoots(session *model.AIDevSession) ([]string, error) {
+	if session.IsolationMode == codeIsolationMultiWorktree {
+		repositories, err := loadCodeSessionRepositories(session.ID)
+		if err != nil {
+			return nil, err
+		}
+		roots := make([]string, 0, len(repositories))
+		for _, repository := range repositories {
+			if repository.Status == codeDeliveryCompleted {
+				continue
+			}
+			resolved, resolveErr := filepath.EvalSymlinks(repository.WorktreeDir)
+			if resolveErr != nil {
+				return nil, errors.New("会话仓库目录不存在或无法访问")
+			}
+			roots = append(roots, resolved)
+		}
+		return roots, nil
+	}
 	workDir, err := filepath.EvalSymlinks(filepath.Clean(session.WorkDir))
 	if err != nil {
 		return nil, errors.New("会话工作目录不存在或无法访问")
@@ -366,7 +384,7 @@ func validateCodeQualityGate(session *model.AIDevSession) error {
 	if session == nil || session.ProjectID == 0 {
 		return nil
 	}
-	project, err := repo.NewAIGroupRepo().GetGroupByID(session.ProjectID)
+	project, err := repo.NewAIProjectRepo().GetProjectByID(session.ProjectID)
 	if err != nil || !project.RequireQualityGate {
 		return err
 	}

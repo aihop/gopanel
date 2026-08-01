@@ -4,7 +4,31 @@ import (
 	"fmt"
 	"testing"
 	"time"
+
+	"github.com/aihop/gopanel/app/model"
+	"github.com/aihop/gopanel/constant"
 )
+
+func TestMobileConsoleLoginAllowsActiveAdministrators(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		user    *model.User
+		allowed bool
+	}{
+		{name: "super administrator", user: &model.User{Status: constant.UserStatusNormal, Role: constant.UserRoleSuper}, allowed: true},
+		{name: "administrator", user: &model.User{Status: constant.UserStatusNormal, Role: constant.UserRoleAdmin}, allowed: true},
+		{name: "sub administrator", user: &model.User{Status: constant.UserStatusNormal, Role: constant.UserRoleSubAdmin}},
+		{name: "demo user", user: &model.User{Status: constant.UserStatusNormal, Role: constant.UserRoleDemo}},
+		{name: "disabled super administrator", user: &model.User{Status: constant.UserStatusNotActive, Role: constant.UserRoleSuper}},
+		{name: "missing user"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := canLoginMobileConsole(test.user); got != test.allowed {
+				t.Fatalf("canLoginMobileConsole() = %v, want %v", got, test.allowed)
+			}
+		})
+	}
+}
 
 func TestMobilePairingAttemptsAreRateLimited(t *testing.T) {
 	resetMobilePairingAttempts(t)

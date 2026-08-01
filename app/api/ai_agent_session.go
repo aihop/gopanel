@@ -84,7 +84,9 @@ func ensureSessionTaskWithDB(db *gorm.DB, session *model.AIDevSession, claims *t
 	session.LastTaskID = task.ID
 	session.Status = "active"
 	session.CurrentStage = "task_ready"
-	if err := db.Save(session).Error; err != nil {
+	if err := updateCodeSessionDevelopmentState(db, session.ID, map[string]any{
+		"last_task_id": task.ID, "status": "active", "current_stage": "task_ready",
+	}); err != nil {
 		return nil, err
 	}
 	return task, nil
@@ -133,23 +135,24 @@ func GetAISession(c fiber.Ctx) error {
 func CreateAISession(c fiber.Ctx) error {
 	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
 	var req struct {
-		Title          string               `json:"title"`
-		WorkDir        string               `json:"workDir"`
-		ProjectID      uint                 `json:"projectId"`
-		ExecutorID     string               `json:"executorId"`
-		ApprovalPolicy string               `json:"approvalPolicy"`
-		Isolated       bool                 `json:"isolated"`
-		Provider       *codeProviderRequest `json:"provider"`
-		CodexProvider  *codeProviderRequest `json:"codexProvider"`
+		Title              string               `json:"title"`
+		WorkDir            string               `json:"workDir"`
+		ProjectID          uint                 `json:"projectId"`
+		ExecutorID         string               `json:"executorId"`
+		ApprovalPolicy     string               `json:"approvalPolicy"`
+		Isolated           bool                 `json:"isolated"`
+		IncludeUncommitted bool                 `json:"includeUncommitted"`
+		Provider           *codeProviderRequest `json:"provider"`
+		CodexProvider      *codeProviderRequest `json:"codexProvider"`
 	}
 	if bindErr := c.Bind().JSON(&req); bindErr != nil {
 		return c.JSON(e.Fail(bindErr))
 	}
 	workDir := strings.TrimSpace(req.WorkDir)
-	var project *model.AIGroup
+	var project *model.AIProject
 	var err error
 	if req.ProjectID > 0 {
-		project, err = repo.NewAIGroupRepo().GetGroupByID(req.ProjectID)
+		project, err = repo.NewAIProjectRepo().GetProjectByID(req.ProjectID)
 		if err != nil {
 			return c.JSON(e.Fail(errors.New("项目不存在")))
 		}
@@ -206,12 +209,16 @@ func CreateAISession(c fiber.Ctx) error {
 	if err := sessionRepo.CreateSession(session); err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	if req.Isolated {
+	useWorktree := req.Isolated
+	if project != nil {
+		useWorktree = inspectCodeWorktreeCapability(project).Available
+	}
+	if useWorktree {
 		if project == nil {
 			_ = sessionRepo.DeleteSession(session.ID)
 			return c.JSON(e.Fail(errors.New("Git Worktree 隔离仅支持项目会话")))
 		}
-		if err := createCodeSessionWorktree(session, project); err != nil {
+		if err := createCodeSessionWorktreeWithLease(session, project, req.IncludeUncommitted); err != nil {
 			_ = sessionRepo.DeleteSession(session.ID)
 			return c.JSON(e.Fail(err))
 		}
@@ -239,11 +246,15 @@ func CreateAISession(c fiber.Ctx) error {
 	}
 	return c.JSON(e.Succ(session))
 }
+
 func CreateAISessionInstruction(c fiber.Ctx) error {
 	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
 	sessionID, _ := strconv.Atoi(c.Params("id"))
 	session, err := getAISessionWithPermission(uint(sessionID), claims)
 	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	if err := validateCodeSessionDevelopmentOpen(session); err != nil {
 		return c.JSON(e.Fail(err))
 	}
 	var req struct {
@@ -273,6 +284,8 @@ func CreateAISessionInstruction(c fiber.Ctx) error {
 	if err := validateCodeTokenBudget(session); err != nil {
 		return c.JSON(e.Fail(err))
 	}
+	unlockLifecycle := codeSessionLifecycles.lock(session.ID)
+	defer unlockLifecycle()
 	requireApproval := codeSessionRequiresRiskApproval(session)
 	needsApproval := shouldRequireAIApproval(content, requireApproval)
 	instructionStatus := "queued"
@@ -283,7 +296,17 @@ func CreateAISessionInstruction(c fiber.Ctx) error {
 	var instruction *model.AIInstruction
 	var approval *model.AIApproval
 	if err := global.DB.Transaction(func(tx *gorm.DB) error {
-		var txErr error
+		lockedSession, txErr := lockCodeSessionForDevelopment(tx, session.ID)
+		if txErr != nil {
+			return txErr
+		}
+		session = lockedSession
+		requireApproval = codeSessionRequiresRiskApproval(session)
+		needsApproval = shouldRequireAIApproval(content, requireApproval)
+		instructionStatus = "queued"
+		if needsApproval {
+			instructionStatus = "pending_approval"
+		}
 		task, txErr = ensureSessionTaskWithDB(tx, session, claims, content)
 		if txErr != nil {
 			return txErr
@@ -318,8 +341,9 @@ func CreateAISessionInstruction(c fiber.Ctx) error {
 		if strings.TrimSpace(session.Title) == "" {
 			session.Title = buildDefaultSessionTitle(session.WorkDir, content)
 		}
-		if txErr = tx.Model(&model.AIDevSession{}).Where("id = ?", session.ID).
-			Updates(map[string]any{"status": "active", "last_instruction_at": now, "title": session.Title}).Error; txErr != nil {
+		if txErr = updateCodeSessionDevelopmentState(tx, session.ID, map[string]any{
+			"status": "active", "last_instruction_at": now, "title": session.Title,
+		}); txErr != nil {
 			return txErr
 		}
 		return reconcileCodeTaskState(tx, session, task, instructionStatus, map[bool]string{true: "awaiting_approval", false: "instruction_queued"}[needsApproval])
@@ -403,6 +427,15 @@ func GetAISessionState(c fiber.Ctx) error {
 			recentMessages = messages
 		}
 	}
+	var deliveryJob *codeDeliveryJobView
+	deliveryJob, err = loadCodeDeliveryJobView(session.ID)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		deliveryJob = nil
+		err = nil
+	}
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
 	return c.JSON(e.Succ(fiber.Map{
 		"session":           session,
 		"codexRuntime":      getCodexRuntimeState(session),
@@ -418,5 +451,6 @@ func GetAISessionState(c fiber.Ctx) error {
 		"changedFiles":      changedFiles,
 		"latestRun":         latestRun,
 		"tokenUsage":        tokenUsage,
+		"delivery":          deliveryJob,
 	}))
 }

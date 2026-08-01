@@ -1,6 +1,6 @@
 <template>
   <header
-    class="toolbar px-4 pb-6 pt-4 sm:px-10"
+    class="toolbar px-4 py-4 sm:px-10"
     :class="{ boxed }"
   >
     <div class="wrap toolbar-panel flex items-center justify-end gap-3 rounded-[24px] px-4 shadow-[0_10px_30px_rgba(37,99,235,0.06)] backdrop-blur-xl sm:px-5">

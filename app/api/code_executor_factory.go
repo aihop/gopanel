@@ -17,6 +17,7 @@ import (
 
 const (
 	codexSessionAPIKeyEnv   = "GOPANEL_CODEX_SESSION_API_KEY"
+	codexNetworkConfig      = "sandbox_workspace_write.network_access=true"
 	openCodeSessionKeyEnv   = "GOPANEL_OPENCODE_SESSION_API_KEY"
 	claudeSessionAPIKeyEnv  = "ANTHROPIC_API_KEY"
 	claudeSessionBaseURLEnv = "ANTHROPIC_BASE_URL"
@@ -75,11 +76,19 @@ func (aiderExecutorFactory) ConfigSchema() *codeExecutorConfigSchema {
 }
 
 func (codexExecutorFactory) BuildArgs(prompt, nativeSessionID string, _ uint, approvalPolicy string) ([]string, string, error) {
-	prefix := []string{"--ask-for-approval", codexApprovalPolicy(approvalPolicy), "--sandbox", "workspace-write", "exec"}
+	prefix := append(codexSandboxArgs(approvalPolicy), "exec")
 	if nativeSessionID != "" {
 		return append(prefix, "resume", "--json", "--skip-git-repo-check", nativeSessionID, prompt), nativeSessionID, nil
 	}
 	return append(prefix, "--json", "--skip-git-repo-check", prompt), "", nil
+}
+
+func codexSandboxArgs(approvalPolicy string) []string {
+	return []string{
+		"-c", codexNetworkConfig,
+		"--ask-for-approval", codexApprovalPolicy(approvalPolicy),
+		"--sandbox", "workspace-write",
+	}
 }
 
 func (claudeExecutorFactory) BuildArgs(prompt, nativeSessionID string, _ uint, approvalPolicy string) ([]string, string, error) {

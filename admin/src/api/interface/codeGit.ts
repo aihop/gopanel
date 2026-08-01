@@ -24,6 +24,8 @@ export interface CodeGitRepository {
 	stagedAdditions: number
 	stagedDeletions: number
 	truncated: boolean
+	isolated: boolean
+	deliveryStatus?: string
 }
 
 export interface CodeGitStatus {
@@ -49,8 +51,68 @@ export interface CodeGitDiff {
 }
 
 export interface CodeGitDeliveryResult {
-	status: "committed" | "merged" | "conflict"
+	status: "committed" | "merged" | "partial" | "conflict" | "failed"
+	resultType?: "local" | "remote_verified" | "mixed"
+	errorMessage?: string
 	commit?: string
 	branch?: string
+	repositoryId?: string
+	repositoryName?: string
+	conflictFiles?: string[]
+	repositories?: CodeRepositoryDeliveryResult[]
+}
+
+export type CodeDeliveryJobStatus = "queued" | "running" | "completed" | "partial" | "conflict" | "failed"
+
+export interface CodeDeliveryJob {
+	id: number
+	sessionId: number
+	taskId?: number
+	status: CodeDeliveryJobStatus
+	stage: string
+	progress: number
+	attempt: number
+	queuePosition: number
+	targetBranch?: string
+	resultCommit?: string
+	resultType?: "local" | "remote_verified" | "mixed"
+	repositories?: CodeRepositoryDeliveryResult[]
+	errorMessage?: string
+	conflictFiles: string[]
+	createdAt: string
+	updatedAt: string
+	startedAt?: string
+	completedAt?: string
+}
+
+export interface CodeDeliveryPushRepository {
+	repositoryId: string
+	repositoryName: string
+	status: "pending" | "pushed" | "failed"
+	remote?: string
+	branch?: string
+	commit?: string
+	errorMessage?: string
+	ready: boolean
+}
+
+export interface CodeDeliveryPushResult {
+	available: boolean
+	status: "unavailable" | "pending" | "pushed" | "failed"
+	repositories: CodeDeliveryPushRepository[]
+}
+
+export interface CodeRepositoryDeliveryResult {
+	repositoryId: string
+	repositoryName: string
+	status: string
+	branch: string
+	targetBranch: string
+	remote?: string
+	remoteBranch?: string
+	commit?: string
+	pushStatus: "pending" | "pushed" | "failed" | "local"
+	pushedCommit?: string
+	errorMessage?: string
 	conflictFiles?: string[]
 }

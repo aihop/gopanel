@@ -77,10 +77,10 @@ const router = createRouter({
 					meta: { title: t("code.workspace"), titleKey: "code.workspace", auth: true, roles: "all" }
 				},
 				{
-					path: "group/:id",
-					name: "Code-Group",
+					path: "project/:id",
+					name: "Code-Project",
 					component: () => import("@/views/Code/Workspace.vue"),
-					meta: { title: t("code.teamWorkspace"), titleKey: "code.teamWorkspace", auth: true, roles: "all" }
+					meta: { title: t("code.projectWorkspace"), titleKey: "code.projectWorkspace", auth: true, roles: "all" }
 				}
 			]
 		},
@@ -219,6 +219,12 @@ const router = createRouter({
 				roles: "all"
 			},
 			children: [
+				{
+					path: "terminal",
+					name: "Host-Terminal",
+					component: () => import("@/views/Host/terminal/index.vue"),
+					meta: { title: t("menu.terminal"), titleKey: "menu.terminal", auth: true, roles: "all" }
+				},
 				{
 					path: "monitor",
 					name: "Host-Monitor",
@@ -368,7 +374,7 @@ const defaultViewport = viewportMeta?.content || "initial-scale=1, minimum-scale
 router.afterEach(route => {
 	if (!viewportMeta) return
 	viewportMeta.content = route.path === "/mobile" || route.path.startsWith("/mobile/")
-		? "width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no"
+		? "width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
 		: defaultViewport
 })
 

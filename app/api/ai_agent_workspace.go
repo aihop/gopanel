@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/md5"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -98,7 +99,10 @@ func normalizeAIAgentAuthorizedWorkDir(workDir string, userID uint, claims *toke
 	return workDir, nil
 }
 
-func ensureAIAgentWorkspaceContainer(wsConn *websocket.Conn, workDir string, claims *token.CustomClaims) (string, error) {
+func ensureAIAgentWorkspaceContainer(wsConn *websocket.Conn, workDir string, session *model.AIDevSession, claims *token.CustomClaims) (string, error) {
+	if err := ensureCodeManagedPushGuards(session); err != nil {
+		return "", err
+	}
 	containerName := aiAgentWorkspaceContainerName(workDir, claims.UserId)
 	isRunning, exists, err := docker.InspectContainerRunning(context.Background(), containerName)
 	if err != nil {
@@ -121,6 +125,16 @@ func ensureAIAgentWorkspaceContainer(wsConn *websocket.Conn, workDir string, cla
 
 	if !exists {
 		runArgs := buildAIAgentWorkspaceRunArgs(containerName, workDir)
+		gitMetadataDirs, metadataErr := workspaceGitMetadataMounts(session, workDir)
+		if metadataErr != nil {
+			return "", metadataErr
+		}
+		for _, metadataDir := range gitMetadataDirs {
+			runArgs = append(runArgs, "-v", fmt.Sprintf("%s:%s", metadataDir, metadataDir))
+		}
+		if len(gitMetadataDirs) > 0 {
+			runArgs = append(runArgs, "-v", fmt.Sprintf("%s:%s", workDir, workDir))
+		}
 		if isAnyManagedAIProjectWorkDir(workDir) {
 			for _, sourceDir := range aiProjectWorkspaceSourceDirs(workDir) {
 				if _, sourceErr := normalizeAIProjectSourceDir(sourceDir, claims); sourceErr != nil {
@@ -202,6 +216,44 @@ func buildAIAgentWorkspaceRunArgs(containerName, workDir string) []string {
 		"-v", fmt.Sprintf("%s:/workspace", workDir),
 		"-w", "/workspace",
 	}
+}
+
+func workspaceGitMetadataMounts(session *model.AIDevSession, workDir string) ([]string, error) {
+	worktreeDirs := []string{workDir}
+	if session != nil && session.IsolationMode == codeIsolationMultiWorktree {
+		if filepath.Clean(session.WorkDir) != filepath.Clean(workDir) {
+			return nil, fmt.Errorf("会话工作目录与终端目录不一致")
+		}
+		repositories, err := loadCodeSessionRepositories(session.ID)
+		if err != nil || len(repositories) == 0 {
+			return nil, fmt.Errorf("会话多仓库 Worktree 元数据不可用")
+		}
+		worktreeDirs = make([]string, 0, len(repositories))
+		for index := range repositories {
+			repository := &repositories[index]
+			if err := validateCodeSessionRepositoryWorktree(session, repository); err != nil {
+				return nil, err
+			}
+			worktreeDirs = append(worktreeDirs, repository.WorktreeDir)
+		}
+	}
+	seen := make(map[string]struct{})
+	metadataDirs := make([]string, 0, len(worktreeDirs))
+	for _, worktreeDir := range worktreeDirs {
+		if _, err := os.Stat(filepath.Join(worktreeDir, ".git")); err != nil {
+			continue
+		}
+		commonDir, err := resolveCodeGitPath(worktreeDir, "--git-common-dir")
+		if err != nil {
+			return nil, err
+		}
+		if _, exists := seen[commonDir]; exists {
+			continue
+		}
+		seen[commonDir] = struct{}{}
+		metadataDirs = append(metadataDirs, commonDir)
+	}
+	return metadataDirs, nil
 }
 
 func buildAIAgentWorkspaceDaemonCommand() string {

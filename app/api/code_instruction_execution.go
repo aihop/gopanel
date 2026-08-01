@@ -66,6 +66,11 @@ func executeCodeInstruction(
 func startCodeInstructionExecution(session *model.AIDevSession, task *model.AITask, instruction *model.AIInstruction, claim bool) error {
 	now := time.Now()
 	return global.DB.Transaction(func(tx *gorm.DB) error {
+		lockedSession, err := lockCodeSessionForDevelopment(tx, session.ID)
+		if err != nil {
+			return err
+		}
+		session = lockedSession
 		query := tx.Model(&model.AIInstruction{}).Where("id = ?", instruction.ID)
 		if claim {
 			query = query.Where("status = ?", "queued")

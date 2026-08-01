@@ -60,6 +60,19 @@ func (manager *nativeCodeTerminalManager) attach(
 	session *model.AIDevSession,
 	cols, rows uint16,
 ) (*nativeCodeTerminal, bool, error) {
+	if session == nil || session.ID == 0 {
+		return nil, false, errors.New("开发会话不可用")
+	}
+	unlockLifecycle := codeSessionLifecycles.lock(session.ID)
+	defer unlockLifecycle()
+	current, err := repo.NewAIDevSessionRepo().GetSessionByID(session.ID)
+	if err != nil {
+		return nil, false, err
+	}
+	session = current
+	if err := validateCodeSessionDevelopmentOpen(session); err != nil {
+		return nil, false, err
+	}
 	manager.mu.Lock()
 	defer manager.mu.Unlock()
 	if terminal := manager.sessions[session.ID]; terminal != nil {
@@ -94,21 +107,24 @@ func (manager *nativeCodeTerminalManager) attach(
 		executorName: session.AgentName,
 	}
 	if preparedSessionID != "" && session.NativeSessionID != preparedSessionID {
-		session.NativeSessionID = preparedSessionID
-		if err := repo.NewAIDevSessionRepo().UpdateSession(session); err != nil {
+		if err := updateCodeSessionDevelopmentState(global.DB, session.ID, map[string]any{
+			"native_session_id": preparedSessionID,
+		}); err != nil {
 			_ = command.Process.Kill()
 			_ = ptmx.Close()
 			lease.Release()
 			return nil, false, err
 		}
+		session.NativeSessionID = preparedSessionID
 	}
 	lease.SetCancel(func() {
 		if command.Process != nil {
 			_ = command.Process.Kill()
 		}
 	})
-	if err := global.DB.Model(&model.AIDevSession{}).Where("id = ?", session.ID).
-		Updates(map[string]any{"status": "active", "current_stage": "interactive"}).Error; err != nil {
+	if err := updateCodeSessionDevelopmentState(global.DB, session.ID, map[string]any{
+		"status": "active", "current_stage": "interactive",
+	}); err != nil {
 		_ = command.Process.Kill()
 		_ = ptmx.Close()
 		lease.Release()
@@ -185,7 +201,8 @@ func (terminal *nativeCodeTerminal) publish(output []byte) {
 func (terminal *nativeCodeTerminal) write(subscriptionID string, data []byte) error {
 	terminal.mu.Lock()
 	defer terminal.mu.Unlock()
-	if terminal.controllerID != subscriptionID || terminal.controlExpiredLocked(time.Now()) {
+	subscription := terminal.subscribers[subscriptionID]
+	if subscription == nil || subscription.ReadOnly || terminal.controllerID != subscriptionID || terminal.controlExpiredLocked(time.Now()) {
 		return errors.New("当前连接没有终端输入权")
 	}
 	terminal.renewControlLeaseLocked(time.Now())
@@ -240,18 +257,16 @@ func serveNativeCodeTerminal(
 		return
 	}
 	afterSequence, _ := strconv.ParseUint(wsConn.Query("after_sequence", "0"), 10, 64)
-	subscription, baseline := terminal.subscribe(afterSequence)
+	readOnly := wsConn.Query("read_only") == "1"
+	subscription, baseline := terminal.subscribe(afterSequence, readOnly)
 	subscription.UserID = claims.UserId
 	subscription.IP = wsConn.IP()
-	subscription.ReadOnly = wsConn.Query("read_only") == "1"
 	subscription.DeviceID, _ = wsConn.Locals(middleware.MobileDeviceIDKey).(uint)
-	if baseline.HasControl && wsConn.Query("read_only") != "1" && wsConn.Query("take_control") != "1" {
+	subscription.AllowControl = subscription.DeviceID > 0
+	if baseline.HasControl && !readOnly && wsConn.Query("take_control") != "1" {
 		recordCodeAudit(claims.UserId, session.ProjectID, session.ID, "terminal_control_acquire", "success", subscription.ID, "连接自动获得控制权", wsConn.IP(), time.Now(), codeAuditMeta{"deviceId": subscription.DeviceID, "automatic": true})
 	}
-	if wsConn.Query("read_only") == "1" && baseline.HasControl {
-		terminal.releaseControl(subscription.ID)
-		baseline.HasControl = false
-	} else if wsConn.Query("take_control") == "1" {
+	if wsConn.Query("take_control") == "1" {
 		startedAt := time.Now()
 		granted, reason := terminal.takeControl(subscription.ID)
 		baseline.HasControl = granted
@@ -333,7 +348,7 @@ func serveNativeCodeTerminal(
 			if !granted {
 				status = "denied"
 			}
-			recordCodeAudit(claims.UserId, session.ProjectID, session.ID, "terminal_control_acquire", status, subscription.ID, reason, wsConn.IP(), startedAt, codeAuditMeta{"deviceId": subscription.DeviceID, "readOnly": subscription.ReadOnly})
+			recordCodeAudit(claims.UserId, session.ProjectID, session.ID, "terminal_control_acquire", status, subscription.ID, reason, wsConn.IP(), startedAt, codeAuditMeta{"deviceId": subscription.DeviceID, "readOnly": subscription.DefaultReadOnly})
 			if !granted {
 				_, expiresAt := terminal.controlState(subscription.ID)
 				_ = writeEvent(nativeTerminalEvent{Type: "control", HasControl: false, ControlReason: reason, LeaseExpiresAt: expiresAt})
