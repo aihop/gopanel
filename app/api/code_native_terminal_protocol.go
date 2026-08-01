@@ -98,11 +98,12 @@ func splitNativeTerminalBaseline(event nativeTerminalEvent) []nativeTerminalEven
 		return []nativeTerminalEvent{event}
 	}
 	chunks := make([]nativeTerminalEvent, 0, (len(event.Data)+nativeTerminalBaselineChunkLimit-1)/nativeTerminalBaselineChunkLimit)
-	for start := 0; start < len(event.Data); start += nativeTerminalBaselineChunkLimit {
-		end := min(start+nativeTerminalBaselineChunkLimit, len(event.Data))
+	for start := 0; start < len(event.Data); {
+		end := terminalChunkEnd(event.Data, start, nativeTerminalBaselineChunkLimit)
 		chunk := event
 		chunk.Data = event.Data[start:end]
 		chunks = append(chunks, chunk)
+		start = end
 	}
 	return chunks
 }

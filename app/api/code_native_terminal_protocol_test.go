@@ -1,8 +1,10 @@
 package api
 
 import (
+	"bytes"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func newNativeTerminalProtocolTestSubject() *nativeCodeTerminal {
@@ -72,6 +74,21 @@ func TestNativeTerminalProtocolSplitsLargeBaseline(t *testing.T) {
 	chunks := splitNativeTerminalBaseline(event)
 	if len(chunks) != 2 || len(chunks[0].Data) != nativeTerminalBaselineChunkLimit || len(chunks[1].Data) != 1 {
 		t.Fatalf("unexpected baseline chunks: %d, %d, %d", len(chunks), len(chunks[0].Data), len(chunks[1].Data))
+	}
+}
+
+func TestNativeTerminalBaselineChunksPreserveUTF8(t *testing.T) {
+	data := append(bytes.Repeat([]byte{'x'}, nativeTerminalBaselineChunkLimit-1), []byte("中文")...)
+	chunks := splitNativeTerminalBaseline(nativeTerminalEvent{Type: "baseline", Data: data})
+	var combined []byte
+	for _, chunk := range chunks {
+		if !utf8.Valid(chunk.Data) {
+			t.Fatalf("invalid UTF-8 chunk: %q", chunk.Data)
+		}
+		combined = append(combined, chunk.Data...)
+	}
+	if !bytes.Equal(combined, data) {
+		t.Fatal("baseline data changed during UTF-8 chunking")
 	}
 }
 

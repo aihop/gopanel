@@ -4,8 +4,10 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/aihop/gopanel/app/model"
 )
@@ -109,6 +111,35 @@ func TestHostTerminalHistoryIsCapped(t *testing.T) {
 	session.publish(data)
 	if len(session.history) != hostTerminalHistoryLimit || !session.historyTruncated {
 		t.Fatalf("history cap not applied: size=%d truncated=%v", len(session.history), session.historyTruncated)
+	}
+}
+
+func TestHostTerminalSplitsLargeBaseline(t *testing.T) {
+	event := hostTerminalEvent{Type: "baseline", Data: string(make([]byte, hostTerminalBaselineChunkLimit+1)), Truncated: true}
+	chunks := splitHostTerminalBaseline(event)
+	if len(chunks) != 2 || len(chunks[0].Data) != hostTerminalBaselineChunkLimit || len(chunks[1].Data) != 1 {
+		t.Fatalf("unexpected baseline chunks: %#v", chunks)
+	}
+	if !chunks[0].Truncated || chunks[1].Truncated || chunks[0].ChunkIndex != 0 || chunks[1].ChunkIndex != 1 || chunks[1].ChunkCount != 2 {
+		t.Fatalf("unexpected chunk metadata: %#v", chunks)
+	}
+}
+
+func TestHostTerminalBaselineChunksPreserveUTF8(t *testing.T) {
+	data := strings.Repeat("x", hostTerminalBaselineChunkLimit-1) + "中文"
+	chunks := splitHostTerminalBaseline(hostTerminalEvent{Type: "baseline", Data: data})
+	var combined strings.Builder
+	for _, chunk := range chunks {
+		if !utf8.ValidString(chunk.Data) {
+			t.Fatalf("invalid UTF-8 chunk: %q", chunk.Data)
+		}
+		combined.WriteString(chunk.Data)
+		if chunk.ChunkCount != len(chunks) {
+			t.Fatalf("unexpected chunk count: %#v", chunks)
+		}
+	}
+	if combined.String() != data {
+		t.Fatal("baseline data changed during UTF-8 chunking")
 	}
 }
 

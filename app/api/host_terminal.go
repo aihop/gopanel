@@ -159,7 +159,12 @@ func HostTerminalWebSocket(wsConn *websocket.Conn) {
 	writeEvent := func(event hostTerminalEvent) error {
 		writeMu.Lock()
 		defer writeMu.Unlock()
-		return wsConn.WriteJSON(event)
+		for _, chunk := range splitHostTerminalBaseline(event) {
+			if err := wsConn.WriteJSON(chunk); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
 	if err := writeEvent(baseline); err != nil {
 		return

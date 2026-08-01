@@ -8,6 +8,8 @@ import { updateMobileSessionTitle } from "@/api/modules/mobile"
 import Icon from "@/components/common/Icon.vue"
 import { mobileMessages } from "@/i18n/locales/mobile"
 import MobileTerminalInput from "./MobileTerminalInput.vue"
+import { MobileTerminalOutputQueue } from "./mobileTerminalOutputQueue"
+import "./mobileTerminal.css"
 import "@xterm/xterm/css/xterm.css"
 
 const props = withDefaults(
@@ -33,6 +35,7 @@ const renameTitle = ref("")
 const renameLoading = ref(false)
 let terminal: Terminal | null = null
 let fitAddon: FitAddon | null = null
+let outputQueue: MobileTerminalOutputQueue | null = null
 let socket: WebSocket | null = null
 let resizeObserver: ResizeObserver | null = null
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
@@ -40,19 +43,22 @@ let pingTimer: ReturnType<typeof setInterval> | null = null
 let fitFrame: number | null = null
 let reportedCols = 0
 let reportedRows = 0
-let lastSequence = 0
+let receivedSequence = 0
+let renderedSequence = 0
 let resyncRequest = 0
 let pendingResyncId = ""
 let closing = false
 
 function sendAck(sequence: number) {
-	if (socket?.readyState === WebSocket.OPEN && sequence > 0) {
+	if (props.mode === "ai" && socket?.readyState === WebSocket.OPEN && sequence > 0) {
 		socket.send(JSON.stringify({ type: "ack", data: String(sequence) }))
 	}
 }
 
 function requestResync() {
 	if (socket?.readyState !== WebSocket.OPEN || pendingResyncId) return
+	outputQueue?.clear()
+	receivedSequence = renderedSequence
 	if (props.mode === "native") {
 		pendingResyncId = "native"
 		socket.send(JSON.stringify({ type: "resync", data: "" }))
@@ -62,7 +68,7 @@ function requestResync() {
 	socket.send(
 		JSON.stringify({
 			type: "resync",
-			data: JSON.stringify({ sequence: lastSequence, requestId: pendingResyncId })
+			data: JSON.stringify({ sequence: renderedSequence, requestId: pendingResyncId })
 		})
 	)
 }
@@ -106,13 +112,11 @@ function sendTerminalInput(data: string) {
 	socket.send(JSON.stringify({ type: "cmd", data }))
 }
 
-function writeTerminalData(data: string, forceBottom = false) {
-	if (!terminal) return
-	const buffer = terminal.buffer.active
-	const shouldFollow = forceBottom || buffer.baseY - buffer.viewportY <= 1
-	terminal.write(data, () => {
-		if (shouldFollow) terminal?.scrollToBottom()
-	})
+function queueTerminalData(
+	data: string,
+	options: { sequence?: number; forceBottom?: boolean; resetBefore?: boolean } = {}
+) {
+	return outputQueue?.enqueue({ data, ...options }) ?? false
 }
 
 function applyCtrlModifier(data: string) {
@@ -154,7 +158,7 @@ function connect() {
 			: `${protocol}//${window.location.host}/api/mobile/app/terminal?session_id=${props.sessionId}`
 	url += `${url.includes("?") ? "&" : "?"}cols=${terminal.cols}&rows=${terminal.rows}`
 	if (props.mode === "ai") url += "&read_only=1"
-	if (lastSequence) url += `&after_sequence=${lastSequence}`
+	if (renderedSequence) url += `&after_sequence=${renderedSequence}`
 	const currentSocket = new WebSocket(url)
 	socket = currentSocket
 	currentSocket.onopen = () => {
@@ -172,31 +176,37 @@ function connect() {
 				const sequence = Number(message.sequence) || 0
 				const chunkIndex = Number(message.chunkIndex) || 0
 				const chunkCount = Number(message.chunkCount) || 1
-				if ((props.mode === "native" || message.truncated) && chunkIndex === 0) terminal?.reset()
-				if (message.data) writeTerminalData(message.data, chunkIndex === chunkCount - 1)
-				else if (chunkIndex === chunkCount - 1) terminal?.scrollToBottom()
-				if (chunkIndex === chunkCount - 1) {
-					lastSequence = sequence
+				const isLastChunk = chunkIndex === chunkCount - 1
+				const replaceHistory = (props.mode === "native" || message.truncated) && chunkIndex === 0
+				if (replaceHistory) outputQueue?.clear()
+				if (
+					!queueTerminalData(message.data || "", {
+						sequence: isLastChunk ? sequence : undefined,
+						forceBottom: isLastChunk,
+						resetBefore: replaceHistory
+					})
+				)
+					return
+				if (isLastChunk) {
+					receivedSequence = sequence
 					pendingResyncId = ""
 					updateControl(Boolean(message.hasControl))
-					sendAck(sequence)
 				}
 			} else if (message.type === "output") {
 				const sequence = Number(message.sequence) || 0
 				if (pendingResyncId) return
-				if (lastSequence > 0 && sequence !== lastSequence + 1) {
+				if (receivedSequence > 0 && sequence !== receivedSequence + 1) {
 					requestResync()
 					return
 				}
-				if (message.data) writeTerminalData(message.data)
-				lastSequence = sequence
-				sendAck(sequence)
+				if (!queueTerminalData(message.data || "", { sequence })) return
+				receivedSequence = sequence
 			} else if (message.type === "resync_required") {
 				requestResync()
 			} else if (message.type === "control") {
 				updateControl(Boolean(message.hasControl))
 				if (message.controlReason || message.data)
-					terminal?.writeln(`\r\n\x1b[33m[GoPanel] ${t("mobile.terminalControlBusy")}\x1b[0m`)
+					queueTerminalData(`\r\n\x1b[33m[GoPanel] ${t("mobile.terminalControlBusy")}\x1b[0m\r\n`)
 			} else if (message.type === "closed") {
 				closing = true
 				connected.value = false
@@ -207,12 +217,12 @@ function connect() {
 				connected.value = false
 				connecting.value = false
 				updateControl(false)
-				if (message.data) terminal?.writeln(`\r\n\x1b[31m[GoPanel] ${message.data}\x1b[0m`)
+				if (message.data) queueTerminalData(`\r\n\x1b[31m[GoPanel] ${message.data}\x1b[0m`)
 			} else if (message.type === "cmd" && message.data) {
-				writeTerminalData(message.data)
+				queueTerminalData(message.data)
 			}
 		} catch {
-			writeTerminalData(event.data)
+			queueTerminalData(event.data)
 		}
 	}
 	currentSocket.onclose = () => {
@@ -236,22 +246,35 @@ function openTerminal() {
 	if (!terminalElement.value || terminal) return
 	closing = false
 	connecting.value = true
-	lastSequence = 0
+	receivedSequence = 0
+	renderedSequence = 0
 	pendingResyncId = ""
 	reportedCols = 0
 	reportedRows = 0
 	terminal = new Terminal({
 		disableStdin: true,
-		cursorBlink: true,
+		cursorBlink: false,
 		cursorStyle: "bar",
 		fontSize: window.innerWidth < 640 ? 12 : 14,
 		fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-		scrollback: 5000,
+		scrollback: 2000,
+		scrollSensitivity: 1,
+		fastScrollSensitivity: 3,
+		smoothScrollDuration: 0,
 		theme: { background: "#0b1020", foreground: "#d4d4d8", cursor: "#60a5fa" }
 	})
 	fitAddon = new FitAddon()
 	terminal.loadAddon(fitAddon)
 	terminal.open(terminalElement.value)
+	outputQueue = new MobileTerminalOutputQueue(terminal, {
+		onRendered: sequence => {
+			renderedSequence = Math.max(renderedSequence, sequence)
+			sendAck(renderedSequence)
+		},
+		onOverflow: requestResync
+	})
+	const viewport = terminalElement.value.querySelector<HTMLElement>(".xterm-viewport")
+	if (viewport) outputQueue.bindTouchScrolling(viewport)
 	if (terminal.textarea) {
 		terminal.textarea.inputMode = "text"
 		terminal.textarea.autocapitalize = "none"
@@ -287,6 +310,8 @@ function closeTerminal() {
 	fitFrame = null
 	resizeObserver?.disconnect()
 	resizeObserver = null
+	outputQueue?.dispose()
+	outputQueue = null
 	const activeSocket = socket
 	socket = null
 	activeSocket?.close()
@@ -415,7 +440,7 @@ onBeforeUnmount(closeTerminal)
 				</n-button>
 			</div>
 		</header>
-		<div class="relative min-h-0 w-full flex-1 bg-[#0b1020]">
+		<div class="mobile-terminal relative min-h-0 w-full flex-1 bg-[#0b1020]">
 			<div ref="terminalElement" class="h-full w-full" />
 			<div
 				v-if="connecting"
@@ -468,15 +493,3 @@ onBeforeUnmount(closeTerminal)
 		</n-modal>
 	</section>
 </template>
-
-<style scoped>
-:deep(.xterm) {
-	height: 100%;
-	padding: 12px 2px 12px 10px;
-}
-
-:deep(.xterm-viewport) {
-	overscroll-behavior-y: contain;
-	-webkit-overflow-scrolling: touch;
-}
-</style>

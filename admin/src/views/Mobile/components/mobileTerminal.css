@@ -1,0 +1,10 @@
+.mobile-terminal .xterm {
+	height: 100%;
+	padding: 12px 2px 12px 10px;
+}
+
+.mobile-terminal .xterm-viewport {
+	overscroll-behavior-y: contain;
+	-webkit-overflow-scrolling: touch;
+	touch-action: pan-y;
+}
