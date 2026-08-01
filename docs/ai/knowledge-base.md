@@ -60,8 +60,7 @@
 - **commit**: `f94d34f`
 - **问题**: 节点管理页点「关闭只读接入」提示成功，但主控依然能用旧令牌拉到本机摘要——权限没真的收回。
 - **根因**: `repo/setting.go:127` 的 `UpdateOrCreate` 实现是 `Assign(model.Setting{Key: key, Value: value}).FirstOrCreate(...)`。GORM 的 `Assign` 传结构体时会**跳过零值字段**，所以 `Value: ""` 被静默忽略，行里的旧值原封不动。
-- **修复**: 清空场景改用 `Update(key, "")`——它内部走 `Updates(map[string]interface{}{...})`，map 不受零值跳过影响。
-- **注意**: 这个坑对 `UpdateOrCreate` 的**所有**调用方都成立。任何"把某个 setting 清空"的需求都不能用它，必须走 `Update`。已确认只改了节点这一处，其他调用点未逐一排查。
+- **修复**: 先在节点清空场景改用 `Update(key, "")`；后续将 `UpdateOrCreate` 的 `Assign` 参数改为 map，使所有调用方都能正确保存空字符串，并补充仓储回归测试。
 
 ### 2026-07-25: 证书剩余天数用 -1 当哨兵会撞车
 

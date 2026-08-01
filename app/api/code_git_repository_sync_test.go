@@ -113,6 +113,8 @@ func TestCodeGitFetchUnavailableClassification(t *testing.T) {
 	for _, message := range []string{
 		"Git 操作失败：fatal: unable to get password from user",
 		"Git 操作失败：fatal: could not resolve host: codeup.aliyun.com",
+		"Git 操作失败：LibreSSL SSL_connect: SSL_ERROR_SYSCALL in connection to 127.0.0.1:1",
+		"Git 操作失败：net/http: TLS handshake timeout",
 		"Git 操作超时",
 	} {
 		if !isCodeGitFetchUnavailable(errors.New(message)) {

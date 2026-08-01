@@ -124,5 +124,5 @@ func (u *SettingRepo) DelMonitorNet(timeForDelete time.Time) error {
 }
 
 func (u *SettingRepo) UpdateOrCreate(key, value string) error {
-	return global.DB.Model(&model.Setting{}).Where("key = ?", key).Assign(model.Setting{Key: key, Value: value}).FirstOrCreate(&model.Setting{}).Error
+	return global.DB.Model(&model.Setting{}).Where("key = ?", key).Assign(map[string]interface{}{"key": key, "value": value}).FirstOrCreate(&model.Setting{}).Error
 }

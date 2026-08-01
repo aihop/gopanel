@@ -163,6 +163,7 @@ func isCodeGitFetchUnavailable(err error) bool {
 		"could not resolve host", "temporary failure in name resolution", "network is unreachable",
 		"no route to host", "failed to connect", "connection refused", "connection reset",
 		"connection timed out", "operation timed out", "connection closed by remote host",
+		"ssl_error_syscall", "tls handshake timeout",
 	} {
 		if strings.Contains(message, fragment) {
 			return true

@@ -1,6 +1,6 @@
 import http from "@/api"
 import type { Website } from "../interface/website"
-import type { Result } from "../interface"
+import type { ResPage } from "../interface"
  
 export const websiteListAPI = () => {
 	return http.post<ResPage<Website.WebsiteDTO>>(`/website/list`)

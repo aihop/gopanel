@@ -1,4 +1,4 @@
-name: File Size Gate
+name: Quality Gate
 
 on:
   pull_request:
@@ -19,3 +19,50 @@ jobs:
         env:
           FILE_SIZE_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: bash scripts/check-file-size.sh --base-ref "${FILE_SIZE_BASE_REF}"
+
+  go-test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [".", "gpc", "gp-agent"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.1"
+          cache-dependency-path: ${{ matrix.module }}/go.sum
+      - name: Test ${{ matrix.module }}
+        working-directory: ${{ matrix.module }}
+        run: go test ./... -count=1
+
+  admin-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: admin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: admin/package-lock.json
+      - run: npm ci
+      - run: npm run test:unit
+      - run: npm run type-check
+
+  flutter-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.41.8"
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter test
