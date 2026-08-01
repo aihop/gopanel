@@ -369,7 +369,7 @@ func syncCodeSessionGitRepositoryOperation(c fiber.Ctx, syncRepositoryID string)
 		}
 		return nil
 	})
-	if errors.Is(err, errCodeExecutionBusy) {
+	if errors.Is(err, errCodeSessionWorkspaceBusy) {
 		err = errors.New("当前会话正在执行 AI 指令或终端操作，请完成或停止后再同步远端")
 	}
 	return result, session, err

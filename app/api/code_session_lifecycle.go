@@ -26,6 +26,15 @@ type codeSessionLifecycleLocker struct {
 
 var codeSessionLifecycles = &codeSessionLifecycleLocker{locks: make(map[uint]*sync.Mutex)}
 
+var errCodeSessionWorkspaceBusy = errors.New("当前会话正在执行 AI 指令或终端操作，请完成或停止后再修改工作区")
+
+func codeSessionWorkspaceMutationError(err error) error {
+	if errors.Is(err, errCodeExecutionBusy) {
+		return errCodeSessionWorkspaceBusy
+	}
+	return err
+}
+
 func (locker *codeSessionLifecycleLocker) lock(sessionID uint) func() {
 	locker.mu.Lock()
 	lock := locker.locks[sessionID]
@@ -97,7 +106,7 @@ func runCodeSessionWorkspaceMutationWithTx(session *model.AIDevSession, operatio
 	defer unlockLifecycle()
 	lease, err := codeExecutions.acquireSession(context.Background(), session, codeExecutionMutation, false)
 	if err != nil {
-		return err
+		return codeSessionWorkspaceMutationError(err)
 	}
 	defer lease.Release()
 	return global.DB.Transaction(func(tx *gorm.DB) error {
