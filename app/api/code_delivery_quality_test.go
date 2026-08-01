@@ -47,7 +47,7 @@ func TestRunCodeDeliveryQualityGateRunsMissingChecks(t *testing.T) {
 func TestRunCodeDeliveryQualityGateStopsFailedDelivery(t *testing.T) {
 	session := createQualityDeliverySession(t, 148, "false")
 	err := runCodeDeliveryQualityGate(session, session.UserID, nil, nil)
-	if err == nil || !strings.Contains(err.Error(), "质量门禁未通过") {
+	if err == nil || !strings.Contains(err.Error(), "质量门禁未通过") || !strings.Contains(err.Error(), "> false") {
 		t.Fatalf("failed quality check should stop delivery: %v", err)
 	}
 	checks, detectErr := detectCodeQualityChecks(session)

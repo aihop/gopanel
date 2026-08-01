@@ -51,6 +51,8 @@ func codeExecutorSearchDirs() []string {
 	}
 	homeDir := codeExecutorHomeDir()
 	for _, relativeDir := range []string{
+		"sdk/node/bin",
+		"sdk/go/bin",
 		".local/bin",
 		".npm-global/bin",
 		".n/bin",

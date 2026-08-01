@@ -48,6 +48,10 @@ func runCodeDeliveryQualityGate(session *model.AIDevSession, userID uint, lease 
 			return err
 		}
 		if result.Status != "passed" {
+			summary := codeQualityFailureSummary(result.Output)
+			if summary != "" {
+				return fmt.Errorf("质量门禁未通过：%s：%s", check.Label, summary)
+			}
 			return fmt.Errorf("质量门禁未通过：%s", check.Label)
 		}
 		if !result.Current {

@@ -156,10 +156,14 @@ func (u *DashboardService) LoadCurrentInfo(req dto.DashboardReq) *dto.DashboardC
 	}
 
 	hostInfo, _ := host.Info()
-	currentInfo.Uptime = hostInfo.Uptime
+	if hostInfo != nil {
+		currentInfo.Uptime = hostInfo.Uptime
+	}
 	if req.Scope == "basic" {
-		currentInfo.TimeSinceUptime = time.Now().Add(-time.Duration(hostInfo.Uptime) * time.Second).Format(constant.DateTimeLayout)
-		currentInfo.Procs = hostInfo.Procs
+		if hostInfo != nil {
+			currentInfo.TimeSinceUptime = time.Now().Add(-time.Duration(hostInfo.Uptime) * time.Second).Format(constant.DateTimeLayout)
+			currentInfo.Procs = hostInfo.Procs
+		}
 		currentInfo.CPUTotal, _ = cpu.Counts(true)
 		totalPercent, _ := cpu.Percent(100*time.Millisecond, false)
 		if len(totalPercent) == 1 {
@@ -169,22 +173,30 @@ func (u *DashboardService) LoadCurrentInfo(req dto.DashboardReq) *dto.DashboardC
 		currentInfo.CPUPercent, _ = cpu.Percent(100*time.Millisecond, true)
 
 		loadInfo, _ := load.Avg()
-		currentInfo.Load1 = loadInfo.Load1
-		currentInfo.Load5 = loadInfo.Load5
-		currentInfo.Load15 = loadInfo.Load15
-		currentInfo.LoadUsagePercent = loadInfo.Load1 / (float64(currentInfo.CPUTotal*2) * 0.75) * 100
+		if loadInfo != nil {
+			currentInfo.Load1 = loadInfo.Load1
+			currentInfo.Load5 = loadInfo.Load5
+			currentInfo.Load15 = loadInfo.Load15
+			if currentInfo.CPUTotal > 0 {
+				currentInfo.LoadUsagePercent = loadInfo.Load1 / (float64(currentInfo.CPUTotal*2) * 0.75) * 100
+			}
+		}
 
 		memoryInfo, _ := mem.VirtualMemory()
-		currentInfo.MemoryTotal = memoryInfo.Total
-		currentInfo.MemoryAvailable = memoryInfo.Available
-		currentInfo.MemoryUsed = memoryInfo.Used
-		currentInfo.MemoryUsedPercent = memoryInfo.UsedPercent
+		if memoryInfo != nil {
+			currentInfo.MemoryTotal = memoryInfo.Total
+			currentInfo.MemoryAvailable = memoryInfo.Available
+			currentInfo.MemoryUsed = memoryInfo.Used
+			currentInfo.MemoryUsedPercent = memoryInfo.UsedPercent
+		}
 
 		swapInfo, _ := mem.SwapMemory()
-		currentInfo.SwapMemoryTotal = swapInfo.Total
-		currentInfo.SwapMemoryAvailable = swapInfo.Free
-		currentInfo.SwapMemoryUsed = swapInfo.Used
-		currentInfo.SwapMemoryUsedPercent = swapInfo.UsedPercent
+		if swapInfo != nil {
+			currentInfo.SwapMemoryTotal = swapInfo.Total
+			currentInfo.SwapMemoryAvailable = swapInfo.Free
+			currentInfo.SwapMemoryUsed = swapInfo.Used
+			currentInfo.SwapMemoryUsedPercent = swapInfo.UsedPercent
+		}
 		currentInfo.DiskData = loadDiskInfo()
 	}
 

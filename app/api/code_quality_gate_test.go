@@ -3,6 +3,7 @@ package api
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -51,5 +52,12 @@ func TestTruncateCodeQualityOutputKeepsHeadAndTail(t *testing.T) {
 	}
 	if truncated[:5] != "begin" || truncated[len(truncated)-3:] != "end" {
 		t.Fatalf("head or tail missing: %q", truncated)
+	}
+}
+
+func TestCodeQualityFailureSummaryKeepsUsefulTail(t *testing.T) {
+	summary := codeQualityFailureSummary("setup\n\nfirst failure\nsecond failure\nthird failure\nfourth failure\nfifth failure")
+	if strings.Contains(summary, "first failure") || !strings.Contains(summary, "fifth failure") {
+		t.Fatalf("unexpected failure summary: %q", summary)
 	}
 }

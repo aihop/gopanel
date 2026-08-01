@@ -290,9 +290,19 @@ func executeCodeQualityCheck(lease *codeExecutionLease, check codeQualityCheck) 
 	defer cancel()
 	lease.SetCancel(cancel)
 	output := &boundedCodeOutput{}
-	command := exec.CommandContext(ctx, check.Executable, check.Args...)
+	commandPath, commandEnv, resolveErr := resolveCodeExecutorCommand(check.Executable)
+	if resolveErr != nil {
+		completedAt := time.Now()
+		return codeQualityCheckResult{
+			CheckID: check.ID, Status: "failed", ExitCode: -1,
+			DurationMS: completedAt.Sub(startedAt).Milliseconds(),
+			Output:     fmt.Sprintf("质量检查命令不可用：%s", check.Executable),
+			StartedAt:  startedAt, CompletedAt: completedAt,
+		}
+	}
+	command := exec.CommandContext(ctx, commandPath, check.Args...)
 	command.Dir = check.workDirPath
-	command.Env = append(os.Environ(), "CI=1", "NO_COLOR=1")
+	command.Env = append(commandEnv, "CI=1", "NO_COLOR=1")
 	command.Stdout, command.Stderr = output, output
 	err := command.Run()
 	completedAt := time.Now()
@@ -310,6 +320,24 @@ func executeCodeQualityCheck(lease *codeExecutionLease, check codeQualityCheck) 
 		DurationMS: completedAt.Sub(startedAt).Milliseconds(), Output: text,
 		OutputTruncated: truncated, StartedAt: startedAt, CompletedAt: completedAt,
 	}
+}
+
+func codeQualityFailureSummary(output string) string {
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	filtered := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if trimmed := strings.TrimSpace(line); trimmed != "" {
+			filtered = append(filtered, trimmed)
+		}
+	}
+	if len(filtered) > 4 {
+		filtered = filtered[len(filtered)-4:]
+	}
+	summary := strings.Join(filtered, " | ")
+	if runes := []rune(summary); len(runes) > 500 {
+		summary = string(runes[len(runes)-500:])
+	}
+	return summary
 }
 
 func findCodeQualityCheck(checks []codeQualityCheck, checkID string) *codeQualityCheck {
