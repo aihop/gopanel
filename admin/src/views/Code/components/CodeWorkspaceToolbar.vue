@@ -64,7 +64,7 @@ const sessionIcon = computed(() => (props.isTerminalSession ? "mdi:console-line"
 			<CodeTaskDeliveryButton v-if="sessionId !== null && !isTerminalSession" :session-id="sessionId" />
 			<div
 				v-if="hasContext && !isTerminalSession"
-				class="rounded-xl border border-slate-200 bg-slate-50/80 p-0.5 dark:border-[var(--border-color)] dark:bg-white/5"
+				class="rounded-xl bg-slate-50/80 dark:bg-white/5"
 			>
 				<WorkspaceModeSwitch :value="workspaceMode" @update:value="emit('updateMode', $event)" />
 			</div>
