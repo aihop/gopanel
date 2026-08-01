@@ -175,6 +175,94 @@ func TestPrepareCodeRepositoryRequiresConfiguredBranchCheckout(t *testing.T) {
 	}
 }
 
+func TestPrepareCodeRepositoryRestoresDetachedConfiguredBranch(t *testing.T) {
+	repository := createCodeGitRepository(t)
+	targetBranch, err := runCodeGit(repository, "branch", "--show-current")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(repository, "checkout", "--detach", "HEAD"); err != nil {
+		t.Fatal(err)
+	}
+	prepared, err := prepareCodeRepositoryCandidateForBranch(codeRepositoryCandidate{SourceDir: repository}, false, targetBranch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	currentBranch, err := runCodeGit(repository, "branch", "--show-current")
+	if err != nil || currentBranch != targetBranch || prepared.TargetBranch != targetBranch {
+		t.Fatalf("detached repository was not restored: branch=%q prepared=%#v err=%v", currentBranch, prepared, err)
+	}
+}
+
+func TestPrepareCodeRepositoryRejectsDetachedDifferentCommit(t *testing.T) {
+	repository := createCodeGitRepository(t)
+	targetBranch, err := runCodeGit(repository, "branch", "--show-current")
+	if err != nil {
+		t.Fatal(err)
+	}
+	previousCommit, err := runCodeGit(repository, "rev-parse", "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	commitCodeTestFile(t, repository, "next.txt", "next\n")
+	if _, err := runCodeGit(repository, "checkout", "--detach", previousCommit); err != nil {
+		t.Fatal(err)
+	}
+	_, err = prepareCodeRepositoryCandidateForBranch(codeRepositoryCandidate{SourceDir: repository}, false, targetBranch)
+	if err == nil || !strings.Contains(err.Error(), "当前提交不等于交付分支") {
+		t.Fatalf("unexpected detached commit should be rejected: %v", err)
+	}
+}
+
+func TestPrepareCodeRepositoryRestoresDetachedRemoteOnlyBranch(t *testing.T) {
+	repository, _ := createCodeRemoteRepository(t)
+	targetBranch, err := runCodeGit(repository, "branch", "--show-current")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(repository, "checkout", "--detach", "HEAD"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(repository, "branch", "-D", targetBranch); err != nil {
+		t.Fatal(err)
+	}
+	prepared, err := prepareCodeRepositoryCandidateForBranch(codeRepositoryCandidate{SourceDir: repository}, false, targetBranch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	currentBranch, err := runCodeGit(repository, "branch", "--show-current")
+	if err != nil || currentBranch != targetBranch || prepared.TargetBranch != targetBranch {
+		t.Fatalf("remote-only branch was not restored: branch=%q prepared=%#v err=%v", currentBranch, prepared, err)
+	}
+}
+
+func TestCreateCodeSessionWorktreeRestoresDetachedPrimaryRepository(t *testing.T) {
+	withAIProjectBaseDir(t)
+	repository := createCodeGitRepository(t)
+	targetBranch, err := runCodeGit(repository, "branch", "--show-current")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(repository, "checkout", "--detach", "HEAD"); err != nil {
+		t.Fatal(err)
+	}
+	session := &model.AIDevSession{ID: 92, UserID: 7, WorkDir: repository}
+	project := &model.AIProject{
+		SourceDirs: []string{repository}, PrimaryRepository: repository, DeliveryBranch: targetBranch,
+	}
+	if err := createCodeSessionWorktree(session, project); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { rollbackCodeSessionWorktree(session) })
+	currentBranch, err := runCodeGit(repository, "branch", "--show-current")
+	if err != nil || currentBranch != targetBranch || session.TargetBranch != targetBranch {
+		t.Fatalf("task worktree did not restore primary repository: branch=%q session=%#v err=%v", currentBranch, session, err)
+	}
+	if _, err := os.Stat(session.WorkDir); err != nil {
+		t.Fatalf("task worktree was not created: %v", err)
+	}
+}
+
 func TestRefreshCodeRepositoryTargetRejectsBranchSwitch(t *testing.T) {
 	repository := createCodeGitRepository(t)
 	targetBranch, err := runCodeGit(repository, "branch", "--show-current")

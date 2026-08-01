@@ -98,6 +98,24 @@ func TestCodeProjectRepositorySpecsFindNestedMultiDirectoryRepositories(t *testi
 	}
 }
 
+func TestCodeProjectRepositorySpecsUseConfiguredBranchWhenDetached(t *testing.T) {
+	repository := createCodeGitRepository(t)
+	branch, err := runCodeGit(repository, "branch", "--show-current")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(repository, "checkout", "--detach", "HEAD"); err != nil {
+		t.Fatal(err)
+	}
+	project := &model.AIProject{
+		SourceDirs: []string{repository}, PrimaryRepository: repository, DeliveryBranch: branch,
+	}
+	specs, err := codeProjectRepositorySpecs(project)
+	if err != nil || len(specs) != 1 || specs[0].Branch != branch {
+		t.Fatalf("configured detached repository was rejected: %#v, %v", specs, err)
+	}
+}
+
 func TestValidateCodeProjectGitlinkTargetsRejectsPointerMismatch(t *testing.T) {
 	parent, child := createGitlinkRepositoryTree(t)
 	branch, _ := runCodeGit(parent, "branch", "--show-current")

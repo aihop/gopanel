@@ -79,12 +79,15 @@ func codeProjectRepositorySpecs(project *model.AIProject) ([]codeProjectReposito
 	}
 	specs := make([]codeProjectRepositorySpec, 0, len(candidates))
 	for _, candidate := range candidates {
-		branch, branchErr := runCodeGit(candidate.SourceDir, "branch", "--show-current")
-		if branchErr != nil || strings.TrimSpace(branch) == "" {
-			return nil, fmt.Errorf("仓库 %s 当前处于 detached HEAD", filepath.Base(candidate.SourceDir))
-		}
+		branch := ""
 		if candidate.SourceDir == policy.PrimaryRepository {
 			branch = policy.DeliveryBranch
+		} else {
+			currentBranch, branchErr := runCodeGit(candidate.SourceDir, "branch", "--show-current")
+			if branchErr != nil || strings.TrimSpace(currentBranch) == "" {
+				return nil, fmt.Errorf("仓库 %s 当前处于 detached HEAD", filepath.Base(candidate.SourceDir))
+			}
+			branch = strings.TrimSpace(currentBranch)
 		}
 		remote, remoteRef := codeRepositoryRemoteTracking(candidate.SourceDir, branch)
 		if remote != "" && remoteRef == "" {

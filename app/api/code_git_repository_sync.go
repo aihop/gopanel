@@ -100,19 +100,9 @@ func prepareCodeRepositoryCandidateForBranch(candidate codeRepositoryCandidate, 
 	if dirty && !includeUncommitted {
 		return codePreparedRepository{}, fmt.Errorf("源仓库 %s 存在未提交变更；如需保留这些修改，请启用未提交改动快照", filepath.Base(candidate.SourceDir))
 	}
-	targetBranch, err := runCodeGit(candidate.SourceDir, "branch", "--show-current")
-	if err != nil || strings.TrimSpace(targetBranch) == "" {
-		return codePreparedRepository{}, fmt.Errorf("源仓库 %s 当前处于 detached HEAD，无法确定目标分支", filepath.Base(candidate.SourceDir))
-	}
-	if strings.TrimSpace(deliveryBranch) != "" {
-		targetBranch = strings.TrimSpace(deliveryBranch)
-		currentBranch, _ := runCodeGit(candidate.SourceDir, "branch", "--show-current")
-		if strings.TrimSpace(currentBranch) != targetBranch {
-			return codePreparedRepository{}, fmt.Errorf(
-				"主交付仓库当前分支为 %s，请先切换到交付分支 %s",
-				strings.TrimSpace(currentBranch), targetBranch,
-			)
-		}
+	targetBranch, err := resolveCodeRepositoryTargetBranch(candidate.SourceDir, strings.TrimSpace(deliveryBranch), dirty)
+	if err != nil {
+		return codePreparedRepository{}, err
 	}
 	prepared := codePreparedRepository{
 		SourceDir: candidate.SourceDir, ParentSourceDir: candidate.ParentSourceDir,
@@ -150,6 +140,49 @@ func prepareCodeRepositoryCandidateForBranch(candidate codeRepositoryCandidate, 
 		prepared.SyncStatus = "local_only"
 	}
 	return prepared, nil
+}
+
+func resolveCodeRepositoryTargetBranch(sourceDir, deliveryBranch string, dirty bool) (string, error) {
+	currentBranch, err := runCodeGit(sourceDir, "branch", "--show-current")
+	if err != nil {
+		return "", err
+	}
+	currentBranch = strings.TrimSpace(currentBranch)
+	if deliveryBranch == "" {
+		if currentBranch == "" {
+			return "", fmt.Errorf("源仓库 %s 当前处于 detached HEAD，无法确定目标分支", filepath.Base(sourceDir))
+		}
+		return currentBranch, nil
+	}
+	if currentBranch == deliveryBranch {
+		return deliveryBranch, nil
+	}
+	if currentBranch != "" {
+		return "", fmt.Errorf("主交付仓库当前分支为 %s，请先切换到交付分支 %s", currentBranch, deliveryBranch)
+	}
+	if dirty {
+		return "", fmt.Errorf("主交付仓库处于 detached HEAD 且存在未提交变更，无法安全恢复到交付分支 %s", deliveryBranch)
+	}
+	headCommit, headErr := runCodeGit(sourceDir, "rev-parse", "HEAD")
+	targetRef := "refs/heads/" + deliveryBranch
+	targetCommit, targetErr := runCodeGit(sourceDir, "rev-parse", targetRef)
+	createLocalBranch := false
+	if targetErr != nil {
+		targetRef = "refs/remotes/origin/" + deliveryBranch
+		targetCommit, targetErr = runCodeGit(sourceDir, "rev-parse", targetRef)
+		createLocalBranch = targetErr == nil
+	}
+	if headErr != nil || targetErr != nil || strings.TrimSpace(headCommit) != strings.TrimSpace(targetCommit) {
+		return "", fmt.Errorf("主交付仓库处于 detached HEAD，且当前提交不等于交付分支 %s，请先确认目标分支", deliveryBranch)
+	}
+	switchArgs := []string{"switch", "--", deliveryBranch}
+	if createLocalBranch {
+		switchArgs = []string{"switch", "-c", deliveryBranch, "--track", "origin/" + deliveryBranch}
+	}
+	if _, err := runCodeGit(sourceDir, switchArgs...); err != nil {
+		return "", fmt.Errorf("主交付仓库无法自动恢复到交付分支 %s：%w", deliveryBranch, err)
+	}
+	return deliveryBranch, nil
 }
 
 func isCodeGitFetchUnavailable(err error) bool {
