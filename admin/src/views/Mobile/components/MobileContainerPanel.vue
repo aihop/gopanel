@@ -2,6 +2,7 @@
 import { getMobileContainers, operateMobileContainer, type MobileContainer, type MobileContainerList } from "@/api/modules/mobile"
 import Icon from "@/components/common/Icon.vue"
 import { mobileMessages } from "@/i18n/locales/mobile"
+import MobileContainerWebsiteModal from "./MobileContainerWebsiteModal.vue"
 import { computed, onBeforeUnmount, onMounted, ref } from "vue"
 import { useDialog, useMessage } from "naive-ui"
 import { useI18n } from "vue-i18n"
@@ -18,6 +19,7 @@ const loadError = ref("")
 const keyword = ref("")
 const state = ref("all")
 const operationKey = ref("")
+const websiteModalRef = ref<InstanceType<typeof MobileContainerWebsiteModal>>()
 const containerList = ref<MobileContainerList>({ items: [], total: 0, running: 0, stopped: 0 })
 let refreshTimer: ReturnType<typeof setInterval> | null = null
 
@@ -58,6 +60,10 @@ function formatBytes(value: number) {
 	const units = ["B", "KB", "MB", "GB", "TB"]
 	const unitIndex = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1)
 	return `${(value / 1024 ** unitIndex).toFixed(unitIndex > 1 ? 1 : 0)} ${units[unitIndex]}`
+}
+
+function hasPublishedTCPPort(container: MobileContainer) {
+	return (container.ports || []).some(port => /->.*\/tcp$/i.test(port))
 }
 
 async function loadContainers(silent = false) {
@@ -172,7 +178,16 @@ onBeforeUnmount(() => {
 							{{ container.runTime }}
 						</div>
 					</div>
-					<div class="mt-3 flex justify-end gap-2">
+					<div class="mt-3 flex flex-wrap justify-end gap-2">
+						<n-button
+							v-if="container.state === 'running' && hasPublishedTCPPort(container)"
+							size="small"
+							type="primary"
+							secondary
+							@click="websiteModalRef?.acceptParams(container)"
+						>
+							{{ t("container.bindWebsite") }}
+						</n-button>
 						<n-button v-if="container.state !== 'running'" size="small" type="primary" secondary :loading="operationKey === `${container.containerID}:start`" :disabled="Boolean(operationKey)" @click="confirmOperation(container, 'start')">
 							{{ t("mobile.containerOperation_start") }}
 						</n-button>
@@ -186,5 +201,6 @@ onBeforeUnmount(() => {
 				</article>
 			</div>
 		</n-spin>
+		<MobileContainerWebsiteModal ref="websiteModalRef" @success="loadContainers(true)" />
 	</div>
 </template>

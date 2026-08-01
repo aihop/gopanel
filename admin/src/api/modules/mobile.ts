@@ -96,6 +96,11 @@ export interface MobileContainerList {
 	stopped: number
 }
 
+export interface MobileContainerPublishOptions {
+	ports: Array<{ hostPort: number; containerPort: string }>
+	websites: Array<{ id: number; alias: string; primaryDomain: string }>
+}
+
 export interface MobileWebsite {
 	id: number
 	alias: string
@@ -259,6 +264,27 @@ export function operateMobileContainer(container: MobileContainer, operation: "s
 			containerID: container.containerID,
 			operation
 		})
+	)
+}
+
+export function getMobileContainerPublishOptions(container: MobileContainer) {
+	return mobileRequest(
+		mobileHttp.get<ResultData<MobileContainerPublishOptions>>(
+			`/mobile/app/containers/${encodeURIComponent(container.containerID)}/publish-options`,
+			{ params: { runtimeHost: container.runtimeHost || "" } },
+		),
+	)
+}
+
+export function publishMobileContainerWebsite(data: {
+	containerId: string
+	runtimeHost: string
+	websiteId: number
+	hostPort: number
+	scheme: "http" | "https"
+}) {
+	return mobileRequest(
+		mobileHttp.post<ResultData<void>>("/mobile/app/containers/publish-website", data),
 	)
 }
 

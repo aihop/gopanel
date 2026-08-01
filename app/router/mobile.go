@@ -29,6 +29,8 @@ func MobileRouter(r fiber.Router) {
 	app.Get("/system/upgrade/logs", api.SettingSystemUpgradeLogs)
 	app.Get("/containers", api.GetMobileContainers)
 	app.Post("/containers/operate", api.OperateMobileContainer)
+	app.Get("/containers/:id/publish-options", api.GetMobileContainerPublishOptions)
+	app.Post("/containers/publish-website", api.PublishMobileContainerWebsite)
 	app.Get("/resources/websites", api.GetMobileWebsites)
 	app.Post("/resources/websites/domains", api.UpdateMobileWebsiteDomainBindings)
 	app.Get("/resources/databases", api.GetMobileDatabases)
