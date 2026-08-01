@@ -9,6 +9,7 @@ import { useDialog, useMessage } from "naive-ui"
 type UpdateStatus = "idle" | "connecting" | "updating" | "restarting" | "success" | "failed"
 
 const { locale, t } = useI18n({ messages: mobileMessages })
+withDefaults(defineProps<{ showCurrentVersion?: boolean }>(), { showCurrentVersion: false })
 const dialog = useDialog()
 const message = useMessage()
 const versionInfo = ref<MobileVersionInfo | null>(null)
@@ -157,6 +158,18 @@ onBeforeUnmount(closeLogStream)
 </script>
 
 <template>
+	<section v-if="showCurrentVersion" class="mb-4 rounded-2xl bg-white p-4 shadow-sm">
+		<div class="flex items-center justify-between gap-3">
+			<div>
+				<div class="text-sm font-medium text-slate-900">{{ t("mobile.updateLogs") }}</div>
+				<div class="mt-1 text-xs text-slate-500">{{ t("setting.currentVersion") }} {{ versionInfo?.versionName || "-" }}</div>
+			</div>
+			<n-button size="small" secondary :loading="checking" @click="loadUpdate()">
+				{{ t("mobile.refresh") }}
+			</n-button>
+		</div>
+	</section>
+
 	<n-alert v-if="checkError" type="error" :show-icon="false" class="mb-4 rounded-2xl">
 		<div class="flex items-center justify-between gap-3">
 			<span class="text-sm">{{ t("mobile.updateCheckFailed") }}</span>

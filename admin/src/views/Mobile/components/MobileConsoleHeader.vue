@@ -1,15 +1,14 @@
 <script setup lang="ts">
 import { useI18n } from "vue-i18n"
-import Icon from "@/components/common/Icon.vue"
 import { mobileMessages } from "@/i18n/locales/mobile"
 import Logo from "@/layouts/common/Logo.vue"
 
 defineProps<{
-	activeTab: "overview" | "resources" | "code"
+	activeTab: "overview" | "resources" | "code" | "settings"
 	nodeName: string
 	nodeOnline: boolean
 }>()
-const emit = defineEmits<{ selectNode: []; logout: []; newSession: [] }>()
+const emit = defineEmits<{ selectNode: []; newSession: [] }>()
 const { t } = useI18n({ messages: mobileMessages })
 </script>
 
@@ -34,17 +33,7 @@ const { t } = useI18n({ messages: mobileMessages })
 			</div>
 			<div class="flex shrink-0 items-center gap-1">
 				<n-button
-					size="small"
-					quaternary
-					circle
-					:title="t('mobile.logout')"
-					:aria-label="t('mobile.logout')"
-					@click="emit('logout')"
-				>
-					<template #icon><Icon name="mdi:logout" /></template>
-				</n-button>
-				<n-button
-					v-if="activeTab !== 'resources'"
+					v-if="activeTab === 'overview' || activeTab === 'code'"
 					size="small"
 					type="primary"
 					secondary

@@ -23,6 +23,7 @@ import MobileRecentSessions from "./components/MobileRecentSessions.vue"
 import MobileSessionCreator from "./components/MobileSessionCreator.vue"
 import MobileSessionBrowser from "./components/MobileSessionBrowser.vue"
 import MobileSystemUpdate from "./components/MobileSystemUpdate.vue"
+import MobileSettingsPanel from "./components/MobileSettingsPanel.vue"
 import MobileTaskStatusDrawer from "./components/MobileTaskStatusDrawer.vue"
 import MobileTerminal from "./components/MobileTerminal.vue"
 import { useI18n } from "vue-i18n"
@@ -37,7 +38,9 @@ const { t } = useI18n({ messages: mobileMessages })
 const message = useMessage()
 const dialog = useDialog()
 const router = useRouter()
-const activeTab = ref<"overview" | "resources" | "code">("overview")
+type MobileConsoleTab = "overview" | "resources" | "code" | "settings"
+
+const activeTab = ref<MobileConsoleTab>("overview")
 const overview = ref<MobileOverview | null>(null)
 const nodes = ref<MobileNode[]>([])
 const selectedNodeId = ref(Number(localStorage.getItem("gopanel-mobile-node-id") || 0))
@@ -241,10 +244,10 @@ async function switchToCode() {
 	await loadSessions(true)
 }
 
-function selectTab(tab: "overview" | "resources" | "code") {
+function selectTab(tab: MobileConsoleTab) {
 	if (tab === "overview") void switchToOverview()
 	else if (tab === "code") void switchToCode()
-	else activeTab.value = "resources"
+	else activeTab.value = tab
 }
 
 async function leaveTaskDetail() {
@@ -360,14 +363,13 @@ onBeforeUnmount(() => {
 			:node-name="selectedNode?.name || ''"
 			:node-online="nodeIsOnline"
 			@select-node="showNodeSwitcher = true"
-			@logout="confirmLogout"
 			@new-session="showSessionCreator = true"
 		/>
 
 		<main :class="isTaskDetail ? 'w-full p-0' : 'mx-auto max-w-2xl p-4'">
 			<MobileSystemUpdate v-if="activeTab === 'overview' && selectedNode?.isLocal" />
 			<n-alert
-				v-if="loadError && activeTab !== 'resources'"
+				v-if="loadError && (activeTab === 'overview' || activeTab === 'code')"
 				type="error"
 				class="mb-4"
 				:title="t('mobile.loadFailed')"
@@ -405,6 +407,14 @@ onBeforeUnmount(() => {
 				</div>
 
 				<MobileResourcePanel v-else-if="activeTab === 'resources'" />
+
+				<MobileSettingsPanel
+					v-else-if="activeTab === 'settings'"
+					:node="selectedNode"
+					:node-online="nodeIsOnline"
+					@select-node="showNodeSwitcher = true"
+					@logout="confirmLogout"
+				/>
 
 				<div v-else :class="isTaskDetail ? '' : 'space-y-4'">
 					<MobileSessionBrowser
