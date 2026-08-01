@@ -3,18 +3,26 @@ import { computed, ref, watch } from "vue"
 import { useDialog, useMessage } from "naive-ui"
 import { useI18n } from "vue-i18n"
 import type { CodeSession } from "@/api/interface/code"
-import type { CodeDeliveryJob } from "@/api/interface/codeGit"
-import { deliverMobileSession } from "@/api/modules/mobile"
+import type { CodeDeliveryJob, CodeGitStatus } from "@/api/interface/codeGit"
+import { deliverMobileSession, getMobileGitStatus, saveMobileGitChanges } from "@/api/modules/mobile"
 import Icon from "@/components/common/Icon.vue"
 import { mobileTaskDeliveryMessages } from "../mobileTaskDeliveryMessages"
 
-const props = defineProps<{ session: CodeSession; delivery?: CodeDeliveryJob | null }>()
-const emit = defineEmits<{ queued: [] }>()
+const props = defineProps<{
+	session: CodeSession
+	delivery?: CodeDeliveryJob | null
+	active: boolean
+	revision?: string
+}>()
+const emit = defineEmits<{ updated: [] }>()
 const { t } = useI18n({ messages: mobileTaskDeliveryMessages })
 const dialog = useDialog()
 const message = useMessage()
 const loading = ref(false)
 const queued = ref(false)
+const gitStatus = ref<CodeGitStatus | null>(null)
+const statusLoading = ref(false)
+const statusError = ref(false)
 
 const available = computed(() =>
 	Boolean(props.session.worktreeBranch || props.session.isolationMode === "multi_worktree")
@@ -26,16 +34,59 @@ const delivering = computed(
 		props.session.status === "delivering"
 )
 const delivered = computed(() => props.delivery?.status === "completed" || props.session.status === "delivered")
-const label = computed(() =>
-	delivered.value
-		? t("mobile.deliveredShort")
-		: delivering.value
-			? t("mobile.deliveringShort")
-			: t("mobile.deliverToMain")
-)
+const hasChanges = computed(() => (gitStatus.value?.files || 0) > 0)
+const label = computed(() => {
+	if (statusError.value) return t("mobile.retryGitStatus")
+	if (statusLoading.value) return t("mobile.checkingChanges")
+	if (props.delivery?.status === "queued") return t("mobile.deliveryQueuedShort")
+	if (delivering.value && props.delivery?.stage === "quality_check") return t("mobile.runningDeliveryQuality")
+	if (delivering.value) return t("mobile.deliveringShort")
+	if (hasChanges.value) return t("mobile.saveChanges")
+	if (delivered.value) return t("mobile.deliveredShort")
+	if (["failed", "conflict", "partial"].includes(props.delivery?.status || "")) {
+		return t("mobile.retryDelivery")
+	}
+	return t("mobile.deliverToMain")
+})
+
+async function loadGitStatus(silent = false) {
+	if (!available.value || statusLoading.value) return
+	statusLoading.value = true
+	try {
+		gitStatus.value = await getMobileGitStatus(props.session.id)
+		statusError.value = false
+	} catch (error) {
+		statusError.value = true
+		if (!silent) message.error(error instanceof Error ? error.message : t("mobile.gitStatusFailed"))
+	} finally {
+		statusLoading.value = false
+	}
+}
+
+async function saveChanges() {
+	loading.value = true
+	try {
+		await saveMobileGitChanges(props.session.id)
+		message.success(t("mobile.gitSaveSuccess"))
+		await loadGitStatus(true)
+		emit("updated")
+	} catch (error) {
+		message.error(error instanceof Error ? error.message : t("mobile.gitSaveFailed"))
+	} finally {
+		loading.value = false
+	}
+}
 
 function deliver() {
-	if (loading.value || delivering.value || delivered.value) return
+	if (statusError.value) {
+		void loadGitStatus()
+		return
+	}
+	if (loading.value || statusLoading.value || delivering.value || (delivered.value && !hasChanges.value)) return
+	if (hasChanges.value) {
+		void saveChanges()
+		return
+	}
 	dialog.warning({
 		title: t("mobile.deliverToMain"),
 		content: t("mobile.deliverToMainConfirm"),
@@ -47,7 +98,7 @@ function deliver() {
 				await deliverMobileSession(props.session.id)
 				queued.value = true
 				message.success(t("mobile.deliveryQueuedSuccess"))
-				emit("queued")
+				emit("updated")
 			} catch (error) {
 				message.error(error instanceof Error ? error.message : t("mobile.deliveryQueueFailed"))
 			} finally {
@@ -58,9 +109,19 @@ function deliver() {
 }
 
 watch(
-	() => props.session.id,
-	() => {
+	[() => props.session.id, () => props.active],
+	([, active]) => {
 		queued.value = false
+		gitStatus.value = null
+		statusError.value = false
+		if (active) void loadGitStatus()
+	},
+	{ immediate: true }
+)
+watch(
+	() => props.revision,
+	() => {
+		if (props.active) void loadGitStatus(true)
 	}
 )
 </script>
@@ -70,17 +131,15 @@ watch(
 		v-if="available"
 		size="tiny"
 		secondary
-		:loading="loading"
-		:disabled="delivering || delivered"
-		:type="delivered ? 'success' : delivering ? 'info' : 'primary'"
+		:loading="loading || statusLoading"
+		:disabled="delivering || (!statusError && delivered && !hasChanges)"
+		:type="delivered && !hasChanges ? 'success' : delivering ? 'info' : 'primary'"
 		class="!h-10 !rounded-xl"
 		@click.stop="deliver"
 	>
 		<template #icon>
 			<Icon
-				:name="
-					delivered ? 'mdi:cloud-check-outline' : delivering ? 'mdi:cloud-sync-outline' : 'mdi:source-merge'
-				"
+				:name="hasChanges ? 'mdi:content-save-outline' : delivered ? 'mdi:cloud-check-outline' : delivering ? 'mdi:cloud-sync-outline' : 'mdi:source-merge'"
 				:size="14"
 			/>
 		</template>

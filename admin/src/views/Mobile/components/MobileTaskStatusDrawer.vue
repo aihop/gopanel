@@ -18,7 +18,7 @@ const emit = defineEmits<{
 	(event: "reject", reason: string): void
 	(event: "stop"): void
 	(event: "retry"): void
-	(event: "deliveryQueued"): void
+	(event: "deliveryUpdated"): void
 }>()
 const { t } = useI18n({ messages: mobileMessages })
 const approvalReason = ref("")
@@ -113,7 +113,9 @@ watch(
 							<MobileTaskDeliveryButton
 								:session="session"
 								:delivery="state?.delivery"
-								@queued="emit('deliveryQueued')"
+								:active="show"
+								:revision="`${state?.latestRun?.id || 0}:${state?.changedFiles.join('|') || ''}`"
+								@updated="emit('deliveryUpdated')"
 							/>
 						</div>
 					</section>

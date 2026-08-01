@@ -14,7 +14,7 @@ import type {
 import type { Dashboard } from "@/api/interface/dashboard"
 import type { HostTerminalSession } from "@/api/interface/hostTerminal"
 import type { CodeProjectSyncStatus } from "@/api/interface/codeOverview"
-import type { CodeDeliveryJob } from "@/api/interface/codeGit"
+import type { CodeDeliveryJob, CodeGitDeliveryResult, CodeGitStatus } from "@/api/interface/codeGit"
 import type { NodeSummary, NodeWarning } from "./node"
 
 const mobileHttp = axios.create({
@@ -401,6 +401,18 @@ export function deliverMobileSession(sessionId: number) {
 		mobileHttp.post<ResultData<CodeDeliveryJob>>(`/mobile/app/sessions/${sessionId}/worktree/merge`, {
 			confirm: true
 		})
+	)
+}
+
+export function getMobileGitStatus(sessionId: number) {
+	return mobileRequest(
+		mobileHttp.get<ResultData<CodeGitStatus>>(`/mobile/app/sessions/${sessionId}/git/status`)
+	)
+}
+
+export function saveMobileGitChanges(sessionId: number, message = "") {
+	return mobileRequest(
+		mobileHttp.post<ResultData<CodeGitDeliveryResult>>(`/mobile/app/sessions/${sessionId}/git/save`, { message })
 	)
 }
 

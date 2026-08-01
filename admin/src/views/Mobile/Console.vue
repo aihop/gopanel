@@ -65,7 +65,7 @@ const projectTerminalProject = ref<AIProject | null>(null)
 let refreshTimer: ReturnType<typeof setInterval> | null = null
 let nodeRefreshTicks = 0
 
-async function handleDeliveryQueued() {
+async function handleDeliveryUpdated() {
 	await Promise.all([loadSessions(), loadSessionState(true)])
 }
 
@@ -476,7 +476,7 @@ onBeforeUnmount(() => {
 			@reject="reason => decideApproval(false, reason)"
 			@stop="stopExecution"
 			@retry="retryExecution"
-			@delivery-queued="handleDeliveryQueued"
+			@delivery-updated="handleDeliveryUpdated"
 		/>
 	</div>
 </template>
