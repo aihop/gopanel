@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"path/filepath"
@@ -98,6 +99,14 @@ func TestCodeDeliveryLifecycleCompletesAndReopens(t *testing.T) {
 	if err := database.First(session, session.ID).Error; err != nil || session.Status != codeSessionStatusActive {
 		t.Fatalf("failed delivery did not reopen session: %#v, %v", session, err)
 	}
+}
+
+func TestStopCodeInteractiveExecutionDoesNotTreatCleanupAsTimeout(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	if err := stopCodeInteractiveExecution(ctx, 999); err != nil {
+		t.Fatalf("idle interactive execution should stop without timeout: %v", err)
+	}
+	cancel()
 }
 
 func TestCodeDeliveredSessionRejectsWorkspaceMutation(t *testing.T) {

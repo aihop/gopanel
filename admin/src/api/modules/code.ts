@@ -86,7 +86,16 @@ export function getCodeExecutionRun(runId: number) {
 }
 
 export function getCodeSessionState(sessionId: number) {
-	return http.get<CodeSessionState>(`/code/sessions/${sessionId}/state`, undefined, { timeout: 10000 })
+	return http.get<CodeSessionState>(`/code/sessions/${sessionId}/state`, undefined, { timeout: 10000 }).then(response => ({
+		...response,
+		data: {
+			...response.data,
+			recentMessages: response.data.recentMessages || [],
+			previews: response.data.previews || [],
+			timelineEvents: response.data.timelineEvents || [],
+			changedFiles: response.data.changedFiles || [],
+		}
+	}))
 }
 
 export function getCodeSessionStructure(sessionId: number, path = "") {

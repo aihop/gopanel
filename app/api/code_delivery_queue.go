@@ -318,11 +318,8 @@ func (runner *codeDeliveryRunner) run(jobID uint) {
 		runner.updateProgress(job.ID, stage, progress)
 	}
 	reporter(codeDeliveryStageStoppingTerminal, 5)
-	stopContext, cancelStop := context.WithTimeout(ctx, codeDeliveryQueueTimeout)
-	codeExecutions.cancelSessionKindAndWait(stopContext, job.SessionID, codeExecutionInteractive)
-	cancelStop()
-	if stopContext.Err() != nil {
-		runner.finish(job, codeGitDeliveryResult{}, errors.New("停止会话交互终端超时，请稍后重试"))
+	if err := stopCodeInteractiveExecution(ctx, job.SessionID); err != nil {
+		runner.finish(job, codeGitDeliveryResult{}, err)
 		return
 	}
 	var session model.AIDevSession
@@ -355,6 +352,16 @@ func (runner *codeDeliveryRunner) run(jobID uint) {
 		return
 	}
 	runner.finish(job, result, err)
+}
+
+func stopCodeInteractiveExecution(ctx context.Context, sessionID uint) error {
+	stopContext, cancelStop := context.WithTimeout(ctx, codeDeliveryQueueTimeout)
+	defer cancelStop()
+	codeExecutions.cancelSessionKindAndWait(stopContext, sessionID, codeExecutionInteractive)
+	if stopContext.Err() != nil {
+		return errors.New("停止会话交互终端超时，请稍后重试")
+	}
+	return nil
 }
 
 func loadCodeDeliveryJobView(sessionID uint) (*codeDeliveryJobView, error) {
