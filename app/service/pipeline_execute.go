@@ -96,7 +96,7 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 	logger.Info("开始构建版本...，版本号: %s", record.Version)
 	// 这里要加判断，如果是 build_run，才执行构建命令
 
-	exposePort, err := s.stepBuild(ctx, logger, p, workspaceDir, releaseDir, record.Version)
+	_, err := s.stepBuild(ctx, logger, p, workspaceDir, releaseDir, record.Version)
 
 	if err != nil {
 		if ctx.Err() != nil {
@@ -156,7 +156,7 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 	_ = s.releaseRepo.Create(release)
 
 	switch strings.TrimSpace(p.ActionType) {
-	case "build_image":
+	case "build_image", "build":
 		imageRef, err := s.stepBuildImage(ctx, logger, p, releaseDir, recordID)
 		if err != nil {
 			s.recordRepo.UpdateStatus(recordID, "failed", fmt.Sprintf("镜像构建失败: %v", err))
@@ -167,35 +167,9 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 		s.recordRepo.UpdateStatus(recordID, "success", fmt.Sprintf("镜像构建成功: %s", imageRef))
 		logger.Info("镜像构建成功: %s", imageRef)
 
-	case "none":
-		s.recordRepo.UpdateStatus(recordID, "success", "构建成功（未配置后续操作）")
-		logger.Info("流水线构建成功，action_type=none，跳过部署")
-
 	default:
-		// "deploy" — sync to linked websites (existing behavior)
-		finalImage := detectBuiltImageRef(p, record.Version, logger.GetLogs())
-		if finalImage != "" {
-			logger.Info("检测到本次真实构建镜像: %s", finalImage)
-			_ = s.recordRepo.UpdateImageTag(recordID, finalImage)
-			record.ImageTag = finalImage
-		}
-		summary, err := NewWebsite().DeployFromPipeline(ctx, p.ID, recordID, record.Version, archivePath, finalImage, exposePort)
-		if err != nil {
-			s.recordRepo.UpdateStatus(recordID, "failed", err.Error())
-			logger.Error("同步网站运行结果失败: %v", err)
-			return
-		}
-		if summary != nil && summary.Matched == 0 {
-			s.recordRepo.UpdateStatus(recordID, "success", "构建成功（无关联网站）")
-			logger.Info("流水线构建成功，无关联网站")
-			return
-		}
-		msg := ""
-		if summary != nil {
-			msg = fmt.Sprintf("已完成 %d/%d 个网站同步", summary.Success, summary.Matched)
-			logger.Info("%s", msg)
-		}
-		s.recordRepo.UpdateStatus(recordID, "success", msg)
+		s.recordRepo.UpdateStatus(recordID, "success", "构建成功（未配置后续操作）")
+		logger.Info("流水线构建成功，网站发布请从容器列表选择端口绑定")
 	}
 	logger.Info("====== Pipeline #%d 执行成功！======", recordID)
 }

@@ -32,6 +32,7 @@ func (s *PipelineApplicationService) Page(ctx context.Context, page, limit int) 
 	return total, list, nil
 }
 func (s *PipelineApplicationService) Create(req request.PipelineCreate) error {
+	req.ActionType = normalizePipelineActionType(req.ActionType)
 	pipelineKey := normalizePipelineKey(req.PipelineKey)
 	if err := s.validatePipelineKey(pipelineKey, 0, ""); err != nil {
 		return err
@@ -57,6 +58,7 @@ func (s *PipelineApplicationService) Create(req request.PipelineCreate) error {
 	return s.pipelineRepo.Create(pipeline)
 }
 func (s *PipelineApplicationService) Update(req request.PipelineUpdate) error {
+	req.ActionType = normalizePipelineActionType(req.ActionType)
 	pipeline, err := s.pipelineRepo.Get(req.ID)
 	if err != nil {
 		return err
@@ -100,6 +102,15 @@ func (s *PipelineApplicationService) Update(req request.PipelineUpdate) error {
 		}
 	}
 	return s.pipelineRepo.Update(pipeline)
+}
+
+func normalizePipelineActionType(value string) string {
+	switch value {
+	case "build", "build_image":
+		return "build_image"
+	default:
+		return "none"
+	}
 }
 func (s *PipelineApplicationService) Delete(id uint) error {
 	websiteCount, err := s.websiteRepo.CountByPipelineID(id)

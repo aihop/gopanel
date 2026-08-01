@@ -105,6 +105,7 @@ func (s *WebsiteService) List(ctx *gormx.Contextx) (websiteDTOs []*response.Webs
 			ErrorLogPath:             errorLogPath,
 			AppInstallID:             appInstallID,
 			PipelineID:               web.PipelineID,
+			ContainerID:              web.ContainerID,
 			RuntimeType:              runtimeType,
 			OtherDomains:             otherDomains,
 			DefaultServer:            web.DefaultServer,

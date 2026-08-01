@@ -171,6 +171,8 @@ func FillWebsiteRuntimeMeta(ctx context.Context, websites []*response.WebsiteRes
 		}
 		meta := lookup.defaultMeta
 		switch {
+		case strings.TrimSpace(websites[i].ContainerID) != "":
+			meta = lookup.metaForContainerID(websites[i].ContainerID)
 		case websites[i].AppInstallID > 0:
 			appInstall, err := appInstallRepo.GetFirst(commonRepo.WithByID(websites[i].AppInstallID))
 			if err == nil {

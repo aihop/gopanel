@@ -20,6 +20,14 @@ type InspectReq struct {
 	RuntimeHost string `json:"runtimeHost"`
 }
 
+type ContainerWebsiteBind struct {
+	ContainerID string `json:"containerId" validate:"required"`
+	RuntimeHost string `json:"runtimeHost"`
+	WebsiteID   uint   `json:"websiteId" validate:"required"`
+	HostPort    int    `json:"hostPort" validate:"required,min=1,max=65535"`
+	Scheme      string `json:"scheme" validate:"omitempty,oneof=http https"`
+}
+
 type ContainerInfo struct {
 	ContainerID string `json:"containerID"`
 	Name        string `json:"name"`

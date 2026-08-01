@@ -58,6 +58,9 @@ func (s *AppDeployApplicationService) Switch(deployID uint, exposePort int) erro
 	if err := s.db.First(&targetDeploy, deployID).Error; err != nil {
 		return fmt.Errorf("部署记录不存在")
 	}
+	if targetDeploy.SourceType == "container_bind" {
+		return fmt.Errorf("容器端口绑定记录不能作为部署版本切换，请从容器列表重新发布")
+	}
 	var website model.Website
 	if err := s.db.Preload("Domains").First(&website, targetDeploy.WebsiteID).Error; err != nil {
 		return fmt.Errorf("网站不存在")

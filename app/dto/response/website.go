@@ -55,6 +55,7 @@ type WebsiteRes struct {
 	RuntimeDir    string    `json:"runtimeDir"`
 	AppInstallID  uint      `json:"appInstallId"`
 	PipelineID    uint      `json:"pipelineId"`
+	ContainerID   string    `json:"containerId"`
 	RuntimeType   string    `json:"runtimeType"`
 	RuntimeHost   string    `json:"runtimeHost"`
 	RuntimeKind   string    `json:"runtimeKind"`

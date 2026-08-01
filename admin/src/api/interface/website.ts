@@ -1,5 +1,4 @@
 import type { CommonModel, ReqPage } from "."
-
 export namespace Website {
 	export interface WebsiteUpstream extends CommonModel {
 		address: string
@@ -137,6 +136,7 @@ export namespace Website {
 		status: string
 		logText: string
 		containerId: string
+		runtimeHost?: string
 		port: number
 		isActive: boolean
 		dockerCompose: string

@@ -17,7 +17,7 @@ type Pipeline struct {
 	AuthType string `gorm:"column:auth_type;type:varchar(20);not null;default:'none'" json:"authType"`
 	AuthData string `gorm:"column:auth_data;type:text" json:"authData"` // JSON format credentials
 
-	ActionType   string `gorm:"column:action_type;type:varchar(32);not null;default:'deploy'" json:"actionType"`
+	ActionType   string `gorm:"column:action_type;type:varchar(32);not null;default:'none'" json:"actionType"`
 	ActionParams string `gorm:"column:action_params;type:text" json:"actionParams"`
 	BuildImage   string `gorm:"column:build_image;type:varchar(100);not null" json:"buildImage"`
 	BuildScript  string `gorm:"column:build_script;type:text" json:"buildScript"`
@@ -37,19 +37,19 @@ func (Pipeline) TableName() string {
 }
 
 type PipelineRecord struct {
-	ID           uint      `gorm:"primaryKey" json:"id"`
-	CreatedAt    time.Time `json:"createdAt"`
-	UpdatedAt    time.Time `json:"updatedAt"`
-	PipelineID   uint      `gorm:"column:pipeline_id;type:integer;not null" json:"pipelineId"`
-	Status       string    `gorm:"column:status;type:varchar(20);not null;default:'pending'" json:"status"` // pending, cloning, building, deploying, success, failed
-	Version      string    `gorm:"column:version;type:varchar(50)" json:"version"`                          // 记录本次执行的版本号
-	CommitHash   string    `gorm:"column:commit_hash;type:varchar(64)" json:"commitHash"`
+	ID         uint      `gorm:"primaryKey" json:"id"`
+	CreatedAt  time.Time `json:"createdAt"`
+	UpdatedAt  time.Time `json:"updatedAt"`
+	PipelineID uint      `gorm:"column:pipeline_id;type:integer;not null" json:"pipelineId"`
+	Status     string    `gorm:"column:status;type:varchar(20);not null;default:'pending'" json:"status"` // pending, cloning, building, deploying, success, failed
+	Version    string    `gorm:"column:version;type:varchar(50)" json:"version"`                          // 记录本次执行的版本号
+	CommitHash string    `gorm:"column:commit_hash;type:varchar(64)" json:"commitHash"`
 	// Changelog 本次构建包含的提交标题，一行一条，来自「上次成功构建的 commit..HEAD」。
 	// 只存纯文本，展示端不要按 HTML 渲染——内容来自仓库提交信息，属于外部输入。
 	Changelog    string `gorm:"column:changelog;type:text" json:"changelog"`
 	ErrorMessage string `gorm:"column:error_message;type:text" json:"errorMessage"`
-	ArchiveFile  string    `gorm:"column:archive_file;type:varchar(255)" json:"archiveFile"` // Path to the zip backup
-	ImageTag     string    `gorm:"column:image_tag;type:varchar(255)" json:"imageTag"`
+	ArchiveFile  string `gorm:"column:archive_file;type:varchar(255)" json:"archiveFile"` // Path to the zip backup
+	ImageTag     string `gorm:"column:image_tag;type:varchar(255)" json:"imageTag"`
 
 	RunnerReleaseDir   string   `gorm:"column:runner_release_dir;type:varchar(255)" json:"runnerReleaseDir"`
 	RunnerContainerID  string   `gorm:"column:runner_container_id;type:varchar(128)" json:"runnerContainerId"`

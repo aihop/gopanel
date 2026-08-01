@@ -4,6 +4,7 @@ import { remoteContainerListAPI, remoteContainerOperateAPI } from "@/api/modules
 import { t } from "@/i18n"
 import { useDialog, useMessage } from "naive-ui"
 import { onMounted, ref, watch } from "vue"
+import ContainerWebsiteDialog from "@/views/Container/container/ContainerWebsiteDialog.vue"
 
 const props = defineProps<{
 	nodeId: number
@@ -23,6 +24,7 @@ const page = ref(1)
 const pageSize = ref(10)
 const keyword = ref("")
 const operatingName = ref("")
+const bindDialogRef = ref()
 
 async function fetchData() {
 	loading.value = true
@@ -127,6 +129,13 @@ onMounted(fetchData)
 					</div>
 					<div v-if="canControl" class="mt-2 flex gap-3 text-xs">
 						<a
+							v-if="row.state === 'running'"
+							class="cursor-pointer text-primary"
+							@click="bindDialogRef?.acceptParams({ containerId: row.containerID, containerName: row.name, nodeId })"
+						>
+							{{ t("container.bindWebsite") }}
+						</a>
+						<a
 							v-if="row.state !== 'running'"
 							class="cursor-pointer text-primary"
 							@click="operate(row, 'start')"
@@ -156,5 +165,6 @@ onMounted(fetchData)
 				/>
 			</div>
 		</n-spin>
+		<ContainerWebsiteDialog ref="bindDialogRef" @success="fetchData" />
 	</div>
 </template>

@@ -49,6 +49,9 @@ func normalizeWebsiteProtocol(protocol string) string {
 }
 
 func (s WebsiteService) Create(ctx context.Context, req *request.WebsiteCreate, mode model.DatabaseMode) (err error) {
+	if req.CodeSource == "pipeline" || req.PipelineId > 0 {
+		return errors.New("网站不再直接关联流水线，请先启动容器，再从容器列表发布到网站")
+	}
 	alias := req.Alias
 	if alias == "default" {
 		return buserr.New("ErrDefaultAlias")

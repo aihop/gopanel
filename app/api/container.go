@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"github.com/aihop/gopanel/app/dto"
@@ -12,6 +13,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"os"
 	"strconv"
+	"time"
 )
 
 func ContainerList(c fiber.Ctx) error {
@@ -178,6 +180,19 @@ func ContainerInspect(c fiber.Ctx) error {
 		return c.JSON(e.Fail(buserr.Err(err)))
 	}
 	return c.JSON(e.Succ(result))
+}
+
+func ContainerBindWebsite(c fiber.Ctx) error {
+	req, err := e.BodyToStruct[dto.ContainerWebsiteBind](c.Body())
+	if err != nil {
+		return c.JSON(e.Fail(buserr.Err(err)))
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	if err := service.NewIContainerService().BindWebsite(ctx, req); err != nil {
+		return c.JSON(e.Fail(buserr.Err(err)))
+	}
+	return c.JSON(e.Succ())
 }
 func ContainerLogs(c *websocket.Conn) {
 	defer c.Close()

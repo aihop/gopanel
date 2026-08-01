@@ -65,6 +65,15 @@ func (r *AppDeployRepo) CountByPipelineRecordID(recordID uint) (int64, error) {
 	return count, err
 }
 
+func (r *AppDeployRepo) ReplaceActiveContainerBinding(tx *gorm.DB, deploy *model.AppDeploy) error {
+	if err := tx.Model(&model.AppDeploy{}).
+		Where("website_id = ? AND is_active = ?", deploy.WebsiteID, true).
+		Update("is_active", false).Error; err != nil {
+		return err
+	}
+	return tx.Create(deploy).Error
+}
+
 func (r *AppDeployRepo) ActiveWebsiteCountByPipelineRecordIDs(recordIDs []uint) (map[uint]int, error) {
 	result := make(map[uint]int)
 	if len(recordIDs) == 0 {

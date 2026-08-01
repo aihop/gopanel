@@ -15,6 +15,7 @@ type AppDeploy struct {
 	Status           string `gorm:"type:varchar;not null" json:"status"`
 	LogText          string `gorm:"type:longtext;" json:"logText"`
 	ContainerID      string `gorm:"type:varchar;" json:"containerId"`
+	RuntimeHost      string `gorm:"type:varchar(255);" json:"runtimeHost"`
 	Port             int    `gorm:"type:integer;" json:"port"`
 	IsActive         bool   `gorm:"type:boolean;default:false" json:"isActive"`
 	DockerCompose    string `json:"dockerCompose" gorm:"type:longtext"`
