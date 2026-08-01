@@ -429,7 +429,7 @@ func UpdateCodeGitStage(c fiber.Ctx) error {
 		return c.JSON(e.Fail(err))
 	}
 	var updated codeGitStatus
-	err = runCodeSessionWorkspaceMutation(session, func(current *model.AIDevSession) error {
+	err = runCodeSessionGitMutation(session, func(current *model.AIDevSession) error {
 		repository, mutationErr := findCodeGitRepository(discoverCodeGitRepositories(current, sourceDirs), req.RepositoryID)
 		if mutationErr != nil {
 			return mutationErr

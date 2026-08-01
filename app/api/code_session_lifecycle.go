@@ -118,6 +118,38 @@ func runCodeSessionWorkspaceMutationWithTx(session *model.AIDevSession, operatio
 	})
 }
 
+func runCodeSessionGitMutation(session *model.AIDevSession, operation func(*model.AIDevSession) error) error {
+	if session == nil || session.ID == 0 {
+		return errors.New("开发会话不可用")
+	}
+	unlockLifecycle := codeSessionLifecycles.lock(session.ID)
+	defer unlockLifecycle()
+	return global.DB.Transaction(func(tx *gorm.DB) error {
+		current, err := lockCodeSessionForDevelopment(tx, session.ID)
+		if err != nil {
+			return err
+		}
+		if err := validateCodeSessionGitMutationIdle(tx, current.ID); err != nil {
+			return err
+		}
+		return operation(current)
+	})
+}
+
+func validateCodeSessionGitMutationIdle(tx *gorm.DB, sessionID uint) error {
+	var activeInstructions int64
+	if err := tx.Model(&model.AIInstruction{}).Where(
+		"session_id = ? AND status IN ?", sessionID,
+		[]string{"queued", "running", "pending_approval"},
+	).Count(&activeInstructions).Error; err != nil {
+		return err
+	}
+	if activeInstructions > 0 {
+		return errors.New("当前会话仍有待处理指令，请完成或停止后再修改 Git 状态")
+	}
+	return nil
+}
+
 func validateCodeSessionReadyForDelivery(tx *gorm.DB, session *model.AIDevSession) error {
 	if err := validateCodeSessionDevelopmentOpen(session); err != nil {
 		return err

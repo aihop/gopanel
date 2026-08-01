@@ -130,7 +130,7 @@ func runCodeGitDelivery(c fiber.Ctx, action string, operation func(*model.AIDevS
 		return c.JSON(e.Fail(err))
 	}
 	var result codeGitDeliveryResult
-	err = runCodeSessionWorkspaceMutation(session, func(current *model.AIDevSession) error {
+	err = runCodeSessionGitMutation(session, func(current *model.AIDevSession) error {
 		var operationErr error
 		result, operationErr = operation(current)
 		return operationErr
