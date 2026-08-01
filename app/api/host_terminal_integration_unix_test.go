@@ -3,7 +3,6 @@
 package api
 
 import (
-	"context"
 	"errors"
 	"path/filepath"
 	"strings"
@@ -75,7 +74,7 @@ func TestHostTerminalManagerCreateWriteAndStop(t *testing.T) {
 	}
 }
 
-func TestCodeDeliveryStopsAllHostTerminals(t *testing.T) {
+func TestCodeDeliveryRejectsRunningHostTerminalWithoutStoppingIt(t *testing.T) {
 	database, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "terminal-delivery.db")), &gorm.Config{})
 	if err != nil {
 		t.Fatal(err)
@@ -91,21 +90,21 @@ func TestCodeDeliveryStopsAllHostTerminals(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	if err := manager.stopAllForCodeDelivery(ctx, 9); err != nil {
-		t.Fatal(err)
+	if err := manager.validateStoppedForCodeDelivery(); err == nil {
+		t.Fatal("delivery should reject a running host terminal")
 	}
-	if manager.get(record.ID) != nil {
-		t.Fatal("delivery returned before the host terminal exited")
+	if manager.get(record.ID) == nil {
+		t.Fatal("delivery stopped the host terminal process")
 	}
 	var stored model.HostTerminalSession
-	if err := database.First(&stored, record.ID).Error; err != nil || stored.Status != "stopped" {
-		t.Fatalf("terminal was not stopped for delivery: %#v, %v", stored, err)
+	if err := database.First(&stored, record.ID).Error; err != nil || stored.Status != "running" {
+		t.Fatalf("delivery changed the terminal state: %#v, %v", stored, err)
 	}
-	var audit model.HostTerminalAuditEvent
-	if err := database.Where("session_id = ? AND action = ?", record.ID, "delivery_stop").First(&audit).Error; err != nil {
-		t.Fatalf("delivery stop audit is missing: %v", err)
+	if !manager.stop(record.ID) {
+		t.Fatal("test cleanup could not stop host terminal")
+	}
+	if manager.get(record.ID) != nil {
+		t.Fatal("test cleanup returned before host terminal exit")
 	}
 }
 

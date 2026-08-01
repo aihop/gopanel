@@ -309,6 +309,15 @@ func (coordinator *codeExecutionCoordinator) cancelSessionAndWait(ctx context.Co
 	return coordinator.cancelSessionKindAndWait(ctx, sessionID, "")
 }
 
+func (coordinator *codeExecutionCoordinator) hasSessionKind(sessionID uint, kind string) bool {
+	if sessionID == 0 {
+		return false
+	}
+	coordinator.mu.Lock()
+	defer coordinator.mu.Unlock()
+	return len(coordinator.sessionLeases(sessionID, kind)) > 0
+}
+
 func (coordinator *codeExecutionCoordinator) cancelSessionKindAndWait(ctx context.Context, sessionID uint, kind string) bool {
 	if sessionID == 0 {
 		return false

@@ -1,9 +1,7 @@
 package api
 
 import (
-	"context"
 	"errors"
-	"fmt"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -66,24 +64,16 @@ func codeProjectOperationPaths(project *model.AIProject) []string {
 	return paths
 }
 
-func stopHostTerminalsForCodeDelivery(ctx context.Context, userID uint) error {
-	stopContext, cancel := context.WithTimeout(ctx, codeDeliveryQueueTimeout)
-	defer cancel()
-	return hostTerminals.stopAllForCodeDelivery(stopContext, userID)
+func validateHostTerminalsStoppedForCodeDelivery() error {
+	return hostTerminals.validateStoppedForCodeDelivery()
 }
 
-func (manager *hostTerminalManager) stopAllForCodeDelivery(ctx context.Context, userID uint) error {
+func (manager *hostTerminalManager) validateStoppedForCodeDelivery() error {
 	manager.mu.Lock()
-	ids := make([]uint, 0, len(manager.sessions))
-	for id := range manager.sessions {
-		ids = append(ids, id)
-	}
+	active := len(manager.sessions) > 0
 	manager.mu.Unlock()
-	for _, id := range ids {
-		if !manager.stopAndWait(ctx, id) && manager.get(id) != nil {
-			return fmt.Errorf("统一交付前无法停止宿主终端会话 %d", id)
-		}
-		recordHostTerminalAudit(id, userID, "delivery_stop", "success", "", "统一交付前自动停止宿主终端")
+	if active {
+		return errors.New("当前仍有宿主终端在运行，请先退出终端后再交付；现有进程不会被自动停止")
 	}
 	return nil
 }

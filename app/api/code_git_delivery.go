@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"errors"
-	"fmt"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -108,9 +107,6 @@ func mergeCodeSessionWorktree(session *model.AIDevSession) (codeGitDeliveryResul
 	if err != nil {
 		return codeGitDeliveryResult{}, err
 	}
-	if err := cleanupCodeSessionWorktree(session); err != nil {
-		return codeGitDeliveryResult{}, fmt.Errorf("合并成功，但清理 Worktree 失败：%w", err)
-	}
 	return codeGitDeliveryResult{Status: "merged", Commit: commit, Branch: session.WorktreeBranch}, nil
 }
 
@@ -204,13 +200,7 @@ func runCodeWorktreeMerge(c fiber.Ctx, operation func(*model.AIDevSession) (code
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	deliveryContext, cancelDelivery := context.WithTimeout(context.Background(), codeDeliveryQueueTimeout)
-	defer cancelDelivery()
-	codeExecutions.cancelSessionKindAndWait(deliveryContext, session.ID, codeExecutionInteractive)
-	if deliveryContext.Err() != nil {
-		return c.JSON(e.Fail(errors.New("停止会话交互终端超时，请稍后重试")))
-	}
-	lease, err := codeExecutions.acquireSession(deliveryContext, session, codeExecutionDelivery, true)
+	lease, err := codeExecutions.acquireSession(context.Background(), session, codeExecutionDelivery, false)
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}

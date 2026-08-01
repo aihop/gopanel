@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 
@@ -40,7 +39,10 @@ func persistCodeDeliveryJob(session *model.AIDevSession, userID uint, requestIP 
 	if err := validateCodeSessionReadyForDelivery(global.DB, &current); err != nil {
 		return nil, err
 	}
-	if err := stopHostTerminalsForCodeDelivery(context.Background(), userID); err != nil {
+	if codeExecutions.hasSessionKind(session.ID, codeExecutionInteractive) {
+		return nil, errors.New("当前会话终端仍在运行，请先退出终端后再交付；现有进程不会被自动停止")
+	}
+	if err := validateHostTerminalsStoppedForCodeDelivery(); err != nil {
 		return nil, err
 	}
 	keys, targetBranch, err := codeDeliveryRepositoryKeys(session)

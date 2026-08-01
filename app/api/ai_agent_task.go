@@ -116,6 +116,9 @@ func DeleteAITask(c fiber.Ctx) error {
 		if !backgroundCodeRunner.wait(stopContext, task.SessionID) || stopContext.Err() != nil {
 			return c.JSON(e.Fail(errors.New("停止 Code 会话超时，请稍后重试")))
 		}
+		if err := cleanupDeliveredCodeSessionWorktrees(session); err != nil {
+			global.LOG.Warnf("Cleanup delivered Code worktrees %d skipped: %v", session.ID, err)
+		}
 		if err := aiRepo.DeleteTaskAndSession(uint(taskID), session.ID); err != nil {
 			return c.JSON(e.Fail(err))
 		}

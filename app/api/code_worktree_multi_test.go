@@ -373,6 +373,27 @@ func TestCommitAndMergeMultiRepositorySession(t *testing.T) {
 	if err := global.DB.First(&stored, session.ID).Error; err != nil || stored.WorkDir != project.WorkDir || stored.IsolationMode != "" {
 		t.Fatalf("session was not restored: %#v, %v", stored, err)
 	}
+	if _, err := os.Stat(session.WorkDir); err != nil {
+		t.Fatalf("delivery removed a potentially active multi-repository workspace: %v", err)
+	}
+	storedRepositories, err := loadCodeSessionRepositories(session.ID)
+	if err != nil || len(storedRepositories) != len(repositories) {
+		t.Fatalf("delivered repository metadata was removed: %#v, %v", storedRepositories, err)
+	}
+	for _, repository := range storedRepositories {
+		if repository.Status != codeDeliveryCompleted {
+			t.Fatalf("repository delivery was not completed: %#v", repository)
+		}
+		if _, err := os.Stat(repository.WorktreeDir); err != nil {
+			t.Fatalf("delivered repository worktree was removed: %v", err)
+		}
+	}
+	if err := cleanupDeliveredCodeSessionWorktrees(session); err != nil {
+		t.Fatalf("deferred multi-repository cleanup failed: %v", err)
+	}
+	if _, err := os.Stat(session.WorkDir); !os.IsNotExist(err) {
+		t.Fatalf("multi-repository workspace remained after deferred cleanup: %v", err)
+	}
 }
 
 func TestMultiRepositoryDeliveryResumesAfterConflict(t *testing.T) {

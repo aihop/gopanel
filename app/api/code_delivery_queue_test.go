@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -70,6 +71,34 @@ func TestCodeDeliveryEnqueueIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestCodeDeliveryRejectsInteractiveTerminalWithoutCancellingIt(t *testing.T) {
+	database := withCodeGovernanceDB(t)
+	workDir := t.TempDir()
+	session := &model.AIDevSession{
+		ID: 914, UserID: 1, ProjectID: 1, Status: codeSessionStatusActive,
+		WorkDir: workDir, SourceWorkDir: workDir, TargetBranch: "main",
+	}
+	if err := database.Create(session).Error; err != nil {
+		t.Fatal(err)
+	}
+	previousCoordinator := codeExecutions
+	codeExecutions = newCodeExecutionCoordinator(2)
+	t.Cleanup(func() { codeExecutions = previousCoordinator })
+	lease, err := codeExecutions.acquireSession(context.Background(), session, codeExecutionInteractive, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lease.Release()
+	var cancelled atomic.Bool
+	lease.SetCancel(func() { cancelled.Store(true) })
+	if _, err := persistCodeDeliveryJob(session, session.UserID, "127.0.0.1"); err == nil {
+		t.Fatal("delivery should reject an active interactive terminal")
+	}
+	if cancelled.Load() {
+		t.Fatal("delivery cancelled the interactive terminal")
+	}
+}
+
 func TestCodeDeliveryLifecycleCompletesAndReopens(t *testing.T) {
 	database := withCodeGovernanceDB(t)
 	session := &model.AIDevSession{ID: 908, UserID: 1, Status: codeSessionStatusDelivering, WorkDir: t.TempDir()}
@@ -99,14 +128,6 @@ func TestCodeDeliveryLifecycleCompletesAndReopens(t *testing.T) {
 	if err := database.First(session, session.ID).Error; err != nil || session.Status != codeSessionStatusActive {
 		t.Fatalf("failed delivery did not reopen session: %#v, %v", session, err)
 	}
-}
-
-func TestStopCodeInteractiveExecutionDoesNotTreatCleanupAsTimeout(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	if err := stopCodeInteractiveExecution(ctx, 999); err != nil {
-		t.Fatalf("idle interactive execution should stop without timeout: %v", err)
-	}
-	cancel()
 }
 
 func TestCodeDeliveredSessionRejectsWorkspaceMutation(t *testing.T) {

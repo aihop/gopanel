@@ -78,13 +78,7 @@ func PushCodeSessionDelivery(c fiber.Ctx) error {
 	if err := validateCodeDeliveryPushSession(session, claims); err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	deliveryContext, cancelDelivery := context.WithTimeout(context.Background(), codeDeliveryQueueTimeout)
-	defer cancelDelivery()
-	codeExecutions.cancelSessionKindAndWait(deliveryContext, session.ID, codeExecutionInteractive)
-	if deliveryContext.Err() != nil {
-		return c.JSON(e.Fail(errors.New("停止会话交互终端超时，请稍后重试")))
-	}
-	lease, err := codeExecutions.acquireSession(deliveryContext, session, codeExecutionDelivery, true)
+	lease, err := codeExecutions.acquireSession(context.Background(), session, codeExecutionDelivery, false)
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}

@@ -317,9 +317,9 @@ func (runner *codeDeliveryRunner) run(jobID uint) {
 		job.Stage, job.Progress = stage, progress
 		runner.updateProgress(job.ID, stage, progress)
 	}
-	reporter(codeDeliveryStageStoppingTerminal, 5)
-	if err := stopCodeInteractiveExecution(ctx, job.SessionID); err != nil {
-		runner.finish(job, codeGitDeliveryResult{}, err)
+	reporter(codeDeliveryStageQueued, 5)
+	if codeExecutions.hasSessionKind(job.SessionID, codeExecutionInteractive) {
+		runner.deferJob(job.ID, errors.New("当前会话终端仍在运行，交付将在终端退出后继续；现有进程不会被自动停止"))
 		return
 	}
 	var session model.AIDevSession
@@ -327,8 +327,8 @@ func (runner *codeDeliveryRunner) run(jobID uint) {
 		runner.finish(job, codeGitDeliveryResult{}, err)
 		return
 	}
-	if err = stopHostTerminalsForCodeDelivery(ctx, job.UserID); err != nil {
-		runner.finish(job, codeGitDeliveryResult{}, err)
+	if err = validateHostTerminalsStoppedForCodeDelivery(); err != nil {
+		runner.deferJob(job.ID, err)
 		return
 	}
 	lease, err := codeExecutions.acquireSession(ctx, &session, codeExecutionDelivery, true)
@@ -352,16 +352,6 @@ func (runner *codeDeliveryRunner) run(jobID uint) {
 		return
 	}
 	runner.finish(job, result, err)
-}
-
-func stopCodeInteractiveExecution(ctx context.Context, sessionID uint) error {
-	stopContext, cancelStop := context.WithTimeout(ctx, codeDeliveryQueueTimeout)
-	defer cancelStop()
-	codeExecutions.cancelSessionKindAndWait(stopContext, sessionID, codeExecutionInteractive)
-	if stopContext.Err() != nil {
-		return errors.New("停止会话交互终端超时，请稍后重试")
-	}
-	return nil
 }
 
 func loadCodeDeliveryJobView(sessionID uint) (*codeDeliveryJobView, error) {

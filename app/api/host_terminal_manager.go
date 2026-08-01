@@ -234,8 +234,8 @@ func (session *hostTerminal) wait(manager *hostTerminalManager) {
 		close(subscriber.Events)
 	}
 	session.mu.Unlock()
-	close(session.done)
 	recordHostTerminalAudit(session.record.ID, session.record.UserID, "exit", status, session.record.ClientIP, session.record.ErrorMessage)
+	close(session.done)
 }
 
 func (manager *hostTerminalManager) get(id uint) *hostTerminal {
