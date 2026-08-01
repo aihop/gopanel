@@ -45,8 +45,11 @@ func TestCodeDeliveryClaimIsExclusive(t *testing.T) {
 
 func TestCodeDeliveryEnqueueIsIdempotent(t *testing.T) {
 	database := withCodeGovernanceDB(t)
-	sourceDir := t.TempDir()
-	session := &model.AIDevSession{ID: 907, UserID: 1, ProjectID: 1, SourceWorkDir: sourceDir, TargetBranch: "main"}
+	session, _ := createDeliveryWorktree(t, 907)
+	session.ProjectID = 1
+	if err := database.Create(&model.AIProject{ID: session.ProjectID, Name: "queue", CreatorID: session.UserID}).Error; err != nil {
+		t.Fatal(err)
+	}
 	if err := database.Create(session).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -71,12 +74,12 @@ func TestCodeDeliveryEnqueueIsIdempotent(t *testing.T) {
 	}
 }
 
-func TestCodeDeliveryRejectsInteractiveTerminalWithoutCancellingIt(t *testing.T) {
+func TestCodeDeliverySnapshotsWithInteractiveTerminalWithoutCancellingIt(t *testing.T) {
 	database := withCodeGovernanceDB(t)
-	workDir := t.TempDir()
-	session := &model.AIDevSession{
-		ID: 914, UserID: 1, ProjectID: 1, Status: codeSessionStatusActive,
-		WorkDir: workDir, SourceWorkDir: workDir, TargetBranch: "main",
+	session, _ := createDeliveryWorktree(t, 914)
+	session.ProjectID, session.Status = 1, codeSessionStatusActive
+	if err := database.Create(&model.AIProject{ID: session.ProjectID, Name: "interactive", CreatorID: session.UserID}).Error; err != nil {
+		t.Fatal(err)
 	}
 	if err := database.Create(session).Error; err != nil {
 		t.Fatal(err)
@@ -91,8 +94,9 @@ func TestCodeDeliveryRejectsInteractiveTerminalWithoutCancellingIt(t *testing.T)
 	defer lease.Release()
 	var cancelled atomic.Bool
 	lease.SetCancel(func() { cancelled.Store(true) })
-	if _, err := persistCodeDeliveryJob(session, session.UserID, "127.0.0.1"); err == nil {
-		t.Fatal("delivery should reject an active interactive terminal")
+	job, err := persistCodeDeliveryJob(session, session.UserID, "127.0.0.1")
+	if err != nil || job.Status != codeDeliveryJobQueued {
+		t.Fatalf("delivery should snapshot with an active interactive terminal: %#v, %v", job, err)
 	}
 	if cancelled.Load() {
 		t.Fatal("delivery cancelled the interactive terminal")
@@ -113,11 +117,11 @@ func TestCodeDeliveryLifecycleCompletesAndReopens(t *testing.T) {
 	if err := completeCodeSessionLifecycle(database, session.ID, now); err != nil {
 		t.Fatal(err)
 	}
-	if err := database.First(session, session.ID).Error; err != nil || session.Status != codeSessionStatusDelivered || session.DeliveredAt == nil {
+	if err := database.First(session, session.ID).Error; err != nil || session.Status != codeSessionStatusActive || session.DeliveredAt == nil {
 		t.Fatalf("session was not completed: %#v, %v", session, err)
 	}
-	if err := validateCodeSessionDevelopmentOpen(session); err == nil {
-		t.Fatal("delivered session should reject further development")
+	if err := validateCodeSessionDevelopmentOpen(session); err != nil {
+		t.Fatalf("delivered snapshot should keep session open: %v", err)
 	}
 	if err := database.Model(session).Updates(map[string]any{"status": codeSessionStatusDelivering, "delivered_at": nil}).Error; err != nil {
 		t.Fatal(err)
@@ -150,11 +154,8 @@ func TestCodeDeliveredSessionRejectsWorkspaceMutation(t *testing.T) {
 
 func TestCodeWorkspaceMutationCompletesBeforeDeliverySeal(t *testing.T) {
 	database := withCodeGovernanceDB(t)
-	workDir := t.TempDir()
-	session := &model.AIDevSession{
-		ID: 913, UserID: 1, Status: codeSessionStatusActive, WorkDir: workDir,
-		SourceWorkDir: workDir, TargetBranch: "main",
-	}
+	session, _ := createDeliveryWorktree(t, 913)
+	session.Status = codeSessionStatusActive
 	if err := database.Create(session).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -221,7 +222,7 @@ func TestCodeDeliveryRecoveryRestoresSessionLifecycle(t *testing.T) {
 	if err := database.First(queuedSession, queuedSession.ID).Error; err != nil || queuedSession.Status != codeSessionStatusDelivering {
 		t.Fatalf("queued session lifecycle was not restored: %#v, %v", queuedSession, err)
 	}
-	if err := database.First(completedSession, completedSession.ID).Error; err != nil || completedSession.Status != codeSessionStatusDelivered {
+	if err := database.First(completedSession, completedSession.ID).Error; err != nil || completedSession.Status != codeSessionStatusActive || completedSession.DeliveredAt == nil {
 		t.Fatalf("completed session lifecycle was not restored: %#v, %v", completedSession, err)
 	}
 	if queued.Status != codeDeliveryJobQueued {

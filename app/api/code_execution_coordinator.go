@@ -118,10 +118,10 @@ func codeExecutionWorkspaceKeys(session *model.AIDevSession) []string {
 }
 
 func codeExecutionDeliveryKeys(session *model.AIDevSession) []string {
-	keys := codeExecutionWorkspaceKeys(session)
 	if session == nil {
-		return keys
+		return nil
 	}
+	keys := make([]string, 0)
 	if session.IsolationMode == codeIsolationMultiWorktree {
 		if repositories, err := loadCodeSessionRepositories(session.ID); err == nil {
 			for _, repository := range repositories {

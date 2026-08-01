@@ -192,20 +192,6 @@ func integrateAndPushCodeRepositoryWithProgress(session *model.AIDevSession, rep
 		if err := resetCodeRepositoryToRemote(repository); err != nil {
 			return result, err
 		}
-		if err := syncCodeWorktreeWithTarget(repository.WorktreeDir, repository.TargetBranch); err != nil {
-			return result, fmt.Errorf("仓库 %s 同步失败：%w", repository.LinkName, err)
-		}
-		if err := validateCodeQualityGate(session); err != nil {
-			return result, err
-		}
-		worktreeCommit, err := runCodeGit(repository.WorktreeDir, "rev-parse", "HEAD")
-		if err != nil {
-			return result, err
-		}
-		if err := global.DB.Model(repository).Update("worktree_commit", worktreeCommit).Error; err != nil {
-			return result, err
-		}
-		repository.WorktreeCommit = worktreeCommit
 	}
 	return result, errCodePushRemoteAdvanced
 }

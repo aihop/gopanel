@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -162,6 +163,57 @@ func TestCodeDeliveryMergesLocallyAndPushesRemote(t *testing.T) {
 	var delivery model.AICodeDelivery
 	if err := database.Where("session_id = ?", session.ID).First(&delivery).Error; err != nil || delivery.PushStatus != codePushPushed || delivery.PushedCommit != result.Commit {
 		t.Fatalf("push state was not persisted: %#v, %v", delivery, err)
+	}
+}
+
+func TestCodeDeliveryUsesCapturedCommitWhileTerminalContinues(t *testing.T) {
+	database := withCodeGovernanceDB(t)
+	session, sourceDir := createDeliveryWorktree(t, 67)
+	session.ProjectID, session.Status = 14, codeSessionStatusActive
+	if err := database.Create(&model.AIProject{ID: session.ProjectID, Name: "snapshot", CreatorID: session.UserID}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := database.Create(session).Error; err != nil {
+		t.Fatal(err)
+	}
+	firstCommit := commitCodeTestFile(t, session.WorkDir, "captured.txt", "captured\n")
+	job, err := persistCodeDeliveryJob(session, session.UserID, "127.0.0.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondCommit := commitCodeTestFile(t, session.WorkDir, "later.txt", "later\n")
+	if firstCommit == secondCommit {
+		t.Fatal("terminal did not advance after delivery snapshot")
+	}
+	result, err := resumeCodeSessionDelivery(session, session.UserID)
+	if err != nil || result.Status != "merged" {
+		t.Fatalf("snapshot delivery failed: %#v, %v", result, err)
+	}
+	if _, err := os.Stat(filepath.Join(sourceDir, "captured.txt")); err != nil {
+		t.Fatalf("captured commit was not delivered: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(sourceDir, "later.txt")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("later terminal commit leaked into snapshot delivery: %v", err)
+	}
+	if _, err := os.Stat(session.WorkDir); err != nil {
+		t.Fatalf("active worktree was removed: %v", err)
+	}
+	if err := database.Model(job).Updates(map[string]any{"status": codeDeliveryJobCompleted, "stage": codeDeliveryStageCompleted}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := completeCodeSessionLifecycle(database, session.ID, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	secondJob, err := persistCodeDeliveryJob(session, session.UserID, "127.0.0.1")
+	if err != nil || secondJob.ID != job.ID || secondJob.Status != codeDeliveryJobQueued {
+		t.Fatalf("second delivery was not queued: %#v, %v", secondJob, err)
+	}
+	secondResult, err := resumeCodeSessionDelivery(session, session.UserID)
+	if err != nil || secondResult.Status != "merged" {
+		t.Fatalf("second snapshot delivery failed: %#v, %v", secondResult, err)
+	}
+	if _, err := os.Stat(filepath.Join(sourceDir, "later.txt")); err != nil {
+		t.Fatalf("later commit was not delivered by second snapshot: %v", err)
 	}
 }
 

@@ -318,17 +318,9 @@ func (runner *codeDeliveryRunner) run(jobID uint) {
 		runner.updateProgress(job.ID, stage, progress)
 	}
 	reporter(codeDeliveryStageQueued, 5)
-	if codeExecutions.hasSessionKind(job.SessionID, codeExecutionInteractive) {
-		runner.deferJob(job.ID, errors.New("当前会话终端仍在运行，交付将在终端退出后继续；现有进程不会被自动停止"))
-		return
-	}
 	var session model.AIDevSession
 	if err := global.DB.First(&session, job.SessionID).Error; err != nil {
 		runner.finish(job, codeGitDeliveryResult{}, err)
-		return
-	}
-	if err = validateHostTerminalsStoppedForCodeDelivery(); err != nil {
-		runner.deferJob(job.ID, err)
 		return
 	}
 	lease, err := codeExecutions.acquireSession(ctx, &session, codeExecutionDelivery, true)
@@ -338,10 +330,6 @@ func (runner *codeDeliveryRunner) run(jobID uint) {
 	}
 	defer lease.Release()
 	lease.SetCancel(cancel)
-	if err := repairCodeSessionWorktreeBranches(&session); err != nil {
-		runner.finish(job, codeGitDeliveryResult{}, err)
-		return
-	}
 	var result codeGitDeliveryResult
 	if session.IsolationMode == codeIsolationMultiWorktree || hasCodeMultiRepositoryDelivery(session.ID) {
 		result, err = resumeCodeMultiRepositoryDeliveryWithProgress(&session, job.UserID, reporter)
