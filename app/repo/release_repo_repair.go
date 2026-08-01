@@ -66,9 +66,6 @@ func (r *ReleaseRepo) mergeDuplicatePipelineRecordReleases(recordID uint) error 
 		if err := tx.Model(&model.Release{}).Where("id = ?", keeper.ID).Updates(map[string]interface{}{"version": merged.Version, "commit_hash": merged.CommitHash, "changelog": merged.Changelog, "source_type": merged.SourceType, "image_tag": merged.ImageTag, "archive_file": merged.ArchiveFile, "release_dir": merged.ReleaseDir, "artifact_meta": merged.ArtifactMeta, "status": merged.Status, "remark": merged.Remark}).Error; err != nil {
 			return err
 		}
-		if err := tx.Model(&model.AppDeploy{}).Where("release_id IN ?", duplicateIDs).Update("release_id", keeper.ID).Error; err != nil {
-			return err
-		}
 		return tx.Delete(&model.Release{}, duplicateIDs).Error
 	})
 }

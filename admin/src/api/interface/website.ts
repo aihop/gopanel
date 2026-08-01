@@ -1,5 +1,4 @@
 import type { CommonModel, ReqPage } from "."
-
 export namespace Website {
 	export interface WebsiteUpstream extends CommonModel {
 		address: string
@@ -26,18 +25,6 @@ export namespace Website {
 		transport?: string
 	}
 
-	export interface WebsiteDeploySummary {
-		id: number
-		version: string
-		releaseId: number
-		pipelineRecordId: number
-		sourceType: string
-		imageTag: string
-		status: string
-		isActive: boolean
-		createdAt: string
-	}
-
 	export interface Website extends CommonModel {
 		primaryDomain: string
 		type: string
@@ -60,7 +47,6 @@ export namespace Website {
 		accessLog?: boolean
 		errorLog?: boolean
 		containerId?: string
-		pipelineId?: number
 		codeSource?: string
 		proxy?: string
 		upstreams?: WebsiteUpstream[]
@@ -90,8 +76,6 @@ export namespace Website {
 		runtimeKind?: string
 		runtimeMode?: string
 		runUser?: string
-		activeRelease?: WebsiteDeploySummary
-		latestPipelineSync?: WebsiteDeploySummary
 	}
 	export interface WebsiteRes extends CommonModel {
 		protocol: string
@@ -105,7 +89,6 @@ export namespace Website {
 		appName: string
 		runtimeName: string
 		runtimeDir?: string
-		pipelineId?: number
 		codeSource?: string
 		proxy?: string
 		upstreams?: WebsiteUpstream[]
@@ -119,14 +102,10 @@ export namespace Website {
 		runtimeMode?: string
 		runUser?: string
 		sslExpireDate: Date
-		activeRelease?: WebsiteDeploySummary
-		latestPipelineSync?: WebsiteDeploySummary
 	}
 
 	export interface AppDeployRecord extends CommonModel {
 		websiteId: number
-		releaseId: number
-		pipelineRecordId: number
 		version: string
 		sourceType: string
 		sourceUrl: string
@@ -137,6 +116,7 @@ export namespace Website {
 		status: string
 		logText: string
 		containerId: string
+		runtimeHost?: string
 		port: number
 		isActive: boolean
 		dockerCompose: string
@@ -148,7 +128,6 @@ export namespace Website {
 		websiteId: number
 		zipPath?: string
 		imageTag?: string
-		releaseId?: number
 	}
 
 	export interface NewAppInstall {
@@ -184,7 +163,6 @@ export namespace Website {
 		codeSource?: string
 		gitRepo?: string // legacy API field, currently used as Docker image reference
 		codeDir?: string
-		pipelineId?: number
 		engineMode?: string
 		engineConfig?: any
 		antiCrawler?: boolean
@@ -211,7 +189,6 @@ export namespace Website {
 		IPV6: boolean
 		ipv6?: boolean
 		proxy?: string
-		pipelineId?: number
 		codeSource?: string
 		engineEnv?: string
 		engineMode?: string

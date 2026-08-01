@@ -131,6 +131,13 @@ export namespace Container {
 		type: string
 		runtimeHost?: string
 	}
+	export interface ContainerWebsiteBind {
+		containerId: string
+		runtimeHost?: string
+		websiteId: number
+		hostPort: number
+		scheme: "http" | "https"
+	}
 	export interface ContainerPrune {
 		pruneType: string
 		withTagAll: boolean

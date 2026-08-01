@@ -27,16 +27,6 @@ type WebsiteService struct {
 	repo *repo.WebsiteRepo
 }
 
-func ensurePipelineExists(pipelineID uint) error {
-	if pipelineID == 0 {
-		return nil
-	}
-	if _, err := repo.NewPipeline(global.DB).Get(pipelineID); err != nil {
-		return fmt.Errorf("关联流水线不存在")
-	}
-	return nil
-}
-
 func normalizeWebsiteProtocol(protocol string) string {
 	switch strings.ToUpper(strings.TrimSpace(protocol)) {
 	case constant.ProtocolHTTP, constant.Http:
@@ -49,6 +39,9 @@ func normalizeWebsiteProtocol(protocol string) string {
 }
 
 func (s WebsiteService) Create(ctx context.Context, req *request.WebsiteCreate, mode model.DatabaseMode) (err error) {
+	if req.CodeSource == "pipeline" {
+		return errors.New("网站不再直接关联流水线，请先启动容器，再从容器列表发布到网站")
+	}
 	alias := req.Alias
 	if alias == "default" {
 		return buserr.New("ErrDefaultAlias")
@@ -62,9 +55,6 @@ func (s WebsiteService) Create(ctx context.Context, req *request.WebsiteCreate, 
 	websiteRepo := repo.NewWebsite()
 	if exist, _ := websiteRepo.GetBy(websiteRepo.WithAlias(alias)); len(exist) > 0 {
 		return errors.New("网站目录、别名已存在")
-	}
-	if err := ensurePipelineExists(req.PipelineId); err != nil {
-		return err
 	}
 	defaultHttpPort := 80
 	var (
@@ -119,7 +109,6 @@ func (s WebsiteService) Create(ctx context.Context, req *request.WebsiteCreate, 
 		AccessLog:                true,
 		ErrorLog:                 true,
 		IPV6:                     req.IPV6,
-		PipelineID:               req.PipelineId,
 		AntiCrawler:              req.AntiCrawler,
 		AntiLeech:                req.AntiLeech,
 		RateLimitMode:            req.RateLimitMode,
@@ -180,28 +169,16 @@ func (s WebsiteService) Create(ctx context.Context, req *request.WebsiteCreate, 
 		if codeDir == "" {
 			codeDir = filepath.Join(global.CONF.System.BaseDir, "www", alias)
 		}
-		if req.CodeSource == "pipeline" {
-			website.Status = "Pending"
-			website.ContainerID = ""
-			website.EngineEnv = ""
-			if req.Proxy != "" {
-				website.Proxy = req.Proxy
-			} else {
-				website.Proxy = "http://127.0.0.1:80"
-			}
-			global.LOG.Infof("Website created with pipeline source. Waiting for pipeline execution.")
-		} else {
-			hostPort, containerID, runtimeDir, deployErr := DeployWebsiteEngine(context.Background(), alias, req, nil)
-			if deployErr != nil {
-				return fmt.Errorf("failed to deploy container: %w", deployErr)
-			}
-			website.Proxy = fmt.Sprintf("127.0.0.1:%d", hostPort)
-			website.ContainerID = containerID
-			website.EngineEnv = req.GitRepo
-			website.RuntimeDir = runtimeDir
-			website.Status = "Running"
-			global.LOG.Infof("Deployed custom container %s on port %d", containerID, hostPort)
+		hostPort, containerID, runtimeDir, deployErr := DeployWebsiteEngine(context.Background(), alias, req, nil)
+		if deployErr != nil {
+			return fmt.Errorf("failed to deploy container: %w", deployErr)
 		}
+		website.Proxy = fmt.Sprintf("127.0.0.1:%d", hostPort)
+		website.ContainerID = containerID
+		website.EngineEnv = req.GitRepo
+		website.RuntimeDir = runtimeDir
+		website.Status = "Running"
+		global.LOG.Infof("Deployed custom container %s on port %d", containerID, hostPort)
 	}
 
 	if req.Type == constant.Static {

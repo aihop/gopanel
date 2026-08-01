@@ -4,8 +4,6 @@ import { NModal, NButton, NPopconfirm, useMessage, NAlert, NSpace } from "naive-
 import { useAuthStore } from "@/store/auth"
 import { getPipelineRecords, stopPipeline } from "@/api/modules/pipeline"
 import { appsRepairPodmanSubuidAPI } from "@/api/modules/apps"
-import { websiteListAPI } from "@/api/modules/website"
-import type { Website } from "@/api/interface/website"
 import type { Pipeline } from "@/api/interface/pipeline"
 import { buildRuntimeDetailText } from "@/utils/runtime"
 
@@ -21,7 +19,6 @@ const message = useMessage()
 const isRunning = ref(false)
 const isStopping = ref(false)
 const runnerResult = ref<{ hostPort: number; containerId: string } | null>(null)
-const linkedWebsite = ref<Website.WebsiteDTO | null>(null)
 const currentRecord = ref<Pipeline.ResRecord | null>(null)
 
 const repairTipVisible = ref(false)
@@ -78,11 +75,6 @@ const copyRunnerAddress = async () => {
   }
 }
 
-const linkedWebsiteUrl = computed(() => {
-  if (!linkedWebsite.value?.primaryDomain) return ""
-  return `https://${linkedWebsite.value.primaryDomain}`
-})
-
 const runnerRuntimeText = computed(() => {
   const row = currentRecord.value
   if (!row?.runnerContainerId) return ""
@@ -93,25 +85,6 @@ const runnerRuntimeText = computed(() => {
     runUserPrefix: "运行用户："
   })
 })
-
-const openLinkedWebsite = () => {
-  if (!linkedWebsiteUrl.value) return
-  window.open(linkedWebsiteUrl.value, "_blank")
-}
-
-const fetchLinkedWebsite = async () => {
-  if (!props.pipelineId) {
-    linkedWebsite.value = null
-    return
-  }
-  try {
-    const res = await websiteListAPI()
-    const items: Website.WebsiteDTO[] = Array.isArray(res.data?.items) ? res.data.items : []
-    linkedWebsite.value = items.find(item => Number(item.pipelineId || 0) === Number(props.pipelineId)) || null
-  } catch (error) {
-    linkedWebsite.value = null
-  }
-}
 
 const fetchCurrentRecord = async () => {
   if (!props.pipelineId || !props.recordId) {
@@ -139,7 +112,6 @@ const startLogs = () => {
   isRunning.value = true
   isStopping.value = false
   runnerResult.value = null
-  fetchLinkedWebsite()
   fetchCurrentRecord()
   
   repairTipVisible.value = false
@@ -264,16 +236,6 @@ watch(
           @click="copyRunnerAddress"
         >
           复制地址
-        </n-button>
-        <n-button
-          v-if="linkedWebsiteUrl"
-          size="tiny"
-          class="ml-2"
-          type="primary"
-          quaternary
-          @click="openLinkedWebsite"
-        >
-          打开关联站点
         </n-button>
       </div>
     </n-alert>

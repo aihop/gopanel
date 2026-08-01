@@ -325,7 +325,7 @@ export const createPipelineFormFromEdit = (editData: Pipeline.ResPipeline) => {
       buildScript: editData.buildScript || "",
       artifactPath: editData.artifactPath || ".",
       pipelineKey: editData.pipelineKey || "",
-      actionType: editData.actionType || "none",
+      actionType: ["build", "build_image"].includes(editData.actionType) ? "build_image" : "none",
       actionParams: editData.actionParams || {},
       runnerEnabled,
       runnerPolicy: runnerConfig.mode || "build_run",

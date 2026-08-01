@@ -103,6 +103,10 @@
       ref="dialogTerminalRef"
       :mask-closable="false"
     />
+    <ContainerWebsiteDialog
+      ref="dialogWebsiteRef"
+      @success="search"
+    />
 
   </div>
 </template>
@@ -119,6 +123,7 @@ import TerminalDialog from "@/views/Container/container/terminal/index.vue"
 import CodeDialog from "@/components/CodeDialog.vue"
 import OpDialog from "@/components/OpDialog.vue"
 import ContainerListToolbar from "@/views/Container/container/ContainerListToolbar.vue"
+import ContainerWebsiteDialog from "@/views/Container/container/ContainerWebsiteDialog.vue"
 import LayoutContent from "@/components/LayoutContent.vue"
 import ComplexTable from "@/components/ComplexTable.vue"
 
@@ -148,6 +153,7 @@ const stateOptions = computed(() => [
 
 const dialogUpgradeRef = ref()
 const dialogCommitRef = ref()
+const dialogWebsiteRef = ref()
 const opRef = ref()
 const getRowActions = (row: Container.ContainerInfo) => [
 	{
@@ -164,6 +170,17 @@ const getRowActions = (row: Container.ContainerInfo) => [
 		label: t("container.monitor"),
 		disabled: row.state !== "running",
 		click: () => onMonitor(row)
+	},
+	{
+		label: t("container.bindWebsite"),
+		disabled: row.state !== "running",
+		click: () => {
+			dialogWebsiteRef.value?.acceptParams({
+				containerId: row.containerID,
+				containerName: row.name,
+				runtimeHost: row.runtimeHost || ""
+			})
+		}
 	},
 	{
 		label: t("container.rename"),

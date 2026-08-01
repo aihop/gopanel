@@ -21,7 +21,16 @@ type WebsiteRepo struct {
 }
 
 func (r *WebsiteRepo) MigrateTable() error {
-	return r.db.AutoMigrate(&model.Website{}, &model.WebsiteDomain{}, &model.WebsiteUpstream{})
+	if err := r.db.AutoMigrate(&model.Website{}, &model.WebsiteDomain{}, &model.WebsiteUpstream{}); err != nil {
+		return err
+	}
+	if err := r.db.Model(&model.Website{}).Where("code_source = ?", "pipeline").Update("code_source", "container").Error; err != nil {
+		return err
+	}
+	if r.db.Migrator().HasColumn(&model.Website{}, "pipeline_id") {
+		return r.db.Migrator().DropColumn(&model.Website{}, "pipeline_id")
+	}
+	return nil
 }
 
 func (w *WebsiteRepo) WithAppInstallId(appInstallID uint) DBOption {
@@ -139,16 +148,4 @@ func (w *WebsiteRepo) DeleteAll(ctx context.Context) error {
 func (r *WebsiteRepo) CountByWhere(where *gormx.Wherex) (res int64, err error) {
 	err = r.db.Model(&model.Website{}).Scopes(gormx.Wheres(where)).Count(&res).Error
 	return
-}
-
-func (w *WebsiteRepo) WithPipelineID(pipelineID uint) DBOption {
-	return func(db *gorm.DB) *gorm.DB {
-		return db.Where("pipeline_id = ?", pipelineID)
-	}
-}
-
-func (w *WebsiteRepo) CountByPipelineID(pipelineID uint) (int64, error) {
-	var count int64
-	err := w.db.Model(&model.Website{}).Where("pipeline_id = ?", pipelineID).Count(&count).Error
-	return count, err
 }

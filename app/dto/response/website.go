@@ -18,18 +18,6 @@ type WebsiteUpstream struct {
 	Sort           int       `json:"sort"`
 }
 
-type WebsiteDeploySummary struct {
-	ID               uint      `json:"id"`
-	Version          string    `json:"version"`
-	ReleaseID        uint      `json:"releaseId"`
-	PipelineRecordID uint      `json:"pipelineRecordId"`
-	SourceType       string    `json:"sourceType"`
-	ImageTag         string    `json:"imageTag"`
-	Status           string    `json:"status"`
-	IsActive         bool      `json:"isActive"`
-	CreatedAt        time.Time `json:"createdAt"`
-}
-
 type WebsiteRes struct {
 	ID            uint      `json:"id"`
 	CreatedAt     time.Time `json:"createdAt"`
@@ -54,7 +42,7 @@ type WebsiteRes struct {
 	RuntimeName   string    `json:"runtimeName"`
 	RuntimeDir    string    `json:"runtimeDir"`
 	AppInstallID  uint      `json:"appInstallId"`
-	PipelineID    uint      `json:"pipelineId"`
+	ContainerID   string    `json:"containerId"`
 	RuntimeType   string    `json:"runtimeType"`
 	RuntimeHost   string    `json:"runtimeHost"`
 	RuntimeKind   string    `json:"runtimeKind"`
@@ -74,9 +62,7 @@ type WebsiteRes struct {
 	RedirectCode             int    `json:"redirectCode"`
 	RedirectDomainsToPrimary bool   `json:"redirectDomainsToPrimary"`
 
-	ActiveRelease      *WebsiteDeploySummary `json:"activeRelease,omitempty"`
-	LatestPipelineSync *WebsiteDeploySummary `json:"latestPipelineSync,omitempty"`
-	Upstreams          []WebsiteUpstream     `json:"upstreams"`
+	Upstreams []WebsiteUpstream `json:"upstreams"`
 }
 
 type WebsiteLogTopIP struct {

@@ -76,54 +76,6 @@ func (s *PipelineApplicationService) fillReleasedFlags(records []model.PipelineR
 	}
 	return nil
 }
-func (s *PipelineApplicationService) fillActiveDeployCountsForRecords(records []model.PipelineRecord) error {
-	if len(records) == 0 {
-		return nil
-	}
-	recordIDs := make([]uint, 0, len(records))
-	for _, item := range records {
-		if item.ID > 0 {
-			recordIDs = append(recordIDs, item.ID)
-		}
-	}
-	countMap, err := s.appDeployRepo.ActiveWebsiteCountByPipelineRecordIDs(recordIDs)
-	if err != nil {
-		return err
-	}
-	nameMap, err := s.appDeployRepo.ActiveWebsiteNamesByPipelineRecordIDs(recordIDs)
-	if err != nil {
-		return err
-	}
-	for i := range records {
-		records[i].ActiveWebsiteCount = countMap[records[i].ID]
-		records[i].ActiveWebsiteNames = nameMap[records[i].ID]
-	}
-	return nil
-}
-func (s *PipelineApplicationService) fillActiveDeployCountsForReleases(releases []model.Release) error {
-	if len(releases) == 0 {
-		return nil
-	}
-	releaseIDs := make([]uint, 0, len(releases))
-	for _, item := range releases {
-		if item.ID > 0 {
-			releaseIDs = append(releaseIDs, item.ID)
-		}
-	}
-	countMap, err := s.appDeployRepo.ActiveWebsiteCountByReleaseIDs(releaseIDs)
-	if err != nil {
-		return err
-	}
-	nameMap, err := s.appDeployRepo.ActiveWebsiteNamesByReleaseIDs(releaseIDs)
-	if err != nil {
-		return err
-	}
-	for i := range releases {
-		releases[i].ActiveWebsiteCount = countMap[releases[i].ID]
-		releases[i].ActiveWebsiteNames = nameMap[releases[i].ID]
-	}
-	return nil
-}
 func snapshotPipelineReleaseDir(pipeline *model.Pipeline, record *model.PipelineRecord, src string) (string, error) {
 	src = strings.TrimSpace(src)
 	if pipeline == nil || record == nil {

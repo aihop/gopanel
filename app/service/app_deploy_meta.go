@@ -24,18 +24,6 @@ func BuildOtherDomains(w model.Website) string {
 func buildDeployCaddyDomain(website model.Website) string {
 	return BuildWebsiteCaddyDomain(website.PrimaryDomain, website.Protocol)
 }
-func appendPipelineDeployInfoLog(pipelineRecordID uint, websiteAlias, msg string) {
-	if pipelineRecordID == 0 || !IsPipelineLoggerActive(pipelineRecordID) {
-		return
-	}
-	GetPipelineLogger(pipelineRecordID).Info("[%s] %s", websiteAlias, msg)
-}
-func appendPipelineDeployErrorLog(pipelineRecordID uint, websiteAlias, msg string) {
-	if pipelineRecordID == 0 || !IsPipelineLoggerActive(pipelineRecordID) {
-		return
-	}
-	GetPipelineLogger(pipelineRecordID).Error("[%s] %s", websiteAlias, msg)
-}
 func UnzipFile(src, dest string) error {
 	r, err := zip.OpenReader(src)
 	if err != nil {

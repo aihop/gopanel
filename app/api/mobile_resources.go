@@ -21,7 +21,6 @@ type mobileWebsiteSummary struct {
 	Type                     string `json:"type"`
 	Status                   string `json:"status"`
 	AppName                  string `json:"appName"`
-	PipelineID               uint   `json:"pipelineId"`
 	RedirectDomainsToPrimary bool   `json:"redirectDomainsToPrimary"`
 }
 
@@ -65,7 +64,7 @@ func GetMobileWebsites(c fiber.Ctx) error {
 		items = append(items, mobileWebsiteSummary{
 			ID: website.ID, Alias: website.Alias, PrimaryDomain: website.PrimaryDomain,
 			OtherDomains: website.OtherDomains, Protocol: website.Protocol, Type: website.Type,
-			Status: website.Status, AppName: website.AppName, PipelineID: website.PipelineID,
+			Status: website.Status, AppName: website.AppName,
 			RedirectDomainsToPrimary: website.RedirectDomainsToPrimary,
 		})
 	}

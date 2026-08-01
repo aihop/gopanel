@@ -12,16 +12,14 @@ import (
 )
 
 type PipelineApplicationService struct {
-	pipelineRepo  *repo.PipelineRepo
-	recordRepo    *repo.PipelineRecordRepo
-	releaseRepo   *repo.ReleaseRepo
-	appDeployRepo *repo.AppDeployRepo
-	websiteRepo   *repo.WebsiteRepo
-	executor      *PipelineService
+	pipelineRepo *repo.PipelineRepo
+	recordRepo   *repo.PipelineRecordRepo
+	releaseRepo  *repo.ReleaseRepo
+	executor     *PipelineService
 }
 
 func NewPipelineApplication(db *gorm.DB) *PipelineApplicationService {
-	return &PipelineApplicationService{pipelineRepo: repo.NewPipeline(db), recordRepo: repo.NewPipelineRecord(db), releaseRepo: repo.NewRelease(db), appDeployRepo: repo.NewAppDeploy(db), websiteRepo: repo.NewWebsite(), executor: NewPipelineService(db)}
+	return &PipelineApplicationService{pipelineRepo: repo.NewPipeline(db), recordRepo: repo.NewPipelineRecord(db), releaseRepo: repo.NewRelease(db), executor: NewPipelineService(db)}
 }
 func (s *PipelineApplicationService) Page(ctx context.Context, page, limit int) (int64, []model.Pipeline, error) {
 	total, list, err := s.pipelineRepo.Page(page, limit)
@@ -32,6 +30,7 @@ func (s *PipelineApplicationService) Page(ctx context.Context, page, limit int) 
 	return total, list, nil
 }
 func (s *PipelineApplicationService) Create(req request.PipelineCreate) error {
+	req.ActionType = normalizePipelineActionType(req.ActionType)
 	pipelineKey := normalizePipelineKey(req.PipelineKey)
 	if err := s.validatePipelineKey(pipelineKey, 0, ""); err != nil {
 		return err
@@ -57,6 +56,7 @@ func (s *PipelineApplicationService) Create(req request.PipelineCreate) error {
 	return s.pipelineRepo.Create(pipeline)
 }
 func (s *PipelineApplicationService) Update(req request.PipelineUpdate) error {
+	req.ActionType = normalizePipelineActionType(req.ActionType)
 	pipeline, err := s.pipelineRepo.Get(req.ID)
 	if err != nil {
 		return err
@@ -101,14 +101,16 @@ func (s *PipelineApplicationService) Update(req request.PipelineUpdate) error {
 	}
 	return s.pipelineRepo.Update(pipeline)
 }
+
+func normalizePipelineActionType(value string) string {
+	switch value {
+	case "build", "build_image":
+		return "build_image"
+	default:
+		return "none"
+	}
+}
 func (s *PipelineApplicationService) Delete(id uint) error {
-	websiteCount, err := s.websiteRepo.CountByPipelineID(id)
-	if err != nil {
-		return err
-	}
-	if websiteCount > 0 {
-		return fmt.Errorf("该流水线已被网站绑定，不允许删除")
-	}
 	recordCount, err := s.recordRepo.CountByPipelineID(id)
 	if err != nil {
 		return err

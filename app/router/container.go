@@ -28,6 +28,7 @@ func ContainerRouter(r fiber.Router) {
 		containerRouter.Post("/clean/logs", api.ContainerCleanLogs)
 		containerRouter.Post("/load/logs", api.ContainerLoadLogs)
 		containerRouter.Post("/inspect", api.ContainerInspect)
+		containerRouter.Post("/bind-website", api.ContainerBindWebsite)
 		containerRouter.Post("/rename", api.ContainerRename)
 		containerRouter.Post("/commit", api.ContainerCommit)
 		containerRouter.Post("/operate", api.ContainerOperation)

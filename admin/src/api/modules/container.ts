@@ -53,6 +53,10 @@ export const inspect = (params: Container.ContainerInspect) => {
 	return http.post<string>(`/container/inspect`, params)
 }
 
+export const bindContainerWebsite = (params: Container.ContainerWebsiteBind) => {
+	return http.post<void>(`/container/bind-website`, params, TimeoutEnum.T_40S)
+}
+
 export const DownloadFile = (params: Container.ContainerLogInfo) => {
 	return http.download<BlobPart>("/container/download/logs", params, {
 		responseType: "blob",

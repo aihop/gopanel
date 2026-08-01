@@ -1,6 +1,5 @@
 import type { Website } from "@/api/interface/website"
 import type { App } from "@/api/interface/apps"
-import type { Pipeline } from "@/api/interface/pipeline"
 import { buildRuntimeDetailText, type RuntimeLabelOptions } from "@/utils/runtime"
 
 type WebsiteRuntimeFields = {
@@ -20,22 +19,19 @@ type WebsiteIpv6Like = {
 
 type WebsiteBindingLike = Pick<
 	Website.WebsiteDTO,
-	"codeSource" | "appInstallId" | "pipelineId" | "appName" | "runtimeKind" | "runtimeMode" | "runUser"
+	"codeSource" | "appInstallId" | "appName" | "runtimeKind" | "runtimeMode" | "runUser"
 >
 
 const websiteSourceLabelMap: Record<string, string> = {
 	git: "自定义镜像",
-	pipeline: "流水线",
+	container: "容器端口",
 	app_store: "应用商店",
 	upload: "代码上传"
 }
 
 type AppInstallBindingLike = Pick<App.AppInstalledInfo, "name" | "runtimeKind" | "runtimeMode" | "runUser">
-type PipelineBindingLike = Pick<Pipeline.ResPipeline, "name" | "runtimeKind" | "runtimeMode" | "runUser">
-
 interface WebsiteBindingMaps {
 	appInstallMap?: Record<number, AppInstallBindingLike>
-	pipelineMap?: Record<number, PipelineBindingLike>
 }
 
 interface WebsiteBindingOptions extends RuntimeLabelOptions {
@@ -48,7 +44,7 @@ export function hasWebsiteRuntimeMeta(row: WebsiteBindingLike | null | undefined
 }
 
 export function needsWebsiteBindingLookup(row: WebsiteBindingLike | null | undefined) {
-	return !!row && !!(row.appInstallId || row.pipelineId) && !hasWebsiteRuntimeMeta(row)
+	return !!row?.appInstallId && !hasWebsiteRuntimeMeta(row)
 }
 
 export function isImageWebsiteSource(row: Pick<Website.WebsiteDTO, "codeSource"> | null | undefined) {
@@ -90,43 +86,6 @@ export function resolveWebsiteBindingMeta(
 		const item = maps.appInstallMap?.[row.appInstallId]
 		const name = row.appName || item?.name || `应用 #${row.appInstallId}`
 		const source = "应用商店"
-		const prefix = includeSourceInDetail ? `${sourcePrefix}${source} · ${name}` : name
-		if (hasWebsiteRuntimeMeta(row)) {
-			const runtimeRow: WebsiteRuntimeFields = row
-			return {
-				source,
-				name,
-				detail: buildRuntimeDetailText(runtimeRow, {
-					prefix,
-					kindFallback: "Runtime",
-					userFallback: "镜像默认",
-					...(options || {})
-				})
-			}
-		}
-		if (!item) {
-			return {
-				source,
-				name,
-				detail: includeSourceInDetail ? `${sourcePrefix}${source} · ${name}` : name
-			}
-		}
-		return {
-			source,
-			name,
-			detail: buildRuntimeDetailText(item, {
-				prefix,
-				kindFallback: "Runtime",
-				userFallback: "镜像默认",
-				...(options || {})
-			})
-		}
-	}
-
-	if (row.codeSource === "pipeline" && row.pipelineId) {
-		const item = maps.pipelineMap?.[row.pipelineId]
-		const name = item?.name || `流水线 #${row.pipelineId}`
-		const source = "流水线"
 		const prefix = includeSourceInDetail ? `${sourcePrefix}${source} · ${name}` : name
 		if (hasWebsiteRuntimeMeta(row)) {
 			const runtimeRow: WebsiteRuntimeFields = row

@@ -1,6 +1,8 @@
 package service
 
 import (
+	"context"
+
 	"github.com/aihop/gopanel/app/dto"
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/pkg/websocket"
@@ -64,6 +66,7 @@ type IContainerService interface {
 	DownloadContainerLogs(containerType, container, since, tail, runtimeHost string) (string, error)
 	ContainerStatsByID(id string) (*dto.ContainerStats, error)
 	Inspect(req *dto.InspectReq) (string, error)
+	BindWebsite(ctx context.Context, req *dto.ContainerWebsiteBind) error
 	DeleteNetwork(req *dto.BatchDelete) error
 	CreateNetwork(req *dto.NetworkCreate) error
 	DeleteVolume(req *dto.BatchDelete) error

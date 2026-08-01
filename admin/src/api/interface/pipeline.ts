@@ -66,8 +66,6 @@ export namespace Pipeline {
     runtimeMode?: string;
     runUser?: string;
     released?: boolean;
-    activeWebsiteCount?: number;
-    activeWebsiteNames?: string[];
   }
 
   export interface ResRelease {
@@ -86,8 +84,6 @@ export namespace Pipeline {
     artifactMeta?: string;
     status: string;
     remark?: string;
-    activeWebsiteCount?: number;
-    activeWebsiteNames?: string[];
   }
 
   export interface ReqDetectRunnerPreset {

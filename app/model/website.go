@@ -24,7 +24,6 @@ type Website struct {
 	Rewrite       string `gorm:"type:varchar" json:"rewrite"`
 
 	AppInstallID uint `gorm:"type:integer" json:"appInstallId"`
-	PipelineID   uint `gorm:"type:integer;column:pipeline_id" json:"pipelineId"`
 
 	EngineEnv   string `gorm:"type:varchar;" json:"engineEnv"`
 	ContainerID string `gorm:"type:varchar;" json:"containerId"`

@@ -144,11 +144,7 @@ func (u *ContainerService) Page(req *dto.PageContainer) (int64, interface{}, err
 				if strings.TrimSpace(website.PrimaryDomain) != "" {
 					info.Websites = append(info.Websites, website.PrimaryDomain)
 				}
-				if website.PipelineID > 0 {
-					info.SourceType = "pipeline"
-				} else {
-					info.SourceType = "website"
-				}
+				info.SourceType = "website"
 			} else if strings.HasPrefix(strings.ToLower(info.Name), "pipeline-") {
 				info.SourceType = "pipeline"
 			}
@@ -227,7 +223,7 @@ func preloadContainerPageMeta(records []types.Container) (*containerPageRelatedM
 		return meta, nil
 	}
 	var websites []model.Website
-	query := global.DB.Model(&model.Website{}).Select("id", "primary_domain", "app_install_id", "container_id", "pipeline_id").Order("id asc").Where("1 = 0")
+	query := global.DB.Model(&model.Website{}).Select("id", "primary_domain", "app_install_id", "container_id").Order("id asc").Where("1 = 0")
 	if len(installIDs) > 0 {
 		query = query.Or("app_install_id IN ?", installIDs)
 	}

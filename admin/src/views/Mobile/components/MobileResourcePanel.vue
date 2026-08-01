@@ -245,11 +245,6 @@ watch(activeTab, tab => {
 							<div class="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-500">
 								<div>{{ t("mobile.resourceType") }}：{{ displayValue(item.type) }}</div>
 								<div>{{ t("mobile.resourceAppName") }}：{{ displayValue(item.appName) }}</div>
-								<div class="col-span-2">
-									{{ t("mobile.resourcePipeline") }}：{{
-										item.pipelineId ? `#${item.pipelineId}` : "-"
-									}}
-								</div>
 							</div>
 							<n-button class="mt-3" secondary type="primary" block @click="manageWebsiteDomains(item)">
 								<template #icon><Icon name="mdi:web-plus" /></template>

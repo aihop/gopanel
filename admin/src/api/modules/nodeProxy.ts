@@ -42,6 +42,15 @@ export interface RemoteContainer {
 	ports?: string[]
 }
 
+export interface RemoteContainerInfo {
+	exposedPorts?: Array<{
+		hostIP?: string
+		hostPort: string
+		containerPort: string
+		protocol: string
+	}>
+}
+
 /** 远程节点的容器列表。参数形状与本机 /container/list 完全一致 */
 export const remoteContainerListAPI = (nodeId: number, params: { page: number; limit: number; name?: string }) => {
 	return nodeApi(nodeId).post<{ total: number; items: RemoteContainer[] }>(`/container/list`, {
@@ -59,6 +68,19 @@ export const remoteContainerListAPI = (nodeId: number, params: { page: number; l
 /** 远程容器启停。operation 取值与本机一致：start/stop/restart/kill/pause/unpause/remove */
 export const remoteContainerOperateAPI = (nodeId: number, names: string[], operation: string) => {
 	return nodeApi(nodeId).post<any>(`/container/operate`, { names, operation })
+}
+
+export const remoteContainerInfoAPI = (nodeId: number, containerId: string) => {
+	return nodeApi(nodeId).post<RemoteContainerInfo>(`/container/info`, { name: containerId })
+}
+
+export const remoteContainerBindWebsiteAPI = (nodeId: number, params: {
+	containerId: string
+	websiteId: number
+	hostPort: number
+	scheme: "http" | "https"
+}) => {
+	return nodeApi(nodeId).post<void>(`/container/bind-website`, params)
 }
 
 /** 远程节点的网站列表 */
