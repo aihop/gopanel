@@ -22,6 +22,9 @@ const active = computed(() => ["queued", "running"].includes(job.value?.status |
 const completed = computed(() => job.value?.status === "completed")
 const label = computed(() => {
 	if (job.value?.status === "queued") return t("code.deliverQueued")
+	if (job.value?.status === "running" && job.value.stage === "quality_check") {
+		return t("code.runningDeliveryQuality")
+	}
 	if (job.value?.status === "running") return t("code.deliveringToMain", { progress: job.value.progress })
 	if (completed.value) return t("code.deliveredToMain")
 	if (["failed", "conflict", "partial"].includes(job.value?.status || "")) return t("code.retryDeliveryToMain")
