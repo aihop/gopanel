@@ -50,10 +50,8 @@ import { useThemeStore } from "@/store/theme"
 import { computed } from "vue"
 
 import logoTextDefault from "@/assets/images/logo-text.svg?url"
-import consolexText from "@/assets/images/consolex-text.svg?url"
 import logoIconDefault from "@/assets/images/logo-icon.svg?url"
-import consolexIcon from "@/assets/images/consolex-icon.svg?url"
-
+ 
 const {
 	mini,
 	dark,
@@ -67,8 +65,8 @@ const themeStore = useThemeStore()
 const isDark = computed<boolean>(() => dark ?? themeStore.isThemeDark)
 const isLight = computed<boolean>(() => !dark || themeStore.isThemeLight)
 const appBrand = import.meta.env.VITE_APP_BRAND || "GoPanel"
-const logoText = computed(() => (appBrand === "ConsoleX" ? consolexText : logoTextDefault))
-const logoIcon = computed(() => (appBrand === "ConsoleX" ? consolexIcon : logoIconDefault))
+const logoText = computed(() => logoTextDefault)
+const logoIcon = computed(() => logoIconDefault)
 </script>
 
 <style lang="scss" scoped>

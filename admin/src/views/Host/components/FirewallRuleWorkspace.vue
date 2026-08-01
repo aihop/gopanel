@@ -137,7 +137,7 @@ const getRuleRowKey = (row: { id: string | number }) => row.id
     <div class="mt-8 rounded-[26px] border border-slate-100 bg-slate-50/75 p-4 sm:p-6">
       <div class="mb-5 rounded-[20px] border border-amber-100 bg-amber-50/80 px-4 py-3 text-sm leading-7 text-amber-700">
         Linux 防火墙对 Docker
-        端口映射存在天然限制，若端口来自容器编排，请优先在应用或已安装页面控制端口暴露策略。
+        端口映射存在天然限制，若端口来自容器编排，请优先在应用或已安装页面控制端口暴露策略
       </div>
       <n-data-table
         :columns="columns"
