@@ -17,7 +17,7 @@ import type { HostTerminalSession } from "@/api/interface/hostTerminal"
 import { mobileMessages } from "@/i18n/locales/mobile"
 import MobileConsoleHeader from "./components/MobileConsoleHeader.vue"
 import MobileConsoleNavigation from "./components/MobileConsoleNavigation.vue"
-import MobileContainerPanel from "./components/MobileContainerPanel.vue"
+import MobileResourcePanel from "./components/MobileResourcePanel.vue"
 import MobileFileBrowser from "./components/MobileFileBrowser.vue"
 import MobileRecentSessions from "./components/MobileRecentSessions.vue"
 import MobileSessionCreator from "./components/MobileSessionCreator.vue"
@@ -37,7 +37,7 @@ const { t } = useI18n({ messages: mobileMessages })
 const message = useMessage()
 const dialog = useDialog()
 const router = useRouter()
-const activeTab = ref<"overview" | "containers" | "code">("overview")
+const activeTab = ref<"overview" | "resources" | "code">("overview")
 const overview = ref<MobileOverview | null>(null)
 const nodes = ref<MobileNode[]>([])
 const selectedNodeId = ref(Number(localStorage.getItem("gopanel-mobile-node-id") || 0))
@@ -241,10 +241,10 @@ async function switchToCode() {
 	await loadSessions(true)
 }
 
-function selectTab(tab: "overview" | "containers" | "code") {
+function selectTab(tab: "overview" | "resources" | "code") {
 	if (tab === "overview") void switchToOverview()
 	else if (tab === "code") void switchToCode()
-	else activeTab.value = "containers"
+	else activeTab.value = "resources"
 }
 
 async function leaveTaskDetail() {
@@ -367,7 +367,7 @@ onBeforeUnmount(() => {
 		<main :class="isTaskDetail ? 'w-full p-0' : 'mx-auto max-w-2xl p-4'">
 			<MobileSystemUpdate v-if="activeTab === 'overview' && selectedNode?.isLocal" />
 			<n-alert
-				v-if="loadError && activeTab !== 'containers'"
+				v-if="loadError && activeTab !== 'resources'"
 				type="error"
 				class="mb-4"
 				:title="t('mobile.loadFailed')"
@@ -404,7 +404,7 @@ onBeforeUnmount(() => {
 					/>
 				</div>
 
-				<MobileContainerPanel v-else-if="activeTab === 'containers'" />
+				<MobileResourcePanel v-else-if="activeTab === 'resources'" />
 
 				<div v-else :class="isTaskDetail ? '' : 'space-y-4'">
 					<MobileSessionBrowser
