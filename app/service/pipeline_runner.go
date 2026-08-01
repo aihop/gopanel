@@ -35,12 +35,19 @@ func (s *PipelineService) stepRunner(ctx context.Context, logger *PipelineLogger
 	if prev, err := s.recordRepo.LatestRunnerContainerID(p.ID); err == nil {
 		previousContainerID = strings.TrimSpace(prev)
 	}
-	options := websiteEngineDeployOptions{CodeSource: "pipeline", CodeDirFallback: codeRoot, PreviousContainerID: previousContainerID, PipelineKey: strings.TrimSpace(p.PipelineKey), PipelineVersion: strings.TrimSpace(p.Version), RunnerConfig: runnerCfg}
 	progress := func(format string, a ...interface{}) {
 		logger.Info("[Runner] "+format, a...)
 	}
 	alias := fmt.Sprintf("pipeline-%s", p.PipelineKey)
-	hostPort, containerID, _, err := deployWebsiteEngine(ctx, alias, options, progress)
+	deployRequest := pipelineRunnerDeployRequest{
+		Alias:               alias,
+		CodeRoot:            codeRoot,
+		PipelineKey:         strings.TrimSpace(p.PipelineKey),
+		PipelineVersion:     strings.TrimSpace(p.Version),
+		PreviousContainerID: previousContainerID,
+		Config:              runnerCfg,
+	}
+	hostPort, containerID, err := deployPipelineRunner(ctx, deployRequest, progress)
 	if err != nil {
 		return 0, "", "", err
 	}

@@ -26,15 +26,12 @@ func deployStaticWebsite(website *model.Website, releaseDir string) error {
 
 // deployWebAppWebsite 部署Web应用网站
 // @param website 网站模型
-// @param releaseDir 发布目录
-// @param runtimeDir 运行时目录
 // @param imageTag 镜像标签
-// @return int, string, string, error
+// @return int, string, error
 // @return hostPort 宿主机端口
 // @return containerID 容器ID
-// @return runtimeDir 运行时目录
 // @return error 错误
-func deployWebAppWebsite(website *model.Website, releaseDir, runtimeDir, imageTag string) (int, string, string, error) {
+func deployWebAppWebsite(website *model.Website, imageTag string) (int, string, error) {
 	imageRef := strings.TrimSpace(imageTag)
 	if imageRef == "" {
 		imageRef = strings.TrimSpace(website.EngineEnv)
@@ -43,28 +40,24 @@ func deployWebAppWebsite(website *model.Website, releaseDir, runtimeDir, imageTa
 		imageRef = ""
 	}
 	if imageRef == "" {
-		return 0, "", "", fmt.Errorf("缺少可部署的镜像标签")
+		return 0, "", fmt.Errorf("缺少可部署的镜像标签")
 	}
 	previousContainerID := website.ContainerID
-	preferredRuntimeDir := strings.TrimSpace(runtimeDir)
-	if preferredRuntimeDir == "" {
-		preferredRuntimeDir = strings.TrimSpace(website.RuntimeDir)
-	}
-	options := websiteEngineDeployOptions{CodeSource: "git", Image: imageRef, CodeDir: preferredRuntimeDir, CodeDirFallback: releaseDir, PreviousContainerID: previousContainerID}
-	hostPort, containerID, actualRuntimeDir, err := deployWebsiteEngine(context.Background(), website.Alias, options, nil)
+	deployRequest := websiteImageDeployRequest{Alias: website.Alias, Image: imageRef, PreviousContainerID: previousContainerID}
+	hostPort, containerID, err := deployWebsiteImage(context.Background(), deployRequest, nil)
 	if err != nil {
-		return 0, "", "", fmt.Errorf("启动容器失败: %w", err)
+		return 0, "", fmt.Errorf("启动容器失败: %w", err)
 	}
 	oldContainerID := strings.TrimSpace(previousContainerID)
-	if err := switchWebsiteRuntimeTarget(website, fmt.Sprintf("127.0.0.1:%d", hostPort), containerID, actualRuntimeDir); err != nil {
-		return 0, "", "", err
+	if err := switchWebsiteRuntimeTarget(website, fmt.Sprintf("127.0.0.1:%d", hostPort), containerID, ""); err != nil {
+		return 0, "", err
 	}
 	website.EngineEnv = imageRef
 	if err := global.DB.Save(website).Error; err != nil {
-		return 0, "", "", err
+		return 0, "", err
 	}
 	cleanupPreviousWebsiteContainer(oldContainerID, containerID)
-	return hostPort, containerID, actualRuntimeDir, nil
+	return hostPort, containerID, nil
 }
 
 // switchWebsiteRuntimeTarget 切换网站运行时目标

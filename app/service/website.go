@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -165,19 +164,18 @@ func (s WebsiteService) Create(ctx context.Context, req *request.WebsiteCreate, 
 
 	switch req.Type {
 	case constant.WebApp:
-		codeDir := req.CodeDir
-		if codeDir == "" {
-			codeDir = filepath.Join(global.CONF.System.BaseDir, "www", alias)
+		if err = validateWebsiteImageSource(req.CodeSource); err != nil {
+			return err
 		}
-		options := websiteEngineDeployOptions{CodeSource: req.CodeSource, Image: req.GitRepo, CodeDir: codeDir}
-		hostPort, containerID, runtimeDir, deployErr := deployWebsiteEngine(context.Background(), alias, options, nil)
+		deployRequest := websiteImageDeployRequest{Alias: alias, Image: req.GitRepo}
+		hostPort, containerID, deployErr := deployWebsiteImage(context.Background(), deployRequest, nil)
 		if deployErr != nil {
 			return fmt.Errorf("failed to deploy container: %w", deployErr)
 		}
 		website.Proxy = fmt.Sprintf("127.0.0.1:%d", hostPort)
 		website.ContainerID = containerID
 		website.EngineEnv = req.GitRepo
-		website.RuntimeDir = runtimeDir
+		website.RuntimeDir = ""
 		website.Status = "Running"
 		global.LOG.Infof("Deployed custom container %s on port %d", containerID, hostPort)
 	}

@@ -50,12 +50,10 @@ func runAppDeployment(website *model.Website, deploy *model.AppDeploy) (*model.A
 		err = ApplyCaddyFromDB(context.Background())
 	case constant.WebApp, constant.Container:
 		appendLog("容器化应用类型，开始部署...")
-		deploy.Port, deploy.ContainerID, deploy.RuntimeDir, err = deployWebAppWebsite(website, deploy.ReleaseDir, deploy.RuntimeDir, deploy.ImageTag)
+		deploy.RuntimeDir = ""
+		deploy.Port, deploy.ContainerID, err = deployWebAppWebsite(website, deploy.ImageTag)
 		if err == nil {
 			appendLog(fmt.Sprintf("容器已启动，映射端口: %d", deploy.Port))
-			if deploy.RuntimeDir != "" {
-				appendLog(fmt.Sprintf("本次沿用运行目录: %s", deploy.RuntimeDir))
-			}
 		}
 	default:
 		err = fmt.Errorf("暂不支持的网站类型: %s", website.Type)
