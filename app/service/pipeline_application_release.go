@@ -26,17 +26,11 @@ func (s *PipelineApplicationService) RecordPage(ctx context.Context, pipelineID 
 	if err := s.fillReleasedFlags(list); err != nil {
 		return 0, nil, err
 	}
-	if err := s.fillActiveDeployCountsForRecords(list); err != nil {
-		return 0, nil, err
-	}
 	return total, list, nil
 }
 func (s *PipelineApplicationService) ReleasePage(pipelineID uint, page, limit int) (int64, []model.Release, error) {
 	total, list, err := s.releaseRepo.PageByPipeline(pipelineID, page, limit)
 	if err != nil {
-		return 0, nil, err
-	}
-	if err := s.fillActiveDeployCountsForReleases(list); err != nil {
 		return 0, nil, err
 	}
 	return total, list, nil
@@ -58,13 +52,6 @@ func (s *PipelineApplicationService) DeleteRecord(recordID uint) error {
 	}
 	if releaseCount > 0 {
 		return fmt.Errorf("该执行记录已生成正式版本，不允许删除")
-	}
-	deployCount, err := s.appDeployRepo.CountByPipelineRecordID(recordID)
-	if err != nil {
-		return err
-	}
-	if deployCount > 0 {
-		return fmt.Errorf("该执行记录已有关联部署记录，不允许删除")
 	}
 	return s.recordRepo.Delete(recordID)
 }

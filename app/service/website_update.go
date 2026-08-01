@@ -22,9 +22,6 @@ func (s WebsiteService) Update(ctx context.Context, req *request.WebsiteUpdate) 
 	if err != nil {
 		return errors.New("网站不存在")
 	}
-	if pipelineErr := ensurePipelineExists(req.PipelineId); pipelineErr != nil {
-		return pipelineErr
-	}
 	originalDomains := website.Domains
 	var upstreams []model.WebsiteUpstream
 	if normalizedPrimaryDomain := sanitizeWebsitePrimaryDomain(req.PrimaryDomain); normalizedPrimaryDomain != "" {
@@ -50,7 +47,6 @@ func (s WebsiteService) Update(ctx context.Context, req *request.WebsiteUpdate) 
 	} else if strings.TrimSpace(req.Proxy) != "" {
 		website.Proxy = strings.TrimSpace(req.Proxy)
 	}
-	website.PipelineID = req.PipelineId
 	if req.CodeSource != "" {
 		website.CodeSource = req.CodeSource
 	}

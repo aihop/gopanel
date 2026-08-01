@@ -12,16 +12,14 @@ import (
 )
 
 type PipelineApplicationService struct {
-	pipelineRepo  *repo.PipelineRepo
-	recordRepo    *repo.PipelineRecordRepo
-	releaseRepo   *repo.ReleaseRepo
-	appDeployRepo *repo.AppDeployRepo
-	websiteRepo   *repo.WebsiteRepo
-	executor      *PipelineService
+	pipelineRepo *repo.PipelineRepo
+	recordRepo   *repo.PipelineRecordRepo
+	releaseRepo  *repo.ReleaseRepo
+	executor     *PipelineService
 }
 
 func NewPipelineApplication(db *gorm.DB) *PipelineApplicationService {
-	return &PipelineApplicationService{pipelineRepo: repo.NewPipeline(db), recordRepo: repo.NewPipelineRecord(db), releaseRepo: repo.NewRelease(db), appDeployRepo: repo.NewAppDeploy(db), websiteRepo: repo.NewWebsite(), executor: NewPipelineService(db)}
+	return &PipelineApplicationService{pipelineRepo: repo.NewPipeline(db), recordRepo: repo.NewPipelineRecord(db), releaseRepo: repo.NewRelease(db), executor: NewPipelineService(db)}
 }
 func (s *PipelineApplicationService) Page(ctx context.Context, page, limit int) (int64, []model.Pipeline, error) {
 	total, list, err := s.pipelineRepo.Page(page, limit)
@@ -113,13 +111,6 @@ func normalizePipelineActionType(value string) string {
 	}
 }
 func (s *PipelineApplicationService) Delete(id uint) error {
-	websiteCount, err := s.websiteRepo.CountByPipelineID(id)
-	if err != nil {
-		return err
-	}
-	if websiteCount > 0 {
-		return fmt.Errorf("该流水线已被网站绑定，不允许删除")
-	}
 	recordCount, err := s.recordRepo.CountByPipelineID(id)
 	if err != nil {
 		return err

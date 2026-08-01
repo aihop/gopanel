@@ -103,7 +103,6 @@ export interface MobileWebsite {
 	type: string
 	status: string
 	appName: string
-	pipelineId: number
 }
 
 export interface MobileDatabase {

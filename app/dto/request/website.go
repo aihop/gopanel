@@ -25,9 +25,8 @@ type WebsiteCreate struct {
 	AppID         uint          `json:"appID"`
 	AppInstallID  uint          `json:"appInstallId"`
 
-	CodeSource          string                 `json:"codeSource"` // upload, git(legacy image source), pipeline, app_store
+	CodeSource          string                 `json:"codeSource"` // upload, git(legacy image source), app_store
 	GitRepo             string                 `json:"gitRepo"`    // legacy field name, currently used as Docker image reference
-	PipelineId          uint                   `json:"pipelineId"`
 	CodeDir             string                 `json:"codeDir"`
 	CodeDirFallback     string                 `json:"-"`
 	PreviousContainerID string                 `json:"-"`
@@ -67,7 +66,6 @@ type WebsiteUpdate struct {
 	IPV6          bool   `json:"IPV6"`
 	OtherDomains  string `json:"otherDomains"`
 	Proxy         string `json:"proxy"`
-	PipelineId    uint   `json:"pipelineId"`
 	CodeSource    string `json:"codeSource"`
 
 	AntiCrawler              bool   `json:"antiCrawler"`

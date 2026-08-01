@@ -151,7 +151,6 @@ func bindContainerTargetToWebsite(ctx context.Context, target containerWebsiteTa
 	}
 	website.Proxy = buildWebsiteUpstreamDial(upstream)
 	website.ContainerID = target.ContainerID
-	website.PipelineID = 0
 	website.CodeSource = "container"
 	website.Status = constant.WebRunning
 

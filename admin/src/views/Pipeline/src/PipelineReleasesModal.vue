@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { h, ref, watch } from "vue"
-import { NDataTable, NModal, NTag, NPopover, useMessage, type DataTableColumns } from "naive-ui"
+import { NDataTable, NModal, NTag, useMessage, type DataTableColumns } from "naive-ui"
 import { getPipelineReleases } from "@/api/modules/pipeline"
 import { Pipeline } from "@/api/interface/pipeline"
 import { formatTime } from "@/utils/date"
@@ -77,31 +77,6 @@ const getArtifactSummary = (row: Pipeline.ResRelease) => {
   }
 }
 
-const renderActiveWebsiteTag = (count?: number, names?: string[]) => {
-  if (!count) return null
-  const websiteNames = Array.isArray(names) ? names.filter(Boolean) : []
-  return h(
-    NPopover,
-    { trigger: "hover" },
-    {
-      trigger: () =>
-        h(
-          NTag,
-          { type: "warning", size: "small", style: "cursor:pointer;" },
-          { default: () => `线上 ${count} 站点` }
-        ),
-      default: () =>
-        h(
-          "div",
-          { class: "max-w-[260px] space-y-1 text-xs text-slate-600" },
-          websiteNames.length
-            ? websiteNames.map((name) => h("div", { class: "break-all" }, name))
-            : [h("div", "暂无站点信息")]
-        )
-    }
-  )
-}
-
 const columns: DataTableColumns<Pipeline.ResRelease> = [
   { title: "ID", key: "id", width: 60 },
   {
@@ -115,10 +90,7 @@ const columns: DataTableColumns<Pipeline.ResRelease> = [
     key: "version",
     width: 220,
     render: (row: Pipeline.ResRelease) =>
-      h("div", { class: "flex flex-wrap gap-1" }, [
-        h(NTag, { type: "success", size: "small" }, { default: () => `v${row.version}` }),
-        renderActiveWebsiteTag(row.activeWebsiteCount, row.activeWebsiteNames)
-      ])
+      h(NTag, { type: "success", size: "small" }, { default: () => `v${row.version}` })
   },
   {
     title: "Commit",

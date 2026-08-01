@@ -18,7 +18,6 @@ type mobileWebsiteSummary struct {
 	Type          string `json:"type"`
 	Status        string `json:"status"`
 	AppName       string `json:"appName"`
-	PipelineID    uint   `json:"pipelineId"`
 }
 
 type mobileDatabaseSummary struct {
@@ -60,7 +59,7 @@ func GetMobileWebsites(c fiber.Ctx) error {
 	for _, website := range websites {
 		items = append(items, mobileWebsiteSummary{
 			ID: website.ID, Alias: website.Alias, PrimaryDomain: website.PrimaryDomain,
-			Type: website.Type, Status: website.Status, AppName: website.AppName, PipelineID: website.PipelineID,
+			Type: website.Type, Status: website.Status, AppName: website.AppName,
 		})
 	}
 	return c.JSON(e.Succ(fiber.Map{"items": items, "total": len(items)}))

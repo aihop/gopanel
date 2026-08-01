@@ -334,14 +334,12 @@
 <script setup lang="ts">
 import type { Website } from "@/api/interface/website"
 import type { App } from "@/api/interface/apps"
-import type { Pipeline } from "@/api/interface/pipeline"
 import { computed, ref } from "vue"
 import { useDialog, useMessage } from "naive-ui"
 import { websiteUpdateAPI } from "@/api/modules/website"
 import { ListAppInstalled } from "@/api/modules/apps"
 import { getSSHLoginLogs } from "@/api/modules/log"
 import { buildRuntimeDetailText } from "@/utils/runtime"
-import { listAllPipelines } from "@/utils/pipeline"
 import { getWebsiteIpv6Value, hasWebsiteRuntimeMeta, isHttpsWebsiteProtocol, resolveWebsiteBindingMeta } from "@/utils/websiteRuntime"
 import http from "@/api"
 import { formatTime } from "@/utils/date"
@@ -389,7 +387,6 @@ const operatingIP = ref("")
 const blockedIPs = ref<string[]>([])
 const blockedRuleItems = ref<Host.RuleInfo[]>([])
 const appInstallMap = ref<Record<number, App.AppInstalledInfo>>({})
-const pipelineMap = ref<Record<number, Pipeline.ResPipeline>>({})
 
 const rateLimitOptions = [
   { label: "关闭", value: "none" },
@@ -462,8 +459,7 @@ const exposedPortsText = computed(() => {
 const bindingRuntimeText = computed(() => {
   if (!website.value) return ""
   return resolveWebsiteBindingMeta(website.value, {
-    appInstallMap: appInstallMap.value,
-    pipelineMap: pipelineMap.value
+    appInstallMap: appInstallMap.value
   }, {
     sourcePrefix: "绑定目标：",
     includeSourceInDetail: true,
@@ -564,15 +560,8 @@ async function loadBindingMeta() {
       for (const item of list) nextMap[item.id] = item
       appInstallMap.value = nextMap
     }
-    if (website.value.pipelineId) {
-      const list = await listAllPipelines()
-      const nextMap: Record<number, Pipeline.ResPipeline> = {}
-      for (const item of list) nextMap[item.id] = item
-      pipelineMap.value = nextMap
-    }
   } catch (error) {
     appInstallMap.value = {}
-    pipelineMap.value = {}
   }
 }
 
@@ -672,7 +661,6 @@ async function handleSave() {
       protocol: website.value.protocol,
       otherDomains: buildOtherDomains(website.value),
       proxy: website.value.proxy || "",
-      pipelineId: website.value.pipelineId,
       codeSource: website.value.codeSource,
       IPV6: getWebsiteIpv6Value(website.value),
       remark: website.value.remark || "",

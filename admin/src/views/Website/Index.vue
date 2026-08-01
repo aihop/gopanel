@@ -133,7 +133,6 @@
 
 <script setup lang="ts">
 import type { Website } from "@/api/interface/website"
-import type { Pipeline } from "@/api/interface/pipeline"
 import type { App } from "@/api/interface/apps"
 import type { DataTableColumns } from "naive-ui"
 import { httpDefaultReloadAPI, httpDefaultStatusAPI, httpDefaultStopAPI } from "@/api/modules/http"
@@ -152,7 +151,6 @@ import { t } from "@/i18n"
 import { useAuthStore } from "@/store/auth"
 import OpDialog from "@/components/OpDialog.vue"
 import { buildRuntimeDetailText } from "@/utils/runtime"
-import { listAllPipelines } from "@/utils/pipeline"
 import {
 	getWebsiteSourceLabel,
 	isHttpsWebsiteProtocol,
@@ -242,7 +240,6 @@ const loading = ref(false)
 const tableData = ref<WebsiteTableRow[]>([])
 const total = ref(0)
 const appInstallMap = ref<Record<number, App.AppInstalledInfo>>({})
-const pipelineMap = ref<Record<number, Pipeline.ResPipeline>>({})
 
 const activeTab = ref("list")
 
@@ -316,7 +313,6 @@ function getWebsiteBindingMeta(row: WebsiteTableRow) {
 		row,
 		{
 			appInstallMap: appInstallMap.value,
-			pipelineMap: pipelineMap.value
 		},
 		{
 			includeSourceInDetail: false,
@@ -326,21 +322,6 @@ function getWebsiteBindingMeta(row: WebsiteTableRow) {
 			runUserPrefix: "用户:"
 		}
 	)
-}
-
-function getWebsiteDeploySummary(row: WebsiteTableRow) {
-	const lines: string[] = []
-	if (row.activeRelease?.releaseId) {
-		lines.push(`正式版本 v${row.activeRelease.version}`)
-	} else {
-		lines.push("正式版本 未上线")
-	}
-	if (row.latestPipelineSync?.pipelineRecordId) {
-		lines.push(
-			`${row.latestPipelineSync.isActive ? "构建同步 当前生效" : "构建同步"} #${row.latestPipelineSync.pipelineRecordId}`
-		)
-	}
-	return lines
 }
 
 function getBackendSummary(row: WebsiteTableRow) {
@@ -463,18 +444,12 @@ const columns: DataTableColumns<WebsiteTableRow> = [
 			}
 
 			const bindingMeta = getWebsiteBindingMeta(row)
-			const deploySummary = getWebsiteDeploySummary(row)
 			return h("div", { class: "flex flex-col gap-2" }, [
 				h("div", { class: "flex items-center flex-wrap gap-1" }, tags),
 				bindingMeta
 					? h("div", { class: "text-xs text-slate-500" }, `${bindingMeta.source} · ${bindingMeta.detail}`)
 					: null,
 				h("div", { class: "text-xs text-slate-500" }, getBackendSummary(row)),
-				h(
-					"div",
-					{ class: "flex flex-wrap gap-2 text-xs text-slate-400" },
-					deploySummary.map(item => h("span", item))
-				)
 			])
 		}
 	},
@@ -613,7 +588,6 @@ async function fetchData() {
 			await fetchBindingMeta()
 		} else {
 			appInstallMap.value = {}
-			pipelineMap.value = {}
 		}
 	} catch (error) {
 	} finally {
@@ -623,21 +597,15 @@ async function fetchData() {
 
 async function fetchBindingMeta() {
 	try {
-		const [appsRes, pipelines] = await Promise.all([ListAppInstalled(), listAllPipelines()])
+		const appsRes = await ListAppInstalled()
 		const apps: App.AppInstalledInfo[] = Array.isArray(appsRes.data) ? appsRes.data : []
 		const nextAppMap: Record<number, App.AppInstalledInfo> = {}
 		for (const item of apps) {
 			nextAppMap[item.id] = item
 		}
 		appInstallMap.value = nextAppMap
-		const nextPipelineMap: Record<number, Pipeline.ResPipeline> = {}
-		for (const item of pipelines) {
-			nextPipelineMap[item.id] = item
-		}
-		pipelineMap.value = nextPipelineMap
 	} catch (error) {
 		appInstallMap.value = {}
-		pipelineMap.value = {}
 	}
 }
 

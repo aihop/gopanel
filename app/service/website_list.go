@@ -6,29 +6,9 @@ import (
 	"strings"
 
 	"github.com/aihop/gopanel/app/dto/response"
-	"github.com/aihop/gopanel/app/model"
-	"github.com/aihop/gopanel/app/repo"
 	"github.com/aihop/gopanel/constant"
-	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/pkg/gormx"
 )
-
-func buildWebsiteDeploySummary(item model.AppDeploy) *response.WebsiteDeploySummary {
-	if item.ID == 0 {
-		return nil
-	}
-	return &response.WebsiteDeploySummary{
-		ID:               item.ID,
-		Version:          item.Version,
-		ReleaseID:        item.ReleaseID,
-		PipelineRecordID: item.PipelineRecordID,
-		SourceType:       item.SourceType,
-		ImageTag:         item.ImageTag,
-		Status:           item.Status,
-		IsActive:         item.IsActive,
-		CreatedAt:        item.CreatedAt,
-	}
-}
 
 func (s *WebsiteService) List(ctx *gormx.Contextx) (websiteDTOs []*response.WebsiteRes, err error) {
 	_ = s.SyncFromCaddyfile()
@@ -39,15 +19,6 @@ func (s *WebsiteService) List(ctx *gormx.Contextx) (websiteDTOs []*response.Webs
 	if len(res) == 0 {
 		return []*response.WebsiteRes{}, nil
 	}
-	websiteIDs := make([]uint, 0, len(res))
-	for _, web := range res {
-		if web != nil && web.ID > 0 {
-			websiteIDs = append(websiteIDs, web.ID)
-		}
-	}
-	appDeployRepo := repo.NewAppDeploy(global.DB)
-	activeReleaseMap, _ := appDeployRepo.ActiveReleaseByWebsiteIDs(websiteIDs)
-	latestPipelineSyncMap, _ := appDeployRepo.LatestPipelineSyncByWebsiteIDs(websiteIDs)
 	for _, web := range res {
 		var (
 			appName      string
@@ -104,7 +75,6 @@ func (s *WebsiteService) List(ctx *gormx.Contextx) (websiteDTOs []*response.Webs
 			AccessLogPath:            accessLogPath,
 			ErrorLogPath:             errorLogPath,
 			AppInstallID:             appInstallID,
-			PipelineID:               web.PipelineID,
 			ContainerID:              web.ContainerID,
 			RuntimeType:              runtimeType,
 			OtherDomains:             otherDomains,
@@ -124,8 +94,6 @@ func (s *WebsiteService) List(ctx *gormx.Contextx) (websiteDTOs []*response.Webs
 			HttpConfig:               web.HttpConfig,
 			RedirectCode:             web.RedirectCode,
 			RedirectDomainsToPrimary: web.RedirectDomainsToPrimary,
-			ActiveRelease:            buildWebsiteDeploySummary(activeReleaseMap[web.ID]),
-			LatestPipelineSync:       buildWebsiteDeploySummary(latestPipelineSyncMap[web.ID]),
 			Upstreams:                responseWebsiteUpstreams(web.Upstreams, web.Proxy),
 		})
 	}

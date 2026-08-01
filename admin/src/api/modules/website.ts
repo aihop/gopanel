@@ -1,7 +1,6 @@
 import http from "@/api"
 import type { Website } from "../interface/website"
-import type { ResPage, Result } from "../interface"
-import type { Pipeline } from "../interface/pipeline"
+import type { Result } from "../interface"
  
 export const websiteListAPI = () => {
 	return http.post<ResPage<Website.WebsiteDTO>>(`/website/list`)
@@ -30,10 +29,6 @@ export const WebsiteTodayIPStatsAPI = (req: Website.WebSiteTodayIPStatsReq) => {
 
 export const AppDeployListAPI = (req: { websiteId: number }) => {
 	return http.post<Website.AppDeployRecord[]>(`/website/app-deploy/list`, req)
-}
-
-export const WebsiteReleasePageAPI = (params: { websiteId: number; page: number; limit: number }) => {
-	return http.get<ResPage<Pipeline.ResRelease>>(`/website/releases`, params)
 }
 
 export const AppDeploySwitchAPI = (req: { deployId: number }) => {

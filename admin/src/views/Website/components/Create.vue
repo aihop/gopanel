@@ -66,7 +66,6 @@
 							<n-space>
 								<n-radio value="upload" v-if="form.type === 'static'">稍后上传 / 本地目录</n-radio>
 								<n-radio value="git">自定义镜像部署</n-radio>
-								<n-radio value="pipeline">关联流水线</n-radio>
 								<n-radio value="app_store">应用商店</n-radio>
 							</n-space>
 						</n-radio-group>
@@ -166,9 +165,6 @@
 				<n-form-item :label="$t('website.proxyTarget')" path="proxy" v-if="form.type === 'web_app'">
 					<div class="w-full">
 						<n-input v-model:value="form.proxy" :placeholder="$t('website.proxyTargetPlaceholder')" />
-						<div v-if="form.codeSource === 'pipeline'" class="mt-2 text-xs text-slate-500">
-							{{ $t("website.pipelineProxyPlaceholderHelper") }}
-						</div>
 					</div>
 				</n-form-item>
 
@@ -198,20 +194,6 @@
 						/>
 						<div v-if="selectedAppRuntimeText" class="mt-2 text-xs text-slate-500">
 							{{ selectedAppRuntimeText }}
-						</div>
-					</div>
-				</n-form-item>
-
-				<n-form-item label="选择流水线" path="pipelineId" v-if="form.codeSource === 'pipeline'">
-					<div class="w-full">
-						<n-select
-							v-model:value="form.pipelineId"
-							:options="pipelineOptions"
-							placeholder="请选择关联的部署流水线"
-							@update:value="handlePipelineSelect"
-						/>
-						<div v-if="selectedPipelineRuntimeText" class="mt-2 text-xs text-slate-500">
-							{{ selectedPipelineRuntimeText }}
 						</div>
 					</div>
 				</n-form-item>
@@ -301,7 +283,6 @@
 import type { FormInst } from "naive-ui"
 import type { Website } from "@/api/interface/website"
 import type { App } from "@/api/interface/apps"
-import type { Pipeline } from "@/api/interface/pipeline"
 import type { Container } from "@/api/interface/container"
 import { computed, ref, watch, onMounted } from "vue"
 import { websiteCreateAPI, websiteUpdateAPI } from "@/api/modules/website"
@@ -313,7 +294,6 @@ import {
 	buildRuntimeDetailText as formatRuntimeDetailText,
 	getRunUserLabel
 } from "@/utils/runtime"
-import { listAllPipelines } from "@/utils/pipeline"
 import { getWebsiteIpv6Value, normalizeWebsiteProtocol as normalizeWebsiteProtocolValue } from "@/utils/websiteRuntime"
 import { t } from "@/i18n"
 
@@ -346,7 +326,6 @@ type WebsiteFormState = {
 	codeSource: string
 	dockerImage: string
 	codeDir: string
-	pipelineId?: number
 	antiCrawler: boolean
 	antiLeech: boolean
 	rateLimitMode: string
@@ -438,7 +417,6 @@ function createDefaultForm(): WebsiteFormState {
 		codeSource: "upload",
 		dockerImage: "",
 		codeDir: "",
-		pipelineId: undefined,
 		antiCrawler: false,
 		antiLeech: false,
 		rateLimitMode: "none",
@@ -474,9 +452,6 @@ const bindingRuntimeSummary = ref("")
 const appInstallOptions = ref<RuntimeOption[]>([])
 const rawAppList = ref<App.AppInstalledInfo[]>([])
 
-const pipelineOptions = ref<RuntimeOption[]>([])
-const rawPipelineList = ref<Pipeline.ResPipeline[]>([])
-
 const localImageOptions = ref<ImageOption[]>([])
 const upstreamSchemeOptions = [
 	{ label: "HTTP", value: "http" },
@@ -488,18 +463,6 @@ const selectedAppRuntimeText = computed(() => {
 	if (!item) return ""
 	return formatRuntimeDetailText(item, {
 		prefix: item.containerName ? `容器：${item.containerName}` : "",
-		kindFallback: "Runtime",
-		userFallback: "镜像默认",
-		runtimePrefix: "运行时：",
-		runUserPrefix: "用户："
-	})
-})
-
-const selectedPipelineRuntimeText = computed(() => {
-	const item = rawPipelineList.value.find(pipeline => pipeline.id === form.value.pipelineId)
-	if (!item) return ""
-	return formatRuntimeDetailText(item, {
-		prefix: item.pipelineKey ? `标识：${item.pipelineKey}` : `流水线 #${item.id}`,
 		kindFallback: "Runtime",
 		userFallback: "镜像默认",
 		runtimePrefix: "运行时：",
@@ -586,9 +549,6 @@ function syncSourceSpecificFields(source: string) {
 	if (source !== "app_store") {
 		form.value.appInstallId = undefined
 	}
-	if (source !== "pipeline") {
-		form.value.pipelineId = undefined
-	}
 	if (source !== "git") {
 		form.value.dockerImage = ""
 	}
@@ -649,7 +609,6 @@ function buildCreatePayload(): Website.WebSiteCreateReq {
 		codeSource: source,
 		gitRepo: source === "git" ? form.value.dockerImage : "",
 		codeDir: source === "upload" ? form.value.codeDir : "",
-		pipelineId: source === "pipeline" ? form.value.pipelineId : undefined,
 		antiCrawler: form.value.antiCrawler,
 		antiLeech: form.value.antiLeech,
 		rateLimitMode: form.value.rateLimitMode,
@@ -678,7 +637,6 @@ function buildUpdatePayload(): Website.WebSiteUpdateReq {
 			form.value.type === "proxy"
 				? buildProxyFromUpstream(upstreams?.find(item => item.enabled !== false))
 				: form.value.proxy,
-		pipelineId: source === "pipeline" ? form.value.pipelineId : undefined,
 		codeSource: source,
 		IPV6: form.value.IPV6,
 		remark: form.value.remark,
@@ -727,21 +685,6 @@ const fetchLocalImages = async () => {
 	}
 }
 
-const getPipelineList = async () => {
-	try {
-		const items = await listAllPipelines()
-		rawPipelineList.value = items
-		pipelineOptions.value = items.map(item => {
-			return {
-				label: buildPipelineOptionLabel(item),
-				value: item.id
-			}
-		})
-	} catch (error) {
-		console.error(error)
-	}
-}
-
 const handleAppSelect = (val: number) => {
 	if (!val) return
 	const app = rawAppList.value.find(a => a.id === val)
@@ -754,23 +697,13 @@ const handleAppSelect = (val: number) => {
 	}
 }
 
-const handlePipelineSelect = (val: number) => {
-	if (!val) return
-	// pipeline 站点允许不填占位代理地址，等待首次成功部署后自动回填真实地址。
-}
-
 function buildAppOptionLabel(app: App.AppInstalledInfo) {
 	const port = app.httpPort ? `端口:${app.httpPort}` : app.httpsPort ? `HTTPS:${app.httpsPort}` : "无端口"
 	return `${app.name} · ${port} · ${buildRuntimeBadgeText(app, { kindFallback: "Runtime" })} · 用户:${getRunUserLabel(app, { userFallback: "镜像默认" })}`
 }
 
-function buildPipelineOptionLabel(item: Pipeline.ResPipeline) {
-	return `${item.name} (#${item.id}) · ${buildRuntimeBadgeText(item, { kindFallback: "Runtime" })} · 用户:${getRunUserLabel(item, { userFallback: "镜像默认" })}`
-}
-
 onMounted(() => {
 	fetchApps()
-	getPipelineList()
 	fetchLocalImages()
 })
 
@@ -830,9 +763,6 @@ const rules = {
 	proxy: {
 		required: true,
 		validator(_rule: unknown, value: string) {
-			if (form.value.codeSource === "pipeline") {
-				return true
-			}
 			if (form.value.type === "web_app" && !value) {
 				return new Error(t("website.proxyTargetRequired"))
 			}
@@ -845,16 +775,6 @@ const rules = {
 		validator(_rule: unknown, value: number) {
 			if (form.value.codeSource === "app_store" && !value) {
 				return new Error(t("website.appInstallRequired"))
-			}
-			return true
-		},
-		trigger: "blur"
-	},
-	pipelineId: {
-		required: true,
-		validator(_rule: unknown, value: number) {
-			if (form.value.codeSource === "pipeline" && !value) {
-				return new Error(t("website.pipelineRequired"))
 			}
 			return true
 		},

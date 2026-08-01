@@ -1,4 +1,4 @@
-admin/src/api/interface/website.ts	739
+admin/src/api/interface/website.ts	716
 admin/src/components/UploadDialog.vue	672
 admin/src/components/auth/LoginCaptcha.vue	774
 admin/src/components/common/SearchDialog.vue	611
@@ -10,7 +10,7 @@ admin/src/views/Database/src/components/DatabaseTablesView.vue	744
 admin/src/views/Database/src/components/OperationsView.vue	503
 admin/src/views/Database/src/components/useStructureView.ts	988
 admin/src/views/Host/disk.vue	599
-admin/src/views/Website/Index.vue	774
-admin/src/views/Website/components/AppDeployHistory.vue	760
-admin/src/views/Website/components/Create.vue	996
-admin/src/views/Website/components/SecurityDrawer.vue	725
+admin/src/views/Website/Index.vue	742
+admin/src/views/Website/components/AppDeployHistory.vue	527
+admin/src/views/Website/components/Create.vue	916
+admin/src/views/Website/components/SecurityDrawer.vue	713

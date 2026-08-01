@@ -2160,10 +2160,7 @@ export default {
 		proxyTarget: "代理地址",
 		proxyTargetPlaceholder: "例如 http://127.0.0.1:8080 或 8080",
 		proxyTargetRequired: "请输入代理地址或容器内部端口",
-		pipelineProxyPlaceholderHelper:
-			"这里可留空。流水线成功后只会同步临时运行结果并回填真实代理地址；稳定上线、网站切换与回滚请在正式版本中操作。",
 		appInstallRequired: "请选择已安装的容器应用",
-		pipelineRequired: "请选择关联流水线",
 		dockerImageRequired: "请输入容器镜像地址",
 		static: "静态网站",
 		deployment: "一键部署",

@@ -9,40 +9,25 @@ import (
 
 	"github.com/aihop/gopanel/app/dto/request"
 	"github.com/aihop/gopanel/app/model"
-	"github.com/aihop/gopanel/app/repo"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
 	"gorm.io/gorm"
 )
 
 type AppDeployApplicationService struct {
-	db          *gorm.DB
-	releaseRepo *repo.ReleaseRepo
+	db *gorm.DB
 }
 
 type AppDeployTriggerOptions struct {
 	WebsiteID uint
 	ZipPath   string
 	ImageTag  string
-	ReleaseID uint
 }
 
 func NewAppDeployApplication(db *gorm.DB) *AppDeployApplicationService {
 	return &AppDeployApplicationService{
-		db:          db,
-		releaseRepo: repo.NewRelease(db),
+		db: db,
 	}
-}
-
-func (s *AppDeployApplicationService) PageWebsiteReleases(websiteID uint, page, limit int) (int64, []model.Release, error) {
-	var website model.Website
-	if err := s.db.Select("id", "pipeline_id").First(&website, websiteID).Error; err != nil {
-		return 0, nil, fmt.Errorf("网站不存在")
-	}
-	if website.PipelineID == 0 {
-		return 0, []model.Release{}, nil
-	}
-	return s.releaseRepo.PageByPipeline(website.PipelineID, page, limit)
 }
 
 func (s *AppDeployApplicationService) ListByWebsite(websiteID uint) ([]model.AppDeploy, error) {
@@ -66,7 +51,7 @@ func (s *AppDeployApplicationService) Switch(deployID uint, exposePort int) erro
 		return fmt.Errorf("网站不存在")
 	}
 
-	if targetDeploy.SourceType == "pipeline" || targetDeploy.SourceType == "git" || targetDeploy.ArchiveFile != "" || targetDeploy.ImageTag != "" {
+	if targetDeploy.SourceType == "git" || targetDeploy.ArchiveFile != "" || targetDeploy.ImageTag != "" {
 		releaseDir := targetDeploy.ReleaseDir
 		if releaseDir == "" {
 			releaseDir = filepath.Join(global.CONF.System.BaseDir, "www", website.Alias, "releases", targetDeploy.Version)
@@ -131,21 +116,6 @@ func (s *AppDeployApplicationService) Trigger(opts AppDeployTriggerOptions, expo
 		return fmt.Errorf("网站不存在")
 	}
 
-	if opts.ReleaseID > 0 {
-		release, err := s.releaseRepo.Get(opts.ReleaseID)
-		if err != nil {
-			return fmt.Errorf("正式版本不存在")
-		}
-		if website.PipelineID == 0 || website.PipelineID != release.PipelineID {
-			return fmt.Errorf("该网站未绑定对应流水线，无法部署此正式版本")
-		}
-		if release.Status != "ready" {
-			return fmt.Errorf("该正式版本当前不可部署")
-		}
-		go ProcessReleaseAppDeployment(website, release, exposePort)
-		return nil
-	}
-
 	version := fmt.Sprintf("v%d", time.Now().Unix())
 	releaseDir := filepath.Join(global.CONF.System.BaseDir, "www", website.Alias, "releases", version)
 	sourceType := "manual"
@@ -155,7 +125,7 @@ func (s *AppDeployApplicationService) Trigger(opts AppDeployTriggerOptions, expo
 	case strings.TrimSpace(opts.ZipPath) != "":
 		sourceType = "upload"
 	}
-	go ProcessAppDeployment(website, 0, version, opts.ZipPath, releaseDir, "", opts.ImageTag, sourceType, exposePort)
+	go ProcessAppDeployment(website, version, opts.ZipPath, releaseDir, "", opts.ImageTag, sourceType, exposePort)
 	return nil
 }
 

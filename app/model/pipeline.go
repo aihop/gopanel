@@ -51,16 +51,14 @@ type PipelineRecord struct {
 	ArchiveFile  string `gorm:"column:archive_file;type:varchar(255)" json:"archiveFile"` // Path to the zip backup
 	ImageTag     string `gorm:"column:image_tag;type:varchar(255)" json:"imageTag"`
 
-	RunnerReleaseDir   string   `gorm:"column:runner_release_dir;type:varchar(255)" json:"runnerReleaseDir"`
-	RunnerContainerID  string   `gorm:"column:runner_container_id;type:varchar(128)" json:"runnerContainerId"`
-	RunnerHostPort     int      `gorm:"column:runner_host_port;type:int" json:"runnerHostPort"`
-	RuntimeHost        string   `gorm:"-" json:"runtimeHost"`
-	RuntimeKind        string   `gorm:"-" json:"runtimeKind"`
-	RuntimeMode        string   `gorm:"-" json:"runtimeMode"`
-	RunUser            string   `gorm:"-" json:"runUser"`
-	Released           bool     `gorm:"-" json:"released"`
-	ActiveWebsiteCount int      `gorm:"-" json:"activeWebsiteCount"`
-	ActiveWebsiteNames []string `gorm:"-" json:"activeWebsiteNames"`
+	RunnerReleaseDir  string `gorm:"column:runner_release_dir;type:varchar(255)" json:"runnerReleaseDir"`
+	RunnerContainerID string `gorm:"column:runner_container_id;type:varchar(128)" json:"runnerContainerId"`
+	RunnerHostPort    int    `gorm:"column:runner_host_port;type:int" json:"runnerHostPort"`
+	RuntimeHost       string `gorm:"-" json:"runtimeHost"`
+	RuntimeKind       string `gorm:"-" json:"runtimeKind"`
+	RuntimeMode       string `gorm:"-" json:"runtimeMode"`
+	RunUser           string `gorm:"-" json:"runUser"`
+	Released          bool   `gorm:"-" json:"released"`
 }
 
 func (PipelineRecord) TableName() string {
@@ -68,23 +66,21 @@ func (PipelineRecord) TableName() string {
 }
 
 type Release struct {
-	ID                 uint      `gorm:"primaryKey" json:"id"`
-	CreatedAt          time.Time `json:"createdAt"`
-	UpdatedAt          time.Time `json:"updatedAt"`
-	PipelineID         uint      `gorm:"column:pipeline_id;type:integer;not null;index" json:"pipelineId"`
-	PipelineRecordID   uint      `gorm:"column:pipeline_record_id;type:integer;not null;uniqueIndex:uniq_release_pipeline_record" json:"pipelineRecordId"`
-	Version            string    `gorm:"column:version;type:varchar(50);not null;index" json:"version"`
-	CommitHash         string    `gorm:"column:commit_hash;type:varchar(64);index" json:"commitHash"`
-	Changelog          string    `gorm:"column:changelog;type:text" json:"changelog"` // 发布时从构建记录复制，一行一条提交标题
-	SourceType         string    `gorm:"column:source_type;type:varchar(32);not null;default:'archive';index" json:"sourceType"`
-	ImageTag           string    `gorm:"column:image_tag;type:varchar(255);index" json:"imageTag"`
-	ArchiveFile        string    `gorm:"column:archive_file;type:varchar(255)" json:"archiveFile"`
-	ReleaseDir         string    `gorm:"column:release_dir;type:varchar(255)" json:"releaseDir"`
-	ArtifactMeta       string    `gorm:"column:artifact_meta;type:longtext" json:"artifactMeta"`
-	Status             string    `gorm:"column:status;type:varchar(32);not null;default:'ready';index" json:"status"`
-	Remark             string    `gorm:"column:remark;type:varchar(255)" json:"remark"`
-	ActiveWebsiteCount int       `gorm:"-" json:"activeWebsiteCount"`
-	ActiveWebsiteNames []string  `gorm:"-" json:"activeWebsiteNames"`
+	ID               uint      `gorm:"primaryKey" json:"id"`
+	CreatedAt        time.Time `json:"createdAt"`
+	UpdatedAt        time.Time `json:"updatedAt"`
+	PipelineID       uint      `gorm:"column:pipeline_id;type:integer;not null;index" json:"pipelineId"`
+	PipelineRecordID uint      `gorm:"column:pipeline_record_id;type:integer;not null;uniqueIndex:uniq_release_pipeline_record" json:"pipelineRecordId"`
+	Version          string    `gorm:"column:version;type:varchar(50);not null;index" json:"version"`
+	CommitHash       string    `gorm:"column:commit_hash;type:varchar(64);index" json:"commitHash"`
+	Changelog        string    `gorm:"column:changelog;type:text" json:"changelog"` // 发布时从构建记录复制，一行一条提交标题
+	SourceType       string    `gorm:"column:source_type;type:varchar(32);not null;default:'archive';index" json:"sourceType"`
+	ImageTag         string    `gorm:"column:image_tag;type:varchar(255);index" json:"imageTag"`
+	ArchiveFile      string    `gorm:"column:archive_file;type:varchar(255)" json:"archiveFile"`
+	ReleaseDir       string    `gorm:"column:release_dir;type:varchar(255)" json:"releaseDir"`
+	ArtifactMeta     string    `gorm:"column:artifact_meta;type:longtext" json:"artifactMeta"`
+	Status           string    `gorm:"column:status;type:varchar(32);not null;default:'ready';index" json:"status"`
+	Remark           string    `gorm:"column:remark;type:varchar(255)" json:"remark"`
 }
 
 func (Release) TableName() string {

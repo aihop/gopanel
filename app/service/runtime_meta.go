@@ -164,7 +164,6 @@ func FillWebsiteRuntimeMeta(ctx context.Context, websites []*response.WebsiteRes
 	}
 	defer lookup.Close()
 
-	recordRepo := repo.NewPipelineRecord(global.DB)
 	for i := range websites {
 		if websites[i] == nil {
 			continue
@@ -178,9 +177,6 @@ func FillWebsiteRuntimeMeta(ctx context.Context, websites []*response.WebsiteRes
 			if err == nil {
 				meta = lookup.metaForContainerNames(appInstall.ContainerName)
 			}
-		case websites[i].PipelineID > 0:
-			containerID, _ := recordRepo.LatestRunnerContainerID(websites[i].PipelineID)
-			meta = lookup.metaForContainerID(containerID)
 		}
 		websites[i].RuntimeHost = meta.RuntimeHost
 		websites[i].RuntimeKind = meta.RuntimeKind

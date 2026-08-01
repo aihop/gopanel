@@ -2286,10 +2286,7 @@ export default {
 		proxyTarget: "Proxy target",
 		proxyTargetPlaceholder: "For example http://127.0.0.1:8080 or 8080",
 		proxyTargetRequired: "Enter a proxy target or container port",
-		pipelineProxyPlaceholderHelper:
-			"You can leave this empty. After the pipeline succeeds, only the temporary runtime target will be synced back automatically; use formal releases for stable cutover and rollback.",
 		appInstallRequired: "Please select an installed application",
-		pipelineRequired: "Please select a pipeline",
 		dockerImageRequired: "Please enter the container image address",
 		static: "Static",
 		deployment: "Deployment",
