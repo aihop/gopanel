@@ -155,6 +155,8 @@ const dialogUpgradeRef = ref()
 const dialogCommitRef = ref()
 const dialogWebsiteRef = ref()
 const opRef = ref()
+const hasPublishedTCPPort = (row: Container.ContainerInfo) => (row.ports || []).some(port => /->.*\/tcp$/i.test(port))
+
 const getRowActions = (row: Container.ContainerInfo) => [
 	{
 		label: t("commons.button.edit"),
@@ -171,17 +173,21 @@ const getRowActions = (row: Container.ContainerInfo) => [
 		disabled: row.state !== "running",
 		click: () => onMonitor(row)
 	},
-	{
-		label: t("container.bindWebsite"),
-		disabled: row.state !== "running",
-		click: () => {
-			dialogWebsiteRef.value?.acceptParams({
-				containerId: row.containerID,
-				containerName: row.name,
-				runtimeHost: row.runtimeHost || ""
-			})
-		}
-	},
+	...(hasPublishedTCPPort(row)
+		? [
+				{
+					label: t("container.bindWebsite"),
+					disabled: row.state !== "running",
+					click: () => {
+						dialogWebsiteRef.value?.acceptParams({
+							containerId: row.containerID,
+							containerName: row.name,
+							runtimeHost: row.runtimeHost || ""
+						})
+					}
+				}
+			]
+		: []),
 	{
 		label: t("container.rename"),
 		disabled: row.isFromCompose || row.state === "running",

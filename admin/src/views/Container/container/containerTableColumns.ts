@@ -237,6 +237,9 @@ export const createContainerColumns = (options: ContainerListColumnOptions) => [
             NDropdown,
             {
               trigger: "hover",
+              menuProps: () => ({
+                style: "display: grid; grid-template-columns: repeat(2, minmax(120px, 1fr));"
+              }),
               options: options.getRowActions(row).map(item => ({
                 label: item.label,
                 key: item.label,
