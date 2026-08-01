@@ -336,7 +336,7 @@ func TestCommitAndMergeGitlinkRepositorySession(t *testing.T) {
 }
 
 func TestCommitAndMergeMultiRepositorySession(t *testing.T) {
-	session, project, sourceDirs := createMultiRepositorySession(t, 82)
+	session, _, sourceDirs := createMultiRepositorySession(t, 82)
 	repositories, err := loadCodeSessionRepositories(session.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -370,8 +370,8 @@ func TestCommitAndMergeMultiRepositorySession(t *testing.T) {
 		}
 	}
 	var stored model.AIDevSession
-	if err := global.DB.First(&stored, session.ID).Error; err != nil || stored.WorkDir != project.WorkDir || stored.IsolationMode != "" {
-		t.Fatalf("session was not restored: %#v, %v", stored, err)
+	if err := global.DB.First(&stored, session.ID).Error; err != nil || stored.WorkDir != session.WorkDir || stored.IsolationMode != codeIsolationMultiWorktree {
+		t.Fatalf("session workspace was not preserved: %#v, %v", stored, err)
 	}
 	if _, err := os.Stat(session.WorkDir); err != nil {
 		t.Fatalf("delivery removed a potentially active multi-repository workspace: %v", err)
@@ -426,12 +426,15 @@ func TestMultiRepositoryDeliveryResumesAfterConflict(t *testing.T) {
 	}
 
 	first, err := resumeCodeMultiRepositoryDelivery(session, session.UserID)
-	if err == nil || !strings.Contains(err.Error(), "隔离工作区解决") || first.Status != "" {
+	if err != nil || first.Status != codeDeliveryJobPartial || len(first.ConflictFiles) != 1 {
 		t.Fatalf("unexpected conflict result: %#v, %v", first, err)
 	}
 	stored, err := loadCodeSessionRepositories(session.ID)
-	if err != nil || stored[0].Status != "committed" || stored[1].Status != "committed" {
+	if err != nil || stored[0].Status != codeDeliveryCompleted || stored[1].Status != "conflict" {
 		t.Fatalf("unexpected persisted delivery state: %#v, %v", stored, err)
+	}
+	if _, err := runCodeGit(conflictRepository.WorktreeDir, "merge", conflictRepository.TargetBranch); err == nil {
+		t.Fatal("expected worktree merge conflict")
 	}
 	if err := os.WriteFile(filepath.Join(conflictRepository.WorktreeDir, "README.md"), []byte("resolved\n"), 0600); err != nil {
 		t.Fatal(err)

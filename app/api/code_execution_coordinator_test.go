@@ -61,6 +61,26 @@ func TestCodeExecutionCoordinatorWaitsWithoutPreemptingInteractiveLease(t *testi
 	}
 }
 
+func TestCodeExecutionCoordinatorDeliveryDoesNotWaitForInteractiveWorktree(t *testing.T) {
+	coordinator := newCodeExecutionCoordinator(2)
+	session := &model.AIDevSession{ID: 31, WorkDir: "/workspace/session", SourceWorkDir: "/workspace/source"}
+	interactive, err := coordinator.acquireSession(context.Background(), session, codeExecutionInteractive, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer interactive.Release()
+	var cancelled atomic.Bool
+	interactive.SetCancel(func() { cancelled.Store(true) })
+	delivery, err := coordinator.acquireSession(context.Background(), session, codeExecutionDelivery, false)
+	if err != nil {
+		t.Fatalf("delivery should lock only the source repository: %v", err)
+	}
+	delivery.Release()
+	if cancelled.Load() {
+		t.Fatal("delivery cancelled the interactive terminal")
+	}
+}
+
 func TestCodeExecutionCoordinatorNewSessionDoesNotInterruptSharedWorkspace(t *testing.T) {
 	coordinator := newCodeExecutionCoordinator(2)
 	firstSession := &model.AIDevSession{ID: 21, WorkDir: "/workspace/shared"}

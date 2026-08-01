@@ -139,8 +139,8 @@ func markCodeSessionDelivering(tx *gorm.DB, session *model.AIDevSession) error {
 }
 
 func completeCodeSessionLifecycle(tx *gorm.DB, sessionID uint, deliveredAt time.Time) error {
-	updated := tx.Model(&model.AIDevSession{}).Where("id = ? AND status <> ?", sessionID, codeSessionStatusDelivered).Updates(map[string]any{
-		"status": codeSessionStatusDelivered, "current_stage": codeDeliveryStageCompleted, "delivered_at": deliveredAt,
+	updated := tx.Model(&model.AIDevSession{}).Where("id = ?", sessionID).Updates(map[string]any{
+		"status": codeSessionStatusActive, "current_stage": codeDeliveryStageCompleted, "delivered_at": deliveredAt,
 	})
 	if updated.Error != nil || updated.RowsAffected == 0 {
 		return updated.Error
@@ -174,7 +174,7 @@ func restoreCodeDeliverySessionLifecycles() {
 	var completedJobs []model.AICodeDeliveryJob
 	if err := global.DB.Model(&model.AICodeDeliveryJob{}).
 		Joins("JOIN ai_dev_sessions ON ai_dev_sessions.id = ai_code_delivery_jobs.session_id").
-		Where("ai_code_delivery_jobs.status = ? AND ai_dev_sessions.status <> ?", codeDeliveryJobCompleted, codeSessionStatusDelivered).
+		Where("ai_code_delivery_jobs.status = ? AND ai_dev_sessions.current_stage <> ?", codeDeliveryJobCompleted, codeDeliveryStageCompleted).
 		Find(&completedJobs).Error; err != nil {
 		return
 	}

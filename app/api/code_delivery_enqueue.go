@@ -20,13 +20,11 @@ func enqueueCodeDeliveryJob(session *model.AIDevSession, userID uint, requestIP 
 }
 
 func persistCodeDeliveryJob(session *model.AIDevSession, userID uint, requestIP string) (*model.AICodeDeliveryJob, error) {
-	codeHostTerminalLifecycle.Lock()
-	defer codeHostTerminalLifecycle.Unlock()
 	unlockLifecycle := codeSessionLifecycles.lock(session.ID)
 	defer unlockLifecycle()
 	var job model.AICodeDeliveryJob
 	queryErr := global.DB.Where("session_id = ?", session.ID).First(&job).Error
-	if queryErr == nil && (job.Status == codeDeliveryJobQueued || job.Status == codeDeliveryJobRunning || job.Status == codeDeliveryJobCompleted) {
+	if queryErr == nil && (job.Status == codeDeliveryJobQueued || job.Status == codeDeliveryJobRunning) {
 		return &job, nil
 	}
 	if queryErr != nil && !errors.Is(queryErr, gorm.ErrRecordNotFound) {
@@ -39,13 +37,10 @@ func persistCodeDeliveryJob(session *model.AIDevSession, userID uint, requestIP 
 	if err := validateCodeSessionReadyForDelivery(global.DB, &current); err != nil {
 		return nil, err
 	}
-	if codeExecutions.hasSessionKind(session.ID, codeExecutionInteractive) {
-		return nil, errors.New("当前会话终端仍在运行，请先退出终端后再交付；现有进程不会被自动停止")
-	}
-	if err := validateHostTerminalsStoppedForCodeDelivery(); err != nil {
+	if err := captureCodeDeliverySnapshot(&current, userID); err != nil {
 		return nil, err
 	}
-	keys, targetBranch, err := codeDeliveryRepositoryKeys(session)
+	keys, targetBranch, err := codeDeliveryRepositoryKeys(&current)
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +51,7 @@ func persistCodeDeliveryJob(session *model.AIDevSession, userID uint, requestIP 
 			return err
 		}
 		queryErr := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("session_id = ?", session.ID).First(&job).Error
-		if queryErr == nil && (job.Status == codeDeliveryJobQueued || job.Status == codeDeliveryJobRunning || job.Status == codeDeliveryJobCompleted) {
+		if queryErr == nil && (job.Status == codeDeliveryJobQueued || job.Status == codeDeliveryJobRunning) {
 			return nil
 		}
 		if err := validateCodeSessionReadyForDelivery(tx, &lockedSession); err != nil {
