@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onBeforeUnmount, nextTick } from "vue"
-import { Terminal } from "xterm"
-import { FitAddon } from "xterm-addon-fit"
-import "xterm/css/xterm.css"
+import { FitAddon } from "@xterm/addon-fit"
+import { Terminal } from "@xterm/xterm"
+import "@xterm/xterm/css/xterm.css"
 import { useAuthStore } from "@/store/auth"
 import { useI18n } from "vue-i18n"
 import { getCodeSession, getCodexRuntimeState } from "@/api/modules/code"

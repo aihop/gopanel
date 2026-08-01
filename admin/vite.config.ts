@@ -10,8 +10,6 @@ import Components from "unplugin-vue-components/vite"
 import { defineConfig, loadEnv } from "vite"
 import VueDevTools from "vite-plugin-vue-devtools"
 import svgLoader from "vite-svg-loader"
-// import { visualizer } from "rollup-plugin-visualizer"
-// import viteCompression from "vite-plugin-compression"
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
@@ -54,7 +52,6 @@ export default defineConfig(({ mode }) => {
 					"vue",
 					"vue-router",
 					"@vueuse/core",
-					"@vueuse/core",
 					"pinia",
 					"vue-i18n",
 					{
@@ -69,30 +66,7 @@ export default defineConfig(({ mode }) => {
 				resolvers: [VueHooksPlusResolver()],
 				vueTemplate: true
 			}),
-			// 打包体积分析插件
-				// visualizer({
-				// 	open: false, // build 后不自动打开浏览器
-				// 	gzipSize: true, // 分析 gzip 大小
-				// 	brotliSize: true, // 分析 brotli 大小
-				// 	filename: "dist/stats.html" // 生成的分析报告文件路径
-				// }),
-				// gzip 压缩
-				// viteCompression({
-				// 	verbose: true,
-				// 	disable: false,
-				// 	threshold: 10240,  
-				// 	algorithm: 'gzip',
-				// 	ext: '.gz',
-				// }),
-				// brotli 压缩（拥有更高的压缩率）
-				// viteCompression({
-				// 	verbose: true,
-				// 	disable: false,
-				// 	threshold: 10240,
-				// 	algorithm: 'brotliCompress',
-				// 	ext: '.br',
-				// })
-			],
+		],
 		resolve: {
 			alias: [
 				{ find: "@", replacement: fileURLToPath(new URL("./src", import.meta.url)) },

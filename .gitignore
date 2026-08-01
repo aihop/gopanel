@@ -26,3 +26,8 @@ init.yaml.dev
 !.env.example
 
 /public
+/.tmp
+/admin/yarn.lock
+/gp-agent/gp-agent
+/gpc/gpc
+*.bak
