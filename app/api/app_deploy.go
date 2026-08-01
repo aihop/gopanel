@@ -40,7 +40,7 @@ func AppDeploySwitch(c fiber.Ctx) error {
 		return c.JSON(e.Fail(buserr.Err(err)))
 	}
 	appSvc := service.NewAppDeployApplication(global.DB)
-	if err := appSvc.Switch(R.DeployID, 0); err != nil {
+	if err := appSvc.Switch(R.DeployID); err != nil {
 		return c.JSON(e.Fail(buserr.Err(err)))
 	}
 	return c.JSON(e.Succ())
@@ -74,7 +74,7 @@ func AppDeployTrigger(c fiber.Ctx) error {
 		WebsiteID: R.WebsiteID,
 		ZipPath:   R.ZipPath,
 		ImageTag:  R.ImageTag,
-	}, 0); err != nil {
+	}); err != nil {
 		return c.JSON(e.Fail(buserr.Err(err)))
 	}
 	return c.JSON(e.Succ())

@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/aihop/gopanel/app/dto/request"
 	"github.com/aihop/gopanel/app/model"
 )
 
@@ -36,12 +35,12 @@ func (s *PipelineService) stepRunner(ctx context.Context, logger *PipelineLogger
 	if prev, err := s.recordRepo.LatestRunnerContainerID(p.ID); err == nil {
 		previousContainerID = strings.TrimSpace(prev)
 	}
-	req := &request.WebsiteCreate{CodeSource: "pipeline", GitRepo: "", CodeDir: "", CodeDirFallback: codeRoot, PreviousContainerID: previousContainerID, PipelineKey: strings.TrimSpace(p.PipelineKey), PipelineVersion: strings.TrimSpace(p.Version), RunnerConfig: runnerCfg}
+	options := websiteEngineDeployOptions{CodeSource: "pipeline", CodeDirFallback: codeRoot, PreviousContainerID: previousContainerID, PipelineKey: strings.TrimSpace(p.PipelineKey), PipelineVersion: strings.TrimSpace(p.Version), RunnerConfig: runnerCfg}
 	progress := func(format string, a ...interface{}) {
 		logger.Info("[Runner] "+format, a...)
 	}
 	alias := fmt.Sprintf("pipeline-%s", p.PipelineKey)
-	hostPort, containerID, _, err := DeployWebsiteEngine(ctx, alias, req, progress)
+	hostPort, containerID, _, err := deployWebsiteEngine(ctx, alias, options, progress)
 	if err != nil {
 		return 0, "", "", err
 	}

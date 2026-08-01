@@ -169,7 +169,8 @@ func (s WebsiteService) Create(ctx context.Context, req *request.WebsiteCreate, 
 		if codeDir == "" {
 			codeDir = filepath.Join(global.CONF.System.BaseDir, "www", alias)
 		}
-		hostPort, containerID, runtimeDir, deployErr := DeployWebsiteEngine(context.Background(), alias, req, nil)
+		options := websiteEngineDeployOptions{CodeSource: req.CodeSource, Image: req.GitRepo, CodeDir: codeDir}
+		hostPort, containerID, runtimeDir, deployErr := deployWebsiteEngine(context.Background(), alias, options, nil)
 		if deployErr != nil {
 			return fmt.Errorf("failed to deploy container: %w", deployErr)
 		}

@@ -55,11 +55,3 @@ func (r *ReleaseRepo) PageByPipeline(pipelineId uint, page, limit int) (int64, [
 	err := query.Order("id desc").Offset((page - 1) * limit).Limit(limit).Find(&list).Error
 	return total, list, err
 }
-func (r *ReleaseRepo) LatestByPipelineID(pipelineId uint) (*model.Release, error) {
-	var item model.Release
-	err := r.db.Model(&model.Release{}).Where("pipeline_id = ?", pipelineId).Order("id desc").First(&item).Error
-	if err != nil {
-		return nil, err
-	}
-	return &item, nil
-}

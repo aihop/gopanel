@@ -9,7 +9,7 @@ import (
 )
 
 // ProcessAppDeployment 处理应用部署
-func ProcessAppDeployment(website model.Website, version, zipPath, releaseDir, runtimeDir, imageTag, sourceType string, exposePort int) (*model.AppDeploy, error) {
+func ProcessAppDeployment(website model.Website, version, zipPath, releaseDir, runtimeDir, imageTag, sourceType string) (*model.AppDeploy, error) {
 	if err := global.DB.Preload("Domains").First(&website, website.ID).Error; err != nil {
 		return nil, fmt.Errorf("加载网站信息失败: %w", err)
 	}
@@ -28,11 +28,11 @@ func ProcessAppDeployment(website model.Website, version, zipPath, releaseDir, r
 	if err := global.DB.Create(&deploy).Error; err != nil {
 		return nil, err
 	}
-	return runAppDeployment(&website, &deploy, exposePort)
+	return runAppDeployment(&website, &deploy)
 }
 
 // ReuseAppDeployment 处理重新部署
-func ReuseAppDeployment(website model.Website, deploy *model.AppDeploy, exposePort int) (*model.AppDeploy, error) {
+func ReuseAppDeployment(website model.Website, deploy *model.AppDeploy) (*model.AppDeploy, error) {
 	if deploy == nil {
 		return nil, fmt.Errorf("部署记录不存在")
 	}
@@ -47,5 +47,5 @@ func ReuseAppDeployment(website model.Website, deploy *model.AppDeploy, exposePo
 	if err := global.DB.Save(deploy).Error; err != nil {
 		return nil, err
 	}
-	return runAppDeployment(&website, deploy, exposePort)
+	return runAppDeployment(&website, deploy)
 }

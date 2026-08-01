@@ -25,14 +25,9 @@ type WebsiteCreate struct {
 	AppID         uint          `json:"appID"`
 	AppInstallID  uint          `json:"appInstallId"`
 
-	CodeSource          string                 `json:"codeSource"` // upload, git(legacy image source), app_store
-	GitRepo             string                 `json:"gitRepo"`    // legacy field name, currently used as Docker image reference
-	CodeDir             string                 `json:"codeDir"`
-	CodeDirFallback     string                 `json:"-"`
-	PreviousContainerID string                 `json:"-"`
-	PipelineKey         string                 `json:"-"`
-	PipelineVersion     string                 `json:"-"`
-	RunnerConfig        map[string]interface{} `json:"-"`
+	CodeSource string `json:"codeSource"` // upload, git(legacy image source), app_store
+	GitRepo    string `json:"gitRepo"`    // legacy field name, currently used as Docker image reference
+	CodeDir    string `json:"codeDir"`
 
 	AntiCrawler              bool   `json:"antiCrawler"`
 	AntiLeech                bool   `json:"antiLeech"`

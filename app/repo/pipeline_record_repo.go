@@ -74,14 +74,6 @@ func (r *PipelineRecordRepo) LatestRunnerContainerIDs(pipelineIDs []uint) (map[u
 	}
 	return result, nil
 }
-func (r *PipelineRecordRepo) LatestByPipelineID(pipelineId uint) (*model.PipelineRecord, error) {
-	var rec model.PipelineRecord
-	err := r.db.Model(&model.PipelineRecord{}).Where("pipeline_id = ?", pipelineId).Order("id desc").First(&rec).Error
-	if err != nil {
-		return nil, err
-	}
-	return &rec, nil
-}
 func (r *PipelineRecordRepo) PageByPipeline(pipelineId uint, page, limit int) (int64, []model.PipelineRecord, error) {
 	var total int64
 	var list []model.PipelineRecord

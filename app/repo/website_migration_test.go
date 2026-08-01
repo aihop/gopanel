@@ -94,3 +94,54 @@ func TestAppDeployMigrationRemovesPipelineLinks(t *testing.T) {
 		t.Fatalf("repeated migration should succeed: %v", err)
 	}
 }
+
+func TestAppDeployLegacySyncDoesNotCreateLegacyTable(t *testing.T) {
+	database, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repository := NewAppDeploy(database)
+	if err := repository.MigrateTable(); err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.SyncFromLegacy(); err != nil {
+		t.Fatal(err)
+	}
+	if database.Migrator().HasTable(&model.LegacyWebsiteDeploy{}) {
+		t.Fatal("legacy website deploy table should not be created on a fresh install")
+	}
+}
+
+func TestAppDeployLegacySyncMigratesExistingTable(t *testing.T) {
+	database, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := database.AutoMigrate(&model.LegacyWebsiteDeploy{}); err != nil {
+		t.Fatal(err)
+	}
+	legacy := model.LegacyWebsiteDeploy{
+		WebsiteID:  1,
+		Version:    "manual",
+		SourceType: "image",
+		Status:     "Running",
+		ImageTag:   "example/app:1",
+	}
+	if err := database.Create(&legacy).Error; err != nil {
+		t.Fatal(err)
+	}
+	repository := NewAppDeploy(database)
+	if err := repository.MigrateTable(); err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.SyncFromLegacy(); err != nil {
+		t.Fatal(err)
+	}
+	var deploy model.AppDeploy
+	if err := database.First(&deploy, legacy.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if deploy.ImageTag != legacy.ImageTag || deploy.SourceType != legacy.SourceType {
+		t.Fatalf("unexpected migrated deploy: %#v", deploy)
+	}
+}

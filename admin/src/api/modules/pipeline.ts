@@ -34,10 +34,6 @@ export const getPipelineReleases = (params: { pipelineId: number; page: number; 
   return http.get<ResPage<Pipeline.ResRelease>>(`/pipeline/releases`, params);
 };
 
-export const getPipelineRelease = (params: { id: number }) => {
-  return http.get<Pipeline.ResRelease>(`/pipeline/release`, params);
-};
-
 export const publishPipelineRelease = (params: { id: number }) => {
   return http.post<Pipeline.ResRelease>(`/pipeline/release/publish`, params);
 };

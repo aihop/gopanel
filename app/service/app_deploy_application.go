@@ -38,7 +38,7 @@ func (s *AppDeployApplicationService) ListByWebsite(websiteID uint) ([]model.App
 	return list, nil
 }
 
-func (s *AppDeployApplicationService) Switch(deployID uint, exposePort int) error {
+func (s *AppDeployApplicationService) Switch(deployID uint) error {
 	var targetDeploy model.AppDeploy
 	if err := s.db.First(&targetDeploy, deployID).Error; err != nil {
 		return fmt.Errorf("部署记录不存在")
@@ -63,7 +63,7 @@ func (s *AppDeployApplicationService) Switch(deployID uint, exposePort int) erro
 		targetDeploy.ArchiveFile = archiveFile
 		targetDeploy.SourceUrl = archiveFile
 		targetDeploy.ReleaseDir = releaseDir
-		if _, err := ReuseAppDeployment(website, &targetDeploy, exposePort); err != nil {
+		if _, err := ReuseAppDeployment(website, &targetDeploy); err != nil {
 			return fmt.Errorf("回滚发布失败: %w", err)
 		}
 		return nil
@@ -110,7 +110,7 @@ func (s *AppDeployApplicationService) Delete(deployID uint) error {
 	return nil
 }
 
-func (s *AppDeployApplicationService) Trigger(opts AppDeployTriggerOptions, exposePort int) error {
+func (s *AppDeployApplicationService) Trigger(opts AppDeployTriggerOptions) error {
 	var website model.Website
 	if err := s.db.Preload("Domains").First(&website, opts.WebsiteID).Error; err != nil {
 		return fmt.Errorf("网站不存在")
@@ -125,7 +125,7 @@ func (s *AppDeployApplicationService) Trigger(opts AppDeployTriggerOptions, expo
 	case strings.TrimSpace(opts.ZipPath) != "":
 		sourceType = "upload"
 	}
-	go ProcessAppDeployment(website, version, opts.ZipPath, releaseDir, "", opts.ImageTag, sourceType, exposePort)
+	go ProcessAppDeployment(website, version, opts.ZipPath, releaseDir, "", opts.ImageTag, sourceType)
 	return nil
 }
 

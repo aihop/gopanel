@@ -133,17 +133,6 @@ func asNumberString(v interface{}) string {
 		return ""
 	}
 }
-// isDeployManagedEnvKey 这些键必须以本次部署为准。
-// 复用旧容器配置 / 历史运行模板时，旧 env 会整体合并进来，如果不排除这几个键，
-// 端口会沿用旧值、版本号会永远停在第一次部署的那个版本。
-func isDeployManagedEnvKey(key string) bool {
-	switch key {
-	case "PORT", "HOST", "GOPANEL_PIPELINE_VERSION", "PIPELINE_VERSION", "VERSION":
-		return true
-	}
-	return false
-}
-
 func mergeRunnerEnvs(base []string, rc runnerConfig, containerPort string, pipelineVersion string) []string {
 	envMap := make(map[string]string)
 	for _, e := range base {

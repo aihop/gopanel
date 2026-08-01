@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/aihop/gopanel/app/dto/request"
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/utils/docker"
@@ -30,14 +29,12 @@ func deployStaticWebsite(website *model.Website, releaseDir string) error {
 // @param releaseDir 发布目录
 // @param runtimeDir 运行时目录
 // @param imageTag 镜像标签
-// @param exposePort 暴露端口
-// @param version 本次部署的版本号，注入容器环境变量供应用读取
 // @return int, string, string, error
-// @return exposePort 暴露端口
+// @return hostPort 宿主机端口
 // @return containerID 容器ID
 // @return runtimeDir 运行时目录
 // @return error 错误
-func deployWebAppWebsite(website *model.Website, releaseDir, runtimeDir, imageTag string, exposePort int) (int, string, string, error) {
+func deployWebAppWebsite(website *model.Website, releaseDir, runtimeDir, imageTag string) (int, string, string, error) {
 	imageRef := strings.TrimSpace(imageTag)
 	if imageRef == "" {
 		imageRef = strings.TrimSpace(website.EngineEnv)
@@ -53,8 +50,8 @@ func deployWebAppWebsite(website *model.Website, releaseDir, runtimeDir, imageTa
 	if preferredRuntimeDir == "" {
 		preferredRuntimeDir = strings.TrimSpace(website.RuntimeDir)
 	}
-	req := &request.WebsiteCreate{CodeSource: "git", GitRepo: imageRef, CodeDir: preferredRuntimeDir, CodeDirFallback: releaseDir, PreviousContainerID: previousContainerID, Proxy: ""}
-	hostPort, containerID, actualRuntimeDir, err := DeployWebsiteEngine(context.Background(), website.Alias, req, nil)
+	options := websiteEngineDeployOptions{CodeSource: "git", Image: imageRef, CodeDir: preferredRuntimeDir, CodeDirFallback: releaseDir, PreviousContainerID: previousContainerID}
+	hostPort, containerID, actualRuntimeDir, err := deployWebsiteEngine(context.Background(), website.Alias, options, nil)
 	if err != nil {
 		return 0, "", "", fmt.Errorf("启动容器失败: %w", err)
 	}

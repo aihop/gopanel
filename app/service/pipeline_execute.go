@@ -142,19 +142,6 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 	} else {
 		logger.Info("未启用 Runner 步骤，跳过...")
 	}
-	// Auto-create a Release record so rollback/publish works.
-	release := &model.Release{
-		PipelineID:       p.ID,
-		PipelineRecordID: recordID,
-		Version:          record.Version,
-		CommitHash:       record.CommitHash,
-		SourceType:       "pipeline",
-		ImageTag:         record.ImageTag,
-		ArchiveFile:      archivePath,
-		Status:           "ready",
-	}
-	_ = s.releaseRepo.Create(release)
-
 	switch strings.TrimSpace(p.ActionType) {
 	case "build_image", "build":
 		imageRef, err := s.stepBuildImage(ctx, logger, p, releaseDir, recordID)

@@ -31,6 +31,9 @@ func (r *AppDeployRepo) MigrateTable() error {
 }
 
 func (r *AppDeployRepo) SyncFromLegacy() error {
+	if !r.db.Migrator().HasTable(&model.LegacyWebsiteDeploy{}) {
+		return nil
+	}
 	var legacyList []model.LegacyWebsiteDeploy
 	if err := r.db.Order("id asc").Find(&legacyList).Error; err != nil {
 		return err

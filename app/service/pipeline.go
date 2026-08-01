@@ -31,9 +31,8 @@ func StopPipeline(recordID uint) {
 }
 
 type PipelineService struct {
-	repo        *repo.PipelineRepo
-	recordRepo  *repo.PipelineRecordRepo
-	releaseRepo *repo.ReleaseRepo
+	repo       *repo.PipelineRepo
+	recordRepo *repo.PipelineRecordRepo
 }
 type RunnerPresetDetectResult struct {
 	Preset string   `json:"preset"`
@@ -45,7 +44,7 @@ type pipelinePackageJSON struct {
 }
 
 func NewPipelineService(db *gorm.DB) *PipelineService {
-	return &PipelineService{repo: repo.NewPipeline(db), recordRepo: repo.NewPipelineRecord(db), releaseRepo: repo.NewRelease(db)}
+	return &PipelineService{repo: repo.NewPipeline(db), recordRepo: repo.NewPipelineRecord(db)}
 }
 func (s *PipelineService) DetectRunnerPreset(ctx context.Context, req request.PipelineDetect) (*RunnerPresetDetectResult, error) {
 	repoURL := strings.TrimSpace(req.RepoUrl)

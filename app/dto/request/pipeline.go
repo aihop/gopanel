@@ -32,7 +32,6 @@ type PipelineUpdate struct {
 	BuildImage   string                 `json:"buildImage"`
 	BuildScript  string                 `json:"buildScript"`
 	ArtifactPath string                 `json:"artifactPath"`
-	ExposePort   int                    `json:"exposePort"`
 	PipelineKey  string                 `json:"pipelineKey"`
 	RunnerMode   string                 `json:"runnerMode"`
 	RunnerConfig map[string]interface{} `json:"runnerConfig"`

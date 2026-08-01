@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/aihop/gopanel/app/dto/request"
 	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/utils/docker"
 	"github.com/aihop/gopanel/utils/random"
@@ -20,7 +19,18 @@ import (
 
 const runnerWorkspaceMountPath = "/gopanel/workspace"
 
-func DeployWebsiteEngine(ctx context.Context, alias string, req *request.WebsiteCreate, progress func(format string, a ...interface{})) (int, string, string, error) {
+type websiteEngineDeployOptions struct {
+	CodeSource          string
+	Image               string
+	CodeDir             string
+	CodeDirFallback     string
+	PreviousContainerID string
+	PipelineKey         string
+	PipelineVersion     string
+	RunnerConfig        map[string]interface{}
+}
+
+func deployWebsiteEngine(ctx context.Context, alias string, options websiteEngineDeployOptions, progress func(format string, a ...interface{})) (int, string, string, error) {
 	cli, err := docker.NewDockerClient()
 	if err != nil {
 		return 0, "", "", fmt.Errorf("failed to init docker client: %w", err)
@@ -35,14 +45,13 @@ func DeployWebsiteEngine(ctx context.Context, alias string, req *request.Website
 	var containerPort string
 	var cmd []string
 	var envs []string
-	rc := parseRunnerConfig(req.RunnerConfig)
-	isRunnerPipeline := req.CodeSource == "pipeline" && req.RunnerConfig != nil
-	if req.CodeSource == "git" || req.CodeSource == "pipeline" {
-		imageName = strings.TrimSpace(req.GitRepo)
+	rc := parseRunnerConfig(options.RunnerConfig)
+	if options.CodeSource == "git" || options.CodeSource == "pipeline" {
+		imageName = strings.TrimSpace(options.Image)
 	} else {
-		return 0, "", "", errors.New("unsupported container deployment source: " + req.CodeSource)
+		return 0, "", "", errors.New("unsupported container deployment source: " + options.CodeSource)
 	}
-	if req.CodeSource == "pipeline" && strings.TrimSpace(rc.BaseImage) != "" {
+	if options.CodeSource == "pipeline" && strings.TrimSpace(rc.BaseImage) != "" {
 		imageName = strings.TrimSpace(rc.BaseImage)
 	}
 	if imageName == "" {
@@ -85,123 +94,72 @@ func DeployWebsiteEngine(ctx context.Context, alias string, req *request.Website
 		logEngineProgress(progress, "Runner 发布端口策略: 自动分配宿主机端口")
 	} else {
 		logEngineProgress(progress, "Runner 发布端口策略: 固定宿主机端口 %s", publishedHostPort)
-		if strings.TrimSpace(req.PreviousContainerID) != "" {
+		if strings.TrimSpace(options.PreviousContainerID) != "" {
 			logEngineProgress(progress, "检测到固定端口模式且存在旧容器，新容器需要等待旧容器释放端口后才能完成切换，期间可能有短暂中断")
 		}
 	}
 	containerName := fmt.Sprintf("%s-%s", alias, random.RandString(4))
-	codeDir := req.CodeDir
+	codeDir := options.CodeDir
 	if codeDir == "" {
 		codeDir = filepath.Join(global.CONF.System.BaseDir, "www", alias)
 	}
 	hostConfig := &container.HostConfig{RestartPolicy: container.RestartPolicy{Name: "always"}, PortBindings: nat.PortMap{nat.Port(containerPort + "/tcp"): []nat.PortBinding{{HostIP: "127.0.0.1", HostPort: publishedHostPort}}}}
 	runnerExtraNetworks := make([]string, 0, len(rc.ExtraNetworks))
 	selectedCodeDir := ""
-	if req.CodeSource == "pipeline" {
-			envs = mergeRunnerEnvs(envs, rc, containerPort, req.PipelineVersion)
+	if options.CodeSource == "pipeline" {
+		envs = mergeRunnerEnvs(envs, rc, containerPort, options.PipelineVersion)
 		runnerSourceMountDir := resolveRunnerSourceMountDir(rc, workingDir)
 		cmd = []string{"sh", "-lc", buildRunnerScript(rc, runnerSourceMountDir)}
 		logEngineProgress(progress, "Runner 配置: baseImage=%s, mode=%s", imageName, strings.TrimSpace(rc.Mode))
 		logEngineProgress(progress, "Runner 目录语义: sourceMountDir=%s, workingDir=%s", runnerSourceMountDir, workingDir)
 		logEngineProgress(progress, "Runner 启动脚本已生成")
-		if isRunnerPipeline {
-			const runnerNetworkName = "gopanel-network"
-			if err := docker.EnsureNetwork(runnerNetworkName); err != nil {
-				return 0, "", "", fmt.Errorf("failed to ensure runner network %s: %w", runnerNetworkName, err)
+		const runnerNetworkName = "gopanel-network"
+		if err := docker.EnsureNetwork(runnerNetworkName); err != nil {
+			return 0, "", "", fmt.Errorf("failed to ensure runner network %s: %w", runnerNetworkName, err)
+		}
+		hostConfig.NetworkMode = container.NetworkMode(runnerNetworkName)
+		logEngineProgress(progress, "Runner 默认接入网络: %s", runnerNetworkName)
+		for _, networkName := range rc.ExtraNetworks {
+			if networkName == runnerNetworkName {
+				continue
 			}
-			hostConfig.NetworkMode = container.NetworkMode(runnerNetworkName)
-			logEngineProgress(progress, "Runner 默认接入网络: %s", runnerNetworkName)
-			for _, networkName := range rc.ExtraNetworks {
-				if networkName == runnerNetworkName {
-					continue
-				}
-				if _, err := cli.NetworkInspect(ctx, networkName, network.InspectOptions{}); err != nil {
-					return 0, "", "", fmt.Errorf("runner extra network %s 不存在或不可用: %w", networkName, err)
-				}
-				runnerExtraNetworks = append(runnerExtraNetworks, networkName)
+			if _, err := cli.NetworkInspect(ctx, networkName, network.InspectOptions{}); err != nil {
+				return 0, "", "", fmt.Errorf("runner extra network %s 不存在或不可用: %w", networkName, err)
 			}
-			if len(runnerExtraNetworks) > 0 {
-				logEngineProgress(progress, "Runner 额外接入网络: %s", strings.Join(runnerExtraNetworks, ", "))
-			}
-			selectedCodeDir = strings.TrimSpace(req.CodeDirFallback)
-			if selectedCodeDir == "" {
-				selectedCodeDir = strings.TrimSpace(codeDir)
-			}
-			if selectedCodeDir == "" {
-				return 0, "", "", fmt.Errorf("runner 代码目录为空")
-			}
-			logEngineProgress(progress, "Runner 项目类型: %s", detectRunnerProjectKind(selectedCodeDir, rc))
-			if rc.HasCustomWorkingDir {
-				hostConfig.Binds = append(hostConfig.Binds, fmt.Sprintf("%s:%s", selectedCodeDir, runnerSourceMountDir))
-				logEngineProgress(progress, "Runner 使用自定义 workingDir，代码源直接挂载到最终运行目录: %s -> %s", selectedCodeDir, runnerSourceMountDir)
-			} else {
-				hostConfig.Binds = append(hostConfig.Binds, fmt.Sprintf("%s:%s:ro", selectedCodeDir, runnerSourceMountDir))
-				logEngineProgress(progress, "Runner 未自定义 workingDir，代码源先挂到只读中间目录: %s -> %s (ro)", selectedCodeDir, runnerSourceMountDir)
-			}
-			persistentBinds, err := buildRunnerPersistentBinds(req.PipelineKey, rc, workingDir)
-			if err != nil {
-				return 0, "", "", fmt.Errorf("failed to prepare runner persistent dirs: %w", err)
-			}
-			if len(persistentBinds) > 0 {
-				hostConfig.Binds = append(hostConfig.Binds, persistentBinds...)
-				logEngineProgress(progress, "已追加 %d 个持久化目录映射", len(persistentBinds))
-			}
-			ephemeralMounts := buildRunnerEphemeralMounts(rc, workingDir, selectedCodeDir)
-			if len(ephemeralMounts) > 0 {
-				hostConfig.Mounts = append(hostConfig.Mounts, ephemeralMounts...)
-				logEngineProgress(progress, "Runner 依赖隔离: 已启用 node_modules 临时卷（Node 项目）")
-			} else {
-				logEngineProgress(progress, "Runner 依赖隔离: 未启用（非 Node 项目）")
-			}
+			runnerExtraNetworks = append(runnerExtraNetworks, networkName)
+		}
+		if len(runnerExtraNetworks) > 0 {
+			logEngineProgress(progress, "Runner 额外接入网络: %s", strings.Join(runnerExtraNetworks, ", "))
+		}
+		selectedCodeDir = strings.TrimSpace(options.CodeDirFallback)
+		if selectedCodeDir == "" {
+			selectedCodeDir = strings.TrimSpace(codeDir)
+		}
+		if selectedCodeDir == "" {
+			return 0, "", "", fmt.Errorf("runner 代码目录为空")
+		}
+		logEngineProgress(progress, "Runner 项目类型: %s", detectRunnerProjectKind(selectedCodeDir, rc))
+		if rc.HasCustomWorkingDir {
+			hostConfig.Binds = append(hostConfig.Binds, fmt.Sprintf("%s:%s", selectedCodeDir, runnerSourceMountDir))
+			logEngineProgress(progress, "Runner 使用自定义 workingDir，代码源直接挂载到最终运行目录: %s -> %s", selectedCodeDir, runnerSourceMountDir)
 		} else {
-			runtimeTemplate := detectReusableRuntimeTemplate(ctx, cli, imageName, workingDir, req.PreviousContainerID)
-			if runtimeTemplate.ContainerID != "" && req.PreviousContainerID == "" {
-				req.PreviousContainerID = runtimeTemplate.ContainerID
-			}
-			if len(runtimeTemplate.Binds) > 0 {
-				hostConfig.Binds = append(hostConfig.Binds, runtimeTemplate.Binds...)
-				if runtimeTemplate.NetworkMode != "" && runtimeTemplate.NetworkMode != "default" {
-					hostConfig.NetworkMode = container.NetworkMode(runtimeTemplate.NetworkMode)
-				}
-				if len(runtimeTemplate.ExtraHosts) > 0 {
-					hostConfig.ExtraHosts = append(hostConfig.ExtraHosts, runtimeTemplate.ExtraHosts...)
-				}
-				if len(runtimeTemplate.Env) > 0 {
-					envMap := make(map[string]string)
-					for _, e := range envs {
-						parts := strings.SplitN(e, "=", 2)
-						if len(parts) == 2 {
-							envMap[parts[0]] = parts[1]
-						}
-					}
-					for _, e := range runtimeTemplate.Env {
-						parts := strings.SplitN(e, "=", 2)
-						if len(parts) == 2 {
-							// 端口/版本这类键本次部署已经算好，不让历史模板的旧值盖回去
-							if _, ok := envMap[parts[0]]; ok && isDeployManagedEnvKey(parts[0]) {
-								continue
-							}
-							envMap[parts[0]] = parts[1]
-						}
-					}
-					envs = []string{}
-					for k, v := range envMap {
-						envs = append(envs, fmt.Sprintf("%s=%s", k, v))
-					}
-				}
-				selectedCodeDir = runtimeTemplate.RuntimeDir
-				logEngineProgress(progress, "复用历史成功容器模板(%s): mounts=%d, networkMode=%s", runtimeTemplate.Source, len(runtimeTemplate.Binds), runtimeTemplate.NetworkMode)
-			} else {
-				previousMountDirs := detectPreviousContainerMountDirs(ctx, cli, req.PreviousContainerID, workingDir)
-				selectedCodeDir, mountReason := resolveAutoMountCodeDir(imageInspect, workingDir, append([]string{codeDir}, append(previousMountDirs, req.CodeDirFallback)...)...)
-				if selectedCodeDir != "" {
-					global.LOG.Infof("Auto mounting pipeline code dir %s -> %s", selectedCodeDir, workingDir)
-					logEngineProgress(progress, "自动挂载流水线产物目录: %s -> %s", selectedCodeDir, workingDir)
-					hostConfig.Binds = append(hostConfig.Binds, fmt.Sprintf("%s:%s", selectedCodeDir, workingDir))
-				} else if mountReason != "" {
-					logEngineProgress(progress, "跳过自动挂载: %s", mountReason)
-				}
-			}
+			hostConfig.Binds = append(hostConfig.Binds, fmt.Sprintf("%s:%s:ro", selectedCodeDir, runnerSourceMountDir))
+			logEngineProgress(progress, "Runner 未自定义 workingDir，代码源先挂到只读中间目录: %s -> %s (ro)", selectedCodeDir, runnerSourceMountDir)
+		}
+		persistentBinds, err := buildRunnerPersistentBinds(options.PipelineKey, rc, workingDir)
+		if err != nil {
+			return 0, "", "", fmt.Errorf("failed to prepare runner persistent dirs: %w", err)
+		}
+		if len(persistentBinds) > 0 {
+			hostConfig.Binds = append(hostConfig.Binds, persistentBinds...)
+			logEngineProgress(progress, "已追加 %d 个持久化目录映射", len(persistentBinds))
+		}
+		ephemeralMounts := buildRunnerEphemeralMounts(rc, workingDir, selectedCodeDir)
+		if len(ephemeralMounts) > 0 {
+			hostConfig.Mounts = append(hostConfig.Mounts, ephemeralMounts...)
+			logEngineProgress(progress, "Runner 依赖隔离: 已启用 node_modules 临时卷（Node 项目）")
+		} else {
+			logEngineProgress(progress, "Runner 依赖隔离: 未启用（非 Node 项目）")
 		}
 	}
 	config := &container.Config{Image: imageName, Env: envs, Cmd: cmd, WorkingDir: workingDir, ExposedPorts: imageInspect.Config.ExposedPorts}
@@ -213,46 +171,6 @@ func DeployWebsiteEngine(ctx context.Context, alias string, req *request.Website
 		config.ExposedPorts = make(nat.PortSet)
 	}
 	config.ExposedPorts[nat.Port(containerPort+"/tcp")] = struct{}{}
-	if req.CodeSource == "pipeline" && req.PreviousContainerID != "" && !isRunnerPipeline {
-		if oldInspect, err := cli.ContainerInspect(ctx, req.PreviousContainerID); err == nil {
-			if oldInspect.Config != nil {
-				config = oldInspect.Config
-				config.Image = imageName
-				config.ExposedPorts = make(nat.PortSet)
-				for port := range imageInspect.Config.ExposedPorts {
-					config.ExposedPorts[port] = struct{}{}
-				}
-				config.ExposedPorts[nat.Port(containerPort+"/tcp")] = struct{}{}
-				envMap := make(map[string]string)
-				for _, e := range envs {
-					parts := strings.SplitN(e, "=", 2)
-					if len(parts) == 2 {
-						envMap[parts[0]] = parts[1]
-					}
-				}
-				for _, e := range oldInspect.Config.Env {
-					parts := strings.SplitN(e, "=", 2)
-					if len(parts) == 2 {
-						// 同上：旧容器的端口/版本不能盖掉本次部署算出来的值
-						if _, ok := envMap[parts[0]]; ok && isDeployManagedEnvKey(parts[0]) {
-							continue
-						}
-						envMap[parts[0]] = parts[1]
-					}
-				}
-				mergedEnvs := make([]string, 0, len(envMap))
-				for k, v := range envMap {
-					mergedEnvs = append(mergedEnvs, fmt.Sprintf("%s=%s", k, v))
-				}
-				config.Env = mergedEnvs
-			}
-			if oldInspect.HostConfig != nil {
-				hostConfig = oldInspect.HostConfig
-				hostConfig.PortBindings = nat.PortMap{nat.Port(containerPort + "/tcp"): []nat.PortBinding{{HostIP: "127.0.0.1", HostPort: publishedHostPort}}}
-			}
-			logEngineProgress(progress, "深度继承旧容器(%s)的完整运行参数和配置", req.PreviousContainerID)
-		}
-	}
 	docker.EnsureContainerLogConfig(hostConfig)
 	resp, err := cli.ContainerCreate(ctx, config, hostConfig, nil, nil, containerName)
 	if err != nil {
@@ -268,9 +186,9 @@ func DeployWebsiteEngine(ctx context.Context, alias string, req *request.Website
 	}
 	logEngineProgress(progress, "正在启动容器...")
 	if err := cli.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
-		if req.PreviousContainerID != "" && strings.Contains(err.Error(), "port is already allocated") {
+		if options.PreviousContainerID != "" && strings.Contains(err.Error(), "port is already allocated") {
 			logEngineProgress(progress, "检测到固定端口冲突，正在停止旧容器以释放端口...")
-			_ = cli.ContainerStop(ctx, req.PreviousContainerID, container.StopOptions{})
+			_ = cli.ContainerStop(ctx, options.PreviousContainerID, container.StopOptions{})
 			if retryErr := cli.ContainerStart(ctx, resp.ID, container.StartOptions{}); retryErr != nil {
 				return 0, "", "", fmt.Errorf("停止旧容器后启动新容器仍失败: %w", retryErr)
 			}

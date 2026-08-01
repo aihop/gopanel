@@ -14,10 +14,9 @@ import (
 // runAppDeployment 运行应用部署
 // @param website 网站模型
 // @param deploy 应用部署模型
-// @param exposePort 暴露端口
 // @return *model.AppDeploy 应用部署模型
 // @return error 错误
-func runAppDeployment(website *model.Website, deploy *model.AppDeploy, exposePort int) (*model.AppDeploy, error) {
+func runAppDeployment(website *model.Website, deploy *model.AppDeploy) (*model.AppDeploy, error) {
 	appendLog := func(msg string) {
 		deploy.LogText += msg + "\n"
 		_ = global.DB.Save(deploy).Error
@@ -51,7 +50,7 @@ func runAppDeployment(website *model.Website, deploy *model.AppDeploy, exposePor
 		err = ApplyCaddyFromDB(context.Background())
 	case constant.WebApp, constant.Container:
 		appendLog("容器化应用类型，开始部署...")
-		deploy.Port, deploy.ContainerID, deploy.RuntimeDir, err = deployWebAppWebsite(website, deploy.ReleaseDir, deploy.RuntimeDir, deploy.ImageTag, exposePort)
+		deploy.Port, deploy.ContainerID, deploy.RuntimeDir, err = deployWebAppWebsite(website, deploy.ReleaseDir, deploy.RuntimeDir, deploy.ImageTag)
 		if err == nil {
 			appendLog(fmt.Sprintf("容器已启动，映射端口: %d", deploy.Port))
 			if deploy.RuntimeDir != "" {
