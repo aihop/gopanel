@@ -26,19 +26,19 @@ const { t } = useI18n({ messages: mobileMessages })
 			</button>
 			<button
 				class="flex min-h-14 flex-col items-center justify-center gap-0.5 text-xs transition-colors"
-				:class="activeTab === 'resources' ? 'text-blue-600' : 'text-slate-400'"
-				@click="emit('select', 'resources')"
-			>
-				<Icon :name="activeTab === 'resources' ? 'mdi:widgets' : 'mdi:widgets-outline'" :size="23" />
-				<span>{{ t("mobile.resources") }}</span>
-			</button>
-			<button
-				class="flex min-h-14 flex-col items-center justify-center gap-0.5 text-xs transition-colors"
 				:class="activeTab === 'code' ? 'text-blue-600' : 'text-slate-400'"
 				@click="emit('select', 'code')"
 			>
 				<Icon name="mdi:console-line" :size="23" />
 				<span>{{ t("mobile.code") }}</span>
+			</button>
+			<button
+				class="flex min-h-14 flex-col items-center justify-center gap-0.5 text-xs transition-colors"
+				:class="activeTab === 'resources' ? 'text-blue-600' : 'text-slate-400'"
+				@click="emit('select', 'resources')"
+			>
+				<Icon :name="activeTab === 'resources' ? 'mdi:widgets' : 'mdi:widgets-outline'" :size="23" />
+				<span>{{ t("mobile.resources") }}</span>
 			</button>
 		</div>
 	</nav>
