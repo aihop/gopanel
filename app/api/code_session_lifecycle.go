@@ -84,6 +84,12 @@ func updateCodeSessionDevelopmentState(tx *gorm.DB, sessionID uint, updates map[
 }
 
 func runCodeSessionWorkspaceMutation(session *model.AIDevSession, operation func(*model.AIDevSession) error) error {
+	return runCodeSessionWorkspaceMutationWithTx(session, func(_ *gorm.DB, current *model.AIDevSession) error {
+		return operation(current)
+	})
+}
+
+func runCodeSessionWorkspaceMutationWithTx(session *model.AIDevSession, operation func(*gorm.DB, *model.AIDevSession) error) error {
 	if session == nil || session.ID == 0 {
 		return errors.New("开发会话不可用")
 	}
@@ -99,7 +105,7 @@ func runCodeSessionWorkspaceMutation(session *model.AIDevSession, operation func
 		if err != nil {
 			return err
 		}
-		return operation(current)
+		return operation(tx, current)
 	})
 }
 

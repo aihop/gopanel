@@ -5,6 +5,7 @@ import { useI18n } from "vue-i18n"
 import { useDialog, useMessage } from "naive-ui"
 import Icon from "@/components/common/Icon.vue"
 import CodeDeliveryPush from "./CodeDeliveryPush.vue"
+import CodeSessionRepositorySync from "./CodeSessionRepositorySync.vue"
 import { commitCodeGitChanges, getCodeDeliveryJob, getCodeGitDiff, getCodeGitStatus, mergeCodeSessionWorktree, updateCodeGitStage } from "@/api/modules/codeGit"
 import { getCodeSession } from "@/api/modules/code"
 import type { CodeDeliveryJob, CodeGitDiffKind, CodeGitFile, CodeGitRepository, CodeGitStatus } from "@/api/interface/codeGit"
@@ -314,6 +315,12 @@ useIntervalFn(() => {
 					</n-button>
 				</div>
 			</div>
+			<CodeSessionRepositorySync
+				v-if="hasIsolation && sessionId"
+				:session-id="sessionId"
+				:disabled="deliveryActive"
+				@synced="loadStatus(true)"
+			/>
 			<div v-if="hasIsolation" class="space-y-2 border-b border-slate-200 p-3">
 				<div class="truncate text-xs text-slate-500" :title="deliveryLabel">{{ deliveryLabel }}</div>
 				<div v-if="commitRepository" class="truncate text-[11px] text-slate-400">

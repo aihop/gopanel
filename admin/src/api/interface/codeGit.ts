@@ -42,6 +42,40 @@ export interface CodeGitStatus {
 	stagedDeletions: number
 }
 
+export type CodeSessionGitSyncRepositoryStatus =
+	| "synced"
+	| "local"
+	| "behind"
+	| "offline"
+	| "local_ahead"
+	| "dirty"
+	| "diverged"
+	| "remote_behind"
+	| "blocked"
+
+export interface CodeSessionGitSyncRepository {
+	id: string
+	name: string
+	branch: string
+	remote?: string
+	remoteBranch?: string
+	localCommit?: string
+	remoteCommit?: string
+	ahead: number
+	behind: number
+	status: CodeSessionGitSyncRepositoryStatus
+	reason?: string
+	canSync: boolean
+	updated: boolean
+}
+
+export interface CodeSessionGitSyncStatus {
+	sessionId: number
+	status: CodeSessionGitSyncRepositoryStatus
+	canSync: boolean
+	repositories: CodeSessionGitSyncRepository[]
+}
+
 export interface CodeGitDiff {
 	repositoryId: string
 	path: string
