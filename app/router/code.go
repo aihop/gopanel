@@ -55,6 +55,7 @@ func CodeRouter(r fiber.Router) {
 		group.Get("/sessions/:id/git/diff", api.GetCodeGitDiff)
 		group.Put("/sessions/:id/git/stage", api.UpdateCodeGitStage)
 		group.Post("/sessions/:id/git/commit", api.CommitCodeGitChanges)
+		group.Post("/sessions/:id/git/save", api.SaveCodeGitChanges)
 		group.Post("/sessions/:id/worktree/merge", api.MergeCodeSessionWorktree)
 		group.Get("/sessions/:id/delivery", api.GetCodeDeliveryJob)
 		group.Get("/sessions/:id/delivery/push", api.GetCodeDeliveryPushStatus)

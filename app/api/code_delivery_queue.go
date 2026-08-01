@@ -330,6 +330,11 @@ func (runner *codeDeliveryRunner) run(jobID uint) {
 	}
 	defer lease.Release()
 	lease.SetCancel(cancel)
+	if err := runCodeDeliveryQualityGate(&session, job.UserID, lease, reporter); err != nil {
+		runner.finish(job, codeGitDeliveryResult{}, err)
+		return
+	}
+	lease.SetCancel(cancel)
 	var result codeGitDeliveryResult
 	if session.IsolationMode == codeIsolationMultiWorktree || hasCodeMultiRepositoryDelivery(session.ID) {
 		result, err = resumeCodeMultiRepositoryDeliveryWithProgress(&session, job.UserID, reporter)

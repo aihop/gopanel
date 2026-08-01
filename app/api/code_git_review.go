@@ -51,6 +51,8 @@ type codeGitRepository struct {
 	Truncated       bool          `json:"truncated"`
 	Isolated        bool          `json:"isolated"`
 	DeliveryStatus  string        `json:"deliveryStatus,omitempty"`
+	SavedCommits    int           `json:"savedCommits,omitempty"`
+	HeadCommit      string        `json:"headCommit,omitempty"`
 	root            string
 	workspacePrefix string
 }
@@ -195,6 +197,23 @@ func inspectCodeGitRepository(id, name, root, workspacePrefix string) (codeGitRe
 	return codeGitRepository{ID: id, Name: name, Branch: branch, root: resolvedRoot, workspacePrefix: workspacePrefix}, true
 }
 
+func loadCodeGitSavedState(repository *codeGitRepository, baseCommit string) {
+	baseCommit = strings.TrimSpace(baseCommit)
+	if repository == nil || baseCommit == "" {
+		return
+	}
+	count, err := runCodeGit(repository.root, "rev-list", "--count", baseCommit+"..HEAD")
+	if err != nil {
+		return
+	}
+	repository.SavedCommits, err = strconv.Atoi(strings.TrimSpace(count))
+	if err != nil || repository.SavedCommits == 0 {
+		repository.SavedCommits = 0
+		return
+	}
+	repository.HeadCommit, _ = runCodeGit(repository.root, "rev-parse", "--short=8", "HEAD")
+}
+
 func discoverCodeGitRepositories(session *model.AIDevSession, sourceDirs []string) []codeGitRepository {
 	if session == nil {
 		return nil
@@ -215,12 +234,16 @@ func discoverCodeGitRepositories(session *model.AIDevSession, sourceDirs []strin
 			}
 			repository.Isolated = true
 			repository.DeliveryStatus = sessionRepository.Status
+			loadCodeGitSavedState(&repository, sessionRepository.BaseCommit)
 			repositories = append(repositories, repository)
 		}
 		return repositories
 	}
 	if repository, ok := inspectCodeGitRepository("session", filepath.Base(session.WorkDir), session.WorkDir, ""); ok {
 		repository.Isolated = session.WorktreeBranch != ""
+		if repository.Isolated {
+			loadCodeGitSavedState(&repository, session.BaseCommit)
+		}
 		return []codeGitRepository{repository}
 	}
 	prefixes := codeGitWorkspacePrefixes(session)

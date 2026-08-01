@@ -26,6 +26,8 @@ export interface CodeGitRepository {
 	truncated: boolean
 	isolated: boolean
 	deliveryStatus?: string
+	savedCommits?: number
+	headCommit?: string
 }
 
 export interface CodeGitStatus {

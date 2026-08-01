@@ -6,7 +6,7 @@ import { useDialog, useMessage } from "naive-ui"
 import Icon from "@/components/common/Icon.vue"
 import CodeDeliveryPush from "./CodeDeliveryPush.vue"
 import CodeSessionRepositorySync from "./CodeSessionRepositorySync.vue"
-import { commitCodeGitChanges, getCodeDeliveryJob, getCodeGitDiff, getCodeGitStatus, mergeCodeSessionWorktree, updateCodeGitStage } from "@/api/modules/codeGit"
+import { getCodeDeliveryJob, getCodeGitDiff, getCodeGitStatus, mergeCodeSessionWorktree, saveCodeGitChanges, updateCodeGitStage } from "@/api/modules/codeGit"
 import { getCodeSession } from "@/api/modules/code"
 import type { CodeDeliveryJob, CodeGitDiffKind, CodeGitFile, CodeGitRepository, CodeGitStatus } from "@/api/interface/codeGit"
 import { codeGitReviewMessages } from "../codeGitReviewMessages"
@@ -28,6 +28,7 @@ const stagingKey = ref("")
 const worktreeBranch = ref("")
 const isolationMode = ref("")
 const commitMessage = ref("")
+const showAdvancedOperations = ref(false)
 const deliveryLoading = ref(false)
 const deliveryPushKey = ref(0)
 const deliveryJob = ref<CodeDeliveryJob | null>(null)
@@ -60,13 +61,11 @@ const hasChanges = computed(() => entries.value.length > 0)
 const totalAdditions = computed(() => (status.value?.additions || 0) + (status.value?.stagedAdditions || 0))
 const totalDeletions = computed(() => (status.value?.deletions || 0) + (status.value?.stagedDeletions || 0))
 const isolatedRepositories = computed(() => (status.value?.repositories || []).filter(repository => repository.isolated))
-const commitRepository = computed(() => {
-	if (selectedEntry.value?.repository.stagedCount) return selectedEntry.value.repository
-	return isolatedRepositories.value.find(repository => repository.stagedCount > 0) || null
-})
+const savedRepositories = computed(() => isolatedRepositories.value.filter(repository => (repository.savedCommits || 0) > 0))
+const savedCommitCount = computed(() => savedRepositories.value.reduce((total, repository) => total + (repository.savedCommits || 0), 0))
 const hasIsolation = computed(() => Boolean(worktreeBranch.value || isolationMode.value === "multi_worktree"))
 const deliveryActive = computed(() => ["queued", "running"].includes(deliveryJob.value?.status || ""))
-const canCommit = computed(() => Boolean(hasIsolation.value && !deliveryActive.value && commitRepository.value && commitMessage.value.trim()))
+const canSave = computed(() => Boolean(hasIsolation.value && !deliveryActive.value && hasChanges.value))
 const canMerge = computed(() => Boolean(hasIsolation.value && !deliveryActive.value && status.value && status.value.files === 0))
 const deliveryStatusLabel = computed(() => {
 	if (!deliveryJob.value) return ""
@@ -159,16 +158,16 @@ const loadStatus = async (silent = false) => {
 	}
 }
 
-const commitChanges = async () => {
-	if (!props.sessionId || !canCommit.value) return
+const saveChanges = async () => {
+	if (!props.sessionId || !canSave.value) return
 	deliveryLoading.value = true
 	try {
-		await commitCodeGitChanges(props.sessionId, commitRepository.value?.id || "", commitMessage.value.trim())
+		await saveCodeGitChanges(props.sessionId, commitMessage.value.trim())
 		commitMessage.value = ""
-		message.success(t("code.gitCommitSuccess"))
+		message.success(t("code.gitSaveSuccess"))
 		await loadStatus(true)
 	} catch (error) {
-		message.error(error instanceof Error ? error.message : t("code.gitCommitFailed"))
+		message.error(error instanceof Error ? error.message : t("code.gitSaveFailed"))
 	} finally {
 		deliveryLoading.value = false
 	}
@@ -235,6 +234,7 @@ watch(
 		worktreeBranch.value = ""
 		isolationMode.value = ""
 		commitMessage.value = ""
+		showAdvancedOperations.value = false
 		if (props.active) void loadStatus()
 	}
 )
@@ -323,9 +323,6 @@ useIntervalFn(() => {
 			/>
 			<div v-if="hasIsolation" class="space-y-2 border-b border-slate-200 p-3">
 				<div class="truncate text-xs text-slate-500" :title="deliveryLabel">{{ deliveryLabel }}</div>
-				<div v-if="commitRepository" class="truncate text-[11px] text-slate-400">
-					{{ t("code.gitCommitRepository", { repository: commitRepository.name }) }}
-				</div>
 				<n-alert v-if="deliveryJob" :type="deliveryJob.status === 'failed' || deliveryJob.status === 'conflict' || deliveryJob.status === 'partial' ? 'error' : deliveryJob.status === 'completed' ? 'success' : 'info'" :show-icon="false">
 					<div class="flex items-center justify-between gap-2 text-xs">
 						<span>{{ deliveryStatusLabel }}</span>
@@ -334,12 +331,15 @@ useIntervalFn(() => {
 					<n-progress v-if="deliveryActive" class="mt-2" type="line" :percentage="deliveryJob.progress" :show-indicator="false" />
 					<div v-if="deliveryJob.errorMessage" class="mt-2 break-words text-xs">{{ deliveryJob.errorMessage }}</div>
 				</n-alert>
-				<n-input v-model:value="commitMessage" size="small" :placeholder="t('code.gitCommitPlaceholder')" :disabled="deliveryLoading" @keyup.enter="commitChanges" />
+				<n-input v-model:value="commitMessage" size="small" :placeholder="t('code.gitSavePlaceholder')" :disabled="deliveryLoading" @keyup.enter="saveChanges" />
 				<div class="grid grid-cols-2 gap-2">
-					<n-button size="small" type="primary" :disabled="!canCommit" :loading="deliveryLoading" @click="commitChanges">{{ t("code.gitCommit") }}</n-button>
+					<n-button size="small" type="primary" :disabled="!canSave" :loading="deliveryLoading" @click="saveChanges">{{ t("code.gitSave") }}</n-button>
 					<n-button size="small" type="success" secondary :disabled="!canMerge" :loading="deliveryLoading" @click="mergeWorktree">{{ t("code.gitMerge") }}</n-button>
 				</div>
-				<p class="text-[11px] leading-4 text-slate-400">{{ t(canMerge ? "code.gitMergeReady" : "code.gitMergeHint") }}</p>
+				<p class="text-[11px] leading-4 text-slate-400">{{ t(canMerge ? "code.gitMergeReady" : "code.gitSaveHint") }}</p>
+				<n-button text size="tiny" @click="showAdvancedOperations = !showAdvancedOperations">
+					{{ t(showAdvancedOperations ? "code.gitAdvancedHide" : "code.gitAdvancedShow") }}
+				</n-button>
 			</div>
 			<CodeDeliveryPush v-if="!hasIsolation && sessionId" :session-id="sessionId" :refresh-key="deliveryPushKey" />
 			<n-spin :show="loading" class="min-h-0 flex-1">
@@ -351,6 +351,20 @@ useIntervalFn(() => {
 					:description="t('code.gitNoRepository')"
 					class="mt-16"
 				/>
+				<div v-else-if="status && !hasChanges && savedCommitCount" class="space-y-3 p-4">
+					<n-alert type="success" :title="t('code.gitSavedTitle')">
+						{{ t("code.gitSavedDescription", { count: savedCommitCount }) }}
+					</n-alert>
+					<div class="space-y-2">
+						<div v-for="repository in savedRepositories" :key="repository.id" class="flex items-center justify-between rounded-lg bg-white px-3 py-2 text-xs text-slate-600 shadow-sm">
+							<span class="min-w-0 truncate">{{ repository.name }}</span>
+							<span class="shrink-0 font-mono text-slate-400">{{ repository.headCommit }}</span>
+						</div>
+					</div>
+					<n-button block type="success" :loading="deliveryLoading" :disabled="!canMerge" @click="mergeWorktree">
+						{{ t("code.gitDeliverNow") }}
+					</n-button>
+				</div>
 				<n-empty v-else-if="status && !hasChanges" :description="t('code.gitNoChanges')" class="mt-16" />
 				<n-scrollbar v-else class="h-full">
 					<div class="space-y-4 p-2.5">
@@ -407,6 +421,7 @@ useIntervalFn(() => {
 											{{ entry.file.path }}
 										</span>
 										<n-button
+											v-if="showAdvancedOperations"
 											text
 											size="tiny"
 											:loading="stagingKey === entry.key"

@@ -70,6 +70,24 @@ func TestLoadCodeGitStatusAndDiff(t *testing.T) {
 	}
 }
 
+func TestLoadCodeGitStatusShowsSavedCommits(t *testing.T) {
+	session, _ := createDeliveryWorktree(t, 146)
+	if err := os.WriteFile(filepath.Join(session.WorkDir, "saved.txt"), []byte("saved\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := saveCodeSessionWorktree(session, "test: saved state"); err != nil {
+		t.Fatal(err)
+	}
+	status, err := loadCodeGitStatus(session, nil)
+	if err != nil || len(status.Repositories) != 1 {
+		t.Fatalf("load saved status: %#v, %v", status, err)
+	}
+	repository := status.Repositories[0]
+	if repository.SavedCommits != 1 || len(repository.HeadCommit) != 8 || len(repository.Files) != 0 {
+		t.Fatalf("unexpected saved state: %#v", repository)
+	}
+}
+
 func TestCodeGitStageAndUnstage(t *testing.T) {
 	repositoryDir := createCodeGitRepository(t)
 	if err := os.WriteFile(filepath.Join(repositoryDir, "README.md"), []byte("updated\n"), 0600); err != nil {

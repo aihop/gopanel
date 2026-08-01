@@ -28,9 +28,6 @@ func captureCodeDeliverySnapshot(session *model.AIDevSession, userID uint) error
 	if strings.TrimSpace(targetBranch) == "" {
 		return errors.New("交付目标分支不可用")
 	}
-	if err := validateCodeQualityGate(session); err != nil {
-		return err
-	}
 	if err := verifyCodeDeliveryCommit(session.WorkDir, commit, "Worktree"); err != nil {
 		return err
 	}
@@ -116,9 +113,6 @@ func captureCodeMultiRepositoryDeliverySnapshot(session *model.AIDevSession) err
 			return fmt.Errorf("仓库 %s 的交付目标分支不可用", repository.LinkName)
 		}
 		repository.TargetBranch, repository.WorktreeCommit = targetBranch, commit
-	}
-	if err := validateCodeQualityGate(session); err != nil {
-		return err
 	}
 	for index := range repositories {
 		if err := verifyCodeDeliveryCommit(repositories[index].WorktreeDir, repositories[index].WorktreeCommit, "仓库 "+repositories[index].LinkName); err != nil {

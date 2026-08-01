@@ -1,0 +1,151 @@
+package api
+
+import (
+	"errors"
+	"path/filepath"
+	"sort"
+	"strings"
+
+	"github.com/aihop/gopanel/app/e"
+	"github.com/aihop/gopanel/app/model"
+	"github.com/aihop/gopanel/global"
+	"github.com/gofiber/fiber/v3"
+)
+
+const defaultCodeGitSaveMessage = "chore: 保存会话修改"
+
+func codeGitSaveMessage(message string) (string, error) {
+	if strings.TrimSpace(message) == "" {
+		return defaultCodeGitSaveMessage, nil
+	}
+	return validateCodeGitCommitMessage(message)
+}
+
+func saveCodeGitRepository(workDir, message string) (string, bool, error) {
+	status, err := runCodeGit(workDir, "status", "--porcelain")
+	if err != nil {
+		return "", false, err
+	}
+	if strings.TrimSpace(status) == "" {
+		commit, headErr := runCodeGit(workDir, "rev-parse", "HEAD")
+		return commit, false, headErr
+	}
+	if _, err := runCodeGit(workDir, "add", "-A", "--", "."); err != nil {
+		return "", false, err
+	}
+	if _, err := runCodeGit(
+		workDir,
+		"-c", "user.name=GoPanel Code", "-c", "user.email=code@gopanel.local",
+		"-c", "commit.gpgsign=false", "commit", "-m", message,
+	); err != nil {
+		return "", false, err
+	}
+	commit, err := runCodeGit(workDir, "rev-parse", "HEAD")
+	return commit, true, err
+}
+
+func saveCodeSessionWorktree(session *model.AIDevSession, message string) (codeGitDeliveryResult, error) {
+	if err := validateCodeWorktreeDeliverySession(session); err != nil {
+		return codeGitDeliveryResult{}, err
+	}
+	message, err := codeGitSaveMessage(message)
+	if err != nil {
+		return codeGitDeliveryResult{}, err
+	}
+	commit, changed, err := saveCodeGitRepository(session.WorkDir, message)
+	if err != nil {
+		return codeGitDeliveryResult{}, err
+	}
+	if !changed {
+		return codeGitDeliveryResult{}, errors.New("当前没有需要保存的修改")
+	}
+	return codeGitDeliveryResult{Status: "committed", Commit: commit, Branch: session.WorktreeBranch}, nil
+}
+
+func saveCodeSessionRepositories(session *model.AIDevSession, message string) (codeGitDeliveryResult, error) {
+	message, err := codeGitSaveMessage(message)
+	if err != nil {
+		return codeGitDeliveryResult{}, err
+	}
+	repositories, err := loadCodeSessionRepositories(session.ID)
+	if err != nil || len(repositories) == 0 {
+		return codeGitDeliveryResult{}, errors.New("会话多仓库 Worktree 元数据不可用")
+	}
+	if _, err := codeMultiRepositoryWorkspaceDir(session, repositories); err != nil {
+		return codeGitDeliveryResult{}, err
+	}
+	sort.SliceStable(repositories, func(i, j int) bool {
+		leftDepth := strings.Count(filepath.Clean(repositories[i].SourceDir), string(filepath.Separator))
+		rightDepth := strings.Count(filepath.Clean(repositories[j].SourceDir), string(filepath.Separator))
+		if leftDepth != rightDepth {
+			return leftDepth > rightDepth
+		}
+		return repositories[i].LinkName < repositories[j].LinkName
+	})
+
+	changedCount := 0
+	results := make([]codeRepositoryDeliveryResult, 0, len(repositories))
+	for index := range repositories {
+		repository := &repositories[index]
+		if err := validateCodeSessionRepositoryWorktree(session, repository); err != nil {
+			return codeGitDeliveryResult{}, err
+		}
+		if err := syncSavedCodeRepositoryGitlinks(repository, repositories); err != nil {
+			return codeGitDeliveryResult{}, err
+		}
+		commit, changed, err := saveCodeGitRepository(repository.WorktreeDir, message)
+		if err != nil {
+			return codeGitDeliveryResult{}, err
+		}
+		if changed {
+			changedCount++
+		}
+		if err := global.DB.Model(repository).Updates(map[string]any{
+			"status": "committed", "worktree_commit": commit, "error_message": "",
+		}).Error; err != nil {
+			return codeGitDeliveryResult{}, err
+		}
+		repository.Status, repository.WorktreeCommit, repository.ErrorMessage = "committed", commit, ""
+		results = append(results, codeRepositoryDeliveryResult{
+			RepositoryID: codeSessionRepositoryID(repository.ID), RepositoryName: repository.LinkName,
+			Status: "committed", Branch: repository.Branch, TargetBranch: repository.TargetBranch,
+			Commit: commit, PushStatus: repository.PushStatus,
+		})
+	}
+	if changedCount == 0 {
+		return codeGitDeliveryResult{}, errors.New("当前没有需要保存的修改")
+	}
+	return codeGitDeliveryResult{Status: "committed", Repositories: results}, nil
+}
+
+func syncSavedCodeRepositoryGitlinks(parent *model.AIDevSessionRepository, repositories []model.AIDevSessionRepository) error {
+	for index := range repositories {
+		child := &repositories[index]
+		if child.ParentSourceDir != parent.SourceDir || strings.TrimSpace(child.GitlinkPath) == "" {
+			continue
+		}
+		commit, err := runCodeGit(child.WorktreeDir, "rev-parse", "HEAD")
+		if err != nil {
+			return err
+		}
+		if err := updateCodeGitlink(parent.WorktreeDir, child.GitlinkPath, commit); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func SaveCodeGitChanges(c fiber.Ctx) error {
+	var req struct {
+		Message string `json:"message"`
+	}
+	if err := c.Bind().JSON(&req); err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	return runCodeGitDelivery(c, "git_save_all", func(session *model.AIDevSession) (codeGitDeliveryResult, error) {
+		if session.IsolationMode == codeIsolationMultiWorktree {
+			return saveCodeSessionRepositories(session, req.Message)
+		}
+		return saveCodeSessionWorktree(session, req.Message)
+	})
+}

@@ -21,6 +21,10 @@ export function commitCodeGitChanges(sessionId: number, repositoryId: string, me
 	return http.post<CodeGitDeliveryResult>(`/code/sessions/${sessionId}/git/commit`, { repositoryId, message })
 }
 
+export function saveCodeGitChanges(sessionId: number, message: string) {
+	return http.post<CodeGitDeliveryResult>(`/code/sessions/${sessionId}/git/save`, { message })
+}
+
 export function mergeCodeSessionWorktree(sessionId: number) {
 	return http.post<CodeDeliveryJob>(`/code/sessions/${sessionId}/worktree/merge`, { confirm: true })
 }
