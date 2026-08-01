@@ -100,10 +100,13 @@ export interface MobileWebsite {
 	id: number
 	alias: string
 	primaryDomain: string
+	otherDomains: string
+	protocol: string
 	type: string
 	status: string
 	appName: string
 	pipelineId: number
+	redirectDomainsToPrimary: boolean
 }
 
 export interface MobileDatabase {
@@ -268,6 +271,17 @@ function getMobileResourceList<T>(resource: string) {
 
 export function getMobileWebsites() {
 	return getMobileResourceList<MobileWebsite>("websites")
+}
+
+export function updateMobileWebsiteDomainBindings(data: {
+	websiteId: number
+	primaryDomain: string
+	otherDomains: string
+	redirectDomainsToPrimary: boolean
+}) {
+	return mobileRequest(
+		mobileHttp.post<ResultData<void>>("/mobile/app/resources/websites/domains", { ...data, confirm: true }),
+	)
 }
 
 export function getMobileDatabases() {

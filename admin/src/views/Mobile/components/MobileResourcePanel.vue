@@ -7,7 +7,7 @@ import {
 	type MobileApp,
 	type MobileDatabase,
 	type MobileSSL,
-	type MobileWebsite
+	type MobileWebsite,
 } from "@/api/modules/mobile"
 import Icon from "@/components/common/Icon.vue"
 import { mobileResourceMessages } from "@/i18n/locales/mobileResources"
@@ -16,6 +16,7 @@ import { useI18n } from "vue-i18n"
 import { useMessage } from "naive-ui"
 import { useRouter } from "vue-router"
 import MobileContainerPanel from "./MobileContainerPanel.vue"
+import MobileWebsiteDomainEditor from "./MobileWebsiteDomainEditor.vue"
 
 type ResourceTab = "websites" | "databases" | "ssl" | "containers" | "apps"
 type ResourceItem = MobileWebsite | MobileDatabase | MobileSSL | MobileApp
@@ -33,6 +34,8 @@ const certificates = ref<MobileSSL[]>([])
 const apps = ref<MobileApp[]>([])
 const databaseWarningCount = ref(0)
 const loadedTabs = ref<ResourceTab[]>(["containers"])
+const selectedWebsite = ref<MobileWebsite | null>(null)
+const showWebsiteDomains = ref(false)
 
 const tabs = computed(() => [
 	{ value: "websites" as const, label: t("mobile.resourceWebsite"), icon: "mdi:web" },
@@ -62,7 +65,7 @@ const filteredItems = computed(() => {
 	const search = keyword.value.trim().toLowerCase()
 	if (!search) return activeItems.value
 	return activeItems.value.filter(item =>
-		Object.values(item).some(value => String(value).toLowerCase().includes(search))
+		Object.values(item).some(value => String(value).toLowerCase().includes(search)),
 	)
 })
 
@@ -137,6 +140,15 @@ async function loadActiveResource(silent = false) {
 	}
 }
 
+function manageWebsiteDomains(website: MobileWebsite) {
+	selectedWebsite.value = website
+	showWebsiteDomains.value = true
+}
+
+async function handleWebsiteDomainsSaved() {
+	await loadActiveResource(true)
+}
+
 watch(activeTab, tab => {
 	keyword.value = ""
 	loadError.value = ""
@@ -146,6 +158,11 @@ watch(activeTab, tab => {
 
 <template>
 	<div class="space-y-4">
+		<MobileWebsiteDomainEditor
+			v-model:show="showWebsiteDomains"
+			:website="selectedWebsite"
+			@saved="handleWebsiteDomainsSaved"
+		/>
 		<div class="overflow-x-auto rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
 			<div class="grid min-w-[460px] grid-cols-5 gap-1">
 				<button
@@ -234,6 +251,10 @@ watch(activeTab, tab => {
 									}}
 								</div>
 							</div>
+							<n-button class="mt-3" secondary type="primary" block @click="manageWebsiteDomains(item)">
+								<template #icon><Icon name="mdi:web-plus" /></template>
+								{{ t("mobile.websiteManageDomains") }}
+							</n-button>
 						</template>
 
 						<template v-else-if="isDatabase(item)">

@@ -94,7 +94,7 @@ func getWebsiteDomains(domains string, defaultPort int, websiteID uint) (domainM
 		}
 	}
 	for _, domain := range domainModels {
-		if exist, _ := websiteDomainRepo.GetFirst(websiteDomainRepo.WithDomain(domain.Domain), websiteDomainRepo.WithPort(domain.Port)); exist.ID > 0 {
+		if exist, _ := websiteDomainRepo.GetFirst(websiteDomainRepo.WithDomain(domain.Domain), websiteDomainRepo.WithPort(domain.Port)); exist.ID > 0 && exist.WebsiteID != websiteID {
 			website, _ := websiteRepo.GetFirst(commonRepo.WithByID(exist.WebsiteID))
 			err = errors.New(constant.ErrDomainIsUsed + website.PrimaryDomain)
 			return

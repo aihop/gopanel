@@ -30,6 +30,7 @@ func MobileRouter(r fiber.Router) {
 	app.Get("/containers", api.GetMobileContainers)
 	app.Post("/containers/operate", api.OperateMobileContainer)
 	app.Get("/resources/websites", api.GetMobileWebsites)
+	app.Post("/resources/websites/domains", api.UpdateMobileWebsiteDomainBindings)
 	app.Get("/resources/databases", api.GetMobileDatabases)
 	app.Get("/resources/ssl", api.GetMobileSSLs)
 	app.Get("/resources/apps", api.GetMobileApps)

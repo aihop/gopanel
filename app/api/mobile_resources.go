@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"time"
 
 	"github.com/aihop/gopanel/app/dto"
@@ -12,13 +13,16 @@ import (
 )
 
 type mobileWebsiteSummary struct {
-	ID            uint   `json:"id"`
-	Alias         string `json:"alias"`
-	PrimaryDomain string `json:"primaryDomain"`
-	Type          string `json:"type"`
-	Status        string `json:"status"`
-	AppName       string `json:"appName"`
-	PipelineID    uint   `json:"pipelineId"`
+	ID                       uint   `json:"id"`
+	Alias                    string `json:"alias"`
+	PrimaryDomain            string `json:"primaryDomain"`
+	OtherDomains             string `json:"otherDomains"`
+	Protocol                 string `json:"protocol"`
+	Type                     string `json:"type"`
+	Status                   string `json:"status"`
+	AppName                  string `json:"appName"`
+	PipelineID               uint   `json:"pipelineId"`
+	RedirectDomainsToPrimary bool   `json:"redirectDomainsToPrimary"`
 }
 
 type mobileDatabaseSummary struct {
@@ -60,10 +64,31 @@ func GetMobileWebsites(c fiber.Ctx) error {
 	for _, website := range websites {
 		items = append(items, mobileWebsiteSummary{
 			ID: website.ID, Alias: website.Alias, PrimaryDomain: website.PrimaryDomain,
-			Type: website.Type, Status: website.Status, AppName: website.AppName, PipelineID: website.PipelineID,
+			OtherDomains: website.OtherDomains, Protocol: website.Protocol, Type: website.Type,
+			Status: website.Status, AppName: website.AppName, PipelineID: website.PipelineID,
+			RedirectDomainsToPrimary: website.RedirectDomainsToPrimary,
 		})
 	}
 	return c.JSON(e.Succ(fiber.Map{"items": items, "total": len(items)}))
+}
+
+func UpdateMobileWebsiteDomainBindings(c fiber.Ctx) error {
+	req, err := e.BodyToStruct[request.WebsiteDomainBindingUpdate](c.Body())
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	if err := service.NewWebsite().UpdateDomainBindings(
+		ctx,
+		req.WebsiteID,
+		req.PrimaryDomain,
+		req.OtherDomains,
+		req.RedirectDomainsToPrimary,
+	); err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	return c.JSON(e.Succ())
 }
 
 func GetMobileDatabases(c fiber.Ctx) error {
