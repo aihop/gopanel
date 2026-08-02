@@ -53,6 +53,61 @@ func TestSaveCodeSessionWorktreeRejectsCleanWorktree(t *testing.T) {
 	}
 }
 
+func TestSaveCodeSessionWorktreeRejectsSensitiveFiles(t *testing.T) {
+	tests := []struct {
+		name    string
+		path    string
+		content string
+	}{
+		{name: "environment", path: ".env", content: "TOKEN=secret\n"},
+		{name: "private key name", path: "deploy.pem", content: "credential\n"},
+		{name: "private key content", path: "notes.txt", content: "-----BEGIN PRIVATE KEY-----\nsecret\n"},
+	}
+	for index, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			session, _ := createDeliveryWorktree(t, uint(150+index))
+			if err := os.WriteFile(filepath.Join(session.WorkDir, test.path), []byte(test.content), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := saveCodeSessionWorktree(session, "test: unsafe file"); err == nil || !strings.Contains(err.Error(), "拒绝提交") {
+				t.Fatalf("unsafe file should be rejected: %v", err)
+			}
+			staged, err := runCodeGit(session.WorkDir, "diff", "--cached", "--name-only")
+			if err != nil || staged != "" {
+				t.Fatalf("unsafe file was staged: %q, %v", staged, err)
+			}
+		})
+	}
+}
+
+func TestSaveCodeSessionWorktreeAllowsEnvironmentTemplate(t *testing.T) {
+	session, _ := createDeliveryWorktree(t, 154)
+	if err := os.WriteFile(filepath.Join(session.WorkDir, ".env.example"), []byte("TOKEN=replace-me\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := saveCodeSessionWorktree(session, "test: add environment template"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSaveCodeSessionWorktreeRejectsOversizedFile(t *testing.T) {
+	session, _ := createDeliveryWorktree(t, 155)
+	file, err := os.Create(filepath.Join(session.WorkDir, "large.bin"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Truncate(maxCodeCommitFileBytes + 1); err != nil {
+		file.Close()
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := saveCodeSessionWorktree(session, "test: oversized file"); err == nil || !strings.Contains(err.Error(), "超大文件") {
+		t.Fatalf("oversized file should be rejected: %v", err)
+	}
+}
+
 func TestSaveCodeSessionRepositoriesCommitsChangedRepositories(t *testing.T) {
 	session, _, _ := createMultiRepositorySession(t, 144)
 	repositories, err := loadCodeSessionRepositories(session.ID)

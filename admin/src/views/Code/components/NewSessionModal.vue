@@ -30,7 +30,6 @@ const approvalPolicy = ref<CodeApprovalPolicy>("safe_auto")
 const providerMode = ref<"default" | "custom">("default")
 const providerConfig = ref<CodeExecutorConfig>({ baseUrl: "", apiKey: "", model: "" })
 const isolated = ref(false)
-const includeUncommitted = ref(false)
 const worktreeCapability = ref<CodeWorktreeCapability | null>(null)
 const title = ref("")
 const loading = ref(false)
@@ -71,7 +70,6 @@ const loadExecutors = async () => {
 const loadWorktreeCapability = async () => {
 	worktreeCapability.value = null
 	isolated.value = false
-	includeUncommitted.value = false
 	try {
 		const response = await getCodeWorktreeCapability(props.projectId)
 		worktreeCapability.value = response.data
@@ -127,7 +125,7 @@ const submit = async () => {
 			executorId: selectedExecutorId.value,
 			approvalPolicy: approvalPolicy.value,
 			isolated: isolated.value,
-			includeUncommitted: isolated.value && includeUncommitted.value,
+			includeUncommitted: false,
 			provider:
 				showProviderConfig.value && providerMode.value === "custom"
 					? (Object.fromEntries(
@@ -301,16 +299,6 @@ const submit = async () => {
 								<n-alert v-if="dirtyRepositories.length" type="warning" :show-icon="false">
 									<div class="text-xs leading-5">
 										{{ t("code.worktreeDirtyRepositories", { repositories: dirtyRepositories.join(", ") }) }}
-									</div>
-									<n-checkbox
-										v-model:checked="includeUncommitted"
-										class="mt-2"
-										:disabled="!isolated || !worktreeCapability?.snapshotSupported"
-									>
-										{{ t("code.worktreeIncludeUncommitted") }}
-									</n-checkbox>
-									<div v-if="includeUncommitted" class="mt-1 text-xs opacity-80">
-										{{ t("code.worktreeSnapshotWarning") }}
 									</div>
 								</n-alert>
 							</div>

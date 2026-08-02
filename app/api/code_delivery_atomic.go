@@ -29,21 +29,29 @@ func integrateAndPushCodeDeliveryWithProgress(delivery *model.AICodeDelivery, re
 			}
 			result = merged
 		}
-		if delivery.Status != codeDeliveryMerged || !codeDeliveryHasRemote(delivery.RemoteName, deliveryRemoteBranch(delivery.RemoteBranch, delivery.TargetBranch)) {
+		if delivery.Status != codeDeliveryMerged {
+			return result, nil
+		}
+		if !codeDeliveryHasRemote(delivery.RemoteName, deliveryRemoteBranch(delivery.RemoteBranch, delivery.TargetBranch)) {
+			if err := fastForwardCodeDeliverySource(delivery); err != nil {
+				return codeGitDeliveryResult{}, err
+			}
+			if err := markCodeDeliveryLocalPush(delivery); err != nil {
+				return codeGitDeliveryResult{}, err
+			}
 			return result, nil
 		}
 		if report != nil {
 			report(codeDeliveryStagePushing, 70)
 		}
-		pushResult, err := pushCodeDeliveryRepositoryWithProgress(
-			delivery.SourceWorkDir, delivery.TargetBranch, delivery.RemoteName,
-			deliveryRemoteBranch(delivery.RemoteBranch, delivery.TargetBranch),
-			delivery.RemoteCommit, delivery.MergeCommit, delivery.PushStatus, report,
-		)
+		pushResult, err := pushCodeIntegratedDeliveryWithProgress(delivery, report)
 		if persistErr := persistCodeDeliveryPushResult(delivery, pushResult); persistErr != nil {
 			return codeGitDeliveryResult{}, persistErr
 		}
 		if err == nil {
+			if err := fastForwardCodeDeliverySource(delivery); err != nil {
+				return codeGitDeliveryResult{}, err
+			}
 			result.ResultType = "remote_verified"
 			return result, nil
 		}
@@ -82,11 +90,7 @@ func resetCodeDeliveryToRemote(delivery *model.AICodeDelivery) error {
 	if err != nil {
 		return err
 	}
-	localCommit, err := runCodeGit(delivery.SourceWorkDir, "rev-parse", "refs/heads/"+delivery.TargetBranch)
-	if err != nil || localCommit != delivery.MergeCommit {
-		return errors.New("目标分支已在交付后发生变化，无法自动重试")
-	}
-	if _, err := runCodeGit(delivery.SourceWorkDir, "reset", "--hard", remoteCommit); err != nil {
+	if err := resetCodeDeliveryWorktree(delivery, remoteCommit); err != nil {
 		return fmt.Errorf("恢复最新远端基线失败：%w", err)
 	}
 	updates := map[string]any{

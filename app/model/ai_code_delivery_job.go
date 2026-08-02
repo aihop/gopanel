@@ -18,6 +18,7 @@ type AICodeDeliveryJob struct {
 	TargetBranch      string     `gorm:"column:target_branch;type:varchar(255)" json:"targetBranch,omitempty"`
 	ResultCommit      string     `gorm:"column:result_commit;type:varchar(64)" json:"resultCommit,omitempty"`
 	ResultType        string     `gorm:"column:result_type;type:varchar(32)" json:"resultType,omitempty"`
+	FailureCode       string     `gorm:"column:failure_code;type:varchar(32);index" json:"failureCode,omitempty"`
 	RepositoryResults string     `gorm:"column:repository_results;type:text" json:"-"`
 	ErrorMessage      string     `gorm:"column:error_message;type:text" json:"errorMessage,omitempty"`
 	ConflictFiles     string     `gorm:"column:conflict_files;type:text" json:"-"`

@@ -387,7 +387,7 @@ export function createMobileSession(data: {
 			...data,
 			workDir: "",
 			isolated: true,
-			includeUncommitted: true
+			includeUncommitted: false
 		})
 	)
 }

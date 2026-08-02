@@ -105,14 +105,8 @@ func TestCodeDeliveryCompletesAndIsIdempotent(t *testing.T) {
 	if content, err := os.ReadFile(filepath.Join(sourceDir, "delivery.txt")); err != nil || string(content) != "complete\n" {
 		t.Fatalf("merged content unavailable: %q, %v", content, err)
 	}
-	if _, err := os.Stat(session.WorkDir); err != nil {
-		t.Fatalf("delivery removed a potentially active worktree: %v", err)
-	}
-	if err := cleanupDeliveredCodeSessionWorktrees(session); err != nil {
-		t.Fatalf("delivered worktree cleanup failed after execution stopped: %v", err)
-	}
 	if _, err := os.Stat(session.WorkDir); !os.IsNotExist(err) {
-		t.Fatalf("delivered worktree remained after deferred cleanup: %v", err)
+		t.Fatalf("delivered worktree remained after successful cleanup: %v", err)
 	}
 	var delivery model.AICodeDelivery
 	if err := database.Where("session_id = ?", session.ID).First(&delivery).Error; err != nil || delivery.Status != codeDeliveryCompleted || delivery.CompletedAt == nil {
@@ -157,8 +151,8 @@ func TestCodeDeliveryMergesLocallyAndPushesRemote(t *testing.T) {
 	if localErr != nil || remoteErr != nil || localHead != result.Commit || remoteHead != result.Commit {
 		t.Fatalf("delivery commits differ: local=%q remote=%q want=%q errors=%v/%v", localHead, remoteHead, result.Commit, localErr, remoteErr)
 	}
-	if _, err := os.Stat(session.WorkDir); err != nil {
-		t.Fatalf("delivery removed a potentially active pushed worktree: %v", err)
+	if _, err := os.Stat(session.WorkDir); !os.IsNotExist(err) {
+		t.Fatalf("delivered worktree remained after remote verification: %v", err)
 	}
 	var delivery model.AICodeDelivery
 	if err := database.Where("session_id = ?", session.ID).First(&delivery).Error; err != nil || delivery.PushStatus != codePushPushed || delivery.PushedCommit != result.Commit {
@@ -177,7 +171,7 @@ func TestCodeDeliveryUsesCapturedCommitWhileTerminalContinues(t *testing.T) {
 		t.Fatal(err)
 	}
 	firstCommit := commitCodeTestFile(t, session.WorkDir, "captured.txt", "captured\n")
-	job, err := persistCodeDeliveryJob(session, session.UserID, "127.0.0.1")
+	_, err := persistCodeDeliveryJob(session, session.UserID, "127.0.0.1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -198,22 +192,14 @@ func TestCodeDeliveryUsesCapturedCommitWhileTerminalContinues(t *testing.T) {
 	if _, err := os.Stat(session.WorkDir); err != nil {
 		t.Fatalf("active worktree was removed: %v", err)
 	}
-	if err := database.Model(job).Updates(map[string]any{"status": codeDeliveryJobCompleted, "stage": codeDeliveryStageCompleted}).Error; err != nil {
-		t.Fatal(err)
+	if _, err := os.Stat(session.WorkDir); err != nil {
+		t.Fatalf("worktree with later commit should be preserved: %v", err)
 	}
 	if err := completeCodeSessionLifecycle(database, session.ID, time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	secondJob, err := persistCodeDeliveryJob(session, session.UserID, "127.0.0.1")
-	if err != nil || secondJob.ID != job.ID || secondJob.Status != codeDeliveryJobQueued {
-		t.Fatalf("second delivery was not queued: %#v, %v", secondJob, err)
-	}
-	secondResult, err := resumeCodeSessionDelivery(session, session.UserID)
-	if err != nil || secondResult.Status != "merged" {
-		t.Fatalf("second snapshot delivery failed: %#v, %v", secondResult, err)
-	}
-	if _, err := os.Stat(filepath.Join(sourceDir, "later.txt")); err != nil {
-		t.Fatalf("later commit was not delivered by second snapshot: %v", err)
+	if _, err := persistCodeDeliveryJob(session, session.UserID, "127.0.0.1"); err == nil {
+		t.Fatal("delivered session should require a new task")
 	}
 }
 
@@ -357,8 +343,8 @@ func TestCodeDeliveryResumesFromMergedState(t *testing.T) {
 	if err != nil || result.Commit != mergeCommit {
 		t.Fatalf("unexpected merged recovery: %#v, %v", result, err)
 	}
-	if _, err := os.Stat(session.WorkDir); err != nil {
-		t.Fatalf("merged delivery removed a potentially active worktree: %v", err)
+	if _, err := os.Stat(session.WorkDir); !os.IsNotExist(err) {
+		t.Fatalf("merged delivery worktree was not cleaned: %v", err)
 	}
 	if err := database.First(delivery, delivery.ID).Error; err != nil || delivery.Status != codeDeliveryCompleted {
 		t.Fatalf("delivery did not complete: %#v, %v", delivery, err)

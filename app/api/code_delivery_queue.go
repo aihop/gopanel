@@ -49,6 +49,7 @@ type codeDeliveryJobView struct {
 	TargetBranch  string                         `json:"targetBranch,omitempty"`
 	ResultCommit  string                         `json:"resultCommit,omitempty"`
 	ResultType    string                         `json:"resultType,omitempty"`
+	FailureCode   string                         `json:"failureCode,omitempty"`
 	Repositories  []codeRepositoryDeliveryResult `json:"repositories,omitempty"`
 	ErrorMessage  string                         `json:"errorMessage,omitempty"`
 	ConflictFiles []string                       `json:"conflictFiles"`
@@ -220,19 +221,20 @@ func (runner *codeDeliveryRunner) updateProgress(jobID uint, stage string, progr
 
 func (runner *codeDeliveryRunner) finish(job *model.AICodeDeliveryJob, result codeGitDeliveryResult, runErr error) {
 	status, stage, progress := codeDeliveryJobCompleted, codeDeliveryStageCompleted, 100
+	failureCode := ""
 	if result.Status == codeDeliveryJobPartial {
-		status, stage, progress = codeDeliveryJobPartial, codeDeliveryJobPartial, job.Progress
+		status, stage, progress, failureCode = codeDeliveryJobPartial, job.Stage, job.Progress, "partial"
 	} else if runErr != nil {
-		status, stage, progress = codeDeliveryJobFailed, codeDeliveryJobFailed, job.Progress
+		status, stage, progress, failureCode = codeDeliveryJobFailed, job.Stage, job.Progress, codeDeliveryFailureCode(job.Stage, runErr)
 	} else if result.Status == codeDeliveryJobConflict {
-		status, stage, progress = codeDeliveryJobConflict, codeDeliveryJobConflict, job.Progress
+		status, stage, progress, failureCode = codeDeliveryJobConflict, job.Stage, job.Progress, "conflict"
 	}
 	conflicts, _ := json.Marshal(result.ConflictFiles)
 	repositories, _ := json.Marshal(result.Repositories)
 	now := time.Now()
 	updates := map[string]any{
 		"status": status, "stage": stage, "progress": progress, "result_commit": result.Commit,
-		"result_type": result.ResultType, "repository_results": string(repositories),
+		"result_type": result.ResultType, "failure_code": failureCode, "repository_results": string(repositories),
 		"conflict_files": string(conflicts), "lease_owner": "", "lease_expires_at": nil, "completed_at": now,
 	}
 	if runErr != nil {
@@ -276,6 +278,24 @@ func (runner *codeDeliveryRunner) finish(job *model.AICodeDeliveryJob, result co
 		duration = time.Since(*job.StartedAt)
 	}
 	recordCodeAudit(job.UserID, job.ProjectID, job.SessionID, "worktree_merge", auditStatus, "delivery", detail, job.RequestIP, time.Now().Add(-duration), codeAuditMeta{"commit": result.Commit, "conflictFiles": result.ConflictFiles})
+}
+
+func codeDeliveryFailureCode(stage string, err error) string {
+	if errors.Is(err, errCodePushRemoteAdvanced) {
+		return "remote_advanced"
+	}
+	switch stage {
+	case codeDeliveryStageSyncing:
+		return "source_dirty"
+	case codeDeliveryStageMerging:
+		return "conflict"
+	case codeDeliveryStageQualityCheck:
+		return "quality_failed"
+	case codeDeliveryStagePushing, codeDeliveryStageVerifying:
+		return "push_failed"
+	default:
+		return "delivery_failed"
+	}
 }
 
 func (runner *codeDeliveryRunner) run(jobID uint) {
@@ -329,16 +349,28 @@ func (runner *codeDeliveryRunner) run(jobID uint) {
 		return
 	}
 	defer lease.Release()
-	lease.SetCancel(cancel)
-	if err := runCodeDeliveryQualityGate(&session, job.UserID, lease, reporter); err != nil {
-		runner.finish(job, codeGitDeliveryResult{}, err)
-		return
-	}
-	lease.SetCancel(cancel)
 	var result codeGitDeliveryResult
 	if session.IsolationMode == codeIsolationMultiWorktree || hasCodeMultiRepositoryDelivery(session.ID) {
+		lease.SetCancel(cancel)
+		if err := runCodeDeliveryQualityGate(&session, job.UserID, lease, reporter); err != nil {
+			runner.finish(job, codeGitDeliveryResult{}, err)
+			return
+		}
 		result, err = resumeCodeMultiRepositoryDeliveryWithProgress(&session, job.UserID, reporter)
 	} else {
+		var delivery *model.AICodeDelivery
+		delivery, result, err = prepareCodeSessionDeliveryWithProgress(&session, job.UserID, reporter)
+		if err != nil || result.Status == "conflict" {
+			runner.finish(job, result, err)
+			return
+		}
+		qualitySession := session
+		qualitySession.WorkDir = delivery.DeliveryWorkDir
+		lease.SetCancel(cancel)
+		if err := runCodeDeliveryQualityGate(&qualitySession, job.UserID, lease, reporter); err != nil {
+			runner.finish(job, codeGitDeliveryResult{}, err)
+			return
+		}
 		result, err = resumeCodeSessionDeliveryWithProgress(&session, job.UserID, reporter)
 	}
 	if runner.isSessionCancelled(job.SessionID) {
@@ -368,7 +400,7 @@ func loadCodeDeliveryJobView(sessionID uint) (*codeDeliveryJobView, error) {
 	return &codeDeliveryJobView{
 		ID: job.ID, SessionID: job.SessionID, TaskID: job.TaskID, Status: job.Status, Stage: job.Stage, Progress: job.Progress,
 		Attempt: job.Attempt, QueuePosition: position, TargetBranch: job.TargetBranch, ResultCommit: job.ResultCommit,
-		ResultType: job.ResultType, Repositories: repositories,
+		ResultType: job.ResultType, FailureCode: job.FailureCode, Repositories: repositories,
 		ErrorMessage: job.ErrorMessage, ConflictFiles: conflicts, CreatedAt: job.CreatedAt, UpdatedAt: job.UpdatedAt,
 		StartedAt: job.StartedAt, CompletedAt: job.CompletedAt,
 	}, nil

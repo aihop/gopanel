@@ -209,16 +209,13 @@ func CreateAISession(c fiber.Ctx) error {
 	if err := sessionRepo.CreateSession(session); err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	useWorktree := req.Isolated
-	if project != nil {
-		useWorktree = inspectCodeWorktreeCapability(project).Available
-	}
+	useWorktree := req.Isolated || project != nil
 	if useWorktree {
 		if project == nil {
 			_ = sessionRepo.DeleteSession(session.ID)
 			return c.JSON(e.Fail(errors.New("Git Worktree 隔离仅支持项目会话")))
 		}
-		if err := createCodeSessionWorktreeWithLease(session, project, req.IncludeUncommitted); err != nil {
+		if err := createCodeSessionWorktreeWithLease(session, project, false); err != nil {
 			_ = sessionRepo.DeleteSession(session.ID)
 			return c.JSON(e.Fail(err))
 		}

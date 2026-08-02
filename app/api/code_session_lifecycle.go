@@ -187,7 +187,7 @@ func markCodeSessionDelivering(tx *gorm.DB, session *model.AIDevSession) error {
 
 func completeCodeSessionLifecycle(tx *gorm.DB, sessionID uint, deliveredAt time.Time) error {
 	updated := tx.Model(&model.AIDevSession{}).Where("id = ?", sessionID).Updates(map[string]any{
-		"status": codeSessionStatusActive, "current_stage": codeDeliveryStageCompleted, "delivered_at": deliveredAt,
+		"status": codeSessionStatusDelivered, "current_stage": codeDeliveryStageCompleted, "delivered_at": deliveredAt,
 	})
 	if updated.Error != nil || updated.RowsAffected == 0 {
 		return updated.Error

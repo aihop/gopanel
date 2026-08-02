@@ -117,11 +117,11 @@ func TestCodeDeliveryLifecycleCompletesAndReopens(t *testing.T) {
 	if err := completeCodeSessionLifecycle(database, session.ID, now); err != nil {
 		t.Fatal(err)
 	}
-	if err := database.First(session, session.ID).Error; err != nil || session.Status != codeSessionStatusActive || session.DeliveredAt == nil {
+	if err := database.First(session, session.ID).Error; err != nil || session.Status != codeSessionStatusDelivered || session.DeliveredAt == nil {
 		t.Fatalf("session was not completed: %#v, %v", session, err)
 	}
-	if err := validateCodeSessionDevelopmentOpen(session); err != nil {
-		t.Fatalf("delivered snapshot should keep session open: %v", err)
+	if err := validateCodeSessionDevelopmentOpen(session); err == nil {
+		t.Fatal("delivered session should be frozen")
 	}
 	if err := database.Model(session).Updates(map[string]any{"status": codeSessionStatusDelivering, "delivered_at": nil}).Error; err != nil {
 		t.Fatal(err)
@@ -222,7 +222,7 @@ func TestCodeDeliveryRecoveryRestoresSessionLifecycle(t *testing.T) {
 	if err := database.First(queuedSession, queuedSession.ID).Error; err != nil || queuedSession.Status != codeSessionStatusDelivering {
 		t.Fatalf("queued session lifecycle was not restored: %#v, %v", queuedSession, err)
 	}
-	if err := database.First(completedSession, completedSession.ID).Error; err != nil || completedSession.Status != codeSessionStatusActive || completedSession.DeliveredAt == nil {
+	if err := database.First(completedSession, completedSession.ID).Error; err != nil || completedSession.Status != codeSessionStatusDelivered || completedSession.DeliveredAt == nil {
 		t.Fatalf("completed session lifecycle was not restored: %#v, %v", completedSession, err)
 	}
 	if queued.Status != codeDeliveryJobQueued {

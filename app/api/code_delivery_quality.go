@@ -13,8 +13,8 @@ func runCodeDeliveryQualityGate(session *model.AIDevSession, userID uint, lease 
 	if session == nil || session.ProjectID == 0 {
 		return nil
 	}
-	project, err := repo.NewAIProjectRepo().GetProjectByID(session.ProjectID)
-	if err != nil || !project.RequireQualityGate {
+	_, err := repo.NewAIProjectRepo().GetProjectByID(session.ProjectID)
+	if err != nil {
 		return err
 	}
 	checks, err := detectCodeQualityChecks(session)
@@ -34,7 +34,7 @@ func runCodeDeliveryQualityGate(session *model.AIDevSession, userID uint, lease 
 			continue
 		}
 		if report != nil {
-			report(codeDeliveryStageQualityCheck, 8+(index*10/max(1, len(checks))))
+			report(codeDeliveryStageQualityCheck, 60+(index*8/max(1, len(checks))))
 		}
 		revision, err := codeQualityRevision(check.workDirPath)
 		if err != nil {

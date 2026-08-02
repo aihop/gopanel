@@ -30,6 +30,9 @@ func saveCodeGitRepository(workDir, message string) (string, bool, error) {
 		commit, headErr := runCodeGit(workDir, "rev-parse", "HEAD")
 		return commit, false, headErr
 	}
+	if err := validateCodeGitSaveFiles(workDir); err != nil {
+		return "", false, err
+	}
 	if _, err := runCodeGit(workDir, "add", "-A", "--", "."); err != nil {
 		return "", false, err
 	}

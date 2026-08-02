@@ -144,7 +144,7 @@ func CreateAIProject(c fiber.Ctx) error {
 	project := &model.AIProject{
 		Name: name, Description: strings.TrimSpace(req.Description), SourceDirs: sourceDirs,
 		CreatorID: claims.UserId, PrimaryRepository: primaryRepository,
-		DeliveryBranch: deliveryBranch, RequireQualityGate: req.RequireQualityGate,
+		DeliveryBranch: deliveryBranch, RequireQualityGate: true,
 		MonthlyTokenBudget: req.MonthlyTokenBudget,
 	}
 	if err := applyCodeProjectDeliveryPolicy(project, sourceDirs); err != nil {
@@ -225,7 +225,7 @@ func UpdateAIProject(c fiber.Ctx) error {
 	if req.MonthlyTokenBudget < 0 {
 		return c.JSON(e.Fail(errors.New("Token 月度预算不能为负数")))
 	}
-	project.RequireQualityGate = req.RequireQualityGate
+	project.RequireQualityGate = true
 	project.MonthlyTokenBudget = req.MonthlyTokenBudget
 	if err := applyCodeProjectDeliveryPolicy(project, sourceDirs); err != nil {
 		return c.JSON(e.Fail(err))

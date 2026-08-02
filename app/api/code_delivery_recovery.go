@@ -75,20 +75,36 @@ func mergePreparedCodeDeliveryWithProgress(delivery *model.AICodeDelivery, repor
 		return codeGitDeliveryResult{}, err
 	}
 	delivery.RemoteCommit = targetCommit
+	if err := prepareCodeDeliveryMergeWorktree(delivery, targetCommit); err != nil {
+		return codeGitDeliveryResult{}, err
+	}
 	if report != nil {
 		report(codeDeliveryStageMerging, 55)
 	}
-	if _, err := runCodeGit(snapshot.SourceWorkDir, "merge-base", "--is-ancestor", delivery.WorktreeCommit, "HEAD"); err != nil {
-		if _, err := runCodeGit(snapshot.SourceWorkDir, "merge", "--no-ff", "--no-edit", delivery.WorktreeCommit); err != nil {
-			conflicts := codeGitConflictFiles(snapshot.SourceWorkDir)
-			_, _ = runCodeGit(snapshot.SourceWorkDir, "merge", "--abort")
-			if len(conflicts) > 0 {
-				return codeGitDeliveryResult{Status: "conflict", Branch: snapshot.WorktreeBranch, ConflictFiles: conflicts}, nil
+	if conflicts := codeGitConflictFiles(delivery.DeliveryWorkDir); len(conflicts) > 0 {
+		return codeGitDeliveryResult{Status: "conflict", Branch: snapshot.WorktreeBranch, ConflictFiles: conflicts}, nil
+	}
+	status, err := runCodeGit(delivery.DeliveryWorkDir, "status", "--porcelain")
+	if err != nil || strings.TrimSpace(status) != "" {
+		return codeGitDeliveryResult{}, errors.New("交付 Worktree 存在未提交修改，请完成冲突修复并提交后重试")
+	}
+	if _, err := runCodeGit(delivery.DeliveryWorkDir, "merge-base", "--is-ancestor", targetCommit, "HEAD"); err != nil {
+		if result, mergeErr := mergeCodeDeliveryCommit(delivery, targetCommit, snapshot.WorktreeBranch); result != nil || mergeErr != nil {
+			if result != nil {
+				return *result, mergeErr
 			}
-			return codeGitDeliveryResult{}, err
+			return codeGitDeliveryResult{}, mergeErr
 		}
 	}
-	commit, err := runCodeGit(snapshot.SourceWorkDir, "rev-parse", "HEAD")
+	if _, err := runCodeGit(delivery.DeliveryWorkDir, "merge-base", "--is-ancestor", delivery.WorktreeCommit, "HEAD"); err != nil {
+		if result, mergeErr := mergeCodeDeliveryCommit(delivery, delivery.WorktreeCommit, snapshot.WorktreeBranch); result != nil || mergeErr != nil {
+			if result != nil {
+				return *result, mergeErr
+			}
+			return codeGitDeliveryResult{}, mergeErr
+		}
+	}
+	commit, err := runCodeGit(delivery.DeliveryWorkDir, "rev-parse", "HEAD")
 	if err != nil {
 		return codeGitDeliveryResult{}, err
 	}
@@ -100,6 +116,21 @@ func mergePreparedCodeDeliveryWithProgress(delivery *model.AICodeDelivery, repor
 	}
 	delivery.Status, delivery.MergeCommit, delivery.MergedAt = codeDeliveryMerged, commit, &now
 	return codeGitDeliveryResult{Status: "merged", Commit: commit, Branch: snapshot.WorktreeBranch}, nil
+}
+
+func mergeCodeDeliveryCommit(delivery *model.AICodeDelivery, commit, branch string) (*codeGitDeliveryResult, error) {
+	if _, err := runCodeGit(
+		delivery.DeliveryWorkDir,
+		"-c", "user.name=GoPanel Code", "-c", "user.email=code@gopanel.local",
+		"-c", "commit.gpgsign=false", "merge", "--no-ff", "--no-edit", commit,
+	); err != nil {
+		conflicts := codeGitConflictFiles(delivery.DeliveryWorkDir)
+		if len(conflicts) > 0 {
+			return &codeGitDeliveryResult{Status: "conflict", Branch: branch, ConflictFiles: conflicts}, nil
+		}
+		return nil, err
+	}
+	return nil, nil
 }
 
 func updateCodeDeliveryMetadata(delivery *model.AICodeDelivery) error {
@@ -122,6 +153,9 @@ func updateCodeDeliveryMetadata(delivery *model.AICodeDelivery) error {
 }
 
 func cleanupCodeDeliveryWorktree(delivery *model.AICodeDelivery) error {
+	if err := cleanupCodeIntegrationWorktree(delivery); err != nil {
+		return err
+	}
 	snapshot := codeDeliverySessionSnapshot(delivery)
 	if _, err := os.Stat(snapshot.WorkDir); err == nil {
 		if err := cleanupCodeSessionWorktree(snapshot); err != nil {
@@ -147,6 +181,26 @@ func resumeCodeSessionDelivery(session *model.AIDevSession, userID uint) (codeGi
 	return resumeCodeSessionDeliveryWithProgress(session, userID, nil)
 }
 
+func prepareCodeSessionDeliveryWithProgress(session *model.AIDevSession, userID uint, report codeDeliveryProgressReporter) (*model.AICodeDelivery, codeGitDeliveryResult, error) {
+	delivery, err := loadOrCreateCodeDeliveryWithProgress(session, userID, report)
+	if err != nil {
+		return nil, codeGitDeliveryResult{}, err
+	}
+	result := codeGitDeliveryResult{Status: "merged", Commit: delivery.MergeCommit, Branch: delivery.WorktreeBranch}
+	if delivery.Status == codeDeliveryPrepared {
+		result, err = mergePreparedCodeDeliveryWithProgress(delivery, report)
+		if err != nil || result.Status == "conflict" {
+			return delivery, result, err
+		}
+	}
+	if delivery.Status == codeDeliveryMerged {
+		if err := ensureCodeDeliveryWorktree(delivery, delivery.MergeCommit); err != nil {
+			return delivery, codeGitDeliveryResult{}, err
+		}
+	}
+	return delivery, result, nil
+}
+
 func resumeCodeSessionDeliveryWithProgress(session *model.AIDevSession, userID uint, report codeDeliveryProgressReporter) (codeGitDeliveryResult, error) {
 	delivery, err := loadOrCreateCodeDeliveryWithProgress(session, userID, report)
 	if err != nil {
@@ -158,12 +212,17 @@ func resumeCodeSessionDeliveryWithProgress(session *model.AIDevSession, userID u
 		return result, err
 	}
 	if delivery.Status == codeDeliveryMerged {
-		if err := updateCodeDeliveryMetadata(delivery); err != nil {
-			return codeGitDeliveryResult{}, err
+		if report != nil {
+			report(codeDeliveryStageCleaning, 90)
 		}
-		delivery.Status = codeDeliveryCompleted
+		if err := cleanupCodeDeliveryWorktree(delivery); err != nil {
+			delivery.ErrorMessage = err.Error()
+			_ = global.DB.Model(delivery).Update("error_message", delivery.ErrorMessage).Error
+		} else {
+			delivery.Status = codeDeliveryWorktreeCleaned
+		}
 	}
-	if delivery.Status == codeDeliveryWorktreeCleaned {
+	if delivery.Status == codeDeliveryMerged || delivery.Status == codeDeliveryWorktreeCleaned {
 		if err := updateCodeDeliveryMetadata(delivery); err != nil {
 			return codeGitDeliveryResult{}, err
 		}

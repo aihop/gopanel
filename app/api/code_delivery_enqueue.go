@@ -25,6 +25,13 @@ func persistCodeDeliveryJob(session *model.AIDevSession, userID uint, requestIP 
 	var job model.AICodeDeliveryJob
 	queryErr := global.DB.Where("session_id = ?", session.ID).First(&job).Error
 	if queryErr == nil && (job.Status == codeDeliveryJobQueued || job.Status == codeDeliveryJobRunning) {
+		var current model.AIDevSession
+		if err := global.DB.First(&current, session.ID).Error; err != nil {
+			return nil, err
+		}
+		if current.Status == codeSessionStatusDelivered {
+			return nil, errors.New("当前会话已完成统一交付，请新建会话继续开发")
+		}
 		return &job, nil
 	}
 	if queryErr != nil && !errors.Is(queryErr, gorm.ErrRecordNotFound) {
@@ -75,7 +82,7 @@ func persistCodeDeliveryJob(session *model.AIDevSession, userID uint, requestIP 
 			"status": codeDeliveryJobQueued, "stage": codeDeliveryStageQueued, "progress": 0,
 			"repository_keys": string(encodedKeys), "target_branch": targetBranch,
 			"task_id": session.LastTaskID, "result_commit": "", "result_type": "", "repository_results": "",
-			"error_message": "", "conflict_files": "", "request_ip": requestIP,
+			"failure_code": "", "error_message": "", "conflict_files": "", "request_ip": requestIP,
 			"lease_owner": "", "lease_expires_at": nil, "started_at": nil, "completed_at": nil,
 		}
 		if err := tx.Model(&job).Updates(updates).Error; err != nil {

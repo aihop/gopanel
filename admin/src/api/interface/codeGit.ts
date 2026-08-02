@@ -112,6 +112,7 @@ export interface CodeDeliveryJob {
 	targetBranch?: string
 	resultCommit?: string
 	resultType?: "local" | "remote_verified" | "mixed"
+	failureCode?: "source_dirty" | "conflict" | "quality_failed" | "remote_advanced" | "push_failed" | "partial" | "delivery_failed"
 	repositories?: CodeRepositoryDeliveryResult[]
 	errorMessage?: string
 	conflictFiles: string[]

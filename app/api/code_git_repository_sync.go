@@ -109,16 +109,11 @@ func prepareCodeRepositoryCandidateForBranch(candidate codeRepositoryCandidate, 
 		GitlinkPath: candidate.GitlinkPath, TargetBranch: targetBranch, SyncStatus: "local", Snapshot: dirty,
 	}
 	remoteName, remoteRef := codeRepositoryRemoteTracking(candidate.SourceDir, targetBranch)
-	localOnly := false
 	if remoteName != "" {
 		if _, err := fetchCodeRepository(candidate.SourceDir, remoteName); err != nil {
-			if !isCodeGitFetchUnavailable(err) {
-				return codePreparedRepository{}, fmt.Errorf("同步仓库 %s 失败：%w", filepath.Base(candidate.SourceDir), err)
-			}
-			localOnly = true
-			remoteRef = ""
+			return codePreparedRepository{}, fmt.Errorf("同步仓库 %s 失败：%w", filepath.Base(candidate.SourceDir), err)
 		}
-		if remoteRef == "" && !localOnly {
+		if remoteRef == "" {
 			candidate := "refs/remotes/" + remoteName + "/" + targetBranch
 			if _, err := runCodeGit(prepared.SourceDir, "show-ref", "--verify", candidate); err == nil {
 				remoteRef = candidate
@@ -136,9 +131,6 @@ func prepareCodeRepositoryCandidateForBranch(candidate codeRepositoryCandidate, 
 	prepared.RemoteBranch = codeRemoteBranch(remoteName, remoteRef, targetBranch)
 	prepared.RemoteCommit = remoteCommit
 	prepared.SyncStatus = syncStatus
-	if localOnly {
-		prepared.SyncStatus = "local_only"
-	}
 	return prepared, nil
 }
 
@@ -183,26 +175,6 @@ func resolveCodeRepositoryTargetBranch(sourceDir, deliveryBranch string, dirty b
 		return "", fmt.Errorf("主交付仓库无法自动恢复到交付分支 %s：%w", deliveryBranch, err)
 	}
 	return deliveryBranch, nil
-}
-
-func isCodeGitFetchUnavailable(err error) bool {
-	if err == nil {
-		return false
-	}
-	message := strings.ToLower(err.Error())
-	for _, fragment := range []string{
-		"git 操作超时", "authentication failed", "unable to get password",
-		"could not read username", "terminal prompts disabled", "permission denied (publickey)",
-		"could not resolve host", "temporary failure in name resolution", "network is unreachable",
-		"no route to host", "failed to connect", "connection refused", "connection reset",
-		"connection timed out", "operation timed out", "connection closed by remote host",
-		"ssl_error_syscall", "tls handshake timeout",
-	} {
-		if strings.Contains(message, fragment) {
-			return true
-		}
-	}
-	return false
 }
 
 func codeRepositoryBaseline(sourceDir, targetBranch, remoteRef string, dirty bool) (string, string, string, error) {

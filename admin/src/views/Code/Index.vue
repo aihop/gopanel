@@ -140,7 +140,7 @@
 		  <div class="rounded-xl bg-[var(--n-color-embedded)] p-3">
 			<div class="flex items-start justify-between gap-3">
 				<div><div class="text-sm font-medium">{{ t("code.requireQualityGate") }}</div><div class="mt-1 text-xs text-[var(--n-text-color-3)]">{{ t("code.requireQualityGateHint") }}</div></div>
-				<n-switch v-model:value="projectForm.requireQualityGate" />
+				<n-switch :value="true" disabled />
 			</div>
 		  </div>
 		  <n-input-number v-model:value="projectForm.monthlyTokenBudget" :min="0" :step="100000" style="width: 100%" :placeholder="t('code.monthlyTokenBudget')">
@@ -227,7 +227,7 @@ const showCreateProjectModal = ref(false)
 const showDirectoryPicker = ref(false)
 const creatingProject = ref(false)
 const editingProjectId = ref<number | null>(null)
-const projectForm = ref({ name: '', desc: '', workDir: '', sourceDirs: [] as string[], primaryRepository: '', deliveryBranch: '', requireQualityGate: false, monthlyTokenBudget: 0 })
+const projectForm = ref({ name: '', desc: '', workDir: '', sourceDirs: [] as string[], primaryRepository: '', deliveryBranch: '', requireQualityGate: true, monthlyTokenBudget: 0 })
 
 const projects = ref<AIProject[]>([])
 const projectsLoading = ref(false)
@@ -293,14 +293,14 @@ const formatUpdatedAt = (value: string) => new Date(value).toLocaleString(undefi
 
 const openCreateProjectModal = () => {
   editingProjectId.value = null
-  projectForm.value = { name: '', desc: '', workDir: defaultWorkDir.value, sourceDirs: [], primaryRepository: '', deliveryBranch: '', requireQualityGate: false, monthlyTokenBudget: 0 }
+  projectForm.value = { name: '', desc: '', workDir: defaultWorkDir.value, sourceDirs: [], primaryRepository: '', deliveryBranch: '', requireQualityGate: true, monthlyTokenBudget: 0 }
   showCreateProjectModal.value = true
 }
 
 const openEditProjectModal = (project: AIProject) => {
   editingProjectId.value = project.id
   const sourceDirs = project.sourceDirs?.length ? project.sourceDirs : project.workDir ? [project.workDir] : []
-  projectForm.value = { name: project.name, desc: project.description || '', workDir: sourceDirs[0] || defaultWorkDir.value, sourceDirs, primaryRepository: project.primaryRepository || '', deliveryBranch: project.deliveryBranch || 'main', requireQualityGate: Boolean(project.requireQualityGate), monthlyTokenBudget: project.monthlyTokenBudget || 0 }
+  projectForm.value = { name: project.name, desc: project.description || '', workDir: sourceDirs[0] || defaultWorkDir.value, sourceDirs, primaryRepository: project.primaryRepository || '', deliveryBranch: project.deliveryBranch || 'main', requireQualityGate: true, monthlyTokenBudget: project.monthlyTokenBudget || 0 }
   showCreateProjectModal.value = true
 }
 

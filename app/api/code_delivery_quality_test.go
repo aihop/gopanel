@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/aihop/gopanel/app/model"
+	"github.com/aihop/gopanel/global"
 )
 
 func createQualityDeliverySession(t *testing.T, sessionID uint, command string) *model.AIDevSession {
@@ -57,5 +58,42 @@ func TestRunCodeDeliveryQualityGateStopsFailedDelivery(t *testing.T) {
 	loadCodeQualityResults(session.ID, checks)
 	if checks[0].LastResult == nil || checks[0].LastResult.Status != "failed" {
 		t.Fatalf("failed result was not persisted: %#v", checks[0].LastResult)
+	}
+}
+
+func TestCodeDeliveryQualityFailureKeepsSourceAndRemoteUnchanged(t *testing.T) {
+	session := createQualityDeliverySession(t, 149, "false")
+	sourceCommit, err := runCodeGit(session.SourceWorkDir, "rev-parse", "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var job model.AICodeDeliveryJob
+	if err := global.DB.Where("session_id = ?", session.ID).First(&job).Error; err != nil {
+		t.Fatal(err)
+	}
+	runner := &codeDeliveryRunner{
+		queued: make(map[uint]struct{}), cancelled: make(map[uint]struct{}),
+		owner: newCodeRepositoryLeaseOwner("quality-test"),
+	}
+	runner.run(job.ID)
+	if err := global.DB.First(&job, job.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if job.Status != codeDeliveryJobFailed || job.Stage != codeDeliveryStageQualityCheck || job.FailureCode != "quality_failed" {
+		t.Fatalf("unexpected failed delivery state: %#v", job)
+	}
+	currentSourceCommit, err := runCodeGit(session.SourceWorkDir, "rev-parse", "HEAD")
+	if err != nil || currentSourceCommit != sourceCommit {
+		t.Fatalf("quality failure changed source branch: got=%q want=%q err=%v", currentSourceCommit, sourceCommit, err)
+	}
+	var delivery model.AICodeDelivery
+	if err := global.DB.Where("session_id = ?", session.ID).First(&delivery).Error; err != nil {
+		t.Fatal(err)
+	}
+	if delivery.Status != codeDeliveryMerged || delivery.DeliveryWorkDir == "" {
+		t.Fatalf("delivery worktree was not preserved: %#v", delivery)
+	}
+	if _, err := os.Stat(filepath.Join(delivery.DeliveryWorkDir, "package.json")); err != nil {
+		t.Fatalf("merged delivery worktree unavailable after quality failure: %v", err)
 	}
 }
