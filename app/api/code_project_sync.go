@@ -84,14 +84,17 @@ func codeProjectRepositorySpecs(project *model.AIProject) ([]codeProjectReposito
 			branch = policy.DeliveryBranch
 		} else {
 			currentBranch, branchErr := runCodeGit(candidate.SourceDir, "branch", "--show-current")
-			if branchErr != nil || strings.TrimSpace(currentBranch) == "" {
-				return nil, fmt.Errorf("仓库 %s 当前处于 detached HEAD", filepath.Base(candidate.SourceDir))
+			if branchErr != nil {
+				return nil, fmt.Errorf("读取仓库 %s 当前分支失败：%w", filepath.Base(candidate.SourceDir), branchErr)
 			}
 			branch = strings.TrimSpace(currentBranch)
 		}
-		remote, remoteRef := codeRepositoryRemoteTracking(candidate.SourceDir, branch)
-		if remote != "" && remoteRef == "" {
-			remoteRef = remote + "/" + branch
+		remote, remoteRef := "", ""
+		if branch != "" {
+			remote, remoteRef = codeRepositoryRemoteTracking(candidate.SourceDir, branch)
+			if remote != "" && remoteRef == "" {
+				remoteRef = remote + "/" + branch
+			}
 		}
 		specs = append(specs, codeProjectRepositorySpec{
 			Name: filepath.Base(candidate.SourceDir), Path: candidate.SourceDir,
@@ -127,6 +130,9 @@ func validateCodeProjectGitlinkTargets(specs []codeProjectRepositorySpec) error 
 		if child.RemoteRef != "" {
 			childTarget = child.RemoteRef
 		}
+		if childTarget == "" {
+			childTarget = "HEAD"
+		}
 		entry, err := runCodeGit(parent.Path, "ls-tree", parentTarget, "--", child.GitlinkPath)
 		if err != nil || strings.TrimSpace(entry) == "" {
 			return fmt.Errorf("父仓 %s 的目标分支未包含 Gitlink %s", parent.Name, child.GitlinkPath)
@@ -159,7 +165,11 @@ func inspectCodeProjectRepositorySync(spec codeProjectRepositorySpec) codeProjec
 		result.Status, result.Reason = "dirty", "uncommitted_changes"
 		return result
 	}
-	result.LocalCommit, err = runCodeGit(spec.Path, "rev-parse", spec.Branch)
+	localTarget := spec.Branch
+	if localTarget == "" {
+		localTarget = "HEAD"
+	}
+	result.LocalCommit, err = runCodeGit(spec.Path, "rev-parse", localTarget)
 	if err != nil {
 		result.Reason = "local_branch_unavailable"
 		return result
@@ -173,7 +183,7 @@ func inspectCodeProjectRepositorySync(spec codeProjectRepositorySpec) codeProjec
 		result.Status, result.Reason = "offline", "remote_ref_unavailable"
 		return result
 	}
-	counts, err := runCodeGit(spec.Path, "rev-list", "--left-right", "--count", spec.Branch+"..."+spec.RemoteRef)
+	counts, err := runCodeGit(spec.Path, "rev-list", "--left-right", "--count", localTarget+"..."+spec.RemoteRef)
 	if err != nil || len(strings.Fields(counts)) != 2 {
 		result.Reason = "comparison_failed"
 		return result

@@ -108,6 +108,14 @@ func prepareCodeRepositoryCandidateForBranch(candidate codeRepositoryCandidate, 
 		SourceDir: candidate.SourceDir, ParentSourceDir: candidate.ParentSourceDir,
 		GitlinkPath: candidate.GitlinkPath, TargetBranch: targetBranch, SyncStatus: "local", Snapshot: dirty,
 	}
+	if targetBranch == "" {
+		baseCommit, err := runCodeGit(candidate.SourceDir, "rev-parse", "HEAD")
+		if err != nil {
+			return codePreparedRepository{}, err
+		}
+		prepared.BaseCommit = strings.TrimSpace(baseCommit)
+		return prepared, nil
+	}
 	remoteName, remoteRef := codeRepositoryRemoteTracking(candidate.SourceDir, targetBranch)
 	if remoteName != "" {
 		if _, err := fetchCodeRepository(candidate.SourceDir, remoteName); err != nil {
@@ -141,9 +149,6 @@ func resolveCodeRepositoryTargetBranch(sourceDir, deliveryBranch string, dirty b
 	}
 	currentBranch = strings.TrimSpace(currentBranch)
 	if deliveryBranch == "" {
-		if currentBranch == "" {
-			return "", fmt.Errorf("源仓库 %s 当前处于 detached HEAD，无法确定目标分支", filepath.Base(sourceDir))
-		}
 		return currentBranch, nil
 	}
 	if currentBranch == deliveryBranch {

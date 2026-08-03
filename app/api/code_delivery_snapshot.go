@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/global"
@@ -107,10 +108,10 @@ func captureCodeMultiRepositoryDeliverySnapshot(session *model.AIDevSession) err
 		}
 		targetBranch := strings.TrimSpace(repository.TargetBranch)
 		if targetBranch == "" {
-			targetBranch, _ = runCodeGit(repository.SourceDir, "branch", "--show-current")
-		}
-		if strings.TrimSpace(targetBranch) == "" {
-			return fmt.Errorf("仓库 %s 的交付目标分支不可用", repository.LinkName)
+			if commit != strings.TrimSpace(repository.BaseCommit) {
+				return fmt.Errorf("仓库 %s 已产生新提交，但源仓库处于 detached HEAD，请先配置交付分支", repository.LinkName)
+			}
+			repository.Status = codeDeliveryCompleted
 		}
 		repository.TargetBranch, repository.WorktreeCommit = targetBranch, commit
 	}
@@ -123,10 +124,15 @@ func captureCodeMultiRepositoryDeliverySnapshot(session *model.AIDevSession) err
 		for index := range repositories {
 			repository := &repositories[index]
 			updates := map[string]any{
-				"status": codeDeliveryPrepared, "target_branch": repository.TargetBranch,
+				"status": repository.Status, "target_branch": repository.TargetBranch,
 				"remote_commit": "", "worktree_commit": repository.WorktreeCommit,
 				"merge_commit": "", "error_message": "", "merged_at": nil, "completed_at": nil,
 				"push_status": codePushPending, "pushed_commit": "", "push_error": "", "pushed_at": nil,
+			}
+			if repository.Status != codeDeliveryCompleted {
+				updates["status"] = codeDeliveryPrepared
+			} else {
+				updates["completed_at"] = time.Now()
 			}
 			if err := tx.Model(repository).Updates(updates).Error; err != nil {
 				return err
