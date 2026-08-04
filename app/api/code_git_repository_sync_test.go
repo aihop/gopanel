@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -96,6 +97,43 @@ func TestPrepareCodeRepositoryRejectsUnavailableRemote(t *testing.T) {
 	_, err = prepareCodeRepository(localDir)
 	if err == nil || !strings.Contains(err.Error(), "同步仓库") {
 		t.Fatalf("unavailable remote should block worktree creation: %v", err)
+	}
+}
+
+func TestNormalizeCodeGitCommandErrorClassifiesAndRedactsAuthentication(t *testing.T) {
+	err := normalizeCodeGitCommandError("fatal: unable to get password from user for 'https://secret-token@github.com/aihop/ainode.git'")
+	if !errors.Is(err, errCodeGitAuthentication) {
+		t.Fatalf("authentication failure was not classified: %v", err)
+	}
+	if strings.Contains(err.Error(), "secret-token") {
+		t.Fatalf("authentication failure leaked credentials: %v", err)
+	}
+	if !strings.Contains(err.Error(), "credential helper") {
+		t.Fatalf("authentication failure did not include recovery guidance: %v", err)
+	}
+}
+
+func TestNormalizeCodeGitCommandErrorPreservesNonAuthenticationFailure(t *testing.T) {
+	err := normalizeCodeGitCommandError("fatal: unable to access remote: connection refused")
+	if errors.Is(err, errCodeGitAuthentication) || !strings.Contains(err.Error(), "connection refused") {
+		t.Fatalf("network failure was misclassified: %v", err)
+	}
+}
+
+func TestRunCodeGitRedactsAuthenticationFailure(t *testing.T) {
+	repository := createCodeGitRepository(t)
+	if _, err := runCodeGit(
+		repository,
+		"config", "alias.auth-failure", "!f() { echo \"fatal: authentication failed for https://user:secret@github.com/private/repo.git\" >&2; exit 1; }; f",
+	); err != nil {
+		t.Fatal(err)
+	}
+	_, err := runCodeGit(repository, "auth-failure")
+	if !errors.Is(err, errCodeGitAuthentication) {
+		t.Fatalf("Git authentication failure was not classified: %v", err)
+	}
+	if strings.Contains(err.Error(), "user:secret") {
+		t.Fatalf("Git authentication failure leaked credentials: %v", err)
 	}
 }
 

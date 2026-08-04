@@ -121,6 +121,9 @@ func createCodeSessionWorktree(session *model.AIDevSession, project *model.AIPro
 	}
 	prepared, err := prepareDiscoveredCodeRepositoriesWithPolicy(sourceDirs, policy, includeUncommitted...)
 	if err != nil {
+		if errors.Is(err, errCodeGitAuthentication) {
+			return err
+		}
 		return fmt.Errorf("当前项目不支持 Git Worktree 隔离：%w", err)
 	}
 	if len(prepared) > 1 {
@@ -239,7 +242,9 @@ func runCodeGitWithTimeout(workDir string, timeout time.Duration, args ...string
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	commandArgs := append([]string{"-C", workDir}, args...)
-	output, err := exec.CommandContext(ctx, "git", commandArgs...).CombinedOutput()
+	command := exec.CommandContext(ctx, "git", commandArgs...)
+	command.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	output, err := command.CombinedOutput()
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		return "", errors.New("Git 操作超时")
 	}
@@ -248,7 +253,7 @@ func runCodeGitWithTimeout(workDir string, timeout time.Duration, args ...string
 		if message == "" {
 			message = err.Error()
 		}
-		return "", fmt.Errorf("Git 操作失败：%s", message)
+		return "", fmt.Errorf("Git 操作失败：%w", normalizeCodeGitCommandError(message))
 	}
 	return strings.TrimSpace(string(output)), nil
 }
