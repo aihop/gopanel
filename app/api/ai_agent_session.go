@@ -215,7 +215,7 @@ func CreateAISession(c fiber.Ctx) error {
 			_ = sessionRepo.DeleteSession(session.ID)
 			return c.JSON(e.Fail(errors.New("Git Worktree 隔离仅支持项目会话")))
 		}
-		if err := createCodeSessionWorktreeWithLease(session, project, false); err != nil {
+		if err := createCodeSessionWorktreeWithLease(session, project, true); err != nil {
 			_ = sessionRepo.DeleteSession(session.ID)
 			return c.JSON(e.Fail(err))
 		}

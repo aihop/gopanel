@@ -332,12 +332,12 @@ func TestDiscoverCodeRepositoriesIncludesGitlinkWithoutGitmodules(t *testing.T) 
 	}
 }
 
-func TestPrepareGitlinkRepositoriesRejectsDirtyChildByDefault(t *testing.T) {
+func TestPrepareGitlinkRepositoriesRejectsDirtyChildWhenSnapshotDisabled(t *testing.T) {
 	parent, child := createGitlinkRepositoryTree(t)
 	if err := os.WriteFile(filepath.Join(child, "working.txt"), []byte("dirty\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	_, err := prepareDiscoveredCodeRepositories([]string{parent})
+	_, err := prepareDiscoveredCodeRepositories([]string{parent}, false)
 	if err == nil || !strings.Contains(err.Error(), "源仓库 custom 存在未提交变更") {
 		t.Fatalf("dirty child should be rejected explicitly: %v", err)
 	}

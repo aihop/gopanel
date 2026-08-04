@@ -342,7 +342,7 @@ func prepareDiscoveredCodeRepositoriesWithPolicy(sourceDirs []string, policy cod
 	if len(candidates) == 0 {
 		return nil, errors.New("项目目录中未发现 Git 仓库")
 	}
-	allowSnapshot := len(includeUncommitted) > 0 && includeUncommitted[0]
+	allowSnapshot := len(includeUncommitted) == 0 || includeUncommitted[0]
 	prepared := make([]codePreparedRepository, 0, len(candidates))
 	for _, candidate := range candidates {
 		targetBranch := ""

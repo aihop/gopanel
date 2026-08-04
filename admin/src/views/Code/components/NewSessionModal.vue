@@ -125,7 +125,7 @@ const submit = async () => {
 			executorId: selectedExecutorId.value,
 			approvalPolicy: approvalPolicy.value,
 			isolated: isolated.value,
-			includeUncommitted: false,
+			includeUncommitted: true,
 			provider:
 				showProviderConfig.value && providerMode.value === "custom"
 					? (Object.fromEntries(

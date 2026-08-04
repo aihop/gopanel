@@ -106,6 +106,37 @@ func TestCreateAndRollbackCodeSessionWorktree(t *testing.T) {
 	}
 }
 
+func TestCreateCodeSessionWorktreeSnapshotsDirtyRepositoryByDefault(t *testing.T) {
+	withAIProjectBaseDir(t)
+	repositoryDir := createCodeGitRepository(t)
+	if err := os.WriteFile(filepath.Join(repositoryDir, "README.md"), []byte("staged\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(repositoryDir, "add", "README.md"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repositoryDir, "working.txt"), []byte("untracked\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	sourceStatus, err := runCodeGit(repositoryDir, "status", "--porcelain")
+	if err != nil {
+		t.Fatal(err)
+	}
+	session := &model.AIDevSession{ID: 25, UserID: 7, WorkDir: repositoryDir}
+	if err := createCodeSessionWorktree(session, &model.AIProject{SourceDirs: []string{repositoryDir}}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { rollbackCodeSessionWorktree(session) })
+	worktreeStatus, err := runCodeGit(session.WorkDir, "status", "--porcelain")
+	if err != nil || !strings.Contains(worktreeStatus, "M  README.md") || !strings.Contains(worktreeStatus, "?? working.txt") {
+		t.Fatalf("dirty state was not copied: %q, %v", worktreeStatus, err)
+	}
+	unchangedStatus, err := runCodeGit(repositoryDir, "status", "--porcelain")
+	if err != nil || unchangedStatus != sourceStatus || session.RepositorySync != "snapshot" {
+		t.Fatalf("source repository changed or snapshot metadata missing: before=%q after=%q session=%#v err=%v", sourceStatus, unchangedStatus, session, err)
+	}
+}
+
 func TestCodeSessionWorktreeBlocksDirectPush(t *testing.T) {
 	withAIProjectBaseDir(t)
 	repositoryDir, _ := createCodeRemoteRepository(t)

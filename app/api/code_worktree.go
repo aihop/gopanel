@@ -99,7 +99,7 @@ func inspectCodeWorktreeCapability(project *model.AIProject) codeWorktreeCapabil
 	}
 	result := codeWorktreeCapability{
 		Available: true, SourceDirs: resolvedDirs, RepositoryCount: len(resolvedDirs),
-		DirtyRepositories: codeCandidateNames(candidates), SnapshotSupported: false,
+		DirtyRepositories: codeCandidateNames(candidates), SnapshotSupported: true,
 	}
 	if len(candidates) == 1 {
 		result.SourceDir = candidates[0].SourceDir

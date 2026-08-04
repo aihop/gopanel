@@ -190,7 +190,7 @@ func TestCreateGitlinkRepositorySnapshotPreservesSourceState(t *testing.T) {
 	if err := database.Create(session).Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := createCodeSessionWorktree(session, project, true); err != nil {
+	if err := createCodeSessionWorktree(session, project); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { rollbackCodeSessionWorktree(session) })
