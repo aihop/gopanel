@@ -70,6 +70,8 @@ export const mobileMessages = {
 			createAndOpen: "创建并打开",
 			sessionCreated: "会话创建成功",
 			sessionCreateFailed: "会话创建失败",
+			sessionInitializationFailed: "会话初始化失败",
+			sessionInitializationTimedOut: "会话初始化等待超时，请稍后从会话列表查看",
 			worktreeCheckFailed: "无法检查项目隔离能力",
 			worktreeUnavailable: "当前项目无法创建安全的隔离会话，请在电脑端检查项目目录。",
 			worktreeDirtyDesktopHint:
@@ -316,6 +318,9 @@ export const mobileMessages = {
 			createAndOpen: "Create and open",
 			sessionCreated: "Session created",
 			sessionCreateFailed: "Failed to create session",
+			sessionInitializationFailed: "Session initialization failed",
+			sessionInitializationTimedOut:
+				"Session initialization is taking longer than expected. Check the session list later.",
 			worktreeCheckFailed: "Unable to check project isolation",
 			worktreeUnavailable:
 				"This project cannot create a safe isolated session. Check its directories from the desktop console.",

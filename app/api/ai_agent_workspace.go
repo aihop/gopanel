@@ -49,6 +49,9 @@ func loadAIAgentSessionState(
 		if session.UserID != claims.UserId && claims.Role != constant.UserRoleSuper {
 			return "", 0, nil, nil, fmt.Errorf("无权访问该开发会话")
 		}
+		if err := validateCodeSessionDevelopmentOpen(session); err != nil {
+			return "", 0, nil, nil, err
+		}
 		currentSession = session
 		workDir = session.WorkDir
 		if reqProjectID == 0 {
@@ -70,6 +73,9 @@ func loadAIAgentSessionState(
 			if task.SessionID > 0 && currentSession == nil {
 				session, sessionErr := sessionRepo.GetSessionByID(task.SessionID)
 				if sessionErr == nil && (session.UserID == claims.UserId || claims.Role == constant.UserRoleSuper) {
+					if err := validateCodeSessionDevelopmentOpen(session); err != nil {
+						return "", 0, nil, nil, err
+					}
 					currentSession = session
 				}
 			}

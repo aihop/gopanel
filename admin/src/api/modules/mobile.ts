@@ -16,7 +16,7 @@ import type { HostTerminalSession } from "@/api/interface/hostTerminal"
 import type { CodeProjectSyncStatus } from "@/api/interface/codeOverview"
 import type { CodeDeliveryJob, CodeGitDeliveryResult, CodeGitStatus } from "@/api/interface/codeGit"
 import type { NodeSummary, NodeWarning } from "./node"
-
+import { waitForCodeSessionInitialization } from "./codeSessionInitialization"
 const mobileHttp = axios.create({
 	baseURL: import.meta.env.VITE_API_URL as string,
 	timeout: 15000,
@@ -376,12 +376,15 @@ export function openMobileProjectTerminal(projectId: number) {
 	)
 }
 
-export function createMobileSession(data: {
-	title: string
-	projectId: number
-	executorId: string
-	approvalPolicy: CodeApprovalPolicy
-}) {
+export function createMobileSession(
+	data: {
+		title: string
+		projectId: number
+		executorId: string
+		approvalPolicy: CodeApprovalPolicy
+	},
+	messages: { initializationFailed: string; initializationTimedOut: string }
+) {
 	return mobileRequest(
 		mobileHttp.post<ResultData<CodeSession>>("/mobile/app/sessions", {
 			...data,
@@ -389,7 +392,17 @@ export function createMobileSession(data: {
 			isolated: true,
 			includeUncommitted: true
 		})
-	)
+	).then(async session => {
+		if (session.status !== "initializing") return session
+		await waitForCodeSessionInitialization(
+			() => mobileRequest(
+				mobileHttp.get<ResultData<import("@/api/interface/code").CodeSessionInitialization>>(`/mobile/app/sessions/${session.id}/initialization`)
+			),
+			{ failed: messages.initializationFailed, timedOut: messages.initializationTimedOut }
+		)
+		const state = await getMobileSessionState(session.id)
+		return state.session
+	})
 }
 
 export function updateMobileSessionTitle(sessionId: number, title: string) {

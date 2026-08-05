@@ -133,7 +133,10 @@ const submit = async () => {
 						) as unknown as CodeExecutorConfig)
 					: undefined
 		}
-		const response = await createCodeSession(sessionRequest)
+		const response = await createCodeSession(sessionRequest, {
+			initializationFailed: t("code.sessionInitializationFailed"),
+			initializationTimedOut: t("code.sessionInitializationTimedOut")
+		})
 		emit("created", response.data)
 		close()
 		message.success(t("code.sessionCreated"))

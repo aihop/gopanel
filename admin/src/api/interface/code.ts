@@ -38,6 +38,13 @@ export interface AITask {
 	status: string
 }
 
+export interface CodeSessionInitialization {
+	id: number
+	status: "initializing" | "active" | "failed"
+	currentStage: string
+	initializationError?: string
+}
+
 export interface CodeExecutor {
 	id: string
 	name: string
@@ -94,6 +101,7 @@ export interface CodeSession {
 	repositorySync?: "local" | "local_only" | "synced" | "fast_forwarded"
 	isolationMode?: "single_worktree" | "multi_worktree"
 	status: string
+	initializationError?: string
 	deliveredAt?: string
 	currentStage: string
 	approvalPolicy: CodeApprovalPolicy

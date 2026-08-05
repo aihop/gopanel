@@ -74,12 +74,18 @@ async function submit() {
 	if (!canCreate.value || submitting.value) return
 	submitting.value = true
 	try {
-		const session = await createMobileSession({
-			title: title.value.trim(),
-			projectId: projectId.value,
-			executorId: executorId.value,
-			approvalPolicy: approvalPolicy.value
-		})
+		const session = await createMobileSession(
+			{
+				title: title.value.trim(),
+				projectId: projectId.value,
+				executorId: executorId.value,
+				approvalPolicy: approvalPolicy.value
+			},
+			{
+				initializationFailed: t("mobile.sessionInitializationFailed"),
+				initializationTimedOut: t("mobile.sessionInitializationTimedOut")
+			}
+		)
 		message.success(t("mobile.sessionCreated"))
 		emit("created", session)
 		emit("update:show", false)

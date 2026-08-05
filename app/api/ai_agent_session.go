@@ -201,7 +201,18 @@ func CreateAISession(c fiber.Ctx) error {
 	if title == "" {
 		title = buildDefaultSessionTitle(workDir, "")
 	}
-	session := &model.AIDevSession{UserID: claims.UserId, ProjectID: req.ProjectID, Title: title, AgentName: executorID, WorkDir: workDir, Status: "active", CurrentStage: "idle", ApprovalPolicy: approvalPolicy}
+	useWorktree := req.Isolated || project != nil
+	status, stage := codeSessionStatusActive, "idle"
+	if useWorktree {
+		if project == nil {
+			return c.JSON(e.Fail(errors.New("Git Worktree 隔离仅支持项目会话")))
+		}
+		status, stage = codeSessionStatusInitializing, codeSessionStageSyncingBase
+	}
+	session := &model.AIDevSession{
+		UserID: claims.UserId, ProjectID: req.ProjectID, Title: title, AgentName: executorID,
+		WorkDir: workDir, Status: status, CurrentStage: stage, ApprovalPolicy: approvalPolicy,
+	}
 	if err := setCodeProviderOnSession(session, provider); err != nil {
 		return c.JSON(e.Fail(err))
 	}
@@ -209,21 +220,9 @@ func CreateAISession(c fiber.Ctx) error {
 	if err := sessionRepo.CreateSession(session); err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	useWorktree := req.Isolated || project != nil
 	if useWorktree {
-		if project == nil {
-			_ = sessionRepo.DeleteSession(session.ID)
-			return c.JSON(e.Fail(errors.New("Git Worktree 隔离仅支持项目会话")))
-		}
-		if err := createCodeSessionWorktreeWithLease(session, project, true); err != nil {
-			_ = sessionRepo.DeleteSession(session.ID)
-			return c.JSON(e.Fail(err))
-		}
-		if err := sessionRepo.UpdateSession(session); err != nil {
-			rollbackCodeSessionWorktree(session)
-			_ = sessionRepo.DeleteSession(session.ID)
-			return c.JSON(e.Fail(err))
-		}
+		enqueueCodeSessionInitialization(session.ID)
+		return c.JSON(e.Succ(session))
 	}
 	task := &model.AITask{
 		UserID: claims.UserId, SessionID: session.ID, ProjectID: session.ProjectID,

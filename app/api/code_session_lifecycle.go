@@ -14,9 +14,11 @@ import (
 )
 
 const (
-	codeSessionStatusActive     = "active"
-	codeSessionStatusDelivering = "delivering"
-	codeSessionStatusDelivered  = "delivered"
+	codeSessionStatusInitializing = "initializing"
+	codeSessionStatusActive       = "active"
+	codeSessionStatusFailed       = "failed"
+	codeSessionStatusDelivering   = "delivering"
+	codeSessionStatusDelivered    = "delivered"
 )
 
 type codeSessionLifecycleLocker struct {
@@ -52,6 +54,10 @@ func validateCodeSessionDevelopmentOpen(session *model.AIDevSession) error {
 		return errors.New("开发会话不可用")
 	}
 	switch strings.TrimSpace(session.Status) {
+	case codeSessionStatusInitializing:
+		return errors.New("当前会话正在同步远端并创建隔离工作区，请稍后重试")
+	case codeSessionStatusFailed:
+		return errors.New("当前会话初始化失败，请重试初始化或新建会话")
 	case codeSessionStatusDelivering:
 		return errors.New("当前会话正在统一交付，不能继续执行开发指令")
 	case codeSessionStatusDelivered:

@@ -159,6 +159,7 @@ func (r *App) Run() error {
 
 func (r *App) Serve(listener net.Listener) error {
 	r.reloadFiber(false)
+	api.StartCodeSessionInitialization()
 	api.StartCodeInstructionRecovery()
 	api.StartCodeDeliveryRecovery()
 	api.StartCodeProjectSync()

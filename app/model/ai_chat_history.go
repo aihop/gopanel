@@ -91,6 +91,7 @@ type AIDevSession struct {
 	IsolationMode     string     `gorm:"column:isolation_mode;type:varchar(32);not null;default:''" json:"isolationMode,omitempty"`
 	Status            string     `gorm:"column:status;type:varchar(32);default:'active'" json:"status"`
 	CurrentStage      string     `gorm:"column:current_stage;type:varchar(64);default:'idle'" json:"currentStage"`
+	InitializationErr string     `gorm:"column:initialization_error;type:text" json:"initializationError,omitempty"`
 	LastTaskID        uint       `gorm:"column:last_task_id;type:integer;index" json:"lastTaskId"`
 	NativeSessionID   string     `gorm:"column:native_session_id;type:varchar(255)" json:"nativeSessionId"`
 	ProviderBaseURL   string     `gorm:"column:codex_base_url;type:varchar(1024)" json:"providerBaseUrl,omitempty"`

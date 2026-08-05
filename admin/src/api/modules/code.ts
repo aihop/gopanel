@@ -25,6 +25,7 @@ import type {
 import type { CodeProjectBranches } from "../interface/codeBranches"
 import type { CodeTaskListItem } from "../interface/codeTasks"
 import type { HostTerminalSession } from "../interface/hostTerminal"
+import { waitForCodeSessionInitialization } from "./codeSessionInitialization"
 
 // === Project APIs ===
 
@@ -56,17 +57,28 @@ export function openCodeProjectTerminal(projectId: number) {
 	return http.post<HostTerminalSession>(`/code/projects/${projectId}/terminal`)
 }
 
-export function createCodeSession(data: {
-	title: string
-	workDir: string
-	projectId: number
-	executorId: string
-	approvalPolicy: CodeApprovalPolicy
-	isolated: boolean
-	includeUncommitted: boolean
-	provider?: CodeExecutorConfig
-}) {
-	return http.post<CodeSession>("/code/sessions", data)
+export function createCodeSession(
+	data: {
+		title: string
+		workDir: string
+		projectId: number
+		executorId: string
+		approvalPolicy: CodeApprovalPolicy
+		isolated: boolean
+		includeUncommitted: boolean
+		provider?: CodeExecutorConfig
+	},
+	messages: { initializationFailed: string; initializationTimedOut: string }
+) {
+	return http.post<CodeSession>("/code/sessions", data).then(async response => {
+		if (response.data.status !== "initializing") return response
+		await waitForCodeSessionInitialization(
+			() => http.get<import("../interface/code").CodeSessionInitialization>(`/code/sessions/${response.data.id}/initialization`).then(result => result.data),
+			{ failed: messages.initializationFailed, timedOut: messages.initializationTimedOut }
+		)
+		const initialized = await getCodeSession(response.data.id)
+		return { ...response, data: initialized.data.session }
+	})
 }
 
 export function getCodeSession(sessionId: number) {

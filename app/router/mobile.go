@@ -46,6 +46,8 @@ func MobileRouter(r fiber.Router) {
 	app.Get("/terminal", websocket.New(api.AIAgentWsSSH))
 	app.Get("/sessions", api.GetAISessions)
 	app.Post("/sessions", api.CreateAISession)
+	app.Get("/sessions/:id/initialization", api.GetCodeSessionInitialization)
+	app.Post("/sessions/:id/initialization/retry", api.RetryCodeSessionInitialization)
 	app.Put("/sessions/:id/title", api.UpdateCodeSessionTitle)
 	app.Get("/sessions/:id/state", api.GetAISessionState)
 	app.Get("/sessions/:id/git/status", api.GetCodeGitStatus)

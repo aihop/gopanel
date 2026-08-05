@@ -15,7 +15,9 @@ const providerMessages = {
 		providerPlaceholder_baseUrl: "例如 https://api.openai.com/v1",
 		providerPlaceholder_apiKey: "请输入本会话使用的 API Key",
 		providerPlaceholder_model: "请输入模型 ID",
-		executorFullAutoOnly: "该代码助手暂不支持交互式审批，只能使用完全自动模式。"
+		executorFullAutoOnly: "该代码助手暂不支持交互式审批，只能使用完全自动模式。",
+		sessionInitializationFailed: "会话初始化失败",
+		sessionInitializationTimedOut: "会话初始化等待超时，请稍后从会话列表查看"
 	},
 	en: {
 		newAiTask: "New AI task",
@@ -32,7 +34,9 @@ const providerMessages = {
 		providerPlaceholder_baseUrl: "Example: https://api.openai.com/v1",
 		providerPlaceholder_apiKey: "Enter the API key for this session",
 		providerPlaceholder_model: "Enter the model ID",
-		executorFullAutoOnly: "This coding agent does not support interactive approval and requires fully automatic mode."
+		executorFullAutoOnly: "This coding agent does not support interactive approval and requires fully automatic mode.",
+		sessionInitializationFailed: "Session initialization failed",
+		sessionInitializationTimedOut: "Session initialization is taking longer than expected. Check the session list later."
 	}
 } as const
 

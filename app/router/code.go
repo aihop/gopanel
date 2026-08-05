@@ -39,6 +39,8 @@ func CodeRouter(r fiber.Router) {
 		group.Get("/runs/:id", api.GetCodeExecutionRun)
 		group.Get("/sessions/:id/previews", api.GetAISessionPreviews)
 		group.Post("/sessions", api.CreateAISession)
+		group.Get("/sessions/:id/initialization", api.GetCodeSessionInitialization)
+		group.Post("/sessions/:id/initialization/retry", api.RetryCodeSessionInitialization)
 		group.Put("/sessions/:id/title", api.UpdateCodeSessionTitle)
 		group.Put("/sessions/:id/approval-policy", api.UpdateCodeSessionApprovalPolicy)
 		group.Post("/sessions/:id/instructions", api.CreateAISessionInstruction)
