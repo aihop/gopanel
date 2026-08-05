@@ -21,6 +21,10 @@ func normalizeCodeDeliveryPolicy(sourceDirs []string, primaryRepository, deliver
 	if err != nil {
 		return codeDeliveryPolicy{}, err
 	}
+	return normalizeCodeDeliveryPolicyWithCandidates(sourceDirs, candidates, primaryRepository, deliveryBranch)
+}
+
+func normalizeCodeDeliveryPolicyWithCandidates(sourceDirs []string, candidates []codeRepositoryCandidate, primaryRepository, deliveryBranch string) (codeDeliveryPolicy, error) {
 	if len(candidates) == 0 {
 		return codeDeliveryPolicy{}, errors.New("项目目录中未发现 Git 仓库")
 	}
@@ -69,6 +73,13 @@ func codeProjectDeliveryPolicy(project *model.AIProject, sourceDirs []string) (c
 	return normalizeCodeDeliveryPolicy(sourceDirs, project.PrimaryRepository, project.DeliveryBranch)
 }
 
+func codeProjectDeliveryPolicyWithCandidates(project *model.AIProject, sourceDirs []string, candidates []codeRepositoryCandidate) (codeDeliveryPolicy, error) {
+	if project == nil {
+		return codeDeliveryPolicy{}, errors.New("项目交付策略不可用")
+	}
+	return normalizeCodeDeliveryPolicyWithCandidates(sourceDirs, candidates, project.PrimaryRepository, project.DeliveryBranch)
+}
+
 func applyCodeProjectDeliveryPolicy(project *model.AIProject, sourceDirs []string) error {
 	if project == nil {
 		return errors.New("项目交付策略不可用")
@@ -84,7 +95,7 @@ func applyCodeProjectDeliveryPolicy(project *model.AIProject, sourceDirs []strin
 		}
 		return nil
 	}
-	policy, err := normalizeCodeDeliveryPolicy(sourceDirs, project.PrimaryRepository, project.DeliveryBranch)
+	policy, err := normalizeCodeDeliveryPolicyWithCandidates(sourceDirs, candidates, project.PrimaryRepository, project.DeliveryBranch)
 	if err != nil {
 		return err
 	}

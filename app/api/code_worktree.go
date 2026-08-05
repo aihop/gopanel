@@ -108,18 +108,20 @@ func inspectCodeWorktreeCapability(project *model.AIProject) codeWorktreeCapabil
 }
 
 func createCodeSessionWorktree(session *model.AIDevSession, project *model.AIProject, includeUncommitted ...bool) error {
-	sourceDirs := project.SourceDirs
-	if len(sourceDirs) == 0 && strings.TrimSpace(project.WorkDir) != "" {
-		sourceDirs = aiProjectWorkspaceSourceDirs(project.WorkDir)
-		if len(sourceDirs) == 0 {
-			sourceDirs = []string{project.WorkDir}
-		}
+	sourceDirs := codeProjectSourceDirs(project)
+	candidates, err := discoverCodeRepositoryCandidates(sourceDirs)
+	if err != nil {
+		return fmt.Errorf("当前项目不支持 Git Worktree 隔离：%w", err)
 	}
-	policy, err := codeProjectDeliveryPolicy(project, sourceDirs)
+	return createCodeSessionWorktreeFromCandidates(session, project, sourceDirs, candidates, includeUncommitted...)
+}
+
+func createCodeSessionWorktreeFromCandidates(session *model.AIDevSession, project *model.AIProject, sourceDirs []string, candidates []codeRepositoryCandidate, includeUncommitted ...bool) error {
+	policy, err := codeProjectDeliveryPolicyWithCandidates(project, sourceDirs, candidates)
 	if err != nil {
 		return fmt.Errorf("项目交付策略无效：%w", err)
 	}
-	prepared, err := prepareDiscoveredCodeRepositoriesWithPolicy(sourceDirs, policy, includeUncommitted...)
+	prepared, err := prepareCodeRepositoryCandidatesWithPolicy(candidates, policy, includeUncommitted...)
 	if err != nil {
 		if errors.Is(err, errCodeGitAuthentication) {
 			return err

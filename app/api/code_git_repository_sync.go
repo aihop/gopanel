@@ -3,24 +3,16 @@ package api
 import (
 	"errors"
 	"fmt"
-	"io/fs"
-	"os"
 	"path/filepath"
-	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
 const (
-	maxCodeDiscoveredRepositories = 50
-	codeGitFetchTimeout           = 60 * time.Second
+	codeGitFetchTimeout              = 60 * time.Second
+	codeRepositoryPreparationWorkers = 3
 )
-
-var codeGitScanExcludedDirectories = map[string]struct{}{
-	".git": {}, ".cache": {}, ".next": {}, ".nuxt": {}, ".output": {},
-	".pnpm-store": {}, ".turbo": {}, ".venv": {}, "build": {}, "coverage": {},
-	"dist": {}, "node_modules": {}, "target": {}, "vendor": {},
-}
 
 type codePreparedRepository struct {
 	SourceDir       string
@@ -33,54 +25,6 @@ type codePreparedRepository struct {
 	RemoteCommit    string
 	SyncStatus      string
 	Snapshot        bool
-}
-
-func discoverCodeRepositoryRoots(sourceDirs []string) ([]string, error) {
-	seen := make(map[string]struct{})
-	repositories := make([]string, 0, len(sourceDirs))
-	for _, sourceDir := range sourceDirs {
-		boundary, err := filepath.EvalSymlinks(filepath.Clean(sourceDir))
-		if err != nil {
-			return nil, fmt.Errorf("项目目录不可访问：%s", sourceDir)
-		}
-		err = filepath.WalkDir(boundary, func(path string, entry fs.DirEntry, walkErr error) error {
-			if walkErr != nil {
-				return walkErr
-			}
-			if !entry.IsDir() {
-				return nil
-			}
-			if path != boundary {
-				if _, excluded := codeGitScanExcludedDirectories[entry.Name()]; excluded {
-					return filepath.SkipDir
-				}
-			}
-			if _, err := os.Lstat(filepath.Join(path, ".git")); err != nil {
-				return nil
-			}
-			root, err := runCodeGit(path, "rev-parse", "--show-toplevel")
-			if err != nil {
-				return nil
-			}
-			root, err = filepath.EvalSymlinks(filepath.Clean(root))
-			if err != nil || root != path {
-				return nil
-			}
-			if _, exists := seen[root]; !exists {
-				seen[root] = struct{}{}
-				repositories = append(repositories, root)
-				if len(repositories) > maxCodeDiscoveredRepositories {
-					return fmt.Errorf("项目目录中 Git 仓库超过 %d 个，请缩小目录范围", maxCodeDiscoveredRepositories)
-				}
-			}
-			return nil
-		})
-		if err != nil {
-			return nil, err
-		}
-	}
-	sort.Strings(repositories)
-	return repositories, nil
 }
 
 func prepareCodeRepository(sourceDir string) (codePreparedRepository, error) {
@@ -339,21 +283,83 @@ func prepareDiscoveredCodeRepositoriesWithPolicy(sourceDirs []string, policy cod
 	if err != nil {
 		return nil, err
 	}
+	return prepareCodeRepositoryCandidatesWithPolicy(candidates, policy, includeUncommitted...)
+}
+
+func prepareCodeRepositoryCandidatesWithPolicy(candidates []codeRepositoryCandidate, policy codeDeliveryPolicy, includeUncommitted ...bool) ([]codePreparedRepository, error) {
 	if len(candidates) == 0 {
 		return nil, errors.New("项目目录中未发现 Git 仓库")
 	}
 	allowSnapshot := len(includeUncommitted) == 0 || includeUncommitted[0]
-	prepared := make([]codePreparedRepository, 0, len(candidates))
-	for _, candidate := range candidates {
-		targetBranch := ""
-		if candidate.SourceDir == policy.PrimaryRepository {
-			targetBranch = policy.DeliveryBranch
-		}
-		repository, err := prepareCodeRepositoryCandidateForBranch(candidate, allowSnapshot, targetBranch)
-		if err != nil {
-			return nil, err
-		}
-		prepared = append(prepared, repository)
+	prepared := make([]codePreparedRepository, len(candidates))
+	groups := codeRepositoryPreparationGroups(candidates)
+	jobs := make(chan []int)
+	var firstErr error
+	var errorMu sync.Mutex
+	workerCount := min(codeRepositoryPreparationWorkers, len(groups))
+	var workers sync.WaitGroup
+	workers.Add(workerCount)
+	for range workerCount {
+		go func() {
+			defer workers.Done()
+			for group := range jobs {
+				errorMu.Lock()
+				stopped := firstErr != nil
+				errorMu.Unlock()
+				if stopped {
+					continue
+				}
+				for _, index := range group {
+					targetBranch := ""
+					if candidates[index].SourceDir == policy.PrimaryRepository {
+						targetBranch = policy.DeliveryBranch
+					}
+					repository, err := prepareCodeRepositoryCandidateForBranch(candidates[index], allowSnapshot, targetBranch)
+					if err != nil {
+						errorMu.Lock()
+						if firstErr == nil {
+							firstErr = err
+						}
+						errorMu.Unlock()
+						break
+					}
+					prepared[index] = repository
+				}
+			}
+		}()
+	}
+	for _, group := range groups {
+		jobs <- group
+	}
+	close(jobs)
+	workers.Wait()
+	if firstErr != nil {
+		return nil, firstErr
 	}
 	return prepared, nil
+}
+
+func codeRepositoryPreparationGroups(candidates []codeRepositoryCandidate) [][]int {
+	parents := make(map[string]string, len(candidates))
+	for _, candidate := range candidates {
+		parents[candidate.SourceDir] = candidate.ParentSourceDir
+	}
+	groupIndexes := make(map[string]int)
+	groups := make([][]int, 0, len(candidates))
+	for index, candidate := range candidates {
+		root := candidate.SourceDir
+		parent := candidate.ParentSourceDir
+		for depth := 0; parent != "" && depth < len(candidates); depth++ {
+			root = parent
+			parent = parents[parent]
+		}
+		groupIndex, exists := groupIndexes[root]
+		if !exists {
+			groupIndex = len(groups)
+			groupIndexes[root] = groupIndex
+			groups = append(groups, nil)
+		}
+		groups[groupIndex] = append(groups[groupIndex], index)
+	}
+	return groups
 }

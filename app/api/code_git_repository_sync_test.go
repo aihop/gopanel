@@ -370,6 +370,60 @@ func TestDiscoverCodeRepositoriesIncludesGitlinkWithoutGitmodules(t *testing.T) 
 	}
 }
 
+func TestDiscoverCodeRepositoriesIgnoresTemporaryNestedRepository(t *testing.T) {
+	parent, child := createGitlinkRepositoryTree(t)
+	temporary := filepath.Join(parent, ".tmp", "engine-release")
+	if err := os.MkdirAll(temporary, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(temporary, "init"); err != nil {
+		t.Fatal(err)
+	}
+	commitCodeTestFile(t, temporary, "README.md", "temporary\n")
+	if _, err := runCodeGit(temporary, "remote", "add", "origin", "https://invalid.example/qingpu-engine.git"); err != nil {
+		t.Fatal(err)
+	}
+
+	candidates, err := discoverCodeRepositoryCandidates([]string{parent})
+	if err != nil || len(candidates) != 2 {
+		t.Fatalf("temporary repository changed delivery scope: %#v, %v", candidates, err)
+	}
+	for _, candidate := range candidates {
+		if candidate.SourceDir != parent && candidate.SourceDir != child {
+			t.Fatalf("unexpected repository entered delivery scope: %#v", candidate)
+		}
+	}
+}
+
+func TestDiscoverCodeRepositoriesIgnoresExistingWorktree(t *testing.T) {
+	repository := createCodeGitRepository(t)
+	worktree := filepath.Join(t.TempDir(), "existing-worktree")
+	if _, err := runCodeGit(repository, "worktree", "add", "--detach", worktree, "HEAD"); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _, _ = runCodeGit(repository, "worktree", "remove", "--force", worktree) })
+
+	candidates, err := discoverCodeRepositoryCandidates([]string{worktree})
+	if err != nil || len(candidates) != 0 {
+		t.Fatalf("existing Worktree should not become a project repository: %#v, %v", candidates, err)
+	}
+}
+
+func TestCodeRepositoryPreparationGroupsKeepGitlinksTogether(t *testing.T) {
+	candidates := []codeRepositoryCandidate{
+		{SourceDir: "/project-a"},
+		{SourceDir: "/project-a/themes/custom", ParentSourceDir: "/project-a"},
+		{SourceDir: "/project-b"},
+	}
+	groups := codeRepositoryPreparationGroups(candidates)
+	if len(groups) != 2 || len(groups[0]) != 2 || len(groups[1]) != 1 {
+		t.Fatalf("unexpected preparation groups: %#v", groups)
+	}
+	if groups[0][0] != 0 || groups[0][1] != 1 || groups[1][0] != 2 {
+		t.Fatalf("Gitlink preparation order changed: %#v", groups)
+	}
+}
+
 func TestPrepareGitlinkRepositoriesRejectsDirtyChildWhenSnapshotDisabled(t *testing.T) {
 	parent, child := createGitlinkRepositoryTree(t)
 	if err := os.WriteFile(filepath.Join(child, "working.txt"), []byte("dirty\n"), 0600); err != nil {

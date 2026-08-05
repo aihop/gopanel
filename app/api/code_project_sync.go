@@ -69,11 +69,15 @@ func codeProjectSourceDirs(project *model.AIProject) []string {
 
 func codeProjectRepositorySpecs(project *model.AIProject) ([]codeProjectRepositorySpec, error) {
 	sourceDirs := codeProjectSourceDirs(project)
-	policy, err := codeProjectDeliveryPolicy(project, sourceDirs)
+	candidates, err := discoverCodeRepositoryCandidates(sourceDirs)
 	if err != nil {
 		return nil, err
 	}
-	candidates, err := discoverCodeRepositoryCandidates(sourceDirs)
+	return codeProjectRepositorySpecsWithCandidates(project, sourceDirs, candidates)
+}
+
+func codeProjectRepositorySpecsWithCandidates(project *model.AIProject, sourceDirs []string, candidates []codeRepositoryCandidate) ([]codeProjectRepositorySpec, error) {
+	policy, err := codeProjectDeliveryPolicyWithCandidates(project, sourceDirs, candidates)
 	if err != nil {
 		return nil, err
 	}
@@ -237,7 +241,12 @@ func createCodeSessionWorktreeWithLease(session *model.AIDevSession, project *mo
 		return errors.New("项目主仓正在被项目终端使用，请关闭终端后再创建会话")
 	}
 	defer endCodeRepositoryOperation(project)
-	specs, err := codeProjectRepositorySpecs(project)
+	sourceDirs := codeProjectSourceDirs(project)
+	candidates, err := discoverCodeRepositoryCandidates(sourceDirs)
+	if err != nil {
+		return err
+	}
+	specs, err := codeProjectRepositorySpecsWithCandidates(project, sourceDirs, candidates)
 	if err != nil {
 		return err
 	}
@@ -257,7 +266,7 @@ func createCodeSessionWorktreeWithLease(session *model.AIDevSession, project *mo
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go heartbeatCodeRepositoryLeases(ctx, owner, keys)
-	return createCodeSessionWorktree(session, project, includeUncommitted)
+	return createCodeSessionWorktreeFromCandidates(session, project, sourceDirs, candidates, includeUncommitted)
 }
 
 func inspectCodeProjectSync(project *model.AIProject) (codeProjectSyncStatus, error) {
