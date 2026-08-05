@@ -16,6 +16,7 @@ import type { AIProject, CodeSession, CodeSessionState } from "@/api/interface/c
 import type { HostTerminalSession } from "@/api/interface/hostTerminal"
 import { mobileMessages } from "@/i18n/locales/mobile"
 import MobileConsoleHeader from "./components/MobileConsoleHeader.vue"
+import MobileAttentionPanel from "./components/MobileAttentionPanel.vue"
 import MobileConsoleNavigation from "./components/MobileConsoleNavigation.vue"
 import MobileResourcePanel from "./components/MobileResourcePanel.vue"
 import MobileFileBrowser from "./components/MobileFileBrowser.vue"
@@ -222,6 +223,21 @@ async function openSession(session: CodeSession) {
 	await selectSession(session)
 }
 
+async function openAttentionSession(sessionId: number) {
+	let session =
+		overview.value?.sessions.find(item => item.id === sessionId) ||
+		sessions.value.find(item => item.id === sessionId)
+	if (!session) {
+		try {
+			session = (await getMobileSessionState(sessionId)).session
+		} catch (error) {
+			message.error(error instanceof Error ? error.message : t("mobile.loadFailed"))
+			return
+		}
+	}
+	if (session) await openSession(session)
+}
+
 async function selectProject(projectId: number) {
 	selectedProjectId.value = projectId
 	localStorage.setItem("gopanel-mobile-project-id", String(projectId))
@@ -390,6 +406,7 @@ onBeforeUnmount(() => {
 
 			<n-spin :show="loading">
 				<div v-if="activeTab === 'overview'" class="space-y-4">
+					<MobileAttentionPanel @open-session="openAttentionSession" />
 					<MobileNodeOverview
 						:node="selectedNode"
 						:online="nodeIsOnline"

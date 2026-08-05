@@ -15,6 +15,7 @@ class TaskCenterState {
   final List<TaskEntity> tasks;
   final List<TaskEntity> localTasks;
   final TaskStatus? filter;
+  final bool attentionOnly;
 
   const TaskCenterState({
     this.isLoading = true,
@@ -22,6 +23,7 @@ class TaskCenterState {
     this.tasks = const [],
     this.localTasks = const [],
     this.filter,
+    this.attentionOnly = false,
   });
 
   TaskCenterState copyWith({
@@ -31,6 +33,7 @@ class TaskCenterState {
     List<TaskEntity>? localTasks,
     TaskStatus? filter,
     bool clearFilter = false,
+    bool? attentionOnly,
   }) {
     return TaskCenterState(
       isLoading: isLoading ?? this.isLoading,
@@ -38,11 +41,15 @@ class TaskCenterState {
       tasks: tasks ?? this.tasks,
       localTasks: localTasks ?? this.localTasks,
       filter: clearFilter ? null : (filter ?? this.filter),
+      attentionOnly: attentionOnly ?? this.attentionOnly,
     );
   }
 
   List<TaskEntity> get visibleTasks {
     final list = [...localTasks, ...tasks];
+    if (attentionOnly) {
+      return list.where((task) => task.requiresAttention).toList();
+    }
     if (filter == null) return list;
     return list.where((t) => t.status == filter).toList();
   }
@@ -50,8 +57,8 @@ class TaskCenterState {
 
 final taskCenterControllerProvider =
     NotifierProvider<TaskCenterController, TaskCenterState>(
-  TaskCenterController.new,
-);
+      TaskCenterController.new,
+    );
 
 class TaskCenterController extends Notifier<TaskCenterState> {
   late TaskRepository _repo;
@@ -91,6 +98,7 @@ class TaskCenterController extends Notifier<TaskCenterState> {
       summary: old.summary,
       error: error ?? old.error,
       meta: old.meta,
+      attention: old.attention,
     );
     final list = [...state.localTasks];
     list[idx] = next;
@@ -99,10 +107,26 @@ class TaskCenterController extends Notifier<TaskCenterState> {
 
   void setFilter(TaskStatus? status) {
     if (status == null) {
-      state = state.copyWith(clearFilter: true, errorMessage: null);
+      state = state.copyWith(
+        clearFilter: true,
+        attentionOnly: false,
+        errorMessage: null,
+      );
       return;
     }
-    state = state.copyWith(filter: status, errorMessage: null);
+    state = state.copyWith(
+      filter: status,
+      attentionOnly: false,
+      errorMessage: null,
+    );
+  }
+
+  void showAttentionOnly() {
+    state = state.copyWith(
+      clearFilter: true,
+      attentionOnly: true,
+      errorMessage: null,
+    );
   }
 
   Future<void> _load() async {
@@ -111,10 +135,7 @@ class TaskCenterController extends Notifier<TaskCenterState> {
       final list = await _repo.list();
       state = state.copyWith(isLoading: false, tasks: list, errorMessage: null);
     } catch (e) {
-      state = state.copyWith(
-        isLoading: false,
-        errorMessage: '无法加载任务: $e',
-      );
+      state = state.copyWith(isLoading: false, errorMessage: '无法加载任务: $e');
     }
   }
 }

@@ -3,7 +3,6 @@ import http from "@/api"
 import type { ResultData } from "@/api/interface"
 import type {
 	AIProject,
-	CodeApproval,
 	CodeApprovalPolicy,
 	CodeExecutor,
 	CodeInstructionResponse,
@@ -11,12 +10,13 @@ import type {
 	CodeSessionState,
 	CodeWorktreeCapability
 } from "@/api/interface/code"
-import type { Dashboard } from "@/api/interface/dashboard"
 import type { HostTerminalSession } from "@/api/interface/hostTerminal"
 import type { CodeProjectSyncStatus } from "@/api/interface/codeOverview"
 import type { CodeDeliveryJob, CodeGitDeliveryResult, CodeGitStatus } from "@/api/interface/codeGit"
 import type { NodeSummary, NodeWarning } from "./node"
 import { waitForCodeSessionInitialization } from "./codeSessionInitialization"
+import type { MobileOverview } from "../interface/mobileControlPlane"
+export type { MobileOverview } from "../interface/mobileControlPlane"
 const mobileHttp = axios.create({
 	baseURL: import.meta.env.VITE_API_URL as string,
 	timeout: 15000,
@@ -51,14 +51,6 @@ export interface MobileDevice {
 	lastSeenAt?: string
 	lastIp: string
 	revokedAt?: string
-}
-
-export interface MobileOverview {
-	system: Dashboard.CurrentInfo
-	sessions: CodeSession[]
-	sessionTotal: number
-	pendingApprovals: CodeApproval[]
-	serverTime: string
 }
 
 export interface MobileNode {

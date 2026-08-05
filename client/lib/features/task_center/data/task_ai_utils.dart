@@ -3,6 +3,7 @@ import '../models/task_entity.dart';
 import '../models/task_log.dart';
 import '../models/task_status.dart';
 import '../models/task_type.dart';
+import '../models/task_attention.dart';
 
 TaskEntity buildAiTaskEntity({
   required int sessionId,
@@ -13,6 +14,7 @@ TaskEntity buildAiTaskEntity({
   required DateTime? createdAt,
   required DateTime? updatedAt,
   AiSessionStateInfo? state,
+  TaskAttention? attention,
 }) {
   final resolvedStage = state?.currentStage ?? currentStage;
   final resolvedStatus = state?.session.status ?? status;
@@ -48,6 +50,7 @@ TaskEntity buildAiTaskEntity({
     error: errorSummary.isNotEmpty
         ? errorSummary
         : (resolvedStage == 'failed' ? '开发会话执行失败' : null),
+    attention: attention,
     meta: {
       'sessionId': sessionId.toString(),
       'currentStage': resolvedStage,
@@ -94,7 +97,9 @@ TaskLog buildAiTaskLog({
       ..add('')
       ..add('时间线:');
     for (final event in recentTimeline) {
-      final title = event.title.trim().isEmpty ? event.eventType : event.title.trim();
+      final title = event.title.trim().isEmpty
+          ? event.eventType
+          : event.title.trim();
       lines.add('- [$title] ${event.content.trim()}'.trim());
     }
   }
@@ -128,7 +133,9 @@ TaskStatus mapAiSessionStatus(String status, String currentStage) {
   final stage = currentStage.toLowerCase();
   final normalized = status.toLowerCase();
   if (stage == 'failed' || normalized == 'failed') return TaskStatus.failed;
-  if (stage == 'completed' || stage == 'preview_ready') return TaskStatus.success;
+  if (stage == 'completed' || stage == 'preview_ready') {
+    return TaskStatus.success;
+  }
   return TaskStatus.running;
 }
 

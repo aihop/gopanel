@@ -1,5 +1,6 @@
 import 'task_status.dart';
 import 'task_type.dart';
+import 'task_attention.dart';
 
 class TaskEntity {
   final String id;
@@ -12,6 +13,7 @@ class TaskEntity {
   final String? summary;
   final String? error;
   final Map<String, String> meta;
+  final TaskAttention? attention;
 
   const TaskEntity({
     required this.id,
@@ -24,5 +26,8 @@ class TaskEntity {
     this.summary,
     this.error,
     this.meta = const {},
+    this.attention,
   });
+
+  bool get requiresAttention => attention != null;
 }

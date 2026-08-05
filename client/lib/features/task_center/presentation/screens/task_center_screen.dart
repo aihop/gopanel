@@ -67,6 +67,28 @@ class TaskCenterScreen extends ConsumerWidget {
         children: [
           PanelCard(
             title: const Text('筛选'),
+            trailing: TextButton.icon(
+              onPressed: () {
+                ref
+                    .read(taskCenterControllerProvider.notifier)
+                    .showAttentionOnly();
+              },
+              icon: Icon(
+                Icons.notification_important_outlined,
+                color: state.attentionOnly
+                    ? AppTheme.error
+                    : AppTheme.textSecondary,
+              ),
+              label: Text(
+                '待我处理 ${state.tasks.where((task) => task.requiresAttention).length}',
+                style: TextStyle(
+                  color: state.attentionOnly
+                      ? AppTheme.error
+                      : AppTheme.textSecondary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
             child: GlassTabs<TaskStatus?>(
               items: const [
                 GlassTabItem(value: null, label: '全部'),
@@ -74,7 +96,7 @@ class TaskCenterScreen extends ConsumerWidget {
                 GlassTabItem(value: TaskStatus.failed, label: '失败'),
                 GlassTabItem(value: TaskStatus.success, label: '成功'),
               ],
-              selected: state.filter,
+              selected: state.attentionOnly ? null : state.filter,
               onChanged: (v) {
                 ref.read(taskCenterControllerProvider.notifier).setFilter(v);
               },
@@ -93,14 +115,12 @@ class TaskCenterScreen extends ConsumerWidget {
               ),
             )
           else
-            ...state.visibleTasks
-                .map(
-                  (t) => Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: _taskCard(context, t),
-                  ),
-                )
-                ,
+            ...state.visibleTasks.map(
+              (t) => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _taskCard(context, t),
+              ),
+            ),
         ],
       ),
     );
@@ -147,8 +167,36 @@ class TaskCenterScreen extends ConsumerWidget {
                       color: AppTheme.success,
                       background: const Color(0xFFECFDF5),
                     ),
+                  if (t.requiresAttention)
+                    _metaTag(
+                      '待我处理',
+                      color: AppTheme.error,
+                      background: const Color(0xFFFFF1F2),
+                    ),
                 ],
               ),
+            ],
+            if (t.attention != null) ...[
+              const SizedBox(height: 10),
+              Text(
+                t.attention!.title,
+                style: const TextStyle(
+                  color: AppTheme.error,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              if (t.attention!.summary.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  t.attention!.summary,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
             ],
             if (t.summary != null && t.summary!.isNotEmpty) ...[
               const SizedBox(height: 8),

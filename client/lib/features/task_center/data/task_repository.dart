@@ -2,22 +2,30 @@ import '../../../core/network/api_client.dart';
 import '../../ai_workspace/models/ai_dev_session.dart';
 import '../../ai_workspace/models/ai_session_state_info.dart';
 import 'task_ai_utils.dart';
+import 'task_attention_repository.dart';
 import '../models/task_entity.dart';
+import '../models/task_attention.dart';
 import '../models/task_log.dart';
 import '../models/task_status.dart';
 import '../models/task_type.dart';
+
+const pipelineListPath = '/api/pipeline/list';
 
 class TaskRepository {
   final ApiClient _apiClient;
 
   TaskRepository(this._apiClient);
 
+  Future<void> executeAttentionAction(TaskAttentionAction action) {
+    return TaskAttentionRepository(_apiClient).execute(action);
+  }
+
   Future<List<TaskEntity>> list({
     int maxPipelines = 10,
     int recordsPerPipeline = 3,
   }) async {
     final pipelinesRes = await _apiClient.get<Map<String, dynamic>>(
-      '/api/pipeline/',
+      pipelineListPath,
       queryParameters: {'page': 1, 'pageSize': maxPipelines},
     );
     final pipelinesData = pipelinesRes.data ?? const <String, dynamic>{};
@@ -86,6 +94,11 @@ class TaskRepository {
         .map((e) => _AiSession.fromJson((e as Map).cast<String, dynamic>()))
         .toList();
 
+    final attentionItems = await TaskAttentionRepository(_apiClient).list();
+    final attentionBySession = {
+      for (final attention in attentionItems) attention.sessionId: attention,
+    };
+
     final aiTaskItems = await _mapWithConcurrency<_AiSession, TaskEntity>(
       aiSessions,
       concurrency: 4,
@@ -106,11 +119,18 @@ class TaskRepository {
           createdAt: s.createdAt,
           updatedAt: s.updatedAt,
           state: state,
+          attention: attentionBySession[s.id],
         );
       },
     );
 
     tasks.addAll(aiTaskItems);
+    final loadedSessionIds = aiSessions.map((session) => session.id).toSet();
+    tasks.addAll(
+      attentionItems
+          .where((attention) => !loadedSessionIds.contains(attention.sessionId))
+          .map(_buildAttentionOnlyTask),
+    );
 
     tasks.sort((a, b) {
       final at =
@@ -243,6 +263,25 @@ class TaskRepository {
     }
     return [];
   }
+}
+
+TaskEntity _buildAttentionOnlyTask(TaskAttention attention) {
+  final failed = attention.severity == 'error';
+  return TaskEntity(
+    id: 'aiSession:${attention.sessionId}',
+    title: '开发会话 #${attention.sessionId}',
+    type: TaskType.ai,
+    status: failed ? TaskStatus.failed : TaskStatus.running,
+    updatedAt: attention.updatedAt,
+    summary: attention.summary,
+    error: failed && attention.summary.isNotEmpty ? attention.summary : null,
+    attention: attention,
+    meta: {
+      'sessionId': attention.sessionId.toString(),
+      'currentStageLabel': attention.title,
+      'previewCount': '0',
+    },
+  );
 }
 
 TaskStatus _mapWebsiteDeployStatus(String s) {

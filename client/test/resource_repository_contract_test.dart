@@ -3,6 +3,7 @@ import 'package:gopanel/features/apps/data/apps_repository.dart';
 import 'package:gopanel/features/container/data/container_repository.dart';
 import 'package:gopanel/features/database/data/database_repository.dart';
 import 'package:gopanel/features/website/data/website_repository.dart';
+import 'package:gopanel/features/task_center/data/task_repository.dart';
 
 void main() {
   test('resource repositories use registered list routes', () {
@@ -10,6 +11,7 @@ void main() {
     expect(databaseListPath, '/api/database/list');
     expect(containerListPath, '/api/container/list');
     expect(installedAppsListPath, '/api/apps/installed/list');
+    expect(pipelineListPath, '/api/pipeline/list');
   });
 
   test('website and database lists parse paginated responses', () {

@@ -16,6 +16,7 @@ func CodeRouter(r fiber.Router) {
 		// WebSocket 端点
 		group.Get("/terminal", websocket.New(api.AIAgentWsSSH))
 		group.Get("/executors", api.GetCodeExecutors)
+		group.Get("/attention", api.GetCodeAttention)
 
 		// Projects APIs
 		group.Get("/projects", api.GetAIProjects)
