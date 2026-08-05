@@ -62,6 +62,7 @@
 
 <script setup lang="ts">
 import type { Dashboard } from "@/api/interface/dashboard"
+import { ref } from "vue"
 import { useI18n } from "vue-i18n"
 
 const { t } = useI18n()

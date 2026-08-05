@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -54,13 +55,13 @@ func loadCodeAttentionItems(userID uint, limit int) ([]codeAttentionItem, error)
 	if global.DB == nil {
 		return nil, errors.New("数据库未初始化")
 	}
-	var sessions []model.AIDevSession
-	if err := global.DB.Where("user_id = ?", userID).Order("updated_at desc").Limit(limit).Find(&sessions).Error; err != nil || len(sessions) == 0 {
+	sessionIDs, err := loadCodeAttentionSessionIDs(userID, limit)
+	if err != nil || len(sessionIDs) == 0 {
 		return []codeAttentionItem{}, err
 	}
-	sessionIDs := make([]uint, 0, len(sessions))
-	for _, session := range sessions {
-		sessionIDs = append(sessionIDs, session.ID)
+	var sessions []model.AIDevSession
+	if err := global.DB.Where("user_id = ? AND id IN ?", userID, sessionIDs).Find(&sessions).Error; err != nil || len(sessions) == 0 {
+		return []codeAttentionItem{}, err
 	}
 	approvals, deliveries, runs, err := loadCodeAttentionSources(userID, sessionIDs)
 	if err != nil {
@@ -72,7 +73,62 @@ func loadCodeAttentionItems(userID uint, limit int) ([]codeAttentionItem, error)
 			items = append(items, *item)
 		}
 	}
+	sort.Slice(items, func(left, right int) bool {
+		if items[left].UpdatedAt.Equal(items[right].UpdatedAt) {
+			return items[left].ID < items[right].ID
+		}
+		return items[left].UpdatedAt.After(items[right].UpdatedAt)
+	})
+	if len(items) > limit {
+		items = items[:limit]
+	}
 	return items, nil
+}
+
+func loadCodeAttentionSessionIDs(userID uint, limit int) ([]uint, error) {
+	statuses := []string{codeDeliveryJobConflict, codeDeliveryJobPartial, codeDeliveryJobFailed}
+	sessionIDs := make(map[uint]struct{}, limit)
+	var approvalSessionIDs []uint
+	if err := global.DB.Model(&model.AIApproval{}).
+		Where("request_user_id = ? AND status = ?", userID, "pending").
+		Order("updated_at desc").Limit(limit).Pluck("session_id", &approvalSessionIDs).Error; err != nil {
+		return nil, err
+	}
+	var initializationSessionIDs []uint
+	if err := global.DB.Model(&model.AIDevSession{}).
+		Where("user_id = ? AND status = ? AND current_stage = ?", userID, codeSessionStatusFailed, codeSessionStageInitializationFailed).
+		Order("updated_at desc").Limit(limit).Pluck("id", &initializationSessionIDs).Error; err != nil {
+		return nil, err
+	}
+	var deliverySessionIDs []uint
+	if err := global.DB.Model(&model.AICodeDeliveryJob{}).
+		Where("user_id = ? AND status IN ?", userID, statuses).
+		Order("updated_at desc").Limit(limit).Pluck("session_id", &deliverySessionIDs).Error; err != nil {
+		return nil, err
+	}
+	for _, candidates := range [][]uint{approvalSessionIDs, initializationSessionIDs, deliverySessionIDs} {
+		for _, sessionID := range candidates {
+			sessionIDs[sessionID] = struct{}{}
+		}
+	}
+	var failedRunSessionIDs []uint
+	rankedRuns := global.DB.Model(&model.AIExecutionRun{}).
+		Select("ai_execution_runs.*, ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY created_at DESC, id DESC) AS row_number")
+	if err := global.DB.Table("(?) AS ranked_runs", rankedRuns).
+		Joins("JOIN ai_dev_sessions ON ai_dev_sessions.id = ranked_runs.session_id").
+		Where("row_number = 1 AND ranked_runs.status = ? AND ai_dev_sessions.user_id = ?", "failed", userID).
+		Where("ai_dev_sessions.last_task_id = 0 OR ranked_runs.task_id = ai_dev_sessions.last_task_id").
+		Order("ranked_runs.updated_at desc").Limit(limit).Pluck("ranked_runs.session_id", &failedRunSessionIDs).Error; err != nil {
+		return nil, err
+	}
+	for _, sessionID := range failedRunSessionIDs {
+		sessionIDs[sessionID] = struct{}{}
+	}
+	result := make([]uint, 0, len(sessionIDs))
+	for sessionID := range sessionIDs {
+		result = append(result, sessionID)
+	}
+	return result, nil
 }
 
 func loadCodeAttentionSources(userID uint, sessionIDs []uint) (map[uint]*model.AIApproval, map[uint]*model.AICodeDeliveryJob, map[uint]*model.AIExecutionRun, error) {

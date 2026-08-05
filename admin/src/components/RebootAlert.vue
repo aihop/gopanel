@@ -25,6 +25,7 @@
 <script setup lang="ts">
 import { isSucc } from "@/utils/is"
 import { MsgSuccess } from "@/utils/message"
+import { computed, ref } from "vue"
 const emit = defineEmits(["confirm"])
 const visible = ref(false)
 const alertData = ref<any>({})

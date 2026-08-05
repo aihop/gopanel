@@ -62,6 +62,7 @@ import { updateSetting } from "@/api/modules/setting"
 import DrawerHeader from "@/components/DrawerHeader.vue"
 import { t } from "@/i18n"
 import { MsgSuccess } from "@/utils/message"
+import { useDialog, useMessage } from "naive-ui"
 import { reactive, ref } from "vue"
 
 const emit = defineEmits<{ (e: "search"): void }>()

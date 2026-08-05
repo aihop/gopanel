@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -44,6 +45,31 @@ func TestLoadCodeAttentionItemsReturnsRecoverableInitialization(t *testing.T) {
 	}
 	if items[0].Type != "initialization_failed" || len(items[0].Actions) != 1 || items[0].Actions[0].Type != "retry_initialization" {
 		t.Fatalf("attention = %#v", items[0])
+	}
+}
+
+func TestLoadCodeAttentionItemsLimitsAfterFiltering(t *testing.T) {
+	database := withCodeGovernanceDB(t)
+	if err := database.AutoMigrate(&model.AIApproval{}); err != nil {
+		t.Fatal(err)
+	}
+	attentionSession := model.AIDevSession{UserID: 12, ProjectID: 2, Title: "needs attention", Status: "active"}
+	if err := database.Create(&attentionSession).Error; err != nil {
+		t.Fatal(err)
+	}
+	approval := model.AIApproval{SessionID: attentionSession.ID, RequestUserID: 12, Title: "approval", Content: "deploy", Status: "pending"}
+	if err := database.Create(&approval).Error; err != nil {
+		t.Fatal(err)
+	}
+	for index := 0; index < 3; index++ {
+		session := model.AIDevSession{UserID: 12, ProjectID: 2, Title: fmt.Sprintf("recent %d", index), Status: "active"}
+		if err := database.Create(&session).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	items, err := loadCodeAttentionItems(12, 1)
+	if err != nil || len(items) != 1 || items[0].ApprovalID != approval.ID {
+		t.Fatalf("items = %#v, err = %v", items, err)
 	}
 }
 

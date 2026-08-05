@@ -8,6 +8,7 @@
 <script lang="ts" setup>
 import { FitAddon } from "@xterm/addon-fit"
 import { Terminal } from "@xterm/xterm"
+import { useAuthStore } from "@/store/auth"
 import { enc } from "crypto-js"
 import { nextTick, onBeforeUnmount, ref, watch } from "vue"
 import "@xterm/xterm/css/xterm.css"

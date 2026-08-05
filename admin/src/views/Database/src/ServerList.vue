@@ -4,7 +4,7 @@ import { NButton, NInput, NPopconfirm, NTag } from "naive-ui"
 import { formatTime } from "@/utils/date"
 import UpdateServerModal from "./UpdateServerModal.vue"
 import { useI18n } from "vue-i18n"
-import { reactive, ref, onMounted, onUnmounted } from "vue"
+import { h, onMounted, onUnmounted, reactive, ref } from "vue"
 import emitter from "@/utils/emitter"
 import { useTable } from "@/composables/useTable"
 import {

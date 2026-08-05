@@ -1,3 +1,5 @@
+import { onBeforeMount, ref } from "vue"
+
 export function useNav(list: string[]) {
 	const activeNav = ref("")
 	const navInit = () => {
