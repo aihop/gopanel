@@ -1,3 +1,5 @@
+import { getCurrentInstance } from "vue"
+
 export function useFormat() {
 	const internalInstance = getCurrentInstance()
 	if (!internalInstance) {

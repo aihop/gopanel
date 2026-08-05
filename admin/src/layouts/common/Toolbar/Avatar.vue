@@ -8,6 +8,8 @@
 import { renderIcon } from "@/utils"
 import { NAvatar, NDropdown, useDialog } from "naive-ui"
 import { useAuthStore } from "@/store/auth"
+import { computed } from "vue"
+import { useI18n } from "vue-i18n"
 import { useRouter } from "vue-router"
 import { useMessage } from "naive-ui"
 

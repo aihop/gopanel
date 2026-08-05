@@ -153,6 +153,7 @@ import {
 import { type Container } from "@/api/interface/container"
 import { MsgError, MsgSuccess } from "@/utils/message"
 import { useRouter } from "vue-router"
+import { useI18n } from "vue-i18n"
 import { buildRuntimeDetailText } from "@/utils/runtime"
 import ContainerOperateAdvancedSection from "./ContainerOperateAdvancedSection.vue"
 import ContainerOperateBasicSection from "./ContainerOperateBasicSection.vue"

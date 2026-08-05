@@ -82,6 +82,7 @@ import { Rules } from "@/global/form-rules"
 import { commitContainer } from "@/api/modules/container"
 import { MsgSuccess } from "@/utils/message"
 import { t } from "@/i18n"
+import { useDialog, useMessage } from "naive-ui"
 
 const drawerVisible = ref<boolean>(false)
 const dialog = useDialog()

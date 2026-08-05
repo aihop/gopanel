@@ -155,6 +155,7 @@ import DrawerHeader from "@/components/DrawerHeader.vue"
 import { Rules } from "@/global/form-rules"
 import { t } from "@/i18n"
 import { MsgError } from "@/utils/message"
+import { useDialog } from "naive-ui"
 import { nextTick, onBeforeUnmount, reactive, ref } from "vue"
 const emit = defineEmits<{ (e: "search"): void }>()
 

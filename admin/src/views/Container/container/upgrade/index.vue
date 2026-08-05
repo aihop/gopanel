@@ -73,6 +73,7 @@ import { MsgSuccess } from "@/utils/message"
 import { ref, reactive } from "vue"
 import DrawerHeader from "@/components/DrawerHeader.vue"
 import { useDialog } from "naive-ui"
+import { useI18n } from "vue-i18n"
 
 const { t } = useI18n()
 

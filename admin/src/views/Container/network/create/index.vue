@@ -228,7 +228,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from "vue"
+import { computed, reactive, ref } from "vue"
 import { useMessage } from "naive-ui"
 import type { FormInst, FormRules } from "naive-ui"
 import { createNetwork } from "@/api/modules/container"
