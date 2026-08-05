@@ -6,6 +6,8 @@ import (
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
 	"github.com/aihop/gopanel/app/service"
+	"github.com/aihop/gopanel/global"
+	"gorm.io/gorm"
 )
 
 const nativeCodeNotifyPollInterval = time.Second
@@ -63,9 +65,9 @@ func watchNativeCodeNotifications(sessionID uint, done <-chan struct{}) {
 			return
 		}
 		state := getCodexRuntimeState(session)
-		status := nativeCodeTaskStatus(state)
+		status, _ := nativeCodeTaskState(state)
 		if status != "" && (session.LastTaskID != tracker.lastTaskID || status != tracker.taskStatus) {
-			if syncNativeCodeTaskStatus(session, state, status) {
+			if syncNativeCodeTaskStatus(session, state) {
 				tracker.lastTaskID = session.LastTaskID
 				tracker.taskStatus = status
 			}
@@ -90,44 +92,61 @@ func watchNativeCodeNotifications(sessionID uint, done <-chan struct{}) {
 	}
 }
 
-func nativeCodeTaskStatus(state *codexRuntimeState) string {
+func nativeCodeTaskState(state *codexRuntimeState) (string, string) {
 	if state == nil {
-		return ""
+		return "", ""
 	}
 	switch state.ResponseState {
 	case "responding":
-		return "running"
+		return "running", "executing"
 	case "needsInput":
-		return "pending_approval"
+		return "pending_approval", "awaiting_approval"
 	case "completed":
-		return "completed"
+		return "completed", "completed"
 	case "failed":
-		return "failed"
+		return "failed", "failed"
 	default:
-		return ""
+		return "", ""
 	}
 }
 
-func syncNativeCodeTaskStatus(session *model.AIDevSession, state *codexRuntimeState, status string) bool {
+func syncNativeCodeTaskStatus(session *model.AIDevSession, state *codexRuntimeState) bool {
 	if session == nil || session.LastTaskID == 0 {
 		return false
 	}
-	if state == nil || state.UpdatedAt.IsZero() || status == "" {
+	if state == nil || state.UpdatedAt.IsZero() {
 		return false
 	}
-	taskRepo := repo.NewAITaskRepo()
-	task, err := taskRepo.GetTaskByID(session.LastTaskID)
+	status, sessionStage := nativeCodeTaskState(state)
+	if status == "" || sessionStage == "" {
+		return false
+	}
+	var current *model.AIDevSession
+	err := global.DB.Transaction(func(tx *gorm.DB) error {
+		lockedSession, err := lockCodeSessionForDevelopment(tx, session.ID)
+		if err != nil {
+			return err
+		}
+		var task model.AITask
+		if err := tx.Where("id = ? AND session_id = ?", lockedSession.LastTaskID, lockedSession.ID).First(&task).Error; err != nil {
+			return err
+		}
+		if !nativeCodeRuntimeIsFresh(lockedSession, &task, state) {
+			return gorm.ErrInvalidData
+		}
+		if err := reconcileCodeTaskState(tx, lockedSession, &task, status, sessionStage); err != nil {
+			return err
+		}
+		current = lockedSession
+		return nil
+	})
 	if err != nil {
 		return false
 	}
-	if !nativeCodeRuntimeIsFresh(session, task, state) {
-		return false
-	}
-	if task.Status == status {
-		return true
-	}
-	task.Status = status
-	return taskRepo.UpdateTask(task) == nil
+	session.Status = current.Status
+	session.CurrentStage = current.CurrentStage
+	session.LastTaskID = current.LastTaskID
+	return true
 }
 
 func nativeCodeRuntimeIsFresh(session *model.AIDevSession, task *model.AITask, state *codexRuntimeState) bool {
