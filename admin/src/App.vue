@@ -13,7 +13,19 @@
 				]"
       >
         <RouterView v-slot="{ Component: RouterComponent }">
+          <keep-alive
+            :include="persistentViewNames"
+            :max="1"
+          >
+            <component
+              v-if="route.meta.keepAlive"
+              :is="RouterComponent"
+              id="app-page"
+              :key="routeName + forceRefresh"
+            />
+          </keep-alive>
           <component
+            v-if="!route.meta.keepAlive"
             :is="RouterComponent"
             id="app-page"
             :key="routeName + forceRefresh"
@@ -74,6 +86,7 @@ const layoutComponent = computed<Component>(() => layoutComponents[layoutCompone
 const routerTransition = computed<RouterTransition>(() => themeStore.routerTransition)
 const themeName = computed<ThemeNameEnum>(() => themeStore.themeName)
 const isLogged = computed(() => authStore.isLogged)
+const persistentViewNames = computed(() => (isLogged.value ? ["HostTerminalView"] : []))
 const showFloatingNote = computed(() => authStore.isLogged && authStore.role !== "DEMO")
 
 function checkThemeOverrides(currentRoute: RouteLocationNormalized) {

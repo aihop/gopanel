@@ -222,6 +222,9 @@ func codeProjectHasActiveTerminal(project *model.AIProject) bool {
 	}
 	for _, terminal := range terminals {
 		if hostTerminals.get(terminal.ID) == nil {
+			if hostTerminalHandoverPending(&terminal, time.Now()) {
+				return true
+			}
 			markHostTerminalInterrupted(&terminal)
 			continue
 		}

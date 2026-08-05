@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { FitAddon } from "@xterm/addon-fit"
 import { Terminal } from "@xterm/xterm"
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
+import { nextTick, onActivated, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 import { useAuthStore } from "@/store/auth"
 import "@xterm/xterm/css/xterm.css"
@@ -23,6 +23,7 @@ let pingTimer: ReturnType<typeof setInterval> | null = null
 let lastSequence = 0
 let closing = false
 let reconnectAttempts = 0
+let activatedOnce = false
 
 function send(type: string, data = "") {
 	if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type, data }))
@@ -158,6 +159,19 @@ watch(() => props.sessionId, () => {
 	nextTick(openTerminal)
 })
 onMounted(openTerminal)
+onActivated(() => {
+	if (!activatedOnce) {
+		activatedOnce = true
+		return
+	}
+	nextTick(() => {
+		fit()
+		if (!socket && !closing && terminal && !reconnectTimer) {
+			reconnectAttempts = 0
+			connect()
+		}
+	})
+})
 onBeforeUnmount(disposeTerminal)
 </script>
 

@@ -49,10 +49,8 @@ func ListHostTerminalSessions(c fiber.Ctx) error {
 		return c.JSON(e.Fail(err))
 	}
 	for index := range sessions {
-		if (sessions[index].Status == "running" || sessions[index].Status == "starting") && hostTerminals.get(sessions[index].ID) == nil {
+		if hostTerminals.get(sessions[index].ID) == nil && shouldInterruptMissingHostTerminal(&sessions[index], time.Now()) {
 			markHostTerminalInterrupted(&sessions[index])
-			sessions[index].Status = "interrupted"
-			sessions[index].ErrorMessage = "服务重启或终端进程已丢失"
 		}
 	}
 	return c.JSON(e.Succ(fiber.Map{"items": sessions, "total": total}))
@@ -241,10 +239,26 @@ func markHostTerminalInterrupted(record *model.HostTerminalSession) {
 		return
 	}
 	now := time.Now()
-	_ = global.DB.Model(record).Updates(map[string]any{"status": "interrupted", "ended_at": now, "error_message": "服务重启或终端进程已丢失"}).Error
+	if err := global.DB.Model(record).Updates(map[string]any{"status": "interrupted", "ended_at": now, "error_message": "服务重启或终端进程已丢失"}).Error; err != nil {
+		return
+	}
 	record.Status = "interrupted"
 	record.EndedAt = &now
 	record.ErrorMessage = "服务重启或终端进程已丢失"
+}
+
+func hostTerminalHandoverPending(record *model.HostTerminalSession, now time.Time) bool {
+	if record == nil || record.StartedAt.IsZero() {
+		return false
+	}
+	return now.Before(record.StartedAt.Add(hostTerminalHandoverGrace))
+}
+
+func shouldInterruptMissingHostTerminal(record *model.HostTerminalSession, now time.Time) bool {
+	if record == nil || (record.Status != "running" && record.Status != "starting") {
+		return false
+	}
+	return !hostTerminalHandoverPending(record, now)
 }
 
 func recordHostTerminalAudit(sessionID, userID uint, action, status, ip, detail string) {

@@ -166,3 +166,17 @@ func TestHostTerminalResumeReturnsSameSession(t *testing.T) {
 		t.Fatal("missing terminal process should not be recreated")
 	}
 }
+
+func TestHostTerminalHandoverGraceDefersPassiveInterruption(t *testing.T) {
+	now := time.Now()
+	record := &model.HostTerminalSession{UserID: 1, Status: "running", Shell: "sh", WorkDir: t.TempDir(), StartedAt: now}
+	if !hostTerminalHandoverPending(record, now.Add(hostTerminalHandoverGrace-time.Millisecond)) {
+		t.Fatal("new terminal should remain pending during service handover")
+	}
+	if shouldInterruptMissingHostTerminal(record, now.Add(hostTerminalHandoverGrace-time.Millisecond)) {
+		t.Fatal("new terminal was interrupted during service handover")
+	}
+	if !shouldInterruptMissingHostTerminal(record, now.Add(hostTerminalHandoverGrace)) {
+		t.Fatal("missing terminal should be interrupted after service handover")
+	}
+}

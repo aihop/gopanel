@@ -6,6 +6,7 @@ const (
 	hostTerminalHistoryLimit       = 1024 * 1024
 	hostTerminalBaselineChunkLimit = 64 * 1024
 	hostTerminalControlLease       = 60 * time.Second
+	hostTerminalHandoverGrace      = 2 * time.Minute
 )
 
 type hostTerminalEvent struct {

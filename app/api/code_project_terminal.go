@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"strconv"
+	"time"
 
 	"github.com/aihop/gopanel/app/e"
 	"github.com/aihop/gopanel/app/model"
@@ -56,6 +57,9 @@ func findRunningCodeProjectTerminal(userID uint, workDir string) *model.HostTerm
 		resumed, err := hostTerminals.resume(records[index].ID)
 		if err == nil {
 			return resumed
+		}
+		if hostTerminalHandoverPending(&records[index], time.Now()) {
+			return &records[index]
 		}
 		markHostTerminalInterrupted(&records[index])
 	}

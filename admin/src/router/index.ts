@@ -223,7 +223,7 @@ const router = createRouter({
 					path: "terminal",
 					name: "Host-Terminal",
 					component: () => import("@/views/Host/terminal/index.vue"),
-					meta: { title: t("menu.terminal"), titleKey: "menu.terminal", auth: true, roles: "all" }
+					meta: { title: t("menu.terminal"), titleKey: "menu.terminal", auth: true, roles: "all", keepAlive: true }
 				},
 				{
 					path: "monitor",

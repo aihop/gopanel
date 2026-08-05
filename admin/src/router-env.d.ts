@@ -14,5 +14,6 @@ declare module "vue-router" {
 			padded?: { enabled?: boolean }
 		}
 		skipPin?: boolean
+		keepAlive?: boolean
 	}
 }
