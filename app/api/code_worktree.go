@@ -241,11 +241,24 @@ func runCodeGit(workDir string, args ...string) (string, error) {
 }
 
 func runCodeGitWithTimeout(workDir string, timeout time.Duration, args ...string) (string, error) {
+	return runCodeGitCommand(workDir, timeout, 0, args...)
+}
+
+func runCodeGitCommand(workDir string, timeout time.Duration, credentialID uint, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	commandArgs := append([]string{"-C", workDir}, args...)
+	commandArgs := []string{"-C", workDir}
+	if credentialID > 0 {
+		commandArgs = append(commandArgs, "-c", "credential.helper=")
+	}
+	commandArgs = append(commandArgs, args...)
 	command := exec.CommandContext(ctx, "git", commandArgs...)
-	command.Env = codeGitEnvironment()
+	env, cleanup, err := codeGitCredentialEnvironment(credentialID, codeGitEnvironment())
+	if err != nil {
+		return "", err
+	}
+	defer cleanup()
+	command.Env = env
 	output, err := command.CombinedOutput()
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		return "", errors.New("Git 操作超时")

@@ -179,9 +179,10 @@ func integrateAndPushCodeRepositoryWithProgress(session *model.AIDevSession, rep
 		if report != nil {
 			report(codeDeliveryStagePushing, 70)
 		}
-		pushResult, pushErr := pushCodeDeliveryRepositoryWithProgress(
+		pushResult, pushErr := pushCodeDeliveryRepositoryWithCredential(
 			repository.SourceDir, repository.TargetBranch, repository.RemoteName, remoteBranch,
-			repository.RemoteCommit, repository.MergeCommit, repository.PushStatus, report,
+			repository.RemoteCommit, repository.MergeCommit, repository.PushStatus,
+			codeProjectGitCredentialID(session.ProjectID), report,
 		)
 		if err := persistCodeRepositoryPushResult(repository, pushResult); err != nil {
 			return result, err

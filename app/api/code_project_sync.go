@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/aihop/gopanel/app/e"
@@ -17,8 +16,6 @@ import (
 	"github.com/aihop/gopanel/utils/token"
 	"github.com/gofiber/fiber/v3"
 )
-
-const codeProjectSyncInterval = time.Minute
 
 type codeProjectRepositorySpec struct {
 	Name         string
@@ -54,8 +51,6 @@ type codeProjectSyncStatus struct {
 	Repositories []codeProjectRepositorySync `json:"repositories"`
 }
 
-var codeProjectSyncOnce sync.Once
-
 func codeProjectSourceDirs(project *model.AIProject) []string {
 	sourceDirs := project.SourceDirs
 	if len(sourceDirs) == 0 && strings.TrimSpace(project.WorkDir) != "" {
@@ -74,6 +69,25 @@ func codeProjectRepositorySpecs(project *model.AIProject) ([]codeProjectReposito
 		return nil, err
 	}
 	return codeProjectRepositorySpecsWithCandidates(project, sourceDirs, candidates)
+}
+
+func validateCodeProjectRemoteAccess(project *model.AIProject) error {
+	specs, err := codeProjectRepositorySpecs(project)
+	if err != nil {
+		return err
+	}
+	for _, spec := range specs {
+		if spec.Remote == "" {
+			continue
+		}
+		if _, err := runCodeGitWithCredential(
+			spec.Path, codeWorktreeCommandTimeout, project.GitCredentialID,
+			"-c", "credential.interactive=never", "ls-remote", "--exit-code", "--heads", spec.Remote, spec.RemoteBranch,
+		); err != nil {
+			return fmt.Errorf("仓库 %s 远端连接检查失败：%w", spec.Name, err)
+		}
+	}
+	return nil
 }
 
 func codeProjectRepositorySpecsWithCandidates(project *model.AIProject, sourceDirs []string, candidates []codeRepositoryCandidate) ([]codeProjectRepositorySpec, error) {
@@ -370,7 +384,7 @@ func syncCodeProject(project *model.AIProject, automatic bool) (codeProjectSyncS
 	}
 	for _, spec := range specs {
 		if spec.Remote != "" {
-			if _, fetchErr := fetchCodeRepository(spec.Path, spec.Remote); fetchErr != nil {
+			if _, fetchErr := fetchCodeRepositoryWithCredential(spec.Path, spec.Remote, project.GitCredentialID); fetchErr != nil {
 				result, inspectErr := inspectCodeProjectSyncIgnoringOwner(project, owner)
 				if inspectErr == nil {
 					result.Status, result.CanSync = "offline", false
@@ -381,7 +395,10 @@ func syncCodeProject(project *model.AIProject, automatic bool) (codeProjectSyncS
 						}
 					}
 				}
-				return result, inspectErr
+				if inspectErr != nil {
+					return result, inspectErr
+				}
+				return result, fetchErr
 			}
 		}
 	}
@@ -462,36 +479,4 @@ func SyncCodeProject(c fiber.Ctx) error {
 	}
 	recordCodeAudit(claims.UserId, project.ID, 0, "project_git_sync", "success", "project", result.Status, c.IP(), startedAt, codeAuditMeta{"automatic": false})
 	return c.JSON(e.Succ(result))
-}
-
-func StartCodeProjectSync() {
-	codeProjectSyncOnce.Do(func() {
-		go func() {
-			syncAllCodeProjects()
-			ticker := time.NewTicker(codeProjectSyncInterval)
-			defer ticker.Stop()
-			for {
-				select {
-				case <-ticker.C:
-					syncAllCodeProjects()
-				case <-codeExecutions.stop:
-					return
-				}
-			}
-		}()
-	})
-}
-
-func syncAllCodeProjects() {
-	var projects []model.AIProject
-	if global.DB == nil || global.DB.Find(&projects).Error != nil {
-		return
-	}
-	for index := range projects {
-		startedAt := time.Now()
-		result, err := syncCodeProject(&projects[index], true)
-		if err == nil && result.Status == "synced" && result.Updated {
-			recordCodeAudit(projects[index].CreatorID, projects[index].ID, 0, "project_git_sync", "success", "project", "synced", "", startedAt, codeAuditMeta{"automatic": true})
-		}
-	}
 }

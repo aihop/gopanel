@@ -40,6 +40,10 @@ func prepareCodeRepositoryCandidate(candidate codeRepositoryCandidate, includeUn
 }
 
 func prepareCodeRepositoryCandidateForBranch(candidate codeRepositoryCandidate, includeUncommitted bool, deliveryBranch string) (codePreparedRepository, error) {
+	return prepareCodeRepositoryCandidateForBranchWithCredential(candidate, includeUncommitted, deliveryBranch, 0)
+}
+
+func prepareCodeRepositoryCandidateForBranchWithCredential(candidate codeRepositoryCandidate, includeUncommitted bool, deliveryBranch string, credentialID uint) (codePreparedRepository, error) {
 	dirty := candidate.Dirty
 	if dirty && !includeUncommitted {
 		return codePreparedRepository{}, fmt.Errorf("源仓库 %s 存在未提交变更；如需保留这些修改，请启用未提交改动快照", filepath.Base(candidate.SourceDir))
@@ -62,7 +66,7 @@ func prepareCodeRepositoryCandidateForBranch(candidate codeRepositoryCandidate, 
 	}
 	remoteName, remoteRef := codeRepositoryRemoteTracking(candidate.SourceDir, targetBranch)
 	if remoteName != "" {
-		if _, err := fetchCodeRepository(candidate.SourceDir, remoteName); err != nil {
+		if _, err := fetchCodeRepositoryWithCredential(candidate.SourceDir, remoteName, credentialID); err != nil {
 			return codePreparedRepository{}, fmt.Errorf("同步仓库 %s 失败：%w", filepath.Base(candidate.SourceDir), err)
 		}
 		if remoteRef == "" {
@@ -208,6 +212,10 @@ func fastForwardCodeRepository(sourceDir, targetBranch, remoteRef string) (strin
 }
 
 func refreshCodeRepositoryTarget(sourceDir, targetBranch, remoteName string) (string, error) {
+	return refreshCodeRepositoryTargetWithCredential(sourceDir, targetBranch, remoteName, 0)
+}
+
+func refreshCodeRepositoryTargetWithCredential(sourceDir, targetBranch, remoteName string, credentialID uint) (string, error) {
 	status, err := runCodeGit(sourceDir, "status", "--porcelain")
 	if err != nil || strings.TrimSpace(status) != "" {
 		return "", fmt.Errorf("源仓库 %s 存在未提交变更，无法安全合并", filepath.Base(sourceDir))
@@ -220,7 +228,7 @@ func refreshCodeRepositoryTarget(sourceDir, targetBranch, remoteName string) (st
 		commit, err := runCodeGit(sourceDir, "rev-parse", targetBranch)
 		return commit, err
 	}
-	if _, err := fetchCodeRepository(sourceDir, remoteName); err != nil {
+	if _, err := fetchCodeRepositoryWithCredential(sourceDir, remoteName, credentialID); err != nil {
 		return "", fmt.Errorf("同步仓库 %s 失败：%w", filepath.Base(sourceDir), err)
 	}
 	_, remoteRef := codeRepositoryRemoteTracking(sourceDir, targetBranch)
@@ -258,8 +266,13 @@ func syncCodeWorktreeWithTarget(worktreeDir, targetBranch string) error {
 }
 
 func fetchCodeRepository(sourceDir, remoteName string) (string, error) {
-	return runCodeGitWithTimeout(
+	return fetchCodeRepositoryWithCredential(sourceDir, remoteName, 0)
+}
+
+func fetchCodeRepositoryWithCredential(sourceDir, remoteName string, credentialID uint) (string, error) {
+	return runCodeGitWithCredential(
 		sourceDir, codeGitFetchTimeout,
+		credentialID,
 		"-c", "credential.interactive=never", "fetch", "--prune", "--", remoteName,
 	)
 }
@@ -314,7 +327,7 @@ func prepareCodeRepositoryCandidatesWithPolicy(candidates []codeRepositoryCandid
 					if candidates[index].SourceDir == policy.PrimaryRepository {
 						targetBranch = policy.DeliveryBranch
 					}
-					repository, err := prepareCodeRepositoryCandidateForBranch(candidates[index], allowSnapshot, targetBranch)
+					repository, err := prepareCodeRepositoryCandidateForBranchWithCredential(candidates[index], allowSnapshot, targetBranch, policy.GitCredentialID)
 					if err != nil {
 						errorMu.Lock()
 						if firstErr == nil {

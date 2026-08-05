@@ -17,6 +17,10 @@ func CodeRouter(r fiber.Router) {
 		group.Get("/terminal", websocket.New(api.AIAgentWsSSH))
 		group.Get("/executors", api.GetCodeExecutors)
 		group.Get("/attention", api.GetCodeAttention)
+		group.Get("/git/credentials", api.GetCodeGitCredentials)
+		group.Post("/git/credentials", api.SaveCodeGitCredential)
+		group.Put("/git/credentials/:id", api.SaveCodeGitCredential)
+		group.Delete("/git/credentials/:id", api.DeleteCodeGitCredential)
 
 		// Projects APIs
 		group.Get("/projects", api.GetAIProjects)

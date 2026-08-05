@@ -129,7 +129,8 @@ func pushCodeIntegratedDeliveryWithProgress(delivery *model.AICodeDelivery, repo
 	if delivery.MergeCommit == "" || delivery.DeliveryWorkDir == "" {
 		return failedCodePushResult(result, errors.New("交付 Worktree 尚未完成隔离合并"))
 	}
-	if _, err := fetchCodeRepository(delivery.SourceWorkDir, delivery.RemoteName); err != nil {
+	credentialID := codeProjectGitCredentialID(delivery.ProjectID)
+	if _, err := fetchCodeRepositoryWithCredential(delivery.SourceWorkDir, delivery.RemoteName, credentialID); err != nil {
 		return failedCodePushResult(result, err)
 	}
 	remoteRef := "refs/remotes/" + delivery.RemoteName + "/" + remoteBranch
@@ -141,8 +142,9 @@ func pushCodeIntegratedDeliveryWithProgress(delivery *model.AICodeDelivery, repo
 	if err != nil || currentRemoteCommit != delivery.RemoteCommit {
 		return failedCodePushResult(result, errCodePushRemoteAdvanced)
 	}
-	if _, err := runCodeGitWithTimeout(
+	if _, err := runCodeGitWithCredential(
 		delivery.DeliveryWorkDir, codeGitFetchTimeout,
+		credentialID,
 		"-c", "credential.interactive=never", "push", "--", delivery.RemoteName,
 		delivery.MergeCommit+":refs/heads/"+remoteBranch,
 	); err != nil {
@@ -151,7 +153,7 @@ func pushCodeIntegratedDeliveryWithProgress(delivery *model.AICodeDelivery, repo
 	if report != nil {
 		report(codeDeliveryStageVerifying, 85)
 	}
-	if _, err := fetchCodeRepository(delivery.SourceWorkDir, delivery.RemoteName); err != nil {
+	if _, err := fetchCodeRepositoryWithCredential(delivery.SourceWorkDir, delivery.RemoteName, credentialID); err != nil {
 		return failedCodePushResult(result, err)
 	}
 	pushedCommit, err := runCodeGit(delivery.SourceWorkDir, "rev-parse", remoteRef)

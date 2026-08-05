@@ -191,10 +191,11 @@ func pushCodeSessionDelivery(session *model.AIDevSession) (codePushResult, error
 	if err := global.DB.Where("session_id = ?", session.ID).First(&delivery).Error; err != nil {
 		return codePushResult{}, errors.New("会话尚未完成本地合并交付")
 	}
-	result, err := pushCodeDeliveryRepository(
+	result, err := pushCodeDeliveryRepositoryWithCredential(
 		delivery.SourceWorkDir, delivery.TargetBranch, delivery.RemoteName,
 		deliveryRemoteBranch(delivery.RemoteBranch, delivery.TargetBranch),
 		delivery.RemoteCommit, delivery.MergeCommit, delivery.PushStatus,
+		codeProjectGitCredentialID(delivery.ProjectID), nil,
 	)
 	result.RepositoryID, result.RepositoryName = "session", filepath.Base(delivery.SourceWorkDir)
 	updates := map[string]any{"push_status": result.Status, "push_error": result.ErrorMessage}
@@ -219,10 +220,11 @@ func pushCodeMultiRepositoryDelivery(sessionID uint) (codePushResult, error) {
 	results := make([]codeRepositoryPushResult, 0, len(repositories))
 	for index := range repositories {
 		repository := &repositories[index]
-		result, pushErr := pushCodeDeliveryRepository(
+		result, pushErr := pushCodeDeliveryRepositoryWithCredential(
 			repository.SourceDir, repository.TargetBranch, repository.RemoteName,
 			deliveryRemoteBranch(repository.RemoteBranch, repository.TargetBranch),
 			repository.RemoteCommit, repository.MergeCommit, repository.PushStatus,
+			codeProjectGitCredentialID(repository.ProjectID), nil,
 		)
 		result.RepositoryID, result.RepositoryName = codeSessionRepositoryID(repository.ID), repository.LinkName
 		updates := map[string]any{"push_status": result.Status, "push_error": result.ErrorMessage}
@@ -245,6 +247,10 @@ func pushCodeDeliveryRepository(sourceDir, targetBranch, remoteName, remoteBranc
 }
 
 func pushCodeDeliveryRepositoryWithProgress(sourceDir, targetBranch, remoteName, remoteBranch, remoteCommit, mergeCommit, pushStatus string, report codeDeliveryProgressReporter) (codeRepositoryPushResult, error) {
+	return pushCodeDeliveryRepositoryWithCredential(sourceDir, targetBranch, remoteName, remoteBranch, remoteCommit, mergeCommit, pushStatus, 0, report)
+}
+
+func pushCodeDeliveryRepositoryWithCredential(sourceDir, targetBranch, remoteName, remoteBranch, remoteCommit, mergeCommit, pushStatus string, credentialID uint, report codeDeliveryProgressReporter) (codeRepositoryPushResult, error) {
 	result := codeRepositoryPushResult{Status: codePushPending, Remote: remoteName, Branch: remoteBranch, Commit: mergeCommit, Ready: mergeCommit != ""}
 	if pushStatus == codePushPushed {
 		result.Status = codePushPushed
@@ -260,7 +266,7 @@ func pushCodeDeliveryRepositoryWithProgress(sourceDir, targetBranch, remoteName,
 	if err != nil || localCommit != mergeCommit {
 		return failedCodePushResult(result, errors.New("目标分支已在交付后发生变化，请重新创建会话交付"))
 	}
-	if _, err := fetchCodeRepository(sourceDir, remoteName); err != nil {
+	if _, err := fetchCodeRepositoryWithCredential(sourceDir, remoteName, credentialID); err != nil {
 		return failedCodePushResult(result, err)
 	}
 	remoteRef := "refs/remotes/" + remoteName + "/" + remoteBranch
@@ -272,13 +278,14 @@ func pushCodeDeliveryRepositoryWithProgress(sourceDir, targetBranch, remoteName,
 	if err != nil || currentRemoteCommit != remoteCommit {
 		return failedCodePushResult(result, errCodePushRemoteAdvanced)
 	}
-	if _, err := runCodeGitWithTimeout(
+	if _, err := runCodeGitWithCredential(
 		sourceDir, codeGitFetchTimeout,
+		credentialID,
 		"-c", "credential.interactive=never", "push", "--", remoteName,
 		mergeCommit+":refs/heads/"+remoteBranch,
 	); err != nil {
 		pushErr := err
-		if _, fetchErr := fetchCodeRepository(sourceDir, remoteName); fetchErr == nil {
+		if _, fetchErr := fetchCodeRepositoryWithCredential(sourceDir, remoteName, credentialID); fetchErr == nil {
 			if latestRemoteCommit, resolveErr := runCodeGit(sourceDir, "rev-parse", remoteRef); resolveErr == nil && latestRemoteCommit != remoteCommit {
 				return failedCodePushResult(result, errCodePushRemoteAdvanced)
 			}
@@ -288,7 +295,7 @@ func pushCodeDeliveryRepositoryWithProgress(sourceDir, targetBranch, remoteName,
 	if report != nil {
 		report(codeDeliveryStageVerifying, 85)
 	}
-	if _, err := fetchCodeRepository(sourceDir, remoteName); err != nil {
+	if _, err := fetchCodeRepositoryWithCredential(sourceDir, remoteName, credentialID); err != nil {
 		return failedCodePushResult(result, err)
 	}
 	pushedCommit, err := runCodeGit(sourceDir, "rev-parse", remoteRef)

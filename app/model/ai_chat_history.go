@@ -14,6 +14,7 @@ type AIProject struct {
 	CreatorID          uint                       `gorm:"column:creator_id;type:integer;not null;index" json:"creatorId"`
 	PrimaryRepository  string                     `gorm:"column:primary_repository;type:varchar(1024)" json:"primaryRepository,omitempty"`
 	DeliveryBranch     string                     `gorm:"column:delivery_branch;type:varchar(255);not null;default:''" json:"deliveryBranch"`
+	GitCredentialID    uint                       `gorm:"column:git_credential_id;type:integer;not null;default:0;index" json:"gitCredentialId"`
 	RequireQualityGate bool                       `gorm:"column:require_quality_gate;not null;default:false" json:"requireQualityGate"`
 	MonthlyTokenBudget int64                      `gorm:"column:monthly_token_budget;not null;default:0" json:"monthlyTokenBudget"`
 	TaskCount          int64                      `gorm:"-" json:"taskCount"`

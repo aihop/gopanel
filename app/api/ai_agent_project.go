@@ -113,6 +113,7 @@ func CreateAIProject(c fiber.Ctx) error {
 		SourceDirs         []string `json:"sourceDirs"`
 		PrimaryRepository  *string  `json:"primaryRepository"`
 		DeliveryBranch     *string  `json:"deliveryBranch"`
+		GitCredentialID    uint     `json:"gitCredentialId"`
 		RequireQualityGate bool     `json:"requireQualityGate"`
 		MonthlyTokenBudget int64    `json:"monthlyTokenBudget"`
 	}
@@ -134,6 +135,9 @@ func CreateAIProject(c fiber.Ctx) error {
 	if req.MonthlyTokenBudget < 0 {
 		return c.JSON(e.Fail(errors.New("Token 月度预算不能为负数")))
 	}
+	if err := validateCodeGitCredentialAccess(req.GitCredentialID, claims.UserId); err != nil {
+		return c.JSON(e.Fail(err))
+	}
 	primaryRepository, deliveryBranch := "", ""
 	if req.PrimaryRepository != nil {
 		primaryRepository = strings.TrimSpace(*req.PrimaryRepository)
@@ -144,10 +148,13 @@ func CreateAIProject(c fiber.Ctx) error {
 	project := &model.AIProject{
 		Name: name, Description: strings.TrimSpace(req.Description), SourceDirs: sourceDirs,
 		CreatorID: claims.UserId, PrimaryRepository: primaryRepository,
-		DeliveryBranch: deliveryBranch, RequireQualityGate: true,
+		DeliveryBranch: deliveryBranch, GitCredentialID: req.GitCredentialID, RequireQualityGate: true,
 		MonthlyTokenBudget: req.MonthlyTokenBudget,
 	}
 	if err := applyCodeProjectDeliveryPolicy(project, sourceDirs); err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	if err := validateCodeProjectRemoteAccess(project); err != nil {
 		return c.JSON(e.Fail(err))
 	}
 	projectRepo := repo.NewAIProjectRepo()
@@ -190,6 +197,7 @@ func UpdateAIProject(c fiber.Ctx) error {
 		SourceDirs         []string `json:"sourceDirs"`
 		PrimaryRepository  *string  `json:"primaryRepository"`
 		DeliveryBranch     *string  `json:"deliveryBranch"`
+		GitCredentialID    uint     `json:"gitCredentialId"`
 		RequireQualityGate bool     `json:"requireQualityGate"`
 		MonthlyTokenBudget int64    `json:"monthlyTokenBudget"`
 	}
@@ -208,13 +216,8 @@ func UpdateAIProject(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	workDir, err := syncAIProjectWorkspace(project, sourceDirs)
-	if err != nil {
-		return c.JSON(e.Fail(err))
-	}
 	project.Name = name
 	project.Description = strings.TrimSpace(req.Description)
-	project.WorkDir = workDir
 	project.SourceDirs = sourceDirs
 	if req.PrimaryRepository != nil {
 		project.PrimaryRepository = strings.TrimSpace(*req.PrimaryRepository)
@@ -225,11 +228,23 @@ func UpdateAIProject(c fiber.Ctx) error {
 	if req.MonthlyTokenBudget < 0 {
 		return c.JSON(e.Fail(errors.New("Token 月度预算不能为负数")))
 	}
+	if err := validateCodeGitCredentialAccess(req.GitCredentialID, claims.UserId); err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	project.GitCredentialID = req.GitCredentialID
 	project.RequireQualityGate = true
 	project.MonthlyTokenBudget = req.MonthlyTokenBudget
 	if err := applyCodeProjectDeliveryPolicy(project, sourceDirs); err != nil {
 		return c.JSON(e.Fail(err))
 	}
+	if err := validateCodeProjectRemoteAccess(project); err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	workDir, err := syncAIProjectWorkspace(project, sourceDirs)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	project.WorkDir = workDir
 	if err := projectRepo.UpdateProject(project); err != nil {
 		return c.JSON(e.Fail(err))
 	}

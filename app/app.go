@@ -162,7 +162,6 @@ func (r *App) Serve(listener net.Listener) error {
 	api.StartCodeSessionInitialization()
 	api.StartCodeInstructionRecovery()
 	api.StartCodeDeliveryRecovery()
-	api.StartCodeProjectSync()
 	r.startupMessage(listener.Addr().String())
 
 	err := r.App.Listener(listener, fiber.ListenConfig{DisableStartupMessage: true})

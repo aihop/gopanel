@@ -67,7 +67,9 @@ func mergePreparedCodeDeliveryWithProgress(delivery *model.AICodeDelivery, repor
 	if targetBranch == "" {
 		targetBranch, _ = runCodeGit(snapshot.SourceWorkDir, "branch", "--show-current")
 	}
-	targetCommit, err := refreshCodeRepositoryTarget(snapshot.SourceWorkDir, targetBranch, snapshot.RemoteName)
+	targetCommit, err := refreshCodeRepositoryTargetWithCredential(
+		snapshot.SourceWorkDir, targetBranch, snapshot.RemoteName, codeProjectGitCredentialID(snapshot.ProjectID),
+	)
 	if err != nil {
 		return codeGitDeliveryResult{}, err
 	}

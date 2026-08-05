@@ -1,6 +1,8 @@
 import http from "@/api"
 import type {
 	AIProject,
+	CodeGitCredential,
+	CodeGitCredentialInput,
 	AITask,
 	AIMessage,
 	CodeExecutor,
@@ -33,12 +35,26 @@ export function getAIProjects(params: { page: number; limit: number }) {
 	return http.get<{ items: AIProject[]; total: number }>("/code/projects", params)
 }
 
-export function createAIProject(data: { name: string; description: string; sourceDirs: string[]; primaryRepository: string; deliveryBranch: string; requireQualityGate: boolean; monthlyTokenBudget: number }) {
+export function createAIProject(data: { name: string; description: string; sourceDirs: string[]; primaryRepository: string; deliveryBranch: string; gitCredentialId: number; requireQualityGate: boolean; monthlyTokenBudget: number }) {
 	return http.post<AIProject>("/code/projects", data)
 }
 
-export function updateAIProject(id: number, data: { name: string; description: string; sourceDirs: string[]; primaryRepository: string; deliveryBranch: string; requireQualityGate: boolean; monthlyTokenBudget: number }) {
+export function updateAIProject(id: number, data: { name: string; description: string; sourceDirs: string[]; primaryRepository: string; deliveryBranch: string; gitCredentialId: number; requireQualityGate: boolean; monthlyTokenBudget: number }) {
 	return http.put<AIProject>(`/code/projects/${id}`, data)
+}
+
+export function getCodeGitCredentials() {
+	return http.get<CodeGitCredential[]>("/code/git/credentials")
+}
+
+export function saveCodeGitCredential(data: CodeGitCredentialInput, id?: number) {
+	return id
+		? http.put<CodeGitCredential>(`/code/git/credentials/${id}`, data)
+		: http.post<CodeGitCredential>("/code/git/credentials", data)
+}
+
+export function deleteCodeGitCredential(id: number) {
+	return http.delete(`/code/git/credentials/${id}`)
 }
 
 export function getCodeProjectBranches(projectId: number) {

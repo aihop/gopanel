@@ -9,11 +9,25 @@ export interface AIProject {
 	creatorId: number
 	primaryRepository?: string
 	deliveryBranch: string
+	gitCredentialId: number
 	requireQualityGate: boolean
 	monthlyTokenBudget: number
 	memberCount?: number
 	taskCount?: number
 	executionSummary: AIProjectExecutionSummary
+}
+
+export interface CodeGitCredential {
+	id: number
+	name: string
+	username: string
+	hasSecret: boolean
+}
+
+export interface CodeGitCredentialInput {
+	name: string
+	username: string
+	secret: string
 }
 
 export interface AIProjectExecutionSummary {

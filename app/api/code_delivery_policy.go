@@ -14,6 +14,7 @@ const defaultCodeDeliveryBranch = "main"
 type codeDeliveryPolicy struct {
 	PrimaryRepository string
 	DeliveryBranch    string
+	GitCredentialID   uint
 }
 
 func normalizeCodeDeliveryPolicy(sourceDirs []string, primaryRepository, deliveryBranch string) (codeDeliveryPolicy, error) {
@@ -70,14 +71,18 @@ func codeProjectDeliveryPolicy(project *model.AIProject, sourceDirs []string) (c
 	if project == nil {
 		return codeDeliveryPolicy{}, errors.New("项目交付策略不可用")
 	}
-	return normalizeCodeDeliveryPolicy(sourceDirs, project.PrimaryRepository, project.DeliveryBranch)
+	policy, err := normalizeCodeDeliveryPolicy(sourceDirs, project.PrimaryRepository, project.DeliveryBranch)
+	policy.GitCredentialID = project.GitCredentialID
+	return policy, err
 }
 
 func codeProjectDeliveryPolicyWithCandidates(project *model.AIProject, sourceDirs []string, candidates []codeRepositoryCandidate) (codeDeliveryPolicy, error) {
 	if project == nil {
 		return codeDeliveryPolicy{}, errors.New("项目交付策略不可用")
 	}
-	return normalizeCodeDeliveryPolicyWithCandidates(sourceDirs, candidates, project.PrimaryRepository, project.DeliveryBranch)
+	policy, err := normalizeCodeDeliveryPolicyWithCandidates(sourceDirs, candidates, project.PrimaryRepository, project.DeliveryBranch)
+	policy.GitCredentialID = project.GitCredentialID
+	return policy, err
 }
 
 func applyCodeProjectDeliveryPolicy(project *model.AIProject, sourceDirs []string) error {

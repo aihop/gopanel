@@ -281,6 +281,15 @@ func (runner *codeDeliveryRunner) finish(job *model.AICodeDeliveryJob, result co
 }
 
 func codeDeliveryFailureCode(stage string, err error) string {
+	if errors.Is(err, errCodeGitAuthentication) {
+		return "authentication_failed"
+	}
+	if errors.Is(err, errCodeGitRepository) {
+		return "repository_unavailable"
+	}
+	if errors.Is(err, errCodeGitNetwork) {
+		return "network_failed"
+	}
 	if errors.Is(err, errCodePushRemoteAdvanced) {
 		return "remote_advanced"
 	}

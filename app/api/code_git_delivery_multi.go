@@ -141,7 +141,9 @@ func prepareCodeMultiRepositoryDeliveryWithProgress(session *model.AIDevSession,
 		if targetBranch == "" {
 			targetBranch, _ = runCodeGit(repository.SourceDir, "branch", "--show-current")
 		}
-		targetCommit, err := refreshCodeRepositoryTarget(repository.SourceDir, targetBranch, repository.RemoteName)
+		targetCommit, err := refreshCodeRepositoryTargetWithCredential(
+			repository.SourceDir, targetBranch, repository.RemoteName, codeProjectGitCredentialID(session.ProjectID),
+		)
 		if err != nil {
 			return fmt.Errorf("仓库 %s 同步失败：%w", repository.LinkName, err)
 		}

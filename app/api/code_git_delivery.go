@@ -89,7 +89,9 @@ func mergeCodeSessionWorktree(session *model.AIDevSession) (codeGitDeliveryResul
 	if targetBranch == "" {
 		targetBranch, _ = runCodeGit(session.SourceWorkDir, "branch", "--show-current")
 	}
-	if _, err := refreshCodeRepositoryTarget(session.SourceWorkDir, targetBranch, session.RemoteName); err != nil {
+	if _, err := refreshCodeRepositoryTargetWithCredential(
+		session.SourceWorkDir, targetBranch, session.RemoteName, codeProjectGitCredentialID(session.ProjectID),
+	); err != nil {
 		return codeGitDeliveryResult{}, err
 	}
 	if err := syncCodeWorktreeWithTarget(session.WorkDir, targetBranch); err != nil {

@@ -189,13 +189,17 @@ func inspectCodeSessionGitSyncTargets(sessionID uint, targets []codeSessionGitSy
 	return result
 }
 
-func fetchCodeSessionGitTargets(targets []codeSessionGitSyncTarget) map[string]error {
+func fetchCodeSessionGitTargets(targets []codeSessionGitSyncTarget, credentialIDs ...uint) map[string]error {
+	credentialID := uint(0)
+	if len(credentialIDs) > 0 {
+		credentialID = credentialIDs[0]
+	}
 	errorsByID := make(map[string]error)
 	for _, target := range targets {
 		if target.Remote == "" {
 			continue
 		}
-		_, errorsByID[target.ID] = fetchCodeRepository(target.SourceDir, target.Remote)
+		_, errorsByID[target.ID] = fetchCodeRepositoryWithCredential(target.SourceDir, target.Remote, credentialID)
 	}
 	return errorsByID
 }
@@ -251,6 +255,10 @@ func checkCodeSessionGitSync(c fiber.Ctx) (codeSessionGitSyncStatus, *model.AIDe
 	if err != nil {
 		return codeSessionGitSyncStatus{}, session, err
 	}
+	project, err := getCodeProjectWithPermission(session.ProjectID, c.Locals(constant.AppAuthName).(*token.CustomClaims))
+	if err != nil {
+		return codeSessionGitSyncStatus{}, session, err
+	}
 	for _, target := range targets {
 		if err := validateAIProjectWorkDirForClaims(target.SourceDir, c.Locals(constant.AppAuthName).(*token.CustomClaims)); err != nil {
 			return codeSessionGitSyncStatus{}, session, err
@@ -261,7 +269,7 @@ func checkCodeSessionGitSync(c fiber.Ctx) (codeSessionGitSyncStatus, *model.AIDe
 		return codeSessionGitSyncStatus{}, session, err
 	}
 	defer release()
-	fetchErrors := fetchCodeSessionGitTargets(targets)
+	fetchErrors := fetchCodeSessionGitTargets(targets, project.GitCredentialID)
 	return inspectCodeSessionGitSyncTargets(session.ID, targets, fetchErrors), session, nil
 }
 
@@ -302,7 +310,7 @@ func syncCodeSessionGitRepositoryOperation(c fiber.Ctx, syncRepositoryID string)
 		if err != nil {
 			return err
 		}
-		fetchErrors := fetchCodeSessionGitTargets(currentTargets)
+		fetchErrors := fetchCodeSessionGitTargets(currentTargets, project.GitCredentialID)
 		result = inspectCodeSessionGitSyncTargets(current.ID, currentTargets, fetchErrors)
 		var selected *codeSessionGitSyncTarget
 		for index := range currentTargets {

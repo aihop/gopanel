@@ -127,6 +127,7 @@ func Init() {
 	if err := global.DB.AutoMigrate(
 		&model.Firewall{},
 		&model.Forward{},
+		&model.AIGitCredential{},
 		&model.AIProject{},
 		&model.AITask{},
 		&model.AIMessage{},
