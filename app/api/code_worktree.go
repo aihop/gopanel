@@ -245,7 +245,7 @@ func runCodeGitWithTimeout(workDir string, timeout time.Duration, args ...string
 	defer cancel()
 	commandArgs := append([]string{"-C", workDir}, args...)
 	command := exec.CommandContext(ctx, "git", commandArgs...)
-	command.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	command.Env = codeGitEnvironment()
 	output, err := command.CombinedOutput()
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		return "", errors.New("Git 操作超时")
@@ -258,4 +258,16 @@ func runCodeGitWithTimeout(workDir string, timeout time.Duration, args ...string
 		return "", fmt.Errorf("Git 操作失败：%w", normalizeCodeGitCommandError(message))
 	}
 	return strings.TrimSpace(string(output)), nil
+}
+
+func codeGitEnvironment() []string {
+	env := os.Environ()
+	if homeDir := codeExecutorHomeDir(); homeDir != "" && strings.TrimSpace(os.Getenv("HOME")) == "" {
+		env = upsertEnvironment(env, "HOME", homeDir)
+	}
+	searchDirs := codeExecutorSearchDirs()
+	if len(searchDirs) > 0 {
+		env = upsertEnvironment(env, "PATH", strings.Join(searchDirs, string(os.PathListSeparator)))
+	}
+	return upsertEnvironment(env, "GIT_TERMINAL_PROMPT", "0")
 }

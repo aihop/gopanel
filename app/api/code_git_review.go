@@ -97,6 +97,7 @@ func runCodeGitReviewCommand(workDir string, allowDiffExit bool, outputLimit int
 	defer cancel()
 	commandArgs := append([]string{"-C", workDir}, args...)
 	command := exec.CommandContext(ctx, "git", commandArgs...)
+	command.Env = codeGitEnvironment()
 	output := &codeGitCappedBuffer{limit: outputLimit}
 	command.Stdout = output
 	command.Stderr = output

@@ -31,6 +31,37 @@ func createCodeGitRepository(t *testing.T) string {
 	return resolved
 }
 
+func TestCodeGitEnvironmentRestoresServiceAccountSettings(t *testing.T) {
+	homeDir := codeExecutorHomeDir()
+	if homeDir == "" {
+		t.Skip("current service account home is unavailable")
+	}
+	t.Setenv("HOME", "")
+	t.Setenv("PATH", "/usr/bin")
+	t.Setenv("SSH_AUTH_SOCK", "/tmp/gopanel-test-agent.sock")
+
+	environment := make(map[string]string)
+	for _, item := range codeGitEnvironment() {
+		key, value, found := strings.Cut(item, "=")
+		if found {
+			environment[key] = value
+		}
+	}
+
+	if environment["HOME"] != homeDir {
+		t.Fatalf("HOME = %q, want %q", environment["HOME"], homeDir)
+	}
+	if environment["GIT_TERMINAL_PROMPT"] != "0" {
+		t.Fatalf("GIT_TERMINAL_PROMPT = %q", environment["GIT_TERMINAL_PROMPT"])
+	}
+	if environment["SSH_AUTH_SOCK"] != "/tmp/gopanel-test-agent.sock" {
+		t.Fatalf("SSH_AUTH_SOCK was not preserved: %q", environment["SSH_AUTH_SOCK"])
+	}
+	if !strings.Contains(environment["PATH"], "/usr/local/bin") {
+		t.Fatalf("PATH does not include service Git locations: %q", environment["PATH"])
+	}
+}
+
 func TestInspectCodeWorktreeCapability(t *testing.T) {
 	repositoryDir := createCodeGitRepository(t)
 	available := inspectCodeWorktreeCapability(&model.AIProject{SourceDirs: []string{repositoryDir}})

@@ -270,6 +270,7 @@ func runCodeGitBytes(workDir string, input []byte, args ...string) ([]byte, erro
 	ctx, cancel := context.WithTimeout(context.Background(), codeWorktreeCommandTimeout)
 	defer cancel()
 	command := exec.CommandContext(ctx, "git", append([]string{"-C", workDir}, args...)...)
+	command.Env = codeGitEnvironment()
 	if input != nil {
 		command.Stdin = bytes.NewReader(input)
 	}
