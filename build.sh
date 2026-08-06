@@ -12,6 +12,16 @@ derive_version_code() {
   echo $(( 10#${a} * 100000 + 10#${b} * 1000 + 10#${c} ))
 }
 
+write_sha256() {
+  local archive="$1" digest
+  if command -v sha256sum >/dev/null 2>&1; then
+    digest="$(sha256sum "${archive}" | awk '{print $1}')"
+  else
+    digest="$(shasum -a 256 "${archive}" | awk '{print $1}')"
+  fi
+  printf '%s  %s\n' "${digest}" "$(basename "${archive}")" > "${archive}.sha256"
+}
+
 VERSION="${1:-1.0.0}"
 # version_code 未显式传入(第二参非纯数字)则从版本名推导，避免误用默认 100000
 if [[ "${2:-}" =~ ^[0-9]+$ ]]; then
@@ -186,9 +196,11 @@ for t in "${TARGETS[@]}"; do
   # 打包
   if [ "${GOOS}" = "windows" ] && command -v zip >/dev/null 2>&1; then
     (cd "${OUTDIR}" && zip -qr "${short_name}.zip" "${short_name}")
+    write_sha256 "${OUTDIR}/${short_name}.zip"
     echo "Finished: ${short_name}.zip"
   else
     tar -C "${OUTDIR}" -czf "${OUTDIR}/${short_name}.tar.gz" "${short_name}"
+    write_sha256 "${OUTDIR}/${short_name}.tar.gz"
     echo "Finished: ${short_name}.tar.gz"
   fi
   

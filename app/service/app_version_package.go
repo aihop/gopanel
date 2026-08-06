@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"github.com/aihop/gopanel/app/dto/request"
@@ -11,6 +13,7 @@ import (
 	"github.com/aihop/gopanel/utils/files"
 	"github.com/aihop/gopanel/utils/gpc"
 	"io"
+	"net/http"
 	"os"
 	"path"
 	"path/filepath"
@@ -19,11 +22,18 @@ import (
 	"time"
 )
 
-func (a *AppVersionService) GoPanelUpload(downloadUrl string, installPath string, versionCode int64, versionName string, writeLog func(string, interface{})) error {
+func (a *AppVersionService) GoPanelUpload(downloadUrl, checksum, installPath string, versionCode int64, versionName string, writeLog func(string, interface{})) error {
 	var err error
+	if err := validateUpdateDownloadURL(downloadUrl); err != nil {
+		return err
+	}
+	checksum, err = resolveUpdateChecksum(downloadUrl, checksum)
+	if err != nil {
+		return err
+	}
 	filesUtil := files.NewFileOp()
 	saveDirName := ""
-	sourcePath, err := a.FileDownloadAndExtract(downloadUrl, saveDirName, writeLog)
+	sourcePath, err := a.FileDownloadAndExtract(downloadUrl, checksum, saveDirName, writeLog)
 	if err != nil {
 		return err
 	}
@@ -171,7 +181,7 @@ func (a *AppVersionService) GoPanelUpload(downloadUrl string, installPath string
 	}
 	return nil
 }
-func (a *AppVersionService) FileDownloadAndExtract(downloadUrl string, saveDirName string, writeLog func(string, interface{})) (string, error) {
+func (a *AppVersionService) FileDownloadAndExtract(downloadUrl, checksum, saveDirName string, writeLog func(string, interface{})) (string, error) {
 	suffix := strings.ToLower(common.GetFileExt(path.Base(downloadUrl)))
 	if suffix == ".tgz" {
 		suffix = ".tar.gz"
@@ -225,6 +235,11 @@ DOWNLOAD_DONE:
 		writeLog("downloaded file not found", tmpFile)
 		return "", fmt.Errorf("downloaded file not found: %s", tmpFile)
 	}
+	if err := verifyFileSHA256(tmpFile, checksum); err != nil {
+		writeLog("update package checksum mismatch", err)
+		return "", err
+	}
+	writeLog("update package checksum verified", checksum)
 	writeLog("start extract file", tmpFile)
 	extractedDir, err := extract(tmpFile, suffix)
 	if err != nil {
@@ -253,6 +268,61 @@ DOWNLOAD_DONE:
 		}
 	}
 	return sourcePath, nil
+}
+
+func resolveUpdateChecksum(downloadURL, supplied string) (string, error) {
+	if checksum, err := normalizeSHA256(supplied); err == nil && checksum != "" {
+		return checksum, nil
+	} else if err != nil {
+		return "", err
+	}
+	client := &http.Client{Timeout: 10 * time.Second}
+	response, err := client.Get(downloadURL + ".sha256")
+	if err != nil {
+		return "", fmt.Errorf("download update checksum: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("update checksum unavailable: HTTP %d", response.StatusCode)
+	}
+	content, err := io.ReadAll(io.LimitReader(response.Body, 4096))
+	if err != nil {
+		return "", fmt.Errorf("read update checksum: %w", err)
+	}
+	fields := strings.Fields(string(content))
+	if len(fields) == 0 {
+		return "", fmt.Errorf("update checksum is empty")
+	}
+	return normalizeSHA256(fields[0])
+}
+
+func normalizeSHA256(checksum string) (string, error) {
+	checksum = strings.ToLower(strings.TrimSpace(checksum))
+	if checksum == "" {
+		return "", nil
+	}
+	decoded, err := hex.DecodeString(checksum)
+	if err != nil || len(decoded) != sha256.Size {
+		return "", fmt.Errorf("invalid update SHA-256 checksum")
+	}
+	return checksum, nil
+}
+
+func verifyFileSHA256(filePath, expected string) error {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return err
+	}
+	actual := hex.EncodeToString(hash.Sum(nil))
+	if actual != expected {
+		return fmt.Errorf("update SHA-256 mismatch: expected %s, got %s", expected, actual)
+	}
+	return nil
 }
 func extract(tmpFile string, suffix string) (string, error) {
 	var compressType files.CompressType

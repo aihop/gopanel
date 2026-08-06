@@ -166,7 +166,7 @@ fi
 ASSETS=()
 while IFS=  read -r -d $'\0'; do
     ASSETS+=("$REPLY")
-done < <(find "${OUTDIR}" -maxdepth 1 \( -name "*.tar.gz" -o -name "*.zip" \) -print0)
+done < <(find "${OUTDIR}" -maxdepth 1 \( -name "*.tar.gz" -o -name "*.zip" -o -name "*.sha256" \) -print0)
 
 # 如果存在说明文档，也一并作为 Release 附件上传
 if [ -f "${PROJECT_ROOT}/README.md" ]; then

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -24,10 +25,10 @@ type AppVersionService struct{}
 type IAppVersionService interface {
 	GetUpdateInfo(checkUrl string, upgradeVersion *dto.SettingUpgradeVersion) (*dto.AppUpdateData, error)
 	GoPanelVersion() (*dto.SettingAppVersion, error)
-	GoPanelUpload(downloadUrl string, installPath string, versionCode int64, versionName string, writeLog func(string, interface{})) error
+	GoPanelUpload(downloadUrl, checksum, installPath string, versionCode int64, versionName string, writeLog func(string, interface{})) error
 	WriteUploadLock(installPath string, version_code int64)
 	ReadUploadLock(installPath string) (int64, error)
-	FileDownloadAndExtract(downloadUrl string, saveDirName string, writeLog func(string, interface{})) (string, error)
+	FileDownloadAndExtract(downloadUrl, checksum, saveDirName string, writeLog func(string, interface{})) (string, error)
 }
 
 func (a *AppVersionService) GetUpdateInfo(checkUrl string, upgradeVersion *dto.SettingUpgradeVersion) (*dto.AppUpdateData, error) {
@@ -52,7 +53,20 @@ func (a *AppVersionService) GetUpdateInfo(checkUrl string, upgradeVersion *dto.S
 	if err := json.Unmarshal(body, &release); err != nil {
 		return nil, nil
 	}
+	if release != nil && strings.TrimSpace(release.DownloadUrl) != "" {
+		if err := validateUpdateDownloadURL(release.DownloadUrl); err != nil {
+			return nil, err
+		}
+	}
 	return release, nil
+}
+
+func validateUpdateDownloadURL(downloadURL string) error {
+	parsed, err := url.Parse(strings.TrimSpace(downloadURL))
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
+		return fmt.Errorf("update download URL must use HTTPS")
+	}
+	return nil
 }
 func (a *AppVersionService) WriteUploadLock(installPath string, versionCode int64) {
 	uploadLockFile := filepath.Join(installPath, "update.lock")

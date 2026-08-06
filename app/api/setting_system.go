@@ -260,7 +260,7 @@ func SettingSystemUpgrade(c fiber.Ctx) error {
 	}
 	logName := "gopanel_update_" + time.Now().Format("20060102150405") + ".log"
 	logger := service.GetUpdateLogger(logName)
-	go func() {
+	service.SafeGo("system-upgrade", func() {
 		defer service.RemoveUpdateLogger(logName)
 		writeLog := func(text string, param interface{}) {
 			logger.Append(text, param)
@@ -275,16 +275,16 @@ func SettingSystemUpgrade(c fiber.Ctx) error {
 		writeLog("start upload", updateInfo.LatestVersionName)
 		// 开始更新
 		// 面板内一键更新不走 install.sh，升级上报由 GoPanelUpload 在重启前发出
-		err = appVersionService.GoPanelUpload(updateInfo.DownloadUrl, installPath, updateInfo.LatestVersionCode, updateInfo.LatestVersionName, writeLog)
-		if err != nil {
-			writeLog("upload error", err)
+		upgradeErr := appVersionService.GoPanelUpload(updateInfo.DownloadUrl, updateInfo.SHA256, installPath, updateInfo.LatestVersionCode, updateInfo.LatestVersionName, writeLog)
+		if upgradeErr != nil {
+			writeLog("upload error", upgradeErr)
 			logger.SetStatus("failed")
 			service.TrackEvent(service.TrackEventUpgradeFailed, updateInfo.LatestVersionName)
 			return
 		}
 		writeLog("upload success", updateInfo.LatestVersionName)
 		logger.SetStatus("success")
-	}()
+	})
 
 	// 返回异步任务的日志文件名给前端
 	res := struct {

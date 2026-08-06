@@ -174,6 +174,7 @@ type AppUpdateData struct {
 	LatestVersionName string `json:"latestVersionName"`
 	LatestVersionCode int64  `json:"latestVersionCode"`
 	DownloadUrl       string `json:"downloadUrl"`
+	SHA256            string `json:"sha256"`
 	CreateAt          string `json:"createAt"`
 	Content           string `json:"content"`
 	Title             string `json:"title"`
