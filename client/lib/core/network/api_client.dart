@@ -29,17 +29,6 @@ class ApiClient {
 
     // 添加处理 URL 和 Token 的认证拦截器
     _dio.interceptors.add(AuthInterceptor());
-    // 开发环境下可按需开启请求与响应日志
-    _dio.interceptors.add(
-      LogInterceptor(
-        request: true,
-        requestHeader: true,
-        requestBody: true,
-        responseHeader: true,
-        responseBody: true,
-        error: true,
-      ),
-    );
   }
 
   /// 封装标准的 GET 请求

@@ -18,7 +18,6 @@ class ServerConnection {
       'id': id,
       'name': name,
       'url': url,
-      'token': token,
       'lastConnectedAt': lastConnectedAt.toIso8601String(),
     };
   }
@@ -28,7 +27,7 @@ class ServerConnection {
       id: json['id'] as String,
       name: json['name'] as String,
       url: json['url'] as String,
-      token: json['token'] as String,
+      token: json['token'] as String? ?? '',
       lastConnectedAt: DateTime.parse(json['lastConnectedAt'] as String),
     );
   }

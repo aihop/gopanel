@@ -1,93 +1,179 @@
 import 'dart:convert';
+
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../../shared/models/server_connection.dart';
 
-/// 统一存储服务，封装对 SharedPreferences 的调用
-/// 遵循 PROMPT.md 规范：不让业务代码直接依赖存储实现
 class StorageService {
   static late SharedPreferences _prefs;
+  static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
+  static final Map<String, String> _serverTokens = {};
+  static String? _activeServerToken;
+  static String? _activeServerCookie;
 
-  /// 初始化存储服务，在 main() 中调用
+  static const String _keyServerList = 'server_list';
+  static const String _keyActiveServerUrl = 'active_server_url';
+  static const String _keyActiveServerToken = 'active_server_token';
+  static const String _keyActiveServerCookie = 'active_server_cookie';
+  static const String _secureActiveToken = 'secure_active_server_token';
+  static const String _secureActiveCookie = 'secure_active_server_cookie';
+
   static Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
+    await _migrateActiveCredentials();
+    _activeServerToken = await _secureStorage.read(key: _secureActiveToken);
+    _activeServerCookie = await _secureStorage.read(key: _secureActiveCookie);
+    await _loadServerTokens();
   }
 
-  // ==========================================
-  // 服务器连接列表 (聚合页需要展示的全部服务器)
-  // ==========================================
-  static const String _keyServerList = 'server_list';
-
-  /// 获取保存的所有服务器列表
   static List<ServerConnection> getServerList() {
-    final String? jsonStr = _prefs.getString(_keyServerList);
-    if (jsonStr == null || jsonStr.isEmpty) return [];
+    final entries = _readServerEntries();
+    return entries.map((entry) {
+      final server = ServerConnection.fromJson(entry);
+      return ServerConnection(
+        id: server.id,
+        name: server.name,
+        url: server.url,
+        token: _serverTokens[server.id] ?? '',
+        lastConnectedAt: server.lastConnectedAt,
+      );
+    }).toList();
+  }
 
+  static Future<bool> saveServerConnection(ServerConnection server) async {
+    final list = getServerList();
+    final index = list.indexWhere((item) => item.url == server.url);
+    final saved = index >= 0
+        ? ServerConnection(
+            id: list[index].id,
+            name: server.name,
+            url: server.url,
+            token: server.token,
+            lastConnectedAt: server.lastConnectedAt,
+          )
+        : server;
+    await _secureStorage.write(
+      key: _serverTokenKey(saved.id),
+      value: saved.token,
+    );
+    _serverTokens[saved.id] = saved.token;
+    if (index >= 0) {
+      list[index] = saved;
+    } else {
+      list.add(saved);
+    }
+    return _writeServerList(list);
+  }
+
+  static Future<bool> removeServerConnection(String url) async {
+    final list = getServerList();
+    final removed = list.where((item) => item.url == url).toList();
+    list.removeWhere((item) => item.url == url);
+    for (final server in removed) {
+      await _secureStorage.delete(key: _serverTokenKey(server.id));
+      _serverTokens.remove(server.id);
+    }
+    return _writeServerList(list);
+  }
+
+  static String? get activeServerUrl => _prefs.getString(_keyActiveServerUrl);
+
+  static Future<bool> setActiveServerUrl(String url) {
+    return _prefs.setString(_keyActiveServerUrl, url);
+  }
+
+  static String? get activeServerToken => _activeServerToken;
+
+  static Future<bool> setActiveServerToken(String token) async {
+    await _secureStorage.write(key: _secureActiveToken, value: token);
+    _activeServerToken = token;
+    return true;
+  }
+
+  static String? get activeServerCookie => _activeServerCookie;
+
+  static Future<bool> setActiveServerCookie(String cookie) async {
+    await _secureStorage.write(key: _secureActiveCookie, value: cookie);
+    _activeServerCookie = cookie;
+    return true;
+  }
+
+  static Future<void> clearActiveServer() async {
+    await _prefs.remove(_keyActiveServerUrl);
+    await _secureStorage.delete(key: _secureActiveToken);
+    await _secureStorage.delete(key: _secureActiveCookie);
+    _activeServerToken = null;
+    _activeServerCookie = null;
+  }
+
+  static Future<void> _migrateActiveCredentials() async {
+    await _migratePreference(_keyActiveServerToken, _secureActiveToken);
+    await _migratePreference(_keyActiveServerCookie, _secureActiveCookie);
+  }
+
+  static Future<void> _migratePreference(
+    String preferenceKey,
+    String secureKey,
+  ) async {
+    final legacyValue = _prefs.getString(preferenceKey);
+    if (legacyValue == null || legacyValue.isEmpty) return;
+    final secureValue = await _secureStorage.read(key: secureKey);
+    if (secureValue == null || secureValue.isEmpty) {
+      await _secureStorage.write(key: secureKey, value: legacyValue);
+    }
+    await _prefs.remove(preferenceKey);
+  }
+
+  static Future<void> _loadServerTokens() async {
+    final entries = _readServerEntries();
+    var needsRewrite = false;
+    for (final entry in entries) {
+      final id = entry['id'] as String;
+      final legacyToken = entry['token'] as String?;
+      var token = await _secureStorage.read(key: _serverTokenKey(id));
+      if ((token == null || token.isEmpty) &&
+          legacyToken != null &&
+          legacyToken.isNotEmpty) {
+        await _secureStorage.write(
+          key: _serverTokenKey(id),
+          value: legacyToken,
+        );
+        token = legacyToken;
+      }
+      if (token != null && token.isNotEmpty) {
+        _serverTokens[id] = token;
+      }
+      if (entry.containsKey('token')) {
+        entry.remove('token');
+        needsRewrite = true;
+      }
+    }
+    if (needsRewrite) {
+      await _prefs.setString(_keyServerList, jsonEncode(entries));
+    }
+  }
+
+  static List<Map<String, dynamic>> _readServerEntries() {
+    final jsonString = _prefs.getString(_keyServerList);
+    if (jsonString == null || jsonString.isEmpty) return [];
     try {
-      final List<dynamic> jsonList = jsonDecode(jsonStr);
-      return jsonList.map((e) => ServerConnection.fromJson(e)).toList();
-    } catch (e) {
+      final values = jsonDecode(jsonString) as List<dynamic>;
+      return values
+          .whereType<Map<String, dynamic>>()
+          .map((value) => Map<String, dynamic>.from(value))
+          .toList();
+    } catch (_) {
       return [];
     }
   }
 
-  /// 新增或更新一个服务器到列表中
-  static Future<bool> saveServerConnection(ServerConnection server) async {
-    final list = getServerList();
-    final index = list.indexWhere((e) => e.url == server.url);
-    if (index >= 0) {
-      // 存在相同 URL 的服务器则覆盖更新
-      list[index] = server;
-    } else {
-      // 否则插入新服务器
-      list.add(server);
-    }
-    final jsonStr = jsonEncode(list.map((e) => e.toJson()).toList());
-    return await _prefs.setString(_keyServerList, jsonStr);
+  static Future<bool> _writeServerList(List<ServerConnection> servers) {
+    return _prefs.setString(
+      _keyServerList,
+      jsonEncode(servers.map((server) => server.toJson()).toList()),
+    );
   }
 
-  /// 从列表中移除某个服务器
-  static Future<bool> removeServerConnection(String url) async {
-    final list = getServerList();
-    list.removeWhere((e) => e.url == url);
-    final jsonStr = jsonEncode(list.map((e) => e.toJson()).toList());
-    return await _prefs.setString(_keyServerList, jsonStr);
-  }
-
-  // ==========================================
-  // 当前激活的服务器连接信息 (BaseURL & Token & Cookie)
-  // ==========================================
-  static const String _keyActiveServerUrl = 'active_server_url';
-  static const String _keyActiveServerToken = 'active_server_token';
-  static const String _keyActiveServerCookie = 'active_server_cookie';
-
-  /// 获取当前激活的服务器面板地址
-  static String? get activeServerUrl => _prefs.getString(_keyActiveServerUrl);
-
-  /// 设置当前激活的服务器面板地址
-  static Future<bool> setActiveServerUrl(String url) async {
-    return await _prefs.setString(_keyActiveServerUrl, url);
-  }
-
-  /// 获取当前激活的服务器登录 Token
-  static String? get activeServerToken => _prefs.getString(_keyActiveServerToken);
-
-  /// 设置当前激活的服务器登录 Token
-  static Future<bool> setActiveServerToken(String token) async {
-    return await _prefs.setString(_keyActiveServerToken, token);
-  }
-
-  /// 获取当前激活的服务器 Cookie
-  static String? get activeServerCookie => _prefs.getString(_keyActiveServerCookie);
-
-  /// 设置当前激活的服务器 Cookie
-  static Future<bool> setActiveServerCookie(String cookie) async {
-    return await _prefs.setString(_keyActiveServerCookie, cookie);
-  }
-
-  /// 登出当前激活的服务器（退回到聚合页时调用）
-  static Future<void> clearActiveServer() async {
-    await _prefs.remove(_keyActiveServerUrl);
-    await _prefs.remove(_keyActiveServerToken);
-    await _prefs.remove(_keyActiveServerCookie);
-  }
+  static String _serverTokenKey(String id) => 'secure_server_token_$id';
 }
