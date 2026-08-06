@@ -12,7 +12,12 @@ export async function waitForCodeSessionInitialization(
 	const deadline = Date.now() + 300_000
 	while (Date.now() < deadline) {
 		await new Promise(resolve => window.setTimeout(resolve, 1000))
-		const state = await load()
+		let state: CodeSessionInitialization
+		try {
+			state = await load()
+		} catch {
+			continue
+		}
 		if (state.status === "active") return
 		if (state.status === "failed") throw new Error(state.initializationError || messages.failed)
 	}

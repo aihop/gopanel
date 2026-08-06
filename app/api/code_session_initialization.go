@@ -124,7 +124,7 @@ func initializeCodeSession(sessionID uint) error {
 		return failCodeSessionInitialization(session, errors.New("项目不存在"))
 	}
 	cleanupInterruptedCodeSessionInitialization(session, project)
-	if err = createCodeSessionWorktreeWithLease(session, project, true); err != nil {
+	if err = createCodeSessionWorktreeWithLease(session, project, codeSessionIncludesUncommitted(session)); err != nil {
 		return failCodeSessionInitialization(session, err)
 	}
 	task := &model.AITask{
@@ -159,6 +159,10 @@ func initializeCodeSession(sessionID uint) error {
 		return failCodeSessionInitialization(session, err)
 	}
 	return nil
+}
+
+func codeSessionIncludesUncommitted(session *model.AIDevSession) bool {
+	return session == nil || session.IncludeUncommitted == nil || *session.IncludeUncommitted
 }
 
 func cleanupInterruptedCodeSessionInitialization(session *model.AIDevSession, project *model.AIProject) {

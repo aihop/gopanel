@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -50,6 +51,46 @@ func TestInitializeCodeSessionCreatesWorktreeAndTask(t *testing.T) {
 		t.Fatalf("initialized task = %#v, err = %v", task, err)
 	}
 	t.Cleanup(func() { rollbackCodeSessionWorktree(&stored) })
+}
+
+func TestInitializeCodeSessionHonorsIncludeUncommittedFalse(t *testing.T) {
+	database := withCodeGovernanceDB(t)
+	withAIProjectBaseDir(t)
+	repository := createCodeGitRepository(t)
+	project := codeProjectForRepository(t, repository)
+	project.Name, project.CreatorID, project.WorkDir = "project", 7, repository
+	if err := database.Create(project).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repository, "uncommitted.txt"), []byte("dirty"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	includeUncommitted := false
+	session := createInitializingCodeSession(t, project)
+	if err := database.Model(session).Update("include_uncommitted", includeUncommitted).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	if err := initializeCodeSession(session.ID); err == nil || !strings.Contains(err.Error(), "未提交变更") {
+		t.Fatalf("initialization should reject dirty source when snapshots are disabled: %v", err)
+	}
+	var stored model.AIDevSession
+	if err := database.First(&stored, session.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if stored.Status != codeSessionStatusFailed || stored.IncludeUncommitted == nil || *stored.IncludeUncommitted {
+		t.Fatalf("stored session did not preserve includeUncommitted=false: %#v", stored)
+	}
+}
+
+func TestCodeSessionIncludesUncommittedDefaultsToLegacyBehavior(t *testing.T) {
+	includeUncommitted := false
+	if !codeSessionIncludesUncommitted(&model.AIDevSession{}) {
+		t.Fatal("legacy sessions should include uncommitted changes")
+	}
+	if codeSessionIncludesUncommitted(&model.AIDevSession{IncludeUncommitted: &includeUncommitted}) {
+		t.Fatal("explicit false should disable uncommitted snapshots")
+	}
 }
 
 func TestInitializeCodeSessionPersistsFailureWithoutTask(t *testing.T) {

@@ -141,7 +141,7 @@ func CreateAISession(c fiber.Ctx) error {
 		ExecutorID         string               `json:"executorId"`
 		ApprovalPolicy     string               `json:"approvalPolicy"`
 		Isolated           bool                 `json:"isolated"`
-		IncludeUncommitted bool                 `json:"includeUncommitted"`
+		IncludeUncommitted *bool                `json:"includeUncommitted"`
 		Provider           *codeProviderRequest `json:"provider"`
 		CodexProvider      *codeProviderRequest `json:"codexProvider"`
 	}
@@ -212,6 +212,7 @@ func CreateAISession(c fiber.Ctx) error {
 	session := &model.AIDevSession{
 		UserID: claims.UserId, ProjectID: req.ProjectID, Title: title, AgentName: executorID,
 		WorkDir: workDir, Status: status, CurrentStage: stage, ApprovalPolicy: approvalPolicy,
+		IncludeUncommitted: req.IncludeUncommitted,
 	}
 	if err := setCodeProviderOnSession(session, provider); err != nil {
 		return c.JSON(e.Fail(err))
