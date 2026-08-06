@@ -42,7 +42,8 @@ class _CodeHubScreenState extends ConsumerState<CodeHubScreen> {
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => CodeTerminalScreen.project(
-          terminal: launch.terminal,
+          projectTerminal: launch.terminal,
+          terminalId: launch.terminal.id,
           projectName: launch.project.name,
         ),
       ),
@@ -59,6 +60,7 @@ class _CodeHubScreenState extends ConsumerState<CodeHubScreen> {
       MaterialPageRoute(
         builder: (_) => CodeTerminalScreen(
           session: workspace.currentSession ?? session,
+          terminalId: session.id,
           task: workspace.currentTask,
           nativeProtocol: _usesNativeProtocol(
             workspace.executors,

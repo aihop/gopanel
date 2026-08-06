@@ -39,25 +39,23 @@ const _terminalTheme = TerminalTheme(
 class CodeTerminalScreen extends StatefulWidget {
   const CodeTerminalScreen({
     super.key,
-    required AiDevSession session,
+    required this.session,
+    required this.terminalId,
     required this.task,
     required this.projectName,
     required this.nativeProtocol,
-  }) : session = session,
-       terminalId = session.id,
-       terminalMode = CodeTerminalMode.aiSession,
+  }) : terminalMode = CodeTerminalMode.aiSession,
        projectTerminal = null;
 
   const CodeTerminalScreen.project({
     super.key,
-    required CodeProjectTerminalSession terminal,
+    required this.projectTerminal,
+    required this.terminalId,
     required this.projectName,
   }) : session = null,
        task = null,
        nativeProtocol = true,
-       terminalId = terminal.id,
-       terminalMode = CodeTerminalMode.projectTerminal,
-       projectTerminal = terminal;
+       terminalMode = CodeTerminalMode.projectTerminal;
 
   final AiDevSession? session;
   final AiTaskSummary? task;

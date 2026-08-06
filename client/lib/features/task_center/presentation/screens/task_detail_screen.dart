@@ -351,6 +351,7 @@ class _TaskDetailScreenState extends ConsumerState<TaskDetailScreen> {
         MaterialPageRoute(
           builder: (_) => CodeTerminalScreen(
             session: workspace.currentSession ?? session,
+            terminalId: session.id,
             task: workspace.currentTask,
             nativeProtocol:
                 executor?.nativeTerminal ?? session.agentName != 'terminal',
