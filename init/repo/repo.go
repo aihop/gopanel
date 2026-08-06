@@ -1,6 +1,7 @@
 package repo
 
 import (
+	"fmt"
 	sysLog "log"
 
 	"github.com/aihop/gopanel/app/model"
@@ -9,119 +10,40 @@ import (
 	"github.com/aihop/gopanel/global"
 )
 
-func Init() {
-
-	if err := repo.NewUser(global.DB).MigrateTable(); err != nil {
-		sysLog.Println("AutoMigrate table error", err)
-		return
+func Init() error {
+	migrations := []struct {
+		name string
+		run  func() error
+	}{
+		{"user", func() error { return repo.NewUser(global.DB).MigrateTable() }},
+		{"user note", func() error { return repo.NewUserNote(global.DB).MigrateTable() }},
+		{"image", func() error { return repo.NewImageRepo(global.DB).MigrateTable() }},
+		{"setting", func() error { return repo.NewSetting(global.DB).MigrateTable() }},
+		{"compose template", func() error { return repo.NewComposeTemplate(global.DB).MigrateTable() }},
+		{"compose", func() error { return repo.NewCompose(global.DB).MigrateTableCompose() }},
+		{"app", func() error { return repo.NewApp(global.DB).MigrateTable() }},
+		{"app install", func() error { return repo.NewAppInstall().MigrateTable() }},
+		{"app detail", func() error { return repo.NewAppDetail().MigrateTable() }},
+		{"database user", func() error { return repo.NewDatabaseUser().MigrateTable() }},
+		{"database server", func() error { return repo.NewDatabaseServer().MigrateTable() }},
+		{"backup record", func() error { return repo.NewBackupRecord().MigrateTable() }},
+		{"website", func() error { return repo.NewWebsite().MigrateTable() }},
+		{"SSL", func() error { return repo.NewSSL().MigrateTable() }},
+		{"cloud account", func() error { return repo.NewCloudAccount().MigrateTable() }},
+		{"ACME account", func() error { return repo.NewAcmeAccount().MigrateTable() }},
+		{"notify", func() error { return repo.NewNotify().MigrateTable() }},
+		{"pipeline", func() error { return repo.NewPipeline(global.DB).MigrateTable() }},
+		{"pipeline record", func() error { return repo.NewPipelineRecord(global.DB).MigrateTable() }},
+		{"release", func() error { return repo.NewRelease(global.DB).MigrateTable() }},
+		{"app deploy", func() error { return repo.NewAppDeploy(global.DB).MigrateTable() }},
+		{"cronjob", func() error { return repo.NewCronjob().MigrateTable() }},
+		{"node", func() error { return repo.NewNode().MigrateTable() }},
+		{"legacy AI project data", func() error { return repo.MigrateLegacyAIProjects(global.DB) }},
 	}
-	if err := repo.NewUserNote(global.DB).MigrateTable(); err != nil {
-		sysLog.Println("UserNote table error", err)
-		return
-	}
-	if err := repo.NewImageRepo(global.DB).MigrateTable(); err != nil {
-		sysLog.Println("ImageRepo table error", err)
-		return
-	}
-	if err := repo.NewSetting(global.DB).MigrateTable(); err != nil {
-		sysLog.Println("ImageRepo table error", err)
-		return
-	}
-	if err := repo.NewComposeTemplate(global.DB).MigrateTable(); err != nil {
-		sysLog.Println("ComposeTemplate table error", err)
-		return
-	}
-	if err := repo.NewCompose(global.DB).MigrateTableCompose(); err != nil {
-		sysLog.Println("Compose table error", err)
-		return
-	}
-	if err := repo.NewApp(global.DB).MigrateTable(); err != nil {
-		sysLog.Println("App table error", err)
-		return
-	}
-	if err := repo.NewAppInstall().MigrateTable(); err != nil {
-		sysLog.Println("AppInstall table error", err)
-		return
-	}
-	if err := repo.NewAppDetail().MigrateTable(); err != nil {
-		sysLog.Println("AppInstall table error", err)
-		return
-	}
-
-	if err := repo.NewDatabaseUser().MigrateTable(); err != nil {
-		sysLog.Println("DatabaseUser table error", err)
-		return
-	}
-
-	if err := repo.NewDatabaseServer().MigrateTable(); err != nil {
-		sysLog.Println("DatabaseServer table error", err)
-		return
-	}
-
-	if err := repo.NewBackupRecord().MigrateTable(); err != nil {
-		sysLog.Println("BackupRecord table error", err)
-		return
-	}
-
-	if err := repo.NewWebsite().MigrateTable(); err != nil {
-		sysLog.Println("NewWebsite table error", err)
-		return
-	}
-
-	if err := repo.NewSSL().MigrateTable(); err != nil {
-		sysLog.Println("SSL table error", err)
-		return
-	}
-
-	if err := repo.NewCloudAccount().MigrateTable(); err != nil {
-		sysLog.Println("CloudAccount table error", err)
-		return
-	}
-
-	if err := repo.NewAcmeAccount().MigrateTable(); err != nil {
-		sysLog.Println("AcmeAccount table error", err)
-		return
-	}
-
-	// 邮件通知与告警事件
-	if err := repo.NewNotify().MigrateTable(); err != nil {
-		sysLog.Println("Notify table error", err)
-		return
-	}
-
-	// 流水线
-	if err := repo.NewPipeline(global.DB).MigrateTable(); err != nil {
-		sysLog.Println("Pipeline table error", err)
-		return
-	}
-
-	if err := repo.NewPipelineRecord(global.DB).MigrateTable(); err != nil {
-		sysLog.Println("PipelineRecord table error", err)
-		return
-	}
-
-	if err := repo.NewRelease(global.DB).MigrateTable(); err != nil {
-		sysLog.Println("Release table error", err)
-		return
-	}
-
-	if err := repo.NewAppDeploy(global.DB).MigrateTable(); err != nil {
-		sysLog.Println("AppDeploy table error", err)
-		return
-	}
-
-	if err := repo.NewCronjob().MigrateTable(); err != nil {
-		sysLog.Println("Cronjob table error", err)
-		return
-	}
-
-	if err := repo.NewNode().MigrateTable(); err != nil {
-		sysLog.Println("Node table error", err)
-		return
-	}
-	if err := repo.MigrateLegacyAIProjects(global.DB); err != nil {
-		sysLog.Println("AIProject legacy data migration error", err)
-		return
+	for _, migration := range migrations {
+		if err := migration.run(); err != nil {
+			return fmt.Errorf("migrate %s: %w", migration.name, err)
+		}
 	}
 
 	if err := global.DB.AutoMigrate(
@@ -150,13 +72,11 @@ func Init() {
 		&model.HostTerminalSession{},
 		&model.HostTerminalAuditEvent{},
 	); err != nil {
-		sysLog.Println("AutoMigrate additional tables error", err)
-		return
+		return fmt.Errorf("migrate additional tables: %w", err)
 	}
 
 	if err := repo.NewAppDeploy(global.DB).SyncFromLegacy(); err != nil {
-		sysLog.Println("AppDeploy sync legacy data error", err)
-		return
+		return fmt.Errorf("sync legacy app deploy data: %w", err)
 	}
 
 	if err := repo.NewRelease(global.DB).FixSharedReleaseDirs(); err != nil {
@@ -168,12 +88,15 @@ func Init() {
 	}
 
 	if global.MonitorDB != nil {
-		global.MonitorDB.AutoMigrate(
+		if err := global.MonitorDB.AutoMigrate(
 			&model.MonitorBase{},
 			&model.MonitorIO{},
 			&model.MonitorNetwork{},
-		)
+		); err != nil {
+			return fmt.Errorf("migrate monitor tables: %w", err)
+		}
 	}
 
 	sysLog.Println("AutoMigrate table success")
+	return nil
 }

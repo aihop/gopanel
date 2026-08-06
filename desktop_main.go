@@ -197,7 +197,11 @@ func (a *desktopApp) startBuiltin() error {
 	}
 	a.panel = &panelapp.App{}
 	a.initialCredentials = credentials
-	a.panel.Init()
+	if err := a.panel.Init(); err != nil {
+		a.panel = nil
+		_ = listener.Close()
+		return err
+	}
 	a.gateway.useBuiltin(target, mobileURL, token)
 	if credentials != nil && a.context != nil {
 		go a.showInitialCredentials(a.context)

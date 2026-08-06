@@ -252,7 +252,9 @@ func TestDesktopFirstRunMigratesDatabase(t *testing.T) {
 	global.MonitorDB = nil
 	initconf.InitInstall.User = credentials.Email
 	initconf.InitInstall.Password = credentials.Password
-	initrepo.Init()
+	if err := initrepo.Init(); err != nil {
+		t.Fatal(err)
+	}
 	t.Cleanup(func() {
 		if sqlDatabase, dbErr := database.DB(); dbErr == nil {
 			_ = sqlDatabase.Close()

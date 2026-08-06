@@ -60,11 +60,13 @@ type Config struct {
 	Route  func(t *App)
 }
 
-func (t *App) Init() {
+func (t *App) Init() error {
 	cmd.Init()
 	conf.Init()
 	db.Init()
-	repo.Init()
+	if err := repo.Init(); err != nil {
+		return fmt.Errorf("initialize repositories: %w", err)
+	}
 	// 从数据库读回 API Token 等运行期设置到内存 CONF（DB 为准，修复重启后 token 丢失）
 	service.LoadApiSettingsFromDB()
 	app.Init()
@@ -81,12 +83,15 @@ func (t *App) Init() {
 	// 走 POST /agent/update（见 api.AgentUpdate → service.UpdateGpAgent）。
 
 	t.IsInit = true
+	return nil
 }
 
-func (r *App) Route() *fiber.App {
-	r.Init()
+func (r *App) Route() (*fiber.App, error) {
+	if err := r.Init(); err != nil {
+		return nil, err
+	}
 	r.App = r.newFiber()
-	return r.App
+	return r.App, nil
 }
 
 func (r *App) newFiber() *fiber.App {
@@ -128,7 +133,9 @@ func (r *App) reloadFiber(isNew bool) *fiber.App {
 func (r *App) Run() error {
 	// 默认初始化
 	if !r.IsInit {
-		r.Init()
+		if err := r.Init(); err != nil {
+			return err
+		}
 	}
 
 	listener, err := net.Listen("tcp", global.CONF.System.Port)
@@ -158,6 +165,11 @@ func (r *App) Run() error {
 }
 
 func (r *App) Serve(listener net.Listener) error {
+	if !r.IsInit {
+		if err := r.Init(); err != nil {
+			return err
+		}
+	}
 	r.reloadFiber(false)
 	api.StartCodeSessionInitialization()
 	api.StartCodeInstructionRecovery()
