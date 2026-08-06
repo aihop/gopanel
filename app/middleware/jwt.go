@@ -13,6 +13,7 @@ import (
 	"github.com/aihop/gopanel/app/service"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
+	"github.com/aihop/gopanel/utils/apisign"
 	"github.com/aihop/gopanel/utils/token"
 
 	"github.com/gofiber/fiber/v3"
@@ -110,14 +111,15 @@ func JWT(role string) func(fiber.Ctx) error {
 			if !isValidTimestamp(timestamp) {
 				return c.JSON(e.Auth("timestamp error or expired"))
 			}
-			if !isValidApiKEY(apiKeyStr, timestamp) {
-				return c.JSON(e.Auth("apiKey error"))
+			if err := verifyAPIKey(c, apiKeyStr, timestamp); err != nil {
+				return c.JSON(e.Auth(err.Error()))
 			}
 			// API 鉴权成功，虚拟一个管理员身份放行
 			c.Locals(constant.AppAuthName, &token.CustomClaims{
 				UserId: 1, // 虚拟管理员
 				Role:   constant.UserRoleSuper,
 			})
+			c.Locals(constant.AuthMethodName, constant.AuthMethodAPIKey)
 			return c.Next()
 		}
 		c.Locals(constant.AppAuthName, info)
@@ -244,6 +246,39 @@ func isValidApiKEY(requestKey string, timestamp string) bool {
 	serverKey := global.CONF.System.ApiKey
 	expectedKey := GenerateMD5("gopanel_" + serverKey + "_" + timestamp)
 	return subtle.ConstantTimeCompare([]byte(requestKey), []byte(expectedKey)) == 1
+}
+
+func verifyAPIKey(c fiber.Ctx, requestKey, timestamp string) error {
+	version := strings.TrimSpace(c.Get(constant.AppSignatureVersion))
+	if version == "" {
+		version = strings.TrimSpace(c.Query(constant.AppSignatureVersion))
+	}
+	if version != "v2" {
+		if c.Method() != fiber.MethodGet && c.Method() != fiber.MethodHead {
+			return errors.New("API signature v2 is required for write requests")
+		}
+		if !isValidApiKEY(requestKey, timestamp) {
+			return errors.New("apiKey error")
+		}
+		return nil
+	}
+	nonce := strings.TrimSpace(c.Get(constant.AppNonce))
+	if nonce == "" {
+		nonce = strings.TrimSpace(c.Query(constant.AppNonce))
+	}
+	if nonce == "" {
+		return errors.New("API nonce missing")
+	}
+	rawQuery := string(c.RequestCtx().QueryArgs().QueryString())
+	expected := apisign.Sign(global.CONF.System.ApiKey, timestamp, nonce, c.Method(), c.Path(), rawQuery, c.Body())
+	if !apisign.Equal(expected, requestKey) {
+		return errors.New("apiKey error")
+	}
+	validityMinutes, err := strconv.Atoi(global.CONF.System.ApiKeyValidityTime)
+	if err != nil || !apisign.ConsumeNonce(nonce, time.Duration(validityMinutes)*time.Minute+time.Minute) {
+		return errors.New("API nonce replayed")
+	}
+	return nil
 }
 
 func GenerateMD5(param string) string {

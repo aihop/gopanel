@@ -10,12 +10,14 @@ var (
 )
 
 const (
-	AppSite      = "https://gopanel.cn/"
-	AppXAuth     = "x-auth"
-	AppAuth      = "auth"
-	AppToken     = "token"
-	AppAPIKey    = "apiKey"
-	AppTimestamp = "timestamp"
+	AppSite             = "https://gopanel.cn/"
+	AppXAuth            = "x-auth"
+	AppAuth             = "auth"
+	AppToken            = "token"
+	AppAPIKey           = "apiKey"
+	AppTimestamp        = "timestamp"
+	AppNonce            = "nonce"
+	AppSignatureVersion = "signatureVersion"
 
 	AppAuthName    = "claims"
 	HashDefaultLen = 6 // HASH默认长度
