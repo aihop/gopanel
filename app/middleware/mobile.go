@@ -23,11 +23,11 @@ func MobileDeviceAuth(c fiber.Ctx) error {
 	if deviceToken == "" {
 		deviceToken = strings.TrimSpace(c.Get("X-Mobile-Token"))
 	}
-	device, err := service.AuthenticateMobileDevice(deviceToken, c.IP(), string(c.Request().Header.UserAgent()))
+	device, user, err := service.AuthenticateMobileDevice(deviceToken, c.IP(), string(c.Request().Header.UserAgent()))
 	if err != nil {
 		return c.JSON(e.Auth(err.Error()))
 	}
-	c.Locals(constant.AppAuthName, &token.CustomClaims{UserId: device.UserID, Role: constant.UserRoleAdmin})
+	c.Locals(constant.AppAuthName, &token.CustomClaims{UserId: user.ID, Role: user.Role, SaltId: user.Salt, FileBaseDir: user.FileBaseDir})
 	c.Locals(MobileDeviceIDKey, device.ID)
 	return c.Next()
 }

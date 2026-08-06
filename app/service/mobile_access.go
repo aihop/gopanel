@@ -11,6 +11,7 @@ import (
 
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
+	"github.com/aihop/gopanel/constant"
 )
 
 const (
@@ -104,17 +105,22 @@ func normalizeMobileDeviceTTLDays(requested int) (int, error) {
 	return requested, nil
 }
 
-func AuthenticateMobileDevice(token, ip, agent string) (*model.MobileDevice, error) {
+func AuthenticateMobileDevice(token, ip, agent string) (*model.MobileDevice, *model.User, error) {
 	token = strings.TrimSpace(token)
 	if token == "" {
-		return nil, errors.New("手机授权已失效")
+		return nil, nil, errors.New("手机授权已失效")
 	}
 	device, err := repo.NewMobileAccessRepo().FindDevice(hashMobileSecret(token))
 	if err != nil {
-		return nil, errors.New("手机授权已失效")
+		return nil, nil, errors.New("手机授权已失效")
+	}
+	user, err := NewUser().Get(device.UserID)
+	if err != nil || user.Status != constant.UserStatusNormal ||
+		(user.Role != constant.UserRoleAdmin && user.Role != constant.UserRoleSuper) {
+		return nil, nil, errors.New("手机授权对应的管理员账号已失效")
 	}
 	_ = repo.NewMobileAccessRepo().TouchDevice(device.ID, ip, truncateMobileValue(agent, 255))
-	return device, nil
+	return device, user, nil
 }
 
 func randomMobileSecret() (string, error) {
