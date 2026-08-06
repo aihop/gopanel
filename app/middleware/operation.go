@@ -17,6 +17,7 @@ import (
 	"github.com/aihop/gopanel/app/service"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
+	"github.com/aihop/gopanel/utils/token"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -53,7 +54,7 @@ type response struct {
 
 func OperationLog() fiber.Handler {
 	return func(c fiber.Ctx) error {
-		if c.Method() == fiber.MethodGet {
+		if isReadOnlyMethod(c.Method()) {
 			return c.Next()
 		}
 
@@ -62,38 +63,39 @@ func OperationLog() fiber.Handler {
 		matchPath := strings.TrimPrefix(pathItem, "/api")
 		// match swagger mapping
 		operationDic, hasPath := swagger[matchPath]
-		if !hasPath || len(operationDic.FormatZH) == 0 {
-			return c.Next()
-		}
 
-		source := "local"
 		record := &model.OperationLog{
-			Source:    source,
+			Source:    "local",
 			IP:        c.IP(),
 			Method:    strings.ToLower(c.Method()),
 			Path:      pathItem,
 			UserAgent: string(c.Request().Header.UserAgent()),
 		}
 
-		formatMap := make(map[string]interface{})
-		if len(operationDic.BodyKeys) != 0 {
+		if hasPath && operationDic.FormatZH != "" {
+			formatMap := make(map[string]interface{})
 			bodyMap := make(map[string]interface{})
-			_ = json.Unmarshal(c.Body(), &bodyMap)
-			for _, key := range operationDic.BodyKeys {
-				if val, ok := bodyMap[key]; ok {
-					formatMap[key] = val
+			if len(operationDic.BodyKeys) != 0 {
+				_ = json.Unmarshal(c.Body(), &bodyMap)
+				for _, key := range operationDic.BodyKeys {
+					if val, ok := bodyMap[key]; ok {
+						formatMap[key] = val
+					}
 				}
 			}
+			fillOperationDetail(&operationDic, formatMap)
+			record.DetailEN = strings.ReplaceAll(operationDic.FormatEN, "[]", "")
+			record.DetailZH = strings.ReplaceAll(operationDic.FormatZH, "[]", "")
+		} else {
+			record.DetailEN = fmt.Sprintf("%s %s", c.Method(), pathItem)
+			record.DetailZH = fmt.Sprintf("%s %s", c.Method(), pathItem)
 		}
-
-		fillOperationDetail(&operationDic, formatMap)
-		record.DetailEN = strings.ReplaceAll(operationDic.FormatEN, "[]", "")
-		record.DetailZH = strings.ReplaceAll(operationDic.FormatZH, "[]", "")
 
 		now := time.Now()
 
 		// Execute next handlers
 		err := c.Next()
+		fillOperationIdentity(c, record)
 
 		datas := c.Response().Body()
 		if string(c.Response().Header.Peek("Content-Encoding")) == "gzip" {
@@ -137,6 +139,23 @@ func OperationLog() fiber.Handler {
 		}
 
 		return err
+	}
+}
+
+func isReadOnlyMethod(method string) bool {
+	return method == fiber.MethodGet || method == fiber.MethodHead || method == fiber.MethodOptions
+}
+
+func fillOperationIdentity(c fiber.Ctx, record *model.OperationLog) {
+	if claims, ok := c.Locals(constant.AppAuthName).(*token.CustomClaims); ok {
+		record.UserID = claims.UserId
+	}
+	if authMethod, ok := c.Locals(constant.AuthMethodName).(string); ok {
+		record.AuthMethod = authMethod
+		switch authMethod {
+		case constant.AuthMethodMobile, constant.AuthMethodNodeProxy, constant.AuthMethodAPIKey:
+			record.Source = authMethod
+		}
 	}
 }
 

@@ -8,11 +8,13 @@ import (
 
 type OperationLog struct {
 	BaseModel
-	Source    string `json:"source" gorm:"type:varchar(64)"`
-	IP        string `json:"ip" gorm:"type:varchar(64)"`
-	Path      string `json:"path" gorm:"type:varchar(255)"`
-	Method    string `json:"method" gorm:"type:varchar(64)"`
-	UserAgent string `json:"userAgent" gorm:"type:varchar(255)"`
+	UserID     uint   `json:"userId" gorm:"index"`
+	Source     string `json:"source" gorm:"type:varchar(64)"`
+	AuthMethod string `json:"authMethod" gorm:"type:varchar(64)"`
+	IP         string `json:"ip" gorm:"type:varchar(64)"`
+	Path       string `json:"path" gorm:"type:varchar(255)"`
+	Method     string `json:"method" gorm:"type:varchar(64)"`
+	UserAgent  string `json:"userAgent" gorm:"type:varchar(255)"`
 
 	Latency time.Duration `json:"latency"`
 	Status  string        `json:"status" gorm:"type:varchar(64)"`

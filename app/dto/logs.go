@@ -5,8 +5,10 @@ import (
 )
 
 type OperationLog struct {
-	ID     uint   `json:"id"`
-	Source string `json:"source"`
+	ID         uint   `json:"id"`
+	UserID     uint   `json:"userId"`
+	Source     string `json:"source"`
+	AuthMethod string `json:"authMethod"`
 
 	IP        string `json:"ip"`
 	Path      string `json:"path"`

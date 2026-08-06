@@ -4,7 +4,9 @@ import type { ReqPage } from "."
 export namespace Log {
 	export interface OperationLog {
 		id: number
+		userId: number
 		source: string
+		authMethod: string
 		ip: string
 		path: string
 		method: string

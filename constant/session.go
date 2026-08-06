@@ -6,6 +6,7 @@ const (
 	AuthMethodName    = "authMethod"
 	AuthMethodJWT     = "jwt"
 	AuthMethodAPIKey  = "api-key"
+	AuthMethodMobile  = "mobile"
 	// AuthMethodNodeProxy 请求来自主控面板的代理转发，身份由节点控制令牌签名证明。
 	// 单独标记出来是为了让操作日志能区分"人在本机点的"和"主控代理过来的"。
 	AuthMethodNodeProxy = "node-proxy"

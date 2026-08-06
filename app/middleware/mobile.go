@@ -28,6 +28,7 @@ func MobileDeviceAuth(c fiber.Ctx) error {
 		return c.JSON(e.Auth(err.Error()))
 	}
 	c.Locals(constant.AppAuthName, &token.CustomClaims{UserId: user.ID, Role: user.Role, SaltId: user.Salt, FileBaseDir: user.FileBaseDir})
+	c.Locals(constant.AuthMethodName, constant.AuthMethodMobile)
 	c.Locals(MobileDeviceIDKey, device.ID)
 	return c.Next()
 }
