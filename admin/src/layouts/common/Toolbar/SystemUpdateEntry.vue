@@ -167,10 +167,9 @@
             <div class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
               更新内容
             </div>
-            <div
-              class="update-html mt-3"
-              v-html="u.updateInfo.content"
-            />
+            <div class="update-html mt-3 whitespace-pre-wrap break-words">
+              {{ u.updateInfo.content }}
+            </div>
           </div>
         </div>
       </n-drawer-content>
