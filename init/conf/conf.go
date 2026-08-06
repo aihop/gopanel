@@ -136,6 +136,8 @@ func Init() {
 	p.SetDefault("log.log_suffix", ".log")
 	p.SetDefault("log.max_backup", 10)
 
+	migrateGpcSocketConfig(p, runtime.GOOS)
+
 	// 在设置完默认值后，若之前标记需要创建，则写入默认配置
 	if needCreate {
 		if err := p.WriteConfigAs(cmd.ConfFilePath); err != nil {
@@ -204,9 +206,9 @@ func GlobalConfInit(v *viper.Viper) {
 		if strings.Contains(global.CONF.System.GpAgentSocketPath, "/opt/gopanel/") {
 			global.CONF.System.GpAgentSocketPath = path.Join(global.CONF.System.BaseDir, "agent", "run", "gp-agent.sock")
 		}
-		if strings.Contains(global.CONF.System.GpcSocketPath, "/opt/gopanel/") {
-			global.CONF.System.GpcSocketPath = filepath.Join(global.CONF.System.BaseDir, "gpc.sock")
-		}
+		global.CONF.System.GpcSocketPath = normalizeGpcSocketPath(
+			runtime.GOOS, global.CONF.System.BaseDir, global.CONF.System.GpcSocketPath,
+		)
 	}
 	if global.CONF.System.GpAgentSocketPath == "" {
 		switch runtime.GOOS {
@@ -240,4 +242,33 @@ func GlobalConfInit(v *viper.Viper) {
 	global.CONF.System.TmpDir = path.Join(global.CONF.System.BaseDir, "tmp")
 
 	fmt.Printf("run base dir: %v\n", global.CONF.System.BaseDir)
+}
+
+func normalizeGpcSocketPath(goos, baseDir, socketPath string) string {
+	baseDir = strings.TrimSpace(baseDir)
+	socketPath = strings.TrimSpace(socketPath)
+	if baseDir == "" {
+		return socketPath
+	}
+	cleaned := filepath.Clean(socketPath)
+	legacyOptRoot := filepath.Clean("/opt/gopanel")
+	legacyOptPath := cleaned == filepath.Join(legacyOptRoot, "gpc.sock") ||
+		strings.HasPrefix(cleaned, legacyOptRoot+string(os.PathSeparator))
+	legacyDarwinPath := cleaned == "/run/gopanel/gpc.sock" ||
+		cleaned == "/var/run/gopanel/gpc.sock" ||
+		cleaned == "/private/var/run/gopanel/gpc.sock"
+	if (goos == "darwin" && (legacyDarwinPath || legacyOptPath)) || (goos == "windows" && legacyOptPath) {
+		return filepath.Join(filepath.Clean(baseDir), "gpc.sock")
+	}
+	return socketPath
+}
+
+func migrateGpcSocketConfig(config *viper.Viper, goos string) bool {
+	configuredPath := config.GetString("system.gpc_socket_path")
+	migratedPath := normalizeGpcSocketPath(goos, config.GetString("system.base_dir"), configuredPath)
+	if migratedPath == configuredPath {
+		return false
+	}
+	config.Set("system.gpc_socket_path", migratedPath)
+	return true
 }
