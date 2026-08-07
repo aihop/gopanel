@@ -10,9 +10,8 @@ const props = defineProps<{
   serverOptions: any[]
 }>()
 
-const emit = defineEmits<{
-  (e: 'selectTable', tableName: string): void
-}>()
+const emit = defineEmits<{ (e: 'selectTable', tableName: string): void; (e: 'openSql'): void }>()
+
 
 const message = useMessage()
 const dialog = useDialog()
@@ -569,6 +568,7 @@ onMounted(() => {
         <template #icon><n-icon :component="renderIcon('mdi:code-braces')" /></template>
         函数
       </n-button>
+      <n-button size="tiny" @click="emit('openSql')"><template #icon><n-icon :component="renderIcon('mdi:console')" /></template>{{ $t('database.sqlWorkspace') }}</n-button>
     </div>
 
     <!-- 表概览 -->

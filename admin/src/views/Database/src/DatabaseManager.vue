@@ -24,6 +24,7 @@ const props = defineProps<{
 
 const message = useMessage()
 const dataViewRef = ref()
+const databaseSqlMode = ref(false)
 const {
   activeTab,
   activeTabLabel,
@@ -67,6 +68,7 @@ const {
 } = useDatabaseManager(props, message, dataViewRef)
 
 const handleServerModelUpdate = (value: number | null) => {
+  databaseSqlMode.value = false
   selectedServerId.value = value
   if (value) {
     onServerChange(value)
@@ -74,6 +76,7 @@ const handleServerModelUpdate = (value: number | null) => {
 }
 
 const handleDatabaseModelUpdate = (value: string | null) => {
+  databaseSqlMode.value = false
   selectedDatabase.value = value
   if (value) {
     onDatabaseChange(value)
@@ -82,6 +85,21 @@ const handleDatabaseModelUpdate = (value: string | null) => {
 
 const handleTableKeywordUpdate = (value: string) => {
   tableKeywordInput.value = value
+}
+
+const handleTableSelect = (tableName: string) => {
+  databaseSqlMode.value = false
+  onTableSelect(tableName)
+}
+
+const openDatabaseSql = () => {
+  selectedTable.value = null
+  databaseSqlMode.value = true
+}
+
+const backToDatabaseObjects = () => {
+  databaseSqlMode.value = false
+  clearSelectedTable()
 }
 
 // 创建数据库/表模态框状态
@@ -156,7 +174,7 @@ const handleDropDatabase = async () => {
       @update:table-keyword-input="handleTableKeywordUpdate"
       @update:sidebar-table-page="handleSidebarTablePageChange"
       @update:sidebar-table-page-size="handleSidebarTablePageSizeChange"
-      @select-table="onTableSelect"
+      @select-table="handleTableSelect"
       @search-tables="applyTableSearch"
       @reset-table-search="resetTableSearch"
       @create-database="showCreateDatabaseModal = true"
@@ -171,7 +189,8 @@ const handleDropDatabase = async () => {
         :selected-table="selectedTable"
         :active-tab-label="activeTabLabel"
         :table-count="sidebarTableTotal"
-        @back-to-tables="clearSelectedTable"
+        :database-sql-mode="databaseSqlMode"
+        @back-to-tables="backToDatabaseObjects"
       />
 
       <!-- 未选中表时隐藏整排标签：这些标签都是针对具体表的操作，此处仅显示数据库级表概览 -->
@@ -218,11 +237,21 @@ const handleDropDatabase = async () => {
 
       <!-- 未选择表时显示表概览（数据库级别） -->
       <DatabaseTablesView
-        v-if="selectedDatabase && !selectedTable"
+        v-if="selectedDatabase && !selectedTable && !databaseSqlMode"
         :selectedServerId="selectedServerId"
         :selectedDatabase="selectedDatabase"
         :serverOptions="serverOptions"
-        @select-table="onTableSelect"
+        @select-table="handleTableSelect"
+        @open-sql="openDatabaseSql"
+      />
+
+      <SqlView
+        :key="`database-sql:${viewContextKey}`"
+        v-if="selectedDatabase && !selectedTable && databaseSqlMode"
+        :selectedServerId="selectedServerId"
+        :selectedDatabase="selectedDatabase"
+        :selectedTable="null"
+        :serverOptions="serverOptions"
       />
 
       <!-- 选择表后显示子视图组件 -->
@@ -234,7 +263,7 @@ const handleDropDatabase = async () => {
         :selectedDatabase="selectedDatabase"
         :selectedTable="selectedTable"
         :serverOptions="serverOptions"
-        @select-table="onTableSelect"
+        @select-table="handleTableSelect"
         @edit-record="handleEditRecord"
         @copy-record="handleCopyRecord"
       />

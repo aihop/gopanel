@@ -71,6 +71,25 @@ func TestSplitSQLStatements(t *testing.T) {
 			input:    "SELECT 1--2; SELECT 3",
 			expected: []string{"SELECT 1--2", "SELECT 3"},
 		},
+		{
+			name: "postgres dollar quoted function",
+			input: `CREATE FUNCTION safe_value(value text) RETURNS text AS $$
+BEGIN
+  IF value = '' THEN RETURN 'fallback;value'; END IF;
+  RETURN value;
+END;
+$$ LANGUAGE plpgsql;
+SELECT safe_value('ok');`,
+			expected: []string{
+				"CREATE FUNCTION safe_value(value text) RETURNS text AS $$\nBEGIN\n  IF value = '' THEN RETURN 'fallback;value'; END IF;\n  RETURN value;\nEND;\n$$ LANGUAGE plpgsql",
+				"SELECT safe_value('ok')",
+			},
+		},
+		{
+			name:     "postgres tagged dollar quote",
+			input:    "DO $body$ BEGIN RAISE NOTICE 'one;two'; END; $body$; SELECT $1;",
+			expected: []string{"DO $body$ BEGIN RAISE NOTICE 'one;two'; END; $body$", "SELECT $1"},
+		},
 	}
 
 	for _, tt := range tests {

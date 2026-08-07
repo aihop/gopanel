@@ -8,6 +8,7 @@ const props = defineProps<{
   selectedTable: string | null
   activeTabLabel: string
   tableCount: number
+  databaseSqlMode: boolean
 }>()
 
 const emit = defineEmits<{
@@ -34,7 +35,7 @@ const emit = defineEmits<{
       </div>
       <div class="flex items-center gap-2 flex-wrap">
         <div class="text-sm font-semibold text-slate-800">
-          {{ selectedTable ? `${selectedTable} · ${activeTabLabel}` : selectedDatabase ? `${selectedDatabase} · 数据表` : '数据库管理' }}
+          {{ databaseSqlMode ? `${selectedDatabase} · SQL` : selectedTable ? `${selectedTable} · ${activeTabLabel}` : selectedDatabase ? `${selectedDatabase} · 数据表` : '数据库管理' }}
         </div>
         <div class="px-2 py-0.5 rounded-full bg-slate-100 text-[11px] text-slate-600">
           {{ tableCount }} 张表
@@ -49,11 +50,11 @@ const emit = defineEmits<{
     </div>
     <div class="flex items-center gap-2 shrink-0">
       <n-button
-        v-if="selectedTable"
+        v-if="selectedTable || databaseSqlMode"
         size="tiny"
         @click="emit('backToTables')"
       >
-        返回表列表
+        {{ databaseSqlMode ? $t('database.backToObjects') : $t('database.backToTables') }}
       </n-button>
     </div>
   </div>

@@ -15,10 +15,22 @@ func splitSQLStatements(content string) []string {
 	inBacktick := false     // `
 	inLineComment := false  // --
 	inBlockComment := false // /* */
+	dollarQuote := ""       // PostgreSQL $$ or $tag$
 
 	runes := []rune(content)
 	for i := 0; i < len(runes); i++ {
 		ch := runes[i]
+		if dollarQuote != "" {
+			closing := []rune(dollarQuote)
+			if i+len(closing) <= len(runes) && string(runes[i:i+len(closing)]) == dollarQuote {
+				cur.WriteString(dollarQuote)
+				i += len(closing) - 1
+				dollarQuote = ""
+				continue
+			}
+			cur.WriteRune(ch)
+			continue
+		}
 
 		// 转义字符（MySQL 用 '' 转义单引号）
 		if inSingleQ && ch == '\'' && i+1 < len(runes) && runes[i+1] == '\'' {
@@ -48,6 +60,14 @@ func splitSQLStatements(content string) []string {
 				inBacktick = !inBacktick
 				cur.WriteRune(ch)
 				continue
+			}
+			if ch == '$' && !inSingleQ && !inDoubleQ && !inBacktick {
+				if tag, end := postgresDollarQuoteAt(runes, i); tag != "" {
+					dollarQuote = tag
+					cur.WriteString(tag)
+					i = end
+					continue
+				}
 			}
 		}
 
@@ -102,6 +122,28 @@ func splitSQLStatements(content string) []string {
 	}
 
 	return statements
+}
+
+func postgresDollarQuoteAt(runes []rune, start int) (string, int) {
+	if start >= len(runes) || runes[start] != '$' {
+		return "", start
+	}
+	for end := start + 1; end < len(runes); end++ {
+		ch := runes[end]
+		if ch == '$' {
+			return string(runes[start : end+1]), end
+		}
+		if end == start+1 {
+			if ch != '_' && (ch < 'A' || ch > 'Z') && (ch < 'a' || ch > 'z') {
+				return "", start
+			}
+			continue
+		}
+		if ch != '_' && (ch < 'A' || ch > 'Z') && (ch < 'a' || ch > 'z') && (ch < '0' || ch > '9') {
+			return "", start
+		}
+	}
+	return "", start
 }
 
 func execSQLImport(db *sql.DB, content string) (int, error) {

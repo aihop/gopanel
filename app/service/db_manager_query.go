@@ -1,6 +1,8 @@
 package service
 
 import (
+	"context"
+	"database/sql"
 	"fmt"
 	"strings"
 
@@ -15,22 +17,53 @@ func (s *DBManagerService) ExecSql(req request.ExecSqlReq) (map[string]interface
 	}
 	defer db.Close()
 
-	sqlUpper := strings.ToUpper(strings.TrimSpace(req.SQL))
-	isQuery := strings.HasPrefix(sqlUpper, "SELECT") || strings.HasPrefix(sqlUpper, "SHOW") ||
-		strings.HasPrefix(sqlUpper, "EXPLAIN") || strings.HasPrefix(sqlUpper, "DESCRIBE") ||
-		strings.HasPrefix(sqlUpper, "DESC ") || strings.HasPrefix(sqlUpper, "PRAGMA") ||
-		strings.HasPrefix(sqlUpper, "WITH") || strings.HasPrefix(sqlUpper, "VALUES") ||
-		strings.Contains(sqlUpper, " RETURNING ")
-	if !isQuery {
-		result, err := db.Exec(req.SQL)
+	return execSQLScript(context.Background(), db, req.SQL)
+}
+
+func execSQLScript(ctx context.Context, db *sql.DB, content string) (map[string]interface{}, error) {
+	statements := splitSQLStatements(content)
+	if len(statements) == 0 {
+		return nil, fmt.Errorf("SQL statement is empty")
+	}
+	connection, err := db.Conn(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer connection.Close()
+
+	result := map[string]interface{}{"type": "exec", "affected": int64(0), "statements": len(statements)}
+	var affectedTotal int64
+	for index, statement := range statements {
+		statementResult, execErr := execSQLStatement(ctx, connection, statement)
+		if execErr != nil {
+			_, _ = connection.ExecContext(ctx, "ROLLBACK")
+			return nil, fmt.Errorf("statement %d failed: %w", index+1, execErr)
+		}
+		if statementResult["type"] == "query" {
+			result = statementResult
+			result["statements"] = len(statements)
+			continue
+		}
+		if affected, ok := statementResult["affected"].(int64); ok {
+			affectedTotal += affected
+		}
+		if result["type"] != "query" {
+			result["affected"] = affectedTotal
+		}
+	}
+	return result, nil
+}
+
+func execSQLStatement(ctx context.Context, connection *sql.Conn, statement string) (map[string]interface{}, error) {
+	if !isSQLQueryStatement(statement) {
+		result, err := connection.ExecContext(ctx, statement)
 		if err != nil {
 			return nil, err
 		}
 		affected, _ := result.RowsAffected()
 		return map[string]interface{}{"type": "exec", "affected": affected}, nil
 	}
-
-	rows, err := db.Query(req.SQL)
+	rows, err := connection.QueryContext(ctx, statement)
 	if err != nil {
 		return nil, err
 	}
@@ -44,6 +77,15 @@ func (s *DBManagerService) ExecSql(req request.ExecSqlReq) (map[string]interface
 		return nil, err
 	}
 	return map[string]interface{}{"type": "query", "columns": columns, "rows": tableData}, nil
+}
+
+func isSQLQueryStatement(statement string) bool {
+	sqlUpper := strings.ToUpper(strings.TrimSpace(statement))
+	return strings.HasPrefix(sqlUpper, "SELECT") || strings.HasPrefix(sqlUpper, "SHOW") ||
+		strings.HasPrefix(sqlUpper, "EXPLAIN") || strings.HasPrefix(sqlUpper, "DESCRIBE") ||
+		strings.HasPrefix(sqlUpper, "DESC ") || strings.HasPrefix(sqlUpper, "PRAGMA") ||
+		strings.HasPrefix(sqlUpper, "WITH") || strings.HasPrefix(sqlUpper, "VALUES") ||
+		strings.Contains(sqlUpper, " RETURNING ")
 }
 
 func (s *DBManagerService) GetTableData(req request.GetTableDataReq) (map[string]interface{}, error) {
