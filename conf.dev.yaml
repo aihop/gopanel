@@ -8,12 +8,12 @@ log:
 reset-password: false
 show-config: false
 system:
-  base_dir: /Users/hugh/.gopanel
+  base_dir: /Users/hugh/.gopanel-dev
   container_runtime: podman
   encrypt_key: TfJNY0Lk7YqRLwD2CZKn1nZVwWkcXnya
   entrance: default
-  gp_agent_socket_path: /Users/hugh/.gopanel/agent/run/gp-agent.sock
-  gpc_socket_path: /Users/hugh/.gopanel/gpc.sock
+  gp_agent_socket_path: /Users/hugh/.gopanel-dev/agent/run/gp-agent.sock
+  gpc_socket_path: /Users/hugh/.gopanel-dev/gpc.sock
   mode: dev
   port: :5470
   version: 1.0.0

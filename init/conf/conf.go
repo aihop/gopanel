@@ -192,6 +192,7 @@ func GlobalConfInit(v *viper.Viper) {
 	global.CONF.System.LicenseVerify = os.Getenv("GOPANEL_LICENSE_VERIFY")
 	global.Viper = v
 
+	configuredBaseDir := filepath.Clean(strings.TrimSpace(global.CONF.System.BaseDir))
 	if baseDir := strings.TrimSpace(os.Getenv("GOPANEL_BASE_DIR")); baseDir != "" {
 		global.CONF.System.BaseDir = filepath.Clean(baseDir)
 	} else if baseDir := strings.TrimSpace(os.Getenv("GPC_BASE_DIR")); baseDir != "" {
@@ -201,6 +202,14 @@ func GlobalConfInit(v *viper.Viper) {
 		if err == nil && strings.TrimSpace(homeDir) != "" {
 			global.CONF.System.BaseDir = filepath.Join(homeDir, ".gopanel")
 		}
+	}
+	if configuredBaseDir != "." && configuredBaseDir != filepath.Clean(global.CONF.System.BaseDir) {
+		global.CONF.System.GpAgentSocketPath = rebaseInstanceSocketPath(
+			configuredBaseDir, global.CONF.System.BaseDir, global.CONF.System.GpAgentSocketPath,
+		)
+		global.CONF.System.GpcSocketPath = rebaseInstanceSocketPath(
+			configuredBaseDir, global.CONF.System.BaseDir, global.CONF.System.GpcSocketPath,
+		)
 	}
 	if (runtime.GOOS == "darwin" || runtime.GOOS == "windows") && strings.TrimSpace(global.CONF.System.BaseDir) != "" {
 		if strings.Contains(global.CONF.System.GpAgentSocketPath, "/opt/gopanel/") {
@@ -242,6 +251,20 @@ func GlobalConfInit(v *viper.Viper) {
 	global.CONF.System.TmpDir = path.Join(global.CONF.System.BaseDir, "tmp")
 
 	fmt.Printf("run base dir: %v\n", global.CONF.System.BaseDir)
+}
+
+func rebaseInstanceSocketPath(configuredBaseDir, runtimeBaseDir, socketPath string) string {
+	configuredBaseDir = filepath.Clean(strings.TrimSpace(configuredBaseDir))
+	runtimeBaseDir = filepath.Clean(strings.TrimSpace(runtimeBaseDir))
+	socketPath = filepath.Clean(strings.TrimSpace(socketPath))
+	if configuredBaseDir == "." || runtimeBaseDir == "." || socketPath == "." {
+		return socketPath
+	}
+	relativePath, err := filepath.Rel(configuredBaseDir, socketPath)
+	if err != nil || relativePath == ".." || strings.HasPrefix(relativePath, ".."+string(os.PathSeparator)) {
+		return socketPath
+	}
+	return filepath.Join(runtimeBaseDir, relativePath)
 }
 
 func normalizeGpcSocketPath(goos, baseDir, socketPath string) string {

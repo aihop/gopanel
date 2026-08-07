@@ -46,3 +46,22 @@ func TestNormalizeGpcSocketPathPreservesCustomAndLinuxPaths(t *testing.T) {
 		t.Fatalf("linux path changed to %q", got)
 	}
 }
+
+func TestRebaseInstanceSocketPathFollowsRuntimeBaseDir(t *testing.T) {
+	configuredBaseDir := "/Users/test/.gopanel"
+	runtimeBaseDir := "/Users/test/.gopanel-dev"
+
+	if got := rebaseInstanceSocketPath(configuredBaseDir, runtimeBaseDir, configuredBaseDir+"/gpc.sock"); got != runtimeBaseDir+"/gpc.sock" {
+		t.Fatalf("gpc socket path was not rebased: %q", got)
+	}
+	if got := rebaseInstanceSocketPath(configuredBaseDir, runtimeBaseDir, configuredBaseDir+"/agent/run/gp-agent.sock"); got != runtimeBaseDir+"/agent/run/gp-agent.sock" {
+		t.Fatalf("gp-agent socket path was not rebased: %q", got)
+	}
+}
+
+func TestRebaseInstanceSocketPathPreservesCustomPath(t *testing.T) {
+	const customPath = "/custom/run/gpc.sock"
+	if got := rebaseInstanceSocketPath("/Users/test/.gopanel", "/Users/test/.gopanel-dev", customPath); got != customPath {
+		t.Fatalf("custom socket path changed to %q", got)
+	}
+}
