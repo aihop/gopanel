@@ -62,7 +62,7 @@ func initFile() {
 	_ = os.Remove(initFilePath)
 }
 
-func Init() {
+func Init() error {
 	initFile()
 
 	p := viper.New()
@@ -90,13 +90,15 @@ func Init() {
 	needCreate := false
 	if _, err := os.Stat(cmd.ConfFilePath); err == nil {
 		if err := p.ReadInConfig(); err != nil {
-			fmt.Printf("读取配置文件失败: %v\n", err)
+			return fmt.Errorf("读取配置文件失败 %s: %w", cmd.ConfFilePath, err)
 		}
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("检查配置文件失败 %s: %w", cmd.ConfFilePath, err)
 	} else {
 		// 确保目录存在
 		dir := path.Dir(cmd.ConfFilePath)
 		if err := os.MkdirAll(dir, 0755); err != nil {
-			fmt.Printf("创建配置目录失败: %v\n", err)
+			return fmt.Errorf("创建配置目录失败 %s: %w", dir, err)
 		}
 		needCreate = true
 	}
@@ -141,20 +143,16 @@ func Init() {
 	// 在设置完默认值后，若之前标记需要创建，则写入默认配置
 	if needCreate {
 		if err := p.WriteConfigAs(cmd.ConfFilePath); err != nil {
-			fmt.Printf("写入默认配置失败: %v\n", err)
-		} else {
-			fmt.Printf("已生成默认配置: %s\n", cmd.ConfFilePath)
+			return fmt.Errorf("写入默认配置失败 %s: %w", cmd.ConfFilePath, err)
 		}
-	} else {
-		// 若原来有配置，合并并写回（可选）
-		_ = p.ReadInConfig()
-		_ = p.WriteConfig()
+		fmt.Printf("已生成默认配置: %s\n", cmd.ConfFilePath)
 	}
 
 	// get by env
 	p.SetEnvPrefix("gopanel")
 
 	GlobalConfInit(p)
+	return nil
 }
 
 func GlobalConfInit(v *viper.Viper) {

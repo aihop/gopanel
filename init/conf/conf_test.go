@@ -1,10 +1,37 @@
 package conf
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
+
+	"github.com/aihop/gopanel/cmd"
 
 	"github.com/spf13/viper"
 )
+
+func TestInitRejectsInvalidExistingConfigWithoutOverwrite(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "conf.yaml")
+	invalidConfig := []byte("system:\n  encrypt_key: [invalid\n")
+	if err := os.WriteFile(configPath, invalidConfig, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	oldConfigPath := cmd.ConfFilePath
+	cmd.ConfFilePath = configPath
+	t.Cleanup(func() { cmd.ConfFilePath = oldConfigPath })
+
+	if err := Init(); err == nil {
+		t.Fatal("invalid existing config should block startup")
+	}
+	stored, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(stored) != string(invalidConfig) {
+		t.Fatal("invalid existing config was overwritten")
+	}
+}
 
 func TestNormalizeGpcSocketPathMigratesMacOSLegacyDefaults(t *testing.T) {
 	baseDir := "/Users/test/.gopanel"

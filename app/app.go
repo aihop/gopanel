@@ -62,7 +62,9 @@ type Config struct {
 
 func (t *App) Init() error {
 	cmd.Init()
-	conf.Init()
+	if err := conf.Init(); err != nil {
+		return fmt.Errorf("initialize config: %w", err)
+	}
 	db.Init()
 	if err := repo.Init(); err != nil {
 		return fmt.Errorf("initialize repositories: %w", err)
