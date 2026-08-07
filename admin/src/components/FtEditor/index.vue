@@ -52,7 +52,25 @@
 				:language="config.language"
 				:theme="config.theme"
 				@mount="handleMount"
-			/>
+			>
+				<div class="flex flex-col items-center gap-3 text-blue-100" role="status" aria-live="polite">
+					<div class="relative h-14 w-14">
+						<span class="absolute inset-0 rounded-full border-2 border-blue-300/15" />
+						<span
+							class="absolute inset-0 animate-spin rounded-full border-2 border-transparent border-r-cyan-300 border-t-blue-400 shadow-[0_0_18px_rgba(96,165,250,0.35)] motion-reduce:animate-none"
+						/>
+						<span
+							class="absolute inset-[7px] animate-[spin_1.35s_linear_infinite_reverse] rounded-full border border-transparent border-b-violet-400 border-l-blue-300 motion-reduce:animate-none"
+						/>
+						<span class="absolute inset-0 flex animate-pulse items-center justify-center font-mono text-sm font-semibold text-blue-200 motion-reduce:animate-none">
+							{ }
+						</span>
+					</div>
+					<span class="animate-pulse text-xs font-medium tracking-wide text-slate-300 motion-reduce:animate-none">
+						{{ t("editor.loading") }}
+					</span>
+				</div>
+			</vue-monaco-editor>
 		</div>
 	</div>
 </template>
@@ -62,6 +80,7 @@ import { shallowRef, reactive, ref, watch, computed } from "vue"
 import { VueMonacoEditor } from "@guolao/vue-monaco-editor"
 import { Languages } from "@/global/mimetype"
 import { useI18n } from "vue-i18n"
+import { editorLoadingMessages } from "./messages"
 
 const props = defineProps({
 	modelValue: { type: String, default: "" },
@@ -74,7 +93,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(["update:modelValue", "change"])
-const { t } = useI18n()
+const { t } = useI18n({ messages: editorLoadingMessages })
 
 const form = ref({ content: props.modelValue, path: "" })
 const config = reactive({ theme: props.theme, language: props.language })
