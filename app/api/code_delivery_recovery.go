@@ -217,7 +217,9 @@ func resumeCodeSessionDeliveryWithProgress(session *model.AIDevSession, userID u
 		if report != nil {
 			report(codeDeliveryStageCleaning, 90)
 		}
-		if err := cleanupCodeDeliveryWorktree(delivery); err != nil {
+		if codeExecutions.hasSessionKind(session.ID, codeExecutionInteractive) {
+			delivery.ErrorMessage = ""
+		} else if err := cleanupCodeDeliveryWorktree(delivery); err != nil {
 			delivery.ErrorMessage = err.Error()
 			_ = global.DB.Model(delivery).Update("error_message", delivery.ErrorMessage).Error
 		} else {

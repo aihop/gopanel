@@ -113,7 +113,11 @@ class CodeDeliveryCard extends StatelessWidget {
                 label: Text(
                   CodeWorkspaceText.t(
                     context,
-                    job?.canRetry == true ? 'delivery.retry' : 'delivery.start',
+                    job?.canDeliverPending == true
+                        ? 'delivery.deliverLatest'
+                        : job?.canRetry == true
+                        ? 'delivery.retry'
+                        : 'delivery.start',
                   ),
                 ),
               ),
@@ -126,7 +130,7 @@ class CodeDeliveryCard extends StatelessWidget {
 
   bool _showAction(CodeDeliveryJob? job) {
     if (!_managed || session.status == 'delivered') return false;
-    return job == null || job.canRetry;
+    return job == null || job.canRetry || job.canDeliverPending;
   }
 
   String _description(BuildContext context, CodeDeliveryJob? job) {
@@ -145,7 +149,12 @@ class CodeDeliveryCard extends StatelessWidget {
           ? job.resultCommit.substring(0, 10)
           : job.resultCommit;
       final suffix = commit.isEmpty ? '' : ' · $commit';
-      return '${CodeWorkspaceText.t(context, 'delivery.completed')}$suffix';
+      final key = job.hasUncommittedChanges
+          ? 'delivery.completedWithUnsaved'
+          : job.hasPendingCommits
+          ? 'delivery.completedWithPending'
+          : 'delivery.completed';
+      return '${CodeWorkspaceText.t(context, key)}$suffix';
     }
     return _stageLabel(context, job.stage);
   }
@@ -170,6 +179,7 @@ class CodeDeliveryCard extends StatelessWidget {
   }
 
   Color _accent(CodeDeliveryJob? job) {
+    if (_hasPendingWork(job)) return Colors.amberAccent;
     if (job?.isCompleted == true) return Colors.greenAccent;
     if (job?.status == 'failed') return Colors.redAccent;
     if (job?.status == 'conflict' || job?.status == 'partial') {
@@ -187,13 +197,15 @@ class _StatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final key = switch (job.status) {
-      'completed' => 'delivery.completed',
-      'failed' => 'delivery.failed',
-      'conflict' || 'partial' => 'delivery.conflict',
-      'queued' => 'delivery.queued',
-      _ => 'delivery.running',
-    };
+    final key = _hasPendingWork(job)
+        ? 'delivery.pending'
+        : switch (job.status) {
+            'completed' => 'delivery.completed',
+            'failed' => 'delivery.failed',
+            'conflict' || 'partial' => 'delivery.conflict',
+            'queued' => 'delivery.queued',
+            _ => 'delivery.running',
+          };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(
@@ -206,6 +218,13 @@ class _StatusBadge extends StatelessWidget {
       ),
     );
   }
+}
+
+bool _hasPendingWork(CodeDeliveryJob? job) {
+  if (job == null || !job.isCompleted) return false;
+  return job.hasPendingChanges ||
+      job.hasPendingCommits ||
+      job.hasUncommittedChanges;
 }
 
 String _stageLabel(BuildContext context, String stage) {

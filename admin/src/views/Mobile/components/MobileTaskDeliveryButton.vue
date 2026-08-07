@@ -35,6 +35,7 @@ const delivering = computed(
 )
 const delivered = computed(() => props.delivery?.status === "completed" || props.session.status === "delivered")
 const hasChanges = computed(() => (gitStatus.value?.files || 0) > 0)
+const hasPendingChanges = computed(() => props.delivery?.hasPendingChanges === true)
 const label = computed(() => {
 	if (statusError.value) return t("mobile.retryGitStatus")
 	if (statusLoading.value) return t("mobile.checkingChanges")
@@ -42,6 +43,7 @@ const label = computed(() => {
 	if (delivering.value && props.delivery?.stage === "quality_check") return t("mobile.runningDeliveryQuality")
 	if (delivering.value) return t("mobile.deliveringShort")
 	if (hasChanges.value) return t("mobile.saveChanges")
+	if (hasPendingChanges.value) return t("mobile.deliverLatest")
 	if (delivered.value) return t("mobile.deliveredShort")
 	if (["failed", "conflict", "partial"].includes(props.delivery?.status || "")) {
 		return t("mobile.retryDelivery")
@@ -82,7 +84,13 @@ function deliver() {
 		void loadGitStatus()
 		return
 	}
-	if (loading.value || statusLoading.value || delivering.value || (delivered.value && !hasChanges.value)) return
+	if (
+		loading.value ||
+		statusLoading.value ||
+		delivering.value ||
+		(delivered.value && !hasChanges.value && !hasPendingChanges.value)
+	)
+		return
 	if (hasChanges.value) {
 		void saveChanges()
 		return
@@ -124,6 +132,12 @@ watch(
 		if (props.active) void loadGitStatus(true)
 	}
 )
+watch(
+	() => props.delivery?.status,
+	status => {
+		if (status) queued.value = false
+	}
+)
 </script>
 
 <template>
@@ -132,14 +146,22 @@ watch(
 		size="tiny"
 		secondary
 		:loading="loading || statusLoading"
-		:disabled="delivering || (!statusError && delivered && !hasChanges)"
-		:type="delivered && !hasChanges ? 'success' : delivering ? 'info' : 'primary'"
+		:disabled="delivering || (!statusError && delivered && !hasChanges && !hasPendingChanges)"
+		:type="delivered && !hasChanges && !hasPendingChanges ? 'success' : delivering ? 'info' : 'primary'"
 		class="!h-10 !rounded-xl"
 		@click.stop="deliver"
 	>
 		<template #icon>
 			<Icon
-				:name="hasChanges ? 'mdi:content-save-outline' : delivered ? 'mdi:cloud-check-outline' : delivering ? 'mdi:cloud-sync-outline' : 'mdi:source-merge'"
+				:name="
+					hasChanges
+						? 'mdi:content-save-outline'
+						: delivered && !hasPendingChanges
+							? 'mdi:cloud-check-outline'
+							: delivering
+								? 'mdi:cloud-sync-outline'
+								: 'mdi:source-merge'
+				"
 				:size="14"
 			/>
 		</template>

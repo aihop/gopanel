@@ -171,7 +171,7 @@ func TestCodeDeliveryUsesCapturedCommitWhileTerminalContinues(t *testing.T) {
 		t.Fatal(err)
 	}
 	firstCommit := commitCodeTestFile(t, session.WorkDir, "captured.txt", "captured\n")
-	_, err := persistCodeDeliveryJob(session, session.UserID, "127.0.0.1")
+	job, err := persistCodeDeliveryJob(session, session.UserID, "127.0.0.1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -195,11 +195,25 @@ func TestCodeDeliveryUsesCapturedCommitWhileTerminalContinues(t *testing.T) {
 	if _, err := os.Stat(session.WorkDir); err != nil {
 		t.Fatalf("worktree with later commit should be preserved: %v", err)
 	}
-	if err := completeCodeSessionLifecycle(database, session.ID, time.Now()); err != nil {
+	if err := database.Model(job).Updates(map[string]any{
+		"status": codeDeliveryJobCompleted, "stage": codeDeliveryStageCompleted,
+	}).Error; err != nil {
 		t.Fatal(err)
 	}
-	if _, err := persistCodeDeliveryJob(session, session.UserID, "127.0.0.1"); err == nil {
-		t.Fatal("delivered session should require a new task")
+	if err := finalizeCodeSessionLifecycle(database, session.ID, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	var storedSession model.AIDevSession
+	if err := database.First(&storedSession, session.ID).Error; err != nil || storedSession.Status != codeSessionStatusActive {
+		t.Fatalf("post-snapshot commit should keep the session active: %#v, %v", storedSession, err)
+	}
+	secondJob, err := persistCodeDeliveryJob(&storedSession, session.UserID, "127.0.0.1")
+	if err != nil || secondJob.ID != job.ID || secondJob.Status != codeDeliveryJobQueued {
+		t.Fatalf("post-snapshot commit was not queued for another delivery: %#v, %v", secondJob, err)
+	}
+	var nextDelivery model.AICodeDelivery
+	if err := database.Where("session_id = ?", session.ID).First(&nextDelivery).Error; err != nil || nextDelivery.WorktreeCommit != secondCommit {
+		t.Fatalf("next delivery did not capture the later commit: %#v, %v", nextDelivery, err)
 	}
 }
 

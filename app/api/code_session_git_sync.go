@@ -152,15 +152,28 @@ func inspectCodeSessionGitSyncTarget(target codeSessionGitSyncTarget, fetchErr e
 	}
 	result.Ahead, _ = strconv.Atoi(fields[0])
 	result.Behind, _ = strconv.Atoi(fields[1])
+	baseCommit := strings.TrimSpace(target.BaseCommit)
+	remoteContainsBase := baseCommit != ""
+	localContainsBase := baseCommit != ""
+	if remoteContainsBase {
+		_, err = runCodeGit(target.WorktreeDir, "merge-base", "--is-ancestor", baseCommit, remoteRef)
+		remoteContainsBase = err == nil
+	}
+	if localContainsBase {
+		_, err = runCodeGit(target.WorktreeDir, "merge-base", "--is-ancestor", baseCommit, "HEAD")
+		localContainsBase = err == nil
+	}
 	switch {
 	case result.Ahead == 0 && result.Behind == 0:
 		result.Status = "synced"
-	case result.Ahead > 0 && result.Behind > 0:
-		result.Status, result.Reason = "diverged", "history_diverged"
-	case result.LocalCommit != target.BaseCommit:
-		result.Status, result.Reason = "local_ahead", "local_commits"
 	case result.Ahead == 0 && result.Behind > 0:
 		result.Status, result.CanSync = "behind", true
+	case result.Ahead > 0 && result.Behind == 0 && result.RemoteCommit == baseCommit:
+		result.Status, result.Reason = "local_ahead", "local_commits"
+	case result.Ahead > 0 && result.Behind == 0 && remoteContainsBase && localContainsBase:
+		result.Status, result.Reason, result.CanSync = "integrated", "remote_integrated", true
+	case result.Ahead > 0 && result.Behind > 0 && remoteContainsBase && localContainsBase:
+		result.Status, result.Reason, result.CanSync = "diverged", "merge_required", true
 	default:
 		result.Status, result.Reason = "remote_behind", "remote_history_rewritten"
 	}
@@ -169,21 +182,13 @@ func inspectCodeSessionGitSyncTarget(target codeSessionGitSyncTarget, fetchErr e
 
 func inspectCodeSessionGitSyncTargets(sessionID uint, targets []codeSessionGitSyncTarget, fetchErrors map[string]error) codeSessionGitSyncStatus {
 	result := codeSessionGitSyncStatus{SessionID: sessionID, Status: "synced", Repositories: make([]codeSessionGitSyncRepository, 0, len(targets))}
-	priority := map[string]int{"synced": 0, "local": 1, "behind": 2, "offline": 3, "local_ahead": 4, "dirty": 5, "diverged": 6, "remote_behind": 7, "blocked": 8}
-	hasDirtyRepository := false
+	priority := map[string]int{"synced": 0, "local": 1, "local_ahead": 2, "integrated": 3, "behind": 4, "offline": 5, "dirty": 6, "diverged": 7, "remote_behind": 8, "blocked": 9}
 	for _, target := range targets {
 		repository := inspectCodeSessionGitSyncTarget(target, fetchErrors[target.ID])
 		result.Repositories = append(result.Repositories, repository)
 		result.CanSync = result.CanSync || repository.CanSync
-		hasDirtyRepository = hasDirtyRepository || repository.Status == "dirty"
 		if priority[repository.Status] > priority[result.Status] {
 			result.Status = repository.Status
-		}
-	}
-	if hasDirtyRepository {
-		result.CanSync = false
-		for index := range result.Repositories {
-			result.Repositories[index].CanSync = false
 		}
 	}
 	return result
@@ -223,6 +228,36 @@ func persistCodeSessionGitBaseline(tx *gorm.DB, session *model.AIDevSession, tar
 	}
 	return tx.Model(&model.AIDevSessionRepository{}).Where("id = ? AND session_id = ?", target.RepositoryID, session.ID).
 		Updates(map[string]any{"base_commit": commit, "remote_commit": commit, "sync_status": "synced"}).Error
+}
+
+func syncCodeSessionGitTarget(target codeSessionGitSyncTarget, state codeSessionGitSyncRepository) (string, error) {
+	remoteRef := codeSessionGitRemoteRef(target)
+	if remoteRef == "" || strings.TrimSpace(state.RemoteCommit) == "" {
+		return "", errors.New("远端目标分支不可用")
+	}
+	var err error
+	switch state.Status {
+	case "behind":
+		_, err = runCodeGit(target.WorktreeDir, "merge", "--ff-only", remoteRef)
+	case "diverged":
+		_, err = runCodeGit(
+			target.WorktreeDir,
+			"-c", "user.name=GoPanel Code", "-c", "user.email=code@gopanel.local",
+			"-c", "commit.gpgsign=false", "merge", "--no-edit", remoteRef,
+		)
+	case "integrated":
+	default:
+		return "", fmt.Errorf("仓库当前状态为 %s，不能安全同步到会话", state.Status)
+	}
+	if err != nil {
+		conflicts := codeGitConflictFiles(target.WorktreeDir)
+		if len(conflicts) > 0 {
+			return "", fmt.Errorf("远端更新与会话修改存在冲突，请在隔离工作区解决并保存：%s", strings.Join(conflicts, ", "))
+		}
+		_, _ = runCodeGit(target.WorktreeDir, "merge", "--abort")
+		return "", err
+	}
+	return runCodeGit(target.WorktreeDir, "rev-parse", "HEAD")
 }
 
 func acquireCodeSessionGitSyncLeases(targets []codeSessionGitSyncTarget, purpose string) (func(), error) {
@@ -332,27 +367,19 @@ func syncCodeSessionGitRepositoryOperation(c fiber.Ctx, syncRepositoryID string)
 		if state == nil {
 			return errors.New("Git 仓库同步状态不可用")
 		}
-		for _, repository := range result.Repositories {
-			if repository.Status == "dirty" {
-				return fmt.Errorf("仓库 %s 存在未提交修改，请先提交或清理后再同步", repository.Name)
-			}
-		}
 		if !state.CanSync {
 			return fmt.Errorf("仓库当前状态为 %s，不能安全同步到会话", state.Status)
 		}
-		if _, err := runCodeGit(selected.WorktreeDir, "merge", "--ff-only", codeSessionGitRemoteRef(*selected)); err != nil {
-			return err
-		}
 		previousCommit := state.LocalCommit
-		commit, err := runCodeGit(selected.WorktreeDir, "rev-parse", "HEAD")
-		if err != nil {
+		if _, err := syncCodeSessionGitTarget(*selected, *state); err != nil {
 			return err
 		}
-		if err := persistCodeSessionGitBaseline(tx, current, *selected, commit); err != nil {
+		remoteCommit := strings.TrimSpace(state.RemoteCommit)
+		if err := persistCodeSessionGitBaseline(tx, current, *selected, remoteCommit); err != nil {
 			_, _ = runCodeGit(selected.WorktreeDir, "reset", "--hard", previousCommit)
 			return err
 		}
-		selected.BaseCommit = commit
+		selected.BaseCommit = remoteCommit
 		if current.IsolationMode == codeIsolationMultiWorktree {
 			var repositories []model.AIDevSessionRepository
 			err := tx.Where("session_id = ?", current.ID).Order("link_name asc").Find(&repositories).Error
@@ -361,7 +388,7 @@ func syncCodeSessionGitRepositoryOperation(c fiber.Ctx, syncRepositoryID string)
 			}
 			for index := range repositories {
 				if repositories[index].ID == selected.RepositoryID {
-					repositories[index].BaseCommit, repositories[index].RemoteCommit, repositories[index].SyncStatus = commit, commit, "synced"
+					repositories[index].BaseCommit, repositories[index].RemoteCommit, repositories[index].SyncStatus = remoteCommit, remoteCommit, "synced"
 				}
 			}
 			if err := writeCodeSessionManifest(current.WorkDir, repositories); err != nil {

@@ -112,6 +112,8 @@ func captureCodeMultiRepositoryDeliverySnapshot(session *model.AIDevSession) err
 				return fmt.Errorf("仓库 %s 已产生新提交，但源仓库处于 detached HEAD，请先配置交付分支", repository.LinkName)
 			}
 			repository.Status = codeDeliveryCompleted
+		} else {
+			repository.Status = codeDeliveryPrepared
 		}
 		repository.TargetBranch, repository.WorktreeCommit = targetBranch, commit
 	}

@@ -50,8 +50,9 @@ const deliveryStatusType = computed(() => {
 	if (status === "failed" || status === "conflict") return "error"
 	return "info"
 })
+const deliverySession = computed(() => props.state?.session || props.session)
 const deliveryAvailable = computed(() =>
-	Boolean(props.session?.worktreeBranch || props.session?.isolationMode === "multi_worktree")
+	Boolean(deliverySession.value?.worktreeBranch || deliverySession.value?.isolationMode === "multi_worktree")
 )
 const tokenLabel = (count: number) => new Intl.NumberFormat().format(count || 0)
 
@@ -73,7 +74,7 @@ watch(
 			<n-spin :show="loading">
 				<div class="space-y-4">
 					<section
-						v-if="session && (deliveryAvailable || state?.delivery)"
+						v-if="deliverySession && (deliveryAvailable || state?.delivery)"
 						class="rounded-2xl border border-slate-200 bg-white p-4"
 					>
 						<div class="flex items-center justify-between gap-3">
@@ -111,7 +112,7 @@ watch(
 						</template>
 						<div class="mt-3 flex justify-end">
 							<MobileTaskDeliveryButton
-								:session="session"
+								:session="deliverySession"
 								:delivery="state?.delivery"
 								:active="show"
 								:revision="`${state?.latestRun?.id || 0}:${state?.changedFiles.join('|') || ''}`"

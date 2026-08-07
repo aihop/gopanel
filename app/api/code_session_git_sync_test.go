@@ -50,7 +50,7 @@ func TestCodeSessionGitSyncDetectsAndFastForwardsRemote(t *testing.T) {
 	}
 }
 
-func TestCodeSessionGitSyncRejectsDirtyAndLocalCommits(t *testing.T) {
+func TestCodeSessionGitSyncRejectsDirtyAndLocalOnlyCommits(t *testing.T) {
 	session, _ := createCodeSessionSyncFixture(t)
 	targets, err := codeSessionGitSyncTargets(session)
 	if err != nil {
@@ -73,6 +73,65 @@ func TestCodeSessionGitSyncRejectsDirtyAndLocalCommits(t *testing.T) {
 	}
 }
 
+func TestCodeSessionGitSyncMergesDivergedRemote(t *testing.T) {
+	session, remoteDir := createCodeSessionSyncFixture(t)
+	localCommit := commitCodeTestFile(t, session.WorkDir, "local.txt", "local\n")
+	updater := cloneCodeRepository(t, remoteDir)
+	remoteCommit := commitCodeTestFile(t, updater, "remote.txt", "remote\n")
+	if _, err := runCodeGit(updater, "push", "origin", "HEAD"); err != nil {
+		t.Fatal(err)
+	}
+	targets, err := codeSessionGitSyncTargets(session)
+	if err != nil {
+		t.Fatal(err)
+	}
+	status := inspectCodeSessionGitSyncTargets(session.ID, targets, fetchCodeSessionGitTargets(targets))
+	state := status.Repositories[0]
+	if state.Status != "diverged" || !state.CanSync || state.Reason != "merge_required" {
+		t.Fatalf("diverged session should allow merge sync: %#v", state)
+	}
+	mergedCommit, err := syncCodeSessionGitTarget(targets[0], state)
+	if err != nil || mergedCommit == localCommit || mergedCommit == remoteCommit {
+		t.Fatalf("remote was not merged into the session: commit=%q err=%v", mergedCommit, err)
+	}
+	for _, ancestor := range []string{localCommit, remoteCommit} {
+		if _, err := runCodeGit(session.WorkDir, "merge-base", "--is-ancestor", ancestor, "HEAD"); err != nil {
+			t.Fatalf("commit %s is not in merged session history: %v", ancestor, err)
+		}
+	}
+	status = inspectCodeSessionGitSyncTargets(session.ID, targets, nil)
+	if status.Repositories[0].Status != "integrated" || !status.Repositories[0].CanSync {
+		t.Fatalf("merged remote should be ready to update its baseline: %#v", status.Repositories[0])
+	}
+	targets[0].BaseCommit = remoteCommit
+	status = inspectCodeSessionGitSyncTargets(session.ID, targets, nil)
+	if status.Repositories[0].Status != "local_ahead" || status.Repositories[0].CanSync {
+		t.Fatalf("session commits should remain ahead of the updated baseline: %#v", status.Repositories[0])
+	}
+}
+
+func TestCodeSessionGitSyncLeavesConflictsInIsolatedWorktree(t *testing.T) {
+	session, remoteDir := createCodeSessionSyncFixture(t)
+	commitCodeTestFile(t, session.WorkDir, "README.md", "session\n")
+	updater := cloneCodeRepository(t, remoteDir)
+	commitCodeTestFile(t, updater, "README.md", "remote\n")
+	if _, err := runCodeGit(updater, "push", "origin", "HEAD"); err != nil {
+		t.Fatal(err)
+	}
+	targets, err := codeSessionGitSyncTargets(session)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := inspectCodeSessionGitSyncTargets(session.ID, targets, fetchCodeSessionGitTargets(targets)).Repositories[0]
+	if state.Status != "diverged" || !state.CanSync {
+		t.Fatalf("conflicting histories should be offered for merge: %#v", state)
+	}
+	if _, err := syncCodeSessionGitTarget(targets[0], state); err == nil || len(codeGitConflictFiles(session.WorkDir)) != 1 {
+		t.Fatalf("merge conflict was not preserved for resolution: %v", err)
+	}
+	t.Cleanup(func() { _, _ = runCodeGit(session.WorkDir, "merge", "--abort") })
+}
+
 func TestCodeSessionGitSyncRejectsGitlinkRepositories(t *testing.T) {
 	repository := createCodeGitRepository(t)
 	branch, err := runCodeGit(repository, "branch", "--show-current")
@@ -93,14 +152,23 @@ func TestCodeSessionGitSyncRejectsGitlinkRepositories(t *testing.T) {
 	}
 }
 
-func TestCodeSessionGitSyncDirtyRepositoryDisablesWholeSession(t *testing.T) {
-	cleanRepository := createCodeGitRepository(t)
-	dirtyRepository := createCodeGitRepository(t)
-	branch, err := runCodeGit(cleanRepository, "branch", "--show-current")
+func TestCodeSessionGitSyncDirtyRepositoryDoesNotBlockIndependentRepository(t *testing.T) {
+	session, remoteDir := createCodeSessionSyncFixture(t)
+	updater := cloneCodeRepository(t, remoteDir)
+	commitCodeTestFile(t, updater, "remote.txt", "remote\n")
+	if _, err := runCodeGit(updater, "push", "origin", "HEAD"); err != nil {
+		t.Fatal(err)
+	}
+	cleanTargets, err := codeSessionGitSyncTargets(session)
 	if err != nil {
 		t.Fatal(err)
 	}
-	baseCommit, err := runCodeGit(cleanRepository, "rev-parse", "HEAD")
+	dirtyRepository := createCodeGitRepository(t)
+	branch, err := runCodeGit(dirtyRepository, "branch", "--show-current")
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseCommit, err := runCodeGit(dirtyRepository, "rev-parse", "HEAD")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,11 +176,11 @@ func TestCodeSessionGitSyncDirtyRepositoryDisablesWholeSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	targets := []codeSessionGitSyncTarget{
-		{ID: "clean", Name: "clean", WorktreeDir: cleanRepository, Branch: branch, BaseCommit: baseCommit},
+		cleanTargets[0],
 		{ID: "dirty", Name: "dirty", WorktreeDir: dirtyRepository, Branch: branch, BaseCommit: baseCommit},
 	}
-	status := inspectCodeSessionGitSyncTargets(1, targets, nil)
-	if status.CanSync || status.Repositories[0].CanSync {
-		t.Fatalf("dirty repository should disable session sync: %#v", status)
+	status := inspectCodeSessionGitSyncTargets(session.ID, targets, fetchCodeSessionGitTargets(targets))
+	if !status.CanSync || !status.Repositories[0].CanSync || status.Repositories[1].CanSync {
+		t.Fatalf("dirty repository should not block an independent clean repository: %#v", status)
 	}
 }

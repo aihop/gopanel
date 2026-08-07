@@ -38,25 +38,28 @@ const (
 type codeDeliveryProgressReporter func(stage string, progress int)
 
 type codeDeliveryJobView struct {
-	ID            uint                           `json:"id"`
-	SessionID     uint                           `json:"sessionId"`
-	TaskID        uint                           `json:"taskId,omitempty"`
-	Status        string                         `json:"status"`
-	Stage         string                         `json:"stage"`
-	Progress      int                            `json:"progress"`
-	Attempt       int                            `json:"attempt"`
-	QueuePosition int                            `json:"queuePosition"`
-	TargetBranch  string                         `json:"targetBranch,omitempty"`
-	ResultCommit  string                         `json:"resultCommit,omitempty"`
-	ResultType    string                         `json:"resultType,omitempty"`
-	FailureCode   string                         `json:"failureCode,omitempty"`
-	Repositories  []codeRepositoryDeliveryResult `json:"repositories,omitempty"`
-	ErrorMessage  string                         `json:"errorMessage,omitempty"`
-	ConflictFiles []string                       `json:"conflictFiles"`
-	CreatedAt     time.Time                      `json:"createdAt"`
-	UpdatedAt     time.Time                      `json:"updatedAt"`
-	StartedAt     *time.Time                     `json:"startedAt,omitempty"`
-	CompletedAt   *time.Time                     `json:"completedAt,omitempty"`
+	ID                    uint                           `json:"id"`
+	SessionID             uint                           `json:"sessionId"`
+	TaskID                uint                           `json:"taskId,omitempty"`
+	Status                string                         `json:"status"`
+	Stage                 string                         `json:"stage"`
+	Progress              int                            `json:"progress"`
+	Attempt               int                            `json:"attempt"`
+	QueuePosition         int                            `json:"queuePosition"`
+	TargetBranch          string                         `json:"targetBranch,omitempty"`
+	ResultCommit          string                         `json:"resultCommit,omitempty"`
+	ResultType            string                         `json:"resultType,omitempty"`
+	FailureCode           string                         `json:"failureCode,omitempty"`
+	HasPendingChanges     bool                           `json:"hasPendingChanges"`
+	HasPendingCommits     bool                           `json:"hasPendingCommits"`
+	HasUncommittedChanges bool                           `json:"hasUncommittedChanges"`
+	Repositories          []codeRepositoryDeliveryResult `json:"repositories,omitempty"`
+	ErrorMessage          string                         `json:"errorMessage,omitempty"`
+	ConflictFiles         []string                       `json:"conflictFiles"`
+	CreatedAt             time.Time                      `json:"createdAt"`
+	UpdatedAt             time.Time                      `json:"updatedAt"`
+	StartedAt             *time.Time                     `json:"startedAt,omitempty"`
+	CompletedAt           *time.Time                     `json:"completedAt,omitempty"`
 }
 
 type codeDeliveryRunner struct {
@@ -254,7 +257,7 @@ func (runner *codeDeliveryRunner) finish(job *model.AICodeDeliveryJob, result co
 			return err
 		}
 		if status == codeDeliveryJobCompleted {
-			return completeCodeSessionLifecycle(tx, job.SessionID, now)
+			return finalizeCodeSessionLifecycle(tx, job.SessionID, now)
 		}
 		return reopenCodeSessionLifecycle(tx, job.SessionID)
 	})
@@ -406,11 +409,18 @@ func loadCodeDeliveryJobView(sessionID uint) (*codeDeliveryJobView, error) {
 		).Count(&count).Error
 		position = int(count) + 1
 	}
+	pending := codeSessionPostSnapshotStatus{}
+	if job.Status == codeDeliveryJobCompleted {
+		pending = inspectCodeSessionPostSnapshotStatus(global.DB, sessionID)
+	}
 	return &codeDeliveryJobView{
 		ID: job.ID, SessionID: job.SessionID, TaskID: job.TaskID, Status: job.Status, Stage: job.Stage, Progress: job.Progress,
 		Attempt: job.Attempt, QueuePosition: position, TargetBranch: job.TargetBranch, ResultCommit: job.ResultCommit,
-		ResultType: job.ResultType, FailureCode: job.FailureCode, Repositories: repositories,
-		ErrorMessage: job.ErrorMessage, ConflictFiles: conflicts, CreatedAt: job.CreatedAt, UpdatedAt: job.UpdatedAt,
+		ResultType: job.ResultType, FailureCode: job.FailureCode,
+		HasPendingChanges: pending.HasChanges, HasPendingCommits: pending.HasCommits,
+		HasUncommittedChanges: pending.HasUncommittedChanges,
+		Repositories:          repositories,
+		ErrorMessage:          job.ErrorMessage, ConflictFiles: conflicts, CreatedAt: job.CreatedAt, UpdatedAt: job.UpdatedAt,
 		StartedAt: job.StartedAt, CompletedAt: job.CompletedAt,
 	}, nil
 }

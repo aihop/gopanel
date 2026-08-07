@@ -141,6 +141,10 @@ func detectCodeQualityChecks(session *model.AIDevSession) ([]codeQualityCheck, e
 	if err != nil {
 		return nil, err
 	}
+	return detectCodeQualityChecksInRoots(roots), nil
+}
+
+func detectCodeQualityChecksInRoots(roots []string) []codeQualityCheck {
 	checks := make([]codeQualityCheck, 0)
 	for _, root := range roots {
 		checks = append(checks, detectCodeQualityChecksAt(root, root)...)
@@ -168,7 +172,7 @@ func detectCodeQualityChecks(session *model.AIDevSession) ([]codeQualityCheck, e
 		}
 		return checks[i].WorkDir < checks[j].WorkDir
 	})
-	return checks, nil
+	return checks
 }
 
 func codeQualityRoots(session *model.AIDevSession) ([]string, error) {
@@ -277,11 +281,15 @@ func newCodeQualityCheck(kind, label, workDir, displayRoot, executable string, a
 		relative = filepath.Join(filepath.Base(displayRoot), relative)
 	}
 	command := strings.Join(append([]string{executable}, args...), " ")
-	hash := sha256.Sum256([]byte(workDir + "\x00" + kind + "\x00" + command))
 	return codeQualityCheck{
-		ID: hex.EncodeToString(hash[:8]), Kind: kind, Label: label, Command: command,
+		ID: codeQualityCheckID(workDir, kind, command), Kind: kind, Label: label, Command: command,
 		WorkDir: filepath.ToSlash(relative), Executable: executable, Args: args, workDirPath: workDir,
 	}
+}
+
+func codeQualityCheckID(workDir, kind, command string) string {
+	hash := sha256.Sum256([]byte(workDir + "\x00" + kind + "\x00" + command))
+	return hex.EncodeToString(hash[:8])
 }
 
 func executeCodeQualityCheck(lease *codeExecutionLease, check codeQualityCheck) codeQualityCheckResult {
@@ -409,11 +417,8 @@ func codeQualityRevision(workDir string) (string, error) {
 }
 
 func validateCodeQualityGate(session *model.AIDevSession) error {
-	if session == nil || session.ProjectID == 0 {
-		return nil
-	}
-	_, err := repo.NewAIProjectRepo().GetProjectByID(session.ProjectID)
-	if err != nil {
+	enabled, err := codeDeliveryQualityGateEnabled(session)
+	if err != nil || !enabled {
 		return err
 	}
 	checks, err := detectCodeQualityChecks(session)
@@ -424,6 +429,10 @@ func validateCodeQualityGate(session *model.AIDevSession) error {
 		return errors.New("项目已启用质量门禁，但未识别到可执行检查")
 	}
 	loadCodeQualityResults(session.ID, checks)
+	return validateCodeQualityCheckResults(checks)
+}
+
+func validateCodeQualityCheckResults(checks []codeQualityCheck) error {
 	for _, check := range checks {
 		if check.LastResult == nil {
 			return fmt.Errorf("质量门禁未完成：%s 尚未运行", check.Label)

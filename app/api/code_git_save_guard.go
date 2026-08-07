@@ -42,6 +42,13 @@ func validateCodeGitSaveFiles(workDir string) error {
 	return nil
 }
 
+func validateCodeGitStagedChanges(workDir string) error {
+	if _, err := runCodeGit(workDir, "diff", "--cached", "--check"); err != nil {
+		return fmt.Errorf("暂存区存在未解决的冲突标记或空白错误，请修复后再提交：%w", err)
+	}
+	return nil
+}
+
 func codeGitChangedFilePaths(workDir string) ([]string, error) {
 	changed, err := runCodeGitBytes(workDir, nil, "diff", "--name-only", "--diff-filter=ACMR", "-z", "HEAD")
 	if err != nil {

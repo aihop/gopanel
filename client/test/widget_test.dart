@@ -172,5 +172,14 @@ void main() {
     expect(delivery.canRetry, isTrue);
     expect(delivery.conflictFiles, ['lib/main.dart']);
     expect(delivery.repositories.single.repositoryName, 'client');
+
+    final pendingDelivery = CodeDeliveryJob.fromJson({
+      'status': 'completed',
+      'hasPendingChanges': true,
+      'hasPendingCommits': true,
+      'hasUncommittedChanges': false,
+    });
+    expect(pendingDelivery.canRetry, isFalse);
+    expect(pendingDelivery.canDeliverPending, isTrue);
   });
 }

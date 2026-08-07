@@ -67,6 +67,9 @@ func commitCodeSessionWorktree(session *model.AIDevSession, message string) (cod
 	if strings.TrimSpace(staged) == "" {
 		return codeGitDeliveryResult{}, errors.New("暂存区没有可提交的变更")
 	}
+	if err := validateCodeGitStagedChanges(session.WorkDir); err != nil {
+		return codeGitDeliveryResult{}, err
+	}
 	if _, err := runCodeGit(session.WorkDir, "-c", "user.name=GoPanel Code", "-c", "user.email=code@gopanel.local", "commit", "-m", message); err != nil {
 		return codeGitDeliveryResult{}, err
 	}

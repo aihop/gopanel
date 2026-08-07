@@ -22,7 +22,7 @@ const statusLabel = (repository: CodeSessionGitSyncRepository) =>
 const reasonLabel = (repository: CodeSessionGitSyncRepository) =>
 	repository.reason ? t(`code.gitSyncReason_${repository.reason}`) : ""
 const statusType = (repository: CodeSessionGitSyncRepository) => {
-	if (repository.status === "synced" || repository.updated) return "success" as const
+	if (["synced", "integrated"].includes(repository.status) || repository.updated) return "success" as const
 	if (repository.status === "behind") return "info" as const
 	if (["dirty", "diverged", "remote_behind", "blocked"].includes(repository.status)) return "warning" as const
 	return "default" as const
@@ -46,17 +46,26 @@ const syncRepository = (repository: CodeSessionGitSyncRepository) => {
 	if (!repository.canSync || props.disabled || syncingId.value) return
 	dialog.warning({
 		title: t("code.gitSyncTitle"),
-		content: t("code.gitSyncConfirm", { repository: repository.name, count: repository.behind }),
+		content: t(repository.status === "integrated" ? "code.gitSyncIntegratedConfirm" : "code.gitSyncConfirm", {
+			repository: repository.name,
+			count: repository.behind
+		}),
 		positiveText: t("code.gitSyncAction"),
 		negativeText: t("code.gitCancel"),
 		onPositiveClick: async () => {
 			syncingId.value = repository.id
 			try {
 				result.value = (await syncCodeSessionGitRepository(props.sessionId, repository.id)).data
-				message.success(t("code.gitSyncSuccess", { repository: repository.name }))
+				message.success(
+					t(repository.status === "integrated" ? "code.gitSyncIntegratedSuccess" : "code.gitSyncSuccess", {
+						repository: repository.name
+					})
+				)
 				emit("synced")
 			} catch (error) {
 				message.error(error instanceof Error ? error.message : t("code.gitSyncFailed"))
+				syncingId.value = ""
+				await checkUpdates()
 			} finally {
 				syncingId.value = ""
 			}
@@ -93,12 +102,20 @@ watch(
 		<n-alert v-if="loadError" type="error" :show-icon="false">
 			<div class="text-xs">{{ loadError }}</div>
 		</n-alert>
-		<div v-for="repository in result?.repositories || []" :key="repository.id" class="rounded-lg border border-slate-200 bg-white p-2">
+		<div
+			v-for="repository in result?.repositories || []"
+			:key="repository.id"
+			class="rounded-lg border border-slate-200 bg-white p-2"
+		>
 			<div class="flex items-center gap-2">
 				<div class="min-w-0 flex-1">
 					<div class="truncate text-xs font-medium text-slate-700">{{ repository.name }}</div>
 					<div class="truncate text-[11px] text-slate-400">
-						{{ repository.remote ? `${repository.remote}/${repository.remoteBranch}` : t("code.gitSyncLocalOnly") }}
+						{{
+							repository.remote
+								? `${repository.remote}/${repository.remoteBranch}`
+								: t("code.gitSyncLocalOnly")
+						}}
 					</div>
 				</div>
 				<n-tag size="small" :type="statusType(repository)" :bordered="false">
@@ -119,7 +136,11 @@ watch(
 				:disabled="disabled || Boolean(syncingId)"
 				@click="syncRepository(repository)"
 			>
-				{{ t("code.gitSyncCommits", { count: repository.behind }) }}
+				{{
+					t(repository.status === "integrated" ? "code.gitSyncFinish" : "code.gitSyncCommits", {
+						count: repository.behind
+					})
+				}}
 			</n-button>
 		</div>
 	</div>

@@ -42,6 +42,9 @@ class CodeDeliveryJob {
   final String resultCommit;
   final String resultType;
   final String errorMessage;
+  final bool hasPendingChanges;
+  final bool hasPendingCommits;
+  final bool hasUncommittedChanges;
   final List<String> conflictFiles;
   final List<CodeDeliveryRepositoryResult> repositories;
 
@@ -57,6 +60,9 @@ class CodeDeliveryJob {
     required this.resultCommit,
     required this.resultType,
     required this.errorMessage,
+    required this.hasPendingChanges,
+    required this.hasPendingCommits,
+    required this.hasUncommittedChanges,
     required this.conflictFiles,
     required this.repositories,
   });
@@ -65,6 +71,8 @@ class CodeDeliveryJob {
   bool get isCompleted => status == 'completed';
   bool get canRetry =>
       status == 'failed' || status == 'conflict' || status == 'partial';
+  bool get canDeliverPending =>
+      isCompleted && hasPendingCommits && !hasUncommittedChanges;
 
   factory CodeDeliveryJob.fromJson(Map<String, dynamic> json) {
     return CodeDeliveryJob(
@@ -79,6 +87,9 @@ class CodeDeliveryJob {
       resultCommit: (json['resultCommit'] ?? '').toString(),
       resultType: (json['resultType'] ?? '').toString(),
       errorMessage: (json['errorMessage'] ?? '').toString(),
+      hasPendingChanges: json['hasPendingChanges'] == true,
+      hasPendingCommits: json['hasPendingCommits'] == true,
+      hasUncommittedChanges: json['hasUncommittedChanges'] == true,
       conflictFiles: (json['conflictFiles'] as List<dynamic>? ?? const [])
           .map((item) => item.toString())
           .where((item) => item.isNotEmpty)

@@ -36,6 +36,9 @@ func saveCodeGitRepository(workDir, message string) (string, bool, error) {
 	if _, err := runCodeGit(workDir, "add", "-A", "--", "."); err != nil {
 		return "", false, err
 	}
+	if err := validateCodeGitStagedChanges(workDir); err != nil {
+		return "", false, err
+	}
 	if _, err := runCodeGit(
 		workDir,
 		"-c", "user.name=GoPanel Code", "-c", "user.email=code@gopanel.local",

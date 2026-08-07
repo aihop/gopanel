@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -201,6 +202,83 @@ func completeCodeSessionLifecycle(tx *gorm.DB, sessionID uint, deliveredAt time.
 	return tx.Model(&model.AITask{}).Where("session_id = ?", sessionID).Update("status", "completed").Error
 }
 
+func continueCodeSessionAfterDelivery(tx *gorm.DB, sessionID uint, deliveredAt time.Time) error {
+	updated := tx.Model(&model.AIDevSession{}).Where("id = ?", sessionID).Updates(map[string]any{
+		"status": codeSessionStatusActive, "current_stage": codeDeliveryStageCompleted, "delivered_at": deliveredAt,
+	})
+	if updated.Error != nil || updated.RowsAffected == 0 {
+		return updated.Error
+	}
+	return tx.Model(&model.AITask{}).Where("session_id = ? AND status = ?", sessionID, codeSessionStatusDelivering).
+		Update("status", "completed").Error
+}
+
+func finalizeCodeSessionLifecycle(tx *gorm.DB, sessionID uint, deliveredAt time.Time) error {
+	if codeExecutions.hasSessionKind(sessionID, codeExecutionInteractive) || codeSessionHasPostSnapshotChanges(tx, sessionID) {
+		return continueCodeSessionAfterDelivery(tx, sessionID, deliveredAt)
+	}
+	return completeCodeSessionLifecycle(tx, sessionID, deliveredAt)
+}
+
+type codeSessionPostSnapshotStatus struct {
+	HasChanges            bool
+	HasCommits            bool
+	HasUncommittedChanges bool
+}
+
+func codeSessionHasPostSnapshotChanges(tx *gorm.DB, sessionID uint) bool {
+	return inspectCodeSessionPostSnapshotStatus(tx, sessionID).HasChanges
+}
+
+func inspectCodeSessionPostSnapshotStatus(tx *gorm.DB, sessionID uint) codeSessionPostSnapshotStatus {
+	var repositories []model.AIDevSessionRepository
+	if err := tx.Where("session_id = ?", sessionID).Find(&repositories).Error; err != nil {
+		return codeSessionPostSnapshotStatus{HasChanges: true, HasUncommittedChanges: true}
+	}
+	if len(repositories) > 0 {
+		result := codeSessionPostSnapshotStatus{}
+		for index := range repositories {
+			state := inspectCodeDeliveryWorktreeChanges(repositories[index].WorktreeDir, repositories[index].WorktreeCommit)
+			result.HasCommits = result.HasCommits || state.HasCommits
+			result.HasUncommittedChanges = result.HasUncommittedChanges || state.HasUncommittedChanges
+		}
+		result.HasChanges = result.HasCommits || result.HasUncommittedChanges
+		return result
+	}
+	var delivery model.AICodeDelivery
+	if err := tx.Where("session_id = ?", sessionID).First(&delivery).Error; errors.Is(err, gorm.ErrRecordNotFound) {
+		return codeSessionPostSnapshotStatus{}
+	} else if err != nil {
+		return codeSessionPostSnapshotStatus{HasChanges: true, HasUncommittedChanges: true}
+	}
+	return inspectCodeDeliveryWorktreeChanges(delivery.WorkDir, delivery.WorktreeCommit)
+}
+
+func inspectCodeDeliveryWorktreeChanges(workDir, snapshotCommit string) codeSessionPostSnapshotStatus {
+	workDir, snapshotCommit = strings.TrimSpace(workDir), strings.TrimSpace(snapshotCommit)
+	if workDir == "" || snapshotCommit == "" {
+		return codeSessionPostSnapshotStatus{}
+	}
+	if _, err := os.Stat(workDir); errors.Is(err, os.ErrNotExist) {
+		return codeSessionPostSnapshotStatus{}
+	} else if err != nil {
+		return codeSessionPostSnapshotStatus{HasChanges: true, HasUncommittedChanges: true}
+	}
+	status, err := runCodeGit(workDir, "status", "--porcelain")
+	if err != nil {
+		return codeSessionPostSnapshotStatus{HasChanges: true, HasUncommittedChanges: true}
+	}
+	result := codeSessionPostSnapshotStatus{HasUncommittedChanges: strings.TrimSpace(status) != ""}
+	commit, err := runCodeGit(workDir, "rev-parse", "HEAD")
+	if err != nil {
+		result.HasChanges, result.HasUncommittedChanges = true, true
+		return result
+	}
+	result.HasCommits = strings.TrimSpace(commit) != snapshotCommit
+	result.HasChanges = result.HasCommits || result.HasUncommittedChanges
+	return result
+}
+
 func reopenCodeSessionLifecycle(tx *gorm.DB, sessionID uint) error {
 	if err := tx.Model(&model.AIDevSession{}).Where("id = ? AND status = ?", sessionID, codeSessionStatusDelivering).
 		Updates(map[string]any{"status": codeSessionStatusActive, "current_stage": "delivery_failed"}).Error; err != nil {
@@ -237,7 +315,7 @@ func restoreCodeDeliverySessionLifecycles() {
 			deliveredAt = *job.CompletedAt
 		}
 		_ = global.DB.Transaction(func(tx *gorm.DB) error {
-			return completeCodeSessionLifecycle(tx, job.SessionID, deliveredAt)
+			return finalizeCodeSessionLifecycle(tx, job.SessionID, deliveredAt)
 		})
 	}
 }

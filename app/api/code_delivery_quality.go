@@ -3,29 +3,62 @@ package api
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
+	"strings"
 
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
 	"github.com/aihop/gopanel/global"
 )
 
+type codeDeliveryQualityRoot struct {
+	WorkDir     string
+	IdentityDir string
+	Commit      string
+	Label       string
+}
+
 func runCodeDeliveryQualityGate(session *model.AIDevSession, userID uint, lease *codeExecutionLease, report codeDeliveryProgressReporter) error {
+	enabled, err := codeDeliveryQualityGateEnabled(session)
+	if err != nil || !enabled {
+		return err
+	}
+	if session.IsolationMode == codeIsolationMultiWorktree || hasCodeMultiRepositoryDelivery(session.ID) {
+		roots, cleanup, err := prepareCodeMultiRepositoryQualityRoots(session)
+		if err != nil {
+			return err
+		}
+		qualityErr := runCodeDeliveryQualityGateAtRoots(session, userID, lease, report, roots)
+		return errors.Join(qualityErr, cleanup())
+	}
+	roots, err := codeDeliveryQualityRoots(session)
+	if err != nil {
+		return err
+	}
+	return runCodeDeliveryQualityGateAtRoots(session, userID, lease, report, roots)
+}
+
+func codeDeliveryQualityGateEnabled(session *model.AIDevSession) (bool, error) {
 	if session == nil || session.ProjectID == 0 {
-		return nil
+		return false, nil
 	}
-	_, err := repo.NewAIProjectRepo().GetProjectByID(session.ProjectID)
+	project, err := repo.NewAIProjectRepo().GetProjectByID(session.ProjectID)
 	if err != nil {
+		return false, err
+	}
+	return project.RequireQualityGate, nil
+}
+
+func runCodeDeliveryQualityGateAtRoots(session *model.AIDevSession, userID uint, lease *codeExecutionLease, report codeDeliveryProgressReporter, roots []codeDeliveryQualityRoot) error {
+	if len(roots) == 0 {
+		return errors.New("项目已启用质量门禁，但交付快照不可用")
+	}
+	if err := validateCodeDeliveryQualityRoots(roots); err != nil {
 		return err
 	}
-	checks, err := detectCodeQualityChecks(session)
-	if err != nil {
-		return err
-	}
+	checks := detectCodeDeliveryQualityChecks(roots)
 	if len(checks) == 0 {
 		return errors.New("项目已启用质量门禁，但未识别到可执行检查")
-	}
-	if err := validateCodeDeliverySnapshotCurrent(session); err != nil {
-		return err
 	}
 	loadCodeQualityResults(session.ID, checks)
 	for index := range checks {
@@ -58,29 +91,77 @@ func runCodeDeliveryQualityGate(session *model.AIDevSession, userID uint, lease 
 			return fmt.Errorf("质量检查期间提交发生变化：%s", check.Label)
 		}
 	}
-	if err := validateCodeDeliverySnapshotCurrent(session); err != nil {
+	if err := validateCodeDeliveryQualityRoots(roots); err != nil {
 		return err
 	}
-	return validateCodeQualityGate(session)
+	loadCodeQualityResults(session.ID, checks)
+	return validateCodeQualityCheckResults(checks)
 }
 
-func validateCodeDeliverySnapshotCurrent(session *model.AIDevSession) error {
+func codeDeliveryQualityRoots(session *model.AIDevSession) ([]codeDeliveryQualityRoot, error) {
 	if session.IsolationMode == codeIsolationMultiWorktree || hasCodeMultiRepositoryDelivery(session.ID) {
 		repositories, err := loadCodeSessionRepositories(session.ID)
 		if err != nil || len(repositories) == 0 {
-			return errors.New("会话多仓库交付快照不可用")
+			return nil, errors.New("会话多仓库交付快照不可用")
 		}
-		for index := range repositories {
-			repository := &repositories[index]
-			if err := verifyCodeDeliveryCommit(repository.WorktreeDir, repository.WorktreeCommit, "仓库 "+repository.LinkName); err != nil {
-				return err
+		roots := make([]codeDeliveryQualityRoot, 0, len(repositories))
+		for _, repository := range repositories {
+			if repository.Status == codeDeliveryCompleted {
+				continue
 			}
+			roots = append(roots, codeDeliveryQualityRoot{
+				WorkDir: repository.WorktreeDir, IdentityDir: repository.WorktreeDir,
+				Commit: repository.WorktreeCommit, Label: "仓库 " + repository.LinkName,
+			})
 		}
-		return nil
+		return roots, nil
 	}
 	var delivery model.AICodeDelivery
 	if err := global.DB.Where("session_id = ?", session.ID).First(&delivery).Error; err != nil {
-		return err
+		return nil, err
 	}
-	return verifyCodeDeliveryCommit(delivery.WorkDir, delivery.WorktreeCommit, "Worktree")
+	workDir := strings.TrimSpace(session.WorkDir)
+	commit, label := strings.TrimSpace(delivery.WorktreeCommit), "Worktree"
+	if workDir == strings.TrimSpace(delivery.DeliveryWorkDir) && workDir != "" {
+		commit, label = strings.TrimSpace(delivery.MergeCommit), "交付 Worktree"
+	} else if workDir != strings.TrimSpace(delivery.WorkDir) {
+		return nil, errors.New("质量检查目录与交付快照不一致")
+	}
+	return []codeDeliveryQualityRoot{{WorkDir: workDir, IdentityDir: workDir, Commit: commit, Label: label}}, nil
+}
+
+func detectCodeDeliveryQualityChecks(roots []codeDeliveryQualityRoot) []codeQualityCheck {
+	paths := make([]string, 0, len(roots))
+	for _, root := range roots {
+		paths = append(paths, root.WorkDir)
+	}
+	checks := detectCodeQualityChecksInRoots(paths)
+	for index := range checks {
+		check := &checks[index]
+		for _, root := range roots {
+			relative, err := filepath.Rel(root.WorkDir, check.workDirPath)
+			if err != nil || filepath.IsAbs(relative) || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+				continue
+			}
+			identityDir := strings.TrimSpace(root.IdentityDir)
+			if identityDir == "" {
+				identityDir = root.WorkDir
+			}
+			check.ID = codeQualityCheckID(filepath.Join(identityDir, relative), check.Kind, check.Command)
+			break
+		}
+	}
+	return checks
+}
+
+func validateCodeDeliveryQualityRoots(roots []codeDeliveryQualityRoot) error {
+	for _, root := range roots {
+		if strings.TrimSpace(root.WorkDir) == "" || strings.TrimSpace(root.Commit) == "" {
+			return fmt.Errorf("%s 交付快照不可用", root.Label)
+		}
+		if err := verifyCodeDeliveryCommit(root.WorkDir, root.Commit, root.Label); err != nil {
+			return err
+		}
+	}
+	return nil
 }

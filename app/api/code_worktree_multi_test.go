@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -393,6 +394,40 @@ func TestCommitAndMergeMultiRepositorySession(t *testing.T) {
 	}
 	if _, err := os.Stat(session.WorkDir); !os.IsNotExist(err) {
 		t.Fatalf("multi-repository workspace remained after deferred cleanup: %v", err)
+	}
+}
+
+func TestMultiRepositoryDeliverySnapshotsNewCommitsAfterCompletion(t *testing.T) {
+	session, _, _ := createMultiRepositorySession(t, 821)
+	repositories, err := loadCodeSessionRepositories(session.ID)
+	if err != nil || len(repositories) == 0 {
+		t.Fatalf("load repositories: %#v, %v", repositories, err)
+	}
+	for index := range repositories {
+		repository := &repositories[index]
+		commit := commitCodeTestFile(t, repository.WorktreeDir, fmt.Sprintf("later-%d.txt", index), "later\n")
+		if err := global.DB.Model(repository).Updates(map[string]any{
+			"status": codeDeliveryCompleted, "worktree_commit": repository.BaseCommit,
+			"merge_commit": repository.BaseCommit, "push_status": codePushPushed,
+		}).Error; err != nil {
+			t.Fatal(err)
+		}
+		repository.WorktreeCommit = commit
+	}
+	if err := captureCodeMultiRepositoryDeliverySnapshot(session); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := loadCodeSessionRepositories(session.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index := range stored {
+		if stored[index].Status != codeDeliveryPrepared || stored[index].PushStatus != codePushPending || stored[index].MergeCommit != "" {
+			t.Fatalf("repository was not reset for another delivery: %#v", stored[index])
+		}
+		if head, headErr := runCodeGit(stored[index].WorktreeDir, "rev-parse", "HEAD"); headErr != nil || stored[index].WorktreeCommit != head {
+			t.Fatalf("new snapshot commit was not captured: %#v head=%q err=%v", stored[index], head, headErr)
+		}
 	}
 }
 

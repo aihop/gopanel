@@ -61,6 +61,23 @@ func TestRunCodeDeliveryQualityGateStopsFailedDelivery(t *testing.T) {
 	}
 }
 
+func TestRunCodeDeliveryQualityGateSkipsDisabledProject(t *testing.T) {
+	database := withCodeGovernanceDB(t)
+	session, _ := createDeliveryWorktree(t, 150)
+	session.ProjectID = 150
+	if err := database.Create(&model.AIProject{
+		ID: session.ProjectID, Name: "quality-disabled", CreatorID: session.UserID,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := database.Create(session).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := runCodeDeliveryQualityGate(session, session.UserID, nil, nil); err != nil {
+		t.Fatalf("disabled quality gate should not block delivery: %v", err)
+	}
+}
+
 func TestCodeDeliveryQualityFailureKeepsSourceAndRemoteUnchanged(t *testing.T) {
 	session := createQualityDeliverySession(t, 149, "false")
 	sourceCommit, err := runCodeGit(session.SourceWorkDir, "rev-parse", "HEAD")

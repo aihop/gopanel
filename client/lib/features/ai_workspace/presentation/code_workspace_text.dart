@@ -60,9 +60,10 @@ abstract final class CodeWorkspaceText {
       'delivery.unavailable': '当前会话没有受管隔离工作区，请新建支持 Git Worktree 的项目会话。',
       'delivery.start': '开始统一交付',
       'delivery.retry': '重新交付',
+      'delivery.deliverLatest': '交付后续提交',
       'delivery.confirmTitle': '开始统一交付？',
       'delivery.confirmDescription':
-          '系统会停止宿主终端，完成同步、合并、质量检查和推送。交付封口后不能继续修改当前会话。',
+          '系统会固化当前已保存提交，完成同步、合并、质量检查和推送。交付期间产生的后续提交会保留，可再次交付。',
       'delivery.cancel': '暂不交付',
       'delivery.confirm': '确认交付',
       'delivery.started': '统一交付已进入队列',
@@ -70,6 +71,9 @@ abstract final class CodeWorkspaceText {
       'delivery.conflict': '检测到合并冲突',
       'delivery.conflictHint': '请先在电脑端打开该会话的隔离工作区，解决以下冲突并提交，再返回重试。',
       'delivery.completed': '已完成合并与推送',
+      'delivery.pending': '待继续交付',
+      'delivery.completedWithPending': '本批已交付，仍有后续提交待交付',
+      'delivery.completedWithUnsaved': '本批已交付，后续修改尚未保存，请先在电脑端保存提交',
       'delivery.queued': '等待交付',
       'delivery.running': '正在交付',
       'delivery.queuePosition': '队列第 {position} 位',
@@ -153,9 +157,10 @@ abstract final class CodeWorkspaceText {
           'This session has no managed worktree. Create a project session with Git Worktree support.',
       'delivery.start': 'Start delivery',
       'delivery.retry': 'Retry delivery',
+      'delivery.deliverLatest': 'Deliver newer commits',
       'delivery.confirmTitle': 'Start unified delivery?',
       'delivery.confirmDescription':
-          'Host terminals stop before sync, merge, quality checks, and push. The session is sealed after delivery starts.',
+          'GoPanel snapshots the saved commits, then syncs, merges, runs quality checks, and pushes. Newer commits remain available for another delivery.',
       'delivery.cancel': 'Not now',
       'delivery.confirm': 'Deliver',
       'delivery.started': 'Delivery queued',
@@ -164,6 +169,11 @@ abstract final class CodeWorkspaceText {
       'delivery.conflictHint':
           'Open this session worktree on desktop, resolve and commit these conflicts, then retry here.',
       'delivery.completed': 'Merge and push completed',
+      'delivery.pending': 'More commits pending',
+      'delivery.completedWithPending':
+          'This batch completed; newer commits are waiting for delivery',
+      'delivery.completedWithUnsaved':
+          'This batch completed; save the newer working tree changes on desktop first',
       'delivery.queued': 'Waiting for delivery',
       'delivery.running': 'Delivering',
       'delivery.queuePosition': 'Queue position {position}',
