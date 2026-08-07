@@ -11,8 +11,10 @@ import { Terminal } from "@xterm/xterm"
 import { useAuthStore } from "@/store/auth"
 import { enc } from "crypto-js"
 import { nextTick, onBeforeUnmount, ref, watch } from "vue"
+import { useI18n } from "vue-i18n"
 import "@xterm/xterm/css/xterm.css"
 
+const { t } = useI18n()
 const terminalElement = ref<HTMLDivElement | null>(null)
 const fitAddon = new FitAddon()
 const termReady = ref(false)
@@ -204,7 +206,7 @@ function onWSReceive(message: MessageEvent) {
 
 function errorRealTerminal(ex: any) {
 	let message = ex.message
-	if (!message) message = "disconnected"
+	if (!message) message = t("terminal.disconnected")
 	term.value.write(`\x1B[31m${message}\x1B[m\r\n`)
 }
 
@@ -212,8 +214,7 @@ function closeRealTerminal(ev: CloseEvent) {
 	if (heartbeatTimer.value) {
 		clearInterval(heartbeatTimer.value)
 	}
-	term.value.write("The connection has been disconnected.")
-	term.value.write(ev.reason)
+	term.value.write(`\r\n${ev.reason || t("terminal.disconnected")}`)
 }
 
 function isWsOpen() {
