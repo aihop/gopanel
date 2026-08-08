@@ -220,7 +220,7 @@ export const useDataView = (
         message.error(res.message || '删除失败')
       }
     } catch (error) {
-      // 错误提示由请求拦截器统一处理
+      void 0
     }
   }
 

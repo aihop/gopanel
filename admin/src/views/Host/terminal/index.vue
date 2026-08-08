@@ -73,7 +73,7 @@ async function createSession() {
 		connectedSessionId.value = response.data.id
 		message.success(t("terminal.createSuccess"))
 	} catch (error) {
-		// 错误提示由请求拦截器统一处理
+		void 0
 	} finally {
 		creating.value = false
 	}
@@ -88,7 +88,7 @@ async function endSession(session: HostTerminalSession) {
 		message.success(t("terminal.endSuccess"))
 		await loadSessions(true)
 	} catch (error) {
-		// 错误提示由请求拦截器统一处理
+		void 0
 	} finally {
 		stoppingId.value = null
 	}
@@ -120,7 +120,7 @@ async function reconnectSession(session: HostTerminalSession) {
 		connectedSessionId.value = response.data.id
 		message.success(t("terminal.reconnectSuccess"))
 	} catch (error) {
-		// 错误提示由请求拦截器统一处理
+		void 0
 	} finally {
 		reconnectingId.value = null
 	}
@@ -141,7 +141,7 @@ function confirmDeleteSession(session: HostTerminalSession) {
 				await loadSessions(true)
 				message.success(t("terminal.deleteSuccess"))
 			} catch (error) {
-				// 错误提示由请求拦截器统一处理
+				void 0
 			} finally {
 				deletingId.value = null
 			}

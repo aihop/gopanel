@@ -74,7 +74,7 @@ const loadWorktreeCapability = async () => {
 		worktreeCapability.value = response.data
 		isolated.value = response.data.available
 	} catch (error) {
-		// 错误提示由请求拦截器统一处理
+		void 0
 	}
 }
 
@@ -140,7 +140,7 @@ const submit = async () => {
 		close()
 		message.success(t("code.sessionCreated"))
 	} catch (error) {
-		// 错误提示由请求拦截器统一处理
+		void 0
 	} finally {
 		submitting.value = false
 	}

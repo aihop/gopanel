@@ -131,7 +131,7 @@ const submitRecord = async () => {
       message.error(res.message || t('database.recordSaveFailed'))
     }
   } catch (error: any) {
-    // 错误提示由请求拦截器统一处理
+    void 0
   } finally {
     savingRecord.value = false
   }

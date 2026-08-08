@@ -231,7 +231,7 @@ const handleSubmit = async () => {
 		message.success("保存成功")
 		emit("saved")
 	} catch (err: any) {
-		// 错误提示由请求拦截器统一处理
+		void 0
 	} finally {
 		saving.value = false
 	}

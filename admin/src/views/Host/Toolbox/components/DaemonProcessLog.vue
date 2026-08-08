@@ -117,7 +117,7 @@ const cleanLog = async () => {
 		// 回源确认服务端已清空（避免本地清了但服务端没清的假象）
 		await fetchLogPage()
 	} catch {
-		// 错误提示由请求拦截器统一处理
+		void 0
 	}
 }
 defineExpose({

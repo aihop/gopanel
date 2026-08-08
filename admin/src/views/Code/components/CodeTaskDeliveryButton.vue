@@ -55,7 +55,7 @@ async function loadDelivery(silent = false) {
 		}
 		job.value = (await getCodeDeliveryJob(props.sessionId)).data
 	} catch (error) {
-		// 错误提示由请求拦截器统一处理
+		void 0
 	}
 	if (active.value) pollTimer = setTimeout(() => void loadDelivery(true), 2000)
 	else if (completed.value && sessionStatus.value === "active")
@@ -77,7 +77,7 @@ function deliver() {
 				emit("queued")
 				void loadDelivery(true)
 			} catch (error) {
-				// 错误提示由请求拦截器统一处理
+				void 0
 			} finally {
 				loading.value = false
 			}

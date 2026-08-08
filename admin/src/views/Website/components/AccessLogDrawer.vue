@@ -222,7 +222,7 @@ async function loadLogs(latest = false) {
     end.value = !!res.data?.end
     page.value = latest ? Math.max(total.value, 1) : targetPage
   } catch (error) {
-    // 错误提示由请求拦截器统一处理
+    void 0
   } finally {
     loading.value = false
   }
@@ -252,7 +252,7 @@ async function openTodayIPStats() {
     })
     todayStats.value = res.data || null
   } catch (error) {
-    // 错误提示由请求拦截器统一处理
+    void 0
   } finally {
     todayStatsLoading.value = false
   }

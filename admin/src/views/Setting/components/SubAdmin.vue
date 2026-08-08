@@ -262,7 +262,7 @@ async function fetchData() {
 		dataList.value = responseData.items || []
 		pagination.itemCount = responseData.total || 0
 	} catch (error: any) {
-		// 错误提示由请求拦截器统一处理
+		void 0
 	} finally {
 		loading.value = false
 	}
@@ -324,7 +324,7 @@ async function handleSubmit() {
 				modalVisible.value = false
 				fetchData()
 			} catch (error: any) {
-				// 错误提示由请求拦截器统一处理
+				void 0
 			} finally {
 				submitting.value = false
 			}
@@ -338,7 +338,7 @@ async function handleDelete(id: number) {
 		message.success("删除成功")
 		fetchData()
 	} catch (error: any) {
-		// 错误提示由请求拦截器统一处理
+		void 0
 	}
 }
 

@@ -194,7 +194,7 @@ const startScan = async () => {
       message.error(res.msg || "扫描失败")
     }
   } catch (error: any) {
-    // 错误提示由请求拦截器统一处理
+    void 0
   } finally {
     scanning.value = false
   }
@@ -219,7 +219,7 @@ const handleFixSSH = () => {
           message.error(res.msg || "修复失败")
         }
       } catch (error: any) {
-        // 错误提示由请求拦截器统一处理
+        void 0
       } finally {
         fixingSSH.value = false
       }

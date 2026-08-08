@@ -49,7 +49,7 @@ async function acceptParams(container: MobileContainer) {
 		if (websiteOptions.value.length === 1) websiteId.value = websiteOptions.value[0].value
 		if (portOptions.value.length === 1) hostPort.value = portOptions.value[0].value
 	} catch (error) {
-		// 错误提示由请求拦截器统一处理
+		void 0
 	} finally {
 		loading.value = false
 	}
@@ -73,7 +73,7 @@ async function submit() {
 		visible.value = false
 		emit("success")
 	} catch (error) {
-		// 错误提示由请求拦截器统一处理
+		void 0
 	} finally {
 		submitting.value = false
 	}

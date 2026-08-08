@@ -300,7 +300,7 @@ async function decideApproval(approved: boolean, reason = "") {
 		await decideMobileApproval(approvalId, approved, reason)
 		await loadSessionState(true)
 	} catch (error) {
-		// 错误提示由请求拦截器统一处理
+		void 0
 	} finally {
 		actionLoading.value = false
 	}
@@ -312,7 +312,7 @@ async function stopExecution() {
 		await stopMobileSession(selectedSessionId.value)
 		await loadSessionState(true)
 	} catch (error) {
-		// 错误提示由请求拦截器统一处理
+		void 0
 	} finally {
 		actionLoading.value = false
 	}
@@ -326,7 +326,7 @@ async function retryExecution() {
 		await retryMobileInstruction(instructionId)
 		await loadSessionState(true)
 	} catch (error) {
-		// 错误提示由请求拦截器统一处理
+		void 0
 	} finally {
 		actionLoading.value = false
 	}

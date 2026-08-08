@@ -47,7 +47,7 @@ async function loadWorktreeCapability() {
 	try {
 		worktreeCapability.value = await getMobileWorktreeCapability(projectId.value)
 	} catch (error) {
-		// 错误提示由请求拦截器统一处理
+		void 0
 	} finally {
 		capabilityLoading.value = false
 	}
@@ -90,7 +90,7 @@ async function submit() {
 		emit("created", session)
 		emit("update:show", false)
 	} catch (error) {
-		// 错误提示由请求拦截器统一处理
+		void 0
 	} finally {
 		submitting.value = false
 	}

@@ -133,7 +133,7 @@ const runCheck = async (check: CodeQualityCheck) => {
 		else message.error(t("code.qualityFailed"))
 		await Promise.all([loadState(), loadChecks()])
 	} catch (error) {
-		// 错误提示由请求拦截器统一处理
+		void 0
 	} finally {
 		runningCheckId.value = ""
 	}

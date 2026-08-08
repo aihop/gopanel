@@ -118,7 +118,7 @@ async function submit() {
 		visible.value = false
 		emit("success")
 	} catch (error: any) {
-		// 错误提示由请求拦截器统一处理
+		void 0
 	} finally {
 		submitting.value = false
 	}

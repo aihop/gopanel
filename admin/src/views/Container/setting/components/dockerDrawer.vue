@@ -132,7 +132,7 @@ async function alertConfirm() {
 			MsgError(res?.msg || "保存失败")
 		}
 	} catch (e: any) {
-		// 错误提示由请求拦截器统一处理
+		void 0
 	} finally {
 		loading.value = false
 	}

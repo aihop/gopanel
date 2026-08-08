@@ -294,7 +294,7 @@ const fetchProjectInfo = async () => {
 		projectInfo.value =
 			response.code === 0 ? response.data.items.find(project => project.id === currentProjectId.value) || null : null
 	} catch (error) {
-		// 错误提示由请求拦截器统一处理
+		void 0
 	}
 }
 
@@ -440,7 +440,7 @@ const handleTaskAction = (key: string, task: CodeTaskListItem) => {
 				}
 				await fetchTasks()
 			} catch (error) {
-				// 错误提示由请求拦截器统一处理
+				void 0
 			}
 		}
 	})
@@ -455,7 +455,7 @@ const submitRename = async () => {
 		showRenameModal.value = false
 		await fetchTasks()
 	} catch (error) {
-		// 错误提示由请求拦截器统一处理
+		void 0
 	} finally {
 		renaming.value = false
 	}

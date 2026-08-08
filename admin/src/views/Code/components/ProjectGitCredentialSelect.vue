@@ -58,7 +58,7 @@ async function save() {
 		showEditor.value = false
 		message.success(t("code.gitCredentialSaved"))
 	} catch (error) {
-		// 错误提示由请求拦截器统一处理
+		void 0
 	} finally {
 		saving.value = false
 	}

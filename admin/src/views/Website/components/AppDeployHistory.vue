@@ -248,7 +248,7 @@ async function handleCreateSnapshot() {
 		await AppDeploySnapshotAPI({ websiteId: website.value.id })
 		message.success("配置快照创建成功")
 		fetchData()
-	} catch (error) { // 错误提示由请求拦截器统一处理
+	} catch (error) { void 0
 	} finally {
 		snapshotLoading.value = false
 	}
@@ -362,7 +362,7 @@ async function handleImageDeploy() {
 		showImageDeployModal.value = false
 		fetchData()
 		emit("confirm")
-	} catch (error) { // 错误提示由请求拦截器统一处理
+	} catch (error) { void 0
 	} finally {
 		imageDeployLoading.value = false
 	}
@@ -412,7 +412,7 @@ function handleRollback(row: AppDeployRow) {
 				message.success("切换成功")
 				fetchData()
 				emit("confirm")
-			} catch (error) { // 错误提示由请求拦截器统一处理
+			} catch (error) { void 0
 			}
 		}
 	})
@@ -429,7 +429,7 @@ function handleDelete(row: AppDeployRow) {
 				await AppDeployDeleteAPI({ deployId: row.id })
 				message.success("删除成功")
 				fetchData()
-			} catch (error) { // 错误提示由请求拦截器统一处理
+			} catch (error) { void 0
 			}
 		}
 	})

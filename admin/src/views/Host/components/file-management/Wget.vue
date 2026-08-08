@@ -207,7 +207,7 @@ const cancelDownload = async () => {
 		await WgetCancel({ key: currentKey })
 		statusText.value = "正在终止..."
 	} catch (e: any) {
-		// 错误提示由请求拦截器统一处理
+		void 0
 	} finally {
 		cancelling.value = false
 	}

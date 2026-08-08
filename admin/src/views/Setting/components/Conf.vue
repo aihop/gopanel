@@ -264,7 +264,7 @@ async function fetchConfig() {
 			if (res.data.LogConfig) form.LogConfig = res.data.LogConfig
 		}
 	} catch {
-		// 错误提示由请求拦截器统一处理
+		void 0
 	}
 }
 
@@ -405,7 +405,7 @@ async function saveApiToken() {
 		})
 		message.success("API 配置保存成功")
 	} catch {
-		// 错误提示由请求拦截器统一处理
+		void 0
 	} finally {
 		loadingApiToken.value = false
 	}

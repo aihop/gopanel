@@ -41,7 +41,7 @@ async function approve() {
 		message.success(t("code.quickContinueSuccess"))
 		emit("approved")
 	} catch (error) {
-		// 错误提示由请求拦截器统一处理
+		void 0
 	} finally {
 		approving.value = false
 	}
