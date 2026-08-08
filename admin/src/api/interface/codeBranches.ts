@@ -8,6 +8,9 @@ export interface CodeProjectBranch {
 	subject: string
 	updatedAt: string
 	merged: boolean
+	managed: boolean
+	deletable: boolean
+	deleteBlockReason?: "remote" | "current" | "delivery" | "worktree" | "session"
 	additions: number
 	deletions: number
 }

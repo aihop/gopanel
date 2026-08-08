@@ -332,7 +332,9 @@ func restoreCodeDeliverySessionLifecycles() {
 		}
 		if err := finalizeCodeSessionLifecycle(global.DB, job.SessionID, deliveredAt); err != nil {
 			global.LOG.Errorf("Restore completed Code delivery lifecycle %d failed: %v", job.ID, err)
+			continue
 		}
+		cleanupFinalizedCodeSessionWorktrees(job.SessionID)
 	}
 }
 

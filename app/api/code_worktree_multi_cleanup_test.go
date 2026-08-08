@@ -3,7 +3,11 @@ package api
 import (
 	"errors"
 	"os"
+	"strings"
 	"testing"
+
+	"github.com/aihop/gopanel/app/model"
+	"github.com/aihop/gopanel/global"
 )
 
 func TestMultiRepositoryDeliveredCleanupResumesAfterPartialRemoval(t *testing.T) {
@@ -38,5 +42,79 @@ func TestMultiRepositoryDeliveredCleanupResumesAfterPartialRemoval(t *testing.T)
 	}
 	if _, err := os.Stat(session.WorkDir); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("cleanup workspace remained: %v", err)
+	}
+}
+
+func TestFinalizedMultiRepositorySessionAutomaticallyCleansBranches(t *testing.T) {
+	session, _, _ := createMultiRepositorySession(t, 823)
+	if err := global.DB.Model(session).Update("status", codeSessionStatusDelivered).Error; err != nil {
+		t.Fatal(err)
+	}
+	session.Status = codeSessionStatusDelivered
+	repositories, err := loadCodeSessionRepositories(session.ID)
+	if err != nil || len(repositories) < 2 {
+		t.Fatalf("load repositories: %#v, %v", repositories, err)
+	}
+	branches := make(map[string]string, len(repositories))
+	for index := range repositories {
+		branches[repositories[index].SourceDir] = repositories[index].Branch
+	}
+	cleanupFinalizedCodeSessionWorktrees(session.ID)
+
+	stored, err := loadCodeSessionRepositories(session.ID)
+	if err != nil || len(stored) != 0 {
+		t.Fatalf("finalized repository metadata remained: %#v, %v", stored, err)
+	}
+	if _, err := os.Stat(session.WorkDir); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("finalized multi-repository workspace remained: %v", err)
+	}
+	for sourceDir, branch := range branches {
+		listed, listErr := runCodeGit(sourceDir, "branch", "--list", branch)
+		if listErr != nil || strings.TrimSpace(listed) != "" {
+			t.Fatalf("finalized branch %s remained in %s: %q, %v", branch, sourceDir, listed, listErr)
+		}
+	}
+}
+
+func TestDeliveryRunnerFinalizationCleansMultiRepositoryBranches(t *testing.T) {
+	session, _, _ := createMultiRepositorySession(t, 824)
+	repositories, err := loadCodeSessionRepositories(session.ID)
+	if err != nil || len(repositories) < 2 {
+		t.Fatalf("load repositories: %#v, %v", repositories, err)
+	}
+	branches := make(map[string]string, len(repositories))
+	for index := range repositories {
+		branches[repositories[index].SourceDir] = repositories[index].Branch
+	}
+	if err := global.DB.Model(session).Updates(map[string]any{
+		"status": codeSessionStatusDelivering, "current_stage": codeDeliveryStageCleaning,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	runner := &codeDeliveryRunner{
+		queued: make(map[uint]struct{}), cancelled: make(map[uint]struct{}), owner: newCodeRepositoryLeaseOwner("finish-cleanup-test"),
+	}
+	job := &model.AICodeDeliveryJob{
+		SessionID: session.ID, ProjectID: session.ProjectID, UserID: session.UserID,
+		Status: codeDeliveryJobRunning, Stage: codeDeliveryStageCleaning, Progress: 90,
+		RepositoryKeys: "[\"repositories\"]", LeaseOwner: runner.owner,
+	}
+	if err := global.DB.Create(job).Error; err != nil {
+		t.Fatal(err)
+	}
+	runner.finish(job, codeGitDeliveryResult{Status: codeDeliveryMerged}, nil)
+
+	if err := global.DB.First(session, session.ID).Error; err != nil || session.Status != codeSessionStatusDelivered {
+		t.Fatalf("multi-repository session was not finalized: %#v, %v", session, err)
+	}
+	stored, err := loadCodeSessionRepositories(session.ID)
+	if err != nil || len(stored) != 0 {
+		t.Fatalf("runner cleanup metadata remained: %#v, %v", stored, err)
+	}
+	for sourceDir, branch := range branches {
+		listed, listErr := runCodeGit(sourceDir, "branch", "--list", branch)
+		if listErr != nil || strings.TrimSpace(listed) != "" {
+			t.Fatalf("runner cleanup retained branch %s: %q, %v", branch, listed, listErr)
+		}
 	}
 }

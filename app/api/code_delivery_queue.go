@@ -245,10 +245,11 @@ func (runner *codeDeliveryRunner) finish(job *model.AICodeDeliveryJob, result co
 	} else {
 		updates["error_message"] = ""
 	}
+	continueDevelopment := false
 	finishErr := func() error {
 		unlockLifecycle := codeSessionLifecycles.lock(job.SessionID)
 		defer unlockLifecycle()
-		continueDevelopment := status == codeDeliveryJobCompleted && shouldContinueCodeSessionAfterDelivery(global.DB, job.SessionID)
+		continueDevelopment = status == codeDeliveryJobCompleted && shouldContinueCodeSessionAfterDelivery(global.DB, job.SessionID)
 		return global.DB.Transaction(func(tx *gorm.DB) error {
 			updated := tx.Model(&model.AICodeDeliveryJob{}).Where("id = ? AND lease_owner = ?", job.ID, runner.owner).Updates(updates)
 			if updated.Error != nil {
@@ -270,6 +271,9 @@ func (runner *codeDeliveryRunner) finish(job *model.AICodeDeliveryJob, result co
 		global.LOG.Errorf("Finish Code delivery %d failed: %v", job.ID, finishErr)
 		return
 	}
+	if status == codeDeliveryJobCompleted && !continueDevelopment {
+		cleanupFinalizedCodeSessionWorktrees(job.SessionID)
+	}
 	auditStatus, detail := "success", result.Status
 	if status == codeDeliveryJobPartial {
 		auditStatus, detail = "partial", result.ErrorMessage
@@ -286,6 +290,40 @@ func (runner *codeDeliveryRunner) finish(job *model.AICodeDeliveryJob, result co
 		duration = time.Since(*job.StartedAt)
 	}
 	recordCodeAudit(job.UserID, job.ProjectID, job.SessionID, "worktree_merge", auditStatus, "delivery", detail, job.RequestIP, time.Now().Add(-duration), codeAuditMeta{"commit": result.Commit, "conflictFiles": result.ConflictFiles})
+}
+
+func cleanupFinalizedCodeSessionWorktrees(sessionID uint) {
+	repositories, err := loadCodeSessionRepositories(sessionID)
+	if err != nil {
+		global.LOG.Warnf("Load finalized Code session %d repositories for cleanup failed: %v", sessionID, err)
+		return
+	}
+	if len(repositories) == 0 {
+		return
+	}
+	keys := make([]string, 0, len(repositories))
+	for index := range repositories {
+		repository := &repositories[index]
+		keys = append(keys, codeDeliveryRepositoryKey(repository.SourceDir, repository.RemoteName, repository.TargetBranch))
+	}
+	owner := newCodeRepositoryLeaseOwner("delivery-cleanup")
+	acquired, err := acquireCodeRepositoryLeases(owner, 0, keys)
+	if err != nil || !acquired {
+		global.LOG.Warnf("Acquire finalized Code session %d cleanup lease failed: %v", sessionID, err)
+		return
+	}
+	defer func() { _ = releaseCodeRepositoryLeases(owner, keys) }()
+	var session model.AIDevSession
+	if err := global.DB.First(&session, sessionID).Error; err != nil {
+		global.LOG.Warnf("Load finalized Code session %d for cleanup failed: %v", sessionID, err)
+		return
+	}
+	if session.Status != codeSessionStatusDelivered {
+		return
+	}
+	if err := cleanupDeliveredCodeSessionWorktrees(&session); err != nil {
+		global.LOG.Warnf("Cleanup finalized Code session %d worktrees skipped: %v", sessionID, err)
+	}
 }
 
 func codeDeliveryFailureCode(stage string, err error) string {

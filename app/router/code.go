@@ -29,6 +29,7 @@ func CodeRouter(r fiber.Router) {
 		group.Put("/projects/:id", api.UpdateAIProject)
 		group.Get("/projects/:id/overview", api.GetCodeProjectOverview)
 		group.Get("/projects/:id/git/branches", api.GetCodeProjectBranches)
+		group.Delete("/projects/:id/git/branches", api.DeleteCodeProjectBranch)
 		group.Get("/projects/:id/git/sync", api.GetCodeProjectSync)
 		group.Post("/projects/:id/git/sync", api.SyncCodeProject)
 		group.Get("/projects/:id/worktree-capability", api.GetCodeWorktreeCapability)

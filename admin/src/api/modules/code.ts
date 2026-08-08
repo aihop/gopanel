@@ -66,6 +66,10 @@ export function getCodeProjectBranches(projectId: number) {
 	return http.get<CodeProjectBranches>(`/code/projects/${projectId}/git/branches`, undefined, { timeout: 15000 })
 }
 
+export function deleteCodeProjectBranch(projectId: number, repositoryPath: string, branch: string, force: boolean) {
+	return http.delete(`/code/projects/${projectId}/git/branches`, { repositoryPath, branch, force })
+}
+
 export function getCodeExecutors() {
 	return http.get<CodeExecutor[]>("/code/executors")
 }

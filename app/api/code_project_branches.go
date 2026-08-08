@@ -27,17 +27,20 @@ var codeProjectBranchScanExcludedDirs = map[string]struct{}{
 }
 
 type codeProjectBranch struct {
-	Name      string `json:"name"`
-	Ref       string `json:"ref"`
-	Scope     string `json:"scope"`
-	Current   bool   `json:"current"`
-	Upstream  string `json:"upstream,omitempty"`
-	Commit    string `json:"commit"`
-	Subject   string `json:"subject"`
-	UpdatedAt string `json:"updatedAt"`
-	Merged    bool   `json:"merged"`
-	Additions int    `json:"additions"`
-	Deletions int    `json:"deletions"`
+	Name              string `json:"name"`
+	Ref               string `json:"ref"`
+	Scope             string `json:"scope"`
+	Current           bool   `json:"current"`
+	Upstream          string `json:"upstream,omitempty"`
+	Commit            string `json:"commit"`
+	Subject           string `json:"subject"`
+	UpdatedAt         string `json:"updatedAt"`
+	Merged            bool   `json:"merged"`
+	Managed           bool   `json:"managed"`
+	Deletable         bool   `json:"deletable"`
+	DeleteBlockReason string `json:"deleteBlockReason,omitempty"`
+	Additions         int    `json:"additions"`
+	Deletions         int    `json:"deletions"`
 }
 
 type codeProjectBranchRepository struct {
@@ -89,7 +92,7 @@ func inspectCodeProjectBranches(project *model.AIProject) (codeProjectBranches, 
 	}
 	result := codeProjectBranches{Repositories: make([]codeProjectBranchRepository, 0, len(repositoryRoots))}
 	for _, root := range repositoryRoots {
-		repository, inspectErr := inspectCodeProjectBranchRepository(root)
+		repository, inspectErr := inspectCodeProjectBranchRepository(project, root)
 		if inspectErr != nil {
 			return codeProjectBranches{}, inspectErr
 		}
@@ -147,13 +150,19 @@ func discoverCodeProjectBranchRepositories(sourceDirs []string) ([]string, error
 	return repositories, nil
 }
 
-func inspectCodeProjectBranchRepository(root string) (codeProjectBranchRepository, error) {
+func inspectCodeProjectBranchRepository(project *model.AIProject, root string) (codeProjectBranchRepository, error) {
 	currentBranch, _ := runCodeGit(root, "symbolic-ref", "--quiet", "--short", "HEAD")
 	status, err := runCodeGit(root, "status", "--porcelain")
 	if err != nil {
 		return codeProjectBranchRepository{}, err
 	}
-	mergedOutput, _ := runCodeGit(root, "for-each-ref", "--merged=HEAD", "--format=%(refname)", "refs/heads")
+	mergeTarget := codeProjectRepositoryDeliveryBranch(project, root, strings.TrimSpace(currentBranch))
+	mergedOutput := ""
+	if mergeTarget != "" {
+		mergedOutput, _ = runCodeGit(
+			root, "for-each-ref", "--merged=refs/heads/"+mergeTarget, "--format=%(refname)", "refs/heads",
+		)
+	}
 	mergedRefs := make(map[string]struct{})
 	for _, refName := range strings.Fields(mergedOutput) {
 		mergedRefs[refName] = struct{}{}
@@ -164,6 +173,11 @@ func inspectCodeProjectBranchRepository(root string) (codeProjectBranchRepositor
 	}
 	branches := make([]codeProjectBranch, 0)
 	commitStats := make(map[string][2]int)
+	deliveryBranch := codeProjectRepositoryDeliveryBranch(project, root, strings.TrimSpace(currentBranch))
+	protected, err := inspectCodeProjectProtectedBranches(root)
+	if err != nil {
+		return codeProjectBranchRepository{}, err
+	}
 	for _, line := range strings.Split(output, "\n") {
 		fields := strings.Split(line, "\x00")
 		if len(fields) != 8 || strings.HasSuffix(fields[0], "/HEAD") {
@@ -182,11 +196,14 @@ func inspectCodeProjectBranchRepository(root string) (codeProjectBranchRepositor
 			}
 			commitStats[fields[2]] = stats
 		}
-		branches = append(branches, codeProjectBranch{
+		branch := codeProjectBranch{
 			Name: fields[1], Ref: fields[0], Scope: scope, Current: fields[7] == "*",
 			Commit: fields[3], Subject: fields[4], UpdatedAt: fields[5], Upstream: fields[6], Merged: merged,
-			Additions: stats[0], Deletions: stats[1],
-		})
+			Managed: strings.HasPrefix(fields[1], "gopanel/code-"), Additions: stats[0], Deletions: stats[1],
+		}
+		branch.DeleteBlockReason = codeProjectBranchDeleteBlockReason(deliveryBranch, branch, protected)
+		branch.Deletable = branch.DeleteBlockReason == ""
+		branches = append(branches, branch)
 	}
 	changedFiles := 0
 	if strings.TrimSpace(status) != "" {
@@ -197,4 +214,14 @@ func inspectCodeProjectBranchRepository(root string) (codeProjectBranchRepositor
 		Detached: strings.TrimSpace(currentBranch) == "", Dirty: changedFiles > 0,
 		ChangedFiles: changedFiles, Branches: branches,
 	}, nil
+}
+
+func codeProjectRepositoryDeliveryBranch(project *model.AIProject, root, currentBranch string) string {
+	if project != nil && filepath.Clean(strings.TrimSpace(project.PrimaryRepository)) == filepath.Clean(root) {
+		return strings.TrimSpace(project.DeliveryBranch)
+	}
+	if project != nil && strings.TrimSpace(project.PrimaryRepository) == "" && len(codeProjectSourceDirs(project)) == 1 {
+		return strings.TrimSpace(project.DeliveryBranch)
+	}
+	return strings.TrimSpace(currentBranch)
 }
