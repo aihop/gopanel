@@ -230,7 +230,6 @@ const submit = async () => {
 			handleClose()
 		}
 	} catch (e: any) {
-		MsgError(e?.msg || e?.message || t("commons.msg.operationFailed"))
 		console.error(e)
 	} finally {
 		loading.value = false

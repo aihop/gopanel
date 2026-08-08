@@ -68,7 +68,6 @@ const handleRetryFromLogs = async () => {
     
     fetchData()
   } catch (error: any) {
-    message.error(error.message || "触发失败")
   }
 }
 
@@ -85,7 +84,6 @@ const handleRerun = async (row: Pipeline.ResRecord) => {
     
     fetchData()
   } catch (error: any) {
-    message.error(error.message || "触发失败")
   }
 }
 
@@ -95,7 +93,6 @@ const handleStop = async (row: Pipeline.ResRecord) => {
     message.success("已发送强制停止指令")
     fetchData()
   } catch (error: any) {
-    message.error(error.message || "停止失败")
   }
 }
 
@@ -108,7 +105,6 @@ const handleDelete = async (row: Pipeline.ResRecord) => {
     }
     fetchData()
   } catch (error: any) {
-    message.error(error.message || "删除失败")
   }
 }
 
@@ -118,7 +114,6 @@ const handlePublishRelease = async (row: Pipeline.ResRecord) => {
     message.success(row.released ? "该记录已存在正式版本" : "已生成正式版本")
     fetchData()
   } catch (error: any) {
-    message.error(error.message || "生成正式版本失败")
   }
 }
 
@@ -337,7 +332,6 @@ const fetchData = async () => {
     data.value = res.data.items
     pagination.value.itemCount = res.data.total
   } catch (error: any) {
-    message.error(error.message || "获取记录失败")
   } finally {
     loading.value = false
   }

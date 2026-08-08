@@ -198,7 +198,6 @@ const handleSubmit = async () => {
 		message.success("镜像拉取任务已开始")
 	} catch (error) {
 		console.error("拉取镜像失败:", error)
-		message.error("拉取镜像失败")
 		isReading.value = false
 	}
 }

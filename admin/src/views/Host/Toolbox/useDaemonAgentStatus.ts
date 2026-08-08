@@ -69,7 +69,6 @@ export const useDaemonAgentStatus = (
       }
     } catch (error: any) {
       ensuringAgent.value = false
-      message.error(error?.message || t("controlPlane.operationFailed"))
     }
     // 注意：成功发起后不在这里解锁 —— 任务还在后台跑，
     // 解锁交给日志弹窗结束时的 handleEnsureFinished，避免连点触发两次安装
@@ -95,7 +94,6 @@ export const useDaemonAgentStatus = (
       }
     } catch (error: any) {
       updatingAgent.value = false
-      message.error(error?.message || t("controlPlane.operationFailed"))
     }
     // 同 ensureAgent：解锁交给日志弹窗结束
   }

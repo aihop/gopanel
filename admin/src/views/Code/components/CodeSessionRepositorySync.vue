@@ -37,7 +37,6 @@ const checkUpdates = async () => {
 		result.value = (await checkCodeSessionGitSync(props.sessionId)).data
 	} catch (error) {
 		loadError.value = error instanceof Error ? error.message : t("code.gitSyncCheckFailed")
-		message.error(loadError.value)
 	} finally {
 		loading.value = false
 	}
@@ -64,7 +63,6 @@ const syncRepository = (repository: CodeSessionGitSyncRepository) => {
 				)
 				emit("synced")
 			} catch (error) {
-				message.error(error instanceof Error ? error.message : t("code.gitSyncFailed"))
 				syncingId.value = ""
 				await checkUpdates()
 			} finally {

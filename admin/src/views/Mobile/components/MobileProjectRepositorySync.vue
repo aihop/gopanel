@@ -65,7 +65,6 @@ const requestSync = () => {
 				state.value = await syncMobileProject(props.projectId as number)
 				message.success(t("mobileSync.success"))
 			} catch (error) {
-				message.error(error instanceof Error ? error.message : t("mobileSync.failed"))
 			} finally {
 				syncing.value = false
 			}

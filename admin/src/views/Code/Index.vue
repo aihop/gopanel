@@ -258,7 +258,6 @@ const loadRepositoryOptions = async () => {
   } catch {
     repositoryOptions.value = []
     projectForm.value.primaryRepository = ''
-    message.error(t('code.primaryRepositoryLoadFailed'))
   } finally {
     repositoriesLoading.value = false
   }
@@ -372,7 +371,6 @@ const submitProject = async () => {
       await fetchProjects()
     }
   } catch {
-    message.error(t(editingProjectId.value ? 'code.projectUpdateFailed' : 'code.projectCreateFailed'))
   } finally {
     creatingProject.value = false
   }

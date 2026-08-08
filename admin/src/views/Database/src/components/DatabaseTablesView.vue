@@ -82,7 +82,6 @@ const handleChangeOwner = async (tableName: string, owner: string) => {
       message.error(res.message || '修改失败')
     }
   } catch {
-    message.error('修改请求失败')
   } finally {
     changingOwnerTable.value = null
   }
@@ -261,7 +260,6 @@ const onFileSelected = async (e: Event) => {
       }
     }
   } catch (err: any) {
-    message.error(err?.message || '导入请求失败')
   } finally {
     importing.value = false
     importProgress.value = 0
@@ -367,7 +365,6 @@ const dropView = async (viewName: string) => {
       fetchViews()
     } 
   } catch {
-    message.error('删除视图请求失败')
   }
 }
 
@@ -439,7 +436,6 @@ const dropRoutine = async (name: string, type: string) => {
       fetchRoutines()
     } 
   } catch {
-    message.error('删除请求失败')
   }
 }
 

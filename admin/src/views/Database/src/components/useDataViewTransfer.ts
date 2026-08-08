@@ -35,7 +35,6 @@ export const useDataViewTransfer = (props: DataViewProps, message: MessageLike) 
       downloadFile((res as any).data || res, `${props.selectedDatabase}_${props.selectedTable}.${format}`)
       message.success(`${format.toUpperCase()} 已导出`)
     } catch {
-      message.error(`导出 ${format.toUpperCase()} 失败`)
     }
   }
 
@@ -83,7 +82,6 @@ export const useDataViewTransfer = (props: DataViewProps, message: MessageLike) 
       message.success('导出成功')
       showExportModal.value = false
     } catch {
-      message.error('导出失败')
     } finally {
       exporting.value = false
     }

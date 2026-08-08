@@ -55,7 +55,6 @@ async function loadDelivery(silent = false) {
 		}
 		job.value = (await getCodeDeliveryJob(props.sessionId)).data
 	} catch (error) {
-		if (!silent) message.error(error instanceof Error ? error.message : t("code.deliveryLoadFailed"))
 	}
 	if (active.value) pollTimer = setTimeout(() => void loadDelivery(true), 2000)
 	else if (completed.value && sessionStatus.value === "active")
@@ -77,7 +76,6 @@ function deliver() {
 				emit("queued")
 				void loadDelivery(true)
 			} catch (error) {
-				message.error(error instanceof Error ? error.message : t("code.deliveryQueueFailed"))
 			} finally {
 				loading.value = false
 			}

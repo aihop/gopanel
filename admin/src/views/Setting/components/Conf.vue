@@ -264,7 +264,6 @@ async function fetchConfig() {
 			if (res.data.LogConfig) form.LogConfig = res.data.LogConfig
 		}
 	} catch {
-		message.error("获取配置失败")
 	}
 }
 
@@ -405,7 +404,6 @@ async function saveApiToken() {
 		})
 		message.success("API 配置保存成功")
 	} catch {
-		message.error("API 配置保存失败")
 	} finally {
 		loadingApiToken.value = false
 	}

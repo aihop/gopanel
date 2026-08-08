@@ -61,7 +61,6 @@ async function loadGitStatus(silent = false) {
 		statusError.value = false
 	} catch (error) {
 		statusError.value = true
-		if (!silent) message.error(error instanceof Error ? error.message : t("mobile.gitStatusFailed"))
 	} finally {
 		statusLoading.value = false
 	}
@@ -75,7 +74,6 @@ async function saveChanges() {
 		await loadGitStatus(true)
 		emit("updated")
 	} catch (error) {
-		message.error(error instanceof Error ? error.message : t("mobile.gitSaveFailed"))
 	} finally {
 		loading.value = false
 	}
@@ -110,7 +108,6 @@ function deliver() {
 				message.success(t("mobile.deliveryQueuedSuccess"))
 				emit("updated")
 			} catch (error) {
-				message.error(error instanceof Error ? error.message : t("mobile.deliveryQueueFailed"))
 			} finally {
 				loading.value = false
 			}

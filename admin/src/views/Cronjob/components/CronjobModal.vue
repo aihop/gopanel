@@ -231,7 +231,6 @@ const handleSubmit = async () => {
 		message.success("保存成功")
 		emit("saved")
 	} catch (err: any) {
-		message.error(err?.message || "保存失败")
 	} finally {
 		saving.value = false
 	}

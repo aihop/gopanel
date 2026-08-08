@@ -90,7 +90,6 @@ const handleClear = () => {
 				message.success("已清空")
 				fetchRecords()
 			} catch {
-				message.error("清空失败")
 			}
 		}
 	})

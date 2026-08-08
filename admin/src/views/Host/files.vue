@@ -279,7 +279,6 @@ async function loadData() {
 			totalItems.value = 0
 		}
 	} catch (error) {
-		message.error("加载文件列表失败，请检查网络连接")
 		fileList.value = []
 		totalItems.value = 0
 	} finally {

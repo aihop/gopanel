@@ -90,7 +90,6 @@ const loadOverview = async (notify = false) => {
 	} catch (error) {
 		if (requestId !== overviewRequest || projectId !== props.projectId) return
 		if (notify || !overview.value) loadError.value = true
-		if (notify) message.error(error instanceof Error ? error.message : t("code.overviewLoadFailed"))
 	} finally {
 		if (requestId === overviewRequest) {
 			loading.value = false
@@ -113,7 +112,6 @@ const loadBranches = async (notify = false) => {
 		if (requestId !== branchesRequest || projectId !== props.projectId) return
 		branchesError.value = true
 		branches.value = { repositories: [], totalBranches: 0 }
-		if (notify) message.error(error instanceof Error ? error.message : t("code.branchLoadFailed"))
 	}
 }
 

@@ -43,7 +43,6 @@ const pushDelivery = () => {
 				result.value = (await pushCodeSessionDelivery(props.sessionId)).data
 				message.success(t("code.gitPushSuccess"))
 			} catch (error) {
-				message.error(error instanceof Error ? error.message : t("code.gitPushFailed"))
 				await loadStatus()
 			} finally {
 				pushing.value = false

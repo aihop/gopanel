@@ -49,7 +49,6 @@ async function acceptParams(container: MobileContainer) {
 		if (websiteOptions.value.length === 1) websiteId.value = websiteOptions.value[0].value
 		if (portOptions.value.length === 1) hostPort.value = portOptions.value[0].value
 	} catch (error) {
-		message.error(error instanceof Error ? error.message : t("container.bindWebsiteLoadFailed"))
 	} finally {
 		loading.value = false
 	}
@@ -73,7 +72,6 @@ async function submit() {
 		visible.value = false
 		emit("success")
 	} catch (error) {
-		message.error(error instanceof Error ? error.message : t("container.bindWebsiteFailed"))
 	} finally {
 		submitting.value = false
 	}

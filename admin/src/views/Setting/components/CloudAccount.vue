@@ -340,7 +340,6 @@ async function handleSave() {
 			modalVisible.value = false
 			await fetchData()
 		} catch (error: any) {
-			message.error(error.message || "保存失败")
 		} finally {
 			submitting.value = false
 		}

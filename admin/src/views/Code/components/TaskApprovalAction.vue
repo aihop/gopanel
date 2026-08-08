@@ -41,7 +41,6 @@ async function approve() {
 		message.success(t("code.quickContinueSuccess"))
 		emit("approved")
 	} catch (error) {
-		message.error(error instanceof Error ? error.message : t("code.quickContinueFailed"))
 	} finally {
 		approving.value = false
 	}

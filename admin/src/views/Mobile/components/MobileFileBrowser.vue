@@ -57,7 +57,6 @@ async function openEntry(entry: MobileCodeStructureEntry) {
 		originalContent.value = result.content
 		fileVersion.value = result.version
 	} catch (error) {
-		message.error(error instanceof Error ? error.message : t("mobile.fileOpenFailed"))
 	} finally {
 		loading.value = false
 	}
@@ -100,7 +99,6 @@ async function save() {
 		fileVersion.value = result.version
 		message.success(t("mobile.fileSaved"))
 	} catch (error) {
-		message.error(error instanceof Error ? error.message : t("mobile.fileSaveFailed"))
 	} finally {
 		saving.value = false
 	}

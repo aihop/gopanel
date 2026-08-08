@@ -21,7 +21,6 @@ export const useControlPlaneStatus = () => {
 			if (!controlPlaneStatus.value) controlPlaneError.value = t("controlPlane.empty")
 		} catch (error: any) {
 			controlPlaneError.value = error?.message || t("controlPlane.loadFailed")
-			if (notify) message.error(controlPlaneError.value)
 		} finally {
 			controlPlaneLoading.value = false
 		}

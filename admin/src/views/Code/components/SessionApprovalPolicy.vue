@@ -46,7 +46,6 @@ const loadPolicy = async () => {
 	} catch {
 		if (sequence !== loadSequence || sessionId !== props.sessionId) return
 		loadError.value = true
-		message.error(t("code.approvalPolicyLoadFailed"))
 	} finally {
 		if (sequence === loadSequence) loading.value = false
 	}
@@ -65,7 +64,6 @@ const updatePolicy = async (value: CodeApprovalPolicy) => {
 	} catch {
 		if (sessionId !== props.sessionId) return
 		approvalPolicy.value = previousPolicy
-		message.error(t("code.approvalPolicyUpdateFailed"))
 	} finally {
 		if (sessionId === props.sessionId) saving.value = false
 	}

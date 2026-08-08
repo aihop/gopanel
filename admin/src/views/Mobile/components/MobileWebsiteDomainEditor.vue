@@ -64,7 +64,6 @@ async function save() {
 		emit("update:show", false)
 	} catch (error) {
 		saveError.value = error instanceof Error ? error.message : t("mobile.websiteDomainSaveFailed")
-		message.error(saveError.value)
 	} finally {
 		saving.value = false
 	}

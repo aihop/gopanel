@@ -49,7 +49,6 @@ const load = async (notify = false) => {
 	} catch (error) {
 		if (currentRequest !== requestId || projectId !== props.projectId) return
 		loadError.value = true
-		if (notify) message.error(error instanceof Error ? error.message : t("code.repositorySyncLoadFailed"))
 	} finally {
 		if (currentRequest === requestId) {
 			pending = false
@@ -73,7 +72,6 @@ const requestSync = () => {
 				state.value = response.data
 				message.success(t("code.repositorySyncSuccess"))
 			} catch (error) {
-				message.error(error instanceof Error ? error.message : t("code.repositorySyncFailed"))
 			} finally {
 				syncing.value = false
 			}

@@ -192,7 +192,6 @@ const executeSql = async () => {
       }
     } 
   } catch (error: any) {
-    message.error(error.message || "执行 SQL 失败")
   } finally {
     executingSql.value = false
   }

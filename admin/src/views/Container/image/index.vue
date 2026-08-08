@@ -159,7 +159,6 @@ const fetchImageData = async () => {
 		}
 	} catch (error) {
 		console.error("获取镜像列表失败:", error)
-		message.error("获取镜像列表失败")
 		imageData.value = []
 		pagination.value.itemCount = 0
 	} finally {
@@ -175,7 +174,6 @@ const fetchRepos = async () => {
 		}
 	} catch (error) {
 		console.error("获取镜像源列表失败:", error)
-		message.error("获取镜像源列表失败")
 	}
 }
 
@@ -212,7 +210,6 @@ const handleDeleteImage = (row: ImageRow, specificTag?: string) => {
 				}
 			} catch (error: any) {
 				console.error("删除镜像失败:", error)
-				message.error(error.msg || "删除镜像时发生错误")
 			} finally {
 				dialogReactive.loading = false
 			}

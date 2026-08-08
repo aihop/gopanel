@@ -117,7 +117,6 @@ const cleanLog = async () => {
 		// 回源确认服务端已清空（避免本地清了但服务端没清的假象）
 		await fetchLogPage()
 	} catch {
-		message.error("日志清空失败")
 	}
 }
 defineExpose({

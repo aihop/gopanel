@@ -249,7 +249,6 @@ async function handleCreateSnapshot() {
 		message.success("配置快照创建成功")
 		fetchData()
 	} catch (error) {
-		message.error("创建快照失败")
 	} finally {
 		snapshotLoading.value = false
 	}
@@ -314,7 +313,6 @@ async function customRequest({ file, onFinish, onError, onProgress }: UploadCust
 		emit("confirm")
 		onFinish()
 	} catch (error) {
-		message.error(getErrorMessage(error, "上传或部署失败"))
 		onError()
 	}
 }
@@ -365,7 +363,6 @@ async function handleImageDeploy() {
 		fetchData()
 		emit("confirm")
 	} catch (error) {
-		message.error(getErrorMessage(error, "提交部署失败"))
 	} finally {
 		imageDeployLoading.value = false
 	}
@@ -416,7 +413,6 @@ function handleRollback(row: AppDeployRow) {
 				fetchData()
 				emit("confirm")
 			} catch (error) {
-				message.error(getErrorMessage(error, "版本切换失败"))
 			}
 		}
 	})
@@ -434,7 +430,6 @@ function handleDelete(row: AppDeployRow) {
 				message.success("删除成功")
 				fetchData()
 			} catch (error) {
-				message.error(getErrorMessage(error, "版本删除失败"))
 			}
 		}
 	})

@@ -114,7 +114,6 @@ export const useDataViewTableList = (
     } catch (error) {
       tableList.value = []
       tableListPagination.value.itemCount = 0
-      message.error((error as any)?.message || '获取数据表列表失败')
     } finally {
       loadingTables.value = false
     }

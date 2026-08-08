@@ -91,7 +91,6 @@ async function acceptParams(params: BindTarget) {
 	} catch (error: any) {
 		websites.value = []
 		ports.value = []
-		message.error(error?.message || t("container.bindWebsiteLoadFailed"))
 	} finally {
 		loading.value = false
 	}
@@ -119,7 +118,6 @@ async function submit() {
 		visible.value = false
 		emit("success")
 	} catch (error: any) {
-		message.error(error?.message || t("container.bindWebsiteFailed"))
 	} finally {
 		submitting.value = false
 	}

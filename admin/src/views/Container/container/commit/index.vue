@@ -133,7 +133,6 @@ const onSubmit = async (formEl: any | undefined) => {
 								loading.value = false
 							})
 				} catch (error: any) {
-					message.error(error.message || "删除失败")
 				}
 				}
   })

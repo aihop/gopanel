@@ -134,7 +134,6 @@ async function loadActiveResource(silent = false) {
 		loadError.value =
 			error instanceof Error ? error.message : t("mobile.resourceLoadFailed", { name: activeLabel.value })
 		if (loadError.value.includes("手机授权已失效")) await router.replace("/mobile/auth")
-		if (!silent) message.error(loadError.value)
 	} finally {
 		if (!silent) loading.value = false
 	}

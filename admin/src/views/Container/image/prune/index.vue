@@ -97,7 +97,6 @@ const acceptParams = async (): Promise<void> => {
 		dialogVisible.value = true
 		formValue.withTagAll = false
 	} catch (error: any) {
-		message.error(error.msg || "获取镜像列表失败")
 	}
 }
 
@@ -124,7 +123,6 @@ const onClean = async () => {
 			message.error(res.msg || "清理镜像失败")
 		}
 	} catch (error: any) {
-		message.error(error.msg || "清理镜像时发生错误")
 	} finally {
 		loading.value = false
 	}

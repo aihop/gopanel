@@ -544,7 +544,6 @@ const submitUpload = async (file: any) => {
 			uploadedChunkCount++
 		} catch (err) {
 			isUpload.value = false
-			MsgError(t("commons.msg.uploadFailed"))
 			return
 		}
 

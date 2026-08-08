@@ -256,7 +256,6 @@ const handleContainerSync = async () => {
 			MsgSuccess(message, 5000)
 		}
 	} catch {
-		MsgError(t("commons.res.commonError"))
 	} finally {
 		containerSyncing.value = false
 	}

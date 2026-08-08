@@ -40,7 +40,6 @@ const loadHistory = async () => {
 			runs.value = []
 		}
 	} catch (error) {
-		message.error(error instanceof Error ? error.message : t("code.historyLoadFailed"))
 	} finally {
 		loading.value = false
 	}
@@ -61,7 +60,6 @@ const showRunRawOutput = async (runId: number) => {
 		const response = await getCodeExecutionRun(runId)
 		rawOutput.value = response.data.rawOutput || response.data.output || ""
 	} catch (error) {
-		message.error(error instanceof Error ? error.message : t("code.historyLoadFailed"))
 	} finally {
 		detailLoading.value = false
 	}

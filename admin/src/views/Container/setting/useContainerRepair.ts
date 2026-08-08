@@ -44,7 +44,6 @@ export const useContainerRepair = (
 				message.error(res.msg || t("containerRuntime.repairFailed"))
 			}
 		} catch (e: any) {
-			message.error(e?.message || t("containerRuntime.repairFailed"))
 		} finally {
 			repairSocketLoading.value = false
 		}
@@ -61,7 +60,6 @@ export const useContainerRepair = (
 				message.error(res.msg || t("containerRuntime.operationFailed"))
 			}
 		} catch (e: any) {
-			message.error(e?.message || t("containerRuntime.operationFailed"))
 		} finally {
 			repairLingerLoading.value = false
 		}
@@ -152,7 +150,6 @@ export const useContainerRepair = (
 			}
 		} catch (error: any) {
 			installLoading.value = false
-			message.error(error?.message || t("containerRuntime.installFailed"))
 		}
 	}
 
@@ -171,7 +168,6 @@ export const useContainerRepair = (
 			await pollInstallTask(res.data.id)
 		} catch (error: any) {
 			installLoading.value = false
-			message.error(error?.message || t("containerRuntime.installFailed"))
 		}
 	}
 

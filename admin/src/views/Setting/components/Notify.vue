@@ -83,7 +83,6 @@ const fetchConfig = async () => {
 		form.value = { ...form.value, ...res.data }
 		hasPassword.value = !!res.data.hasPassword
 	} catch (error: any) {
-		message.error(error.message || "读取通知配置失败")
 	} finally {
 		loading.value = false
 	}
@@ -107,7 +106,6 @@ const handleSave = async () => {
 		password.value = ""
 		message.success("已保存")
 	} catch (error: any) {
-		message.error(error.message || "保存失败")
 	} finally {
 		saving.value = false
 	}
@@ -119,7 +117,6 @@ const handleTest = async () => {
 		await testNotifyMail({ ...form.value, password: password.value })
 		message.success("测试邮件已发送，请查收（也看一下垃圾箱）")
 	} catch (error: any) {
-		message.error(error.message || "发送失败")
 	} finally {
 		testing.value = false
 	}
@@ -131,7 +128,6 @@ const handleEvaluate = async () => {
 		message.success("已执行一轮评估")
 		void fetchEvents()
 	} catch (error: any) {
-		message.error(error.message || "评估失败")
 	}
 }
 

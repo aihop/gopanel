@@ -294,7 +294,6 @@ const handleSubmit = () => {
       handleClose()
       emit("success")
     } catch (error: any) {
-      message.error(error.message || (isEdit.value ? "更新失败" : "创建失败"))
     } finally {
       loading.value = false
     }

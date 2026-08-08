@@ -74,7 +74,6 @@ async function loadContainers(silent = false) {
 	} catch (error) {
 		loadError.value = error instanceof Error ? error.message : t("mobile.containerLoadFailed")
 		if (loadError.value.includes("手机授权已失效")) await router.replace("/mobile/auth")
-		if (!silent) message.error(loadError.value)
 	} finally {
 		if (!silent) loading.value = false
 	}
@@ -101,7 +100,6 @@ async function runOperation(container: MobileContainer, operation: ContainerOper
 		message.success(t("mobile.containerOperationSuccess", { operation: operationLabel(operation) }))
 		await loadContainers(true)
 	} catch (error) {
-		message.error(error instanceof Error ? error.message : t("mobile.containerOperationFailed"))
 	} finally {
 		operationKey.value = ""
 	}

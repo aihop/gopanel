@@ -316,7 +316,6 @@ const handleSaveRepo = async () => {
 					}
 				} catch (error: any) {
 					console.error("Error updating image repository:", error)
-					message.error(error.message)
 				}
 			} else {
 				// Add mode
@@ -342,7 +341,6 @@ const handleSaveRepo = async () => {
 					}
 				} catch (error: any) {
 					console.error("Error creating image repository:", error)
-					message.error(error.message || "添加仓库时发生错误")
 				}
 			}
 			isSubmitting.value = false
@@ -465,7 +463,6 @@ const handleDeleteRow = (row: RepositoryRow) => {
 				}
 			} catch (error: any) {
 				console.error("Error deleting image repository:", error)
-				message.error(error.message || "删除仓库时发生错误")
 			}
 		},
 		onNegativeClick: () => {
@@ -551,7 +548,6 @@ const fetchRepositoryData = async () => {
 		repositoryData.value = []
 		pagination.value.itemCount = 0
 		console.error("Error fetching repository data:", error)
-		message.error(error.message )
 	} finally {
 		loading.value = false
 	}

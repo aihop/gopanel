@@ -76,7 +76,6 @@ const handleSubmit = async () => {
       message.error(res.message || '创建失败')
     }
   } catch (error: any) {
-    message.error(error?.message || '创建请求失败')
   } finally {
     submitting.value = false
   }

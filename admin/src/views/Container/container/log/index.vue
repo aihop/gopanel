@@ -241,7 +241,6 @@ async function onDownload() {
 				const event = new MouseEvent("click")
 				a.dispatchEvent(event)
 			} catch (error) {
-				message.error(t("commons.msg.operationFailed"))
 			}
 		}
 	})

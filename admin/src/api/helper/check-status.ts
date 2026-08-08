@@ -1,5 +1,5 @@
 import { t } from "@/i18n"
-import { MsgRequestError } from "@/utils/message"
+import { MsgError } from "@/utils/message"
 import GlobalStore from "@/store/modules/global"
 
 export const checkStatus = (status: number, msg: string): void => {
@@ -9,20 +9,20 @@ export const checkStatus = (status: number, msg: string): void => {
 
 	switch (status) {
 		case 400:
-			MsgRequestError(msg ? msg : t("commons.res.paramError"))
+			MsgError(msg ? msg : t("commons.res.paramError"))
 			break
 		case 404:
-			MsgRequestError(msg ? msg : t("commons.res.notFound"))
+			MsgError(msg ? msg : t("commons.res.notFound"))
 			break
 		case 403:
 			globalStore.setLogStatus(false)
 			window.location.replace(loginUrl)
-			MsgRequestError(msg ? msg : t("commons.res.forbidden"))
+			MsgError(msg ? msg : t("commons.res.forbidden"))
 			break
 		case 500:
-			MsgRequestError(msg ? msg : t("commons.res.serverError"))
+			MsgError(msg ? msg : t("commons.res.serverError"))
 			break
 		default:
-			MsgRequestError(msg ? msg : t("commons.res.commonError"))
+			MsgError(msg ? msg : t("commons.res.commonError"))
 	}
 }

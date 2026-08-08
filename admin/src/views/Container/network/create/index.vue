@@ -341,7 +341,6 @@ const handleSubmit = () => {
 				handleClose()
 				emit("success")
 			} catch (error) {
-				message.error("创建失败")
 				console.error("创建失败:", error)
 			} finally {
 				loading.value = false

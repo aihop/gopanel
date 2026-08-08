@@ -132,7 +132,6 @@ async function alertConfirm() {
 			MsgError(res?.msg || "保存失败")
 		}
 	} catch (e: any) {
-		MsgError(e?.message || "保存异常")
 	} finally {
 		loading.value = false
 	}

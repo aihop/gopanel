@@ -41,7 +41,6 @@ const fetchBranches = async (silent = false) => {
 		branchesError.value = false
 	} catch (error) {
 		branchesError.value = true
-		if (!silent) message.error(error instanceof Error ? error.message : t("code.branchLoadFailed"))
 	} finally {
 		branchesLoading.value = false
 	}

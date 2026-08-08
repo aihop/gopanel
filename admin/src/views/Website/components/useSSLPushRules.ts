@@ -81,7 +81,6 @@ export const useSSLPushRules = (options: UseSSLPushRulesOptions) => {
       resetPushRuleForm()
       await fetchPushRules()
     } catch (error: any) {
-      message.error(error.message || "保存失败")
     } finally {
       options.submitting.value = false
     }

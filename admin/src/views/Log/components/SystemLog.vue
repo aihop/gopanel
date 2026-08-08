@@ -75,7 +75,6 @@ const loadSystemLog = async () => {
 			}
 		})
 	} catch (error) {
-		message.error("获取日志内容失败")
 	} finally {
 		loading.value = false
 	}

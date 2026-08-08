@@ -131,7 +131,6 @@ const submitRecord = async () => {
       message.error(res.message || t('database.recordSaveFailed'))
     }
   } catch (error: any) {
-    message.error(error?.message || t('database.recordSaveFailed'))
   } finally {
     savingRecord.value = false
   }

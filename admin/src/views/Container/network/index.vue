@@ -233,7 +233,6 @@ const handleDeleteRow = async (row: Container.NetworkInfo) => {
 				message.success("删除成功")
 				fetchNetworkList()
 			} catch (error) {
-				message.error("删除失败")
 				console.error("删除失败:", error)
 			}
 		}
@@ -268,7 +267,6 @@ const handleBulkDelete = () => {
 				checkedRowKeys.value = []
 				fetchNetworkList()
 			} catch (error) {
-				message.error("删除失败")
 				console.error("删除失败:", error)
 			}
 		}
@@ -293,7 +291,6 @@ const handleCleanNetworks = () => {
 				)
 				fetchNetworkList()
 			} catch (error) {
-				message.error("清理失败")
 				console.error("清理失败:", error)
 			}
 		}

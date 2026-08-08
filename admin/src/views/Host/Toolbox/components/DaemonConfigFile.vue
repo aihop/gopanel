@@ -42,7 +42,6 @@ const loadConfig = async () => {
 			content.value = res.data
 		}
 	} catch {
-		message.error("加载配置失败")
 	}
 }
 

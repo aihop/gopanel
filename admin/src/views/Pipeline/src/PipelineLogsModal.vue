@@ -55,7 +55,6 @@ const handleRepair = async () => {
       message.error(res?.msg || "修复失败")
     }
   } catch (e: any) {
-    message.error(e?.message || "修复过程发生错误")
   } finally {
     repairing.value = false
   }
@@ -187,7 +186,6 @@ const handleStopPipeline = async () => {
     await stopPipeline({ id: props.recordId })
     message.success("已发送停止指令")
   } catch (error: any) {
-    message.error(error.message || "停止流水线失败")
     isStopping.value = false
   }
 }

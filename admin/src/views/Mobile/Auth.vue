@@ -59,7 +59,6 @@ async function signIn() {
 		captchaToken.value = ""
 		pendingSubmitAfterCaptcha.value = false
 		errorMessage.value = error instanceof Error ? error.message : t("mobile.loginFailed")
-		message.error(errorMessage.value)
 	}
 }
 

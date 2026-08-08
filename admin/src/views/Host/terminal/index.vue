@@ -59,7 +59,6 @@ async function loadSessions(silent = false) {
 		}
 	} catch (error) {
 		loadError.value = error instanceof Error ? error.message : t("terminal.loadFailed")
-		message.error(loadError.value)
 	} finally {
 		loading.value = false
 	}
@@ -74,7 +73,6 @@ async function createSession() {
 		connectedSessionId.value = response.data.id
 		message.success(t("terminal.createSuccess"))
 	} catch (error) {
-		message.error(error instanceof Error ? error.message : t("terminal.createFailed"))
 	} finally {
 		creating.value = false
 	}
@@ -89,7 +87,6 @@ async function endSession(session: HostTerminalSession) {
 		message.success(t("terminal.endSuccess"))
 		await loadSessions(true)
 	} catch (error) {
-		message.error(error instanceof Error ? error.message : t("terminal.endFailed"))
 	} finally {
 		stoppingId.value = null
 	}
@@ -121,7 +118,6 @@ async function reconnectSession(session: HostTerminalSession) {
 		connectedSessionId.value = response.data.id
 		message.success(t("terminal.reconnectSuccess"))
 	} catch (error) {
-		message.error(error instanceof Error ? error.message : t("terminal.reconnectFailed"))
 	} finally {
 		reconnectingId.value = null
 	}
@@ -142,7 +138,6 @@ function confirmDeleteSession(session: HostTerminalSession) {
 				await loadSessions(true)
 				message.success(t("terminal.deleteSuccess"))
 			} catch (error) {
-				message.error(error instanceof Error ? error.message : t("terminal.deleteFailed"))
 			} finally {
 				deletingId.value = null
 			}
@@ -159,7 +154,6 @@ async function openAudit(session: HostTerminalSession) {
 		auditEvents.value = response.data || []
 	} catch (error) {
 		auditEvents.value = []
-		message.error(error instanceof Error ? error.message : t("terminal.auditLoadFailed"))
 	} finally {
 		auditLoading.value = false
 	}

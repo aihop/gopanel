@@ -31,7 +31,6 @@ async function load(notify = false) {
 		loadError.value = false
 	} catch (error) {
 		loadError.value = true
-		if (notify) message.error(error instanceof Error ? error.message : t("code.gitCredentialLoadFailed"))
 	} finally {
 		loading.value = false
 	}
@@ -59,7 +58,6 @@ async function save() {
 		showEditor.value = false
 		message.success(t("code.gitCredentialSaved"))
 	} catch (error) {
-		message.error(error instanceof Error ? error.message : t("code.gitCredentialSaveFailed"))
 	} finally {
 		saving.value = false
 	}

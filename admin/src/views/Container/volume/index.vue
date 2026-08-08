@@ -161,7 +161,6 @@ const handleDeleteRow = async (row: Container.VolumeInfo) => {
 		message.success("删除成功")
 		fetchVolumeList()
 	} catch (error) {
-		message.error("删除失败")
 		console.error("删除失败:", error)
 	}
 }
@@ -183,7 +182,6 @@ const handleBulkDelete = async () => {
 		checkedRowKeys.value = []
 		fetchVolumeList()
 	} catch (error) {
-		message.error("删除失败")
 		console.error("删除失败:", error)
 	}
 }
@@ -210,7 +208,6 @@ const handleCleanVolumes = () => {
 				)
 				fetchVolumeList()
 			} catch (error) {
-				message.error("清理失败")
 				console.error("清理失败:", error)
 			}
 		}

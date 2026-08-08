@@ -98,7 +98,6 @@ export const useContainerSetting = (message: any) => {
 			if (isSucc(res.code)) validate.value = res.data
 			else message.error(res.msg || t("containerRuntime.loadFailed"))
 		} catch (error: any) {
-			message.error(error?.message || t("containerRuntime.loadFailed"))
 		}
 	}
 
@@ -173,7 +172,6 @@ export const useContainerSetting = (message: any) => {
 				message.error(res?.msg || "保存失败")
 			}
 		} catch (error: any) {
-			message.error(error?.message || "保存异常")
 		} finally {
 			mirrorSaveLoading.value = false
 		}
@@ -209,7 +207,6 @@ export const useContainerSetting = (message: any) => {
 				message.error(res.msg || "保存失败")
 			}
 		} catch {
-			message.error("保存异常")
 		} finally {
 			saveLoading.value = false
 		}
@@ -236,7 +233,6 @@ export const useContainerSetting = (message: any) => {
 				message.error(res.msg || "保存失败")
 			}
 		} catch {
-			message.error("保存异常")
 		} finally {
 			daemonLoading.value = false
 		}
@@ -260,7 +256,6 @@ export const useContainerSetting = (message: any) => {
 				message.error(res.msg || "操作失败")
 			}
 		} catch {
-			message.error("操作异常")
 		} finally {
 			logPruneLoading.value = false
 		}
@@ -288,7 +283,6 @@ export const useContainerSetting = (message: any) => {
 				message.error(res.msg || "保存失败")
 			}
 		} catch {
-			message.error("保存异常")
 		} finally {
 			daemonLoading.value = false
 		}
@@ -316,7 +310,6 @@ export const useContainerSetting = (message: any) => {
 				message.error(res.msg || "保存失败")
 			}
 		} catch {
-			message.error("保存异常")
 		} finally {
 			daemonLoading.value = false
 		}

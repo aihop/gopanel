@@ -207,7 +207,6 @@ const cancelDownload = async () => {
 		await WgetCancel({ key: currentKey })
 		statusText.value = "正在终止..."
 	} catch (e: any) {
-		MsgError(e?.msg || "取消失败")
 	} finally {
 		cancelling.value = false
 	}
@@ -251,7 +250,6 @@ const submit = async () => {
 			handleClose()
 		}
 	} catch (e: any) {
-		MsgError(e?.msg || e?.message || t("commons.msg.operationFailed"))
 		console.error(e)
 	} finally {
 		loading.value = false

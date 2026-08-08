@@ -294,7 +294,6 @@ const fetchProjectInfo = async () => {
 		projectInfo.value =
 			response.code === 0 ? response.data.items.find(project => project.id === currentProjectId.value) || null : null
 	} catch (error) {
-		message.error(error instanceof Error ? error.message : t("code.projectLoadFailed"))
 	}
 }
 
@@ -440,7 +439,6 @@ const handleTaskAction = (key: string, task: CodeTaskListItem) => {
 				}
 				await fetchTasks()
 			} catch (error) {
-				message.error(error instanceof Error ? error.message : t("code.taskDeleteFailed"))
 			}
 		}
 	})
@@ -455,7 +453,6 @@ const submitRename = async () => {
 		showRenameModal.value = false
 		await fetchTasks()
 	} catch (error) {
-		message.error(error instanceof Error ? error.message : t("code.taskRenameFailed"))
 	} finally {
 		renaming.value = false
 	}

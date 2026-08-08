@@ -61,7 +61,6 @@ const fetchOverview = async () => {
 		const res = await getDiskOverview()
 		disks.value = res.data || []
 	} catch (error: any) {
-		message.error(error.message || "获取磁盘信息失败")
 	}
 }
 
@@ -210,7 +209,6 @@ const handleScan = async () => {
 	} catch (error: any) {
 		scanning.value = false
 		logCleanPending.value = false
-		message.error(error.message || "启动扫描失败")
 	}
 }
 
@@ -247,7 +245,6 @@ const handleCancel = async () => {
 		await cancelDiskScan(task.value.id)
 		message.info("已请求取消")
 	} catch (error: any) {
-		message.error(error.message || "取消失败")
 	}
 }
 
@@ -296,7 +293,6 @@ const doClean = async () => {
 		}
 		void fetchOverview()
 	} catch (error: any) {
-		message.error(error.message || "清理失败")
 	} finally {
 		cleaning.value = false
 	}

@@ -59,7 +59,6 @@ const handleRun = async (row: any) => {
 		message.success("已提交执行，稍后可在执行记录中查看结果")
 		setTimeout(fetchData, 1500)
 	} catch {
-		message.error("提交执行失败")
 	}
 }
 
@@ -69,7 +68,6 @@ const handleToggleStatus = async (row: any, enabled: boolean) => {
 		message.success(enabled ? "已启用" : "已禁用")
 		fetchData()
 	} catch {
-		message.error("操作失败")
 	}
 }
 
@@ -85,7 +83,6 @@ const handleDelete = (row: any) => {
 				message.success("删除成功")
 				fetchData()
 			} catch {
-				message.error("删除失败")
 			}
 		}
 	})

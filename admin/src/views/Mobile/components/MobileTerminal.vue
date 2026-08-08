@@ -345,7 +345,6 @@ async function renameSession() {
 		message.success(t("mobile.sessionRenameSuccess"))
 		emit("renamed")
 	} catch (error) {
-		message.error(error instanceof Error ? error.message : t("mobile.sessionRenameFailed"))
 	} finally {
 		renameLoading.value = false
 	}

@@ -69,7 +69,6 @@ const loadState = async (notify = false) => {
 		stateError.value = false
 	} catch (error) {
 		stateError.value = true
-		if (notify) message.error(error instanceof Error ? error.message : t("code.deliveryLoadFailed"))
 	} finally {
 		statePending = false
 	}
@@ -83,7 +82,6 @@ const loadChecks = async (notify = false) => {
 		qualityError.value = false
 	} catch (error) {
 		qualityError.value = true
-		if (notify) message.error(error instanceof Error ? error.message : t("code.qualityLoadFailed"))
 	}
 }
 
@@ -95,7 +93,6 @@ const loadAudit = async (notify = false) => {
 		auditError.value = false
 	} catch (error) {
 		auditError.value = true
-		if (notify) message.error(error instanceof Error ? error.message : t("code.auditLoadFailed"))
 	}
 }
 
@@ -136,7 +133,6 @@ const runCheck = async (check: CodeQualityCheck) => {
 		else message.error(t("code.qualityFailed"))
 		await Promise.all([loadState(), loadChecks()])
 	} catch (error) {
-		message.error(error instanceof Error ? error.message : t("code.qualityRunFailed"))
 	} finally {
 		runningCheckId.value = ""
 	}

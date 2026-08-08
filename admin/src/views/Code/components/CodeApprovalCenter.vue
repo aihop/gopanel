@@ -39,7 +39,6 @@ const loadPending = async (notify = false) => {
 		loadError.value = false
 	} catch (error) {
 		loadError.value = true
-		if (notify) message.error(error instanceof Error ? error.message : t("code.approvalLoadFailed"))
 	} finally {
 		loading.value = false
 	}
@@ -53,7 +52,6 @@ const decide = async (approval: CodeApproval, approved: boolean) => {
 		message.success(t(approved ? "code.approvalApproved" : "code.approvalRejected"))
 		await loadPending()
 	} catch (error) {
-		message.error(error instanceof Error ? error.message : t("code.approvalDecisionFailed"))
 	} finally {
 		decidingId.value = null
 	}

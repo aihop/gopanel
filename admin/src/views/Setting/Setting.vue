@@ -122,7 +122,6 @@ const handleRestart = (operation: "panel" | "server") => {
 					message.error(res.msg || (isPanel ? "重启面板失败" : "重启服务器失败"))
 				}
 			} catch (_e) {
-				message.error(isPanel ? "重启面板异常" : "重启服务器异常")
 			} finally {
 				if (isPanel) {
 					restartingPanel.value = false

@@ -171,7 +171,6 @@ const fetchData = async () => {
     data.value = res.data.items
     pagination.value.itemCount = res.data.total
   } catch (error: any) {
-    message.error(error.message || "获取正式版本失败")
   } finally {
     loading.value = false
   }

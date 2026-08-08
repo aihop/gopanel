@@ -222,7 +222,6 @@ async function loadLogs(latest = false) {
     end.value = !!res.data?.end
     page.value = latest ? Math.max(total.value, 1) : targetPage
   } catch (error) {
-    message.error(getErrorMessage(error, `读取${drawerTitle.value}失败`))
   } finally {
     loading.value = false
   }
@@ -252,7 +251,6 @@ async function openTodayIPStats() {
     })
     todayStats.value = res.data || null
   } catch (error) {
-    message.error(getErrorMessage(error, "读取今日 IP 统计失败"))
   } finally {
     todayStatsLoading.value = false
   }

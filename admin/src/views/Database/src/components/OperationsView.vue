@@ -199,7 +199,6 @@ const handleCopy = async () => {
       message.error(res.msg || '复制失败')
     }
   } catch (err: any) {
-    message.error(err?.message || '复制请求失败')
   } finally {
     loadingCopy.value = false
   }

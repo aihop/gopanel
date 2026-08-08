@@ -182,7 +182,6 @@ export const useInstalledAppLog = (options: UseInstalledAppLogOptions) => {
         options.message.error(res.msg || "修复失败")
       }
     } catch (error: any) {
-      options.message.error(error?.message || "修复失败")
     } finally {
       repairingCompose.value = false
     }

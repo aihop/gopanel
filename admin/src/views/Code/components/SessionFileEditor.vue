@@ -66,7 +66,6 @@ const loadTab = async (tab: EditorTab) => {
 		tab.version = response.data.version
 	} catch (error) {
 		tab.error = error instanceof Error ? error.message : t("code.fileOpenFailed")
-		message.error(tab.error)
 	} finally {
 		tab.loading = false
 	}
@@ -103,7 +102,6 @@ const saveTab = async (tab = activeTab.value) => {
 		emit("saved", tab.path)
 		message.success(t("code.fileSaved"))
 	} catch (error) {
-		message.error(error instanceof Error ? error.message : t("code.fileSaveFailed"))
 	} finally {
 		saving.value = false
 	}

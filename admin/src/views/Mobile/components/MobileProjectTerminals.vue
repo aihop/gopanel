@@ -25,7 +25,6 @@ async function openTerminal(project: AIProject) {
 		emit("update:show", false)
 		emit("opened", session, project)
 	} catch (error) {
-		message.error(error instanceof Error ? error.message : t("mobile.projectTerminalOpenFailed"))
 	} finally {
 		openingProjectId.value = 0
 	}

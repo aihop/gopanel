@@ -176,7 +176,6 @@ export const useDatabaseManager = (
         }))
       }
     } catch (error) {
-      message.error('获取服务器列表失败')
     }
   }
 
@@ -205,7 +204,6 @@ export const useDatabaseManager = (
         }))
       }
     } catch (error) {
-      message.error('获取数据库列表失败')
     }
   }
 

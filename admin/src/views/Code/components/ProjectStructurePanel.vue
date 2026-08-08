@@ -63,7 +63,6 @@ const loadRoot = async () => {
 	} catch {
 		nodes.value = []
 		loadError.value = true
-		message.error(t("code.structureLoadFailed"))
 	} finally {
 		loading.value = false
 	}
@@ -76,7 +75,6 @@ const loadChildren = async (option: TreeOption) => {
 		node.children = response.data.entries.map(toTreeOption)
 		if (response.data.truncated) message.warning(t("code.structureTruncated"))
 	} catch (error) {
-		message.error(t("code.structureLoadFailed"))
 		throw error
 	}
 }

@@ -67,7 +67,6 @@ async function loadUpdate(silent = false) {
 		checkError.value = ""
 	} catch (error) {
 		checkError.value = error instanceof Error ? error.message : t("mobile.updateCheckFailed")
-		if (!silent) message.error(t("mobile.updateCheckFailed"))
 	} finally {
 		checking.value = false
 	}
@@ -137,7 +136,6 @@ async function startUpgrade() {
 		openLogStream(result.log)
 		message.success(t("mobile.updateStarted"))
 	} catch (error) {
-		message.error(error instanceof Error ? error.message : t("mobile.updateFailed"))
 	} finally {
 		upgrading.value = false
 	}

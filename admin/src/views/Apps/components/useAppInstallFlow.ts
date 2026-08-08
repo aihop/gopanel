@@ -138,7 +138,6 @@ export const useAppInstallFlow = (options: UseAppInstallFlowOptions) => {
         }
       }
     } catch (error) {
-      message.error("获取应用版本详情失败")
     } finally {
       installLoading.value = false
     }
@@ -163,7 +162,6 @@ export const useAppInstallFlow = (options: UseAppInstallFlowOptions) => {
         message.error(res.msg || "获取应用详情失败")
       }
     } catch (error) {
-      message.error("获取应用详情异常")
     } finally {
       loadingMsg.destroy()
     }
@@ -201,7 +199,6 @@ export const useAppInstallFlow = (options: UseAppInstallFlowOptions) => {
         if (appIndex !== -1) apps.value[appIndex].installing = false
       })
     } catch (error: any) {
-      message.error(error.message || "安装异常")
     } finally {
       installLoading.value = false
     }
@@ -254,7 +251,6 @@ export const useAppInstallFlow = (options: UseAppInstallFlowOptions) => {
 
       await doSubmitInstall(reqData)
     } catch (error: any) {
-      message.error(error.message || "安装异常")
       installLoading.value = false
     }
   }
@@ -303,7 +299,6 @@ export const useAppInstallFlow = (options: UseAppInstallFlowOptions) => {
         message.error(res.msg || "修复失败")
       }
     } catch (error: any) {
-      message.error(error?.message || "修复失败")
     } finally {
       repairingCompose.value = false
     }
@@ -337,7 +332,6 @@ export const useAppInstallFlow = (options: UseAppInstallFlowOptions) => {
       currentInstallName.value = installName
       startLogStream(installName, "重建流程结束")
     } catch (error: any) {
-      message.error(error?.message || "重建异常")
     } finally {
       loadingMsg.destroy()
     }

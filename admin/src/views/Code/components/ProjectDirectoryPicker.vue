@@ -54,7 +54,6 @@ const loadDirectories = async (path: string, fallbackPath = "") => {
 		}
 		loadError.value = true
 		directories.value = []
-		message.error(t("code.directoryLoadFailed"))
 	} finally {
 		loading.value = false
 	}

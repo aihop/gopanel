@@ -231,7 +231,6 @@ async function openAttentionSession(sessionId: number) {
 		try {
 			session = (await getMobileSessionState(sessionId)).session
 		} catch (error) {
-			message.error(error instanceof Error ? error.message : t("mobile.loadFailed"))
 			return
 		}
 	}
@@ -301,7 +300,6 @@ async function decideApproval(approved: boolean, reason = "") {
 		await decideMobileApproval(approvalId, approved, reason)
 		await loadSessionState(true)
 	} catch (error) {
-		message.error(error instanceof Error ? error.message : t("mobile.loadFailed"))
 	} finally {
 		actionLoading.value = false
 	}
@@ -313,7 +311,6 @@ async function stopExecution() {
 		await stopMobileSession(selectedSessionId.value)
 		await loadSessionState(true)
 	} catch (error) {
-		message.error(error instanceof Error ? error.message : t("mobile.loadFailed"))
 	} finally {
 		actionLoading.value = false
 	}
@@ -327,7 +324,6 @@ async function retryExecution() {
 		await retryMobileInstruction(instructionId)
 		await loadSessionState(true)
 	} catch (error) {
-		message.error(error instanceof Error ? error.message : t("mobile.loadFailed"))
 	} finally {
 		actionLoading.value = false
 	}

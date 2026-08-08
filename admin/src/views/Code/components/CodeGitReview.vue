@@ -139,7 +139,6 @@ const loadDiff = async (entry: GitReviewEntry, preserveContent = false) => {
 		diffTruncated.value = response.data.truncated
 	} catch (error) {
 		if (sequence !== diffSequence) return
-		message.error(error instanceof Error ? error.message : t("code.gitDiffFailed"))
 	} finally {
 		if (sequence === diffSequence && !preserveContent) diffLoading.value = false
 	}
@@ -174,7 +173,6 @@ const loadStatus = async (silent = false) => {
 		await reconcileSelection()
 	} catch (error) {
 		loadError.value = error instanceof Error ? error.message : t("code.gitLoadFailed")
-		if (!silent) message.error(loadError.value)
 	} finally {
 		statusPending = false
 		loading.value = false
@@ -191,7 +189,6 @@ const saveChanges = async () => {
 		message.success(t("code.gitSaveSuccess"))
 		await loadStatus(true)
 	} catch (error) {
-		message.error(error instanceof Error ? error.message : t("code.gitSaveFailed"))
 	} finally {
 		deliveryLoading.value = false
 	}
@@ -208,7 +205,6 @@ const updateStage = async (entry: GitReviewEntry, staged: boolean) => {
 		await reconcileSelection()
 		message.success(t("code.gitStageSuccess"))
 	} catch (error) {
-		message.error(error instanceof Error ? error.message : t("code.gitStageFailed"))
 	} finally {
 		stagingKey.value = ""
 	}

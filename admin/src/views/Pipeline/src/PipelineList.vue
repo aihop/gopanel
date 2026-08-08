@@ -173,7 +173,6 @@ const fetchData = async () => {
     data.value = res.data.items
     pagination.value.itemCount = res.data.total
   } catch (error: any) {
-    message.error(error.message || "获取列表失败")
   } finally {
     loading.value = false
   }
@@ -211,7 +210,6 @@ const confirmRun = async () => {
     
     fetchData() // 刷新列表以更新当前版本号
   } catch (error: any) {
-    message.error(error.message || "触发失败")
   } finally {
     runLoading.value = false
   }
@@ -233,7 +231,6 @@ const handleRetryFromLogs = async () => {
     
     fetchData()
   } catch (error: any) {
-    message.error(error.message || "重新触发失败")
   } finally {
     runLoading.value = false
   }
@@ -262,7 +259,6 @@ const handleDelete = async (row: Pipeline.ResPipeline) => {
         message.success("删除成功")
         fetchData()
       } catch (error: any) {
-        message.error(error.message || "删除失败")
       }
     }
   })

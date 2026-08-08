@@ -691,7 +691,6 @@ async function handleStop() {
 			.catch(err => {
 				console.error("获取HTTP服务状态失败", err)
 			})
-		message.error("停止失败")
 	}
 }
 

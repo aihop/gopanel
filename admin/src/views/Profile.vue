@@ -267,7 +267,6 @@ async function handlePasswordSubmit() {
 		message.success("密码修改成功")
 		resetForm()
 	} catch {
-		message.error("密码修改失败")
 	}
 }
 

@@ -90,7 +90,6 @@ export const useComposeCreateFlow = () => {
       MsgSuccess("创建任务已提交，正在获取日志...")
       return true
     } catch (e: any) {
-      MsgError(e?.message)
       return false
     }
   }

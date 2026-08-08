@@ -247,7 +247,6 @@ export const useStructureView = (
         message.error(res.message || '删除字段失败')
       }
     } catch {
-      message.error('执行删除请求失败')
     }
   }
 
@@ -371,7 +370,6 @@ export const useStructureView = (
         message.error(res.message || '操作失败')
       }
     } catch {
-      message.error('执行失败')
     } finally {
       submittingColumn.value = false
     }
@@ -444,7 +442,6 @@ export const useStructureView = (
       }
     } catch {
       indexData.value = []
-      message.error('获取索引数据失败')
     } finally {
       loadingIndex.value = false
     }
@@ -511,7 +508,6 @@ export const useStructureView = (
         message.error(res.message || '删除索引失败')
       }
     } catch {
-      message.error('执行删除请求失败')
     }
   }
 
@@ -598,7 +594,6 @@ export const useStructureView = (
         message.error(res.message || (isEditIndex.value ? '修改索引失败' : '创建索引失败'))
       }
     } catch {
-      message.error('执行失败')
     } finally {
       submittingIndex.value = false
     }
@@ -858,7 +853,6 @@ export const useStructureView = (
         message.error(res.message || '删除外键失败')
       }
     } catch {
-      message.error('执行删除请求失败')
     }
   }
 
@@ -897,7 +891,6 @@ export const useStructureView = (
         message.error(res.message || '添加外键失败')
       }
     } catch {
-      message.error('执行失败')
     } finally {
       submittingFk.value = false
     }

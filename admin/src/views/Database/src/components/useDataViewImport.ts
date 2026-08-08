@@ -70,7 +70,6 @@ export const useDataViewImport = (
       clearFileSelection()
       refreshData()
     } catch (error: any) {
-      message.error(error?.message || '导入请求失败')
     } finally {
       importing.value = false
     }

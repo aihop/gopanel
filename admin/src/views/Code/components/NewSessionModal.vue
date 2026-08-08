@@ -61,7 +61,6 @@ const loadExecutors = async () => {
 		selectedExecutorId.value = preferredExecutor?.id || ""
 	} catch (error) {
 		loadError.value = error instanceof Error ? error.message : t("code.executorLoadFailed")
-		message.error(t("code.executorLoadFailed"))
 	} finally {
 		loading.value = false
 	}
@@ -75,7 +74,6 @@ const loadWorktreeCapability = async () => {
 		worktreeCapability.value = response.data
 		isolated.value = response.data.available
 	} catch (error) {
-		message.error(error instanceof Error ? error.message : t("code.worktreeCapabilityFailed"))
 	}
 }
 
@@ -141,7 +139,6 @@ const submit = async () => {
 		close()
 		message.success(t("code.sessionCreated"))
 	} catch (error) {
-		message.error(error instanceof Error ? error.message : t("code.sessionCreateFailed"))
 	} finally {
 		submitting.value = false
 	}

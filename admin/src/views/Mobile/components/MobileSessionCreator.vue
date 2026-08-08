@@ -47,7 +47,6 @@ async function loadWorktreeCapability() {
 	try {
 		worktreeCapability.value = await getMobileWorktreeCapability(projectId.value)
 	} catch (error) {
-		message.error(error instanceof Error ? error.message : t("mobile.worktreeCheckFailed"))
 	} finally {
 		capabilityLoading.value = false
 	}
@@ -90,7 +89,6 @@ async function submit() {
 		emit("created", session)
 		emit("update:show", false)
 	} catch (error) {
-		message.error(error instanceof Error ? error.message : t("mobile.sessionCreateFailed"))
 	} finally {
 		submitting.value = false
 	}
