@@ -7,7 +7,7 @@ admin/src/utils/util.ts	728
 admin/src/views/Container/repo/index.vue	560
 admin/src/views/Dashboard/Index.vue	513
 admin/src/views/Database/src/components/DatabaseTablesView.vue	740
-admin/src/views/Database/src/components/OperationsView.vue	502
+admin/src/views/Database/src/components/OperationsView.vue	501
 admin/src/views/Database/src/components/useStructureView.ts	981
 admin/src/views/Host/disk.vue	595
 admin/src/views/Website/Index.vue	741

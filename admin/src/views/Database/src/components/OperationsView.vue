@@ -85,7 +85,7 @@ const handleTruncate = async () => {
       message.error(res.msg || '清空失败')
     }
   } catch (err: any) {
-    message.error('请求失败')
+    void 0
   } finally {
     loadingTruncate.value = false
   }
@@ -108,7 +108,7 @@ const dropTableCascade = async () => {
       message.error(res.msg || '删除失败')
     }
   } catch {
-    message.error('请求失败')
+    void 0
   } finally {
     loadingDrop.value = false
   }
@@ -137,7 +137,7 @@ const handleDrop = async () => {
       message.error(res.msg || '删除失败')
     }
   } catch (err: any) {
-    message.error('请求失败')
+    void 0
   } finally {
     loadingDrop.value = false
   }
@@ -160,7 +160,7 @@ const handleRename = async () => {
       message.error(res.msg || '重命名失败')
     }
   } catch (err: any) {
-    message.error('请求失败')
+    void 0
   } finally {
     loadingRename.value = false
   }
@@ -299,7 +299,6 @@ const handleMaintain = async (operation: string) => {
       type: 'ERROR',
       text: err?.message || '请求失败'
     }]
-    message.error(err?.message || '请求失败')
   } finally {
     loadingMap[operation].value = false
   }
