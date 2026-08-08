@@ -1,6 +1,8 @@
 package api
 
 import (
+	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -8,6 +10,8 @@ import (
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/utils/token"
+	"github.com/gofiber/fiber/v3"
+	"net/http/httptest"
 )
 
 func TestNormalizeAIProjectWorkDir(t *testing.T) {
@@ -100,5 +104,44 @@ func TestAIProjectDirectoryDefaultsRejectsInvalidSubAdminBase(t *testing.T) {
 	_, _, err := aiProjectDirectoryDefaults(&token.CustomClaims{Role: constant.UserRoleSubAdmin}, t.TempDir())
 	if err == nil {
 		t.Fatal("expected an invalid sub-admin base directory to be rejected")
+	}
+}
+
+func TestCreateAIProjectDoesNotRequireRemoteAccess(t *testing.T) {
+	database := withCodeGovernanceDB(t)
+	repository := createCodeGitRepository(t)
+	if _, err := runCodeGit(repository, "remote", "add", "origin", filepath.Join(t.TempDir(), "missing.git")); err != nil {
+		t.Fatal(err)
+	}
+	body, err := json.Marshal(map[string]any{
+		"name": "offline project", "sourceDirs": []string{repository}, "deliveryBranch": "main",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := fiber.New()
+	app.Post("/projects", func(c fiber.Ctx) error {
+		c.Locals(constant.AppAuthName, &token.CustomClaims{UserId: 7, Role: constant.UserRoleSuper})
+		return CreateAIProject(c)
+	})
+	request := httptest.NewRequest("POST", "/projects", bytes.NewReader(body))
+	request.Header.Set("Content-Type", "application/json")
+	response, err := app.Test(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result struct {
+		Code int    `json:"code"`
+		Msg  string `json:"msg"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Code != 0 {
+		t.Fatalf("project creation was blocked by remote access: %s", result.Msg)
+	}
+	var count int64
+	if err := database.Model(&model.AIProject{}).Where("creator_id = ?", 7).Count(&count).Error; err != nil || count != 1 {
+		t.Fatalf("stored projects = %d, err = %v", count, err)
 	}
 }

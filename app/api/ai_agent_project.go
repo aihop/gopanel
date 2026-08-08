@@ -154,9 +154,6 @@ func CreateAIProject(c fiber.Ctx) error {
 	if err := applyCodeProjectDeliveryPolicy(project, sourceDirs); err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	if err := validateCodeProjectRemoteAccess(project); err != nil {
-		return c.JSON(e.Fail(err))
-	}
 	projectRepo := repo.NewAIProjectRepo()
 	if err := projectRepo.CreateProject(project); err != nil {
 		return c.JSON(e.Fail(err))
@@ -235,9 +232,6 @@ func UpdateAIProject(c fiber.Ctx) error {
 	project.RequireQualityGate = true
 	project.MonthlyTokenBudget = req.MonthlyTokenBudget
 	if err := applyCodeProjectDeliveryPolicy(project, sourceDirs); err != nil {
-		return c.JSON(e.Fail(err))
-	}
-	if err := validateCodeProjectRemoteAccess(project); err != nil {
 		return c.JSON(e.Fail(err))
 	}
 	workDir, err := syncAIProjectWorkspace(project, sourceDirs)

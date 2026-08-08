@@ -71,25 +71,6 @@ func codeProjectRepositorySpecs(project *model.AIProject) ([]codeProjectReposito
 	return codeProjectRepositorySpecsWithCandidates(project, sourceDirs, candidates)
 }
 
-func validateCodeProjectRemoteAccess(project *model.AIProject) error {
-	specs, err := codeProjectRepositorySpecs(project)
-	if err != nil {
-		return err
-	}
-	for _, spec := range specs {
-		if spec.Remote == "" {
-			continue
-		}
-		if _, err := runCodeGitWithCredential(
-			spec.Path, codeWorktreeCommandTimeout, project.GitCredentialID,
-			"-c", "credential.interactive=never", "ls-remote", "--exit-code", "--heads", spec.Remote, spec.RemoteBranch,
-		); err != nil {
-			return fmt.Errorf("仓库 %s 远端连接检查失败：%w", spec.Name, err)
-		}
-	}
-	return nil
-}
-
 func codeProjectRepositorySpecsWithCandidates(project *model.AIProject, sourceDirs []string, candidates []codeRepositoryCandidate) ([]codeProjectRepositorySpec, error) {
 	policy, err := codeProjectDeliveryPolicyWithCandidates(project, sourceDirs, candidates)
 	if err != nil {
