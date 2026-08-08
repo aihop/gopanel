@@ -134,7 +134,7 @@ func copyExecutableFileDarwin(src, dst string) error {
 
 func scheduleDarwinServiceRestart(serviceName string) error {
 	target := "system/" + serviceName
-	cmd := exec.Command("sh", "-c", fmt.Sprintf("sleep 1; launchctl kickstart -k %q >/dev/null 2>&1", target))
+	cmd := exec.Command("sh", "-c", fmt.Sprintf("sleep 3; launchctl kickstart -k %q >/dev/null 2>&1", target))
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := cmd.Start(); err != nil {
 		return err

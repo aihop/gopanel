@@ -15,12 +15,16 @@ import (
 	"github.com/aihop/gopanel/utils/systemctl"
 )
 
-const goPanelServiceName = "gopanel.service"
+const (
+	goPanelLinuxServiceName  = "gopanel.service"
+	goPanelDarwinServiceName = "io.aihop.gopanel"
+)
 
 var (
 	panelRestartOS            = runtime.GOOS
 	panelRestartGPCDo         = gpc.Do
 	panelRestartServiceExists = systemctl.IsExist
+	panelRestartLaunchdExists = isGoPanelLaunchdServiceLoaded
 	panelRestartStandalone    = restartStandaloneGoPanelNow
 )
 
@@ -60,12 +64,13 @@ func prepareGoPanelRestart() (func() error, error) {
 	if panelRestartOS != "linux" && panelRestartOS != "darwin" {
 		return panelRestartStandalone, nil
 	}
+	serviceName := goPanelServiceName(panelRestartOS)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	resp, gpcErr := panelRestartGPCDo(ctx, "GOPANEL_SERVICE_ACTION", map[string]interface{}{
 		"op":   "status",
-		"name": goPanelServiceName,
+		"name": serviceName,
 	})
 	if gpcErr == nil && resp != nil && strings.EqualFold(strings.TrimSpace(resp.Output), "active") {
 		return func() error {
@@ -73,12 +78,18 @@ func prepareGoPanelRestart() (func() error, error) {
 			defer cancel()
 			_, err := panelRestartGPCDo(ctx, "GOPANEL_SERVICE_ACTION", map[string]interface{}{
 				"op":   "restart",
-				"name": goPanelServiceName,
+				"name": serviceName,
 			})
 			return err
 		}, nil
 	}
 
+	if panelRestartOS == "darwin" {
+		if panelRestartLaunchdExists(serviceName) {
+			return nil, fmt.Errorf("面板由 macOS launchd 托管，但 gpc helper 不可用；请先重启 gpc 服务后重试")
+		}
+		return panelRestartStandalone, nil
+	}
 	managed, err := panelRestartServiceExists("gopanel")
 	if err != nil {
 		return nil, fmt.Errorf("检查 GoPanel 服务状态失败: %w", err)
@@ -87,6 +98,17 @@ func prepareGoPanelRestart() (func() error, error) {
 		return nil, fmt.Errorf("面板由系统服务托管，但 gpc helper 不可用；请先重启 gpc 服务后重试")
 	}
 	return panelRestartStandalone, nil
+}
+
+func isGoPanelLaunchdServiceLoaded(serviceName string) bool {
+	return exec.Command("launchctl", "print", "system/"+serviceName).Run() == nil
+}
+
+func goPanelServiceName(goos string) string {
+	if goos == "darwin" {
+		return goPanelDarwinServiceName
+	}
+	return goPanelLinuxServiceName
 }
 
 func restartStandaloneGoPanelNow() error {

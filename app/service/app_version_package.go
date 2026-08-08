@@ -60,7 +60,12 @@ func (a *AppVersionService) GoPanelUpload(downloadUrl, checksum, installPath str
 	}
 	gopanelFile := findPath(sourcePath, filepath.Join("gopanel", "gopanel"), "gopanel", filepath.Join("gopanel", "gopanel.exe"), "gopanel.exe", filepath.Join("bin", "gopanel"))
 	gpcFile := findPath(sourcePath, filepath.Join("gpc", "gpc"), "gpc", filepath.Join("bin", "gpc"))
-	if gopanelFile != "" {
+	gpcUpdateScheduled := false
+	if gopanelFile == "" {
+		writeLog("no gopanel binary found in extracted package", sourcePath)
+		return fmt.Errorf("update package does not contain gopanel binary")
+	}
+	{
 		writeLog("detected binary file", gopanelFile)
 		targetBin := filepath.Join(installPath, filepath.Base(gopanelFile))
 		tmpBinFile, err := os.CreateTemp(installPath, ".gopanel_tmp_*")
@@ -132,8 +137,6 @@ func (a *AppVersionService) GoPanelUpload(downloadUrl, checksum, installPath str
 			writeLog("chmod failed on target", err)
 			return err
 		}
-	} else {
-		writeLog("no gopanel binary found in extracted package", sourcePath)
 	}
 	if runtime.GOOS != "windows" {
 		if gpcFile != "" {
@@ -150,6 +153,7 @@ func (a *AppVersionService) GoPanelUpload(downloadUrl, checksum, installPath str
 				if strings.TrimSpace(resp.Output) != "" {
 					writeLog("gpc helper update output", resp.Output)
 				}
+				gpcUpdateScheduled = true
 				writeLog("gpc helper update scheduled", "/usr/local/bin/gpc")
 			}
 		} else {
@@ -169,16 +173,20 @@ func (a *AppVersionService) GoPanelUpload(downloadUrl, checksum, installPath str
 	} else {
 		writeLog("stat installPath failed for chown", err)
 	}
-	a.WriteUploadLock(installPath, versionCode)
-	writeLog("-------------------------------", "successful update to version_code "+fmt.Sprintf("%d", versionCode))
-	// 必须在重启前上报：重启会杀掉当前进程，放到 GoPanelUpload 之后调用大概率发不出去
-	TrackEvent(TrackEventUpgradeSuccess, versionName)
 	writeLog("restart panel", runtime.GOOS)
-	if err := cmd.RestartGoPanel(); err != nil {
-		writeLog("restart error", err.Error())
-	} else {
-		writeLog("restart scheduled", "gopanel restart has been triggered")
+	restartDelay := time.Second
+	if gpcUpdateScheduled {
+		restartDelay = 5 * time.Second
+		writeLog("wait for gpc helper restart", restartDelay)
 	}
+	if err := cmd.RestartGoPanelWithDelay(restartDelay); err != nil {
+		writeLog("restart error", err.Error())
+		return fmt.Errorf("schedule gopanel restart: %w", err)
+	}
+	a.WriteUploadLock(installPath, versionCode)
+	writeLog("restart scheduled", "gopanel restart has been triggered")
+	writeLog("-------------------------------", "successful update to version_code "+fmt.Sprintf("%d", versionCode))
+	TrackEvent(TrackEventUpgradeSuccess, versionName)
 	return nil
 }
 func (a *AppVersionService) FileDownloadAndExtract(downloadUrl, checksum, saveDirName string, writeLog func(string, interface{})) (string, error) {

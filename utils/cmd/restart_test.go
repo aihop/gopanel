@@ -34,6 +34,55 @@ func TestPrepareGoPanelRestartUsesGPCForManagedService(t *testing.T) {
 	}
 }
 
+func TestPrepareGoPanelRestartUsesDarwinLaunchdLabel(t *testing.T) {
+	restorePanelRestartDependencies(t)
+	panelRestartOS = "darwin"
+	names := make([]string, 0, 2)
+	panelRestartGPCDo = func(_ context.Context, _ string, params map[string]interface{}) (*gpc.Response, error) {
+		name, _ := params["name"].(string)
+		names = append(names, name)
+		return &gpc.Response{OK: true, Output: "active"}, nil
+	}
+	panelRestartServiceExists = func(string) (bool, error) {
+		t.Fatal("darwin must not initialize the linux service manager")
+		return false, nil
+	}
+	panelRestartLaunchdExists = func(string) bool {
+		t.Fatal("launchd discovery should not run after a successful gpc preflight")
+		return false
+	}
+
+	restart, err := prepareGoPanelRestart()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := restart(); err != nil {
+		t.Fatal(err)
+	}
+	if len(names) != 2 || names[0] != goPanelDarwinServiceName || names[1] != goPanelDarwinServiceName {
+		t.Fatalf("unexpected darwin service names: %#v", names)
+	}
+}
+
+func TestPrepareGoPanelRestartRejectsManagedDarwinWithoutGPC(t *testing.T) {
+	restorePanelRestartDependencies(t)
+	panelRestartOS = "darwin"
+	panelRestartGPCDo = func(context.Context, string, map[string]interface{}) (*gpc.Response, error) {
+		return &gpc.Response{}, errors.New("gpc unavailable")
+	}
+	panelRestartServiceExists = func(string) (bool, error) {
+		t.Fatal("darwin must not initialize the linux service manager")
+		return false, nil
+	}
+	panelRestartLaunchdExists = func(name string) bool {
+		return name == goPanelDarwinServiceName
+	}
+
+	if _, err := prepareGoPanelRestart(); err == nil {
+		t.Fatal("managed darwin service should require gpc")
+	}
+}
+
 func TestPrepareGoPanelRestartRejectsManagedServiceWithoutGPC(t *testing.T) {
 	restorePanelRestartDependencies(t)
 	panelRestartOS = "linux"
@@ -70,7 +119,7 @@ func TestPrepareGoPanelRestartRejectsManagedServiceAfterEmptyGPCResponse(t *test
 
 func TestPrepareGoPanelRestartAllowsStandaloneDevelopment(t *testing.T) {
 	restorePanelRestartDependencies(t)
-	panelRestartOS = "darwin"
+	panelRestartOS = "linux"
 	panelRestartGPCDo = func(context.Context, string, map[string]interface{}) (*gpc.Response, error) {
 		return &gpc.Response{}, errors.New("gpc unavailable")
 	}
@@ -98,11 +147,13 @@ func restorePanelRestartDependencies(t *testing.T) {
 	originalOS := panelRestartOS
 	originalGPCDo := panelRestartGPCDo
 	originalServiceExists := panelRestartServiceExists
+	originalLaunchdExists := panelRestartLaunchdExists
 	originalStandalone := panelRestartStandalone
 	t.Cleanup(func() {
 		panelRestartOS = originalOS
 		panelRestartGPCDo = originalGPCDo
 		panelRestartServiceExists = originalServiceExists
+		panelRestartLaunchdExists = originalLaunchdExists
 		panelRestartStandalone = originalStandalone
 	})
 }

@@ -108,7 +108,7 @@ function openLogStream(logName: string) {
 	eventSource.addEventListener("status", event => {
 		const status = (event as MessageEvent).data
 		if (status === "failed") logStatus.value = "failed"
-		else if (status === "success") logStatus.value = "success"
+		else if (status === "success") logStatus.value = "restarting"
 		else if (status === "running") logStatus.value = "updating"
 	})
 	eventSource.addEventListener("eof", async () => {

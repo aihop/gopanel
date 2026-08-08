@@ -129,17 +129,21 @@ func initConfig() {
 	cfg.MaxFileReadBytes = int64(1048576)
 	cfg.MaxFileWriteBytes = int64(1048576)
 
-	switch runtime.GOOS {
-	case "darwin":
-		cfg.GoPanelServiceName = "dev.gopanel.server"
-	case "windows":
-		cfg.GoPanelServiceName = "GoPanel"
-	default:
-		cfg.GoPanelServiceName = "gopanel.service"
-	}
+	cfg.GoPanelServiceName = defaultGoPanelServiceName(runtime.GOOS)
 
 	cfg.GoPanelConfigPath = filepath.Join(baseDir, "conf.yaml")
 	cfg.GoPanelPidfilePath = filepath.Join(baseDir, "run", "gopanel.pid")
+}
+
+func defaultGoPanelServiceName(goos string) string {
+	switch goos {
+	case "darwin":
+		return "io.aihop.gopanel"
+	case "windows":
+		return "GoPanel"
+	default:
+		return "gopanel.service"
+	}
 }
 
 func normalizeRoots(roots []string) []string {

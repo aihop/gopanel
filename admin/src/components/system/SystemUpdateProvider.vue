@@ -306,7 +306,7 @@ const startLogStream = () => {
 	eventSource.addEventListener("status", event => {
 		const data = (event as MessageEvent).data
 		if (data === "success") {
-			logStatus.value = "success"
+			logStatus.value = "restarting"
 		} else if (data === "failed") {
 			logStatus.value = "failed"
 		} else if (data === "running") {
@@ -316,11 +316,6 @@ const startLogStream = () => {
 
 	eventSource.addEventListener("eof", async () => {
 		stopLogStream()
-		if (logStatus.value === "success") {
-			await refreshVersionAndUpdateState()
-			appendLogLine("====== 更新日志已结束 ======")
-			return
-		}
 		if (logStatus.value !== "failed") {
 			await verifyUpdateResultAfterRestart()
 		}

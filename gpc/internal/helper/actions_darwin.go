@@ -17,6 +17,10 @@ import (
 	"time"
 )
 
+var terminateLaunchdProcess = func(pid int) error {
+	return syscall.Kill(pid, syscall.SIGTERM)
+}
+
 func (s *Server) actionChownBaseDir(ctx context.Context, params map[string]interface{}) error {
 	_ = ctx
 	_ = params
@@ -100,8 +104,8 @@ func (s *Server) actionGoPanelService(ctx context.Context, params map[string]int
 		_ = os.Remove(s.cfg.GoPanelPidfilePath)
 		return "stopped", nil
 	case "restart":
-		if loaded, _, _, _ := launchctlStatus(ctx, name); loaded {
-			if err := launchctlKickstart(ctx, name); err != nil {
+		if loaded, _, pid, _ := launchctlStatus(ctx, name); loaded {
+			if err := restartLoadedLaunchdService(ctx, name, pid); err != nil {
 				return "", err
 			}
 			return "restarted", nil
@@ -111,6 +115,17 @@ func (s *Server) actionGoPanelService(ctx context.Context, params map[string]int
 	default:
 		return "", errors.New("invalid params: op")
 	}
+}
+
+func restartLoadedLaunchdService(ctx context.Context, name string, pid int) error {
+	if err := launchctlKickstart(ctx, name); err == nil {
+		return nil
+	} else if pid <= 0 {
+		return err
+	} else if terminateErr := terminateLaunchdProcess(pid); terminateErr != nil {
+		return fmt.Errorf("launchctl kickstart failed: %v; terminate managed process failed: %w", err, terminateErr)
+	}
+	return nil
 }
 
 func (s *Server) actionGoPanelInfo(ctx context.Context, params map[string]interface{}) (string, error) {
