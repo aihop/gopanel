@@ -67,7 +67,15 @@ func prepareCodeRepositoryCandidateForBranchWithCredential(candidate codeReposit
 	remoteName, remoteRef := codeRepositoryRemoteTracking(candidate.SourceDir, targetBranch)
 	if remoteName != "" {
 		if _, err := fetchCodeRepositoryWithCredential(candidate.SourceDir, remoteName, credentialID); err != nil {
-			return codePreparedRepository{}, fmt.Errorf("同步仓库 %s 失败：%w", filepath.Base(candidate.SourceDir), err)
+			baseCommit, baseErr := runCodeGit(candidate.SourceDir, "rev-parse", targetBranch)
+			if baseErr != nil {
+				return codePreparedRepository{}, baseErr
+			}
+			prepared.BaseCommit = strings.TrimSpace(baseCommit)
+			prepared.RemoteName = remoteName
+			prepared.RemoteBranch = codeRemoteBranch(remoteName, remoteRef, targetBranch)
+			prepared.SyncStatus = "offline"
+			return prepared, nil
 		}
 		if remoteRef == "" {
 			candidate := "refs/remotes/" + remoteName + "/" + targetBranch

@@ -93,7 +93,7 @@ func TestCodeSessionIncludesUncommittedDefaultsToLegacyBehavior(t *testing.T) {
 	}
 }
 
-func TestInitializeCodeSessionPersistsFailureWithoutTask(t *testing.T) {
+func TestInitializeCodeSessionUsesLocalRepositoryWhenRemoteUnavailable(t *testing.T) {
 	database := withCodeGovernanceDB(t)
 	withAIProjectBaseDir(t)
 	repository, _ := createCodeRemoteRepository(t)
@@ -107,20 +107,21 @@ func TestInitializeCodeSessionPersistsFailureWithoutTask(t *testing.T) {
 	}
 	session := createInitializingCodeSession(t, project)
 
-	if err := initializeCodeSession(session.ID); err == nil {
-		t.Fatal("missing remote should fail initialization")
+	if err := initializeCodeSession(session.ID); err != nil {
+		t.Fatal(err)
 	}
 	var stored model.AIDevSession
 	if err := database.First(&stored, session.ID).Error; err != nil {
 		t.Fatal(err)
 	}
-	if stored.Status != codeSessionStatusFailed || stored.CurrentStage != codeSessionStageInitializationFailed || strings.TrimSpace(stored.InitializationErr) == "" {
-		t.Fatalf("failed session = %#v", stored)
+	if stored.Status != codeSessionStatusActive || stored.CurrentStage != "idle" || stored.RepositorySync != "offline" || stored.LastTaskID == 0 {
+		t.Fatalf("offline session = %#v", stored)
 	}
 	var taskCount int64
-	if err := database.Model(&model.AITask{}).Where("session_id = ?", session.ID).Count(&taskCount).Error; err != nil || taskCount != 0 {
-		t.Fatalf("failed initialization created tasks: count=%d err=%v", taskCount, err)
+	if err := database.Model(&model.AITask{}).Where("session_id = ?", session.ID).Count(&taskCount).Error; err != nil || taskCount != 1 {
+		t.Fatalf("offline initialization task count=%d err=%v", taskCount, err)
 	}
+	t.Cleanup(func() { rollbackCodeSessionWorktree(&stored) })
 }
 
 func TestInitializingCodeSessionRejectsDevelopment(t *testing.T) {

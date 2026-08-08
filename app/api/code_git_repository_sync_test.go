@@ -87,19 +87,6 @@ func TestPrepareCodeRepositoryRejectsLocalAhead(t *testing.T) {
 	}
 }
 
-func TestPrepareCodeRepositoryRejectsUnavailableRemote(t *testing.T) {
-	localDir, _ := createCodeRemoteRepository(t)
-	var err error
-	if _, err := runCodeGit(localDir, "remote", "set-url", "origin", "https://127.0.0.1:1/gopanel.git"); err != nil {
-		t.Fatal(err)
-	}
-
-	_, err = prepareCodeRepository(localDir)
-	if err == nil || !strings.Contains(err.Error(), "同步仓库") {
-		t.Fatalf("unavailable remote should block worktree creation: %v", err)
-	}
-}
-
 func TestNormalizeCodeGitCommandErrorClassifiesAndRedactsAuthentication(t *testing.T) {
 	err := normalizeCodeGitCommandError("fatal: unable to get password from user for 'https://secret-token@github.com/aihop/ainode.git'")
 	if !errors.Is(err, errCodeGitAuthentication) {
