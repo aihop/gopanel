@@ -108,6 +108,7 @@ func (s *Server) actionGoPanelService(ctx context.Context, params map[string]int
 			if err := restartLoadedLaunchdService(ctx, name, pid); err != nil {
 				return "", err
 			}
+			s.markPanelUpdateReconciled()
 			return "restarted", nil
 		}
 		_, _ = s.actionGoPanelService(ctx, map[string]interface{}{"op": "stop", "name": name})

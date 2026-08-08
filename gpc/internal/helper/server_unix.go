@@ -54,6 +54,7 @@ func (s *Server) Serve(ctx context.Context) error {
 
 	_ = os.Chmod(s.cfg.SocketPath, 0660)
 	s.tryChgrpSocketToBaseDir()
+	go s.reconcilePendingPanelUpdate(ctx)
 
 	for {
 		select {
