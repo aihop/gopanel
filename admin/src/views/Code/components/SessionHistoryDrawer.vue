@@ -40,6 +40,7 @@ const loadHistory = async () => {
 			runs.value = []
 		}
 	} catch (error) {
+		// 错误提示由请求拦截器统一处理
 	} finally {
 		loading.value = false
 	}
@@ -60,6 +61,7 @@ const showRunRawOutput = async (runId: number) => {
 		const response = await getCodeExecutionRun(runId)
 		rawOutput.value = response.data.rawOutput || response.data.output || ""
 	} catch (error) {
+		// 错误提示由请求拦截器统一处理
 	} finally {
 		detailLoading.value = false
 	}

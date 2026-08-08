@@ -345,6 +345,7 @@ async function renameSession() {
 		message.success(t("mobile.sessionRenameSuccess"))
 		emit("renamed")
 	} catch (error) {
+		// 错误提示由请求拦截器统一处理
 	} finally {
 		renameLoading.value = false
 	}

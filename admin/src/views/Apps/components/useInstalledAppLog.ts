@@ -182,6 +182,7 @@ export const useInstalledAppLog = (options: UseInstalledAppLogOptions) => {
         options.message.error(res.msg || "修复失败")
       }
     } catch (error: any) {
+      // 错误提示由请求拦截器统一处理
     } finally {
       repairingCompose.value = false
     }

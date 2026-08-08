@@ -171,6 +171,7 @@ const fetchData = async () => {
     data.value = res.data.items
     pagination.value.itemCount = res.data.total
   } catch (error: any) {
+    // 错误提示由请求拦截器统一处理
   } finally {
     loading.value = false
   }

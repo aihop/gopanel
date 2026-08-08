@@ -241,6 +241,7 @@ async function onDownload() {
 				const event = new MouseEvent("click")
 				a.dispatchEvent(event)
 			} catch (error) {
+				// 错误提示由请求拦截器统一处理
 			}
 		}
 	})

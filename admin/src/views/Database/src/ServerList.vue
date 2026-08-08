@@ -256,6 +256,7 @@ const handleContainerSync = async () => {
 			MsgSuccess(message, 5000)
 		}
 	} catch {
+		// 错误提示由请求拦截器统一处理
 	} finally {
 		containerSyncing.value = false
 	}

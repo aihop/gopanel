@@ -25,6 +25,7 @@ async function openTerminal(project: AIProject) {
 		emit("update:show", false)
 		emit("opened", session, project)
 	} catch (error) {
+		// 错误提示由请求拦截器统一处理
 	} finally {
 		openingProjectId.value = 0
 	}

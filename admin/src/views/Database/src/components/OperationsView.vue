@@ -198,7 +198,7 @@ const handleCopy = async () => {
     } else {
       message.error(res.msg || '复制失败')
     }
-  } catch (err: any) {
+  } catch (err: any) { // 错误提示由请求拦截器统一处理
   } finally {
     loadingCopy.value = false
   }

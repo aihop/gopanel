@@ -112,6 +112,7 @@ export const useSSLManagement = () => {
         message.info("该云账号下暂无CDN域名")
       }
     } catch (error: any) {
+      // 错误提示由请求拦截器统一处理
     } finally {
       cdnDomainsLoading.value = false
     }
@@ -215,6 +216,7 @@ export const useSSLManagement = () => {
           message.success("已提交重签请求")
           openLogModal(row.id)
         } catch (error: any) {
+          // 错误提示由请求拦截器统一处理
         } finally {
           loading.value = false
         }
@@ -246,6 +248,7 @@ export const useSSLManagement = () => {
         await fetchData()
       }
     } catch (error: any) {
+      // 错误提示由请求拦截器统一处理
     } finally {
       submitting.value = false
     }
@@ -305,6 +308,7 @@ export const useSSLManagement = () => {
       message.success("已成功推送到指定的 CDN")
       pushCDNModalVisible.value = false
     } catch (error: any) {
+      // 错误提示由请求拦截器统一处理
     } finally {
       submitting.value = false
     }

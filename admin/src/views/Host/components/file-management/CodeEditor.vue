@@ -154,7 +154,6 @@ const openCodeEditor = (path: string, extension: string) => {
 			originalContent.value = res.data.content
 		})
 		.catch(() => {
-			MsgError("此文件不支持预览")
 			closeModal()
 		})
 }

@@ -98,6 +98,7 @@ export const useContainerSetting = (message: any) => {
 			if (isSucc(res.code)) validate.value = res.data
 			else message.error(res.msg || t("containerRuntime.loadFailed"))
 		} catch (error: any) {
+			// 错误提示由请求拦截器统一处理
 		}
 	}
 
@@ -121,7 +122,6 @@ export const useContainerSetting = (message: any) => {
 					daemonRetryTimer.value = window.setTimeout(() => getDaemon(false), 1500)
 					return
 				}
-				message.error(e?.message || "获取容器运行时配置失败")
 			})
 			.finally(() => {
 				daemonLoading.value = false
@@ -172,6 +172,7 @@ export const useContainerSetting = (message: any) => {
 				message.error(res?.msg || "保存失败")
 			}
 		} catch (error: any) {
+			// 错误提示由请求拦截器统一处理
 		} finally {
 			mirrorSaveLoading.value = false
 		}
@@ -207,6 +208,7 @@ export const useContainerSetting = (message: any) => {
 				message.error(res.msg || "保存失败")
 			}
 		} catch {
+			// 错误提示由请求拦截器统一处理
 		} finally {
 			saveLoading.value = false
 		}
@@ -233,6 +235,7 @@ export const useContainerSetting = (message: any) => {
 				message.error(res.msg || "保存失败")
 			}
 		} catch {
+			// 错误提示由请求拦截器统一处理
 		} finally {
 			daemonLoading.value = false
 		}
@@ -256,6 +259,7 @@ export const useContainerSetting = (message: any) => {
 				message.error(res.msg || "操作失败")
 			}
 		} catch {
+			// 错误提示由请求拦截器统一处理
 		} finally {
 			logPruneLoading.value = false
 		}
@@ -283,6 +287,7 @@ export const useContainerSetting = (message: any) => {
 				message.error(res.msg || "保存失败")
 			}
 		} catch {
+			// 错误提示由请求拦截器统一处理
 		} finally {
 			daemonLoading.value = false
 		}
@@ -310,6 +315,7 @@ export const useContainerSetting = (message: any) => {
 				message.error(res.msg || "保存失败")
 			}
 		} catch {
+			// 错误提示由请求拦截器统一处理
 		} finally {
 			daemonLoading.value = false
 		}

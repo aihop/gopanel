@@ -65,6 +65,7 @@ const requestSync = () => {
 				state.value = await syncMobileProject(props.projectId as number)
 				message.success(t("mobileSync.success"))
 			} catch (error) {
+				// 错误提示由请求拦截器统一处理
 			} finally {
 				syncing.value = false
 			}

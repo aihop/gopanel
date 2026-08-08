@@ -57,6 +57,7 @@ async function openEntry(entry: MobileCodeStructureEntry) {
 		originalContent.value = result.content
 		fileVersion.value = result.version
 	} catch (error) {
+		// 错误提示由请求拦截器统一处理
 	} finally {
 		loading.value = false
 	}
@@ -99,6 +100,7 @@ async function save() {
 		fileVersion.value = result.version
 		message.success(t("mobile.fileSaved"))
 	} catch (error) {
+		// 错误提示由请求拦截器统一处理
 	} finally {
 		saving.value = false
 	}

@@ -267,6 +267,7 @@ async function handlePasswordSubmit() {
 		message.success("密码修改成功")
 		resetForm()
 	} catch {
+		// 错误提示由请求拦截器统一处理
 	}
 }
 

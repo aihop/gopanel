@@ -192,6 +192,7 @@ const executeSql = async () => {
       }
     } 
   } catch (error: any) {
+    // 错误提示由请求拦截器统一处理
   } finally {
     executingSql.value = false
   }

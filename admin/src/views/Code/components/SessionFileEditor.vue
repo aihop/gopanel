@@ -102,6 +102,7 @@ const saveTab = async (tab = activeTab.value) => {
 		emit("saved", tab.path)
 		message.success(t("code.fileSaved"))
 	} catch (error) {
+		// 错误提示由请求拦截器统一处理
 	} finally {
 		saving.value = false
 	}

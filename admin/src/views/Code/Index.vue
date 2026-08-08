@@ -371,6 +371,7 @@ const submitProject = async () => {
       await fetchProjects()
     }
   } catch {
+    // 错误提示由请求拦截器统一处理
   } finally {
     creatingProject.value = false
   }

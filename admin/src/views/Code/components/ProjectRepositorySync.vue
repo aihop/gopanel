@@ -72,6 +72,7 @@ const requestSync = () => {
 				state.value = response.data
 				message.success(t("code.repositorySyncSuccess"))
 			} catch (error) {
+				// 错误提示由请求拦截器统一处理
 			} finally {
 				syncing.value = false
 			}

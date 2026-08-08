@@ -60,7 +60,7 @@ const fetchOverview = async () => {
 	try {
 		const res = await getDiskOverview()
 		disks.value = res.data || []
-	} catch (error: any) {
+	} catch (error: any) { // 错误提示由请求拦截器统一处理
 	}
 }
 
@@ -244,7 +244,7 @@ const handleCancel = async () => {
 	try {
 		await cancelDiskScan(task.value.id)
 		message.info("已请求取消")
-	} catch (error: any) {
+	} catch (error: any) { // 错误提示由请求拦截器统一处理
 	}
 }
 
@@ -292,7 +292,7 @@ const doClean = async () => {
 			task.value.result.files = task.value.result.files.filter(f => !done.has(f.path))
 		}
 		void fetchOverview()
-	} catch (error: any) {
+	} catch (error: any) { // 错误提示由请求拦截器统一处理
 	} finally {
 		cleaning.value = false
 	}

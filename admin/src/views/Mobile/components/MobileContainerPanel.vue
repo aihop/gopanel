@@ -100,6 +100,7 @@ async function runOperation(container: MobileContainer, operation: ContainerOper
 		message.success(t("mobile.containerOperationSuccess", { operation: operationLabel(operation) }))
 		await loadContainers(true)
 	} catch (error) {
+		// 错误提示由请求拦截器统一处理
 	} finally {
 		operationKey.value = ""
 	}

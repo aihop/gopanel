@@ -52,6 +52,7 @@ const decide = async (approval: CodeApproval, approved: boolean) => {
 		message.success(t(approved ? "code.approvalApproved" : "code.approvalRejected"))
 		await loadPending()
 	} catch (error) {
+		// 错误提示由请求拦截器统一处理
 	} finally {
 		decidingId.value = null
 	}

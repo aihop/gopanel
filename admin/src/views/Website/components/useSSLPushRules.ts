@@ -81,6 +81,7 @@ export const useSSLPushRules = (options: UseSSLPushRulesOptions) => {
       resetPushRuleForm()
       await fetchPushRules()
     } catch (error: any) {
+      // 错误提示由请求拦截器统一处理
     } finally {
       options.submitting.value = false
     }

@@ -166,6 +166,7 @@ async function cancelInstall(item: any) {
           message.error(res.msg || "取消安装失败")
         }
       } catch (error) {
+        // 错误提示由请求拦截器统一处理
       } finally {
         loadingMsg.destroy()
       }
@@ -195,6 +196,7 @@ async function handleOperate(item: any, operation: string) {
           message.error(res.msg || `${actionText}操作失败`)
         }
       } catch (error) {
+        // 错误提示由请求拦截器统一处理
       } finally {
         loadingMsg.destroy()
       }
@@ -224,6 +226,7 @@ async function handleRebuild(item: any) {
           message.error(res.msg || "重建失败")
         }
       } catch (error) {
+        // 错误提示由请求拦截器统一处理
       } finally {
         loadingMsg.destroy()
       }
@@ -256,6 +259,7 @@ async function handleDeleteCompose() {
       message.error(res.msg || "卸载失败")
     }
   } catch (error) {
+    // 错误提示由请求拦截器统一处理
   } finally {
     loadingMsg.destroy()
   }

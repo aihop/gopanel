@@ -189,6 +189,7 @@ const saveChanges = async () => {
 		message.success(t("code.gitSaveSuccess"))
 		await loadStatus(true)
 	} catch (error) {
+		// 错误提示由请求拦截器统一处理
 	} finally {
 		deliveryLoading.value = false
 	}
@@ -205,6 +206,7 @@ const updateStage = async (entry: GitReviewEntry, staged: boolean) => {
 		await reconcileSelection()
 		message.success(t("code.gitStageSuccess"))
 	} catch (error) {
+		// 错误提示由请求拦截器统一处理
 	} finally {
 		stagingKey.value = ""
 	}

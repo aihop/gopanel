@@ -246,7 +246,7 @@ export const useStructureView = (
       } else {
         message.error(res.message || '删除字段失败')
       }
-    } catch {
+    } catch { // 错误提示由请求拦截器统一处理
     }
   }
 
@@ -369,7 +369,7 @@ export const useStructureView = (
       } else {
         message.error(res.message || '操作失败')
       }
-    } catch {
+    } catch { // 错误提示由请求拦截器统一处理
     } finally {
       submittingColumn.value = false
     }
@@ -507,7 +507,7 @@ export const useStructureView = (
       } else {
         message.error(res.message || '删除索引失败')
       }
-    } catch {
+    } catch { // 错误提示由请求拦截器统一处理
     }
   }
 
@@ -593,7 +593,7 @@ export const useStructureView = (
       } else {
         message.error(res.message || (isEditIndex.value ? '修改索引失败' : '创建索引失败'))
       }
-    } catch {
+    } catch { // 错误提示由请求拦截器统一处理
     } finally {
       submittingIndex.value = false
     }
@@ -852,7 +852,7 @@ export const useStructureView = (
       } else {
         message.error(res.message || '删除外键失败')
       }
-    } catch {
+    } catch { // 错误提示由请求拦截器统一处理
     }
   }
 
@@ -890,7 +890,7 @@ export const useStructureView = (
       } else {
         message.error(res.message || '添加外键失败')
       }
-    } catch {
+    } catch { // 错误提示由请求拦截器统一处理
     } finally {
       submittingFk.value = false
     }
