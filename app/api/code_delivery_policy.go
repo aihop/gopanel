@@ -33,7 +33,7 @@ func normalizeCodeDeliveryPolicyWithCandidates(sourceDirs []string, candidates [
 	if primaryRepository != "" {
 		resolved, resolveErr := filepath.EvalSymlinks(filepath.Clean(primaryRepository))
 		if resolveErr != nil {
-			return codeDeliveryPolicy{}, errors.New("主交付仓库不可访问")
+			return codeDeliveryPolicy{}, errors.New("主交付仓库不可访问，请重新选择项目内的 Git 仓库")
 		}
 		primaryRepository = resolved
 	}

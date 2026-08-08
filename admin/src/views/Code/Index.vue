@@ -147,9 +147,7 @@
 			<template #prefix>{{ t("code.monthlyTokenBudget") }}</template>
 		  </n-input-number>
 		  <div class="-mt-3 text-xs text-[var(--n-text-color-3)]">{{ t("code.monthlyTokenBudgetHint") }}</div>
-		  <n-input v-model:value="projectForm.primaryRepository" :placeholder="t('code.primaryRepositoryPlaceholder')">
-			<template #prefix>{{ t("code.primaryRepository") }}</template>
-		  </n-input>
+		  <n-select v-model:value="projectForm.primaryRepository" :options="primaryRepositoryOptions" :loading="repositoriesLoading" clearable :placeholder="t('code.primaryRepositoryPlaceholder')" />
 		  <div class="-mt-3 text-xs text-[var(--n-text-color-3)]">{{ t("code.primaryRepositoryHint") }}</div>
 		  <n-input v-model:value="projectForm.deliveryBranch" :placeholder="t('code.deliveryBranchPlaceholder')">
 			<template #prefix>{{ t("code.deliveryBranch") }}</template>
@@ -197,7 +195,7 @@
 		:initial-path="projectForm.workDir || defaultWorkDir"
 		:root-path="directoryRoot"
 		:selected-paths="projectForm.sourceDirs"
-		@select="projectForm.sourceDirs = $event"
+		@select="handleSourceDirsSelected"
       />
       <ProjectQuickPanels ref="quickPanelsRef" />
     </div>
@@ -205,11 +203,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
-import { getAIProjects, createAIProject, updateAIProject } from '@/api/modules/code'
+import { getAIProjects, createAIProject, discoverCodeProjectRepositories, updateAIProject } from '@/api/modules/code'
 import type { AIProject } from '@/api/interface/code'
 import Icon from '@/components/common/Icon.vue'
 import ProjectDirectoryPicker from './components/ProjectDirectoryPicker.vue'
@@ -228,6 +226,8 @@ const { t } = useI18n({ messages: codeProjectMessages })
 const showCreateProjectModal = ref(false)
 const showDirectoryPicker = ref(false)
 const creatingProject = ref(false)
+const repositoriesLoading = ref(false)
+const repositoryOptions = ref<Array<{ label: string; value: string }>>([])
 const editingProjectId = ref<number | null>(null)
 const projectForm = ref({ name: '', desc: '', workDir: '', sourceDirs: [] as string[], primaryRepository: '', deliveryBranch: '', gitCredentialId: 0, requireQualityGate: true, monthlyTokenBudget: 0 })
 
@@ -239,6 +239,30 @@ const defaultWorkDir = ref("/")
 const directoryRoot = ref("/")
 const quickPanelsRef = ref<InstanceType<typeof ProjectQuickPanels> | null>(null)
 let refreshTimer: ReturnType<typeof setInterval> | undefined
+
+const primaryRepositoryOptions = computed(() => [
+  { label: t('code.primaryRepositoryAuto'), value: '' },
+  ...repositoryOptions.value,
+])
+
+const loadRepositoryOptions = async () => {
+  const sourceDirs = projectForm.value.sourceDirs
+  if (!sourceDirs.length) { repositoryOptions.value = []; projectForm.value.primaryRepository = ''; return }
+  repositoriesLoading.value = true
+  try {
+    const res = await discoverCodeProjectRepositories(sourceDirs)
+    repositoryOptions.value = (res.data || []).map(item => ({ label: `${item.name} · ${item.path}`, value: item.path }))
+    if (projectForm.value.primaryRepository && !repositoryOptions.value.some(item => item.value === projectForm.value.primaryRepository)) {
+      projectForm.value.primaryRepository = ''
+    }
+  } catch {
+    repositoryOptions.value = []
+    projectForm.value.primaryRepository = ''
+    message.error(t('code.primaryRepositoryLoadFailed'))
+  } finally {
+    repositoriesLoading.value = false
+  }
+}
 
 const fetchProjects = async (silent = false) => {
   if (projectsRefreshing.value) return
@@ -297,6 +321,7 @@ const openCreateProjectModal = () => {
   editingProjectId.value = null
   projectForm.value = { name: '', desc: '', workDir: defaultWorkDir.value, sourceDirs: [], primaryRepository: '', deliveryBranch: '', gitCredentialId: 0, requireQualityGate: true, monthlyTokenBudget: 0 }
   showCreateProjectModal.value = true
+  repositoryOptions.value = []
 }
 
 const openEditProjectModal = (project: AIProject) => {
@@ -304,10 +329,17 @@ const openEditProjectModal = (project: AIProject) => {
   const sourceDirs = project.sourceDirs?.length ? project.sourceDirs : project.workDir ? [project.workDir] : []
   projectForm.value = { name: project.name, desc: project.description || '', workDir: sourceDirs[0] || defaultWorkDir.value, sourceDirs, primaryRepository: project.primaryRepository || '', deliveryBranch: project.deliveryBranch || 'main', gitCredentialId: project.gitCredentialId || 0, requireQualityGate: true, monthlyTokenBudget: project.monthlyTokenBudget || 0 }
   showCreateProjectModal.value = true
+  void loadRepositoryOptions()
 }
 
 const removeSourceDir = (sourceDir: string) => {
   projectForm.value.sourceDirs = projectForm.value.sourceDirs.filter(path => path !== sourceDir)
+  void loadRepositoryOptions()
+}
+
+const handleSourceDirsSelected = (sourceDirs: string[]) => {
+  projectForm.value.sourceDirs = sourceDirs
+  void loadRepositoryOptions()
 }
 
 const submitProject = async () => {
@@ -325,7 +357,7 @@ const submitProject = async () => {
       name: projectForm.value.name.trim(),
 	  description: projectForm.value.desc.trim(),
 	  sourceDirs: projectForm.value.sourceDirs,
-	  primaryRepository: projectForm.value.primaryRepository.trim(),
+	  primaryRepository: projectForm.value.primaryRepository?.trim() || '',
 	  deliveryBranch: projectForm.value.deliveryBranch.trim(),
 	  gitCredentialId: projectForm.value.gitCredentialId,
       requireQualityGate: projectForm.value.requireQualityGate,

@@ -134,6 +134,11 @@ export interface CodeWorktreeCapability {
 	snapshotSupported: boolean
 }
 
+export interface CodeProjectRepositoryOption {
+	name: string
+	path: string
+}
+
 export interface AIMessage {
 	id: number
 	createdAt: string

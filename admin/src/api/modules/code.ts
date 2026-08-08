@@ -16,6 +16,7 @@ import type {
 	CodeQualityCheck,
 	CodeQualityCheckResult,
 	CodeWorktreeCapability,
+	CodeProjectRepositoryOption,
 	CodeSession,
 	CodeSessionFile,
 	CodeSessionHistory,
@@ -41,6 +42,10 @@ export function createAIProject(data: { name: string; description: string; sourc
 
 export function updateAIProject(id: number, data: { name: string; description: string; sourceDirs: string[]; primaryRepository: string; deliveryBranch: string; gitCredentialId: number; requireQualityGate: boolean; monthlyTokenBudget: number }) {
 	return http.put<AIProject>(`/code/projects/${id}`, data)
+}
+
+export function discoverCodeProjectRepositories(sourceDirs: string[]) {
+	return http.post<CodeProjectRepositoryOption[]>("/code/projects/repositories/discover", { sourceDirs })
 }
 
 export function getCodeGitCredentials() {
