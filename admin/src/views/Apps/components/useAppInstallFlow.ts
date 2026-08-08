@@ -267,8 +267,8 @@ export const useAppInstallFlow = (options: UseAppInstallFlowOptions) => {
     retryingInstall.value = true
     try {
       await doSubmitInstall(JSON.parse(JSON.stringify(lastInstallReq.value)))
-    } catch (error: any) {
-      message.error(error?.message || "重新安装异常")
+    } catch {
+      return
     } finally {
       retryingInstall.value = false
     }

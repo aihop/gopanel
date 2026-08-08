@@ -145,8 +145,8 @@ const handleDropDatabase = async () => {
     } else {
       message.error(res.message || '删除失败')
     }
-  } catch (error: any) {
-    message.error(error?.message || '删除请求失败')
+  } catch {
+    return
   }
 }
 </script>

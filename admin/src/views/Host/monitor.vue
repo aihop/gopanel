@@ -284,8 +284,8 @@ async function loadAllTrends() {
 async function refreshAll() {
 	try {
 		await Promise.all([loadOverview(), loadAllTrends()])
-	} catch (error: any) {
-		message.error(error?.message || "监控数据加载失败")
+	} catch {
+		return
 	}
 }
 
