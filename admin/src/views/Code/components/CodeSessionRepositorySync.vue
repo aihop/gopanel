@@ -22,7 +22,8 @@ const statusLabel = (repository: CodeSessionGitSyncRepository) =>
 const reasonLabel = (repository: CodeSessionGitSyncRepository) =>
 	repository.reason ? t(`code.gitSyncReason_${repository.reason}`) : ""
 const statusType = (repository: CodeSessionGitSyncRepository) => {
-	if (["synced", "integrated"].includes(repository.status) || repository.updated) return "success" as const
+	if (repository.status === "synced" || repository.updated) return "success" as const
+	if (repository.status === "integrated") return "warning" as const
 	if (repository.status === "behind") return "info" as const
 	if (["dirty", "diverged", "remote_behind", "blocked"].includes(repository.status)) return "warning" as const
 	return "default" as const

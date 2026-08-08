@@ -213,8 +213,21 @@ func continueCodeSessionAfterDelivery(tx *gorm.DB, sessionID uint, deliveredAt t
 		Update("status", "completed").Error
 }
 
-func finalizeCodeSessionLifecycle(tx *gorm.DB, sessionID uint, deliveredAt time.Time) error {
-	if codeExecutions.hasSessionKind(sessionID, codeExecutionInteractive) || codeSessionHasPostSnapshotChanges(tx, sessionID) {
+func finalizeCodeSessionLifecycle(db *gorm.DB, sessionID uint, deliveredAt time.Time) error {
+	unlockLifecycle := codeSessionLifecycles.lock(sessionID)
+	defer unlockLifecycle()
+	continueDevelopment := shouldContinueCodeSessionAfterDelivery(db, sessionID)
+	return db.Transaction(func(tx *gorm.DB) error {
+		return applyCodeSessionLifecycleFinalization(tx, sessionID, deliveredAt, continueDevelopment)
+	})
+}
+
+func shouldContinueCodeSessionAfterDelivery(db *gorm.DB, sessionID uint) bool {
+	return codeExecutions.hasSessionKind(sessionID, codeExecutionInteractive) || codeSessionHasPostSnapshotChanges(db, sessionID)
+}
+
+func applyCodeSessionLifecycleFinalization(tx *gorm.DB, sessionID uint, deliveredAt time.Time, continueDevelopment bool) error {
+	if continueDevelopment {
 		return continueCodeSessionAfterDelivery(tx, sessionID, deliveredAt)
 	}
 	return completeCodeSessionLifecycle(tx, sessionID, deliveredAt)
@@ -289,24 +302,27 @@ func reopenCodeSessionLifecycle(tx *gorm.DB, sessionID uint) error {
 }
 
 func restoreCodeDeliverySessionLifecycles() {
-	var sessionIDs []uint
-	err := global.DB.Model(&model.AICodeDeliveryJob{}).
+	var activeJobs []model.AICodeDeliveryJob
+	if err := global.DB.Model(&model.AICodeDeliveryJob{}).
 		Where("status IN ?", []string{codeDeliveryJobQueued, codeDeliveryJobRunning}).
-		Distinct().Pluck("session_id", &sessionIDs).Error
-	if err != nil {
+		Find(&activeJobs).Error; err != nil {
+		global.LOG.Errorf("Restore active Code delivery lifecycles failed: %v", err)
 		return
 	}
-	if len(sessionIDs) > 0 {
-		_ = global.DB.Model(&model.AIDevSession{}).Where("id IN ? AND status <> ?", sessionIDs, codeSessionStatusDelivered).
-			Updates(map[string]any{"status": codeSessionStatusDelivering, "current_stage": "delivery_queued"}).Error
-		_ = global.DB.Model(&model.AITask{}).Where("session_id IN ?", sessionIDs).
-			Update("status", codeSessionStatusDelivering).Error
+	for index := range activeJobs {
+		if err := restoreActiveCodeDeliveryLifecycle(&activeJobs[index]); err != nil {
+			global.LOG.Errorf("Restore active Code delivery lifecycle %d failed: %v", activeJobs[index].ID, err)
+		}
 	}
 	var completedJobs []model.AICodeDeliveryJob
 	if err := global.DB.Model(&model.AICodeDeliveryJob{}).
 		Joins("JOIN ai_dev_sessions ON ai_dev_sessions.id = ai_code_delivery_jobs.session_id").
-		Where("ai_code_delivery_jobs.status = ? AND ai_dev_sessions.current_stage <> ?", codeDeliveryJobCompleted, codeDeliveryStageCompleted).
+		Where(
+			"ai_code_delivery_jobs.status = ? AND (ai_dev_sessions.current_stage <> ? OR ai_dev_sessions.status = ?)",
+			codeDeliveryJobCompleted, codeDeliveryStageCompleted, codeSessionStatusDelivering,
+		).
 		Find(&completedJobs).Error; err != nil {
+		global.LOG.Errorf("Load completed Code delivery lifecycles failed: %v", err)
 		return
 	}
 	for _, job := range completedJobs {
@@ -314,10 +330,25 @@ func restoreCodeDeliverySessionLifecycles() {
 		if job.CompletedAt != nil {
 			deliveredAt = *job.CompletedAt
 		}
-		_ = global.DB.Transaction(func(tx *gorm.DB) error {
-			return finalizeCodeSessionLifecycle(tx, job.SessionID, deliveredAt)
-		})
+		if err := finalizeCodeSessionLifecycle(global.DB, job.SessionID, deliveredAt); err != nil {
+			global.LOG.Errorf("Restore completed Code delivery lifecycle %d failed: %v", job.ID, err)
+		}
 	}
+}
+
+func restoreActiveCodeDeliveryLifecycle(job *model.AICodeDeliveryJob) error {
+	unlockLifecycle := codeSessionLifecycles.lock(job.SessionID)
+	defer unlockLifecycle()
+	return global.DB.Transaction(func(tx *gorm.DB) error {
+		updated := tx.Model(&model.AIDevSession{}).
+			Where("id = ? AND status <> ?", job.SessionID, codeSessionStatusDelivered).
+			Updates(map[string]any{"status": codeSessionStatusDelivering, "current_stage": "delivery_queued"})
+		if updated.Error != nil || updated.RowsAffected == 0 || job.TaskID == 0 {
+			return updated.Error
+		}
+		return tx.Model(&model.AITask{}).Where("id = ? AND session_id = ?", job.TaskID, job.SessionID).
+			Update("status", codeSessionStatusDelivering).Error
+	})
 }
 
 func (runner *codeDeliveryRunner) cancelSession(sessionID uint) {

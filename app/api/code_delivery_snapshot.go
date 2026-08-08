@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -100,22 +101,60 @@ func captureCodeMultiRepositoryDeliverySnapshot(session *model.AIDevSession) err
 	if _, err := codeMultiRepositoryWorkspaceDir(session, repositories); err != nil {
 		return err
 	}
+	if _, err := codeDeliveryRepositoriesInOrder(repositories, true); err != nil {
+		return err
+	}
+	commits := make([]string, len(repositories))
+	reset := make([]bool, len(repositories))
+	repositoryBySource := make(map[string]int, len(repositories))
 	for index := range repositories {
 		repository := &repositories[index]
+		repositoryBySource[filepath.Clean(repository.SourceDir)] = index
 		commit, err := cleanCodeDeliveryCommit(repository.WorktreeDir, "仓库 "+repository.LinkName)
 		if err != nil {
 			return err
 		}
+		commits[index] = commit
 		targetBranch := strings.TrimSpace(repository.TargetBranch)
 		if targetBranch == "" {
 			if commit != strings.TrimSpace(repository.BaseCommit) {
 				return fmt.Errorf("仓库 %s 已产生新提交，但源仓库处于 detached HEAD，请先配置交付分支", repository.LinkName)
 			}
-			repository.Status = codeDeliveryCompleted
+		}
+		previousCommit := strings.TrimSpace(repository.WorktreeCommit)
+		reset[index] = previousCommit == "" || commit != previousCommit ||
+			(repository.Status != codeDeliveryCompleted && repository.Status != codeDeliveryMerged &&
+				repository.Status != codeDeliveryPrepared)
+	}
+	for changed := true; changed; {
+		changed = false
+		for index := range repositories {
+			if !reset[index] || strings.TrimSpace(repositories[index].ParentSourceDir) == "" {
+				continue
+			}
+			parentIndex, exists := repositoryBySource[filepath.Clean(repositories[index].ParentSourceDir)]
+			if exists && !reset[parentIndex] {
+				reset[parentIndex] = true
+				changed = true
+			}
+		}
+	}
+	for index := range repositories {
+		if !reset[index] {
+			continue
+		}
+		repository := &repositories[index]
+		targetBranch := strings.TrimSpace(repository.TargetBranch)
+		if targetBranch == "" {
+			if codeRepositoryHasResetDescendant(index, repositories, reset, repositoryBySource) {
+				repository.Status = codeDeliveryPrepared
+			} else {
+				repository.Status = codeDeliveryCompleted
+			}
 		} else {
 			repository.Status = codeDeliveryPrepared
 		}
-		repository.TargetBranch, repository.WorktreeCommit = targetBranch, commit
+		repository.TargetBranch, repository.WorktreeCommit = targetBranch, commits[index]
 	}
 	for index := range repositories {
 		if err := verifyCodeDeliveryCommit(repositories[index].WorktreeDir, repositories[index].WorktreeCommit, "仓库 "+repositories[index].LinkName); err != nil {
@@ -124,11 +163,22 @@ func captureCodeMultiRepositoryDeliverySnapshot(session *model.AIDevSession) err
 	}
 	return global.DB.Transaction(func(tx *gorm.DB) error {
 		for index := range repositories {
+			if !reset[index] {
+				if repositories[index].Status == codeDeliveryCompleted {
+					if err := tx.Model(&repositories[index]).Updates(map[string]any{
+						"publish_started_at": nil, "source_applied_at": nil,
+					}).Error; err != nil {
+						return err
+					}
+				}
+				continue
+			}
 			repository := &repositories[index]
 			updates := map[string]any{
 				"status": repository.Status, "target_branch": repository.TargetBranch,
-				"remote_commit": "", "worktree_commit": repository.WorktreeCommit,
-				"merge_commit": "", "error_message": "", "merged_at": nil, "completed_at": nil,
+				"remote_commit": "", "worktree_commit": repository.WorktreeCommit, "source_commit": "",
+				"merge_commit": "", "error_message": "", "merged_at": nil, "publish_started_at": nil,
+				"source_applied_at": nil, "completed_at": nil,
 				"push_status": codePushPending, "pushed_commit": "", "push_error": "", "pushed_at": nil,
 			}
 			if repository.Status != codeDeliveryCompleted {
@@ -142,6 +192,31 @@ func captureCodeMultiRepositoryDeliverySnapshot(session *model.AIDevSession) err
 		}
 		return nil
 	})
+}
+
+func codeRepositoryHasResetDescendant(
+	index int,
+	repositories []model.AIDevSessionRepository,
+	reset []bool,
+	repositoryBySource map[string]int,
+) bool {
+	for childIndex := range repositories {
+		if childIndex == index || !reset[childIndex] {
+			continue
+		}
+		parentSource := strings.TrimSpace(repositories[childIndex].ParentSourceDir)
+		for parentSource != "" {
+			parentIndex, exists := repositoryBySource[filepath.Clean(parentSource)]
+			if !exists {
+				break
+			}
+			if parentIndex == index {
+				return true
+			}
+			parentSource = strings.TrimSpace(repositories[parentIndex].ParentSourceDir)
+		}
+	}
+	return false
 }
 
 func cleanCodeDeliveryCommit(workDir, label string) (string, error) {

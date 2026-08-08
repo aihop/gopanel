@@ -461,11 +461,11 @@ func TestMultiRepositoryDeliveryResumesAfterConflict(t *testing.T) {
 	}
 
 	first, err := resumeCodeMultiRepositoryDelivery(session, session.UserID)
-	if err != nil || first.Status != codeDeliveryJobPartial || len(first.ConflictFiles) != 1 {
+	if err != nil || first.Status != codeDeliveryJobConflict || len(first.ConflictFiles) != 1 {
 		t.Fatalf("unexpected conflict result: %#v, %v", first, err)
 	}
 	stored, err := loadCodeSessionRepositories(session.ID)
-	if err != nil || stored[0].Status != codeDeliveryCompleted || stored[1].Status != "conflict" {
+	if err != nil || stored[0].Status != codeDeliveryMerged || stored[1].Status != "conflict" {
 		t.Fatalf("unexpected persisted delivery state: %#v, %v", stored, err)
 	}
 	if _, err := runCodeGit(conflictRepository.WorktreeDir, "merge", conflictRepository.TargetBranch); err == nil {

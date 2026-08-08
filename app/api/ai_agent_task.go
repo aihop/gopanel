@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -117,7 +118,7 @@ func DeleteAITask(c fiber.Ctx) error {
 			return c.JSON(e.Fail(errors.New("停止 Code 会话超时，请稍后重试")))
 		}
 		if err := cleanupDeliveredCodeSessionWorktrees(session); err != nil {
-			global.LOG.Warnf("Cleanup delivered Code worktrees %d skipped: %v", session.ID, err)
+			return c.JSON(e.Fail(fmt.Errorf("清理 Code 交付工作区失败：%w", err)))
 		}
 		if err := aiRepo.DeleteTaskAndSession(uint(taskID), session.ID); err != nil {
 			return c.JSON(e.Fail(err))

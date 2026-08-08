@@ -2,8 +2,6 @@ package api
 
 import (
 	"errors"
-	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/aihop/gopanel/app/e"
@@ -80,14 +78,10 @@ func saveCodeSessionRepositories(session *model.AIDevSession, message string) (c
 	if _, err := codeMultiRepositoryWorkspaceDir(session, repositories); err != nil {
 		return codeGitDeliveryResult{}, err
 	}
-	sort.SliceStable(repositories, func(i, j int) bool {
-		leftDepth := strings.Count(filepath.Clean(repositories[i].SourceDir), string(filepath.Separator))
-		rightDepth := strings.Count(filepath.Clean(repositories[j].SourceDir), string(filepath.Separator))
-		if leftDepth != rightDepth {
-			return leftDepth > rightDepth
-		}
-		return repositories[i].LinkName < repositories[j].LinkName
-	})
+	repositories, err = codeDeliveryRepositoriesInOrder(repositories, false)
+	if err != nil {
+		return codeGitDeliveryResult{}, err
+	}
 
 	changedCount := 0
 	results := make([]codeRepositoryDeliveryResult, 0, len(repositories))

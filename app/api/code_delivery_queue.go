@@ -245,22 +245,27 @@ func (runner *codeDeliveryRunner) finish(job *model.AICodeDeliveryJob, result co
 	} else {
 		updates["error_message"] = ""
 	}
-	finishErr := global.DB.Transaction(func(tx *gorm.DB) error {
-		updated := tx.Model(&model.AICodeDeliveryJob{}).Where("id = ? AND lease_owner = ?", job.ID, runner.owner).Updates(updates)
-		if updated.Error != nil {
-			return updated.Error
-		}
-		if updated.RowsAffected != 1 {
-			return errors.New("交付任务租约已失效")
-		}
-		if err := tx.Where("job_id = ? AND lease_owner = ?", job.ID, runner.owner).Delete(&model.AICodeDeliveryLease{}).Error; err != nil {
-			return err
-		}
-		if status == codeDeliveryJobCompleted {
-			return finalizeCodeSessionLifecycle(tx, job.SessionID, now)
-		}
-		return reopenCodeSessionLifecycle(tx, job.SessionID)
-	})
+	finishErr := func() error {
+		unlockLifecycle := codeSessionLifecycles.lock(job.SessionID)
+		defer unlockLifecycle()
+		continueDevelopment := status == codeDeliveryJobCompleted && shouldContinueCodeSessionAfterDelivery(global.DB, job.SessionID)
+		return global.DB.Transaction(func(tx *gorm.DB) error {
+			updated := tx.Model(&model.AICodeDeliveryJob{}).Where("id = ? AND lease_owner = ?", job.ID, runner.owner).Updates(updates)
+			if updated.Error != nil {
+				return updated.Error
+			}
+			if updated.RowsAffected != 1 {
+				return errors.New("交付任务租约已失效")
+			}
+			if err := tx.Where("job_id = ? AND lease_owner = ?", job.ID, runner.owner).Delete(&model.AICodeDeliveryLease{}).Error; err != nil {
+				return err
+			}
+			if status == codeDeliveryJobCompleted {
+				return applyCodeSessionLifecycleFinalization(tx, job.SessionID, now, continueDevelopment)
+			}
+			return reopenCodeSessionLifecycle(tx, job.SessionID)
+		})
+	}()
 	if finishErr != nil {
 		global.LOG.Errorf("Finish Code delivery %d failed: %v", job.ID, finishErr)
 		return
@@ -364,11 +369,7 @@ func (runner *codeDeliveryRunner) run(jobID uint) {
 	var result codeGitDeliveryResult
 	if session.IsolationMode == codeIsolationMultiWorktree || hasCodeMultiRepositoryDelivery(session.ID) {
 		lease.SetCancel(cancel)
-		if err := runCodeDeliveryQualityGate(&session, job.UserID, lease, reporter); err != nil {
-			runner.finish(job, codeGitDeliveryResult{}, err)
-			return
-		}
-		result, err = resumeCodeMultiRepositoryDeliveryWithProgress(&session, job.UserID, reporter)
+		result, err = resumeCodeMultiRepositoryDeliveryWithProgress(&session, job.UserID, lease, reporter)
 	} else {
 		var delivery *model.AICodeDelivery
 		delivery, result, err = prepareCodeSessionDeliveryWithProgress(&session, job.UserID, reporter)

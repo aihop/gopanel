@@ -164,8 +164,10 @@ func inspectCodeSessionGitSyncTarget(target codeSessionGitSyncTarget, fetchErr e
 		localContainsBase = err == nil
 	}
 	switch {
-	case result.Ahead == 0 && result.Behind == 0:
+	case result.Ahead == 0 && result.Behind == 0 && (baseCommit == "" || result.RemoteCommit == baseCommit):
 		result.Status = "synced"
+	case result.Ahead == 0 && result.Behind == 0 && remoteContainsBase && localContainsBase:
+		result.Status, result.Reason, result.CanSync = "integrated", "remote_integrated", true
 	case result.Ahead == 0 && result.Behind > 0:
 		result.Status, result.CanSync = "behind", true
 	case result.Ahead > 0 && result.Behind == 0 && result.RemoteCommit == baseCommit:

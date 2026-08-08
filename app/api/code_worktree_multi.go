@@ -203,15 +203,24 @@ func rollbackCodeSessionRepositoryWorktrees(session *model.AIDevSession) {
 		global.LOG.Errorf("Load Code repository worktrees %d failed: %v", session.ID, err)
 		return
 	}
+	if err := cleanupCodeMultiRepositoryIntegrationWorktrees(session, repositories); err != nil {
+		if global.LOG != nil {
+			global.LOG.Errorf("Rollback Code integration worktrees %d failed: %v", session.ID, err)
+		}
+		return
+	}
+	cleanupFailed := false
 	for index := len(repositories) - 1; index >= 0; index-- {
 		repository := repositories[index]
-		if _, err := runCodeGit(repository.SourceDir, "worktree", "remove", "--force", repository.WorktreeDir); err != nil {
+		if err := removeCodeSessionRepositoryWorktree(&repository, true); err != nil {
+			cleanupFailed = true
 			if global.LOG != nil {
 				global.LOG.Errorf("Rollback Code repository worktree %d failed: %v", repository.ID, err)
 			}
-			continue
 		}
-		_, _ = runCodeGit(repository.SourceDir, "branch", "-D", "--", repository.Branch)
+	}
+	if cleanupFailed {
+		return
 	}
 	_ = global.DB.Where("session_id = ?", session.ID).Delete(&model.AIDevSessionRepository{}).Error
 	_ = os.RemoveAll(session.WorkDir)
@@ -222,7 +231,21 @@ func cleanupCodeSessionRepositoryWorktrees(session *model.AIDevSession) error {
 	if err != nil {
 		return err
 	}
+	if len(repositories) == 0 {
+		return os.RemoveAll(session.WorkDir)
+	}
+	if err := cleanupCodeMultiRepositoryIntegrationWorktrees(session, repositories); err != nil {
+		return err
+	}
 	for _, repository := range repositories {
+		if _, err := os.Lstat(repository.WorktreeDir); errors.Is(err, os.ErrNotExist) {
+			if _, pruneErr := runCodeGit(repository.SourceDir, "worktree", "prune", "--expire", "now"); pruneErr != nil {
+				return pruneErr
+			}
+			continue
+		} else if err != nil {
+			return err
+		}
 		status, statusErr := runCodeGit(repository.WorktreeDir, "status", "--porcelain")
 		if statusErr != nil || strings.TrimSpace(status) != "" {
 			return fmt.Errorf("仓库 %s 仍有未提交修改，已保留会话工作区", repository.LinkName)
@@ -233,10 +256,7 @@ func cleanupCodeSessionRepositoryWorktrees(session *model.AIDevSession) error {
 	}
 	sort.SliceStable(repositories, func(i, j int) bool { return repositories[i].LinkName > repositories[j].LinkName })
 	for _, repository := range repositories {
-		if _, err := runCodeGit(repository.SourceDir, "worktree", "remove", repository.WorktreeDir); err != nil {
-			return err
-		}
-		if _, err := runCodeGit(repository.SourceDir, "branch", "-d", "--", repository.Branch); err != nil {
+		if err := removeCodeSessionRepositoryWorktree(&repository, false); err != nil {
 			return err
 		}
 	}
@@ -244,4 +264,33 @@ func cleanupCodeSessionRepositoryWorktrees(session *model.AIDevSession) error {
 		return err
 	}
 	return os.RemoveAll(session.WorkDir)
+}
+
+func removeCodeSessionRepositoryWorktree(repository *model.AIDevSessionRepository, force bool) error {
+	if repository == nil {
+		return nil
+	}
+	if _, err := os.Lstat(repository.WorktreeDir); err == nil {
+		args := []string{"worktree", "remove"}
+		if force {
+			args = append(args, "--force")
+		}
+		args = append(args, repository.WorktreeDir)
+		if _, err := runCodeGit(repository.SourceDir, args...); err != nil {
+			return err
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	} else if _, err := runCodeGit(repository.SourceDir, "worktree", "prune", "--expire", "now"); err != nil {
+		return err
+	}
+	if !codeWorktreeBranchExists(repository.SourceDir, repository.Branch) {
+		return nil
+	}
+	deleteFlag := "-d"
+	if force {
+		deleteFlag = "-D"
+	}
+	_, err := runCodeGit(repository.SourceDir, "branch", deleteFlag, "--", repository.Branch)
+	return err
 }

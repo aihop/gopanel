@@ -34,8 +34,10 @@ const delivering = computed(
 		props.session.status === "delivering"
 )
 const delivered = computed(() => props.delivery?.status === "completed" || props.session.status === "delivered")
-const hasChanges = computed(() => (gitStatus.value?.files || 0) > 0)
-const hasPendingChanges = computed(() => props.delivery?.hasPendingChanges === true)
+const hasPendingCommits = computed(() => props.delivery?.hasPendingCommits === true)
+const hasUncommittedChanges = computed(() => props.delivery?.hasUncommittedChanges === true)
+const hasChanges = computed(() => (gitStatus.value?.files || 0) > 0 || hasUncommittedChanges.value)
+const canDeliverPending = computed(() => hasPendingCommits.value && !hasUncommittedChanges.value)
 const label = computed(() => {
 	if (statusError.value) return t("mobile.retryGitStatus")
 	if (statusLoading.value) return t("mobile.checkingChanges")
@@ -43,7 +45,7 @@ const label = computed(() => {
 	if (delivering.value && props.delivery?.stage === "quality_check") return t("mobile.runningDeliveryQuality")
 	if (delivering.value) return t("mobile.deliveringShort")
 	if (hasChanges.value) return t("mobile.saveChanges")
-	if (hasPendingChanges.value) return t("mobile.deliverLatest")
+	if (canDeliverPending.value) return t("mobile.deliverLatest")
 	if (delivered.value) return t("mobile.deliveredShort")
 	if (["failed", "conflict", "partial"].includes(props.delivery?.status || "")) {
 		return t("mobile.retryDelivery")
@@ -88,7 +90,7 @@ function deliver() {
 		loading.value ||
 		statusLoading.value ||
 		delivering.value ||
-		(delivered.value && !hasChanges.value && !hasPendingChanges.value)
+		(delivered.value && !hasChanges.value && !canDeliverPending.value)
 	)
 		return
 	if (hasChanges.value) {
@@ -146,8 +148,8 @@ watch(
 		size="tiny"
 		secondary
 		:loading="loading || statusLoading"
-		:disabled="delivering || (!statusError && delivered && !hasChanges && !hasPendingChanges)"
-		:type="delivered && !hasChanges && !hasPendingChanges ? 'success' : delivering ? 'info' : 'primary'"
+		:disabled="delivering || (!statusError && delivered && !hasChanges && !canDeliverPending)"
+		:type="delivered && !hasChanges && !canDeliverPending ? 'success' : delivering ? 'info' : 'primary'"
 		class="!h-10 !rounded-xl"
 		@click.stop="deliver"
 	>
@@ -156,7 +158,7 @@ watch(
 				:name="
 					hasChanges
 						? 'mdi:content-save-outline'
-						: delivered && !hasPendingChanges
+						: delivered && !canDeliverPending && !hasChanges
 							? 'mdi:cloud-check-outline'
 							: delivering
 								? 'mdi:cloud-sync-outline'

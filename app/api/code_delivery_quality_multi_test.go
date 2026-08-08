@@ -3,6 +3,7 @@ package api
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/aihop/gopanel/app/model"
@@ -58,5 +59,101 @@ func TestMultiRepositoryDeliveryRunnerUsesCapturedQualitySnapshot(t *testing.T) 
 	currentCommit, err := runCodeGit(repositories[0].WorktreeDir, "rev-parse", "HEAD")
 	if err != nil || currentCommit != laterCommit {
 		t.Fatalf("interactive worktree changed during snapshot delivery: got=%q want=%q err=%v", currentCommit, laterCommit, err)
+	}
+}
+
+func TestMultiRepositorySecondDeliveryRunsQualityForChangedRepository(t *testing.T) {
+	session, project, _ := createMultiRepositorySession(t, 948)
+	if err := global.DB.Model(project).Update("require_quality_gate", true).Error; err != nil {
+		t.Fatal(err)
+	}
+	repositories, err := loadCodeSessionRepositories(session.ID)
+	if err != nil || len(repositories) < 2 {
+		t.Fatalf("load repositories: %#v, %v", repositories, err)
+	}
+	changed := &repositories[0]
+	marker := filepath.Join(t.TempDir(), "quality-runs")
+	writeAndCommitCodeTestFiles(t, changed.WorktreeDir, map[string]string{
+		"package.json": `{"scripts":{"test":"node verify.js"}}`,
+		"verify.js": "const fs=require('fs');fs.appendFileSync(" + quotedCodeTestJS(marker) +
+			",'run\\n');if(fs.existsSync('fail-quality'))process.exit(1);\n",
+	})
+	first, err := resumeCodeMultiRepositoryDelivery(session, session.UserID)
+	if err != nil || first.Status != codeDeliveryMerged {
+		t.Fatalf("first delivery failed: %#v, %v", first, err)
+	}
+	firstRuns, err := os.ReadFile(marker)
+	if err != nil || string(firstRuns) != "run\n" {
+		t.Fatalf("first quality run = %q, %v", firstRuns, err)
+	}
+	firstSourceHead, err := runCodeGit(changed.SourceDir, "rev-parse", "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	commitCodeTestFile(t, changed.WorktreeDir, "fail-quality", "fail\n")
+	if err := captureCodeMultiRepositoryDeliverySnapshot(session); err != nil {
+		t.Fatal(err)
+	}
+	if prepared, err := prepareCodeMultiRepositoryDeliveryWithProgress(session, nil); err != nil || prepared.Status != codeDeliveryMerged {
+		t.Fatalf("prepare second delivery: %#v, %v", prepared, err)
+	}
+	stored, err := loadCodeSessionRepositories(session.ID)
+	if err != nil || !codeMultiRepositoryDeliveryFrozen(stored) {
+		t.Fatalf("second delivery was not frozen: %#v, %v", stored, err)
+	}
+	for index := range stored {
+		repository := &stored[index]
+		if repository.ID == changed.ID {
+			if repository.Status != codeDeliveryMerged {
+				t.Fatalf("changed repository was not merged: %#v", repository)
+			}
+			continue
+		}
+		if repository.Status != codeDeliveryCompleted || repository.SourceAppliedAt != nil {
+			t.Fatalf("unchanged repository leaked previous delivery state: %#v", repository)
+		}
+	}
+	result, err := resumeCodeMultiRepositoryDelivery(session, session.UserID)
+	if err == nil || !strings.Contains(err.Error(), "质量门禁未通过") || result.Status != codeDeliveryJobFailed {
+		t.Fatalf("second delivery bypassed quality gate: %#v, %v", result, err)
+	}
+	secondRuns, err := os.ReadFile(marker)
+	if err != nil || string(secondRuns) != "run\nrun\n" {
+		t.Fatalf("second quality run = %q, %v", secondRuns, err)
+	}
+	currentSourceHead, err := runCodeGit(changed.SourceDir, "rev-parse", "HEAD")
+	if err != nil || currentSourceHead != firstSourceHead {
+		t.Fatalf("quality failure changed source: got=%q want=%q err=%v", currentSourceHead, firstSourceHead, err)
+	}
+}
+
+func TestMultiRepositorySecondDeliveryRerunsUnchangedRepositoryQuality(t *testing.T) {
+	session, project, _ := createMultiRepositorySession(t, 949)
+	if err := global.DB.Model(project).Update("require_quality_gate", true).Error; err != nil {
+		t.Fatal(err)
+	}
+	repositories, err := loadCodeSessionRepositories(session.ID)
+	if err != nil || len(repositories) < 2 {
+		t.Fatalf("load repositories: %#v, %v", repositories, err)
+	}
+	changed, checked := &repositories[0], &repositories[1]
+	marker := filepath.Join(t.TempDir(), "quality-runs")
+	writeAndCommitCodeTestFiles(t, checked.WorktreeDir, map[string]string{
+		"package.json": `{"scripts":{"test":"node verify.js"}}`,
+		"verify.js":    "require('fs').appendFileSync(" + quotedCodeTestJS(marker) + ",'run\\n');\n",
+	})
+	if result, err := resumeCodeMultiRepositoryDelivery(session, session.UserID); err != nil || result.Status != codeDeliveryMerged {
+		t.Fatalf("first delivery failed: %#v, %v", result, err)
+	}
+	commitCodeTestFile(t, changed.WorktreeDir, "second-delivery.txt", "changed\n")
+	if err := captureCodeMultiRepositoryDeliverySnapshot(session); err != nil {
+		t.Fatal(err)
+	}
+	if result, err := resumeCodeMultiRepositoryDelivery(session, session.UserID); err != nil || result.Status != codeDeliveryMerged {
+		t.Fatalf("second delivery failed: %#v, %v", result, err)
+	}
+	runs, err := os.ReadFile(marker)
+	if err != nil || string(runs) != "run\nrun\n" {
+		t.Fatalf("unchanged repository quality runs = %q, %v", runs, err)
 	}
 }

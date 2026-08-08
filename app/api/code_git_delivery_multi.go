@@ -2,9 +2,7 @@ package api
 
 import (
 	"errors"
-	"fmt"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
@@ -14,18 +12,19 @@ import (
 )
 
 type codeRepositoryDeliveryResult struct {
-	RepositoryID   string   `json:"repositoryId"`
-	RepositoryName string   `json:"repositoryName"`
-	Status         string   `json:"status"`
-	Branch         string   `json:"branch"`
-	TargetBranch   string   `json:"targetBranch"`
-	Remote         string   `json:"remote,omitempty"`
-	RemoteBranch   string   `json:"remoteBranch,omitempty"`
-	Commit         string   `json:"commit,omitempty"`
-	PushStatus     string   `json:"pushStatus"`
-	PushedCommit   string   `json:"pushedCommit,omitempty"`
-	ErrorMessage   string   `json:"errorMessage,omitempty"`
-	ConflictFiles  []string `json:"conflictFiles,omitempty"`
+	RepositoryID    string     `json:"repositoryId"`
+	RepositoryName  string     `json:"repositoryName"`
+	Status          string     `json:"status"`
+	Branch          string     `json:"branch"`
+	TargetBranch    string     `json:"targetBranch"`
+	Remote          string     `json:"remote,omitempty"`
+	RemoteBranch    string     `json:"remoteBranch,omitempty"`
+	Commit          string     `json:"commit,omitempty"`
+	PushStatus      string     `json:"pushStatus"`
+	PushedCommit    string     `json:"pushedCommit,omitempty"`
+	SourceAppliedAt *time.Time `json:"sourceAppliedAt,omitempty"`
+	ErrorMessage    string     `json:"errorMessage,omitempty"`
+	ConflictFiles   []string   `json:"conflictFiles,omitempty"`
 }
 
 func validateCodeMultiWorktreeDeliverySession(session *model.AIDevSession, claims *token.CustomClaims) error {
@@ -124,185 +123,125 @@ func commitCodeSessionRepository(session *model.AIDevSession, repositoryID, mess
 	}, nil
 }
 
-func prepareCodeMultiRepositoryDelivery(session *model.AIDevSession, repositories []model.AIDevSessionRepository) error {
-	return prepareCodeMultiRepositoryDeliveryWithProgress(session, repositories, nil)
-}
-
-func prepareCodeMultiRepositoryDeliveryWithProgress(session *model.AIDevSession, repositories []model.AIDevSessionRepository, report codeDeliveryProgressReporter) error {
-	if report != nil {
-		report(codeDeliveryStageSyncing, 20)
-	}
-	for index := range repositories {
-		repository := &repositories[index]
-		if repository.Status == codeDeliveryCompleted || repository.Status == codeDeliveryMerged {
-			continue
-		}
-		if strings.TrimSpace(repository.WorktreeCommit) == "" {
-			return fmt.Errorf("仓库 %s 的交付快照不可用", repository.LinkName)
-		}
-		targetBranch := repository.TargetBranch
-		if targetBranch == "" {
-			targetBranch, _ = runCodeGit(repository.SourceDir, "branch", "--show-current")
-		}
-		targetCommit, err := refreshCodeRepositoryTargetWithCredential(
-			repository.SourceDir, targetBranch, repository.RemoteName, codeProjectGitCredentialID(session.ProjectID),
-		)
-		if err != nil {
-			return fmt.Errorf("仓库 %s 同步失败：%w", repository.LinkName, err)
-		}
-		repository.TargetBranch, repository.RemoteCommit = targetBranch, targetCommit
-	}
-	for index := range repositories {
-		repository := &repositories[index]
-		if repository.Status == codeDeliveryCompleted || repository.Status == codeDeliveryMerged {
-			continue
-		}
-		if err := global.DB.Model(repository).Updates(map[string]any{
-			"status": codeDeliveryPrepared, "target_branch": repository.TargetBranch,
-			"remote_commit": repository.RemoteCommit, "worktree_commit": repository.WorktreeCommit,
-			"error_message": "",
-		}).Error; err != nil {
-			return err
-		}
-		repository.Status = codeDeliveryPrepared
-	}
-	return nil
-}
-
-func mergeCodeSessionRepository(repository *model.AIDevSessionRepository, repositories []model.AIDevSessionRepository) (codeRepositoryDeliveryResult, error) {
-	result := codeRepositoryDeliveryResult{
-		RepositoryID: codeSessionRepositoryID(repository.ID), RepositoryName: repository.LinkName,
-		Status: repository.Status, Branch: repository.Branch, TargetBranch: repository.TargetBranch,
-		Remote: repository.RemoteName, RemoteBranch: deliveryRemoteBranch(repository.RemoteBranch, repository.TargetBranch),
-		Commit: repository.MergeCommit, PushStatus: repository.PushStatus,
-		PushedCommit: repository.PushedCommit, ErrorMessage: repository.PushError,
-	}
-	if repository.Status == codeDeliveryMerged || repository.Status == codeDeliveryCompleted {
-		return result, nil
-	}
-	if _, err := runCodeGit(repository.SourceDir, "merge-base", "--is-ancestor", repository.WorktreeCommit, "HEAD"); err != nil {
-		if statusErr := validateCodeRepositoryMergeStatus(repository, repositories); statusErr != nil {
-			return result, statusErr
-		}
-		if _, err := runCodeGit(repository.SourceDir, "merge", "--no-ff", "--no-edit", repository.WorktreeCommit); err != nil {
-			conflicts := codeGitConflictFiles(repository.SourceDir)
-			_, _ = runCodeGit(repository.SourceDir, "merge", "--abort")
-			if len(conflicts) > 0 {
-				result.Status, result.ConflictFiles = "conflict", conflicts
-				_ = global.DB.Model(repository).Updates(map[string]any{
-					"status": "conflict", "error_message": strings.Join(conflicts, ", "),
-				}).Error
-				return result, nil
-			}
-			return result, err
-		}
-	}
-	if err := commitCodeSourceGitlinkUpdates(repository, repositories); err != nil {
-		return result, err
-	}
-	commit, err := runCodeGit(repository.SourceDir, "rev-parse", "HEAD")
-	if err != nil {
-		return result, err
-	}
-	now := time.Now()
-	if err := global.DB.Model(repository).Updates(map[string]any{
-		"status": codeDeliveryMerged, "merge_commit": commit, "merged_at": now, "error_message": "",
-	}).Error; err != nil {
-		return result, err
-	}
-	repository.Status, repository.MergeCommit, repository.MergedAt = codeDeliveryMerged, commit, &now
-	result.Status, result.Commit = codeDeliveryMerged, commit
-	return result, nil
-}
-
-func completeMergedCodeSessionRepository(repository *model.AIDevSessionRepository) error {
-	if repository.Status == codeDeliveryCompleted {
-		return nil
-	}
-	now := time.Now()
-	if err := global.DB.Model(repository).Updates(map[string]any{
-		"status": codeDeliveryCompleted, "completed_at": now, "error_message": "",
-	}).Error; err != nil {
-		return err
-	}
-	repository.Status, repository.CompletedAt = codeDeliveryCompleted, &now
-	return nil
-}
-
 func resumeCodeMultiRepositoryDelivery(session *model.AIDevSession, _ uint) (codeGitDeliveryResult, error) {
-	return resumeCodeMultiRepositoryDeliveryWithProgress(session, 0, nil)
+	return resumeCodeMultiRepositoryDeliveryWithProgress(session, 0, nil, nil)
 }
 
-func resumeCodeMultiRepositoryDeliveryWithProgress(session *model.AIDevSession, _ uint, report codeDeliveryProgressReporter) (codeGitDeliveryResult, error) {
+func resumeCodeMultiRepositoryDeliveryWithProgress(
+	session *model.AIDevSession,
+	userID uint,
+	lease *codeExecutionLease,
+	report codeDeliveryProgressReporter,
+) (codeGitDeliveryResult, error) {
 	repositories, err := loadCodeSessionRepositories(session.ID)
 	if err != nil || len(repositories) == 0 {
 		return codeGitDeliveryResult{}, errors.New("会话多仓库 Worktree 元数据不可用")
 	}
-	sort.SliceStable(repositories, func(i, j int) bool {
-		leftDepth := strings.Count(filepath.Clean(repositories[i].SourceDir), string(filepath.Separator))
-		rightDepth := strings.Count(filepath.Clean(repositories[j].SourceDir), string(filepath.Separator))
-		if leftDepth != rightDepth {
-			return leftDepth > rightDepth
-		}
-		return repositories[i].LinkName < repositories[j].LinkName
-	})
-	if _, err := codeMultiRepositoryWorkspaceDir(session, repositories); err != nil {
-		return codeGitDeliveryResult{}, err
+	if codeMultiRepositoryAllCompleted(repositories) {
+		return publishCodeMultiRepositoryDeliveryWithProgress(session, report)
 	}
-	needsSnapshot := false
-	for index := range repositories {
-		status := repositories[index].Status
-		if status != codeDeliveryPrepared && status != codeDeliveryMerged && status != codeDeliveryCompleted {
-			needsSnapshot = true
-			break
-		}
-	}
-	if needsSnapshot {
-		if err := captureCodeMultiRepositoryDeliverySnapshot(session); err != nil {
+	publishingStarted := false
+	if codeMultiRepositoryDeliveryFrozen(repositories) {
+		if err := restoreCodeMultiRepositoryIntegrationWorktrees(session, repositories); err != nil {
 			return codeGitDeliveryResult{}, err
 		}
-		repositories, err = loadCodeSessionRepositories(session.ID)
+		if publishingStarted, err = codeMultiRepositoryPublishStarted(session, repositories); err != nil {
+			return codeGitDeliveryResult{}, err
+		}
+	} else {
+		prepared, prepareErr := prepareCodeMultiRepositoryDeliveryWithProgress(session, report)
+		if prepareErr != nil || prepared.Status == codeDeliveryJobConflict || prepared.Status == codeDeliveryJobPartial {
+			return prepared, prepareErr
+		}
+	}
+	runQualityGate := !publishingStarted
+	if publishingStarted {
+		runQualityGate, err = codeMultiRepositoryHasQualityChecks(session)
 		if err != nil {
 			return codeGitDeliveryResult{}, err
 		}
-		sort.SliceStable(repositories, func(i, j int) bool {
-			return strings.Count(filepath.Clean(repositories[i].SourceDir), string(filepath.Separator)) >
-				strings.Count(filepath.Clean(repositories[j].SourceDir), string(filepath.Separator))
-		})
 	}
-	if err := prepareCodeMultiRepositoryDeliveryWithProgress(session, repositories, report); err != nil {
-		return codeGitDeliveryResult{}, err
+	if runQualityGate {
+		err = runCodeDeliveryQualityGate(session, userID, lease, report)
 	}
-	results := make([]codeRepositoryDeliveryResult, 0, len(repositories))
+	if err != nil {
+		stored, loadErr := loadCodeSessionRepositories(session.ID)
+		if loadErr != nil {
+			return codeGitDeliveryResult{}, loadErr
+		}
+		return codeMultiRepositoryFailure(codeStoredRepositoryDeliveryResults(stored), err), err
+	}
+	return publishCodeMultiRepositoryDeliveryWithProgress(session, report)
+}
+
+func codeMultiRepositoryAllCompleted(repositories []model.AIDevSessionRepository) bool {
+	if len(repositories) == 0 {
+		return false
+	}
 	for index := range repositories {
-		if repositories[index].Status == codeDeliveryCompleted {
-			results = append(results, codeStoredRepositoryDeliveryResult(&repositories[index]))
+		if repositories[index].Status != codeDeliveryCompleted {
+			return false
+		}
+	}
+	return true
+}
+
+func codeMultiRepositoryDeliveryFrozen(repositories []model.AIDevSessionRepository) bool {
+	if len(repositories) == 0 {
+		return false
+	}
+	for index := range repositories {
+		repository := &repositories[index]
+		if repository.Status == codeDeliveryCompleted {
 			continue
 		}
-		result, mergeErr := integrateAndPushCodeRepositoryWithProgress(session, &repositories[index], repositories, report)
-		results = append(results, result)
-		if mergeErr != nil {
-			return codeMultiRepositoryFailure(results, mergeErr), mergeErr
-		}
-		if result.Status == "conflict" {
-			conflictResult := codeGitDeliveryResult{
-				Status: "conflict", RepositoryID: result.RepositoryID, RepositoryName: result.RepositoryName,
-				Branch: result.Branch, ConflictFiles: result.ConflictFiles, Repositories: results,
-			}
-			if hasCompletedCodeRepositoryResult(results[:len(results)-1]) {
-				conflictResult.Status = codeDeliveryJobPartial
-			}
-			conflictResult.ResultType = codeMultiRepositoryResultType(results)
-			return conflictResult, nil
-		}
-		if report != nil {
-			report(codeDeliveryStageCleaning, 90+index*5/max(1, len(repositories)))
-		}
-		if err := completeMergedCodeSessionRepository(&repositories[index]); err != nil {
-			return codeMultiRepositoryFailure(results, err), err
+		if repository.Status != codeDeliveryMerged || strings.TrimSpace(repository.SourceCommit) == "" ||
+			strings.TrimSpace(repository.MergeCommit) == "" {
+			return false
 		}
 	}
-	return codeGitDeliveryResult{Status: "merged", ResultType: codeMultiRepositoryResultType(results), Repositories: results}, nil
+	return true
+}
+
+func codeMultiRepositoryPublishStarted(
+	session *model.AIDevSession,
+	repositories []model.AIDevSessionRepository,
+) (bool, error) {
+	for index := range repositories {
+		repository := &repositories[index]
+		if repository.Status == codeDeliveryCompleted {
+			continue
+		}
+		if repository.SourceAppliedAt != nil || repository.PushStatus == codePushPushed {
+			return true, nil
+		}
+		if strings.TrimSpace(repository.MergeCommit) == "" || strings.TrimSpace(repository.TargetBranch) == "" {
+			continue
+		}
+		commit, err := runCodeGit(repository.SourceDir, "rev-parse", "refs/heads/"+repository.TargetBranch)
+		if err == nil && strings.TrimSpace(commit) == strings.TrimSpace(repository.MergeCommit) {
+			if err := markCodeMultiRepositorySourceApplied(repository); err != nil {
+				return false, err
+			}
+			return true, nil
+		}
+		remoteBranch := deliveryRemoteBranch(repository.RemoteBranch, repository.TargetBranch)
+		if !codeDeliveryHasRemote(repository.RemoteName, remoteBranch) {
+			continue
+		}
+		if _, err := fetchCodeRepositoryWithCredential(
+			repository.SourceDir, repository.RemoteName, codeProjectGitCredentialID(session.ProjectID),
+		); err != nil {
+			return false, err
+		}
+		remoteCommit, err := runCodeGit(
+			repository.SourceDir, "rev-parse", "refs/remotes/"+repository.RemoteName+"/"+remoteBranch,
+		)
+		if err == nil && strings.TrimSpace(remoteCommit) == strings.TrimSpace(repository.MergeCommit) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func codeStoredRepositoryDeliveryResult(repository *model.AIDevSessionRepository) codeRepositoryDeliveryResult {
@@ -315,7 +254,7 @@ func codeStoredRepositoryDeliveryResult(repository *model.AIDevSessionRepository
 		Status: repository.Status, Branch: repository.Branch, TargetBranch: repository.TargetBranch,
 		Remote: repository.RemoteName, RemoteBranch: deliveryRemoteBranch(repository.RemoteBranch, repository.TargetBranch),
 		Commit: repository.MergeCommit, PushStatus: pushStatus, PushedCommit: repository.PushedCommit,
-		ErrorMessage: repository.PushError,
+		SourceAppliedAt: repository.SourceAppliedAt, ErrorMessage: repository.PushError,
 	}
 }
 
@@ -332,7 +271,8 @@ func codeMultiRepositoryFailure(results []codeRepositoryDeliveryResult, err erro
 
 func hasCompletedCodeRepositoryResult(results []codeRepositoryDeliveryResult) bool {
 	for _, result := range results {
-		if result.Status == codeDeliveryMerged || result.Status == codeDeliveryCompleted || result.PushStatus == codePushPushed {
+		if (result.Status != codeDeliveryCompleted || result.SourceAppliedAt != nil) &&
+			(result.SourceAppliedAt != nil || result.PushStatus == codePushPushed) {
 			return true
 		}
 	}
@@ -342,9 +282,12 @@ func hasCompletedCodeRepositoryResult(results []codeRepositoryDeliveryResult) bo
 func codeMultiRepositoryResultType(results []codeRepositoryDeliveryResult) string {
 	hasLocal, hasRemote := false, false
 	for _, result := range results {
+		if result.Status == codeDeliveryCompleted && result.SourceAppliedAt == nil {
+			continue
+		}
 		if result.PushStatus == codePushPushed {
 			hasRemote = true
-		} else if result.Status == codeDeliveryMerged || result.Status == codeDeliveryCompleted || result.PushStatus == "local" {
+		} else if result.SourceAppliedAt != nil {
 			hasLocal = true
 		}
 	}

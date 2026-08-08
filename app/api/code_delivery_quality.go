@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/aihop/gopanel/app/model"
@@ -77,7 +78,7 @@ func runCodeDeliveryQualityGateAtRoots(session *model.AIDevSession, userID uint,
 		currentRevision, currentErr := codeQualityRevision(check.workDirPath)
 		result.Revision = revision
 		result.Current = currentErr == nil && currentRevision == revision
-		if err := persistCodeQualityResult(session, userID, check, result); err != nil {
+		if err := persistCodeDeliveryQualityResult(session, userID, check, result, roots); err != nil {
 			return err
 		}
 		if result.Status != "passed" {
@@ -96,6 +97,40 @@ func runCodeDeliveryQualityGateAtRoots(session *model.AIDevSession, userID uint,
 	}
 	loadCodeQualityResults(session.ID, checks)
 	return validateCodeQualityCheckResults(checks)
+}
+
+func persistCodeDeliveryQualityResult(
+	session *model.AIDevSession,
+	userID uint,
+	check codeQualityCheck,
+	result codeQualityCheckResult,
+	roots []codeDeliveryQualityRoot,
+) error {
+	if err := persistCodeQualityResult(session, userID, check, result); err != nil {
+		return err
+	}
+	for _, root := range roots {
+		identityDir := strings.TrimSpace(root.IdentityDir)
+		if identityDir == "" {
+			identityDir = root.WorkDir
+		}
+		if filepath.Clean(identityDir) != filepath.Clean(root.WorkDir) {
+			continue
+		}
+		relative, err := filepath.Rel(root.WorkDir, check.workDirPath)
+		if err != nil || filepath.IsAbs(relative) || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+			continue
+		}
+		alias := check
+		alias.ID = codeQualityCheckID(filepath.Join(identityDir, relative), check.Kind, check.Command)
+		if alias.ID == check.ID {
+			return nil
+		}
+		aliasResult := result
+		aliasResult.CheckID = alias.ID
+		return persistCodeQualityResult(session, userID, alias, aliasResult)
+	}
+	return nil
 }
 
 func codeDeliveryQualityRoots(session *model.AIDevSession) ([]codeDeliveryQualityRoot, error) {
@@ -136,6 +171,7 @@ func detectCodeDeliveryQualityChecks(roots []codeDeliveryQualityRoot) []codeQual
 		paths = append(paths, root.WorkDir)
 	}
 	checks := detectCodeQualityChecksInRoots(paths)
+	deliveryFingerprint := codeDeliveryQualityFingerprint(roots)
 	for index := range checks {
 		check := &checks[index]
 		for _, root := range roots {
@@ -147,11 +183,26 @@ func detectCodeDeliveryQualityChecks(roots []codeDeliveryQualityRoot) []codeQual
 			if identityDir == "" {
 				identityDir = root.WorkDir
 			}
-			check.ID = codeQualityCheckID(filepath.Join(identityDir, relative), check.Kind, check.Command)
+			check.ID = codeQualityCheckID(
+				filepath.Join(identityDir, relative), check.Kind, check.Command+"\x00"+deliveryFingerprint,
+			)
 			break
 		}
 	}
 	return checks
+}
+
+func codeDeliveryQualityFingerprint(roots []codeDeliveryQualityRoot) string {
+	commits := make([]string, 0, len(roots))
+	for _, root := range roots {
+		identityDir := strings.TrimSpace(root.IdentityDir)
+		if identityDir == "" {
+			identityDir = root.WorkDir
+		}
+		commits = append(commits, filepath.Clean(identityDir)+"\x00"+strings.TrimSpace(root.Commit))
+	}
+	sort.Strings(commits)
+	return codeQualityCheckID(strings.Join(commits, "\x00"), "delivery", "")
 }
 
 func validateCodeDeliveryQualityRoots(roots []codeDeliveryQualityRoot) error {

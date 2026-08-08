@@ -231,16 +231,27 @@ func TestCodeDeliveryRecoveryRestoresSessionLifecycle(t *testing.T) {
 }
 
 func TestCodeMultiRepositoryResultType(t *testing.T) {
+	sourceAppliedAt := time.Now()
 	results := []codeRepositoryDeliveryResult{
-		{Status: codeDeliveryCompleted, PushStatus: codePushPushed},
+		{Status: codeDeliveryCompleted, PushStatus: codePushPushed, SourceAppliedAt: &sourceAppliedAt},
 		{Status: codeDeliveryMerged, PushStatus: "local"},
 	}
-	if resultType := codeMultiRepositoryResultType(results); resultType != "mixed" {
-		t.Fatalf("unexpected mixed result type: %s", resultType)
+	if resultType := codeMultiRepositoryResultType(results); resultType != "remote_verified" {
+		t.Fatalf("isolated merge should not count as local delivery: %s", resultType)
+	}
+	failed := codeMultiRepositoryFailure(results[1:], errors.New("quality failed"))
+	if failed.Status != codeDeliveryJobFailed || failed.ResultType != "" {
+		t.Fatalf("isolated merge should not count as partial delivery: %#v", failed)
 	}
 	partial := codeMultiRepositoryFailure(results[:1], errors.New("second repository failed"))
 	if partial.Status != codeDeliveryJobPartial || partial.ResultType != "remote_verified" {
 		t.Fatalf("unexpected partial result: %#v", partial)
+	}
+	mixed := append(results[:1], codeRepositoryDeliveryResult{
+		Status: codeDeliveryCompleted, PushStatus: "local", SourceAppliedAt: &sourceAppliedAt,
+	})
+	if resultType := codeMultiRepositoryResultType(mixed); resultType != "mixed" {
+		t.Fatalf("unexpected mixed delivery result: %s", resultType)
 	}
 }
 

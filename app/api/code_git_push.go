@@ -3,9 +3,7 @@ package api
 import (
 	"context"
 	"errors"
-	"fmt"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
@@ -25,6 +23,7 @@ const (
 )
 
 var errCodePushRemoteAdvanced = errors.New("远端分支已在交付后更新，请先同步并重新交付")
+var errCodeMultiRepositoryManualPush = errors.New("多仓库会话不能单独推送，请通过统一交付重新执行质量检查并发布全部仓库")
 
 type codeRepositoryPushResult struct {
 	RepositoryID   string `json:"repositoryId"`
@@ -94,21 +93,7 @@ func PushCodeSessionDelivery(c fiber.Ctx) error {
 
 func loadCodeDeliveryPushStatus(session *model.AIDevSession) (codePushResult, error) {
 	if hasCodeMultiRepositoryDelivery(session.ID) {
-		repositories, err := loadCodeSessionRepositories(session.ID)
-		if err != nil {
-			return codePushResult{}, err
-		}
-		results := make([]codeRepositoryPushResult, 0, len(repositories))
-		for _, repository := range repositories {
-			remoteBranch := deliveryRemoteBranch(repository.RemoteBranch, repository.TargetBranch)
-			results = append(results, codeRepositoryPushResult{
-				RepositoryID: codeSessionRepositoryID(repository.ID), RepositoryName: repository.LinkName,
-				Status: repository.PushStatus, Remote: repository.RemoteName,
-				Branch: remoteBranch, Commit: repository.PushedCommit, ErrorMessage: repository.PushError,
-				Ready: repository.MergeCommit != "" && repository.RemoteCommit != "",
-			})
-		}
-		return summarizeCodePushResults(results), nil
+		return codePushResult{Status: "unavailable", Repositories: []codeRepositoryPushResult{}}, nil
 	}
 	var delivery model.AICodeDelivery
 	if err := global.DB.Where("session_id = ?", session.ID).First(&delivery).Error; err != nil {
@@ -185,7 +170,7 @@ func summarizeCodePushResults(repositories []codeRepositoryPushResult) codePushR
 
 func pushCodeSessionDelivery(session *model.AIDevSession) (codePushResult, error) {
 	if hasCodeMultiRepositoryDelivery(session.ID) {
-		return pushCodeMultiRepositoryDelivery(session.ID)
+		return codePushResult{}, errCodeMultiRepositoryManualPush
 	}
 	var delivery model.AICodeDelivery
 	if err := global.DB.Where("session_id = ?", session.ID).First(&delivery).Error; err != nil {
@@ -209,37 +194,6 @@ func pushCodeSessionDelivery(session *model.AIDevSession) (codePushResult, error
 		return summarizeCodePushResults([]codeRepositoryPushResult{result}), err
 	}
 	return summarizeCodePushResults([]codeRepositoryPushResult{result}), nil
-}
-
-func pushCodeMultiRepositoryDelivery(sessionID uint) (codePushResult, error) {
-	repositories, err := loadCodeSessionRepositories(sessionID)
-	if err != nil || len(repositories) == 0 {
-		return codePushResult{}, errors.New("会话多仓库交付记录不可用")
-	}
-	sort.SliceStable(repositories, func(i, j int) bool { return repositories[i].LinkName < repositories[j].LinkName })
-	results := make([]codeRepositoryPushResult, 0, len(repositories))
-	for index := range repositories {
-		repository := &repositories[index]
-		result, pushErr := pushCodeDeliveryRepositoryWithCredential(
-			repository.SourceDir, repository.TargetBranch, repository.RemoteName,
-			deliveryRemoteBranch(repository.RemoteBranch, repository.TargetBranch),
-			repository.RemoteCommit, repository.MergeCommit, repository.PushStatus,
-			codeProjectGitCredentialID(repository.ProjectID), nil,
-		)
-		result.RepositoryID, result.RepositoryName = codeSessionRepositoryID(repository.ID), repository.LinkName
-		updates := map[string]any{"push_status": result.Status, "push_error": result.ErrorMessage}
-		if result.Status == codePushPushed {
-			updates["pushed_commit"], updates["pushed_at"] = result.Commit, time.Now()
-		}
-		if err := global.DB.Model(repository).Updates(updates).Error; err != nil {
-			return codePushResult{Status: codePushFailed, Repositories: results}, err
-		}
-		results = append(results, result)
-		if pushErr != nil {
-			return summarizeCodePushResults(results), fmt.Errorf("仓库 %s 推送失败：%w", repository.LinkName, pushErr)
-		}
-	}
-	return summarizeCodePushResults(results), nil
 }
 
 func pushCodeDeliveryRepository(sourceDir, targetBranch, remoteName, remoteBranch, remoteCommit, mergeCommit, pushStatus string) (codeRepositoryPushResult, error) {
