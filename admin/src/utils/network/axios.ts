@@ -1,5 +1,6 @@
 import type { AxiosRequestConfig, AxiosRequestHeaders } from "axios"
 import { useAuthStore } from "@/store/auth"
+import { MsgRequestError } from "@/utils/message"
 import axios from "axios"
 
 import { useRouter } from "vue-router"
@@ -46,12 +47,12 @@ axiosInstance.interceptors.response.use(
 			} else {
 				if (code === 41) {
 					const msg = response.data.msg || "系统错误"
-					showToast && window.$message?.error(msg)
+					showToast && MsgRequestError(msg)
 					return Promise.reject(new Error(msg))
 				} else if (code === 50) {
 					const authStore = useAuthStore()
 					authStore.setLogout()
-					showToast && window.$message?.error("登录已经失效")
+					showToast && MsgRequestError("登录已经失效")
 					const router = useRouter()
 					router.push("/login")
 					return Promise.reject(new Error("登录已经失效"))
@@ -71,7 +72,7 @@ axiosInstance.interceptors.response.use(
 			errMsg = codeMessage?.[error?.response?.status as keyof typeof codeMessage] ?? "请求错误"
 		}
 		const showToast = error.config?._toast
-		showToast && window.$message?.error(errMsg)
+		showToast && MsgRequestError(errMsg)
 		return Promise.reject(new Error(errMsg))
 	}
 )

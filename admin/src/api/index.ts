@@ -4,7 +4,7 @@ import type { ResultData } from "@/api/interface"
 import { ResultEnum } from "@/enums/http-enum"
 import { checkStatus } from "./helper/check-status"
 import GlobalStore from "@/store/modules/global"
-import { MsgError } from "@/utils/message"
+import { MsgRequestError } from "@/utils/message"
 import { useAuthStore } from "@/store/auth"
 import type { Router } from "vue-router"
 import { enc } from "crypto-js"
@@ -69,12 +69,12 @@ class RequestHttp {
 					const authStore = useAuthStore()
 					authStore.setLogout()
 					router?.replace({ path: "/login" })
-					MsgError("登录已经失效")
+					MsgRequestError("登录已经失效")
 					return Promise.reject(new Error("登录已经失效"))
 				}
 				if (data.code === ResultEnum.FAIL) {
 					const msg = response.data.msg || "系统错误"
-					MsgError(msg)
+					MsgRequestError(msg)
 					return Promise.reject(new Error(msg))
 				}
 
@@ -131,7 +131,7 @@ class RequestHttp {
 
 				globalStore.errStatus = ""
 				const { response } = error
-				if (error.message.indexOf("timeout") !== -1) MsgError("请求超时！请您稍后重试")
+				if (error.message.indexOf("timeout") !== -1) MsgRequestError("请求超时！请您稍后重试")
 				if (response) {
 					switch (response.status) {
 						case 310:
