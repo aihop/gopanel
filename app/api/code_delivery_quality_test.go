@@ -207,6 +207,31 @@ func TestPrepareCodeDeliveryQualityEnvironmentSkipsTrackedDartTool(t *testing.T)
 	}
 }
 
+func TestChangedCodeDeliveryQualityRootRestoresTrackedChanges(t *testing.T) {
+	workDir := createCodeGitRepository(t)
+	commit, err := runCodeGit(workDir, "rev-parse", "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	readme := filepath.Join(workDir, "README.md")
+	if err := os.WriteFile(readme, []byte("changed\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	root := codeDeliveryQualityRoot{WorkDir: workDir, Commit: commit}
+	check := newCodeQualityCheck("lint", "Lint", workDir, workDir, "true")
+	changed := changedCodeDeliveryQualityRoot(check, []codeDeliveryQualityRoot{root})
+	if changed == nil {
+		t.Fatal("tracked quality mutation was not detected")
+	}
+	if err := restoreCodeDeliveryQualityRoot(*changed); err != nil {
+		t.Fatal(err)
+	}
+	content, err := os.ReadFile(readme)
+	if err != nil || string(content) != "test\n" {
+		t.Fatalf("quality snapshot was not restored: %q, %v", content, err)
+	}
+}
+
 func TestRunCodeDeliveryQualityGateStopsFailedDelivery(t *testing.T) {
 	session := createQualityDeliverySession(t, 148, "false")
 	err := runCodeDeliveryQualityGate(session, session.UserID, nil, nil)

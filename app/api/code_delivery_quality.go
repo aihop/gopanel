@@ -81,6 +81,12 @@ func runCodeDeliveryQualityGateAtRoots(session *model.AIDevSession, userID uint,
 			return err
 		}
 		result := executeCodeQualityCheck(lease, check)
+		if changedRoot := changedCodeDeliveryQualityRoot(check, roots); changedRoot != nil {
+			return errors.Join(
+				fmt.Errorf("质量检查修改了交付快照：%s", check.Label),
+				restoreCodeDeliveryQualityRoot(*changedRoot),
+			)
+		}
 		currentRevision, currentErr := codeQualityRevision(check.workDirPath)
 		result.Revision = revision
 		result.Current = currentErr == nil && currentRevision == revision
@@ -103,6 +109,29 @@ func runCodeDeliveryQualityGateAtRoots(session *model.AIDevSession, userID uint,
 	}
 	loadCodeQualityResults(session.ID, checks)
 	return validateCodeQualityCheckResults(checks)
+}
+
+func changedCodeDeliveryQualityRoot(check codeQualityCheck, roots []codeDeliveryQualityRoot) *codeDeliveryQualityRoot {
+	for index := range roots {
+		root := &roots[index]
+		if !pathWithinDirectory(root.WorkDir, check.workDirPath) {
+			continue
+		}
+		status, err := runCodeGit(root.WorkDir, "status", "--porcelain", "--untracked-files=no")
+		if err == nil && strings.TrimSpace(status) != "" {
+			return root
+		}
+		return nil
+	}
+	return nil
+}
+
+func restoreCodeDeliveryQualityRoot(root codeDeliveryQualityRoot) error {
+	if _, err := runCodeGit(root.WorkDir, "reset", "--hard", root.Commit); err != nil {
+		return err
+	}
+	_, err := runCodeGit(root.WorkDir, "clean", "-d", "-f")
+	return err
 }
 
 func persistCodeDeliveryQualityResult(

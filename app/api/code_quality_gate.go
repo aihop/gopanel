@@ -267,7 +267,8 @@ func detectNodeQualityChecks(workDir, displayRoot string) []codeQualityCheck {
 	checks := make([]codeQualityCheck, 0, len(scriptCandidates))
 	for _, candidate := range scriptCandidates {
 		for _, name := range candidate.names {
-			if _, exists := packageFile.Scripts[name]; !exists {
+			script, exists := packageFile.Scripts[name]
+			if !exists || mutatingNodeQualityScript(script) {
 				continue
 			}
 			args := append(append([]string{}, prefix...), name)
@@ -276,6 +277,17 @@ func detectNodeQualityChecks(workDir, displayRoot string) []codeQualityCheck {
 		}
 	}
 	return checks
+}
+
+func mutatingNodeQualityScript(script string) bool {
+	fields := strings.Fields(strings.ToLower(script))
+	for _, field := range fields {
+		switch field {
+		case "--fix", "--fix-dry-run", "--write", "-w":
+			return true
+		}
+	}
+	return false
 }
 
 func newCodeQualityCheck(kind, label, workDir, displayRoot, executable string, args ...string) codeQualityCheck {
