@@ -98,3 +98,43 @@ func TestCleanupCodeDeliveryWorktreesWhenSourceDirectoryIsMissing(t *testing.T) 
 		}
 	}
 }
+
+func TestCleanupCodeDeliveryWorktreesWhenSourceIsNoLongerGitRepository(t *testing.T) {
+	session, sourceDir := createDeliveryWorktree(t, 70)
+	deliveryDir := aiSessionDeliveryWorktreeDir(session.UserID, session.ID)
+	if err := os.MkdirAll(deliveryDir, 0750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(sourceDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(sourceDir, 0750); err != nil {
+		t.Fatal(err)
+	}
+	delivery := &model.AICodeDelivery{
+		SessionID: session.ID, UserID: session.UserID, Status: codeDeliveryCompleted,
+		SourceWorkDir: sourceDir, WorkDir: session.WorkDir, WorktreeBranch: session.WorktreeBranch,
+		DeliveryWorkDir: deliveryDir,
+	}
+	if err := cleanupCodeDeliveryWorktree(delivery); err != nil {
+		t.Fatal(err)
+	}
+	for _, workDir := range []string{deliveryDir, session.WorkDir} {
+		if _, err := os.Stat(workDir); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("stale cleanup retained %s: %v", workDir, err)
+		}
+	}
+}
+
+func TestCleanupCodeDeliveryWorktreesWhenManagedDirectoriesAreAlreadyMissing(t *testing.T) {
+	withAIProjectBaseDir(t)
+	delivery := &model.AICodeDelivery{
+		SessionID: 71, UserID: 7, Status: codeDeliveryCompleted,
+		SourceWorkDir: filepath.Join(t.TempDir(), "missing-source"),
+		WorkDir: aiSessionWorktreeDir(7, 71), WorktreeBranch: "gopanel/code-71-stale",
+		DeliveryWorkDir: aiSessionDeliveryWorktreeDir(7, 71),
+	}
+	if err := cleanupCodeDeliveryWorktree(delivery); err != nil {
+		t.Fatalf("already removed worktrees should be treated as cleaned: %v", err)
+	}
+}

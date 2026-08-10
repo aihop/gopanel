@@ -41,7 +41,7 @@ func aiSessionWorktreeDir(userID, sessionID uint) string {
 	return filepath.Join(aiProjectWorktreeRoot(userID), fmt.Sprintf("session_%d", sessionID))
 }
 
-func isManagedAISessionWorkDir(workDir string, userID uint) bool {
+func isManagedAISessionWorkDirPath(workDir string, userID uint) bool {
 	workDir = filepath.Clean(strings.TrimSpace(workDir))
 	if filepath.Dir(workDir) != aiProjectWorktreeRoot(userID) {
 		return false
@@ -53,10 +53,22 @@ func isManagedAISessionWorkDir(workDir string, userID uint) bool {
 	if _, err := strconv.ParseUint(sessionID, 10, 64); err != nil {
 		return false
 	}
+	return true
+}
+
+func isManagedAISessionWorkDir(workDir string, userID uint) bool {
+	if !isManagedAISessionWorkDirPath(workDir, userID) {
+		return false
+	}
 	if info, err := os.Stat(filepath.Join(workDir, ".git")); err == nil && !info.IsDir() {
 		return true
 	}
 	return isAISessionWorkspaceDirectory(workDir)
+}
+
+func isCodeGitWorktree(workDir string) bool {
+	topLevel, err := runCodeGit(workDir, "rev-parse", "--show-toplevel")
+	return err == nil && filepath.Clean(strings.TrimSpace(topLevel)) == filepath.Clean(strings.TrimSpace(workDir))
 }
 
 func GetCodeWorktreeCapability(c fiber.Ctx) error {
@@ -190,8 +202,16 @@ func cleanupCodeSessionWorktree(session *model.AIDevSession) error {
 	if session == nil || session.SourceWorkDir == "" || session.WorktreeBranch == "" {
 		return nil
 	}
-	if !isManagedAISessionWorkDir(session.WorkDir, session.UserID) {
+	if !isManagedAISessionWorkDirPath(session.WorkDir, session.UserID) {
 		return errors.New("会话 Worktree 不在 GoPanel 管理目录中")
+	}
+	if _, err := os.Lstat(session.WorkDir); errors.Is(err, os.ErrNotExist) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	if !isCodeGitWorktree(session.WorkDir) {
+		return errors.New("会话 Worktree 目录已存在但不是有效 Git 工作区")
 	}
 	status, err := runCodeGit(session.WorkDir, "status", "--porcelain")
 	if err != nil {
@@ -199,6 +219,9 @@ func cleanupCodeSessionWorktree(session *model.AIDevSession) error {
 	}
 	if strings.TrimSpace(status) != "" {
 		return errors.New("会话 Worktree 仍有未提交修改，已保留目录避免数据丢失")
+	}
+	if !isCodeGitWorktree(session.SourceWorkDir) {
+		return errors.New("会话源仓库已不可用，已保留 Worktree 避免数据丢失")
 	}
 	if _, err := runCodeGit(session.SourceWorkDir, "merge-base", "--is-ancestor", session.WorktreeBranch, "HEAD"); err != nil {
 		return errors.New("会话 Worktree 包含尚未合并的提交，已保留目录避免数据丢失")

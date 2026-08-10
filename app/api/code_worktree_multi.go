@@ -239,12 +239,18 @@ func cleanupCodeSessionRepositoryWorktrees(session *model.AIDevSession) error {
 	}
 	for _, repository := range repositories {
 		if _, err := os.Lstat(repository.WorktreeDir); errors.Is(err, os.ErrNotExist) {
-			if _, pruneErr := runCodeGit(repository.SourceDir, "worktree", "prune", "--expire", "now"); pruneErr != nil {
-				return pruneErr
+			if isCodeGitWorktree(repository.SourceDir) {
+				_, pruneErr := runCodeGit(repository.SourceDir, "worktree", "prune", "--expire", "now")
+				if pruneErr != nil {
+					return pruneErr
+				}
 			}
 			continue
 		} else if err != nil {
 			return err
+		}
+		if !isCodeGitWorktree(repository.SourceDir) {
+			continue
 		}
 		status, statusErr := runCodeGit(repository.WorktreeDir, "status", "--porcelain")
 		if statusErr != nil || strings.TrimSpace(status) != "" {
@@ -271,6 +277,9 @@ func removeCodeSessionRepositoryWorktree(repository *model.AIDevSessionRepositor
 		return nil
 	}
 	if _, err := os.Lstat(repository.WorktreeDir); err == nil {
+		if !isCodeGitWorktree(repository.SourceDir) {
+			return os.RemoveAll(repository.WorktreeDir)
+		}
 		args := []string{"worktree", "remove"}
 		if force {
 			args = append(args, "--force")
@@ -281,8 +290,10 @@ func removeCodeSessionRepositoryWorktree(repository *model.AIDevSessionRepositor
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
-	} else if _, err := runCodeGit(repository.SourceDir, "worktree", "prune", "--expire", "now"); err != nil {
-		return err
+	} else if isCodeGitWorktree(repository.SourceDir) {
+		if _, err := runCodeGit(repository.SourceDir, "worktree", "prune", "--expire", "now"); err != nil {
+			return err
+		}
 	}
 	if !codeWorktreeBranchExists(repository.SourceDir, repository.Branch) {
 		return nil

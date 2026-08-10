@@ -38,12 +38,20 @@ func cleanupCodeMultiRepositoryIntegrationWorktrees(
 			return fmt.Errorf("仓库 %s 的集成交付 Worktree 路径越界", repository.LinkName)
 		}
 		if _, err := os.Lstat(workDir); errors.Is(err, os.ErrNotExist) {
-			if _, pruneErr := runCodeGit(repository.SourceDir, "worktree", "prune", "--expire", "now"); pruneErr != nil {
-				return pruneErr
+			if isCodeGitWorktree(repository.SourceDir) {
+				if _, pruneErr := runCodeGit(repository.SourceDir, "worktree", "prune", "--expire", "now"); pruneErr != nil {
+					return pruneErr
+				}
 			}
 			continue
 		} else if err != nil {
 			return err
+		}
+		if !isCodeGitWorktree(repository.SourceDir) {
+			if err := os.RemoveAll(workDir); err != nil {
+				return err
+			}
+			continue
 		}
 		if exists, err := validateExistingCodeIntegrationWorktree(repository, workDir); err != nil {
 			return err

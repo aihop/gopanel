@@ -173,24 +173,28 @@ func cleanupCodeDeliveryWorktree(delivery *model.AICodeDelivery) error {
 	}
 	snapshot := codeDeliverySessionSnapshot(delivery)
 	if _, err := os.Stat(snapshot.WorkDir); err == nil {
-		if _, sourceErr := os.Stat(snapshot.SourceWorkDir); errors.Is(sourceErr, os.ErrNotExist) {
-			if !isManagedAISessionWorkDir(snapshot.WorkDir, snapshot.UserID) {
+		if !isCodeGitWorktree(snapshot.SourceWorkDir) {
+			if !isManagedAISessionWorkDirPath(snapshot.WorkDir, snapshot.UserID) {
 				return errors.New("会话 Worktree 不在 GoPanel 管理目录中")
 			}
 			if err := os.RemoveAll(snapshot.WorkDir); err != nil {
 				return err
 			}
-		} else if sourceErr != nil {
-			return sourceErr
 		} else if err := cleanupCodeSessionWorktree(snapshot); err != nil {
 			return err
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	if branches, err := runCodeGit(snapshot.SourceWorkDir, "branch", "--list", snapshot.WorktreeBranch); err == nil && strings.TrimSpace(branches) != "" {
-		if _, err := runCodeGit(snapshot.SourceWorkDir, "branch", "-d", "--", snapshot.WorktreeBranch); err != nil {
+	if isCodeGitWorktree(snapshot.SourceWorkDir) {
+		branches, err := runCodeGit(snapshot.SourceWorkDir, "branch", "--list", snapshot.WorktreeBranch)
+		if err != nil {
 			return err
+		}
+		if strings.TrimSpace(branches) != "" {
+			if _, err := runCodeGit(snapshot.SourceWorkDir, "branch", "-d", "--", snapshot.WorktreeBranch); err != nil {
+				return err
+			}
 		}
 	}
 	if delivery.Status == codeDeliveryCompleted {
