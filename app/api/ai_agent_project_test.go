@@ -110,11 +110,15 @@ func TestAIProjectDirectoryDefaultsRejectsInvalidSubAdminBase(t *testing.T) {
 func TestCreateAIProjectDoesNotRequireRemoteAccess(t *testing.T) {
 	database := withCodeGovernanceDB(t)
 	repository := createCodeGitRepository(t)
+	deliveryBranch, err := runCodeGit(repository, "branch", "--show-current")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := runCodeGit(repository, "remote", "add", "origin", filepath.Join(t.TempDir(), "missing.git")); err != nil {
 		t.Fatal(err)
 	}
 	body, err := json.Marshal(map[string]any{
-		"name": "offline project", "sourceDirs": []string{repository}, "deliveryBranch": "main",
+		"name": "offline project", "sourceDirs": []string{repository}, "deliveryBranch": deliveryBranch,
 	})
 	if err != nil {
 		t.Fatal(err)
