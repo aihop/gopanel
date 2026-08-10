@@ -320,8 +320,8 @@ func syncCodeSessionGitRepositoryOperation(c fiber.Ctx, syncRepositoryID string)
 	if err != nil {
 		return codeSessionGitSyncStatus{}, session, err
 	}
-	if !beginCodeRepositoryOperation(project) {
-		return codeSessionGitSyncStatus{}, session, errors.New("项目主仓正在被终端使用，请关闭终端后再同步会话")
+	if err := beginCodeRepositoryOperation(project); err != nil {
+		return codeSessionGitSyncStatus{}, session, err
 	}
 	defer endCodeRepositoryOperation(project)
 	targets, err := codeSessionGitSyncTargets(session)

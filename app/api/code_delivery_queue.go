@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"sync"
@@ -355,12 +356,21 @@ func codeDeliveryFailureCode(stage string, err error) string {
 }
 
 func (runner *codeDeliveryRunner) run(jobID uint) {
+	var job *model.AICodeDeliveryJob
 	defer func() {
 		runner.mu.Lock()
 		delete(runner.queued, jobID)
 		runner.mu.Unlock()
 	}()
-	job, keys, claimed, err := runner.claim(jobID)
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			runner.finishRecoveredPanic(job, recovered)
+		}
+	}()
+	var keys []string
+	var claimed bool
+	var err error
+	job, keys, claimed, err = runner.claim(jobID)
 	if err != nil {
 		if claimed && job != nil {
 			runner.finish(job, codeGitDeliveryResult{}, err)
@@ -421,6 +431,20 @@ func (runner *codeDeliveryRunner) run(jobID uint) {
 		return
 	}
 	runner.finish(job, result, err)
+}
+
+func (runner *codeDeliveryRunner) finishRecoveredPanic(job *model.AICodeDeliveryJob, recovered any) {
+	panicErr := fmt.Errorf("交付执行异常：%v", recovered)
+	if job == nil {
+		global.LOG.Errorf("Code delivery runner panic before claim: %v", panicErr)
+		return
+	}
+	defer func() {
+		if finishPanic := recover(); finishPanic != nil {
+			global.LOG.Errorf("Finish panicked Code delivery %d failed: %v", job.ID, finishPanic)
+		}
+	}()
+	runner.finish(job, codeGitDeliveryResult{}, panicErr)
 }
 
 func loadCodeDeliveryJobView(sessionID uint) (*codeDeliveryJobView, error) {

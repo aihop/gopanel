@@ -55,6 +55,35 @@ func TestPushCodeDeliveryRepositoryRejectsRemoteUpdate(t *testing.T) {
 	}
 }
 
+func TestPushCodeDeliveryRepositoryAllowsIntegratedRemoteUpdate(t *testing.T) {
+	repository, remoteDir := createCodeRemoteRepository(t)
+	prepared, err := prepareCodeRepository(repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	branch, _ := runCodeGit(repository, "branch", "--show-current")
+	updater := cloneCodeRepository(t, remoteDir)
+	remoteUpdate := commitCodeTestFile(t, updater, "remote-change.txt", "remote\n")
+	if _, err := runCodeGit(updater, "push", "origin", "HEAD"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(repository, "fetch", "origin"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(repository, "merge", "--ff-only", remoteUpdate); err != nil {
+		t.Fatal(err)
+	}
+	mergeCommit := commitCodeTestFile(t, repository, "delivery.txt", "delivery\n")
+	result, err := pushCodeDeliveryRepository(repository, branch, "origin", branch, prepared.RemoteCommit, mergeCommit, codePushPending)
+	if err != nil || result.Status != codePushPushed {
+		t.Fatalf("integrated remote update should remain pushable: %#v, %v", result, err)
+	}
+	remoteHead, err := runCodeGit(remoteDir, "rev-parse", "refs/heads/"+branch)
+	if err != nil || remoteHead != mergeCommit {
+		t.Fatalf("remote commit = %q, want %q: %v", remoteHead, mergeCommit, err)
+	}
+}
+
 func TestPushCodeDeliveryRepositoryRejectsLaterLocalCommit(t *testing.T) {
 	repository, _, remoteCommit, mergeCommit := prepareCodePushTestRepository(t)
 	branch, _ := runCodeGit(repository, "branch", "--show-current")

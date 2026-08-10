@@ -119,10 +119,7 @@ func inspectCodeMultiRepositoryManualPushState(
 		state.AlreadyPushed = true
 		return state, nil
 	}
-	if state.RemoteCommit != strings.TrimSpace(repository.RemoteCommit) {
-		return state, errCodePushRemoteAdvanced
-	}
-	if _, err := runCodeGit(repository.SourceDir, "merge-base", "--is-ancestor", state.RemoteCommit, repository.MergeCommit); err != nil {
+	if !codeRemoteCommitCanFastForward(repository.SourceDir, state.RemoteCommit, repository.MergeCommit) {
 		return state, errCodePushRemoteAdvanced
 	}
 	return state, nil

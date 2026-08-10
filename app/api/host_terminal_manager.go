@@ -52,6 +52,23 @@ func (manager *hostTerminalManager) create(req createHostTerminalRequest, userID
 	}
 	codeHostTerminalLifecycle.Lock()
 	defer codeHostTerminalLifecycle.Unlock()
+	return manager.createResolved(req, workDir, userID, ip)
+}
+
+func (manager *hostTerminalManager) createCodeProjectTerminal(req createHostTerminalRequest, userID uint, ip string) (*model.HostTerminalSession, error) {
+	workDir, err := resolveHostTerminalWorkDir(req.WorkDir)
+	if err != nil {
+		return nil, err
+	}
+	codeHostTerminalLifecycle.Lock()
+	defer codeHostTerminalLifecycle.Unlock()
+	if existing := manager.findRunningCodeProjectTerminal(userID, workDir); existing != nil {
+		return existing, nil
+	}
+	return manager.createResolved(req, workDir, userID, ip)
+}
+
+func (manager *hostTerminalManager) createResolved(req createHostTerminalRequest, workDir string, userID uint, ip string) (*model.HostTerminalSession, error) {
 	if err := validateHostTerminalDevelopmentOpen(workDir); err != nil {
 		return nil, err
 	}

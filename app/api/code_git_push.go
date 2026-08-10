@@ -228,7 +228,7 @@ func pushCodeDeliveryRepositoryWithCredential(sourceDir, targetBranch, remoteNam
 		result.Status = codePushPushed
 		return result, nil
 	}
-	if err != nil || currentRemoteCommit != remoteCommit {
+	if err != nil || !codeRemoteCommitCanFastForward(sourceDir, currentRemoteCommit, mergeCommit) {
 		return failedCodePushResult(result, errCodePushRemoteAdvanced)
 	}
 	if _, err := runCodeGitWithCredential(
@@ -239,7 +239,8 @@ func pushCodeDeliveryRepositoryWithCredential(sourceDir, targetBranch, remoteNam
 	); err != nil {
 		pushErr := err
 		if _, fetchErr := fetchCodeRepositoryWithCredential(sourceDir, remoteName, credentialID); fetchErr == nil {
-			if latestRemoteCommit, resolveErr := runCodeGit(sourceDir, "rev-parse", remoteRef); resolveErr == nil && latestRemoteCommit != remoteCommit {
+			if latestRemoteCommit, resolveErr := runCodeGit(sourceDir, "rev-parse", remoteRef); resolveErr == nil &&
+				!codeRemoteCommitCanFastForward(sourceDir, latestRemoteCommit, mergeCommit) {
 				return failedCodePushResult(result, errCodePushRemoteAdvanced)
 			}
 		}
@@ -257,6 +258,15 @@ func pushCodeDeliveryRepositoryWithCredential(sourceDir, targetBranch, remoteNam
 	}
 	result.Status, result.Commit = codePushPushed, mergeCommit
 	return result, nil
+}
+
+func codeRemoteCommitCanFastForward(sourceDir, remoteCommit, mergeCommit string) bool {
+	remoteCommit, mergeCommit = strings.TrimSpace(remoteCommit), strings.TrimSpace(mergeCommit)
+	if remoteCommit == "" || mergeCommit == "" {
+		return false
+	}
+	_, err := runCodeGit(sourceDir, "merge-base", "--is-ancestor", remoteCommit, mergeCommit)
+	return err == nil
 }
 
 func failedCodePushResult(result codeRepositoryPushResult, err error) (codeRepositoryPushResult, error) {

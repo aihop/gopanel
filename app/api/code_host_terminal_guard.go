@@ -12,6 +12,7 @@ import (
 
 var codeHostTerminalLifecycle sync.Mutex
 var codeRepositoryOperationPaths = make(map[string]int)
+var errCodeProjectActiveTerminal = errors.New("项目主仓正在被项目终端使用，请关闭终端后再操作")
 
 func validateHostTerminalDevelopmentOpen(workDir string) error {
 	var count int64
@@ -30,17 +31,21 @@ func validateHostTerminalDevelopmentOpen(workDir string) error {
 	return nil
 }
 
-func beginCodeRepositoryOperation(project *model.AIProject) bool {
+func beginCodeRepositoryOperation(project *model.AIProject) error {
 	codeHostTerminalLifecycle.Lock()
 	defer codeHostTerminalLifecycle.Unlock()
-	if codeProjectHasActiveTerminal(project) {
-		return false
+	hasActiveTerminal, err := codeProjectHasActiveTerminal(project)
+	if err != nil {
+		return err
+	}
+	if hasActiveTerminal {
+		return errCodeProjectActiveTerminal
 	}
 	for _, path := range codeProjectOperationPaths(project) {
 		path = filepath.Clean(path)
 		codeRepositoryOperationPaths[path]++
 	}
-	return true
+	return nil
 }
 
 func endCodeRepositoryOperation(project *model.AIProject) {

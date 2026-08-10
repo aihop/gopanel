@@ -216,7 +216,7 @@ func inspectCodeMultiRepositoryPushFailure(
 			result.Status = codePushPushed
 			return result, nil
 		}
-		if resolveErr == nil && strings.TrimSpace(current) != state.RemoteCommit {
+		if resolveErr == nil && !codeRemoteCommitCanFastForward(repository.SourceDir, current, repository.MergeCommit) {
 			return failedCodePushResult(result, errCodePushRemoteAdvanced)
 		}
 	}

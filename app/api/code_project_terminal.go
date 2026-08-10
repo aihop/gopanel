@@ -28,10 +28,7 @@ func OpenCodeProjectTerminal(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	if existing := findRunningCodeProjectTerminal(claims.UserId, workDir); existing != nil {
-		return c.JSON(e.Succ(existing))
-	}
-	record, err := hostTerminals.create(createHostTerminalRequest{
+	record, err := hostTerminals.createCodeProjectTerminal(createHostTerminalRequest{
 		Shell: "default", WorkDir: workDir, Cols: 120, Rows: 32,
 	}, claims.UserId, c.IP())
 	if err != nil {
@@ -53,7 +50,7 @@ func codeProjectTerminalWorkDir(project *model.AIProject, sessionID uint, claims
 	return aiProjectSessionWorkDir(project, claims)
 }
 
-func findRunningCodeProjectTerminal(userID uint, workDir string) *model.HostTerminalSession {
+func (manager *hostTerminalManager) findRunningCodeProjectTerminal(userID uint, workDir string) *model.HostTerminalSession {
 	var records []model.HostTerminalSession
 	if err := global.DB.Where(
 		"user_id = ? AND work_dir = ? AND status IN ?", userID, workDir, []string{"starting", "running"},
@@ -61,7 +58,7 @@ func findRunningCodeProjectTerminal(userID uint, workDir string) *model.HostTerm
 		return nil
 	}
 	for index := range records {
-		resumed, err := hostTerminals.resume(records[index].ID)
+		resumed, err := manager.resume(records[index].ID)
 		if err == nil {
 			return resumed
 		}

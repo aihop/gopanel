@@ -2,12 +2,24 @@ package api
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/constant"
+	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/utils/token"
 )
+
+func TestCodeProjectActiveTerminalCheckReportsUnavailableDatabase(t *testing.T) {
+	oldDB := global.DB
+	global.DB = nil
+	t.Cleanup(func() { global.DB = oldDB })
+	active, err := codeProjectHasActiveTerminal(&model.AIProject{WorkDir: t.TempDir()})
+	if err == nil || active || !strings.Contains(err.Error(), "数据库尚未初始化") {
+		t.Fatalf("unexpected terminal check: active=%v err=%v", active, err)
+	}
+}
 
 func TestCodeProjectTerminalWorkDirUsesSourceDirectoryForAdmin(t *testing.T) {
 	sourceDir := t.TempDir()

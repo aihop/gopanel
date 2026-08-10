@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -280,6 +281,30 @@ func TestCodeDeliveryClaimRecoversExpiredLease(t *testing.T) {
 	recovered, _, claimed, err := runner.claim(job.ID)
 	if err != nil || !claimed || recovered.LeaseOwner != runner.owner {
 		t.Fatalf("expired job was not recovered: %#v, %v, %v", recovered, claimed, err)
+	}
+}
+
+func TestCodeDeliveryPanicMarksClaimedJobFailed(t *testing.T) {
+	database := withCodeGovernanceDB(t)
+	session := &model.AIDevSession{ID: 915, UserID: 1, Status: codeSessionStatusDelivering, WorkDir: t.TempDir()}
+	if err := database.Create(session).Error; err != nil {
+		t.Fatal(err)
+	}
+	job := createCodeDeliveryQueueJob(t, session.ID, "repository-a")
+	runner := &codeDeliveryRunner{queued: make(map[uint]struct{}), owner: "panic-runner"}
+	claimedJob, _, claimed, err := runner.claim(job.ID)
+	if err != nil || !claimed {
+		t.Fatalf("claim failed: %#v, %v", claimedJob, err)
+	}
+	runner.finishRecoveredPanic(claimedJob, "test panic")
+	if err := database.First(job, job.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if job.Status != codeDeliveryJobFailed || job.LeaseOwner != "" || !strings.Contains(job.ErrorMessage, "test panic") {
+		t.Fatalf("panic did not finish job: %#v", job)
+	}
+	if err := database.First(session, session.ID).Error; err != nil || session.Status != codeSessionStatusActive {
+		t.Fatalf("panic did not reopen session: %#v, %v", session, err)
 	}
 }
 
