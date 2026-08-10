@@ -35,6 +35,7 @@ const title = ref("")
 const loading = ref(false)
 const submitting = ref(false)
 const loadError = ref("")
+const submitError = ref("")
 
 const aiExecutors = computed(() => executors.value.filter(executor => executor.id !== "terminal"))
 const availableExecutors = computed(() => aiExecutors.value.filter(executor => executor.available))
@@ -83,6 +84,7 @@ watch(
 	show => {
 		if (show) {
 			title.value = ""
+			submitError.value = ""
 			approvalPolicy.value = "safe_auto"
 			providerMode.value = "default"
 			providerConfig.value = { baseUrl: "", apiKey: "", model: "" }
@@ -116,6 +118,7 @@ const submit = async () => {
 		}
 	}
 	submitting.value = true
+	submitError.value = ""
 	try {
 		const sessionRequest = {
 			title: title.value.trim(),
@@ -140,7 +143,8 @@ const submit = async () => {
 		close()
 		message.success(t("code.sessionCreated"))
 	} catch (error) {
-		void 0
+		submitError.value = error instanceof Error ? error.message : t("code.sessionInitializationFailed")
+		message.error(submitError.value)
 	} finally {
 		submitting.value = false
 	}
@@ -158,6 +162,9 @@ const submit = async () => {
 	>
 		<n-spin :show="loading">
 			<div class="space-y-5">
+				<n-alert v-if="submitError" type="error" :title="t('code.sessionInitializationFailed')">
+					{{ submitError }}
+				</n-alert>
 				<n-alert v-if="loadError" type="error" :title="t('code.executorLoadFailed')">
 					<div class="flex items-center justify-between gap-4">
 						<span>{{ loadError }}</span>

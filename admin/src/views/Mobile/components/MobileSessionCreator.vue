@@ -23,6 +23,7 @@ const approvalPolicy = ref<CodeApprovalPolicy>("safe_auto")
 const loading = ref(false)
 const submitting = ref(false)
 const loadError = ref("")
+const submitError = ref("")
 const worktreeCapability = ref<CodeWorktreeCapability | null>(null)
 const capabilityLoading = ref(false)
 
@@ -73,6 +74,7 @@ async function loadOptions() {
 async function submit() {
 	if (!canCreate.value || submitting.value) return
 	submitting.value = true
+	submitError.value = ""
 	try {
 		const session = await createMobileSession(
 			{
@@ -90,7 +92,8 @@ async function submit() {
 		emit("created", session)
 		emit("update:show", false)
 	} catch (error) {
-		void 0
+		submitError.value = error instanceof Error ? error.message : t("mobile.sessionInitializationFailed")
+		message.error(submitError.value)
 	} finally {
 		submitting.value = false
 	}
@@ -101,6 +104,7 @@ watch(
 	show => {
 		if (!show) return
 		title.value = ""
+		submitError.value = ""
 		approvalPolicy.value = "safe_auto"
 		void loadOptions()
 	}
@@ -122,6 +126,9 @@ watch(projectId, () => void loadWorktreeCapability())
 		<n-drawer-content :title="t('mobile.newSession')" closable>
 			<n-spin :show="loading">
 				<div class="mx-auto max-w-xl space-y-4">
+					<n-alert v-if="submitError" type="error" :title="t('mobile.sessionInitializationFailed')">
+						{{ submitError }}
+					</n-alert>
 					<n-alert v-if="loadError" type="error" :title="t('mobile.loadFailed')">
 						<div class="flex items-center justify-between gap-3">
 							<span>{{ loadError }}</span>
