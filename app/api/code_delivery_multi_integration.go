@@ -325,7 +325,8 @@ func prepareCodeRepositoryIntegration(
 	if _, err := runCodeGit(
 		repository.IntegrationWorkDir,
 		"-c", "user.name=GoPanel Code", "-c", "user.email=code@gopanel.local",
-		"-c", "commit.gpgsign=false", "merge", "--no-ff", "--no-edit", repository.WorktreeCommit,
+		"-c", "commit.gpgsign=false", "-c", "core.commitGraph=false",
+		"merge", "--no-ff", "--no-edit", repository.WorktreeCommit,
 	); err != nil {
 		conflicts := codeGitConflictFiles(repository.IntegrationWorkDir)
 		if len(conflicts) == 0 {
