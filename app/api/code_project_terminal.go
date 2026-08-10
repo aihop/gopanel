@@ -23,7 +23,8 @@ func OpenCodeProjectTerminal(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	workDir, err := codeProjectTerminalWorkDir(project, claims)
+	sessionID, _ := strconv.Atoi(c.Query("session_id", "0"))
+	workDir, err := codeProjectTerminalWorkDir(project, uint(sessionID), claims)
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
@@ -39,9 +40,15 @@ func OpenCodeProjectTerminal(c fiber.Ctx) error {
 	return c.JSON(e.Succ(record))
 }
 
-func codeProjectTerminalWorkDir(project *model.AIProject, claims *token.CustomClaims) (string, error) {
+func codeProjectTerminalWorkDir(project *model.AIProject, sessionID uint, claims *token.CustomClaims) (string, error) {
 	if claims == nil || (claims.Role != constant.UserRoleAdmin && claims.Role != constant.UserRoleSuper) {
 		return "", errors.New("只有管理员可以使用项目原生终端")
+	}
+	if sessionID > 0 {
+		session, err := getAISessionWithPermission(sessionID, claims)
+		if err == nil && session.WorkDir != "" && session.ProjectID == project.ID {
+			return session.WorkDir, nil
+		}
 	}
 	return aiProjectSessionWorkDir(project, claims)
 }

@@ -10,6 +10,7 @@ interface ProjectTerminalMessages {
 
 export function useProjectTerminal(
 	projectId: Readonly<Ref<number>>,
+	sessionId: Readonly<Ref<number | null>>,
 	onActivate: (session: HostTerminalSession) => void,
 	onSuccess: (message: string) => void,
 	onError: (message: string) => void,
@@ -25,7 +26,7 @@ export function useProjectTerminal(
 		}
 		opening.value = true
 		try {
-			const response = await openCodeProjectTerminal(projectId.value)
+			const response = await openCodeProjectTerminal(projectId.value, sessionId.value ?? undefined)
 			onActivate(response.data)
 			onSuccess(messages.created)
 		} catch (error) {

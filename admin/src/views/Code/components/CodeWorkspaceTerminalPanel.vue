@@ -54,26 +54,38 @@ function onTaskTabClick() {
 		v-show="active"
 		class="ai-workspace-terminal-panel flex min-h-0 flex-1 flex-col overflow-hidden rounded border border-slate-700 bg-[#1e1e1e] shadow-lg"
 	>
-		<div class="flex shrink-0 items-center gap-2 border-b border-slate-700 bg-slate-900 px-3 py-1.5">
-			<n-button
-				size="tiny"
-				quaternary
-				:type="isProjectTerminalActive ? 'primary' : 'default'"
+			<div class="flex shrink-0 items-center gap-2 border-b border-slate-700 bg-slate-900 px-3 py-1.5">
+			<button
+				class="flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors"
+				:class="
+					isProjectTerminalActive
+						? 'bg-blue-600 text-white'
+						: 'text-slate-300 hover:bg-slate-800 hover:text-white'
+				"
 				@click="onProjectTabClick"
 			>
-				<template #icon><Icon name="mdi:console-line" /></template>
-				{{ t("code.projectTerminal") }}
-			</n-button>
-			<n-button
+				<Icon
+					name="mdi:console-line"
+					:size="14"
+				/>
+				<span>{{ t("code.projectTerminal") }}</span>
+			</button>
+			<button
 				v-if="canTaskTerminal"
-				size="tiny"
-				quaternary
-				:type="!isProjectTerminalActive ? 'primary' : 'default'"
+				class="flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors"
+				:class="
+					!isProjectTerminalActive
+						? 'bg-blue-600 text-white'
+						: 'text-slate-300 hover:bg-slate-800 hover:text-white'
+				"
 				@click="onTaskTabClick"
 			>
-				<template #icon><Icon name="mdi:robot-outline" /></template>
-				{{ taskTerminalLabel }}
-			</n-button>
+				<Icon
+					name="mdi:robot-outline"
+					:size="14"
+				/>
+				<span>{{ taskTerminalLabel }}</span>
+			</button>
 			<div
 				v-if="activeDirectory"
 				class="ml-auto min-w-0 truncate text-xs text-slate-400"

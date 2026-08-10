@@ -13,7 +13,7 @@ func TestCodeProjectTerminalWorkDirUsesSourceDirectoryForAdmin(t *testing.T) {
 	sourceDir := t.TempDir()
 	project := &model.AIProject{SourceDirs: []string{sourceDir}, WorkDir: t.TempDir()}
 
-	workDir, err := codeProjectTerminalWorkDir(project, &token.CustomClaims{Role: constant.UserRoleAdmin})
+	workDir, err := codeProjectTerminalWorkDir(project, 0, &token.CustomClaims{Role: constant.UserRoleAdmin})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -30,7 +30,7 @@ func TestCodeProjectTerminalWorkDirRejectsSubAdmin(t *testing.T) {
 	project := &model.AIProject{SourceDirs: []string{t.TempDir()}}
 	claims := &token.CustomClaims{Role: constant.UserRoleSubAdmin, FileBaseDir: t.TempDir()}
 
-	if _, err := codeProjectTerminalWorkDir(project, claims); err == nil {
+	if _, err := codeProjectTerminalWorkDir(project, 0, claims); err == nil {
 		t.Fatal("sub-admin should not receive a native host shell")
 	}
 }

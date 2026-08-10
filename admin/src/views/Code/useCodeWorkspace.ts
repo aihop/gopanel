@@ -184,6 +184,7 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 
 	const { opening: projectTerminalOpening, open: openNativeProjectTerminal } = useProjectTerminal(
 		currentProjectId,
+		currentSessionId,
 		activateProjectTerminal,
 		value => message.success(value),
 		value => message.error(value),
@@ -209,7 +210,7 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 	}
 
 	const takeOverTerminal = () => {
-		if (currentSessionId.value === null) return
+		if (currentSessionId.value === null && currentTaskId.value === null) return
 		isProjectTerminalActive.value = false
 		terminalTakeoverRequested.value = true
 		workspaceMode.value = "terminal"

@@ -78,8 +78,9 @@ export function getCodeWorktreeCapability(projectId: number) {
 	return http.get<CodeWorktreeCapability>(`/code/projects/${projectId}/worktree-capability`)
 }
 
-export function openCodeProjectTerminal(projectId: number) {
-	return http.post<HostTerminalSession>(`/code/projects/${projectId}/terminal`)
+export function openCodeProjectTerminal(projectId: number, sessionId?: number) {
+	const query = sessionId ? `?session_id=${sessionId}` : ""
+	return http.post<HostTerminalSession>(`/code/projects/${projectId}/terminal${query}`)
 }
 
 export function createCodeSession(
