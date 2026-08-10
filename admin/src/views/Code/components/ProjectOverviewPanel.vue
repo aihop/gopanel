@@ -52,6 +52,11 @@ const statusMeta = computed(() => {
 const budgetPercentage = computed(() => Math.min(100, Math.round(overview.value?.budget.usagePercent || 0)))
 
 const formatTokens = (count: number) => new Intl.NumberFormat().format(count || 0)
+const latestRunTokens = computed(() => {
+	if (overview.value?.latestRun?.tokenUsageStatus === "unavailable") return t("code.tokenNotRecorded")
+	if (overview.value?.latestRun?.tokenUsageStatus === "pending") return t("code.tokenPending")
+	return t("code.tokenCount", { count: formatTokens(overview.value?.latestRun?.totalTokens || 0) })
+})
 const formatDuration = (milliseconds: number) =>
 	milliseconds < 1000
 		? t("code.durationMilliseconds", { count: milliseconds })
@@ -303,6 +308,15 @@ useIntervalFn(() => void loadOverview(), 5000)
 								</div>
 							</div>
 						</div>
+						<div v-if="overview?.tokenUsage.recoveredRuns" class="mt-3 text-xs text-emerald-600">
+							{{ t("code.tokenUsageRecovered", { count: overview.tokenUsage.recoveredRuns }) }}
+						</div>
+						<div v-if="overview?.tokenUsage.unavailableRuns" class="mt-2 text-xs text-amber-600">
+							{{ t("code.tokenUsageIncomplete", { count: overview.tokenUsage.unavailableRuns }) }}
+						</div>
+						<div v-if="overview?.tokenUsage.pendingRuns" class="mt-2 text-xs text-slate-500">
+							{{ t("code.tokenUsagePending", { count: overview.tokenUsage.pendingRuns }) }}
+						</div>
 						<div v-if="overview?.latestRun" class="mt-4 rounded-xl border border-slate-100 p-3 text-sm">
 							<div class="flex items-center justify-between gap-3">
 								<span class="font-medium">
@@ -314,7 +328,7 @@ useIntervalFn(() => void loadOverview(), 5000)
 							</div>
 							<div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--n-text-color-3)]">
 								<span>
-									{{ t("code.tokenCount", { count: formatTokens(overview.latestRun.totalTokens) }) }}
+									{{ latestRunTokens }}
 								</span>
 								<span>{{ formatDuration(overview.latestRun.durationMs) }}</span>
 								<span>{{ formatDate(overview.latestRun.createdAt) }}</span>

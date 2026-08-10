@@ -69,6 +69,13 @@ func (t *App) Init() error {
 	if err := repo.Init(); err != nil {
 		return fmt.Errorf("initialize repositories: %w", err)
 	}
+	tokenRepair, err := api.RepairLegacyCodeTokenUsage(global.DB)
+	if err != nil {
+		return fmt.Errorf("repair legacy Code token usage: %w", err)
+	}
+	if tokenRepair.Recorded+tokenRepair.Recovered+tokenRepair.Unavailable > 0 {
+		fmt.Printf("Code token usage repair: recorded=%d recovered=%d unavailable=%d\n", tokenRepair.Recorded, tokenRepair.Recovered, tokenRepair.Unavailable)
+	}
 	// 从数据库读回 API Token 等运行期设置到内存 CONF（DB 为准，修复重启后 token 丢失）
 	service.LoadApiSettingsFromDB()
 	app.Init()

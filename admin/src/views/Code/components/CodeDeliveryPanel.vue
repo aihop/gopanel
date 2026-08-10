@@ -168,6 +168,11 @@ const durationLabel = (milliseconds: number) => milliseconds < 1000
 	? `${milliseconds} ms`
 	: `${(milliseconds / 1000).toFixed(milliseconds < 10000 ? 1 : 0)} s`
 const tokenLabel = (count: number) => new Intl.NumberFormat().format(count || 0)
+const latestRunTokenLabel = computed(() => {
+	if (state.value?.latestRun?.tokenUsageStatus === "unavailable") return t("code.tokenNotRecorded")
+	if (state.value?.latestRun?.tokenUsageStatus === "pending") return t("code.tokenPending")
+	return tokenLabel(state.value?.latestRun?.totalTokens || 0)
+})
 const auditActionLabel = (action: string) => t(`code.auditAction_${action}`)
 const auditStatusLabel = (status: string) => t(`code.auditStatus_${status}`)
 
@@ -219,11 +224,14 @@ useIntervalFn(() => {
 						<strong class="text-sm text-slate-800">{{ t("code.tokenUsage") }}</strong>
 						<n-empty v-if="!state?.tokenUsage.project.runs" size="small" :description="t('code.noTokenUsage')" class="py-5" />
 						<div v-else class="mt-3 grid grid-cols-3 gap-2 text-center">
-							<div class="rounded-xl bg-slate-50 p-3"><div class="text-lg font-semibold text-slate-800">{{ tokenLabel(state.latestRun?.totalTokens || 0) }}</div><div class="text-xs text-slate-500">{{ t("code.latestRunTokens") }}</div></div>
+							<div class="rounded-xl bg-slate-50 p-3"><div class="text-lg font-semibold text-slate-800">{{ latestRunTokenLabel }}</div><div class="text-xs text-slate-500">{{ t("code.latestRunTokens") }}</div></div>
 							<div class="rounded-xl bg-blue-50 p-3"><div class="text-lg font-semibold text-blue-700">{{ tokenLabel(state.tokenUsage.session.totalTokens) }}</div><div class="text-xs text-slate-500">{{ t("code.sessionTokens") }}</div></div>
 							<div class="rounded-xl bg-emerald-50 p-3"><div class="text-lg font-semibold text-emerald-700">{{ tokenLabel(state.tokenUsage.project.totalTokens) }}</div><div class="text-xs text-slate-500">{{ t("code.projectTokens") }}</div></div>
 						</div>
 						<div v-if="state?.tokenUsage.project.runs" class="mt-3 text-xs text-slate-400">{{ t("code.tokenBreakdown", { input: tokenLabel(state.tokenUsage.project.inputTokens), output: tokenLabel(state.tokenUsage.project.outputTokens), cached: tokenLabel(state.tokenUsage.project.cachedInputTokens), reasoning: tokenLabel(state.tokenUsage.project.reasoningTokens) }) }}</div>
+						<div v-if="state?.tokenUsage.project.runs" class="mt-1 text-[11px] text-slate-400">{{ t("code.tokenBreakdownHint") }}</div>
+						<div v-if="state?.tokenUsage.project.recoveredRuns" class="mt-2 text-xs text-emerald-600">{{ t("code.tokenUsageRecovered", { count: state.tokenUsage.project.recoveredRuns }) }}</div>
+						<div v-if="state?.tokenUsage.project.unavailableRuns" class="mt-2 text-xs text-amber-600">{{ t("code.tokenUsageIncomplete", { count: state.tokenUsage.project.unavailableRuns }) }}</div>
 						<div v-if="state && !state.tokenUsage.budget.unlimited" class="mt-3">
 							<n-alert v-if="state.tokenUsage.budget.exceeded" type="error" :show-icon="false">{{ t("code.tokenBudgetExceeded") }}</n-alert>
 							<div v-else><div class="mb-1 text-xs text-slate-500">{{ t("code.tokenBudget", { used: tokenLabel(state.tokenUsage.budget.usedTokens), limit: tokenLabel(state.tokenUsage.budget.limitTokens) }) }}</div><n-progress type="line" :percentage="Math.min(100, Math.round(state.tokenUsage.budget.usagePercent))" :show-indicator="false" /></div>

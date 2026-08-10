@@ -52,6 +52,9 @@ export const projectOverviewMessages = {
 			awaitingApprovals: "待审批",
 			projectUsage: "项目用量",
 			executionCount: "{count} 次执行",
+			tokenUsageRecovered: "其中 {count} 次历史用量已恢复",
+			tokenUsageIncomplete: "有 {count} 次执行未记录 Token，当前总量可能偏低",
+			tokenUsagePending: "有 {count} 次执行正在统计 Token",
 			historicalTokens: "历史累计 Token",
 			projectTasks: "历史任务",
 			noExecutionHistory: "暂无 AI 执行记录",
@@ -70,6 +73,8 @@ export const projectOverviewMessages = {
 			runStatus_cancelled: "已停止",
 			runStatus_unknown: "状态未知",
 			tokenCount: "{count} Token",
+			tokenNotRecorded: "Token 未记录",
+			tokenPending: "Token 统计中",
 			durationMilliseconds: "{count} 毫秒",
 			durationSeconds: "{count} 秒"
 		}
@@ -128,6 +133,9 @@ export const projectOverviewMessages = {
 			awaitingApprovals: "Awaiting approval",
 			projectUsage: "Project usage",
 			executionCount: "{count} runs",
+			tokenUsageRecovered: "{count} historical runs recovered",
+			tokenUsageIncomplete: "{count} runs have no token data; the total may be low",
+			tokenUsagePending: "Token usage is pending for {count} runs",
 			historicalTokens: "Historical tokens",
 			projectTasks: "Tasks",
 			noExecutionHistory: "No AI execution history",
@@ -146,6 +154,8 @@ export const projectOverviewMessages = {
 			runStatus_cancelled: "Stopped",
 			runStatus_unknown: "Unknown",
 			tokenCount: "{count} tokens",
+			tokenNotRecorded: "Token usage unavailable",
+			tokenPending: "Token usage pending",
 			durationMilliseconds: "{count} ms",
 			durationSeconds: "{count} s"
 		}

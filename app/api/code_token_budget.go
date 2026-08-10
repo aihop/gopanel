@@ -17,6 +17,9 @@ type codeTokenBudget struct {
 	UsagePercent    float64 `json:"usagePercent"`
 	Exceeded        bool    `json:"exceeded"`
 	Unlimited       bool    `json:"unlimited"`
+	Complete        bool    `json:"complete"`
+	UnavailableRuns int64   `json:"unavailableRuns"`
+	PendingRuns     int64   `json:"pendingRuns"`
 }
 
 func codeMonthStart(now time.Time) time.Time {
@@ -26,11 +29,11 @@ func codeMonthStart(now time.Time) time.Time {
 
 func loadCodeTokenBudget(projectID uint, now time.Time) (codeTokenBudget, error) {
 	if projectID == 0 {
-		return codeTokenBudget{Unlimited: true}, nil
+		return codeTokenBudget{Unlimited: true, Complete: true}, nil
 	}
 	project, err := repo.NewAIProjectRepo().GetProjectByID(projectID)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return codeTokenBudget{Unlimited: true}, nil
+		return codeTokenBudget{Unlimited: true, Complete: true}, nil
 	}
 	if err != nil {
 		return codeTokenBudget{}, err
@@ -42,7 +45,10 @@ func loadCodeTokenBudget(projectID uint, now time.Time) (codeTokenBudget, error)
 		return codeTokenBudget{}, err
 	}
 	used := usage.TotalTokens
-	budget := codeTokenBudget{LimitTokens: project.MonthlyTokenBudget, UsedTokens: used, Unlimited: project.MonthlyTokenBudget <= 0}
+	budget := codeTokenBudget{
+		LimitTokens: project.MonthlyTokenBudget, UsedTokens: used, Unlimited: project.MonthlyTokenBudget <= 0,
+		Complete: usage.Complete, UnavailableRuns: usage.UnavailableRuns, PendingRuns: usage.PendingRuns,
+	}
 	if budget.Unlimited {
 		return budget, nil
 	}

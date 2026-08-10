@@ -4,16 +4,16 @@ import "time"
 
 // AIProject 记录 Code 项目。
 type AIProject struct {
-	ID                 uint                       `gorm:"primaryKey" json:"id"`
-	CreatedAt          time.Time                  `json:"createdAt"`
-	UpdatedAt          time.Time                  `json:"updatedAt"`
-	Name               string                     `gorm:"column:name;type:varchar(255);not null" json:"name"`
-	Description        string                     `gorm:"column:description;type:text" json:"description"`
-	WorkDir            string                     `gorm:"column:work_dir;type:varchar(1024);not null;default:''" json:"workDir"`
-	SourceDirs         []string                   `gorm:"column:source_dirs;serializer:json;type:text" json:"sourceDirs"`
-	CreatorID          uint                       `gorm:"column:creator_id;type:integer;not null;index" json:"creatorId"`
-	PrimaryRepository  string                     `gorm:"column:primary_repository;type:varchar(1024)" json:"primaryRepository,omitempty"`
-	DeliveryBranch     string                     `gorm:"column:delivery_branch;type:varchar(255);not null;default:''" json:"deliveryBranch"`
+	ID                uint      `gorm:"primaryKey" json:"id"`
+	CreatedAt         time.Time `json:"createdAt"`
+	UpdatedAt         time.Time `json:"updatedAt"`
+	Name              string    `gorm:"column:name;type:varchar(255);not null" json:"name"`
+	Description       string    `gorm:"column:description;type:text" json:"description"`
+	WorkDir           string    `gorm:"column:work_dir;type:varchar(1024);not null;default:''" json:"workDir"`
+	SourceDirs        []string  `gorm:"column:source_dirs;serializer:json;type:text" json:"sourceDirs"`
+	CreatorID         uint      `gorm:"column:creator_id;type:integer;not null;index" json:"creatorId"`
+	PrimaryRepository string    `gorm:"column:primary_repository;type:varchar(1024)" json:"primaryRepository,omitempty"`
+	DeliveryBranch    string    `gorm:"column:delivery_branch;type:varchar(255);not null;default:''" json:"deliveryBranch"`
 	// DeliveryMode 决定交付提交推往哪里：direct 直推交付目标分支；branch 推会话独占分支，
 	// 由平台的 PR/MR 负责合并，远端目标分支的推进不再阻断交付。
 	DeliveryMode       string                     `gorm:"column:delivery_mode;type:varchar(32);not null;default:'direct'" json:"deliveryMode"`
@@ -79,8 +79,8 @@ type AIMessage struct {
 	// 这里只建普通索引——存量消息的该列均为空串，加唯一索引会让建索引直接失败，
 	// 去重放在写入前用已存在的 NativeID 集合来做。
 	NativeID string `gorm:"column:native_id;type:varchar(128);index" json:"nativeId,omitempty"`
-	Role      string    `gorm:"column:role;type:varchar(32);not null" json:"role"` // user / agent
-	Content   string    `gorm:"column:content;type:text;not null" json:"content"`
+	Role     string `gorm:"column:role;type:varchar(32);not null" json:"role"` // user / agent
+	Content  string `gorm:"column:content;type:text;not null" json:"content"`
 }
 
 func (AIMessage) TableName() string {
@@ -148,6 +148,7 @@ type AIExecutionRun struct {
 	CachedInputTokens int64      `gorm:"column:cached_input_tokens;default:0" json:"cachedInputTokens"`
 	ReasoningTokens   int64      `gorm:"column:reasoning_tokens;default:0" json:"reasoningTokens"`
 	TotalTokens       int64      `gorm:"column:total_tokens;default:0;index" json:"totalTokens"`
+	TokenUsageStatus  string     `gorm:"column:token_usage_status;type:varchar(16);default:'pending';index" json:"tokenUsageStatus"`
 	ErrorMessage      string     `gorm:"column:error_message;type:text" json:"errorMessage"`
 	StartedAt         time.Time  `gorm:"column:started_at;not null" json:"startedAt"`
 	CompletedAt       *time.Time `gorm:"column:completed_at" json:"completedAt,omitempty"`

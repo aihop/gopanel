@@ -196,6 +196,7 @@ export interface CodeExecutionRun {
 	cachedInputTokens: number
 	reasoningTokens: number
 	totalTokens: number
+	tokenUsageStatus: "pending" | "recorded" | "recovered" | "unavailable"
 	errorMessage: string
 	startedAt: string
 	completedAt?: string
@@ -208,6 +209,11 @@ export interface CodeTokenUsage {
 	reasoningTokens: number
 	totalTokens: number
 	runs: number
+	recordedRuns: number
+	recoveredRuns: number
+	unavailableRuns: number
+	pendingRuns: number
+	complete: boolean
 }
 
 export interface CodeDailyTokenUsage extends CodeTokenUsage {
@@ -226,6 +232,9 @@ export interface CodeTokenUsageResponse {
 		usagePercent: number
 		exceeded: boolean
 		unlimited: boolean
+		complete: boolean
+		unavailableRuns: number
+		pendingRuns: number
 	}
 }
 

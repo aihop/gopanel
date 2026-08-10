@@ -8,15 +8,16 @@ import (
 )
 
 type codeExecutorOutput struct {
-	Message           string
-	RawOutput         string
-	NativeSessionID   string
-	Model             string
-	InputTokens       int64
-	OutputTokens      int64
-	CachedInputTokens int64
-	ReasoningTokens   int64
-	TotalTokens       int64
+	Message            string
+	RawOutput          string
+	NativeSessionID    string
+	Model              string
+	InputTokens        int64
+	OutputTokens       int64
+	CachedInputTokens  int64
+	ReasoningTokens    int64
+	TotalTokens        int64
+	TokenUsageReported bool
 }
 
 func parseCodeExecutorOutput(executorID string, rawOutput []byte, preparedSessionID string) codeExecutorOutput {
@@ -104,6 +105,19 @@ func applyCodeUsageMap(result *codeExecutorOutput, payload map[string]any) {
 	if model, ok := firstCodeString(payload, "model", "model_id", "modelID"); ok {
 		result.Model = model
 	}
+	for _, key := range []string{
+		"input_tokens", "inputTokens", "output_tokens", "outputTokens",
+		"cached_input_tokens", "cachedInputTokens", "cache_read_input_tokens", "cacheReadInputTokens",
+		"reasoning_tokens", "reasoningTokens", "reasoning_output_tokens", "total_tokens", "totalTokens",
+	} {
+		if _, exists := payload[key]; exists {
+			result.TokenUsageReported = true
+			break
+		}
+	}
+	if codeNumberExists(payload, "input") && codeNumberExists(payload, "output") {
+		result.TokenUsageReported = true
+	}
 	for _, key := range []string{"usage", "token_usage", "tokenUsage", "tokens", "part"} {
 		if nested, ok := payload[key].(map[string]any); ok {
 			applyCodeUsageMap(result, nested)
@@ -118,6 +132,15 @@ func applyCodeUsageMap(result *codeExecutorOutput, payload map[string]any) {
 	}
 	result.CachedInputTokens = max(result.CachedInputTokens, cached)
 	result.TotalTokens = max(result.TotalTokens, firstCodeInt(payload, "total_tokens", "totalTokens", "total"))
+}
+
+func codeNumberExists(payload map[string]any, key string) bool {
+	switch payload[key].(type) {
+	case float64, json.Number:
+		return true
+	default:
+		return false
+	}
 }
 
 func firstCodeString(payload map[string]any, keys ...string) (string, bool) {

@@ -99,6 +99,10 @@ func executeCodeAgentRun(
 	run.CachedInputTokens = parsed.CachedInputTokens
 	run.ReasoningTokens = parsed.ReasoningTokens
 	run.TotalTokens = parsed.TotalTokens
+	run.TokenUsageStatus = codeTokenUsageUnavailable
+	if parsed.TokenUsageReported {
+		run.TokenUsageStatus = codeTokenUsageRecorded
+	}
 	if execErr != nil {
 		run.Status = "failed"
 		if ctx.Err() != nil {
@@ -147,6 +151,7 @@ func failCodeExecutionRun(sessionRepo repo.IAIDevSessionRepo, run *model.AIExecu
 	run.ExitCode = -1
 	run.ErrorMessage = runErr.Error()
 	run.Output = fmt.Sprintf("执行错误: %v", runErr)
+	run.TokenUsageStatus = codeTokenUsageUnavailable
 	if updateErr := sessionRepo.UpdateExecutionRun(run); updateErr != nil {
 		return run, run.Output, errors.Join(runErr, updateErr)
 	}

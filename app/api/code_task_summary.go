@@ -12,6 +12,10 @@ import (
 type codeTaskSummary struct {
 	DurationMS            int64  `json:"durationMs"`
 	TotalTokens           int64  `json:"totalTokens"`
+	TokenUsageStatus      string `json:"tokenUsageStatus"`
+	TokenRecoveredRuns    int64  `json:"tokenRecoveredRuns"`
+	TokenUnavailableRuns  int64  `json:"tokenUnavailableRuns"`
+	TokenPendingRuns      int64  `json:"tokenPendingRuns"`
 	Executor              string `json:"executor,omitempty"`
 	Model                 string `json:"model,omitempty"`
 	GitStatus             string `json:"gitStatus,omitempty"`
@@ -43,9 +47,13 @@ type codeTaskRunSummaryRow struct {
 }
 
 type codeTaskDurationSummaryRow struct {
-	TaskID      uint
-	DurationMS  int64
-	TotalTokens int64
+	TaskID          uint
+	DurationMS      int64
+	TotalTokens     int64
+	RecordedRuns    int64
+	RecoveredRuns   int64
+	UnavailableRuns int64
+	PendingRuns     int64
 }
 
 type codeTaskDiffStats struct {
@@ -121,12 +129,13 @@ func loadCodeTaskDeliverySummaries(sessionIDs []uint, summaries map[uint]codeTas
 
 func loadCodeTaskRunSummaries(taskIDs []uint, summaries map[uint]codeTaskSummary) error {
 	runQuery := global.DB.Model(&model.AIExecutionRun{}).Where("task_id IN ?", taskIDs)
-	if err := backfillCodeTokenUsage(runQuery); err != nil {
-		return err
-	}
 	var durations []codeTaskDurationSummaryRow
 	err := runQuery.
-		Select("task_id, COALESCE(SUM(duration_ms), 0) AS duration_ms, COALESCE(SUM(total_tokens), 0) AS total_tokens").
+		Select(`task_id, COALESCE(SUM(duration_ms), 0) AS duration_ms, COALESCE(SUM(total_tokens), 0) AS total_tokens,
+			COALESCE(SUM(CASE WHEN token_usage_status = 'recorded' THEN 1 ELSE 0 END), 0) AS recorded_runs,
+			COALESCE(SUM(CASE WHEN token_usage_status = 'recovered' THEN 1 ELSE 0 END), 0) AS recovered_runs,
+			COALESCE(SUM(CASE WHEN token_usage_status = 'unavailable' THEN 1 ELSE 0 END), 0) AS unavailable_runs,
+			COALESCE(SUM(CASE WHEN token_usage_status = 'pending' OR token_usage_status = '' THEN 1 ELSE 0 END), 0) AS pending_runs`).
 		Group("task_id").Scan(&durations).Error
 	if err != nil {
 		return err
@@ -135,6 +144,10 @@ func loadCodeTaskRunSummaries(taskIDs []uint, summaries map[uint]codeTaskSummary
 		summary := summaries[row.TaskID]
 		summary.DurationMS = row.DurationMS
 		summary.TotalTokens = row.TotalTokens
+		summary.TokenRecoveredRuns = row.RecoveredRuns
+		summary.TokenUnavailableRuns = row.UnavailableRuns
+		summary.TokenPendingRuns = row.PendingRuns
+		summary.TokenUsageStatus = codeTaskTokenUsageStatus(row)
 		summaries[row.TaskID] = summary
 	}
 	var latestRuns []codeTaskRunSummaryRow
@@ -152,6 +165,24 @@ func loadCodeTaskRunSummaries(taskIDs []uint, summaries map[uint]codeTaskSummary
 		summaries[row.TaskID] = summary
 	}
 	return nil
+}
+
+func codeTaskTokenUsageStatus(row codeTaskDurationSummaryRow) string {
+	knownRuns := row.RecordedRuns + row.RecoveredRuns
+	missingRuns := row.UnavailableRuns + row.PendingRuns
+	if missingRuns == 0 {
+		if row.RecoveredRuns > 0 {
+			return codeTokenUsageRecovered
+		}
+		return codeTokenUsageRecorded
+	}
+	if knownRuns > 0 {
+		return "partial"
+	}
+	if row.PendingRuns > 0 {
+		return codeTokenUsagePending
+	}
+	return codeTokenUsageUnavailable
 }
 
 func loadCodeTaskGitSummaries(tasks []*model.AITask, sessionIDs []uint, summaries map[uint]codeTaskSummary, diffStatsCache map[string]codeTaskDiffStats) error {

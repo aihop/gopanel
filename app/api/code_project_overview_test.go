@@ -35,7 +35,7 @@ func TestLoadCodeProjectOverviewAggregatesProjectState(t *testing.T) {
 		t.Fatal(err)
 	}
 	now := time.Now()
-	run := model.AIExecutionRun{SessionID: session.ID, TaskID: task.ID, ExecutorID: "codex", Model: "gpt-5", Prompt: "work", Status: "completed", StartedAt: now, CreatedAt: now, TotalTokens: 240}
+	run := model.AIExecutionRun{SessionID: session.ID, TaskID: task.ID, ExecutorID: "codex", Model: "gpt-5", Prompt: "work", Status: "completed", StartedAt: now, CreatedAt: now, TotalTokens: 240, TokenUsageStatus: codeTokenUsageRecorded}
 	if err := database.Create(&run).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func TestLoadCodeProjectOverviewAggregatesProjectState(t *testing.T) {
 	if err := database.Create(&otherSession).Error; err != nil {
 		t.Fatal(err)
 	}
-	otherRun := model.AIExecutionRun{SessionID: otherSession.ID, ExecutorID: "claude", Model: "private-model", Prompt: "other", Status: "completed", StartedAt: now.Add(time.Minute), CreatedAt: now.Add(time.Minute), TotalTokens: 400}
+	otherRun := model.AIExecutionRun{SessionID: otherSession.ID, ExecutorID: "claude", Model: "private-model", Prompt: "other", Status: "completed", StartedAt: now.Add(time.Minute), CreatedAt: now.Add(time.Minute), TotalTokens: 400, TokenUsageStatus: codeTokenUsageRecorded}
 	if err := database.Create(&otherRun).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +54,7 @@ func TestLoadCodeProjectOverviewAggregatesProjectState(t *testing.T) {
 	if overview.TaskCount != 1 || overview.ExecutionSummary.Status != "running" || overview.ExecutionSummary.CurrentTaskID != task.ID {
 		t.Fatalf("unexpected project summary: %#v", overview)
 	}
-	if overview.TokenUsage.TotalTokens != 240 || overview.Budget.UsedTokens != 640 || overview.LatestRun == nil || overview.LatestRun.Model != "gpt-5" {
+	if overview.TokenUsage.TotalTokens != 640 || overview.Budget.UsedTokens != 640 || overview.LatestRun == nil || overview.LatestRun.Model != "private-model" || overview.LatestRun.TokenUsageStatus != codeTokenUsageRecorded {
 		t.Fatalf("unexpected project usage: %#v", overview)
 	}
 }
