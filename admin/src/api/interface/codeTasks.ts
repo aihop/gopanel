@@ -2,6 +2,7 @@ import type { AITask } from "./code"
 
 export interface CodeTaskSummary {
 	durationMs: number
+	totalTokens: number
 	executor?: string
 	model?: string
 	gitStatus?: "working" | "committed" | "merged" | "pushed" | "push_failed" | "conflict"

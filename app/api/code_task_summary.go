@@ -11,6 +11,7 @@ import (
 
 type codeTaskSummary struct {
 	DurationMS            int64  `json:"durationMs"`
+	TotalTokens           int64  `json:"totalTokens"`
 	Executor              string `json:"executor,omitempty"`
 	Model                 string `json:"model,omitempty"`
 	GitStatus             string `json:"gitStatus,omitempty"`
@@ -42,8 +43,9 @@ type codeTaskRunSummaryRow struct {
 }
 
 type codeTaskDurationSummaryRow struct {
-	TaskID     uint
-	DurationMS int64
+	TaskID      uint
+	DurationMS  int64
+	TotalTokens int64
 }
 
 type codeTaskDiffStats struct {
@@ -118,10 +120,13 @@ func loadCodeTaskDeliverySummaries(sessionIDs []uint, summaries map[uint]codeTas
 }
 
 func loadCodeTaskRunSummaries(taskIDs []uint, summaries map[uint]codeTaskSummary) error {
+	runQuery := global.DB.Model(&model.AIExecutionRun{}).Where("task_id IN ?", taskIDs)
+	if err := backfillCodeTokenUsage(runQuery); err != nil {
+		return err
+	}
 	var durations []codeTaskDurationSummaryRow
-	err := global.DB.Model(&model.AIExecutionRun{}).
-		Select("task_id, COALESCE(SUM(duration_ms), 0) AS duration_ms").
-		Where("task_id IN ?", taskIDs).
+	err := runQuery.
+		Select("task_id, COALESCE(SUM(duration_ms), 0) AS duration_ms, COALESCE(SUM(total_tokens), 0) AS total_tokens").
 		Group("task_id").Scan(&durations).Error
 	if err != nil {
 		return err
@@ -129,6 +134,7 @@ func loadCodeTaskRunSummaries(taskIDs []uint, summaries map[uint]codeTaskSummary
 	for _, row := range durations {
 		summary := summaries[row.TaskID]
 		summary.DurationMS = row.DurationMS
+		summary.TotalTokens = row.TotalTokens
 		summaries[row.TaskID] = summary
 	}
 	var latestRuns []codeTaskRunSummaryRow
