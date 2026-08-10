@@ -112,3 +112,39 @@ func TestGetSessionsLoadsUpdatedCurrentTaskTitle(t *testing.T) {
 		t.Fatalf("updated current task title = %#v, err = %v", sessions, err)
 	}
 }
+
+func TestGetSessionsHidesFailedInitializationWithoutTask(t *testing.T) {
+	oldDB := global.DB
+	t.Cleanup(func() { global.DB = oldDB })
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "session-filter.db")), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&model.AIDevSession{}, &model.AITask{}); err != nil {
+		t.Fatal(err)
+	}
+	global.DB = db
+	sessions := []*model.AIDevSession{
+		{UserID: 1, ProjectID: 4, Title: "invalid", WorkDir: "/tmp", Status: "failed", CurrentStage: "initialization_failed"},
+		{UserID: 1, ProjectID: 4, Title: "initializing", WorkDir: "/tmp", Status: "initializing", CurrentStage: "syncing_base"},
+		{UserID: 1, ProjectID: 4, Title: "task failed", WorkDir: "/tmp", Status: "failed", CurrentStage: "initialization_failed", LastTaskID: 9},
+	}
+	if err := db.Create(&sessions).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&model.AITask{ID: 9, UserID: 1, SessionID: sessions[2].ID, Title: "task failed", WorkDir: "/tmp"}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	got, total, err := (&aiDevSessionRepo{}).GetSessionsByUserID(1, 4, 1, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	titles := make(map[string]bool, len(got))
+	for _, session := range got {
+		titles[session.Title] = true
+	}
+	if total != 2 || len(got) != 2 || !titles["task failed"] || !titles["initializing"] || titles["invalid"] {
+		t.Fatalf("filtered sessions = %#v, total = %d", got, total)
+	}
+}

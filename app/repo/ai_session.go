@@ -72,6 +72,7 @@ func (r *aiDevSessionRepo) GetSessionsByUserID(userID, projectID uint, page, lim
 	if projectID > 0 {
 		db = db.Where("project_id = ?", projectID)
 	}
+	db = db.Where("NOT (status = ? AND current_stage = ? AND COALESCE(last_task_id, 0) = 0)", "failed", "initialization_failed")
 
 	db.Count(&total)
 	err := db.Order("updated_at desc").Offset((page - 1) * limit).Limit(limit).Find(&sessions).Error
