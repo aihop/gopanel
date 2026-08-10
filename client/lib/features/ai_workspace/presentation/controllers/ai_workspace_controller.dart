@@ -155,7 +155,6 @@ class AiWorkspaceController extends Notifier<AiWorkspaceState> {
   Timer? _refreshTimer;
   bool _refreshing = false;
   int _projectRequest = 0;
-
   @override
   AiWorkspaceState build() {
     _repo = ref.watch(aiWorkspaceRepositoryProvider);
@@ -346,16 +345,16 @@ class AiWorkspaceController extends Notifier<AiWorkspaceState> {
     }
   }
 
-  Future<void> sendMessage(
+  Future<bool> sendMessage(
     String text, {
     CodeInstructionOptions options = const CodeInstructionOptions(),
   }) async {
     final content = text.trim();
-    if (content.isEmpty || state.isSending) return;
+    if (content.isEmpty || state.isSending) return false;
     final session = state.currentSession;
     if (session == null) {
       state = state.copyWith(errorMessage: '请先创建或选择一个开发会话');
-      return;
+      return false;
     }
     final userMessage = ChatMessage(
       id: 'local-${DateTime.now().microsecondsSinceEpoch}',
@@ -386,8 +385,10 @@ class AiWorkspaceController extends Notifier<AiWorkspaceState> {
         clearApproval: result.approval == null,
       );
       await refreshCurrentSession();
+      return true;
     } catch (error) {
       state = state.copyWith(errorMessage: '指令发送失败：$error');
+      return false;
     } finally {
       state = state.copyWith(isSending: false);
     }

@@ -7,6 +7,7 @@ import '../models/code_task.dart';
 import '../models/code_workspace_file.dart';
 import '../models/code_delivery_job.dart';
 import '../models/code_project_terminal_session.dart';
+import '../models/code_session_recovery.dart';
 
 /// AI 工作区仓库
 /// 负责读取服务器目录、执行远程 AI 任务等 API 交互
@@ -101,6 +102,51 @@ class AiWorkspaceRepository {
       '/api/code/sessions/$sessionId/state',
     );
     return AiSessionStateInfo.fromJson(
+      response.data ?? const <String, dynamic>{},
+    );
+  }
+
+  Future<CodeSessionHistory> getSessionHistory(
+    int sessionId, {
+    int page = 1,
+    int limit = 20,
+  }) async {
+    final response = await _apiClient.get<Map<String, dynamic>>(
+      '/api/code/sessions/$sessionId/history',
+      queryParameters: {'page': page, 'limit': limit},
+    );
+    return CodeSessionHistory.fromJson(
+      response.data ?? const <String, dynamic>{},
+    );
+  }
+
+  Future<AiInstruction> retryInstruction(int instructionId) async {
+    final response = await _apiClient.post<Map<String, dynamic>>(
+      '/api/code/instructions/$instructionId/retry',
+      data: const <String, dynamic>{},
+    );
+    return AiInstruction.fromJson(response.data ?? const <String, dynamic>{});
+  }
+
+  Future<CodeSessionInitialization> getSessionInitialization(
+    int sessionId,
+  ) async {
+    final response = await _apiClient.get<Map<String, dynamic>>(
+      '/api/code/sessions/$sessionId/initialization',
+    );
+    return CodeSessionInitialization.fromJson(
+      response.data ?? const <String, dynamic>{},
+    );
+  }
+
+  Future<CodeSessionInitialization> retrySessionInitialization(
+    int sessionId,
+  ) async {
+    final response = await _apiClient.post<Map<String, dynamic>>(
+      '/api/code/sessions/$sessionId/initialization/retry',
+      data: const <String, dynamic>{},
+    );
+    return CodeSessionInitialization.fromJson(
       response.data ?? const <String, dynamic>{},
     );
   }
