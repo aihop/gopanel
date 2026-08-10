@@ -32,6 +32,9 @@ jobs:
         with:
           go-version: "1.25.1"
           cache-dependency-path: ${{ matrix.module }}/go.sum
+      - name: Validate AI task contracts
+        if: matrix.module == '.'
+        run: go run ./tools/contractcheck
       - name: Test ${{ matrix.module }}
         working-directory: ${{ matrix.module }}
         run: go test ./... -count=1

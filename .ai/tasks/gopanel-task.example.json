@@ -1,0 +1,129 @@
+{
+  "schemaVersion": 1,
+  "id": "task-contract-v1",
+  "title": "建立 GoPanel AI 任务契约第一期",
+  "problem": "GoPanel 已有会话、多仓 worktree、审批、质量门禁、交付和手机任务摘要，但任务开始前缺少可版本化、可校验的目标、范围和完成定义。",
+  "expectedOutcome": "仓库中存在 GoPanel 专用的任务契约规范、实际示例和静态校验入口，后续可在不重做现有任务链路的前提下把契约固化到控制平面。",
+  "constraints": [
+    "第一期只实现仓库声明与静态校验，不修改 AITask 数据库模型",
+    "验证命令只作为声明，校验器不得自动执行",
+    "高风险动作必须显式声明审批要求",
+    "不修改当前任务范围外的前后端业务模块"
+  ],
+  "contractReferences": [
+    {
+      "repository": "gopanel",
+      "path": "AGENTS.md",
+      "purpose": "项目级 AI 行为、权限、验证和提交约束"
+    },
+    {
+      "repository": "gopanel",
+      "path": "app/model/ai_chat_history.go",
+      "purpose": "现有项目、任务、会话、审批和摘要对象"
+    },
+    {
+      "repository": "gopanel",
+      "path": "app/api/code_quality_gate.go",
+      "purpose": "现有质量门禁与验证结果事实源"
+    }
+  ],
+  "repositories": [
+    {
+      "id": "gopanel",
+      "path": ".",
+      "role": "primary",
+      "dependsOn": [],
+      "readScope": [
+        "AGENTS.md",
+        "docs/ai/**",
+        "app/model/ai_*.go",
+        "app/api/code_*.go",
+        ".github/workflows/**"
+      ],
+      "writeScope": [
+        ".ai/**",
+        "tools/contractcheck/**",
+        ".github/workflows/file-size-gate.yml",
+        "docs/ai/README.md"
+      ]
+    }
+  ],
+  "risks": [
+    {
+      "id": "repository-write",
+      "level": "medium",
+      "description": "新增契约和校验器并接入 CI。",
+      "actions": ["filesystem_write", "git_commit"],
+      "approvalRequired": false
+    },
+    {
+      "id": "remote-push",
+      "level": "high",
+      "description": "验证通过后把契约提交推送到项目远端。",
+      "actions": ["credential_use", "git_push"],
+      "approvalRequired": true
+    }
+  ],
+  "acceptanceCriteria": [
+    {
+      "id": "schema-defined",
+      "description": "任务目标、仓库范围、风险、验收证据、验证入口和手机摘要均有稳定字段定义。",
+      "evidence": [
+        {
+          "type": "manual",
+          "reference": ".ai/schema/task-v1.schema.json review"
+        }
+      ]
+    },
+    {
+      "id": "example-valid",
+      "description": "仓库中的 GoPanel 示例能够通过契约校验器。",
+      "evidence": [
+        {
+          "type": "test",
+          "reference": "go run ./tools/contractcheck"
+        }
+      ]
+    },
+    {
+      "id": "unsafe-contract-rejected",
+      "description": "未知字段、无证据验收项和未审批的高风险动作会被拒绝。",
+      "evidence": [
+        {
+          "type": "test",
+          "reference": "go test ./tools/contractcheck -count=1"
+        }
+      ]
+    }
+  ],
+  "verification": [
+    {
+      "id": "contract-validation",
+      "repository": "gopanel",
+      "kind": "command",
+      "command": "go run ./tools/contractcheck",
+      "workDir": ".",
+      "required": true
+    },
+    {
+      "id": "validator-tests",
+      "repository": "gopanel",
+      "kind": "command",
+      "command": "go test ./tools/contractcheck -count=1",
+      "workDir": ".",
+      "required": true
+    },
+    {
+      "id": "scope-review",
+      "repository": "gopanel",
+      "kind": "manual",
+      "instruction": "确认提交中没有包含任务契约范围外的既有工作区改动。",
+      "required": true
+    }
+  ],
+  "mobileSummary": {
+    "goal": "让每个 AI 开发任务开始前就明确目标、范围、风险和完成标准。",
+    "success": "契约结构和示例通过自动校验，并进入项目 CI。",
+    "attention": "第一期尚未把契约快照和验收报告接入数据库任务。"
+  }
+}

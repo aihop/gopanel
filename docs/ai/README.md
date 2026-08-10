@@ -53,6 +53,7 @@
 
 ## 关键文档索引
 
+- [AI 任务契约（目标、范围、风险与验收）](../../.ai/README.md)
 - [知识库（已解决问题 & 技术债）](./knowledge-base.md)
 - [文件拆分方案（重构参考）](./refactoring.md)
 - [1Panel 相似文件审计基线](./1panel-similarity-audit.md)
@@ -65,6 +66,9 @@
 ```bash
 # 后端编译验证
 go vet ./app/...
+
+# 校验 AI 任务契约（只校验，不执行契约命令）
+go run ./tools/contractcheck
 
 # 检查改动文件
 git status
