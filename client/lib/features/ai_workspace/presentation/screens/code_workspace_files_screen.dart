@@ -6,6 +6,7 @@ import '../../models/code_workspace_file.dart';
 import '../code_workspace_text.dart';
 import '../controllers/ai_workspace_controller.dart';
 import '../controllers/code_workspace_files_controller.dart';
+import '../widgets/code_workspace_editor.dart';
 
 class CodeWorkspaceFilesScreen extends ConsumerStatefulWidget {
   const CodeWorkspaceFilesScreen({
@@ -49,70 +50,142 @@ class _CodeWorkspaceFilesScreenState
       builder: (context, _) {
         final state = _controller.state;
         final file = state.openFile;
-        return Scaffold(
-          backgroundColor: const Color(0xFF0F172A),
-          appBar: AppBar(
-            backgroundColor: const Color(0xFF1E293B),
-            foregroundColor: Colors.white,
-            titleSpacing: 0,
-            title: _ScreenTitle(
-              title: file == null
-                  ? CodeWorkspaceText.t(context, 'files.title')
-                  : file.path.split('/').last,
-              subtitle: widget.sessionTitle,
-            ),
-            leading: IconButton(
-              tooltip: CodeWorkspaceText.t(context, 'action.back'),
-              onPressed: file == null
-                  ? () => Navigator.of(context).pop()
-                  : _controller.closeFile,
-              icon: const Icon(Icons.arrow_back_rounded),
-            ),
-            actions: [
-              if (file != null)
+        return PopScope<void>(
+          canPop: file == null,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop) _handleBack();
+          },
+          child: Scaffold(
+            backgroundColor: const Color(0xFF0F172A),
+            appBar: AppBar(
+              backgroundColor: const Color(0xFF1E293B),
+              foregroundColor: Colors.white,
+              titleSpacing: 0,
+              title: _ScreenTitle(
+                title: file == null
+                    ? CodeWorkspaceText.t(context, 'files.title')
+                    : file.path.split('/').last,
+                subtitle: widget.sessionTitle,
+              ),
+              leading: IconButton(
+                tooltip: CodeWorkspaceText.t(context, 'action.back'),
+                onPressed: _handleBack,
+                icon: const Icon(Icons.arrow_back_rounded),
+              ),
+              actions: [
+                if (file != null)
+                  IconButton(
+                    tooltip: CodeWorkspaceText.t(context, 'files.copy'),
+                    onPressed: () => _copyFile(context, file),
+                    icon: const Icon(Icons.content_copy_rounded),
+                  ),
                 IconButton(
-                  tooltip: CodeWorkspaceText.t(context, 'files.copy'),
-                  onPressed: () => _copyFile(context, file),
-                  icon: const Icon(Icons.content_copy_rounded),
+                  tooltip: CodeWorkspaceText.t(context, 'action.refresh'),
+                  onPressed: state.isLoading || state.isSaving
+                      ? null
+                      : _refresh,
+                  icon: const Icon(Icons.refresh_rounded),
                 ),
-              IconButton(
-                tooltip: CodeWorkspaceText.t(context, 'action.refresh'),
-                onPressed: state.isLoading ? null : _controller.refresh,
-                icon: const Icon(Icons.refresh_rounded),
-              ),
-            ],
-          ),
-          body: Column(
-            children: [
-              if (state.isLoading) const LinearProgressIndicator(minHeight: 2),
-              if (state.errorMessage != null)
-                _FilesErrorBanner(
-                  message: state.errorMessage!,
-                  onRetry: _controller.refresh,
+              ],
+            ),
+            body: Column(
+              children: [
+                if (state.isLoading)
+                  const LinearProgressIndicator(minHeight: 2),
+                if (state.errorMessage != null)
+                  _FilesErrorBanner(
+                    message: state.errorMessage!,
+                    onRetry: file != null && state.isDirty ? _save : _refresh,
+                  ),
+                Expanded(
+                  child: file == null
+                      ? _DirectoryView(
+                          state: state,
+                          onOpen: _controller.openEntry,
+                          onOpenParent: _controller.openParent,
+                          onRefresh: _controller.refresh,
+                        )
+                      : CodeWorkspaceEditor(
+                          key: ValueKey('${file.path}:${file.version}'),
+                          file: file,
+                          content: state.draftContent,
+                          isDirty: state.isDirty,
+                          isSaving: state.isSaving,
+                          onChanged: _controller.updateDraft,
+                          onSave: _save,
+                        ),
                 ),
-              Expanded(
-                child: file == null
-                    ? _DirectoryView(
-                        state: state,
-                        onOpen: _controller.openEntry,
-                        onOpenParent: _controller.openParent,
-                        onRefresh: _controller.refresh,
-                      )
-                    : _FileView(file: file),
-              ),
-            ],
+              ],
+            ),
           ),
         );
       },
     );
   }
 
-  Future<void> _copyFile(BuildContext context, CodeSessionFile file) async {
-    await Clipboard.setData(ClipboardData(text: file.content));
+  Future<void> _copyFile(BuildContext context, CodeSessionFile _) async {
+    await Clipboard.setData(
+      ClipboardData(text: _controller.state.draftContent),
+    );
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(CodeWorkspaceText.t(context, 'files.copied'))),
     );
+  }
+
+  Future<void> _save() async {
+    final saved = await _controller.saveOpenFile();
+    if (!mounted || !saved) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(CodeWorkspaceText.t(context, 'files.saveSuccess')),
+      ),
+    );
+  }
+
+  Future<void> _refresh() async {
+    if (_controller.state.isDirty && !await _confirmDiscard()) return;
+    await _controller.refresh();
+  }
+
+  Future<void> _handleBack() async {
+    final state = _controller.state;
+    if (state.isSaving) return;
+    if (state.openFile == null) {
+      Navigator.of(context).pop();
+      return;
+    }
+    if (state.isDirty && !await _confirmDiscard()) return;
+    _controller.closeFile();
+  }
+
+  Future<bool> _confirmDiscard() async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: Text(
+              CodeWorkspaceText.t(dialogContext, 'files.unsavedTitle'),
+            ),
+            content: Text(
+              CodeWorkspaceText.t(dialogContext, 'files.unsavedHint'),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: Text(
+                  CodeWorkspaceText.t(dialogContext, 'files.keepEditing'),
+                ),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: Text(
+                  CodeWorkspaceText.t(dialogContext, 'files.discard'),
+                ),
+              ),
+            ],
+          ),
+        ) ??
+        false;
   }
 }
 
@@ -313,58 +386,6 @@ class _EmptyFilesHint extends StatelessWidget {
   }
 }
 
-class _FileView extends StatelessWidget {
-  const _FileView({required this.file});
-
-  final CodeSessionFile file;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Container(
-          width: double.infinity,
-          color: const Color(0xFF111827),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-          child: Text(
-            '${CodeWorkspaceText.t(context, 'files.readOnly')} · ${_formatSize(file.size)} · ${file.path}',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: Colors.white54, fontSize: 11),
-          ),
-        ),
-        Expanded(
-          child: Scrollbar(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: SelectionArea(
-                  child: Text(
-                    file.content,
-                    style: const TextStyle(
-                      color: Color(0xFFE2E8F0),
-                      fontFamily: 'monospace',
-                      fontSize: 12,
-                      height: 1.55,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  String _formatSize(int bytes) {
-    if (bytes < 1024) return '$bytes B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    return '${(bytes / 1024 / 1024).toStringAsFixed(1)} MB';
-  }
-}
-
 class _FilesErrorBanner extends StatelessWidget {
   const _FilesErrorBanner({required this.message, required this.onRetry});
 
@@ -376,7 +397,7 @@ class _FilesErrorBanner extends StatelessWidget {
     return MaterialBanner(
       backgroundColor: const Color(0xFF451A1A),
       content: Text(
-        '${CodeWorkspaceText.t(context, 'files.loadFailed')}：$message',
+        '${CodeWorkspaceText.t(context, 'files.operationFailed')}：$message',
         style: const TextStyle(color: Colors.white),
       ),
       actions: [

@@ -10,6 +10,8 @@ class CodeWorkspaceFilesState {
   final List<CodeStructureEntry> entries;
   final CodeSessionFile? openFile;
   final bool truncated;
+  final String draftContent;
+  final bool isSaving;
 
   const CodeWorkspaceFilesState({
     this.isLoading = false,
@@ -18,7 +20,11 @@ class CodeWorkspaceFilesState {
     this.entries = const [],
     this.openFile,
     this.truncated = false,
+    this.draftContent = '',
+    this.isSaving = false,
   });
+
+  bool get isDirty => openFile != null && draftContent != openFile!.content;
 
   CodeWorkspaceFilesState copyWith({
     bool? isLoading,
@@ -27,6 +33,8 @@ class CodeWorkspaceFilesState {
     List<CodeStructureEntry>? entries,
     CodeSessionFile? openFile,
     bool? truncated,
+    String? draftContent,
+    bool? isSaving,
     bool clearError = false,
     bool closeFile = false,
   }) {
@@ -37,6 +45,8 @@ class CodeWorkspaceFilesState {
       entries: entries ?? this.entries,
       openFile: closeFile ? null : (openFile ?? this.openFile),
       truncated: truncated ?? this.truncated,
+      draftContent: closeFile ? '' : (draftContent ?? this.draftContent),
+      isSaving: isSaving ?? this.isSaving,
     );
   }
 }
@@ -99,7 +109,12 @@ class CodeWorkspaceFilesController extends ChangeNotifier {
       final file = await _repository.getSessionFile(sessionId, entry.path);
       if (requestVersion != _requestVersion) return;
       _setState(
-        _state.copyWith(isLoading: false, openFile: file, clearError: true),
+        _state.copyWith(
+          isLoading: false,
+          openFile: file,
+          draftContent: file.content,
+          clearError: true,
+        ),
       );
     } catch (error) {
       if (requestVersion != _requestVersion) return;
@@ -122,6 +137,38 @@ class CodeWorkspaceFilesController extends ChangeNotifier {
       );
     }
     return loadDirectory(_state.currentPath);
+  }
+
+  void updateDraft(String content) {
+    if (_state.openFile == null || content == _state.draftContent) return;
+    _setState(_state.copyWith(draftContent: content, clearError: true));
+  }
+
+  Future<bool> saveOpenFile() async {
+    final file = _state.openFile;
+    if (file == null || !_state.isDirty || _state.isSaving) return false;
+    _setState(_state.copyWith(isSaving: true, clearError: true));
+    try {
+      final saved = await _repository.saveSessionFile(
+        sessionId: sessionId,
+        file: file,
+        content: _state.draftContent,
+      );
+      _setState(
+        _state.copyWith(
+          openFile: saved,
+          draftContent: saved.content,
+          isSaving: false,
+          clearError: true,
+        ),
+      );
+      return true;
+    } catch (error) {
+      _setState(
+        _state.copyWith(isSaving: false, errorMessage: error.toString()),
+      );
+      return false;
+    }
   }
 
   void closeFile() {

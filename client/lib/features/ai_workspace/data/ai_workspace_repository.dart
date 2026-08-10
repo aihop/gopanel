@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../../../core/network/api_client.dart';
 import '../models/ai_dev_session.dart';
 import '../models/ai_session_state_info.dart';
@@ -104,6 +106,29 @@ class AiWorkspaceRepository {
       queryParameters: {'path': path},
     );
     return CodeSessionFile.fromJson(response.data ?? const <String, dynamic>{});
+  }
+
+  Future<CodeSessionFile> saveSessionFile({
+    required int sessionId,
+    required CodeSessionFile file,
+    required String content,
+  }) async {
+    final response = await _apiClient.put<Map<String, dynamic>>(
+      '/api/code/sessions/$sessionId/file',
+      data: {
+        'path': file.path,
+        'content': content,
+        'baseVersion': file.version,
+      },
+    );
+    final data = response.data ?? const <String, dynamic>{};
+    return CodeSessionFile(
+      path: (data['path'] ?? file.path).toString(),
+      content: content,
+      extension: file.extension,
+      size: (data['size'] as num?)?.toInt() ?? utf8.encode(content).length,
+      version: (data['version'] ?? '').toString(),
+    );
   }
 
   Future<List<AiPreview>> getSessionPreviews(int sessionId) async {
