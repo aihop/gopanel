@@ -6,6 +6,12 @@ import { getCodeDeliveryJob, mergeCodeSessionWorktree } from "@/api/modules/code
 import { getCodeSession } from "@/api/modules/code"
 import type { CodeDeliveryJob } from "@/api/interface/codeGit"
 import Icon from "@/components/common/Icon.vue"
+import {
+	codeDeliveryPhaseIcon,
+	codeDeliveryPhaseType,
+	useCodeDelivery,
+	type CodeDeliveryPhase
+} from "@/composables/useCodeDelivery"
 import { codeWorkspaceMessages } from "../codeWorkspaceMessages"
 
 const props = defineProps<{ sessionId: number }>()
@@ -19,23 +25,28 @@ const sessionStatus = ref("")
 const loading = ref(false)
 let pollTimer: ReturnType<typeof setTimeout> | null = null
 
-const active = computed(() => ["queued", "running"].includes(job.value?.status || ""))
-const completed = computed(() => job.value?.status === "completed")
-const hasPendingCommits = computed(() => completed.value && job.value?.hasPendingCommits === true)
-const hasUncommittedChanges = computed(() => completed.value && job.value?.hasUncommittedChanges === true)
-const canDeliver = computed(() => !completed.value || (hasPendingCommits.value && !hasUncommittedChanges.value))
-const label = computed(() => {
-	if (job.value?.status === "queued") return t("code.deliverQueued")
-	if (job.value?.status === "running" && job.value.stage === "quality_check") {
-		return t("code.runningDeliveryQuality")
-	}
-	if (job.value?.status === "running") return t("code.deliveringToMain", { progress: job.value.progress })
-	if (hasUncommittedChanges.value) return t("code.saveLatestBeforeDelivery")
-	if (hasPendingCommits.value) return t("code.deliverLatestToMain")
-	if (completed.value) return t("code.deliveredToMain")
-	if (["failed", "conflict", "partial"].includes(job.value?.status || "")) return t("code.retryDeliveryToMain")
-	return t("code.deliverToMain")
+// 交付状态判定与移动端共用，这里只负责把 phase 映射成桌面文案。
+const { phase, busy: active, completed, canDeliver, progress } = useCodeDelivery({
+	job,
+	available,
+	pendingRequiresCompleted: true
 })
+
+const labelKeys: Record<CodeDeliveryPhase, string> = {
+	queued: "code.deliverQueued",
+	quality_check: "code.runningDeliveryQuality",
+	running: "code.deliveringToMain",
+	needs_save: "code.saveLatestBeforeDelivery",
+	deliverable: "code.deliverLatestToMain",
+	delivered: "code.deliveredToMain",
+	retry: "code.retryDeliveryToMain",
+	idle: "code.deliverToMain"
+}
+const label = computed(() =>
+	phase.value === "running"
+		? t("code.deliveringToMain", { progress: progress.value })
+		: t(labelKeys[phase.value])
+)
 
 function clearPoll() {
 	if (pollTimer) clearTimeout(pollTimer)
@@ -100,21 +111,11 @@ onBeforeUnmount(clearPoll)
 		secondary
 		:loading="loading"
 		:disabled="active || !canDeliver"
-		:type="completed && !job?.hasPendingChanges ? 'success' : active ? 'info' : 'primary'"
+		:type="codeDeliveryPhaseType(phase)"
 		class="!rounded-xl"
 		@click="deliver"
 	>
-		<template #icon>
-			<Icon
-				:name="
-					completed && !job?.hasPendingChanges
-						? 'mdi:cloud-check-outline'
-						: active
-							? 'mdi:cloud-sync-outline'
-							: 'mdi:source-merge'
-				"
-			/>
-		</template>
+		<template #icon><Icon :name="codeDeliveryPhaseIcon(phase)" /></template>
 		{{ label }}
 	</n-button>
 </template>

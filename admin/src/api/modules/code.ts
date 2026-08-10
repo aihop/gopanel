@@ -121,8 +121,12 @@ export function updateCodeSessionApprovalPolicy(sessionId: number, approvalPolic
 	return http.put<CodeSession>(`/code/sessions/${sessionId}/approval-policy`, { approvalPolicy })
 }
 
-export function getCodeSessionHistory(sessionId: number) {
-	return http.get<CodeSessionHistory>(`/code/sessions/${sessionId}/history`)
+/** taskId 可选：传入后只返回该任务的对话，不传则返回整个会话的。 */
+export function getCodeSessionHistory(sessionId: number, taskId?: number) {
+	return http.get<CodeSessionHistory>(
+		`/code/sessions/${sessionId}/history`,
+		taskId ? { taskId } : undefined
+	)
 }
 
 export function getCodeExecutionRun(runId: number) {

@@ -198,6 +198,13 @@ func applyCodeTaskDeliverySummary(summary *codeTaskSummary, delivery model.AICod
 	if summary.GitStatus == "push_failed" {
 		summary.GitError = delivery.PushError
 	}
+	// 优先用交付快照时固化的统计：worktree 提交可能已被回收，实时 diff 会静默算不出来。
+	if delivery.StatFiles > 0 {
+		applyCodeTaskDiffStats(summary, codeTaskDiffStats{
+			Additions: delivery.StatAdditions, Deletions: delivery.StatDeletions, Files: delivery.StatFiles,
+		})
+		return
+	}
 	if delivery.BaseCommit == "" || delivery.WorktreeCommit == "" {
 		return
 	}
@@ -233,6 +240,14 @@ func applyCodeTaskRepositorySummaries(summary *codeTaskSummary, repositories []m
 			}
 		}
 		statuses = append(statuses, repositoryStatus)
+		// 优先用交付快照时固化的统计，理由同单仓路径。
+		if repository.StatFiles > 0 {
+			applyCodeTaskDiffStats(summary, codeTaskDiffStats{
+				Additions: repository.StatAdditions, Deletions: repository.StatDeletions,
+				Files: repository.StatFiles,
+			})
+			continue
+		}
 		if repository.BaseCommit == "" || repository.WorktreeCommit == "" {
 			continue
 		}
@@ -299,6 +314,28 @@ func aggregateCodeTaskGitStatuses(statuses []string) string {
 	return "pushed"
 }
 
+// codeTaskDiffExcludedFiles 是统计任务产出行数时排除的机器生成文件。
+// 一次依赖安装刷新 lock 文件就能贡献上万行，让「这个任务改了多少代码」完全失真。
+// 只排除公认由工具生成的 lock 文件：dist/、vendor/ 之类一旦进了版本库，
+// 说明项目有意跟踪它们，排除掉反而会漏算真实改动。
+var codeTaskDiffExcludedFiles = []string{
+	"package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "pnpm-lock.yaml",
+	"go.sum", "Cargo.lock", "composer.lock", "Gemfile.lock",
+	"Podfile.lock", "poetry.lock", "Pipfile.lock", "pubspec.lock",
+}
+
+// codeTaskDiffPathspec 生成排除用的 pathspec。
+// 前缀 * 让匹配跨目录层级——裸文件名只会匹配仓库根目录下的同名文件，
+// 子目录里的 lock 文件会漏网。
+func codeTaskDiffPathspec() []string {
+	pathspec := make([]string, 0, len(codeTaskDiffExcludedFiles)+1)
+	pathspec = append(pathspec, "--")
+	for _, name := range codeTaskDiffExcludedFiles {
+		pathspec = append(pathspec, ":(exclude)*"+name)
+	}
+	return pathspec
+}
+
 func loadCodeTaskDiffStats(root, baseCommit, headCommit string, cache map[string]codeTaskDiffStats) (codeTaskDiffStats, bool) {
 	root = filepath.Clean(strings.TrimSpace(root))
 	if root == "." || baseCommit == "" || headCommit == "" {
@@ -308,7 +345,11 @@ func loadCodeTaskDiffStats(root, baseCommit, headCommit string, cache map[string
 	if cached, exists := cache[cacheKey]; exists {
 		return cached, true
 	}
-	output, err := runCodeGit(root, "diff", "--numstat", "--no-renames", baseCommit+".."+headCommit)
+	args := append(
+		[]string{"diff", "--numstat", "--no-renames", baseCommit + ".." + headCommit},
+		codeTaskDiffPathspec()...,
+	)
+	output, err := runCodeGit(root, args...)
 	if err != nil {
 		return codeTaskDiffStats{}, false
 	}

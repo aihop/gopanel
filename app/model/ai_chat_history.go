@@ -74,6 +74,11 @@ type AIMessage struct {
 	SessionID uint      `gorm:"column:session_id;type:integer;index" json:"sessionId"`
 	TaskID    uint      `gorm:"column:task_id;type:integer;not null;index" json:"taskId"`
 	RunID     uint      `gorm:"column:run_id;type:integer;index" json:"runId"`
+	// NativeID 是执行器原生历史（如 codex rollout）里这条消息的稳定标识，
+	// 用于把外部文件里的对话增量固化进库：文件被清理或格式变更后历史仍在。
+	// 这里只建普通索引——存量消息的该列均为空串，加唯一索引会让建索引直接失败，
+	// 去重放在写入前用已存在的 NativeID 集合来做。
+	NativeID string `gorm:"column:native_id;type:varchar(128);index" json:"nativeId,omitempty"`
 	Role      string    `gorm:"column:role;type:varchar(32);not null" json:"role"` // user / agent
 	Content   string    `gorm:"column:content;type:text;not null" json:"content"`
 }

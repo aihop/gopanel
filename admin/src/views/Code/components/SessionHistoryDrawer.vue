@@ -31,7 +31,8 @@ const loadHistory = async () => {
 	runs.value = []
 	try {
 		if (props.sessionId) {
-			const response = await getCodeSessionHistory(props.sessionId)
+			// 带上 taskId：同一会话下可能有多个任务，历史应只显示当前任务的对话。
+			const response = await getCodeSessionHistory(props.sessionId, props.taskId ?? undefined)
 			messages.value = response.data.messages || []
 			runs.value = response.data.runs || []
 		} else if (props.taskId) {

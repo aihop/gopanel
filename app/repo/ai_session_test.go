@@ -190,3 +190,51 @@ func TestGetSessionsByProjectIncludesAllUsersAndTaskTitles(t *testing.T) {
 		t.Fatalf("project task titles = %#v", titles)
 	}
 }
+
+// 会话列表要和 PC 端的任务列表同口径：没有任务的会话不展示，
+// 否则隔离会话惰性建任务留下的残骸会只在会话列表里堆积，两端数量对不上。
+func TestGetSessionsHidesOrphanSessionsWithoutTask(t *testing.T) {
+	oldDB := global.DB
+	t.Cleanup(func() { global.DB = oldDB })
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "session-orphan.db")), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&model.AIDevSession{}, &model.AITask{}); err != nil {
+		t.Fatal(err)
+	}
+	global.DB = db
+	sessions := []*model.AIDevSession{
+		{UserID: 1, ProjectID: 4, Title: "有任务", WorkDir: "/tmp", Status: "active", CurrentStage: "completed", LastTaskID: 21},
+		{UserID: 1, ProjectID: 4, Title: "初始化中", WorkDir: "/tmp", Status: "initializing", CurrentStage: "syncing_base"},
+		// 以下三种都没有任务，都不该出现在列表里。
+		{UserID: 1, ProjectID: 4, Title: "卡住的交互会话", WorkDir: "/tmp", Status: "active", CurrentStage: "interactive"},
+		{UserID: 1, ProjectID: 4, Title: "空闲无任务", WorkDir: "/tmp", Status: "active", CurrentStage: "idle"},
+		// 指针还在但任务已被删掉，也就是「删了却还显示」的那种。
+		{UserID: 1, ProjectID: 4, Title: "任务已删除", WorkDir: "/tmp", Status: "active", CurrentStage: "interactive", LastTaskID: 99},
+	}
+	if err := db.Create(&sessions).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&model.AITask{ID: 21, UserID: 1, SessionID: sessions[0].ID, Title: "有任务", WorkDir: "/tmp"}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	got, total, err := (&aiDevSessionRepo{}).GetSessionsByUserID(1, 4, 1, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	titles := make(map[string]bool, len(got))
+	for _, session := range got {
+		titles[session.Title] = true
+	}
+	if total != 2 || len(got) != 2 {
+		t.Fatalf("orphan sessions leaked into the list: %#v (total=%d)", got, total)
+	}
+	if !titles["有任务"] || !titles["初始化中"] {
+		t.Fatalf("expected the task-backed and initializing sessions: %#v", titles)
+	}
+	if titles["任务已删除"] || titles["卡住的交互会话"] || titles["空闲无任务"] {
+		t.Fatalf("orphan sessions must be hidden: %#v", titles)
+	}
+}

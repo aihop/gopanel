@@ -7,7 +7,9 @@ import { codeGitReviewMessages } from "../codeGitReviewMessages"
 
 const props = defineProps<{ facts?: CodeDeliveryFact[] }>()
 const { t } = useI18n({ messages: codeGitReviewMessages })
-const visible = computed(() => props.facts?.length === 4)
+// 后端 fact 的数量会随交付语义演进，这里只依赖「有没有」，
+// 写死具体条数会让新增 fact 时整个区块静默消失。
+const visible = computed(() => (props.facts?.length ?? 0) > 0)
 
 const icon = (status: CodeDeliveryFact["status"]) => {
 	if (status === "completed") return "mdi:check-circle"

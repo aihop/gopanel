@@ -218,6 +218,13 @@ func CreateAISession(c fiber.Ctx) error {
 		if project == nil {
 			return c.JSON(e.Fail(errors.New("Git Worktree 隔离仅支持项目会话")))
 		}
+		// 先做秒级的前置校验：凭据、远端地址、源仓状态不满足时直接报错，
+		// 不留下一条无任务、无法清理的失败会话。
+		if err := validateCodeSessionPrerequisites(
+			project, req.IncludeUncommitted == nil || *req.IncludeUncommitted,
+		); err != nil {
+			return c.JSON(e.Fail(err))
+		}
 		status, stage = codeSessionStatusInitializing, codeSessionStageSyncingBase
 	}
 	session := &model.AIDevSession{

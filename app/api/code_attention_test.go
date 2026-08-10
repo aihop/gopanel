@@ -116,3 +116,44 @@ func TestBuildCodeAttentionItemIgnoresOlderFailedTask(t *testing.T) {
 		t.Fatalf("older task created attention: %#v", item)
 	}
 }
+
+// 同一项目反复初始化失败只应提示一次，否则待办面板会被同一个配置问题刷屏。
+func TestLoadCodeAttentionItemsCollapsesRepeatedInitializationFailures(t *testing.T) {
+	database := withCodeGovernanceDB(t)
+	if err := database.AutoMigrate(&model.AIApproval{}); err != nil {
+		t.Fatal(err)
+	}
+	base := time.Now().Add(-time.Hour)
+	sessions := []*model.AIDevSession{
+		{UserID: 3, ProjectID: 7, Title: "旧失败", WorkDir: "/tmp", Status: codeSessionStatusFailed,
+			CurrentStage: codeSessionStageInitializationFailed, InitializationErr: "认证失败", UpdatedAt: base},
+		{UserID: 3, ProjectID: 7, Title: "新失败", WorkDir: "/tmp", Status: codeSessionStatusFailed,
+			CurrentStage: codeSessionStageInitializationFailed, InitializationErr: "认证失败", UpdatedAt: base.Add(time.Minute)},
+		{UserID: 3, ProjectID: 8, Title: "另一个项目", WorkDir: "/tmp", Status: codeSessionStatusFailed,
+			CurrentStage: codeSessionStageInitializationFailed, InitializationErr: "地址不存在", UpdatedAt: base},
+	}
+	for _, session := range sessions {
+		if err := database.Create(session).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	items, err := loadCodeAttentionItems(3, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byProject := map[uint]int{}
+	for _, item := range items {
+		if item.Type != "initialization_failed" {
+			continue
+		}
+		for _, session := range sessions {
+			if session.ID == item.SessionID {
+				byProject[session.ProjectID]++
+			}
+		}
+	}
+	if byProject[7] != 1 || byProject[8] != 1 {
+		t.Fatalf("expected one item per project, got %#v", byProject)
+	}
+}

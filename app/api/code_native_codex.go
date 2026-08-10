@@ -64,11 +64,24 @@ func repairNativeCodexSessionBinding(session *model.AIDevSession) error {
 	if session == nil || strings.TrimSpace(session.NativeSessionID) != "" || session.CreatedAt.IsZero() {
 		return nil
 	}
-	nativeSessionID := findNativeCodexSessionID(session.WorkDir, 0, session.CreatedAt)
-	if nativeSessionID == "" {
-		return nil
+	// 交付完成后 session.WorkDir 会被改写成源仓路径，而 rollout 里记录的是
+	// 当初运行 codex 的隔离 Worktree 目录，只用 WorkDir 匹配会永久失联。
+	// 隔离目录是由 用户+会话号 确定性推导出来的，这里补一次回溯。
+	candidates := []string{session.WorkDir}
+	if session.ID != 0 && session.UserID != 0 {
+		if worktreeDir := aiSessionWorktreeDir(session.UserID, session.ID); worktreeDir != "" {
+			candidates = append(candidates, worktreeDir)
+		}
 	}
-	return bindNativeCodexSession(session, nativeSessionID)
+	for _, candidate := range candidates {
+		if strings.TrimSpace(candidate) == "" {
+			continue
+		}
+		if nativeSessionID := findNativeCodexSessionID(candidate, 0, session.CreatedAt); nativeSessionID != "" {
+			return bindNativeCodexSession(session, nativeSessionID)
+		}
+	}
+	return nil
 }
 
 func bindNativeCodexSession(session *model.AIDevSession, nativeSessionID string) error {

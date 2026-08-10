@@ -33,6 +33,9 @@ func captureCodeDeliverySnapshot(session *model.AIDevSession, userID uint) error
 	if err := verifyCodeDeliveryCommit(session.WorkDir, commit, "Worktree"); err != nil {
 		return err
 	}
+	stats, _ := loadCodeTaskDiffStats(
+		session.SourceWorkDir, session.BaseCommit, commit, map[string]codeTaskDiffStats{},
+	)
 	values := map[string]any{
 		"project_id": session.ProjectID, "user_id": userID, "status": codeDeliveryPrepared,
 		"source_work_dir": session.SourceWorkDir, "work_dir": session.WorkDir,
@@ -42,6 +45,7 @@ func captureCodeDeliverySnapshot(session *model.AIDevSession, userID uint) error
 		"source_commit": "", "worktree_commit": commit,
 		"merge_commit": "", "error_message": "", "merged_at": nil, "completed_at": nil,
 		"push_status": codePushPending, "pushed_commit": "", "push_error": "", "pushed_at": nil,
+		"stat_additions": stats.Additions, "stat_deletions": stats.Deletions, "stat_files": stats.Files,
 	}
 	var delivery model.AICodeDelivery
 	err = global.DB.Where("session_id = ?", session.ID).First(&delivery).Error
@@ -53,6 +57,7 @@ func captureCodeDeliverySnapshot(session *model.AIDevSession, userID uint) error
 			TargetBranch: targetBranch, BaseCommit: session.BaseCommit,
 			RemoteName: session.RemoteName, RemoteBranch: session.RemoteBranch,
 			RemoteCommit: session.RemoteCommit, WorktreeCommit: commit, PushStatus: codePushPending,
+			StatAdditions: stats.Additions, StatDeletions: stats.Deletions, StatFiles: stats.Files,
 		}
 		return global.DB.Create(&delivery).Error
 	}
@@ -162,6 +167,8 @@ func captureCodeMultiRepositoryDeliverySnapshot(session *model.AIDevSession) err
 			return err
 		}
 	}
+	// 交付快照确定后固化各仓库的产出行数，之后任务列表直接读库。
+	diffCache := map[string]codeTaskDiffStats{}
 	return global.DB.Transaction(func(tx *gorm.DB) error {
 		for index := range repositories {
 			if !reset[index] {
@@ -175,12 +182,18 @@ func captureCodeMultiRepositoryDeliverySnapshot(session *model.AIDevSession) err
 				continue
 			}
 			repository := &repositories[index]
+			stats, _ := loadCodeTaskDiffStats(
+				repository.SourceDir, repository.BaseCommit, repository.WorktreeCommit, diffCache,
+			)
+			repository.StatAdditions, repository.StatDeletions = stats.Additions, stats.Deletions
+			repository.StatFiles = stats.Files
 			updates := map[string]any{
 				"status": repository.Status, "target_branch": repository.TargetBranch,
 				"worktree_commit": repository.WorktreeCommit, "source_commit": "",
 				"merge_commit": "", "error_message": "", "merged_at": nil, "publish_started_at": nil,
 				"source_applied_at": nil, "completed_at": nil,
 				"push_status": codePushPending, "pushed_commit": "", "push_error": "", "pushed_at": nil,
+				"stat_additions": stats.Additions, "stat_deletions": stats.Deletions, "stat_files": stats.Files,
 			}
 			if repository.Status != codeDeliveryCompleted {
 				updates["status"] = codeDeliveryPrepared

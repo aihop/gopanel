@@ -19,6 +19,7 @@ type IAITaskRepo interface {
 	CreateMessage(msg *model.AIMessage) error
 	GetMessagesByTaskID(taskID uint) ([]*model.AIMessage, error)
 	GetMessagesBySessionID(sessionID uint) ([]*model.AIMessage, error)
+	GetMessagesBySessionAndTaskID(sessionID, taskID uint) ([]*model.AIMessage, error)
 }
 
 type aiTaskRepo struct{}
@@ -141,5 +142,14 @@ func (r *aiTaskRepo) GetMessagesByTaskID(taskID uint) ([]*model.AIMessage, error
 func (r *aiTaskRepo) GetMessagesBySessionID(sessionID uint) ([]*model.AIMessage, error) {
 	var messages []*model.AIMessage
 	err := global.DB.Where("session_id = ?", sessionID).Order("created_at asc").Find(&messages).Error
+	return messages, err
+}
+
+// GetMessagesBySessionAndTaskID 只取某个任务的对话。
+// 同时带上 session_id 是为了防止越过会话边界读到别的会话的消息。
+func (r *aiTaskRepo) GetMessagesBySessionAndTaskID(sessionID, taskID uint) ([]*model.AIMessage, error) {
+	var messages []*model.AIMessage
+	err := global.DB.Where("session_id = ? AND task_id = ?", sessionID, taskID).
+		Order("created_at asc").Find(&messages).Error
 	return messages, err
 }

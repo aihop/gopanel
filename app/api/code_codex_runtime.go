@@ -43,6 +43,7 @@ type codexRuntimeEvent struct {
 	Type      string `json:"type"`
 	Payload   struct {
 		Type           string          `json:"type"`
+		ID             string          `json:"id"`
 		Role           string          `json:"role"`
 		Phase          string          `json:"phase"`
 		Model          string          `json:"model"`

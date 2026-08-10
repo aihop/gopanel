@@ -82,7 +82,15 @@ func (r *aiDevSessionRepo) GetSessionsByProjectID(projectID uint, page, limit in
 func (r *aiDevSessionRepo) getSessions(db *gorm.DB, userID uint, page, limit int) ([]*model.AIDevSession, int64, error) {
 	var sessions []*model.AIDevSession
 	var total int64
-	db = db.Where("NOT (status = ? AND current_stage = ? AND COALESCE(last_task_id, 0) = 0)", "failed", "initialization_failed")
+	// 会话列表与 PC 端的任务列表保持同一口径：只展示已经产生任务的会话，
+	// 外加正在初始化、任务尚未创建的会话。
+	// 隔离会话是先建会话、首次发指令时才惰性创建任务的，初始化失败或从未使用过的
+	// 会话会永远没有任务；这类会话在任务列表里看不见，也就没有任何入口能清理，
+	// 只按 initialization_failed 过滤会漏掉停在 active 的那批。
+	db = db.Where(
+		"EXISTS (SELECT 1 FROM ai_tasks WHERE ai_tasks.session_id = ai_dev_sessions.id) OR status = ?",
+		"initializing",
+	)
 
 	db.Count(&total)
 	err := db.Order("updated_at desc").Offset((page - 1) * limit).Limit(limit).Find(&sessions).Error

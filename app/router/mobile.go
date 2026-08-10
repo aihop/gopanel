@@ -54,6 +54,8 @@ func MobileRouter(r fiber.Router) {
 	app.Get("/sessions/:id/git/status", api.GetCodeGitStatus)
 	app.Post("/sessions/:id/git/save", api.SaveCodeGitChanges)
 	app.Get("/sessions/:id/delivery", api.GetCodeDeliveryJob)
+	app.Get("/sessions/:id/delivery/push", api.GetCodeDeliveryPushStatus)
+	app.Post("/sessions/:id/delivery/push", api.PushCodeSessionDelivery)
 	app.Post("/sessions/:id/worktree/merge", api.MergeCodeSessionWorktree)
 	app.Get("/sessions/:id/structure", api.GetAISessionStructure)
 	app.Get("/sessions/:id/file", api.GetAISessionFile)

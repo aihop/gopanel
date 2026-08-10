@@ -16,9 +16,23 @@ export const mobileTaskDeliveryMessages = {
 			deliveredShort: "已交付",
 			deliverLatest: "交付后续提交",
 			retryDelivery: "重新交付",
-				deliveryQueuedSuccess: "任务已进入统一交付队列",
-				deliveryQueueFailed: "任务交付失败",
-				deliveryStatus_partial: "部分仓库已完成"
+			deliveryQueuedSuccess: "任务已进入统一交付队列",
+			deliveryQueueFailed: "任务交付失败",
+			deliveryStatus_partial: "部分仓库已完成",
+			cancel: "取消",
+			gitRetry: "重试",
+			gitPush: "推送远端",
+			gitPushTitle: "推送已交付提交",
+			gitPushConfirm: "确认将 {count} 个仓库的已交付提交推送到 {destinations}？系统禁止覆盖远端变化。",
+			gitPushPending: "推送远端（{count}）",
+			gitPushSuccess: "已交付提交已推送并完成远端核验",
+			gitPushFailed: "推送失败",
+			gitPushStatusFailed: "推送状态加载失败",
+			gitPushCompleted: "{count} 个仓库均已推送到远端",
+			gitLocalSyncPending: "{count} 个仓库未自动合入本地主仓",
+			gitLocalSyncHint: "交付提交已安全保留，推送远端不受影响；需要本地同步时在电脑上执行复制的命令。",
+			gitLocalSyncCopy: "复制同步命令",
+			gitLocalSyncCopied: "同步命令已复制"
 		}
 	},
 	en: {
@@ -38,9 +52,23 @@ export const mobileTaskDeliveryMessages = {
 			deliveredShort: "Delivered",
 			deliverLatest: "Deliver newer commits",
 			retryDelivery: "Retry delivery",
-				deliveryQueuedSuccess: "Task added to the delivery queue",
-				deliveryQueueFailed: "Failed to queue task delivery",
-				deliveryStatus_partial: "Some repositories completed"
+			deliveryQueuedSuccess: "Task added to the delivery queue",
+			deliveryQueueFailed: "Failed to queue task delivery",
+			deliveryStatus_partial: "Some repositories completed",
+			cancel: "Cancel",
+			gitRetry: "Retry",
+			gitPush: "Push delivery",
+			gitPushTitle: "Push delivered commits",
+			gitPushConfirm: "Push delivered commits for {count} repositories to {destinations}? Remote changes are never overwritten.",
+			gitPushPending: "Push delivery ({count})",
+			gitPushSuccess: "Delivered commits were pushed and verified remotely",
+			gitPushFailed: "Push failed",
+			gitPushStatusFailed: "Failed to load push status",
+			gitPushCompleted: "All {count} repositories were pushed remotely",
+			gitLocalSyncPending: "{count} repositories were not merged into the local main repository",
+			gitLocalSyncHint: "The delivery commit is kept safely and pushing is unaffected. Run the copied command on your computer when you want the local copy in sync.",
+			gitLocalSyncCopy: "Copy sync commands",
+			gitLocalSyncCopied: "Sync commands copied"
 		}
 	}
 } as const

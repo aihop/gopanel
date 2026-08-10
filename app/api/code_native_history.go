@@ -2,6 +2,8 @@ package api
 
 import (
 	"bufio"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"os"
@@ -10,6 +12,7 @@ import (
 	"time"
 
 	"github.com/aihop/gopanel/app/model"
+	"github.com/aihop/gopanel/global"
 )
 
 const nativeHistoryDuplicateWindow = 5 * time.Minute
@@ -30,37 +33,125 @@ func getNativeCodexMessages(session *model.AIDevSession) ([]*model.AIMessage, er
 	return parseNativeCodexMessages(file, session.ID, session.LastTaskID)
 }
 
+// parseNativeCodexMessages 兼容 codex 两代 rollout 事件格式：
+//   - 旧版：event_msg 下 user_message / agent_message 各自独立，正文是字符串。
+//   - 新版：response_item 下统一为 message，用 role 区分，正文是 [{type,text}] 数组。
+//
+// 只认旧格式会让升级过 codex 之后的会话历史整段读不出来，而且是静默的。
 func parseNativeCodexMessages(reader io.Reader, sessionID, taskID uint) ([]*model.AIMessage, error) {
 	messages := make([]*model.AIMessage, 0)
 	scanner := bufio.NewScanner(reader)
 	scanner.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
 	for scanner.Scan() {
 		var event codexRuntimeEvent
-		if json.Unmarshal(scanner.Bytes(), &event) != nil || event.Type != "event_msg" {
+		if json.Unmarshal(scanner.Bytes(), &event) != nil {
 			continue
 		}
-		role := ""
-		switch event.Payload.Type {
-		case "user_message":
-			role = "user"
-		case "agent_message":
-			role = "agent"
-		default:
+		role, content := nativeCodexMessageFromEvent(&event)
+		if role == "" || content == "" {
 			continue
 		}
-		content := nativeCodexMessageText(event.Payload.Message)
-		if content == "" {
-			continue
-		}
+		createdAt := parseCodexEventTime(event.Timestamp)
 		messages = append(messages, &model.AIMessage{
-			CreatedAt: parseCodexEventTime(event.Timestamp),
+			CreatedAt: createdAt,
 			SessionID: sessionID,
 			TaskID:    taskID,
 			Role:      role,
 			Content:   content,
+			NativeID:  nativeCodexMessageID(event.Payload.ID, role, event.Timestamp, content),
 		})
 	}
 	return messages, scanner.Err()
+}
+
+// nativeCodexMessageFromEvent 把一条 rollout 事件归一化成 (role, content)。
+// 无法识别或不该展示的事件返回空 role。
+func nativeCodexMessageFromEvent(event *codexRuntimeEvent) (string, string) {
+	switch event.Type {
+	case "event_msg":
+		switch event.Payload.Type {
+		case "user_message":
+			return "user", nativeCodexMessageText(event.Payload.Message)
+		case "agent_message":
+			return "agent", nativeCodexMessageText(event.Payload.Message)
+		}
+	case "response_item":
+		if event.Payload.Type != "message" {
+			return "", ""
+		}
+		// developer 是注入的系统提示，不属于用户可见对话。
+		switch event.Payload.Role {
+		case "user":
+			return "user", nativeCodexContentText(event.Payload.Content)
+		case "assistant":
+			return "agent", nativeCodexContentText(event.Payload.Content)
+		}
+	}
+	return "", ""
+}
+
+// nativeCodexContentText 提取新版 message 的正文：content 是 [{type,text}] 数组。
+func nativeCodexContentText(value json.RawMessage) string {
+	var items []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	}
+	if json.Unmarshal(value, &items) != nil {
+		return ""
+	}
+	parts := make([]string, 0, len(items))
+	for _, item := range items {
+		if text := strings.TrimSpace(item.Text); text != "" {
+			parts = append(parts, text)
+		}
+	}
+	return strings.TrimSpace(strings.Join(parts, "\n"))
+}
+
+// nativeCodexMessageID 给一条原生消息生成稳定标识。
+// 新版 rollout 自带 payload.id；旧版没有，用 role+时间戳+正文摘要兜底，
+// 保证同一条消息反复读取时得到同一个 ID，不会重复入库。
+func nativeCodexMessageID(payloadID, role, timestamp, content string) string {
+	if id := strings.TrimSpace(payloadID); id != "" {
+		return id
+	}
+	sum := sha256.Sum256([]byte(role + "\x00" + timestamp + "\x00" + content))
+	return "sha:" + hex.EncodeToString(sum[:16])
+}
+
+// persistNativeCodexMessages 把原生历史增量固化进库。
+// 一旦落库，rollout 文件被清理或 codex 再次变更事件格式都不会让历史消失。
+func persistNativeCodexMessages(sessionID uint, messages []*model.AIMessage) error {
+	if sessionID == 0 || len(messages) == 0 || global.DB == nil {
+		return nil
+	}
+	var existingIDs []string
+	if err := global.DB.Model(&model.AIMessage{}).
+		Where("session_id = ? AND native_id <> ''", sessionID).
+		Pluck("native_id", &existingIDs).Error; err != nil {
+		return err
+	}
+	known := make(map[string]struct{}, len(existingIDs))
+	for _, id := range existingIDs {
+		known[id] = struct{}{}
+	}
+	pending := make([]*model.AIMessage, 0, len(messages))
+	for _, message := range messages {
+		if message == nil || strings.TrimSpace(message.NativeID) == "" {
+			continue
+		}
+		if _, exists := known[message.NativeID]; exists {
+			continue
+		}
+		known[message.NativeID] = struct{}{}
+		stored := *message
+		stored.ID = 0
+		pending = append(pending, &stored)
+	}
+	if len(pending) == 0 {
+		return nil
+	}
+	return global.DB.CreateInBatches(pending, 200).Error
 }
 
 func nativeCodexMessageText(value json.RawMessage) string {

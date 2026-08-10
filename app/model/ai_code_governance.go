@@ -24,6 +24,10 @@ type AICodeDelivery struct {
 	MergeCommit     string     `gorm:"column:merge_commit;type:varchar(64)" json:"mergeCommit"`
 	ErrorMessage    string     `gorm:"column:error_message;type:text" json:"errorMessage"`
 	LocalSyncError  string     `gorm:"column:local_sync_error;type:text" json:"localSyncError,omitempty"`
+	// 交付快照时固化的产出行数，语义同 AIDevSessionRepository。
+	StatAdditions   int        `gorm:"column:stat_additions;not null;default:0" json:"statAdditions"`
+	StatDeletions   int        `gorm:"column:stat_deletions;not null;default:0" json:"statDeletions"`
+	StatFiles       int        `gorm:"column:stat_files;not null;default:0" json:"statFiles"`
 	SourceAppliedAt *time.Time `gorm:"column:source_applied_at" json:"sourceAppliedAt,omitempty"`
 	MergedAt        *time.Time `gorm:"column:merged_at" json:"mergedAt,omitempty"`
 	CompletedAt     *time.Time `gorm:"column:completed_at" json:"completedAt,omitempty"`

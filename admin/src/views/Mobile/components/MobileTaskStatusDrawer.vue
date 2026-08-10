@@ -6,6 +6,7 @@ import Icon from "@/components/common/Icon.vue"
 import { mobileMessages } from "@/i18n/locales/mobile"
 import { mobileTaskDeliveryMessages } from "../mobileTaskDeliveryMessages"
 import MobileTaskDeliveryButton from "./MobileTaskDeliveryButton.vue"
+import MobileDeliveryPush from "./MobileDeliveryPush.vue"
 import CodeDeliveryFacts from "@/views/Code/components/CodeDeliveryFacts.vue"
 
 const props = defineProps<{
@@ -126,6 +127,11 @@ watch(
 								@updated="emit('deliveryUpdated')"
 							/>
 						</div>
+						<MobileDeliveryPush
+							:session-id="deliverySession?.id ?? null"
+							:active="show"
+							:refresh-key="`${state?.delivery?.status || ''}:${state?.delivery?.resultCommit || ''}`"
+						/>
 					</section>
 					<n-alert v-if="state?.pendingApproval" type="warning" :title="state.pendingApproval.title">
 						<div class="whitespace-pre-wrap text-sm">{{ state.pendingApproval.content }}</div>

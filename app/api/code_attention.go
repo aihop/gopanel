@@ -94,11 +94,30 @@ func loadCodeAttentionSessionIDs(userID uint, limit int) ([]uint, error) {
 		Order("updated_at desc").Limit(limit).Pluck("session_id", &approvalSessionIDs).Error; err != nil {
 		return nil, err
 	}
-	var initializationSessionIDs []uint
+	// 同一个项目反复初始化失败通常是同一个原因（凭据、远端地址、源仓状态），
+	// 逐条列出会把待办面板淹掉，且这些会话没有任务、用户无从清理。
+	// 每个项目只保留最近一次，用户修好配置后重试即可。
+	var initializationRows []struct {
+		ID        uint
+		ProjectID uint
+	}
 	if err := global.DB.Model(&model.AIDevSession{}).
+		Select("id", "project_id").
 		Where("user_id = ? AND status = ? AND current_stage = ?", userID, codeSessionStatusFailed, codeSessionStageInitializationFailed).
-		Order("updated_at desc").Limit(limit).Pluck("id", &initializationSessionIDs).Error; err != nil {
+		Order("updated_at desc").Limit(limit).Scan(&initializationRows).Error; err != nil {
 		return nil, err
+	}
+	initializationSessionIDs := make([]uint, 0, len(initializationRows))
+	seenProjects := make(map[uint]struct{}, len(initializationRows))
+	for _, row := range initializationRows {
+		// 非项目会话没有可归并的维度，逐条保留。
+		if row.ProjectID != 0 {
+			if _, exists := seenProjects[row.ProjectID]; exists {
+				continue
+			}
+			seenProjects[row.ProjectID] = struct{}{}
+		}
+		initializationSessionIDs = append(initializationSessionIDs, row.ID)
 	}
 	var deliverySessionIDs []uint
 	if err := global.DB.Model(&model.AICodeDeliveryJob{}).

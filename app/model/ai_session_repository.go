@@ -28,6 +28,11 @@ type AIDevSessionRepository struct {
 	Status             string     `gorm:"column:status;type:varchar(32);not null;index" json:"status"`
 	ErrorMessage       string     `gorm:"column:error_message;type:text" json:"errorMessage,omitempty"`
 	LocalSyncError     string     `gorm:"column:local_sync_error;type:text" json:"localSyncError,omitempty"`
+	// 交付快照时固化的产出行数。存库后不再依赖 worktree 提交是否仍可达，
+	// 也让任务列表不必对每个仓库重跑 git diff。
+	StatAdditions      int        `gorm:"column:stat_additions;not null;default:0" json:"statAdditions"`
+	StatDeletions      int        `gorm:"column:stat_deletions;not null;default:0" json:"statDeletions"`
+	StatFiles          int        `gorm:"column:stat_files;not null;default:0" json:"statFiles"`
 	MergedAt           *time.Time `gorm:"column:merged_at" json:"mergedAt,omitempty"`
 	PublishStartedAt   *time.Time `gorm:"column:publish_started_at" json:"publishStartedAt,omitempty"`
 	SourceAppliedAt    *time.Time `gorm:"column:source_applied_at" json:"sourceAppliedAt,omitempty"`
