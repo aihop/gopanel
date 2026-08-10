@@ -38,6 +38,21 @@ const formatTaskDuration = (durationMs: number) => {
 
 const formatTaskTokens = (tokens: number) => new Intl.NumberFormat().format(tokens)
 
+const taskTokenStatus = (task: CodeTaskListItem) => {
+	switch (task.summary.tokenUsageStatus) {
+		case "recovered":
+			return { label: t("code.taskTokensRecovered"), color: "text-emerald-600" }
+		case "partial":
+			return { label: t("code.taskTokensPartial"), color: "text-amber-600" }
+		case "pending":
+			return { label: t("code.taskTokensPending"), color: "text-slate-400" }
+		case "unavailable":
+			return { label: t("code.taskTokensUnavailable"), color: "text-slate-400" }
+		default:
+			return null
+	}
+}
+
 const taskGitMeta = (task: CodeTaskListItem) =>
 	task.summary.deliveryStatus === "queued"
 		? { icon: "mdi:clock-outline", color: "text-amber-500" }
@@ -72,6 +87,7 @@ const taskTooltip = (task: CodeTaskListItem) =>
 		task.summary.executor,
 		task.summary.model,
 		task.summary.totalTokens ? t("code.taskTokens", { count: formatTaskTokens(task.summary.totalTokens) }) : "",
+		taskTokenStatus(task)?.label,
 		task.summary.branch,
 		new Date(task.createdAt).toLocaleString()
 	]
@@ -151,6 +167,12 @@ const taskTooltip = (task: CodeTaskListItem) =>
 										<span class="text-slate-300">·</span>
 										<span class="whitespace-nowrap text-blue-500">
 											{{ t("code.taskTokens", { count: formatTaskTokens(task.summary.totalTokens) }) }}
+										</span>
+									</template>
+									<template v-if="taskTokenStatus(task)">
+										<span class="text-slate-300">·</span>
+										<span class="whitespace-nowrap" :class="taskTokenStatus(task)!.color">
+											{{ taskTokenStatus(task)!.label }}
 										</span>
 									</template>
 								</div>

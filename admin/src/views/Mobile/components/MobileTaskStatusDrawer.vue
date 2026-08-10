@@ -62,6 +62,11 @@ const deliveryAvailable = computed(() =>
 	Boolean(deliverySession.value?.worktreeBranch || deliverySession.value?.isolationMode === "multi_worktree")
 )
 const tokenLabel = (count: number) => new Intl.NumberFormat().format(count || 0)
+const latestRunTokenLabel = computed(() => {
+	if (props.state?.latestRun?.tokenUsageStatus === "unavailable") return t("mobile.tokenNotRecorded")
+	if (props.state?.latestRun?.tokenUsageStatus === "pending") return t("mobile.tokenPending")
+	return tokenLabel(props.state?.latestRun?.totalTokens || 0)
+})
 
 function previewCanOpen(status: string) {
 	return status === "ready"
@@ -96,7 +101,9 @@ watch(
 								type="line"
 								:percentage="state.delivery.progress"
 								:status="
-									state.delivery.status === 'failed' || state.delivery.status === 'conflict' || state.delivery.status === 'partial'
+									state.delivery.status === 'failed' ||
+									state.delivery.status === 'conflict' ||
+									state.delivery.status === 'partial'
 										? 'error'
 										: state.delivery.status === 'completed'
 											? 'success'
@@ -171,7 +178,7 @@ watch(
 						<strong>{{ t("mobile.tokenUsage") }}</strong>
 						<div class="mt-3 grid grid-cols-3 gap-2 text-center">
 							<div class="rounded-xl bg-slate-50 p-2">
-								<div class="font-semibold">{{ tokenLabel(state.latestRun?.totalTokens || 0) }}</div>
+								<div class="font-semibold">{{ latestRunTokenLabel }}</div>
 								<div class="text-[11px] text-slate-500">{{ t("mobile.latestRunTokens") }}</div>
 							</div>
 							<div class="rounded-xl bg-blue-50 p-2">
@@ -186,6 +193,15 @@ watch(
 								</div>
 								<div class="text-[11px] text-slate-500">{{ t("mobile.projectTokens") }}</div>
 							</div>
+						</div>
+						<div v-if="state.tokenUsage.project.recoveredRuns" class="mt-2 text-xs text-emerald-600">
+							{{ t("mobile.tokenUsageRecovered", { count: state.tokenUsage.project.recoveredRuns }) }}
+						</div>
+						<div v-if="state.tokenUsage.project.unavailableRuns" class="mt-2 text-xs text-amber-600">
+							{{ t("mobile.tokenUsageIncomplete", { count: state.tokenUsage.project.unavailableRuns }) }}
+						</div>
+						<div v-if="state.tokenUsage.project.pendingRuns" class="mt-2 text-xs text-slate-500">
+							{{ t("mobile.tokenUsagePending", { count: state.tokenUsage.project.pendingRuns }) }}
 						</div>
 					</section>
 					<n-alert

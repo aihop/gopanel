@@ -9,6 +9,7 @@ export interface CodeProjectLatestRun {
 	status: string
 	durationMs: number
 	totalTokens: number
+	tokenUsageStatus: "pending" | "recorded" | "recovered" | "unavailable"
 	createdAt: string
 	completedAt?: string
 }
@@ -24,6 +25,11 @@ export interface CodeProjectOverview {
 		reasoningTokens: number
 		totalTokens: number
 		runs: number
+		recordedRuns: number
+		recoveredRuns: number
+		unavailableRuns: number
+		pendingRuns: number
+		complete: boolean
 	}
 	budget: {
 		limitTokens: number
@@ -32,6 +38,9 @@ export interface CodeProjectOverview {
 		usagePercent: number
 		exceeded: boolean
 		unlimited: boolean
+		complete: boolean
+		unavailableRuns: number
+		pendingRuns: number
 	}
 	latestRun: CodeProjectLatestRun | null
 }

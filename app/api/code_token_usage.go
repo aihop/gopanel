@@ -21,6 +21,11 @@ type codeTokenUsage struct {
 	ReasoningTokens   int64 `json:"reasoningTokens"`
 	TotalTokens       int64 `json:"totalTokens"`
 	Runs              int64 `json:"runs"`
+	RecordedRuns      int64 `json:"recordedRuns"`
+	RecoveredRuns     int64 `json:"recoveredRuns"`
+	UnavailableRuns   int64 `json:"unavailableRuns"`
+	PendingRuns       int64 `json:"pendingRuns"`
+	Complete          bool  `json:"complete"`
 }
 
 type codeDailyTokenUsage struct {
@@ -31,6 +36,11 @@ type codeDailyTokenUsage struct {
 	ReasoningTokens   int64  `json:"reasoningTokens"`
 	TotalTokens       int64  `json:"totalTokens"`
 	Runs              int64  `json:"runs"`
+	RecordedRuns      int64  `json:"recordedRuns"`
+	RecoveredRuns     int64  `json:"recoveredRuns"`
+	UnavailableRuns   int64  `json:"unavailableRuns"`
+	PendingRuns       int64  `json:"pendingRuns"`
+	Complete          bool   `json:"complete"`
 }
 
 type codeModelTokenUsage struct {
@@ -41,6 +51,11 @@ type codeModelTokenUsage struct {
 	ReasoningTokens   int64  `json:"reasoningTokens"`
 	TotalTokens       int64  `json:"totalTokens"`
 	Runs              int64  `json:"runs"`
+	RecordedRuns      int64  `json:"recordedRuns"`
+	RecoveredRuns     int64  `json:"recoveredRuns"`
+	UnavailableRuns   int64  `json:"unavailableRuns"`
+	PendingRuns       int64  `json:"pendingRuns"`
+	Complete          bool   `json:"complete"`
 }
 
 type codeTokenUsageResponse struct {
@@ -52,43 +67,20 @@ type codeTokenUsageResponse struct {
 }
 
 func sumCodeTokenUsage(query *gorm.DB) (codeTokenUsage, error) {
-	if err := backfillCodeTokenUsage(query); err != nil {
-		return codeTokenUsage{}, err
-	}
 	var usage codeTokenUsage
 	err := query.Select(`COALESCE(SUM(input_tokens), 0) AS input_tokens,
 		COALESCE(SUM(output_tokens), 0) AS output_tokens,
 		COALESCE(SUM(cached_input_tokens), 0) AS cached_input_tokens,
 		COALESCE(SUM(reasoning_tokens), 0) AS reasoning_tokens,
-		COALESCE(SUM(total_tokens), 0) AS total_tokens, COUNT(*) AS runs`).Scan(&usage).Error
+		COALESCE(SUM(total_tokens), 0) AS total_tokens, COUNT(*) AS runs,
+		COALESCE(SUM(CASE WHEN token_usage_status = 'recorded' THEN 1 ELSE 0 END), 0) AS recorded_runs,
+		COALESCE(SUM(CASE WHEN token_usage_status = 'recovered' THEN 1 ELSE 0 END), 0) AS recovered_runs,
+		COALESCE(SUM(CASE WHEN token_usage_status = 'unavailable' THEN 1 ELSE 0 END), 0) AS unavailable_runs,
+		COALESCE(SUM(CASE WHEN token_usage_status = 'pending' OR token_usage_status = '' THEN 1 ELSE 0 END), 0) AS pending_runs`).Scan(&usage).Error
+	if err == nil {
+		usage.Complete = usage.UnavailableRuns == 0 && usage.PendingRuns == 0
+	}
 	return usage, err
-}
-
-func backfillCodeTokenUsage(query *gorm.DB) error {
-	var runs []model.AIExecutionRun
-	if err := query.Session(&gorm.Session{}).
-		Select("ai_execution_runs.id, ai_execution_runs.executor_id, ai_execution_runs.raw_output").
-		Where("ai_execution_runs.total_tokens = 0 AND ai_execution_runs.raw_output <> ''").Find(&runs).Error; err != nil {
-		return err
-	}
-	for index := range runs {
-		run := &runs[index]
-		parsed := parseCodeExecutorOutput(run.ExecutorID, []byte(run.RawOutput), "")
-		if parsed.TotalTokens <= 0 {
-			continue
-		}
-		updates := map[string]any{
-			"input_tokens":        parsed.InputTokens,
-			"output_tokens":       parsed.OutputTokens,
-			"cached_input_tokens": parsed.CachedInputTokens,
-			"reasoning_tokens":    parsed.ReasoningTokens,
-			"total_tokens":        parsed.TotalTokens,
-		}
-		if err := global.DB.Model(&model.AIExecutionRun{}).Where("id = ? AND total_tokens = 0", run.ID).Updates(updates).Error; err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func loadCodeTokenUsage(session *model.AIDevSession) (codeTokenUsageResponse, error) {
@@ -135,9 +127,20 @@ func loadCodeTokenUsage(session *model.AIDevSession) (codeTokenUsageResponse, er
 		day.ReasoningTokens += run.ReasoningTokens
 		day.TotalTokens += run.TotalTokens
 		day.Runs++
+		switch run.TokenUsageStatus {
+		case codeTokenUsageRecorded:
+			day.RecordedRuns++
+		case codeTokenUsageRecovered:
+			day.RecoveredRuns++
+		case codeTokenUsageUnavailable:
+			day.UnavailableRuns++
+		default:
+			day.PendingRuns++
+		}
 	}
 	daily := make([]codeDailyTokenUsage, 0, len(order))
 	for _, date := range order {
+		dailyByDate[date].Complete = dailyByDate[date].UnavailableRuns == 0 && dailyByDate[date].PendingRuns == 0
 		daily = append(daily, *dailyByDate[date])
 	}
 	modelQuery := global.DB.Model(&model.AIExecutionRun{}).Where("session_id = ?", session.ID)
@@ -151,9 +154,16 @@ func loadCodeTokenUsage(session *model.AIDevSession) (codeTokenUsageResponse, er
 		COALESCE(SUM(input_tokens), 0) AS input_tokens, COALESCE(SUM(output_tokens), 0) AS output_tokens,
 		COALESCE(SUM(cached_input_tokens), 0) AS cached_input_tokens,
 		COALESCE(SUM(reasoning_tokens), 0) AS reasoning_tokens,
-		COALESCE(SUM(total_tokens), 0) AS total_tokens, COUNT(*) AS runs`).
+		COALESCE(SUM(total_tokens), 0) AS total_tokens, COUNT(*) AS runs,
+		COALESCE(SUM(CASE WHEN token_usage_status = 'recorded' THEN 1 ELSE 0 END), 0) AS recorded_runs,
+		COALESCE(SUM(CASE WHEN token_usage_status = 'recovered' THEN 1 ELSE 0 END), 0) AS recovered_runs,
+		COALESCE(SUM(CASE WHEN token_usage_status = 'unavailable' THEN 1 ELSE 0 END), 0) AS unavailable_runs,
+		COALESCE(SUM(CASE WHEN token_usage_status = 'pending' OR token_usage_status = '' THEN 1 ELSE 0 END), 0) AS pending_runs`).
 		Group("COALESCE(NULLIF(model, ''), executor_id)").Order("total_tokens desc").Scan(&models).Error; err != nil {
 		return codeTokenUsageResponse{}, err
+	}
+	for index := range models {
+		models[index].Complete = models[index].UnavailableRuns == 0 && models[index].PendingRuns == 0
 	}
 	budget, err := loadCodeTokenBudget(session.ProjectID, time.Now())
 	if err != nil {

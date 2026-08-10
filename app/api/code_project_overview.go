@@ -16,16 +16,17 @@ import (
 )
 
 type codeProjectLatestRun struct {
-	ID          uint       `json:"id"`
-	SessionID   uint       `json:"sessionId"`
-	TaskID      uint       `json:"taskId"`
-	ExecutorID  string     `json:"executorId"`
-	Model       string     `json:"model"`
-	Status      string     `json:"status"`
-	DurationMS  int64      `json:"durationMs"`
-	TotalTokens int64      `json:"totalTokens"`
-	CreatedAt   time.Time  `json:"createdAt"`
-	CompletedAt *time.Time `json:"completedAt,omitempty"`
+	ID               uint       `json:"id"`
+	SessionID        uint       `json:"sessionId"`
+	TaskID           uint       `json:"taskId"`
+	ExecutorID       string     `json:"executorId"`
+	Model            string     `json:"model"`
+	Status           string     `json:"status"`
+	DurationMS       int64      `json:"durationMs"`
+	TotalTokens      int64      `json:"totalTokens"`
+	TokenUsageStatus string     `json:"tokenUsageStatus"`
+	CreatedAt        time.Time  `json:"createdAt"`
+	CompletedAt      *time.Time `json:"completedAt,omitempty"`
 }
 
 type codeProjectOverview struct {
@@ -47,9 +48,6 @@ func loadCodeProjectOverview(project *model.AIProject, userID uint, includeAll b
 	projectRuns := global.DB.Model(&model.AIExecutionRun{}).
 		Joins("JOIN ai_dev_sessions ON ai_dev_sessions.id = ai_execution_runs.session_id").
 		Where("ai_dev_sessions.project_id = ?", project.ID)
-	if !includeAll {
-		projectRuns = projectRuns.Where("ai_dev_sessions.user_id = ?", userID)
-	}
 	usage, err := sumCodeTokenUsage(projectRuns)
 	if err != nil {
 		return codeProjectOverview{}, err
@@ -63,15 +61,13 @@ func loadCodeProjectOverview(project *model.AIProject, userID uint, includeAll b
 	latestRunQuery := global.DB.Model(&model.AIExecutionRun{}).
 		Joins("JOIN ai_dev_sessions ON ai_dev_sessions.id = ai_execution_runs.session_id").
 		Where("ai_dev_sessions.project_id = ?", project.ID)
-	if !includeAll {
-		latestRunQuery = latestRunQuery.Where("ai_dev_sessions.user_id = ?", userID)
-	}
 	err = latestRunQuery.Order("ai_execution_runs.created_at desc").First(&run).Error
 	if err == nil {
 		latestRun = &codeProjectLatestRun{
 			ID: run.ID, SessionID: run.SessionID, TaskID: run.TaskID, ExecutorID: run.ExecutorID,
 			Model: run.Model, Status: run.Status, DurationMS: run.DurationMS, TotalTokens: run.TotalTokens,
-			CreatedAt: run.CreatedAt, CompletedAt: run.CompletedAt,
+			TokenUsageStatus: run.TokenUsageStatus,
+			CreatedAt:        run.CreatedAt, CompletedAt: run.CompletedAt,
 		}
 	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return codeProjectOverview{}, err
