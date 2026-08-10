@@ -183,6 +183,7 @@ func detectCodeDeliveryQualityChecks(roots []codeDeliveryQualityRoot) []codeQual
 			if identityDir == "" {
 				identityDir = root.WorkDir
 			}
+			applyDartQualityToolchain(checks[index:index+1], identityDir)
 			check.ID = codeQualityCheckID(
 				filepath.Join(identityDir, relative), check.Kind, check.Command+"\x00"+deliveryFingerprint,
 			)

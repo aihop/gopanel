@@ -217,6 +217,7 @@ func codeQualityRoots(session *model.AIDevSession) ([]string, error) {
 
 func detectCodeQualityChecksAt(workDir, displayRoot string) []codeQualityCheck {
 	checks := detectNodeQualityChecks(workDir, displayRoot)
+	checks = append(checks, detectDartQualityChecks(workDir, displayRoot)...)
 	if fileExists(filepath.Join(workDir, "go.mod")) {
 		checks = append(checks,
 			newCodeQualityCheck("test", "Go test", workDir, displayRoot, "go", "test", "./..."),

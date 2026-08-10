@@ -45,6 +45,28 @@ func TestRunCodeDeliveryQualityGateRunsMissingChecks(t *testing.T) {
 	}
 }
 
+func TestDetectCodeDeliveryQualityChecksUsesSessionFlutterToolchain(t *testing.T) {
+	deliveryDir := t.TempDir()
+	identityDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(deliveryDir, "pubspec.yaml"), []byte("name: example\ndependencies:\n  flutter:\n    sdk: flutter\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	toolchain := filepath.Join(identityDir, ".toolchains", "flutter", "bin")
+	if err := os.MkdirAll(toolchain, 0700); err != nil {
+		t.Fatal(err)
+	}
+	flutterPath := filepath.Join(toolchain, "flutter")
+	if err := os.WriteFile(flutterPath, []byte("#!/bin/sh\nexit 0\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	checks := detectCodeDeliveryQualityChecks([]codeDeliveryQualityRoot{{
+		WorkDir: deliveryDir, IdentityDir: identityDir, Commit: "commit", Label: "Flutter",
+	}})
+	if len(checks) != 1 || checks[0].Command != "flutter analyze" || checks[0].Executable != flutterPath {
+		t.Fatalf("unexpected Flutter delivery check: %#v", checks)
+	}
+}
+
 func TestRunCodeDeliveryQualityGateStopsFailedDelivery(t *testing.T) {
 	session := createQualityDeliverySession(t, 148, "false")
 	err := runCodeDeliveryQualityGate(session, session.UserID, nil, nil)
