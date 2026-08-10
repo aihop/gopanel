@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gopanel/core/storage/storage_service.dart';
 import 'package:gopanel/shared/models/server_connection.dart';
 
 void main() {
@@ -24,5 +25,20 @@ void main() {
     });
 
     expect(connection.token, 'legacy-token');
+  });
+
+  test('macOS data protection keychain is reserved for release builds', () {
+    expect(
+      buildMacOsSecureStorageOptions(
+        releaseMode: false,
+      ).usesDataProtectionKeychain,
+      isFalse,
+    );
+    expect(
+      buildMacOsSecureStorageOptions(
+        releaseMode: true,
+      ).usesDataProtectionKeychain,
+      isTrue,
+    );
   });
 }

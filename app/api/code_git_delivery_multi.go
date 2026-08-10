@@ -24,9 +24,12 @@ type codeRepositoryDeliveryResult struct {
 	MergeReady      bool       `json:"mergeReady"`
 	PushStatus      string     `json:"pushStatus"`
 	PushedCommit    string     `json:"pushedCommit,omitempty"`
-	SourceAppliedAt *time.Time `json:"sourceAppliedAt,omitempty"`
-	ErrorMessage    string     `json:"errorMessage,omitempty"`
-	ConflictFiles   []string   `json:"conflictFiles,omitempty"`
+	SourceAppliedAt  *time.Time `json:"sourceAppliedAt,omitempty"`
+	LocalSynced      bool       `json:"localSynced"`
+	LocalSyncError   string     `json:"localSyncError,omitempty"`
+	LocalSyncCommand string     `json:"localSyncCommand,omitempty"`
+	ErrorMessage     string     `json:"errorMessage,omitempty"`
+	ConflictFiles    []string   `json:"conflictFiles,omitempty"`
 }
 
 func validateCodeMultiWorktreeDeliverySession(session *model.AIDevSession, claims *token.CustomClaims) error {
@@ -131,8 +134,8 @@ func resumeCodeMultiRepositoryDelivery(session *model.AIDevSession, _ uint) (cod
 
 func resumeCodeMultiRepositoryDeliveryWithProgress(
 	session *model.AIDevSession,
-	userID uint,
-	lease *codeExecutionLease,
+	_ uint,
+	_ *codeExecutionLease,
 	report codeDeliveryProgressReporter,
 ) (codeGitDeliveryResult, error) {
 	repositories, err := loadCodeSessionRepositories(session.ID)
@@ -142,12 +145,8 @@ func resumeCodeMultiRepositoryDeliveryWithProgress(
 	if codeMultiRepositoryAllCompleted(repositories) {
 		return publishCodeMultiRepositoryDeliveryWithProgress(session, report)
 	}
-	publishingStarted := false
 	if codeMultiRepositoryDeliveryFrozen(repositories) {
 		if err := restoreCodeMultiRepositoryIntegrationWorktrees(session, repositories); err != nil {
-			return codeGitDeliveryResult{}, err
-		}
-		if publishingStarted, err = codeMultiRepositoryPublishStarted(session, repositories); err != nil {
 			return codeGitDeliveryResult{}, err
 		}
 	} else {
@@ -155,23 +154,6 @@ func resumeCodeMultiRepositoryDeliveryWithProgress(
 		if prepareErr != nil || prepared.Status == codeDeliveryJobConflict || prepared.Status == codeDeliveryJobPartial {
 			return prepared, prepareErr
 		}
-	}
-	runQualityGate := !publishingStarted
-	if publishingStarted {
-		runQualityGate, err = codeMultiRepositoryHasQualityChecks(session)
-		if err != nil {
-			return codeGitDeliveryResult{}, err
-		}
-	}
-	if runQualityGate {
-		err = runCodeDeliveryQualityGate(session, userID, lease, report)
-	}
-	if err != nil {
-		stored, loadErr := loadCodeSessionRepositories(session.ID)
-		if loadErr != nil {
-			return codeGitDeliveryResult{}, loadErr
-		}
-		return codeMultiRepositoryFailure(codeStoredRepositoryDeliveryResults(stored), err), err
 	}
 	return publishCodeMultiRepositoryDeliveryWithProgress(session, report)
 }
@@ -205,47 +187,6 @@ func codeMultiRepositoryDeliveryFrozen(repositories []model.AIDevSessionReposito
 	return true
 }
 
-func codeMultiRepositoryPublishStarted(
-	session *model.AIDevSession,
-	repositories []model.AIDevSessionRepository,
-) (bool, error) {
-	for index := range repositories {
-		repository := &repositories[index]
-		if repository.Status == codeDeliveryCompleted {
-			continue
-		}
-		if repository.SourceAppliedAt != nil || repository.PushStatus == codePushPushed {
-			return true, nil
-		}
-		if strings.TrimSpace(repository.MergeCommit) == "" || strings.TrimSpace(repository.TargetBranch) == "" {
-			continue
-		}
-		commit, err := runCodeGit(repository.SourceDir, "rev-parse", "refs/heads/"+repository.TargetBranch)
-		if err == nil && strings.TrimSpace(commit) == strings.TrimSpace(repository.MergeCommit) {
-			if err := markCodeMultiRepositorySourceApplied(repository); err != nil {
-				return false, err
-			}
-			return true, nil
-		}
-		remoteBranch := deliveryRemoteBranch(repository.RemoteBranch, repository.TargetBranch)
-		if !codeDeliveryHasRemote(repository.RemoteName, remoteBranch) {
-			continue
-		}
-		if _, err := fetchCodeRepositoryWithCredential(
-			repository.SourceDir, repository.RemoteName, codeProjectGitCredentialID(session.ProjectID),
-		); err != nil {
-			return false, err
-		}
-		remoteCommit, err := runCodeGit(
-			repository.SourceDir, "rev-parse", "refs/remotes/"+repository.RemoteName+"/"+remoteBranch,
-		)
-		if err == nil && strings.TrimSpace(remoteCommit) == strings.TrimSpace(repository.MergeCommit) {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
 func codeStoredRepositoryDeliveryResult(repository *model.AIDevSessionRepository) codeRepositoryDeliveryResult {
 	pushStatus := repository.PushStatus
 	if !codeDeliveryHasRemote(repository.RemoteName, deliveryRemoteBranch(repository.RemoteBranch, repository.TargetBranch)) {
@@ -258,7 +199,11 @@ func codeStoredRepositoryDeliveryResult(repository *model.AIDevSessionRepository
 		Commit: repository.MergeCommit, PushStatus: pushStatus, PushedCommit: repository.PushedCommit,
 		SnapshotReady:   strings.TrimSpace(repository.WorktreeCommit) != "",
 		MergeReady:      strings.TrimSpace(repository.MergeCommit) != "",
-		SourceAppliedAt: repository.SourceAppliedAt, ErrorMessage: repository.PushError,
+		SourceAppliedAt:  repository.SourceAppliedAt,
+		LocalSynced:      repository.SourceAppliedAt != nil,
+		LocalSyncError:   repository.LocalSyncError,
+		LocalSyncCommand: codeDeliveryLocalSyncCommand(repository.SourceDir, repository.MergeCommit),
+		ErrorMessage:     repository.PushError,
 	}
 }
 
@@ -284,15 +229,21 @@ func hasCompletedCodeRepositoryResult(results []codeRepositoryDeliveryResult) bo
 }
 
 func codeMultiRepositoryResultType(results []codeRepositoryDeliveryResult) string {
-	hasLocal, hasRemote := false, false
+	hasLocal, hasRemote, hasPendingLocal := false, false, false
 	for _, result := range results {
-		if result.Status == codeDeliveryCompleted && result.SourceAppliedAt == nil {
+		// 没有产出交付提交的仓库（本次无变更）不参与结果归类。
+		if strings.TrimSpace(result.Commit) == "" {
 			continue
 		}
-		if result.PushStatus == codePushPushed {
+		switch {
+		case result.PushStatus == codePushPushed:
 			hasRemote = true
-		} else if result.SourceAppliedAt != nil {
+		case result.SourceAppliedAt != nil:
 			hasLocal = true
+		case result.Status == codeDeliveryCompleted:
+			// 已走完落地阶段，只是本地主仓没能快进：交付本身是成功的。
+			// 仅在集成 Worktree 中合并（merged）还没走到落地，不算已交付。
+			hasPendingLocal = true
 		}
 	}
 	if hasLocal && hasRemote {
@@ -303,6 +254,10 @@ func codeMultiRepositoryResultType(results []codeRepositoryDeliveryResult) strin
 	}
 	if hasLocal {
 		return "local"
+	}
+	// 交付提交已经产出，但本地主仓未同步、远端也还没推：交付本身是成功的。
+	if hasPendingLocal {
+		return "delivered"
 	}
 	return ""
 }

@@ -53,10 +53,10 @@ func PreflightCodeProjectQualityChecks(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	detected := detectCodeQualityChecksInRoots(sourceDirs)
+	detected := automaticCodeDeliveryQualityChecks(detectCodeQualityChecksInRoots(sourceDirs))
 	detected = append(detected, configuredCodeQualityChecks(checks, roots)...)
 	items := make([]codeQualityPreflightItem, 0, len(detected))
-	ready := len(detected) > 0
+	ready := true
 	for _, check := range detected {
 		item := codeQualityPreflightItem{
 			ID: check.ID, Kind: check.Kind, Label: check.Label, Command: check.Command, WorkDir: check.WorkDir,
@@ -121,7 +121,7 @@ func normalizeCodeProjectQualityChecks(
 		}
 		workDir := filepath.Join(check.Repository, filepath.Clean(check.WorkDir))
 		resolvedWorkDir, err := filepath.EvalSymlinks(workDir)
-		if err != nil || !isPathInside(resolvedWorkDir, check.Repository) {
+		if err != nil || !pathInsideOrEqual(resolvedWorkDir, check.Repository) {
 			return nil, fmt.Errorf("质量检查 %s 的工作目录不存在或越出仓库", check.Name)
 		}
 		if _, err := parseCodeQualityCommand(check.Command); err != nil {
@@ -175,7 +175,7 @@ func configuredCodeQualityChecks(
 			workDir := filepath.Join(root.WorkDir, filepath.FromSlash(item.WorkDir))
 			resolvedRoot, rootErr := filepath.EvalSymlinks(root.WorkDir)
 			resolvedWorkDir, workDirErr := filepath.EvalSymlinks(workDir)
-			if rootErr != nil || workDirErr != nil || !isPathInside(resolvedWorkDir, resolvedRoot) {
+			if rootErr != nil || workDirErr != nil || !pathInsideOrEqual(resolvedWorkDir, resolvedRoot) {
 				continue
 			}
 			check := newCodeQualityCheck(item.Kind, item.Name, resolvedWorkDir, resolvedRoot, parts[0], parts[1:]...)
@@ -186,6 +186,10 @@ func configuredCodeQualityChecks(
 		}
 	}
 	return checks
+}
+
+func pathInsideOrEqual(path, parent string) bool {
+	return filepath.Clean(path) == filepath.Clean(parent) || isPathInside(path, parent)
 }
 
 func loadConfiguredCodeQualityChecks(projectID uint, roots []codeDeliveryQualityRoot) []codeQualityCheck {

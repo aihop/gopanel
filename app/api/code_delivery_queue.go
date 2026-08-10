@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"sync"
@@ -22,15 +23,14 @@ const (
 	codeDeliveryJobConflict  = "conflict"
 	codeDeliveryJobFailed    = "failed"
 
-	codeDeliveryStageQueued           = "queued"
-	codeDeliveryStageStoppingTerminal = "stopping_terminal"
-	codeDeliveryStageSyncing          = "syncing"
-	codeDeliveryStageMerging          = "merging"
-	codeDeliveryStageQualityCheck     = "quality_check"
-	codeDeliveryStagePushing          = "pushing"
-	codeDeliveryStageVerifying        = "verifying"
-	codeDeliveryStageCleaning         = "cleaning"
-	codeDeliveryStageCompleted        = "completed"
+	codeDeliveryStageQueued       = "queued"
+	codeDeliveryStageSyncing      = "syncing"
+	codeDeliveryStageMerging      = "merging"
+	codeDeliveryStageQualityCheck = "quality_check"
+	codeDeliveryStagePushing      = "pushing"
+	codeDeliveryStageVerifying    = "verifying"
+	codeDeliveryStageCleaning     = "cleaning"
+	codeDeliveryStageCompleted    = "completed"
 
 	codeDeliveryLeaseDuration = 45 * time.Second
 )
@@ -194,6 +194,19 @@ func (runner *codeDeliveryRunner) acquireRepositoryLeases(job *model.AICodeDeliv
 	return acquireCodeRepositoryLeases(runner.owner, job.ID, keys)
 }
 
+// releaseCancelledJob 用于会话正在被删除的场景：不再回写会话状态，
+// 但必须归还作业租约和仓库租约，否则这些仓库要等租约过期才能被下一次操作使用。
+func (runner *codeDeliveryRunner) releaseCancelledJob(jobID uint) {
+	if err := global.DB.Where("job_id = ? AND lease_owner = ?", jobID, runner.owner).
+		Delete(&model.AICodeDeliveryLease{}).Error; err != nil {
+		global.LOG.Warnf("Release cancelled Code delivery %d repository leases failed: %v", jobID, err)
+	}
+	if err := global.DB.Model(&model.AICodeDeliveryJob{}).Where("id = ? AND lease_owner = ?", jobID, runner.owner).
+		Updates(map[string]any{"lease_owner": "", "lease_expires_at": nil}).Error; err != nil {
+		global.LOG.Warnf("Release cancelled Code delivery %d job lease failed: %v", jobID, err)
+	}
+}
+
 func (runner *codeDeliveryRunner) deferJob(jobID uint, err error) {
 	updates := map[string]any{"status": codeDeliveryJobQueued, "stage": codeDeliveryStageQueued, "lease_owner": "", "lease_expires_at": nil}
 	if err != nil {
@@ -355,12 +368,21 @@ func codeDeliveryFailureCode(stage string, err error) string {
 }
 
 func (runner *codeDeliveryRunner) run(jobID uint) {
+	var job *model.AICodeDeliveryJob
 	defer func() {
 		runner.mu.Lock()
 		delete(runner.queued, jobID)
 		runner.mu.Unlock()
 	}()
-	job, keys, claimed, err := runner.claim(jobID)
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			runner.finishRecoveredPanic(job, recovered)
+		}
+	}()
+	var keys []string
+	var claimed bool
+	var err error
+	job, keys, claimed, err = runner.claim(jobID)
 	if err != nil {
 		if claimed && job != nil {
 			runner.finish(job, codeGitDeliveryResult{}, err)
@@ -371,6 +393,7 @@ func (runner *codeDeliveryRunner) run(jobID uint) {
 		return
 	}
 	if runner.isSessionCancelled(job.SessionID) {
+		runner.releaseCancelledJob(job.ID)
 		return
 	}
 	acquired, err := runner.acquireRepositoryLeases(job, keys)
@@ -410,25 +433,32 @@ func (runner *codeDeliveryRunner) run(jobID uint) {
 		lease.SetCancel(cancel)
 		result, err = resumeCodeMultiRepositoryDeliveryWithProgress(&session, job.UserID, lease, reporter)
 	} else {
-		var delivery *model.AICodeDelivery
-		delivery, result, err = prepareCodeSessionDeliveryWithProgress(&session, job.UserID, reporter)
+		_, result, err = prepareCodeSessionDeliveryWithProgress(&session, job.UserID, reporter)
 		if err != nil || result.Status == "conflict" {
 			runner.finish(job, result, err)
-			return
-		}
-		qualitySession := session
-		qualitySession.WorkDir = delivery.DeliveryWorkDir
-		lease.SetCancel(cancel)
-		if err := runCodeDeliveryQualityGate(&qualitySession, job.UserID, lease, reporter); err != nil {
-			runner.finish(job, codeGitDeliveryResult{}, err)
 			return
 		}
 		result, err = resumeCodeSessionDeliveryWithProgress(&session, job.UserID, reporter)
 	}
 	if runner.isSessionCancelled(job.SessionID) {
+		runner.releaseCancelledJob(job.ID)
 		return
 	}
 	runner.finish(job, result, err)
+}
+
+func (runner *codeDeliveryRunner) finishRecoveredPanic(job *model.AICodeDeliveryJob, recovered any) {
+	panicErr := fmt.Errorf("交付执行异常：%v", recovered)
+	if job == nil {
+		global.LOG.Errorf("Code delivery runner panic before claim: %v", panicErr)
+		return
+	}
+	defer func() {
+		if finishPanic := recover(); finishPanic != nil {
+			global.LOG.Errorf("Finish panicked Code delivery %d failed: %v", job.ID, finishPanic)
+		}
+	}()
+	runner.finish(job, codeGitDeliveryResult{}, panicErr)
 }
 
 func loadCodeDeliveryJobView(sessionID uint) (*codeDeliveryJobView, error) {

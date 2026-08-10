@@ -6,6 +6,7 @@ import '../../models/code_project_terminal_session.dart';
 import '../code_workspace_text.dart';
 import '../controllers/code_terminal_client.dart';
 import '../controllers/code_terminal_socket.dart';
+import '../widgets/code_terminal_command_bar.dart';
 import '../widgets/code_terminal_controls.dart';
 import 'ai_chat_screen.dart';
 import 'code_workspace_files_screen.dart';
@@ -130,7 +131,6 @@ class _CodeTerminalScreenState extends State<CodeTerminalScreen> {
 
   void _sendShortcut(String value) {
     _client.sendInput(value);
-    _terminalFocusNode.requestFocus();
   }
 
   void _showKeyboard() {
@@ -139,14 +139,6 @@ class _CodeTerminalScreenState extends State<CodeTerminalScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _terminalViewKey.currentState?.requestKeyboard();
     });
-  }
-
-  void _toggleControl() {
-    if (_client.hasControl) {
-      _client.releaseControl();
-    } else {
-      _client.takeControl();
-    }
   }
 
   @override
@@ -211,24 +203,6 @@ class _CodeTerminalScreenState extends State<CodeTerminalScreen> {
               constraints: const BoxConstraints.tightFor(width: 36, height: 36),
               icon: const Icon(Icons.refresh_rounded, color: Color(0xFFFBBF24)),
             ),
-          if (widget.nativeProtocol)
-            IconButton(
-              tooltip: _client.hasControl
-                  ? CodeWorkspaceText.t(context, 'terminal.releaseControl')
-                  : CodeWorkspaceText.t(context, 'terminal.takeControl'),
-              onPressed: _client.connected ? _toggleControl : null,
-              visualDensity: VisualDensity.compact,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints.tightFor(width: 36, height: 36),
-              icon: Icon(
-                _client.hasControl
-                    ? Icons.lock_open_rounded
-                    : Icons.lock_outline_rounded,
-                color: _client.hasControl
-                    ? const Color(0xFF60A5FA)
-                    : Colors.white54,
-              ),
-            ),
           if (session != null) ...[
             IconButton(
               tooltip: CodeWorkspaceText.t(context, 'terminal.sessionStatus'),
@@ -258,7 +232,7 @@ class _CodeTerminalScreenState extends State<CodeTerminalScreen> {
               key: _terminalViewKey,
               controller: _terminalController,
               focusNode: _terminalFocusNode,
-              autofocus: true,
+              autofocus: false,
               theme: _terminalTheme,
               textStyle: const TerminalStyle(
                 fontSize: 12,
@@ -281,11 +255,15 @@ class _CodeTerminalScreenState extends State<CodeTerminalScreen> {
               keyboardAppearance: Brightness.dark,
             ),
           ),
-          CodeTerminalShortcutBar(
-            enabled: _client.canInput,
+          CodeTerminalCommandBar(
+            connected: _client.connected,
+            hasControl: _client.hasControl,
+            supportsControl: widget.nativeProtocol,
+            onTakeControl: _client.takeControl,
+            onReleaseControl: _client.releaseControl,
+            onSend: _client.sendInput,
             onShortcut: _sendShortcut,
-            onEnter: () => _sendShortcut('\r'),
-            onKeyboard: _showKeyboard,
+            onTerminalKeyboard: _showKeyboard,
           ),
         ],
       ),

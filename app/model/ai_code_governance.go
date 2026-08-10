@@ -19,9 +19,12 @@ type AICodeDelivery struct {
 	RemoteName      string     `gorm:"column:remote_name;type:varchar(255)" json:"remoteName,omitempty"`
 	RemoteBranch    string     `gorm:"column:remote_branch;type:varchar(255)" json:"remoteBranch,omitempty"`
 	RemoteCommit    string     `gorm:"column:remote_commit;type:varchar(64)" json:"remoteCommit,omitempty"`
+	SourceCommit    string     `gorm:"column:source_commit;type:varchar(64)" json:"sourceCommit,omitempty"`
 	WorktreeCommit  string     `gorm:"column:worktree_commit;type:varchar(64)" json:"worktreeCommit"`
 	MergeCommit     string     `gorm:"column:merge_commit;type:varchar(64)" json:"mergeCommit"`
 	ErrorMessage    string     `gorm:"column:error_message;type:text" json:"errorMessage"`
+	LocalSyncError  string     `gorm:"column:local_sync_error;type:text" json:"localSyncError,omitempty"`
+	SourceAppliedAt *time.Time `gorm:"column:source_applied_at" json:"sourceAppliedAt,omitempty"`
 	MergedAt        *time.Time `gorm:"column:merged_at" json:"mergedAt,omitempty"`
 	CompletedAt     *time.Time `gorm:"column:completed_at" json:"completedAt,omitempty"`
 	PushStatus      string     `gorm:"column:push_status;type:varchar(32);not null;default:'pending';index" json:"pushStatus"`

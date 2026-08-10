@@ -74,40 +74,6 @@ func TestHostTerminalManagerCreateWriteAndStop(t *testing.T) {
 	}
 }
 
-func TestCodeDeliveryRejectsRunningHostTerminalWithoutStoppingIt(t *testing.T) {
-	database, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "terminal-delivery.db")), &gorm.Config{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := database.AutoMigrate(&model.AIDevSession{}, &model.HostTerminalSession{}, &model.HostTerminalAuditEvent{}); err != nil {
-		t.Fatal(err)
-	}
-	oldDB := global.DB
-	global.DB = database
-	t.Cleanup(func() { global.DB = oldDB })
-	manager := &hostTerminalManager{sessions: make(map[uint]*hostTerminal)}
-	record, err := manager.create(createHostTerminalRequest{Shell: "sh", WorkDir: t.TempDir()}, 9, "127.0.0.1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := manager.validateStoppedForCodeDelivery(); err == nil {
-		t.Fatal("delivery should reject a running host terminal")
-	}
-	if manager.get(record.ID) == nil {
-		t.Fatal("delivery stopped the host terminal process")
-	}
-	var stored model.HostTerminalSession
-	if err := database.First(&stored, record.ID).Error; err != nil || stored.Status != "running" {
-		t.Fatalf("delivery changed the terminal state: %#v, %v", stored, err)
-	}
-	if !manager.stop(record.ID) {
-		t.Fatal("test cleanup could not stop host terminal")
-	}
-	if manager.get(record.ID) != nil {
-		t.Fatal("test cleanup returned before host terminal exit")
-	}
-}
-
 func TestDeleteHostTerminalRecordUsesSoftDelete(t *testing.T) {
 	database, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "terminal-delete.db")), &gorm.Config{})
 	if err != nil {

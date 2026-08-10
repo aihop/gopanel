@@ -113,6 +113,7 @@ func CreateAIProject(c fiber.Ctx) error {
 		SourceDirs         []string                      `json:"sourceDirs"`
 		PrimaryRepository  *string                       `json:"primaryRepository"`
 		DeliveryBranch     *string                       `json:"deliveryBranch"`
+		DeliveryMode       *string                       `json:"deliveryMode"`
 		GitCredentialID    uint                          `json:"gitCredentialId"`
 		RequireQualityGate bool                          `json:"requireQualityGate"`
 		QualityChecks      []model.AIProjectQualityCheck `json:"qualityChecks"`
@@ -154,6 +155,7 @@ func CreateAIProject(c fiber.Ctx) error {
 		Name: name, Description: strings.TrimSpace(req.Description), SourceDirs: sourceDirs,
 		CreatorID: claims.UserId, PrimaryRepository: primaryRepository,
 		DeliveryBranch: deliveryBranch, GitCredentialID: req.GitCredentialID,
+		DeliveryMode:       normalizeCodeDeliveryMode(req.DeliveryMode),
 		RequireQualityGate: req.RequireQualityGate, QualityChecks: qualityChecks,
 		MonthlyTokenBudget: req.MonthlyTokenBudget,
 	}
@@ -200,6 +202,7 @@ func UpdateAIProject(c fiber.Ctx) error {
 		SourceDirs         []string                      `json:"sourceDirs"`
 		PrimaryRepository  *string                       `json:"primaryRepository"`
 		DeliveryBranch     *string                       `json:"deliveryBranch"`
+		DeliveryMode       *string                       `json:"deliveryMode"`
 		GitCredentialID    uint                          `json:"gitCredentialId"`
 		RequireQualityGate bool                          `json:"requireQualityGate"`
 		QualityChecks      []model.AIProjectQualityCheck `json:"qualityChecks"`
@@ -228,6 +231,9 @@ func UpdateAIProject(c fiber.Ctx) error {
 	}
 	if req.DeliveryBranch != nil {
 		project.DeliveryBranch = strings.TrimSpace(*req.DeliveryBranch)
+	}
+	if req.DeliveryMode != nil {
+		project.DeliveryMode = normalizeCodeDeliveryMode(req.DeliveryMode)
 	}
 	if req.MonthlyTokenBudget < 0 {
 		return c.JSON(e.Fail(errors.New("Token 月度预算不能为负数")))

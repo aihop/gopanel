@@ -6,7 +6,10 @@ import '../models/task_type.dart';
 import '../models/task_attention.dart';
 
 TaskEntity buildAiTaskEntity({
+  required int taskId,
   required int sessionId,
+  required int projectId,
+  required String agentName,
   required String title,
   required String workDir,
   required String status,
@@ -53,6 +56,9 @@ TaskEntity buildAiTaskEntity({
     attention: attention,
     meta: {
       'sessionId': sessionId.toString(),
+      'taskId': taskId.toString(),
+      'projectId': projectId.toString(),
+      'agentName': agentName,
       'currentStage': resolvedStage,
       'currentStageLabel': aiStageLabel(resolvedStage),
       'previewCount': previewCount.toString(),
@@ -133,7 +139,11 @@ TaskStatus mapAiSessionStatus(String status, String currentStage) {
   final stage = currentStage.toLowerCase();
   final normalized = status.toLowerCase();
   if (stage == 'failed' || normalized == 'failed') return TaskStatus.failed;
-  if (stage == 'completed' || stage == 'preview_ready') {
+  if (stage == 'completed' ||
+      stage == 'preview_ready' ||
+      normalized == 'completed' ||
+      normalized == 'delivered' ||
+      normalized == 'success') {
     return TaskStatus.success;
   }
   return TaskStatus.running;

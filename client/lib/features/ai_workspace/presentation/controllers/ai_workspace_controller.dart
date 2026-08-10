@@ -7,6 +7,8 @@ import '../../data/ai_workspace_repository.dart';
 import '../../models/ai_dev_session.dart';
 import '../../models/chat_message.dart';
 import '../../models/code_delivery_job.dart';
+import '../../models/code_task.dart';
+import 'code_task_sessions.dart';
 
 final aiWorkspaceRepositoryProvider = Provider<AiWorkspaceRepository>((ref) {
   return AiWorkspaceRepository(ApiClient());
@@ -20,6 +22,7 @@ class AiWorkspaceState {
   final List<CodeProject> projects;
   final List<CodeExecutor> executors;
   final List<AiDevSession> sessions;
+  final int? selectedProjectId;
   final List<ChatMessage> chatHistory;
   final AiDevSession? currentSession;
   final AiTaskSummary? currentTask;
@@ -43,6 +46,7 @@ class AiWorkspaceState {
     this.projects = const [],
     this.executors = const [],
     this.sessions = const [],
+    this.selectedProjectId,
     this.chatHistory = const [],
     this.currentSession,
     this.currentTask,
@@ -74,6 +78,7 @@ class AiWorkspaceState {
     List<CodeProject>? projects,
     List<CodeExecutor>? executors,
     List<AiDevSession>? sessions,
+    int? selectedProjectId,
     List<ChatMessage>? chatHistory,
     AiDevSession? currentSession,
     AiTaskSummary? currentTask,
@@ -104,6 +109,7 @@ class AiWorkspaceState {
       projects: projects ?? this.projects,
       executors: executors ?? this.executors,
       sessions: sessions ?? this.sessions,
+      selectedProjectId: selectedProjectId ?? this.selectedProjectId,
       chatHistory: chatHistory ?? this.chatHistory,
       currentSession: clearSession
           ? null
@@ -147,6 +153,7 @@ class AiWorkspaceController extends Notifier<AiWorkspaceState> {
   late AiWorkspaceRepository _repo;
   Timer? _refreshTimer;
   bool _refreshing = false;
+  int _projectRequest = 0;
 
   @override
   AiWorkspaceState build() {
@@ -157,26 +164,39 @@ class AiWorkspaceController extends Notifier<AiWorkspaceState> {
   }
 
   Future<void> loadWorkspace() async {
+    final request = ++_projectRequest;
     state = state.copyWith(isLoading: true, clearError: true);
     try {
       final results = await Future.wait([
         _repo.getProjects(),
         _repo.getExecutors(),
-        _repo.getSessions(),
       ]);
       final projects = results[0] as List<CodeProject>;
       final executors = results[1] as List<CodeExecutor>;
-      final sessions = results[2] as List<AiDevSession>;
+      final projectId = _resolveProjectId(projects);
+      final sessions = projectId == null
+          ? const <AiDevSession>[]
+          : await _loadProjectSessions(projectId);
+      if (request != _projectRequest) return;
+      final clearSelection = state.currentSession?.projectId != projectId;
       state = state.copyWith(
         isLoading: false,
         projects: projects,
         executors: executors,
         sessions: sessions,
+        selectedProjectId: projectId,
+        clearSession: clearSelection,
+        clearTask: clearSelection,
+        clearInstruction: clearSelection,
+        clearApproval: clearSelection,
+        clearDelivery: clearSelection,
       );
-      if (state.currentSession == null && sessions.isNotEmpty) {
+      if ((clearSelection || state.currentSession == null) &&
+          sessions.isNotEmpty) {
         await selectSession(sessions.first);
       }
     } catch (error) {
+      if (request != _projectRequest) return;
       state = state.copyWith(
         isLoading: false,
         errorMessage: '开发工作区加载失败：$error',
@@ -184,7 +204,41 @@ class AiWorkspaceController extends Notifier<AiWorkspaceState> {
     }
   }
 
-  Future<void> createSession({
+  Future<void> selectProject(int projectId) async {
+    if (projectId <= 0 || projectId == state.selectedProjectId) return;
+    final request = ++_projectRequest;
+    _refreshTimer?.cancel();
+    state = state.copyWith(
+      isLoading: true,
+      selectedProjectId: projectId,
+      sessions: const [],
+      chatHistory: [_welcomeMessage()],
+      currentStage: 'idle',
+      recentOutput: '',
+      previews: const [],
+      timelineEvents: const [],
+      errorSummary: '',
+      changedFiles: const [],
+      clearError: true,
+      clearSession: true,
+      clearTask: true,
+      clearInstruction: true,
+      clearApproval: true,
+      clearDelivery: true,
+      clearDeliveryError: true,
+    );
+    try {
+      final sessions = await _loadProjectSessions(projectId);
+      if (request != _projectRequest) return;
+      state = state.copyWith(isLoading: false, sessions: sessions);
+      if (sessions.isNotEmpty) await selectSession(sessions.first);
+    } catch (error) {
+      if (request != _projectRequest) return;
+      state = state.copyWith(isLoading: false, errorMessage: '开发任务加载失败：$error');
+    }
+  }
+
+  Future<AiDevSession> createSession({
     required int projectId,
     required String executorId,
     required String approvalPolicy,
@@ -200,9 +254,13 @@ class AiWorkspaceController extends Notifier<AiWorkspaceState> {
       );
       state = state.copyWith(
         isActionLoading: false,
-        sessions: [session, ...state.sessions],
+        selectedProjectId: projectId,
+        sessions: state.selectedProjectId == projectId
+            ? state.sessions
+            : const [],
       );
       await selectSession(session);
+      return session;
     } catch (error) {
       state = state.copyWith(
         isActionLoading: false,
@@ -410,6 +468,26 @@ class AiWorkspaceController extends Notifier<AiWorkspaceState> {
       text: '选择已有会话，或从开发项目创建会话，然后发送开发指令。',
       isUser: false,
       timestamp: DateTime.now(),
+    );
+  }
+
+  int? _resolveProjectId(List<CodeProject> projects) {
+    final selected = state.selectedProjectId;
+    if (projects.any((project) => project.id == selected)) return selected;
+    final current = state.currentSession?.projectId;
+    if (projects.any((project) => project.id == current)) return current;
+    return projects.firstOrNull?.id;
+  }
+
+  Future<List<AiDevSession>> _loadProjectSessions(int projectId) async {
+    final results = await Future.wait([
+      _repo.getSessions(projectId: projectId),
+      _repo.getTasks(projectId: projectId),
+    ]);
+    return alignCodeTaskSessions(
+      results[0] as List<AiDevSession>,
+      results[1] as List<CodeTask>,
+      projectId: projectId,
     );
   }
 }

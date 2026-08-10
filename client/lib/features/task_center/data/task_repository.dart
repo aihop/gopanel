@@ -1,6 +1,7 @@
 import '../../../core/network/api_client.dart';
 import '../../ai_workspace/models/ai_dev_session.dart';
 import '../../ai_workspace/models/ai_session_state_info.dart';
+import '../../ai_workspace/models/code_task.dart';
 import 'task_ai_utils.dart';
 import 'task_attention_repository.dart';
 import '../models/task_entity.dart';
@@ -83,52 +84,62 @@ class TaskRepository {
       tasks.addAll(group);
     }
 
-    final aiSessionsRes = await _apiClient.get<Map<String, dynamic>>(
-      '/api/code/sessions',
-      queryParameters: {'page': 1, 'limit': 20},
+    final aiTasksRes = await _apiClient.get<Map<String, dynamic>>(
+      '/api/code/tasks',
+      queryParameters: {'page': 1, 'limit': 100, 'includeGit': false},
     );
-    final aiSessionsData = aiSessionsRes.data ?? const <String, dynamic>{};
-    final aiSessionItems =
-        (aiSessionsData['items'] as List<dynamic>? ?? const []);
-    final aiSessions = aiSessionItems
-        .map((e) => _AiSession.fromJson((e as Map).cast<String, dynamic>()))
+    final aiTasksData = aiTasksRes.data ?? const <String, dynamic>{};
+    final aiTaskItems = (aiTasksData['items'] as List<dynamic>? ?? const [])
+        .whereType<Map>()
+        .map((item) => CodeTask.fromJson(item.cast<String, dynamic>()))
+        .where((task) => task.id > 0 && task.agentName != 'terminal')
         .toList();
 
     final attentionItems = await TaskAttentionRepository(_apiClient).list();
-    final attentionBySession = {
-      for (final attention in attentionItems) attention.sessionId: attention,
+    final attentionByTask = {
+      for (final attention in attentionItems)
+        if (attention.taskId > 0) attention.taskId: attention,
     };
 
-    final aiTaskItems = await _mapWithConcurrency<_AiSession, TaskEntity>(
-      aiSessions,
+    final codeTasks = await _mapWithConcurrency<CodeTask, TaskEntity>(
+      aiTaskItems,
       concurrency: 4,
-      mapper: (s) async {
+      mapper: (task) async {
         AiSessionStateInfo? state;
-        try {
-          state = await getAiSessionState(s.id);
-        } catch (_) {
-          state = null;
+        if (task.sessionId > 0) {
+          try {
+            state = await getAiSessionState(task.sessionId);
+          } catch (_) {
+            state = null;
+          }
         }
 
         return buildAiTaskEntity(
-          sessionId: s.id,
-          title: s.title,
-          workDir: s.workDir,
-          status: s.status,
-          currentStage: s.currentStage,
-          createdAt: s.createdAt,
-          updatedAt: s.updatedAt,
+          taskId: task.id,
+          sessionId: task.sessionId,
+          projectId: task.projectId,
+          agentName: task.agentName,
+          title: task.title,
+          workDir: task.workDir,
+          status: task.status,
+          currentStage: state?.currentStage ?? '',
+          createdAt: task.createdAt,
+          updatedAt: task.updatedAt,
           state: state,
-          attention: attentionBySession[s.id],
+          attention: attentionByTask[task.id],
         );
       },
     );
 
-    tasks.addAll(aiTaskItems);
-    final loadedSessionIds = aiSessions.map((session) => session.id).toSet();
+    tasks.addAll(codeTasks);
+    final loadedTaskIds = aiTaskItems.map((task) => task.id).toSet();
     tasks.addAll(
       attentionItems
-          .where((attention) => !loadedSessionIds.contains(attention.sessionId))
+          .where(
+            (attention) =>
+                attention.taskId <= 0 ||
+                !loadedTaskIds.contains(attention.taskId),
+          )
           .map(_buildAttentionOnlyTask),
     );
 
@@ -276,6 +287,7 @@ TaskEntity _buildAttentionOnlyTask(TaskAttention attention) {
     summary: attention.summary,
     error: failed && attention.summary.isNotEmpty ? attention.summary : null,
     attention: attention,
+    attentionOnly: true,
     meta: {
       'sessionId': attention.sessionId.toString(),
       'currentStageLabel': attention.title,
@@ -398,37 +410,5 @@ double? _pipelineProgress(String status) {
       return null;
     default:
       return null;
-  }
-}
-
-class _AiSession {
-  final int id;
-  final String title;
-  final String workDir;
-  final String status;
-  final String currentStage;
-  final DateTime? createdAt;
-  final DateTime? updatedAt;
-
-  const _AiSession({
-    required this.id,
-    required this.title,
-    required this.workDir,
-    required this.status,
-    required this.currentStage,
-    required this.createdAt,
-    required this.updatedAt,
-  });
-
-  factory _AiSession.fromJson(Map<String, dynamic> json) {
-    return _AiSession(
-      id: (json['id'] as num?)?.toInt() ?? 0,
-      title: (json['title'] ?? '').toString(),
-      workDir: (json['workDir'] ?? '').toString(),
-      status: (json['status'] ?? '').toString(),
-      currentStage: (json['currentStage'] ?? '').toString(),
-      createdAt: DateTime.tryParse((json['createdAt'] ?? '').toString()),
-      updatedAt: DateTime.tryParse((json['updatedAt'] ?? '').toString()),
-    );
   }
 }

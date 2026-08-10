@@ -155,6 +155,10 @@
 			<template #prefix>{{ t("code.deliveryBranch") }}</template>
 		  </n-input>
 		  <div class="-mt-3 text-xs text-[var(--n-text-color-3)]">{{ t("code.deliveryBranchHint") }}</div>
+		  <n-select v-model:value="projectForm.deliveryMode" :options="deliveryModeOptions" :placeholder="t('code.deliveryMode')" />
+		  <div class="-mt-3 text-xs text-[var(--n-text-color-3)]">
+			{{ projectForm.deliveryMode === "branch" ? t("code.deliveryModeBranchHint") : t("code.deliveryModeDirectHint") }}
+		  </div>
 		  <ProjectGitCredentialSelect v-model="projectForm.gitCredentialId" />
           <n-input
             v-model:value="projectForm.desc"
@@ -233,7 +237,7 @@ const repositoriesLoading = ref(false)
 const repositoryOptions = ref<Array<{ label: string; value: string }>>([])
 const editingProjectId = ref<number | null>(null)
 const emptyQualityChecks = (): CodeProjectQualityCheck[] => []
-const projectForm = ref({ name: '', desc: '', workDir: '', sourceDirs: [] as string[], primaryRepository: '', deliveryBranch: '', gitCredentialId: 0, requireQualityGate: true, qualityChecks: emptyQualityChecks(), monthlyTokenBudget: 0 })
+const projectForm = ref({ name: '', desc: '', workDir: '', sourceDirs: [] as string[], primaryRepository: '', deliveryBranch: '', deliveryMode: 'direct' as 'direct' | 'branch', gitCredentialId: 0, requireQualityGate: true, qualityChecks: emptyQualityChecks(), monthlyTokenBudget: 0 })
 
 const projects = ref<AIProject[]>([])
 const projectsLoading = ref(false)
@@ -247,6 +251,11 @@ let refreshTimer: ReturnType<typeof setInterval> | undefined
 const primaryRepositoryOptions = computed(() => [
   { label: t('code.primaryRepositoryAuto'), value: '' },
   ...repositoryOptions.value,
+])
+
+const deliveryModeOptions = computed(() => [
+  { label: t('code.deliveryModeDirect'), value: 'direct' },
+  { label: t('code.deliveryModeBranch'), value: 'branch' },
 ])
 
 const loadRepositoryOptions = async () => {
@@ -322,7 +331,7 @@ const formatUpdatedAt = (value: string) => new Date(value).toLocaleString(undefi
 
 const openCreateProjectModal = () => {
   editingProjectId.value = null
-  projectForm.value = { name: '', desc: '', workDir: defaultWorkDir.value, sourceDirs: [], primaryRepository: '', deliveryBranch: '', gitCredentialId: 0, requireQualityGate: true, qualityChecks: emptyQualityChecks(), monthlyTokenBudget: 0 }
+  projectForm.value = { name: '', desc: '', workDir: defaultWorkDir.value, sourceDirs: [], primaryRepository: '', deliveryBranch: '', deliveryMode: 'direct' as 'direct' | 'branch', gitCredentialId: 0, requireQualityGate: true, qualityChecks: emptyQualityChecks(), monthlyTokenBudget: 0 }
   showCreateProjectModal.value = true
   repositoryOptions.value = []
 }
@@ -330,7 +339,7 @@ const openCreateProjectModal = () => {
 const openEditProjectModal = (project: AIProject) => {
   editingProjectId.value = project.id
   const sourceDirs = project.sourceDirs?.length ? project.sourceDirs : project.workDir ? [project.workDir] : []
-  projectForm.value = { name: project.name, desc: project.description || '', workDir: sourceDirs[0] || defaultWorkDir.value, sourceDirs, primaryRepository: project.primaryRepository || '', deliveryBranch: project.deliveryBranch || 'main', gitCredentialId: project.gitCredentialId || 0, requireQualityGate: project.requireQualityGate, qualityChecks: (project.qualityChecks || []).map(check => ({ ...check })), monthlyTokenBudget: project.monthlyTokenBudget || 0 }
+  projectForm.value = { name: project.name, desc: project.description || '', workDir: sourceDirs[0] || defaultWorkDir.value, sourceDirs, primaryRepository: project.primaryRepository || '', deliveryBranch: project.deliveryBranch || 'main', deliveryMode: project.deliveryMode === 'branch' ? 'branch' : 'direct', gitCredentialId: project.gitCredentialId || 0, requireQualityGate: project.requireQualityGate, qualityChecks: (project.qualityChecks || []).map(check => ({ ...check })), monthlyTokenBudget: project.monthlyTokenBudget || 0 }
   showCreateProjectModal.value = true
   void loadRepositoryOptions()
 }
@@ -362,6 +371,7 @@ const submitProject = async () => {
 	  sourceDirs: projectForm.value.sourceDirs,
 	  primaryRepository: projectForm.value.primaryRepository?.trim() || '',
 	  deliveryBranch: projectForm.value.deliveryBranch.trim(),
+	  deliveryMode: projectForm.value.deliveryMode,
 	  gitCredentialId: projectForm.value.gitCredentialId,
       requireQualityGate: projectForm.value.requireQualityGate,
 	  qualityChecks: projectForm.value.qualityChecks,

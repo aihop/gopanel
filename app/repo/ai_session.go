@@ -3,6 +3,7 @@ package repo
 import (
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/global"
+	"gorm.io/gorm"
 )
 
 type IAIDevSessionRepo interface {
@@ -10,6 +11,7 @@ type IAIDevSessionRepo interface {
 	DeleteSession(id uint) error
 	GetSessionByID(id uint) (*model.AIDevSession, error)
 	GetSessionsByUserID(userID, projectID uint, page, limit int) ([]*model.AIDevSession, int64, error)
+	GetSessionsByProjectID(projectID uint, page, limit int) ([]*model.AIDevSession, int64, error)
 	UpdateSession(session *model.AIDevSession) error
 	UpdateSessionTitle(id uint, title string) error
 	UpdateSessionApprovalPolicy(id uint, approvalPolicy string) error
@@ -65,13 +67,21 @@ func (r *aiDevSessionRepo) GetSessionByID(id uint) (*model.AIDevSession, error) 
 }
 
 func (r *aiDevSessionRepo) GetSessionsByUserID(userID, projectID uint, page, limit int) ([]*model.AIDevSession, int64, error) {
-	var sessions []*model.AIDevSession
-	var total int64
-
 	db := global.DB.Model(&model.AIDevSession{}).Where("user_id = ?", userID)
 	if projectID > 0 {
 		db = db.Where("project_id = ?", projectID)
 	}
+	return r.getSessions(db, userID, page, limit)
+}
+
+func (r *aiDevSessionRepo) GetSessionsByProjectID(projectID uint, page, limit int) ([]*model.AIDevSession, int64, error) {
+	db := global.DB.Model(&model.AIDevSession{}).Where("project_id = ?", projectID)
+	return r.getSessions(db, 0, page, limit)
+}
+
+func (r *aiDevSessionRepo) getSessions(db *gorm.DB, userID uint, page, limit int) ([]*model.AIDevSession, int64, error) {
+	var sessions []*model.AIDevSession
+	var total int64
 	db = db.Where("NOT (status = ? AND current_stage = ? AND COALESCE(last_task_id, 0) = 0)", "failed", "initialization_failed")
 
 	db.Count(&total)
@@ -89,7 +99,11 @@ func (r *aiDevSessionRepo) GetSessionsByUserID(userID, projectID uint, page, lim
 		return sessions, total, nil
 	}
 	var tasks []*model.AITask
-	if err = global.DB.Select("id", "title").Where("id IN ? AND user_id = ?", taskIDs, userID).Find(&tasks).Error; err != nil {
+	taskQuery := global.DB.Select("id", "title").Where("id IN ?", taskIDs)
+	if userID > 0 {
+		taskQuery = taskQuery.Where("user_id = ?", userID)
+	}
+	if err = taskQuery.Find(&tasks).Error; err != nil {
 		return nil, 0, err
 	}
 	titles := make(map[uint]string, len(tasks))

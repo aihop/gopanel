@@ -76,7 +76,7 @@ class _CodeSessionSheetState extends ConsumerState<CodeSessionSheet> {
         ? _approvalPolicy
         : executor.approvalPolicies.firstOrNull ?? 'full_auto';
     try {
-      await ref
+      final session = await ref
           .read(aiWorkspaceControllerProvider.notifier)
           .createSession(
             projectId: projectId,
@@ -84,7 +84,7 @@ class _CodeSessionSheetState extends ConsumerState<CodeSessionSheet> {
             approvalPolicy: policy,
             title: _titleController.text,
           );
-      if (mounted) Navigator.of(context).pop();
+      if (mounted) Navigator.of(context).pop(session);
     } catch (_) {}
   }
 

@@ -1,28 +1,24 @@
 package api
 
 import (
-	"errors"
 	"strings"
 	"testing"
-
-	"github.com/aihop/gopanel/app/model"
 )
 
-func prepareCodePushTestRepository(t *testing.T) (string, string, string, string) {
+func prepareCodePushTestRepository(t *testing.T) (string, string, string) {
 	t.Helper()
 	repository, remoteDir := createCodeRemoteRepository(t)
-	prepared, err := prepareCodeRepository(repository)
-	if err != nil {
+	if _, err := prepareCodeRepository(repository); err != nil {
 		t.Fatal(err)
 	}
 	mergeCommit := commitCodeTestFile(t, repository, "delivery.txt", "delivery\n")
-	return repository, remoteDir, prepared.RemoteCommit, mergeCommit
+	return repository, remoteDir, mergeCommit
 }
 
 func TestPushCodeDeliveryRepositoryPushesExactCommit(t *testing.T) {
-	repository, remoteDir, remoteCommit, mergeCommit := prepareCodePushTestRepository(t)
+	repository, remoteDir, mergeCommit := prepareCodePushTestRepository(t)
 	branch, _ := runCodeGit(repository, "branch", "--show-current")
-	result, err := pushCodeDeliveryRepository(repository, branch, "origin", branch, remoteCommit, mergeCommit, codePushPending)
+	result, err := pushCodeDeliveryRepository(repository, "origin", branch, mergeCommit, codePushPending)
 	if err != nil || result.Status != codePushPushed || result.Commit != mergeCommit {
 		t.Fatalf("unexpected push result: %#v, %v", result, err)
 	}
@@ -33,62 +29,128 @@ func TestPushCodeDeliveryRepositoryPushesExactCommit(t *testing.T) {
 }
 
 func TestPushCodeDeliveryRepositoryRecoversAfterRemoteSuccess(t *testing.T) {
-	repository, _, remoteCommit, mergeCommit := prepareCodePushTestRepository(t)
+	repository, _, mergeCommit := prepareCodePushTestRepository(t)
 	branch, _ := runCodeGit(repository, "branch", "--show-current")
 	if _, err := runCodeGit(repository, "push", "origin", mergeCommit+":refs/heads/"+branch); err != nil {
 		t.Fatal(err)
 	}
-	result, err := pushCodeDeliveryRepository(repository, branch, "origin", branch, remoteCommit, mergeCommit, codePushPending)
+	result, err := pushCodeDeliveryRepository(repository, "origin", branch, mergeCommit, codePushPending)
 	if err != nil || result.Status != codePushPushed || result.Commit != mergeCommit {
 		t.Fatalf("remote success was not recovered: %#v, %v", result, err)
 	}
 }
 
 func TestPushCodeDeliveryRepositoryRejectsRemoteUpdate(t *testing.T) {
-	repository, remoteDir, remoteCommit, mergeCommit := prepareCodePushTestRepository(t)
+	repository, remoteDir, mergeCommit := prepareCodePushTestRepository(t)
 	branch, _ := runCodeGit(repository, "branch", "--show-current")
 	updater := cloneCodeRepository(t, remoteDir)
 	commitCodeTestFile(t, updater, "remote-change.txt", "remote\n")
 	if _, err := runCodeGit(updater, "push", "origin", "HEAD"); err != nil {
 		t.Fatal(err)
 	}
-	result, err := pushCodeDeliveryRepository(repository, branch, "origin", branch, remoteCommit, mergeCommit, codePushPending)
+	result, err := pushCodeDeliveryRepository(repository, "origin", branch, mergeCommit, codePushPending)
 	if err == nil || result.Status != codePushFailed || !strings.Contains(err.Error(), "远端分支已在交付后更新") {
 		t.Fatalf("remote update should be rejected: %#v, %v", result, err)
 	}
 }
 
-func TestPushCodeDeliveryRepositoryRejectsLaterLocalCommit(t *testing.T) {
-	repository, _, remoteCommit, mergeCommit := prepareCodePushTestRepository(t)
+func TestPushCodeDeliveryRepositoryAllowsIntegratedRemoteUpdate(t *testing.T) {
+	repository, remoteDir := createCodeRemoteRepository(t)
+	if _, err := prepareCodeRepository(repository); err != nil {
+		t.Fatal(err)
+	}
 	branch, _ := runCodeGit(repository, "branch", "--show-current")
-	commitCodeTestFile(t, repository, "later.txt", "later\n")
-	result, err := pushCodeDeliveryRepository(repository, branch, "origin", branch, remoteCommit, mergeCommit, codePushPending)
-	if err == nil || result.Status != codePushFailed || !strings.Contains(err.Error(), "交付后发生变化") {
-		t.Fatalf("later local commit should be rejected: %#v, %v", result, err)
+	updater := cloneCodeRepository(t, remoteDir)
+	remoteUpdate := commitCodeTestFile(t, updater, "remote-change.txt", "remote\n")
+	if _, err := runCodeGit(updater, "push", "origin", "HEAD"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(repository, "fetch", "origin"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(repository, "merge", "--ff-only", remoteUpdate); err != nil {
+		t.Fatal(err)
+	}
+	mergeCommit := commitCodeTestFile(t, repository, "delivery.txt", "delivery\n")
+	result, err := pushCodeDeliveryRepository(repository, "origin", branch, mergeCommit, codePushPending)
+	if err != nil || result.Status != codePushPushed {
+		t.Fatalf("integrated remote update should remain pushable: %#v, %v", result, err)
+	}
+	remoteHead, err := runCodeGit(remoteDir, "rev-parse", "refs/heads/"+branch)
+	if err != nil || remoteHead != mergeCommit {
+		t.Fatalf("remote commit = %q, want %q: %v", remoteHead, mergeCommit, err)
 	}
 }
 
-func TestPushCodeSessionDeliveryRejectsMultiRepositoryBypass(t *testing.T) {
-	database := withCodeGovernanceDB(t)
-	session := &model.AIDevSession{ID: 101, ProjectID: 1}
-	repositories := []model.AIDevSessionRepository{{
-		SessionID: session.ID, ProjectID: session.ProjectID, SourceDir: t.TempDir(), WorktreeDir: t.TempDir(),
-		LinkName: "repository", Branch: "work", TargetBranch: "main", BaseCommit: "base",
-		Status: codeDeliveryMerged, PushStatus: codePushPending,
-	}}
-	if err := database.Create(&repositories).Error; err != nil {
+// 交付之后本地又产生新提交，属于「下一次交付」的内容，不应该锁死本次交付。
+// 推送必须仍然推出本次交付提交本身，并且不把后续提交带到远端。
+func TestPushCodeDeliveryRepositoryPushesDeliveryCommitAfterLaterLocalCommit(t *testing.T) {
+	repository, remoteDir, mergeCommit := prepareCodePushTestRepository(t)
+	branch, _ := runCodeGit(repository, "branch", "--show-current")
+	laterCommit := commitCodeTestFile(t, repository, "later.txt", "later\n")
+	result, err := pushCodeDeliveryRepository(repository, "origin", branch, mergeCommit, codePushPending)
+	if err != nil || result.Status != codePushPushed || result.Commit != mergeCommit {
+		t.Fatalf("later local commit should not block delivery push: %#v, %v", result, err)
+	}
+	remoteHead, err := runCodeGit(remoteDir, "rev-parse", "refs/heads/"+branch)
+	if err != nil || remoteHead != mergeCommit {
+		t.Fatalf("remote commit = %q, want delivery commit %q: %v", remoteHead, mergeCommit, err)
+	}
+	if remoteHead == laterCommit {
+		t.Fatal("push must not carry the post-delivery commit to the remote")
+	}
+}
+
+// 本地主仓未能快进（工作区脏、分支被切走）时，交付提交仍在共享对象库中，推送必须照常可用。
+func TestPushCodeDeliveryRepositoryPushesWhenLocalBranchMovedAway(t *testing.T) {
+	repository, remoteDir, mergeCommit := prepareCodePushTestRepository(t)
+	branch, _ := runCodeGit(repository, "branch", "--show-current")
+	if _, err := runCodeGit(repository, "reset", "--hard", "HEAD~1"); err != nil {
 		t.Fatal(err)
 	}
+	result, err := pushCodeDeliveryRepository(repository, "origin", branch, mergeCommit, codePushPending)
+	if err != nil || result.Status != codePushPushed || result.Commit != mergeCommit {
+		t.Fatalf("delivery commit should stay pushable after local branch moved: %#v, %v", result, err)
+	}
+	remoteHead, err := runCodeGit(remoteDir, "rev-parse", "refs/heads/"+branch)
+	if err != nil || remoteHead != mergeCommit {
+		t.Fatalf("remote commit = %q, want %q: %v", remoteHead, mergeCommit, err)
+	}
+}
+
+func TestPushCodeSessionDeliveryPushesCompletedMultiRepository(t *testing.T) {
+	session, _ := createRemoteCodeMultiRepositorySession(t, 101)
+	repositories, err := loadCodeSessionRepositories(session.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index := range repositories {
+		commitCodeTestFile(t, repositories[index].WorktreeDir, "delivery.txt", repositories[index].LinkName+"\n")
+	}
+	result, err := resumeCodeMultiRepositoryDelivery(session, session.UserID)
+	if err != nil || result.ResultType != "local" {
+		t.Fatalf("local delivery failed: %#v, %v", result, err)
+	}
 	status, err := loadCodeDeliveryPushStatus(session)
-	if err != nil || status.Available || status.Status != "unavailable" || len(status.Repositories) != 0 {
+	if err != nil || !status.Available || status.Status != codePushPending || len(status.Repositories) != len(repositories) {
 		t.Fatalf("unexpected multi-repository push status: %#v, %v", status, err)
 	}
-	result, err := pushCodeSessionDelivery(session)
-	if !errors.Is(err, errCodeMultiRepositoryManualPush) || result.Available {
-		t.Fatalf("multi-repository push bypass was not rejected: %#v, %v", result, err)
+	pushResult, err := pushCodeSessionDelivery(session)
+	if err != nil || pushResult.Status != codePushPushed {
+		t.Fatalf("multi-repository push failed: %#v, %v", pushResult, err)
 	}
-	var stored model.AIDevSessionRepository
-	if err := database.First(&stored, repositories[0].ID).Error; err != nil || stored.PushStatus != codePushPending {
-		t.Fatalf("push bypass changed repository state: %#v, %v", stored, err)
+	pushStatus, err := loadCodeDeliveryPushStatus(session)
+	if err != nil || pushStatus.Status != codePushPushed {
+		t.Fatalf("multi-repository push was not completed: %#v, %v", pushStatus, err)
+	}
+	stored, err := loadCodeSessionRepositories(session.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index := range stored {
+		remoteHead, remoteErr := codeTestRemoteHead(t, stored[index].SourceDir)
+		if remoteErr != nil || remoteHead != stored[index].MergeCommit {
+			t.Fatalf("repository %s remote=%q want=%q: %v", stored[index].LinkName, remoteHead, stored[index].MergeCommit, remoteErr)
+		}
 	}
 }

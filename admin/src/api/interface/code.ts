@@ -9,6 +9,7 @@ export interface AIProject {
 	creatorId: number
 	primaryRepository?: string
 	deliveryBranch: string
+	deliveryMode: "direct" | "branch"
 	gitCredentialId: number
 	requireQualityGate: boolean
 	qualityChecks: CodeProjectQualityCheck[]

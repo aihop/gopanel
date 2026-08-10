@@ -1,0 +1,103 @@
+package api
+
+import (
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/aihop/gopanel/app/model"
+	"github.com/aihop/gopanel/global"
+)
+
+// 本地主仓是用户、项目终端和其它会话共享的工作区，交付流程无法独占它。
+// 交付的真相是「交付提交已经产出、可被推送」，把它快进到本地主仓只是顺带的便利。
+// 因此本地快进失败会被降级记录，既不让整次交付失败，也不阻断推送远端。
+
+func shortCodeCommit(commit string) string {
+	commit = strings.TrimSpace(commit)
+	if len(commit) > 12 {
+		return commit[:12]
+	}
+	return commit
+}
+
+// verifyCodeDeliveryCommitReachable 校验交付提交在仓库对象库中真实存在。
+// 集成 Worktree 与源仓共享对象库，因此这里通过后即可推送，无需本地分支指向它。
+func verifyCodeDeliveryCommitReachable(gitDir, commit, label string) error {
+	commit = strings.TrimSpace(commit)
+	if commit == "" {
+		return fmt.Errorf("%s尚未产出交付提交", label)
+	}
+	if _, err := runCodeGit(gitDir, "cat-file", "-e", commit+"^{commit}"); err != nil {
+		return fmt.Errorf("%s的交付提交 %s 在仓库对象库中不存在", label, shortCodeCommit(commit))
+	}
+	return nil
+}
+
+// codeDeliveryLocalSyncReason 归一化快进失败原因，只描述原因本身。
+// 补救命令由 codeDeliveryLocalSyncCommand 独立给出，避免把命令拼进文案后前端还要反解。
+func codeDeliveryLocalSyncReason(reason string) string {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		return "本地主仓未能自动快进"
+	}
+	return reason
+}
+
+// codeDeliveryLocalSyncCommand 给出可直接执行的手动同步命令。
+func codeDeliveryLocalSyncCommand(sourceDir, mergeCommit string) string {
+	sourceDir, mergeCommit = strings.TrimSpace(sourceDir), strings.TrimSpace(mergeCommit)
+	if sourceDir == "" || mergeCommit == "" {
+		return ""
+	}
+	return fmt.Sprintf("git -C %s merge --ff-only %s", sourceDir, mergeCommit)
+}
+
+func applyCodeDeliveryLocalSync(delivery *model.AICodeDelivery) error {
+	if err := verifyCodeDeliveryCommitReachable(delivery.SourceWorkDir, delivery.MergeCommit, "本次交付"); err != nil {
+		return err
+	}
+	if err := fastForwardCodeDeliverySource(delivery); err != nil {
+		return persistCodeDeliveryLocalSync(delivery, nil, codeDeliveryLocalSyncReason(err.Error()))
+	}
+	appliedAt := time.Now()
+	return persistCodeDeliveryLocalSync(delivery, &appliedAt, "")
+}
+
+func persistCodeDeliveryLocalSync(delivery *model.AICodeDelivery, appliedAt *time.Time, syncError string) error {
+	if err := global.DB.Model(delivery).Updates(map[string]any{
+		"source_applied_at": appliedAt, "local_sync_error": syncError,
+	}).Error; err != nil {
+		return err
+	}
+	delivery.SourceAppliedAt, delivery.LocalSyncError = appliedAt, syncError
+	return nil
+}
+
+func applyCodeRepositoryLocalSync(
+	repository *model.AIDevSessionRepository,
+	repositories []model.AIDevSessionRepository,
+) error {
+	label := "仓库 " + repository.LinkName
+	if err := verifyCodeDeliveryCommitReachable(repository.SourceDir, repository.MergeCommit, label); err != nil {
+		return err
+	}
+	if err := fastForwardCodeMultiRepositorySource(repository, repositories); err != nil {
+		return persistCodeRepositoryLocalSync(repository, nil, codeDeliveryLocalSyncReason(err.Error()))
+	}
+	return persistCodeRepositoryLocalSync(repository, repository.SourceAppliedAt, "")
+}
+
+func persistCodeRepositoryLocalSync(
+	repository *model.AIDevSessionRepository,
+	appliedAt *time.Time,
+	syncError string,
+) error {
+	if err := global.DB.Model(repository).Updates(map[string]any{
+		"source_applied_at": appliedAt, "local_sync_error": syncError,
+	}).Error; err != nil {
+		return err
+	}
+	repository.SourceAppliedAt, repository.LocalSyncError = appliedAt, syncError
+	return nil
+}

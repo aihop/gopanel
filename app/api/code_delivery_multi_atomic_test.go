@@ -11,7 +11,7 @@ import (
 	"github.com/aihop/gopanel/global"
 )
 
-func TestMultiRepositoryDeliveryQualityGateUsesFinalMergeCommit(t *testing.T) {
+func TestMultiRepositoryDeliveryDoesNotRunQualityChecks(t *testing.T) {
 	session, project, _ := createMultiRepositorySession(t, 940)
 	if err := global.DB.Model(project).Update("require_quality_gate", true).Error; err != nil {
 		t.Fatal(err)
@@ -32,7 +32,7 @@ func TestMultiRepositoryDeliveryQualityGateUsesFinalMergeCommit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sourceCommit := commitCodeTestFile(t, repository.SourceDir, "source-only.txt", "source\n")
+	commitCodeTestFile(t, repository.SourceDir, "source-only.txt", "source\n")
 	previousCoordinator := codeExecutions
 	codeExecutions = newCodeExecutionCoordinator(2)
 	t.Cleanup(func() { codeExecutions = previousCoordinator })
@@ -43,29 +43,15 @@ func TestMultiRepositoryDeliveryQualityGateUsesFinalMergeCommit(t *testing.T) {
 	if err := global.DB.First(job, job.ID).Error; err != nil {
 		t.Fatal(err)
 	}
-	if job.Status != codeDeliveryJobFailed || job.Stage != codeDeliveryStageQualityCheck || job.FailureCode != "quality_failed" {
-		t.Fatalf("unexpected quality job result: %#v", job)
+	if job.Status != codeDeliveryJobCompleted || job.Stage != codeDeliveryStageCompleted || job.FailureCode != "" {
+		t.Fatalf("quality check blocked multi-repository delivery: %#v", job)
 	}
-	stored, err := loadCodeSessionRepositories(session.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	storedRepository := codeTestRepositoryByID(t, stored, repository.ID)
-	observed, err := os.ReadFile(observation)
-	if err != nil || strings.TrimSpace(string(observed)) != storedRepository.MergeCommit ||
-		storedRepository.MergeCommit == storedRepository.WorktreeCommit {
-		t.Fatalf("quality checked %q, merge=%q snapshot=%q err=%v", observed, storedRepository.MergeCommit, storedRepository.WorktreeCommit, err)
-	}
-	if strings.Count(strings.TrimSpace(string(observed)), "\n") != 0 {
-		t.Fatalf("quality gate executed more than once: %q", observed)
-	}
-	currentSource, err := runCodeGit(repository.SourceDir, "rev-parse", "HEAD")
-	if err != nil || currentSource != sourceCommit {
-		t.Fatalf("quality failure changed source branch: got=%q want=%q err=%v", currentSource, sourceCommit, err)
+	if _, err := os.Stat(observation); !os.IsNotExist(err) {
+		t.Fatalf("Git delivery executed quality script: %v", err)
 	}
 }
 
-func TestGitlinkMultiRepositoryQualityGateReadsFinalChildTree(t *testing.T) {
+func TestGitlinkMultiRepositoryDeliveryUsesLocalChildTree(t *testing.T) {
 	session, parentSource, childSource := createCodeGitlinkDeliverySession(t, 941, true)
 	repositories, err := loadCodeSessionRepositories(session.ID)
 	if err != nil {
@@ -98,15 +84,18 @@ func TestGitlinkMultiRepositoryQualityGateReadsFinalChildTree(t *testing.T) {
 	}
 	parent = codeTestRepositoryBySource(t, stored, parentSource)
 	child = codeTestRepositoryBySource(t, stored, childSource)
-	if child.SourceCommit != childBefore || child.RemoteCommit != remoteCommit ||
+	if child.SourceCommit != childBefore || child.RemoteCommit == remoteCommit ||
 		child.IntegrationWorkDir != filepath.Join(parent.IntegrationWorkDir, "themes", "custom") {
 		t.Fatalf("unexpected nested integration metadata: parent=%#v child=%#v", parent, child)
 	}
-	for path, expected := range map[string]string{"delivery.txt": "child-final\n", "remote-only.txt": "remote\n"} {
+	for path, expected := range map[string]string{"delivery.txt": "child-final\n"} {
 		content, readErr := os.ReadFile(filepath.Join(parent.IntegrationWorkDir, "themes", "custom", path))
 		if readErr != nil || string(content) != expected {
 			t.Fatalf("final child tree %s = %q, %v", path, content, readErr)
 		}
+	}
+	if _, err := os.Stat(filepath.Join(parent.IntegrationWorkDir, "themes", "custom", "remote-only.txt")); !os.IsNotExist(err) {
+		t.Fatalf("local delivery unexpectedly included remote-only change: %v", err)
 	}
 	entry, err := runCodeGit(parent.IntegrationWorkDir, "ls-tree", parent.MergeCommit, "--", "themes/custom")
 	if err != nil || !strings.Contains(entry, child.MergeCommit) {
@@ -128,7 +117,7 @@ func TestGitlinkMultiRepositoryQualityGateReadsFinalChildTree(t *testing.T) {
 	}
 }
 
-func TestMultiRepositoryPublishRejectsAdvancedRemoteBeforeAnyMutation(t *testing.T) {
+func TestMultiRepositoryManualPushRejectsAdvancedRemoteBeforeAnyPush(t *testing.T) {
 	session, _ := createRemoteCodeMultiRepositorySession(t, 942)
 	repositories, err := loadCodeSessionRepositories(session.ID)
 	if err != nil {
@@ -151,10 +140,8 @@ func TestMultiRepositoryPublishRejectsAdvancedRemoteBeforeAnyMutation(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	sourceHeads := make(map[uint]string, len(prepared))
 	remoteHeads := make(map[uint]string, len(prepared))
 	for index := range prepared {
-		sourceHeads[prepared[index].ID], _ = runCodeGit(prepared[index].SourceDir, "rev-parse", "HEAD")
 		remoteHeads[prepared[index].ID] = prepared[index].RemoteCommit
 	}
 	advanced := &prepared[len(prepared)-1]
@@ -163,24 +150,27 @@ func TestMultiRepositoryPublishRejectsAdvancedRemoteBeforeAnyMutation(t *testing
 	if _, err := runCodeGit(updater, "push", "origin", "HEAD"); err != nil {
 		t.Fatal(err)
 	}
-	_, err = publishCodeMultiRepositoryDeliveryWithProgress(session, nil)
+	if _, err = publishCodeMultiRepositoryDeliveryWithProgress(session, nil); err != nil {
+		t.Fatalf("local delivery was blocked by remote advance: %v", err)
+	}
+	_, err = pushCodeSessionDelivery(session)
 	if !errors.Is(err, errCodePushRemoteAdvanced) {
-		t.Fatalf("remote advance should block publish: %v", err)
+		t.Fatalf("remote advance should block manual push: %v", err)
 	}
 	stored, err := loadCodeSessionRepositories(session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for index := range stored {
-		assertCodeTestSourceState(t, &stored[index], sourceHeads[stored[index].ID])
+		assertCodeTestSourceState(t, &stored[index], stored[index].MergeCommit)
 		if stored[index].ID != advanced.ID {
 			remoteHead, remoteErr := codeTestRemoteHead(t, stored[index].SourceDir)
 			if remoteErr != nil || remoteHead != remoteHeads[stored[index].ID] {
 				t.Fatalf("repository %s was pushed before full preflight: got=%q want=%q err=%v", stored[index].LinkName, remoteHead, remoteHeads[stored[index].ID], remoteErr)
 			}
 		}
-		if stored[index].Status == codeDeliveryCompleted || stored[index].PushedCommit != "" {
-			t.Fatalf("repository completed after failed preflight: %#v", stored[index])
+		if stored[index].Status != codeDeliveryCompleted || stored[index].PushedCommit != "" {
+			t.Fatalf("local delivery state changed after failed push preflight: %#v", stored[index])
 		}
 	}
 }

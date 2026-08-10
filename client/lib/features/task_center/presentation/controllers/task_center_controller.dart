@@ -46,13 +46,24 @@ class TaskCenterState {
   }
 
   List<TaskEntity> get visibleTasks {
-    final list = [...localTasks, ...tasks];
     if (attentionOnly) {
-      return list.where((task) => task.requiresAttention).toList();
+      return attentionTasks;
     }
+    final list = allTasks.where((task) => !task.attentionOnly).toList();
     if (filter == null) return list;
     return list.where((t) => t.status == filter).toList();
   }
+
+  List<TaskEntity> get allTasks {
+    final serverIds = tasks.map((task) => task.id).toSet();
+    return [
+      ...localTasks.where((task) => !serverIds.contains(task.id)),
+      ...tasks,
+    ];
+  }
+
+  List<TaskEntity> get attentionTasks =>
+      allTasks.where((task) => task.requiresAttention).toList();
 }
 
 final taskCenterControllerProvider =
@@ -99,6 +110,7 @@ class TaskCenterController extends Notifier<TaskCenterState> {
       error: error ?? old.error,
       meta: old.meta,
       attention: old.attention,
+      attentionOnly: old.attentionOnly,
     );
     final list = [...state.localTasks];
     list[idx] = next;
@@ -121,6 +133,14 @@ class TaskCenterController extends Notifier<TaskCenterState> {
     );
   }
 
+  void showAll() {
+    state = state.copyWith(
+      clearFilter: true,
+      attentionOnly: false,
+      errorMessage: null,
+    );
+  }
+
   void showAttentionOnly() {
     state = state.copyWith(
       clearFilter: true,
@@ -133,7 +153,15 @@ class TaskCenterController extends Notifier<TaskCenterState> {
     state = state.copyWith(isLoading: true, errorMessage: null);
     try {
       final list = await _repo.list();
-      state = state.copyWith(isLoading: false, tasks: list, errorMessage: null);
+      final serverIds = list.map((task) => task.id).toSet();
+      state = state.copyWith(
+        isLoading: false,
+        tasks: list,
+        localTasks: state.localTasks
+            .where((task) => !serverIds.contains(task.id))
+            .toList(),
+        errorMessage: null,
+      );
     } catch (e) {
       state = state.copyWith(isLoading: false, errorMessage: '无法加载任务: $e');
     }

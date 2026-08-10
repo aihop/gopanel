@@ -27,6 +27,7 @@ type AIDevSessionRepository struct {
 	MergeCommit        string     `gorm:"column:merge_commit;type:varchar(64)" json:"mergeCommit,omitempty"`
 	Status             string     `gorm:"column:status;type:varchar(32);not null;index" json:"status"`
 	ErrorMessage       string     `gorm:"column:error_message;type:text" json:"errorMessage,omitempty"`
+	LocalSyncError     string     `gorm:"column:local_sync_error;type:text" json:"localSyncError,omitempty"`
 	MergedAt           *time.Time `gorm:"column:merged_at" json:"mergedAt,omitempty"`
 	PublishStartedAt   *time.Time `gorm:"column:publish_started_at" json:"publishStartedAt,omitempty"`
 	SourceAppliedAt    *time.Time `gorm:"column:source_applied_at" json:"sourceAppliedAt,omitempty"`

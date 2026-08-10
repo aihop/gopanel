@@ -38,7 +38,8 @@ func captureCodeDeliverySnapshot(session *model.AIDevSession, userID uint) error
 		"source_work_dir": session.SourceWorkDir, "work_dir": session.WorkDir,
 		"worktree_branch": session.WorktreeBranch, "target_branch": targetBranch,
 		"base_commit": session.BaseCommit, "remote_name": session.RemoteName,
-		"remote_branch": session.RemoteBranch, "remote_commit": "", "worktree_commit": commit,
+		"remote_branch": session.RemoteBranch, "remote_commit": session.RemoteCommit,
+		"source_commit": "", "worktree_commit": commit,
 		"merge_commit": "", "error_message": "", "merged_at": nil, "completed_at": nil,
 		"push_status": codePushPending, "pushed_commit": "", "push_error": "", "pushed_at": nil,
 	}
@@ -51,7 +52,7 @@ func captureCodeDeliverySnapshot(session *model.AIDevSession, userID uint) error
 			WorkDir: session.WorkDir, WorktreeBranch: session.WorktreeBranch,
 			TargetBranch: targetBranch, BaseCommit: session.BaseCommit,
 			RemoteName: session.RemoteName, RemoteBranch: session.RemoteBranch,
-			WorktreeCommit: commit, PushStatus: codePushPending,
+			RemoteCommit: session.RemoteCommit, WorktreeCommit: commit, PushStatus: codePushPending,
 		}
 		return global.DB.Create(&delivery).Error
 	}
@@ -176,7 +177,7 @@ func captureCodeMultiRepositoryDeliverySnapshot(session *model.AIDevSession) err
 			repository := &repositories[index]
 			updates := map[string]any{
 				"status": repository.Status, "target_branch": repository.TargetBranch,
-				"remote_commit": "", "worktree_commit": repository.WorktreeCommit, "source_commit": "",
+				"worktree_commit": repository.WorktreeCommit, "source_commit": "",
 				"merge_commit": "", "error_message": "", "merged_at": nil, "publish_started_at": nil,
 				"source_applied_at": nil, "completed_at": nil,
 				"push_status": codePushPending, "pushed_commit": "", "push_error": "", "pushed_at": nil,

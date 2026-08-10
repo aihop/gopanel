@@ -69,6 +69,64 @@ func TestDetectCodeDeliveryQualityChecksUsesSessionFlutterToolchain(t *testing.T
 	}
 }
 
+func TestAutomaticCodeDeliveryQualityChecksSkipsBuild(t *testing.T) {
+	detected := []codeQualityCheck{
+		{Kind: "test", Command: "yarn test"},
+		{Kind: "build", Command: "yarn build"},
+	}
+	checks := automaticCodeDeliveryQualityChecks(detected)
+	if len(checks) != 1 || checks[0].Kind != "test" {
+		t.Fatalf("automatic delivery checks should exclude build: %#v", checks)
+	}
+}
+
+func TestDetectCodeDeliveryQualityChecksDoesNotAutoRunNodeBuild(t *testing.T) {
+	repository := createCodeGitRepository(t)
+	if err := os.WriteFile(filepath.Join(repository, "package.json"), []byte(`{"scripts":{"build":"nuxt build"}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	checks := detectCodeDeliveryQualityChecks(0, []codeDeliveryQualityRoot{{
+		WorkDir: repository, IdentityDir: repository, RuntimeDir: repository, Commit: "commit",
+	}})
+	if len(checks) != 0 {
+		t.Fatalf("detected Node build should not block Git delivery: %#v", checks)
+	}
+}
+
+func TestDetectCodeDeliveryQualityChecksKeepsConfiguredBuild(t *testing.T) {
+	database := withCodeGovernanceDB(t)
+	repository := createCodeGitRepository(t)
+	if err := os.WriteFile(filepath.Join(repository, "package.json"), []byte(`{"scripts":{"build":"true"}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	project := &model.AIProject{
+		ID: 151, Name: "explicit-build", CreatorID: 1,
+		QualityChecks: []model.AIProjectQualityCheck{{
+			Name: "Production build", Kind: "build", Repository: repository, WorkDir: ".", Command: "yarn build",
+		}},
+	}
+	if err := database.Create(project).Error; err != nil {
+		t.Fatal(err)
+	}
+	var stored model.AIProject
+	if err := database.First(&stored, project.ID).Error; err != nil || len(stored.QualityChecks) != 1 {
+		t.Fatalf("configured build was not stored: %#v, %v", stored, err)
+	}
+	direct := configuredCodeQualityChecks(stored.QualityChecks, []codeDeliveryQualityRoot{{
+		WorkDir: repository, IdentityDir: repository, RuntimeDir: repository, Commit: "commit",
+	}})
+	if len(direct) != 1 {
+		resolved, _ := filepath.EvalSymlinks(repository)
+		t.Fatalf("configured build did not map to root: repository=%q resolved=%q stored=%#v", repository, resolved, stored.QualityChecks)
+	}
+	checks := detectCodeDeliveryQualityChecks(project.ID, []codeDeliveryQualityRoot{{
+		WorkDir: repository, IdentityDir: repository, RuntimeDir: repository, Commit: "commit",
+	}})
+	if len(checks) != 1 || checks[0].Kind != "build" || checks[0].Label != "Production build" {
+		t.Fatalf("configured build was not kept: %#v", checks)
+	}
+}
+
 func TestPrepareCodeDeliveryQualityEnvironmentRestoresNodeModules(t *testing.T) {
 	sourceDir := createCodeGitRepository(t)
 	deliveryDir := createCodeGitRepository(t)
@@ -265,12 +323,8 @@ func TestRunCodeDeliveryQualityGateSkipsDisabledProject(t *testing.T) {
 	}
 }
 
-func TestCodeDeliveryQualityFailureKeepsSourceAndRemoteUnchanged(t *testing.T) {
+func TestCodeDeliveryDoesNotRunQualityChecks(t *testing.T) {
 	session := createQualityDeliverySession(t, 149, "false")
-	sourceCommit, err := runCodeGit(session.SourceWorkDir, "rev-parse", "HEAD")
-	if err != nil {
-		t.Fatal(err)
-	}
 	var job model.AICodeDeliveryJob
 	if err := global.DB.Where("session_id = ?", session.ID).First(&job).Error; err != nil {
 		t.Fatal(err)
@@ -283,21 +337,15 @@ func TestCodeDeliveryQualityFailureKeepsSourceAndRemoteUnchanged(t *testing.T) {
 	if err := global.DB.First(&job, job.ID).Error; err != nil {
 		t.Fatal(err)
 	}
-	if job.Status != codeDeliveryJobFailed || job.Stage != codeDeliveryStageQualityCheck || job.FailureCode != "quality_failed" {
-		t.Fatalf("unexpected failed delivery state: %#v", job)
+	if job.Status != codeDeliveryJobCompleted || job.Stage != codeDeliveryStageCompleted || job.FailureCode != "" {
+		t.Fatalf("quality check blocked Git delivery: %#v", job)
 	}
-	currentSourceCommit, err := runCodeGit(session.SourceWorkDir, "rev-parse", "HEAD")
-	if err != nil || currentSourceCommit != sourceCommit {
-		t.Fatalf("quality failure changed source branch: got=%q want=%q err=%v", currentSourceCommit, sourceCommit, err)
-	}
-	var delivery model.AICodeDelivery
-	if err := global.DB.Where("session_id = ?", session.ID).First(&delivery).Error; err != nil {
+	var qualityEvents int64
+	if err := global.DB.Model(&model.AITimelineEvent{}).
+		Where("session_id = ? AND event_type = ?", session.ID, "quality_check").Count(&qualityEvents).Error; err != nil {
 		t.Fatal(err)
 	}
-	if delivery.Status != codeDeliveryMerged || delivery.DeliveryWorkDir == "" {
-		t.Fatalf("delivery worktree was not preserved: %#v", delivery)
-	}
-	if _, err := os.Stat(filepath.Join(delivery.DeliveryWorkDir, "package.json")); err != nil {
-		t.Fatalf("merged delivery worktree unavailable after quality failure: %v", err)
+	if qualityEvents != 0 {
+		t.Fatalf("Git delivery ran %d quality checks", qualityEvents)
 	}
 }

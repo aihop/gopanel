@@ -145,7 +145,7 @@ func TestCodeMultiRepositoryDeliverySnapshotResetsChangedAndFailedRepositories(t
 			expectedCommit = changedHead
 		}
 		if stored[index].Status != codeDeliveryPrepared || stored[index].WorktreeCommit != expectedCommit ||
-			stored[index].RemoteCommit != "" || stored[index].MergeCommit != "" ||
+			stored[index].RemoteCommit != repositories[index].RemoteCommit || stored[index].MergeCommit != "" ||
 			stored[index].PushStatus != codePushPending || stored[index].PushedCommit != "" ||
 			stored[index].PushError != "" || stored[index].MergedAt != nil ||
 			stored[index].SourceAppliedAt != nil || stored[index].CompletedAt != nil || stored[index].PushedAt != nil {

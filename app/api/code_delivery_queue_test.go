@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -233,11 +234,21 @@ func TestCodeDeliveryRecoveryRestoresSessionLifecycle(t *testing.T) {
 func TestCodeMultiRepositoryResultType(t *testing.T) {
 	sourceAppliedAt := time.Now()
 	results := []codeRepositoryDeliveryResult{
-		{Status: codeDeliveryCompleted, PushStatus: codePushPushed, SourceAppliedAt: &sourceAppliedAt},
-		{Status: codeDeliveryMerged, PushStatus: "local"},
+		{Status: codeDeliveryCompleted, Commit: "aaa1", PushStatus: codePushPushed, SourceAppliedAt: &sourceAppliedAt},
+		{Status: codeDeliveryMerged, Commit: "bbb2", PushStatus: "local"},
 	}
 	if resultType := codeMultiRepositoryResultType(results); resultType != "remote_verified" {
 		t.Fatalf("isolated merge should not count as local delivery: %s", resultType)
+	}
+	// 交付提交已产出、本地主仓未同步、远端未推：交付本身成功，归类为 delivered。
+	degraded := []codeRepositoryDeliveryResult{{Status: codeDeliveryCompleted, Commit: "ccc3", PushStatus: codePushPending}}
+	if resultType := codeMultiRepositoryResultType(degraded); resultType != "delivered" {
+		t.Fatalf("degraded local sync should still count as delivered: %s", resultType)
+	}
+	// 本次没有变更的仓库不产出交付提交，不参与结果归类。
+	unchanged := []codeRepositoryDeliveryResult{{Status: codeDeliveryCompleted, PushStatus: codePushPending}}
+	if resultType := codeMultiRepositoryResultType(unchanged); resultType != "" {
+		t.Fatalf("repository without a delivery commit must not be classified: %s", resultType)
 	}
 	failed := codeMultiRepositoryFailure(results[1:], errors.New("quality failed"))
 	if failed.Status != codeDeliveryJobFailed || failed.ResultType != "" {
@@ -248,7 +259,7 @@ func TestCodeMultiRepositoryResultType(t *testing.T) {
 		t.Fatalf("unexpected partial result: %#v", partial)
 	}
 	mixed := append(results[:1], codeRepositoryDeliveryResult{
-		Status: codeDeliveryCompleted, PushStatus: "local", SourceAppliedAt: &sourceAppliedAt,
+		Status: codeDeliveryCompleted, Commit: "ddd4", PushStatus: "local", SourceAppliedAt: &sourceAppliedAt,
 	})
 	if resultType := codeMultiRepositoryResultType(mixed); resultType != "mixed" {
 		t.Fatalf("unexpected mixed delivery result: %s", resultType)
@@ -280,6 +291,30 @@ func TestCodeDeliveryClaimRecoversExpiredLease(t *testing.T) {
 	recovered, _, claimed, err := runner.claim(job.ID)
 	if err != nil || !claimed || recovered.LeaseOwner != runner.owner {
 		t.Fatalf("expired job was not recovered: %#v, %v, %v", recovered, claimed, err)
+	}
+}
+
+func TestCodeDeliveryPanicMarksClaimedJobFailed(t *testing.T) {
+	database := withCodeGovernanceDB(t)
+	session := &model.AIDevSession{ID: 915, UserID: 1, Status: codeSessionStatusDelivering, WorkDir: t.TempDir()}
+	if err := database.Create(session).Error; err != nil {
+		t.Fatal(err)
+	}
+	job := createCodeDeliveryQueueJob(t, session.ID, "repository-a")
+	runner := &codeDeliveryRunner{queued: make(map[uint]struct{}), owner: "panic-runner"}
+	claimedJob, _, claimed, err := runner.claim(job.ID)
+	if err != nil || !claimed {
+		t.Fatalf("claim failed: %#v, %v", claimedJob, err)
+	}
+	runner.finishRecoveredPanic(claimedJob, "test panic")
+	if err := database.First(job, job.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if job.Status != codeDeliveryJobFailed || job.LeaseOwner != "" || !strings.Contains(job.ErrorMessage, "test panic") {
+		t.Fatalf("panic did not finish job: %#v", job)
+	}
+	if err := database.First(session, session.ID).Error; err != nil || session.Status != codeSessionStatusActive {
+		t.Fatalf("panic did not reopen session: %#v, %v", session, err)
 	}
 }
 

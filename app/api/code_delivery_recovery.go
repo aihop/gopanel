@@ -67,16 +67,14 @@ func mergePreparedCodeDeliveryWithProgress(delivery *model.AICodeDelivery, repor
 	if targetBranch == "" {
 		targetBranch, _ = runCodeGit(snapshot.SourceWorkDir, "branch", "--show-current")
 	}
-	targetCommit, err := refreshCodeRepositoryTargetWithCredential(
-		snapshot.SourceWorkDir, targetBranch, snapshot.RemoteName, codeProjectGitCredentialID(snapshot.ProjectID),
-	)
+	targetCommit, err := codeLocalDeliveryTarget(snapshot.SourceWorkDir, targetBranch)
 	if err != nil {
 		return codeGitDeliveryResult{}, err
 	}
-	if err := global.DB.Model(delivery).Update("remote_commit", targetCommit).Error; err != nil {
+	if err := global.DB.Model(delivery).Update("source_commit", targetCommit).Error; err != nil {
 		return codeGitDeliveryResult{}, err
 	}
-	delivery.RemoteCommit = targetCommit
+	delivery.SourceCommit = targetCommit
 	if err := prepareCodeDeliveryMergeWorktree(delivery, targetCommit); err != nil {
 		return codeGitDeliveryResult{}, err
 	}
@@ -118,6 +116,21 @@ func mergePreparedCodeDeliveryWithProgress(delivery *model.AICodeDelivery, repor
 	}
 	delivery.Status, delivery.MergeCommit, delivery.MergedAt = codeDeliveryMerged, commit, &now
 	return codeGitDeliveryResult{Status: "merged", Commit: commit, Branch: snapshot.WorktreeBranch}, nil
+}
+
+// codeLocalDeliveryTarget 只读取交付基线 ref。
+// 合并在独立的交付 Worktree 中进行，不触碰本地主仓工作区，
+// 因此主仓有未提交变更或已切换到其它分支，都不影响本次交付。
+func codeLocalDeliveryTarget(sourceDir, targetBranch string) (string, error) {
+	targetBranch = strings.TrimSpace(targetBranch)
+	if targetBranch == "" {
+		return "", errors.New("本地主仓没有可用的交付目标分支")
+	}
+	commit, err := runCodeGit(sourceDir, "rev-parse", "refs/heads/"+targetBranch)
+	if err != nil {
+		return "", errors.New("本地主仓的交付目标分支 " + targetBranch + " 不可用")
+	}
+	return commit, nil
 }
 
 func mergeCodeDeliveryCommit(delivery *model.AICodeDelivery, commit, branch string) (*codeGitDeliveryResult, error) {
@@ -217,7 +230,7 @@ func resumeCodeSessionDeliveryWithProgress(session *model.AIDevSession, userID u
 	if err != nil {
 		return codeGitDeliveryResult{}, err
 	}
-	result, err := integrateAndPushCodeDeliveryWithProgress(delivery, report)
+	result, err := integrateCodeDeliveryLocallyWithProgress(delivery, report)
 	if err != nil || result.Status == "conflict" {
 		result.Repositories = []codeRepositoryDeliveryResult{codeSingleRepositoryDeliveryResult(delivery, result)}
 		return result, err
@@ -254,9 +267,13 @@ func codeSingleRepositoryDeliveryResult(delivery *model.AICodeDelivery, result c
 		RepositoryID: "session", RepositoryName: filepath.Base(delivery.SourceWorkDir), Status: result.Status,
 		Branch: delivery.WorktreeBranch, TargetBranch: delivery.TargetBranch, Remote: delivery.RemoteName,
 		RemoteBranch: deliveryRemoteBranch(delivery.RemoteBranch, delivery.TargetBranch), Commit: result.Commit,
-		SnapshotReady: strings.TrimSpace(delivery.WorktreeCommit) != "",
-		MergeReady:    strings.TrimSpace(delivery.MergeCommit) != "",
-		PushStatus:    pushStatus, PushedCommit: delivery.PushedCommit, ErrorMessage: delivery.PushError,
-		ConflictFiles: result.ConflictFiles,
+		SnapshotReady:   strings.TrimSpace(delivery.WorktreeCommit) != "",
+		MergeReady:      strings.TrimSpace(delivery.MergeCommit) != "",
+		SourceAppliedAt:  delivery.SourceAppliedAt,
+		LocalSynced:      delivery.SourceAppliedAt != nil,
+		LocalSyncError:   delivery.LocalSyncError,
+		LocalSyncCommand: codeDeliveryLocalSyncCommand(delivery.SourceWorkDir, delivery.MergeCommit),
+		PushStatus:       pushStatus, PushedCommit: delivery.PushedCommit, ErrorMessage: delivery.PushError,
+		ConflictFiles:    result.ConflictFiles,
 	}
 }

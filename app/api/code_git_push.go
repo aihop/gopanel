@@ -23,7 +23,7 @@ const (
 )
 
 var errCodePushRemoteAdvanced = errors.New("远端分支已在交付后更新，请先同步并重新交付")
-var errCodeMultiRepositoryManualPush = errors.New("多仓库会话不能单独推送，请通过统一交付重新执行质量检查并发布全部仓库")
+var errCodeDeliveryBranchAdvanced = errors.New("交付分支已被外部更新，请确认后重新交付")
 
 type codeRepositoryPushResult struct {
 	RepositoryID   string `json:"repositoryId"`
@@ -33,7 +33,11 @@ type codeRepositoryPushResult struct {
 	Branch         string `json:"branch,omitempty"`
 	Commit         string `json:"commit,omitempty"`
 	ErrorMessage   string `json:"errorMessage,omitempty"`
-	Ready          bool   `json:"ready"`
+	// 本地主仓是否已同步到交付提交。未同步不影响推送，仅用于提示用户手动同步。
+	LocalSynced      bool   `json:"localSynced"`
+	LocalSyncError   string `json:"localSyncError,omitempty"`
+	LocalSyncCommand string `json:"localSyncCommand,omitempty"`
+	Ready            bool   `json:"ready"`
 }
 
 type codePushResult struct {
@@ -93,7 +97,7 @@ func PushCodeSessionDelivery(c fiber.Ctx) error {
 
 func loadCodeDeliveryPushStatus(session *model.AIDevSession) (codePushResult, error) {
 	if hasCodeMultiRepositoryDelivery(session.ID) {
-		return codePushResult{Status: "unavailable", Repositories: []codeRepositoryPushResult{}}, nil
+		return loadCodeMultiRepositoryPushStatus(session)
 	}
 	var delivery model.AICodeDelivery
 	if err := global.DB.Where("session_id = ?", session.ID).First(&delivery).Error; err != nil {
@@ -105,9 +109,14 @@ func loadCodeDeliveryPushStatus(session *model.AIDevSession) (codePushResult, er
 	result := codeRepositoryPushResult{
 		RepositoryID: "session", RepositoryName: filepath.Base(delivery.SourceWorkDir),
 		Status: delivery.PushStatus, Remote: delivery.RemoteName,
-		Branch: deliveryRemoteBranch(delivery.RemoteBranch, delivery.TargetBranch),
+		Branch: codeDeliveryPushTarget(
+			codeProjectDeliveryMode(delivery.ProjectID),
+			delivery.SessionID, delivery.RemoteBranch, delivery.TargetBranch,
+		),
 		Commit: delivery.PushedCommit, ErrorMessage: delivery.PushError,
-		Ready: delivery.MergeCommit != "" && delivery.RemoteCommit != "",
+		LocalSynced: delivery.SourceAppliedAt != nil, LocalSyncError: delivery.LocalSyncError,
+		LocalSyncCommand: codeDeliveryLocalSyncCommand(delivery.SourceWorkDir, delivery.MergeCommit),
+		Ready:            strings.TrimSpace(delivery.MergeCommit) != "",
 	}
 	return summarizeCodePushResults([]codeRepositoryPushResult{result}), nil
 }
@@ -170,18 +179,23 @@ func summarizeCodePushResults(repositories []codeRepositoryPushResult) codePushR
 
 func pushCodeSessionDelivery(session *model.AIDevSession) (codePushResult, error) {
 	if hasCodeMultiRepositoryDelivery(session.ID) {
-		return codePushResult{}, errCodeMultiRepositoryManualPush
+		return pushCodeMultiRepositoryDelivery(session)
 	}
 	var delivery model.AICodeDelivery
 	if err := global.DB.Where("session_id = ?", session.ID).First(&delivery).Error; err != nil {
 		return codePushResult{}, errors.New("会话尚未完成本地合并交付")
 	}
-	result, err := pushCodeDeliveryRepositoryWithCredential(
-		delivery.SourceWorkDir, delivery.TargetBranch, delivery.RemoteName,
-		deliveryRemoteBranch(delivery.RemoteBranch, delivery.TargetBranch),
-		delivery.RemoteCommit, delivery.MergeCommit, delivery.PushStatus,
-		codeProjectGitCredentialID(delivery.ProjectID), nil,
-	)
+	mode := codeProjectDeliveryMode(delivery.ProjectID)
+	result, err := pushCodeDeliveryRepositoryWithCredential(codeDeliveryPushRequest{
+		SourceDir:  delivery.SourceWorkDir,
+		RemoteName: delivery.RemoteName,
+		RemoteBranch: codeDeliveryPushTarget(
+			mode, delivery.SessionID, delivery.RemoteBranch, delivery.TargetBranch,
+		),
+		MergeCommit: delivery.MergeCommit, PushStatus: delivery.PushStatus,
+		Isolated: codeDeliveryPushIsolated(mode), LastPushedCommit: delivery.PushedCommit,
+		CredentialID: codeProjectGitCredentialID(delivery.ProjectID),
+	}, nil)
 	result.RepositoryID, result.RepositoryName = "session", filepath.Base(delivery.SourceWorkDir)
 	updates := map[string]any{"push_status": result.Status, "push_error": result.ErrorMessage}
 	if result.Status == codePushPushed {
@@ -196,29 +210,42 @@ func pushCodeSessionDelivery(session *model.AIDevSession) (codePushResult, error
 	return summarizeCodePushResults([]codeRepositoryPushResult{result}), nil
 }
 
-func pushCodeDeliveryRepository(sourceDir, targetBranch, remoteName, remoteBranch, remoteCommit, mergeCommit, pushStatus string) (codeRepositoryPushResult, error) {
-	return pushCodeDeliveryRepositoryWithProgress(sourceDir, targetBranch, remoteName, remoteBranch, remoteCommit, mergeCommit, pushStatus, nil)
+// codeDeliveryPushRequest 描述一次单仓交付推送。
+// Isolated 为真时推送目标是本会话独占的交付分支：远端不存在属正常，
+// 且允许用 --force-with-lease 覆盖 LastPushedCommit（自己上次推的提交）。
+type codeDeliveryPushRequest struct {
+	SourceDir        string
+	RemoteName       string
+	RemoteBranch     string
+	MergeCommit      string
+	PushStatus       string
+	Isolated         bool
+	LastPushedCommit string
+	CredentialID     uint
 }
 
-func pushCodeDeliveryRepositoryWithProgress(sourceDir, targetBranch, remoteName, remoteBranch, remoteCommit, mergeCommit, pushStatus string, report codeDeliveryProgressReporter) (codeRepositoryPushResult, error) {
-	return pushCodeDeliveryRepositoryWithCredential(sourceDir, targetBranch, remoteName, remoteBranch, remoteCommit, mergeCommit, pushStatus, 0, report)
+func pushCodeDeliveryRepository(sourceDir, remoteName, remoteBranch, mergeCommit, pushStatus string) (codeRepositoryPushResult, error) {
+	return pushCodeDeliveryRepositoryWithCredential(codeDeliveryPushRequest{
+		SourceDir: sourceDir, RemoteName: remoteName, RemoteBranch: remoteBranch,
+		MergeCommit: mergeCommit, PushStatus: pushStatus,
+	}, nil)
 }
 
-func pushCodeDeliveryRepositoryWithCredential(sourceDir, targetBranch, remoteName, remoteBranch, remoteCommit, mergeCommit, pushStatus string, credentialID uint, report codeDeliveryProgressReporter) (codeRepositoryPushResult, error) {
+func pushCodeDeliveryRepositoryWithCredential(request codeDeliveryPushRequest, report codeDeliveryProgressReporter) (codeRepositoryPushResult, error) {
+	sourceDir, remoteName := request.SourceDir, request.RemoteName
+	remoteBranch, mergeCommit := request.RemoteBranch, request.MergeCommit
+	credentialID := request.CredentialID
 	result := codeRepositoryPushResult{Status: codePushPending, Remote: remoteName, Branch: remoteBranch, Commit: mergeCommit, Ready: mergeCommit != ""}
-	if pushStatus == codePushPushed {
+	if request.PushStatus == codePushPushed {
 		result.Status = codePushPushed
 		return result, nil
 	}
 	if remoteName == "" || remoteBranch == "" {
 		return failedCodePushResult(result, errors.New("仓库没有可用的远端跟踪分支"))
 	}
-	if mergeCommit == "" {
-		return failedCodePushResult(result, errors.New("仓库尚未完成本地合并交付"))
-	}
-	localCommit, err := runCodeGit(sourceDir, "rev-parse", "refs/heads/"+targetBranch)
-	if err != nil || localCommit != mergeCommit {
-		return failedCodePushResult(result, errors.New("目标分支已在交付后发生变化，请重新创建会话交付"))
+	// 推送的是交付提交本身（commit-ish），不要求本地目标分支已经指向它。
+	if err := verifyCodeDeliveryCommitReachable(sourceDir, mergeCommit, "本次交付"); err != nil {
+		return failedCodePushResult(result, err)
 	}
 	if _, err := fetchCodeRepositoryWithCredential(sourceDir, remoteName, credentialID); err != nil {
 		return failedCodePushResult(result, err)
@@ -229,18 +256,38 @@ func pushCodeDeliveryRepositoryWithCredential(sourceDir, targetBranch, remoteNam
 		result.Status = codePushPushed
 		return result, nil
 	}
-	if err != nil || currentRemoteCommit != remoteCommit {
+	forceLease := ""
+	switch {
+	case err != nil:
+		// 独占的会话交付分支首次推送时远端还不存在，这是正常的。
+		if !request.Isolated {
+			return failedCodePushResult(result, errCodePushRemoteAdvanced)
+		}
+	case codeRemoteCommitCanFastForward(sourceDir, currentRemoteCommit, mergeCommit):
+	case !request.Isolated:
 		return failedCodePushResult(result, errCodePushRemoteAdvanced)
+	case strings.TrimSpace(request.LastPushedCommit) != strings.TrimSpace(currentRemoteCommit):
+		return failedCodePushResult(result, errCodeDeliveryBranchAdvanced)
+	default:
+		forceLease = strings.TrimSpace(currentRemoteCommit)
 	}
-	if _, err := runCodeGitWithCredential(
-		sourceDir, codeGitFetchTimeout,
-		credentialID,
-		"-c", "credential.interactive=never", "push", "--", remoteName,
-		mergeCommit+":refs/heads/"+remoteBranch,
-	); err != nil {
+	args := []string{"-c", "credential.interactive=never", "push"}
+	if forceLease != "" {
+		args = append(args, "--force-with-lease=refs/heads/"+remoteBranch+":"+forceLease)
+	}
+	args = append(args, "--", remoteName, mergeCommit+":refs/heads/"+remoteBranch)
+	if _, err := runCodeGitWithCredential(sourceDir, codeGitFetchTimeout, credentialID, args...); err != nil {
 		pushErr := err
 		if _, fetchErr := fetchCodeRepositoryWithCredential(sourceDir, remoteName, credentialID); fetchErr == nil {
-			if latestRemoteCommit, resolveErr := runCodeGit(sourceDir, "rev-parse", remoteRef); resolveErr == nil && latestRemoteCommit != remoteCommit {
+			latestRemoteCommit, resolveErr := runCodeGit(sourceDir, "rev-parse", remoteRef)
+			// 推送命令报错但远端已经是交付提交：认定推送已生效，避免重复推送。
+			if resolveErr == nil && strings.TrimSpace(latestRemoteCommit) == mergeCommit {
+				result.Status, result.Commit = codePushPushed, mergeCommit
+				return result, nil
+			}
+			// 独占分支本来就允许覆盖，无法快进不构成「远端已推进」。
+			if resolveErr == nil && !request.Isolated &&
+				!codeRemoteCommitCanFastForward(sourceDir, latestRemoteCommit, mergeCommit) {
 				return failedCodePushResult(result, errCodePushRemoteAdvanced)
 			}
 		}
@@ -258,6 +305,15 @@ func pushCodeDeliveryRepositoryWithCredential(sourceDir, targetBranch, remoteNam
 	}
 	result.Status, result.Commit = codePushPushed, mergeCommit
 	return result, nil
+}
+
+func codeRemoteCommitCanFastForward(sourceDir, remoteCommit, mergeCommit string) bool {
+	remoteCommit, mergeCommit = strings.TrimSpace(remoteCommit), strings.TrimSpace(mergeCommit)
+	if remoteCommit == "" || mergeCommit == "" {
+		return false
+	}
+	_, err := runCodeGit(sourceDir, "merge-base", "--is-ancestor", remoteCommit, mergeCommit)
+	return err == nil
 }
 
 func failedCodePushResult(result codeRepositoryPushResult, err error) (codeRepositoryPushResult, error) {

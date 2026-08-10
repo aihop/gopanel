@@ -203,9 +203,9 @@ func inspectCodeProjectRepositorySync(spec codeProjectRepositorySpec) codeProjec
 	return result
 }
 
-func codeProjectHasActiveTerminal(project *model.AIProject) bool {
+func codeProjectHasActiveTerminal(project *model.AIProject) (bool, error) {
 	if global.DB == nil {
-		return true
+		return false, errors.New("数据库尚未初始化，无法检查项目终端状态")
 	}
 	paths := append([]string(nil), codeProjectSourceDirs(project)...)
 	if strings.TrimSpace(project.WorkDir) != "" {
@@ -213,12 +213,12 @@ func codeProjectHasActiveTerminal(project *model.AIProject) bool {
 	}
 	var terminals []model.HostTerminalSession
 	if err := global.DB.Where("status IN ?", []string{"starting", "running"}).Find(&terminals).Error; err != nil {
-		return true
+		return false, fmt.Errorf("检查项目终端状态失败：%w", err)
 	}
 	for _, terminal := range terminals {
 		if hostTerminals.get(terminal.ID) == nil {
 			if hostTerminalHandoverPending(&terminal, time.Now()) {
-				return true
+				return true, nil
 			}
 			markHostTerminalInterrupted(&terminal)
 			continue
@@ -227,16 +227,16 @@ func codeProjectHasActiveTerminal(project *model.AIProject) bool {
 		for _, projectPath := range paths {
 			projectPath = filepath.Clean(projectPath)
 			if terminalPath == projectPath || isPathInside(terminalPath, projectPath) || isPathInside(projectPath, terminalPath) {
-				return true
+				return true, nil
 			}
 		}
 	}
-	return false
+	return false, nil
 }
 
 func createCodeSessionWorktreeWithLease(session *model.AIDevSession, project *model.AIProject, includeUncommitted bool) error {
-	if !beginCodeRepositoryOperation(project) {
-		return errors.New("项目主仓正在被项目终端使用，请关闭终端后再创建会话")
+	if err := beginCodeRepositoryOperation(project); err != nil {
+		return err
 	}
 	defer endCodeRepositoryOperation(project)
 	sourceDirs := codeProjectSourceDirs(project)
@@ -277,7 +277,11 @@ func inspectCodeProjectSyncIgnoringOwner(project *model.AIProject, ignoredOwner 
 		return codeProjectSyncStatus{}, err
 	}
 	result := codeProjectSyncStatus{ProjectID: project.ID, Status: "synced", Repositories: make([]codeProjectRepositorySync, 0, len(specs))}
-	if codeProjectHasActiveTerminal(project) {
+	hasActiveTerminal, err := codeProjectHasActiveTerminal(project)
+	if err != nil {
+		return codeProjectSyncStatus{}, err
+	}
+	if hasActiveTerminal {
 		result.Status = "blocked"
 		for _, spec := range specs {
 			repository := inspectCodeProjectRepositorySync(spec)
@@ -327,8 +331,11 @@ func codeProjectRepositoriesBusy(keys []string, ignoredOwner string) bool {
 }
 
 func syncCodeProject(project *model.AIProject, automatic bool) (codeProjectSyncStatus, error) {
-	if !beginCodeRepositoryOperation(project) {
-		return inspectCodeProjectSync(project)
+	if err := beginCodeRepositoryOperation(project); err != nil {
+		if errors.Is(err, errCodeProjectActiveTerminal) {
+			return inspectCodeProjectSync(project)
+		}
+		return codeProjectSyncStatus{}, err
 	}
 	defer endCodeRepositoryOperation(project)
 	specs, err := codeProjectRepositorySpecs(project)

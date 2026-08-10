@@ -22,13 +22,16 @@ class _CodeHubScreenState extends ConsumerState<CodeHubScreen> {
     await ref.read(aiWorkspaceControllerProvider.notifier).loadWorkspace();
   }
 
-  void _openSessionCreator() {
-    showModalBottomSheet<void>(
+  Future<void> _openSessionCreator() async {
+    final session = await showModalBottomSheet<AiDevSession>(
       context: context,
       isScrollControlled: true,
       showDragHandle: false,
       builder: (_) => const CodeSessionSheet(),
     );
+    if (!mounted || session == null) return;
+    await _openSession(session);
+    if (mounted) await _refresh();
   }
 
   Future<void> _openProjectTerminal() async {
@@ -87,15 +90,49 @@ class _CodeHubScreenState extends ConsumerState<CodeHubScreen> {
             CodeHubHero(
               sessionCount: workspace.sessions.length,
               activeCount: workspace.sessions.where(_isActive).length,
-              onCreate: _openSessionCreator,
+              onCreate: () {
+                _openSessionCreator();
+              },
             ),
             const SizedBox(height: 16),
+            if (workspace.projects.isNotEmpty) ...[
+              DropdownButtonFormField<int>(
+                key: ValueKey(workspace.selectedProjectId),
+                initialValue: workspace.selectedProjectId,
+                decoration: InputDecoration(
+                  labelText: CodeWorkspaceText.t(context, 'hub.project'),
+                  prefixIcon: const Icon(Icons.folder_outlined),
+                ),
+                items: workspace.projects
+                    .map(
+                      (project) => DropdownMenuItem(
+                        value: project.id,
+                        child: Text(
+                          project.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    )
+                    .toList(),
+                onChanged: workspace.isLoading
+                    ? null
+                    : (projectId) {
+                        if (projectId != null) {
+                          ref
+                              .read(aiWorkspaceControllerProvider.notifier)
+                              .selectProject(projectId);
+                        }
+                      },
+              ),
+              const SizedBox(height: 16),
+            ],
             CodeProjectTerminalCard(onTap: _openProjectTerminal),
             const SizedBox(height: 28),
             Row(
               children: [
                 Text(
-                  CodeWorkspaceText.t(context, 'hub.sessions'),
+                  CodeWorkspaceText.t(context, 'hub.projectTasks'),
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w800,
                   ),
@@ -140,10 +177,12 @@ class _CodeHubScreenState extends ConsumerState<CodeHubScreen> {
       return [
         CodeHubEmptyCard(
           icon: Icons.terminal_rounded,
-          title: '还没有开发会话',
-          description: '创建会话后，可以在手机上查看执行过程、发送指令并处理审批。',
-          actionLabel: '创建会话',
-          onAction: _openSessionCreator,
+          title: CodeWorkspaceText.t(context, 'hub.noProjectTasks'),
+          description: CodeWorkspaceText.t(context, 'hub.noProjectTasksHint'),
+          actionLabel: CodeWorkspaceText.t(context, 'hub.create'),
+          onAction: () {
+            _openSessionCreator();
+          },
         ),
       ];
     }

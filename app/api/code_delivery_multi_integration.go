@@ -225,9 +225,7 @@ func ensureCodeRepositoryIntegrationWorktree(
 		if repository.Status == codeDeliveryCompleted {
 			baseCommit = effectiveCodeRepositoryCommit(repository)
 		} else {
-			baseCommit, err = codeRepositoryIntegrationBaseCommit(
-				repository.SourceDir, repository.SourceCommit, repository.RemoteCommit,
-			)
+			baseCommit, err = codeRepositoryIntegrationBaseCommit(repository.SourceCommit)
 		}
 		if err != nil || strings.TrimSpace(baseCommit) == "" {
 			return errors.New("仓库集成交付基线不可用")
@@ -299,9 +297,7 @@ func resetCodeRepositoryIntegrationWorktree(
 	if err := ensureCodeRepositoryIntegrationWorktree(session, repository, repositories); err != nil {
 		return err
 	}
-	baseCommit, err := codeRepositoryIntegrationBaseCommit(
-		repository.SourceDir, repository.SourceCommit, repository.RemoteCommit,
-	)
+	baseCommit, err := codeRepositoryIntegrationBaseCommit(repository.SourceCommit)
 	if err != nil {
 		return err
 	}

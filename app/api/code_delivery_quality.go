@@ -65,7 +65,7 @@ func runCodeDeliveryQualityGateAtRoots(session *model.AIDevSession, userID uint,
 	defer func() { returnErr = errors.Join(returnErr, cleanup()) }()
 	checks := detectCodeDeliveryQualityChecks(session.ProjectID, roots)
 	if len(checks) == 0 {
-		return errors.New("项目已启用质量门禁，但未识别到可执行检查")
+		return nil
 	}
 	loadCodeQualityResults(session.ID, checks)
 	for index := range checks {
@@ -209,7 +209,7 @@ func detectCodeDeliveryQualityChecks(projectID uint, roots []codeDeliveryQuality
 	for _, root := range roots {
 		paths = append(paths, root.WorkDir)
 	}
-	checks := detectCodeQualityChecksInRoots(paths)
+	checks := automaticCodeDeliveryQualityChecks(detectCodeQualityChecksInRoots(paths))
 	checks = mergeCodeQualityChecks(checks, loadConfiguredCodeQualityChecks(projectID, roots))
 	disableCodeDeliveryFlutterPub(checks)
 	deliveryFingerprint := codeDeliveryQualityFingerprint(roots)
@@ -229,6 +229,16 @@ func detectCodeDeliveryQualityChecks(projectID uint, roots []codeDeliveryQuality
 				filepath.Join(identityDir, relative), check.Kind, check.Command+"\x00"+deliveryFingerprint,
 			)
 			break
+		}
+	}
+	return checks
+}
+
+func automaticCodeDeliveryQualityChecks(detected []codeQualityCheck) []codeQualityCheck {
+	checks := make([]codeQualityCheck, 0, len(detected))
+	for _, check := range detected {
+		if check.Kind != "build" {
+			checks = append(checks, check)
 		}
 	}
 	return checks

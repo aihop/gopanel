@@ -10,7 +10,8 @@ import (
 func TestCodeManagedDeliveryPromptOnlyAppliesToIsolatedSessions(t *testing.T) {
 	prompt := "实现功能"
 	isolated := codeManagedDeliveryPrompt(&model.AIDevSession{WorktreeBranch: "gopanel/code-1"}, prompt)
-	if !strings.Contains(isolated, prompt) || !strings.Contains(isolated, "不要执行 git push") || !strings.Contains(isolated, "合并到本地项目目录") {
+	if !strings.Contains(isolated, prompt) || !strings.Contains(isolated, "不要执行 git push") ||
+		!strings.Contains(isolated, "安全合并到本地目标分支") || !strings.Contains(isolated, "单独执行“推送远端”") {
 		t.Fatalf("managed delivery instruction unavailable: %q", isolated)
 	}
 	if plain := codeManagedDeliveryPrompt(&model.AIDevSession{}, prompt); plain != prompt {
