@@ -29,7 +29,9 @@ type codeGitDeliveryResult struct {
 	Repositories   []codeRepositoryDeliveryResult `json:"repositories,omitempty"`
 }
 
-const codeDeliveryQueueTimeout = 2 * time.Minute
+// codeDeliveryQueueTimeout 是交付等待会话工作区独占权的上限。
+// 用变量而非常量，测试可以把它调小来验证超时路径。
+var codeDeliveryQueueTimeout = 2 * time.Minute
 
 func validateCodeGitCommitMessage(message string) (string, error) {
 	message = strings.TrimSpace(message)

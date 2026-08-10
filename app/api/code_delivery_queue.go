@@ -35,33 +35,13 @@ const (
 	codeDeliveryLeaseDuration = 45 * time.Second
 )
 
-type codeDeliveryProgressReporter func(stage string, progress int)
+// errCodeDeliveryWorkspaceBusy 表示交付等不到会话工作区的独占权，
+// 通常是同一会话里还有正在运行的 AI 执行或交互终端。
+var errCodeDeliveryWorkspaceBusy = errors.New(
+	"会话仍有正在运行的 AI 执行或终端，交付无法独占工作区；请先停止会话中的执行再重试交付",
+)
 
-type codeDeliveryJobView struct {
-	ID                    uint                           `json:"id"`
-	SessionID             uint                           `json:"sessionId"`
-	TaskID                uint                           `json:"taskId,omitempty"`
-	Status                string                         `json:"status"`
-	Stage                 string                         `json:"stage"`
-	Progress              int                            `json:"progress"`
-	Attempt               int                            `json:"attempt"`
-	QueuePosition         int                            `json:"queuePosition"`
-	TargetBranch          string                         `json:"targetBranch,omitempty"`
-	ResultCommit          string                         `json:"resultCommit,omitempty"`
-	ResultType            string                         `json:"resultType,omitempty"`
-	FailureCode           string                         `json:"failureCode,omitempty"`
-	HasPendingChanges     bool                           `json:"hasPendingChanges"`
-	HasPendingCommits     bool                           `json:"hasPendingCommits"`
-	HasUncommittedChanges bool                           `json:"hasUncommittedChanges"`
-	Repositories          []codeRepositoryDeliveryResult `json:"repositories,omitempty"`
-	Facts                 []codeDeliveryFact             `json:"facts,omitempty"`
-	ErrorMessage          string                         `json:"errorMessage,omitempty"`
-	ConflictFiles         []string                       `json:"conflictFiles"`
-	CreatedAt             time.Time                      `json:"createdAt"`
-	UpdatedAt             time.Time                      `json:"updatedAt"`
-	StartedAt             *time.Time                     `json:"startedAt,omitempty"`
-	CompletedAt           *time.Time                     `json:"completedAt,omitempty"`
-}
+type codeDeliveryProgressReporter func(stage string, progress int)
 
 type codeDeliveryRunner struct {
 	mu        sync.Mutex
@@ -341,6 +321,9 @@ func cleanupFinalizedCodeSessionWorktrees(sessionID uint) {
 }
 
 func codeDeliveryFailureCode(stage string, err error) string {
+	if errors.Is(err, errCodeDeliveryWorkspaceBusy) {
+		return "workspace_busy"
+	}
 	if errors.Is(err, errCodeGitAuthentication) {
 		return "authentication_failed"
 	}
@@ -422,8 +405,16 @@ func (runner *codeDeliveryRunner) run(jobID uint) {
 		runner.finish(job, codeGitDeliveryResult{}, err)
 		return
 	}
-	lease, err := codeExecutions.acquireSession(ctx, &session, codeExecutionDelivery, true)
+	// 交付要独占会话工作区，而同一会话里的交互式 AI 执行/终端会一直占着它。
+	// 这里必须有超时：否则作业会停在 5% 无限等待，界面上既不失败也不前进，
+	// 用户看不出是被自己的会话挡住了。
+	acquireCtx, cancelAcquire := context.WithTimeout(ctx, codeDeliveryQueueTimeout)
+	lease, err := codeExecutions.acquireSession(acquireCtx, &session, codeExecutionDelivery, true)
+	cancelAcquire()
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			err = errCodeDeliveryWorkspaceBusy
+		}
 		runner.finish(job, codeGitDeliveryResult{}, err)
 		return
 	}
@@ -459,39 +450,4 @@ func (runner *codeDeliveryRunner) finishRecoveredPanic(job *model.AICodeDelivery
 		}
 	}()
 	runner.finish(job, codeGitDeliveryResult{}, panicErr)
-}
-
-func loadCodeDeliveryJobView(sessionID uint) (*codeDeliveryJobView, error) {
-	var job model.AICodeDeliveryJob
-	if err := global.DB.Where("session_id = ?", sessionID).First(&job).Error; err != nil {
-		return nil, err
-	}
-	var conflicts []string
-	_ = json.Unmarshal([]byte(job.ConflictFiles), &conflicts)
-	var repositories []codeRepositoryDeliveryResult
-	_ = json.Unmarshal([]byte(job.RepositoryResults), &repositories)
-	position := 0
-	if job.Status == codeDeliveryJobQueued {
-		var count int64
-		_ = global.DB.Model(&model.AICodeDeliveryJob{}).Where(
-			"status IN ? AND (created_at < ? OR (created_at = ? AND id < ?))",
-			[]string{codeDeliveryJobQueued, codeDeliveryJobRunning}, job.CreatedAt, job.CreatedAt, job.ID,
-		).Count(&count).Error
-		position = int(count) + 1
-	}
-	pending := codeSessionPostSnapshotStatus{}
-	if job.Status == codeDeliveryJobCompleted {
-		pending = inspectCodeSessionPostSnapshotStatus(global.DB, sessionID)
-	}
-	return &codeDeliveryJobView{
-		ID: job.ID, SessionID: job.SessionID, TaskID: job.TaskID, Status: job.Status, Stage: job.Stage, Progress: job.Progress,
-		Attempt: job.Attempt, QueuePosition: position, TargetBranch: job.TargetBranch, ResultCommit: job.ResultCommit,
-		ResultType: job.ResultType, FailureCode: job.FailureCode,
-		HasPendingChanges: pending.HasChanges, HasPendingCommits: pending.HasCommits,
-		HasUncommittedChanges: pending.HasUncommittedChanges,
-		Repositories:          repositories,
-		Facts:                 loadCodeDeliveryFacts(sessionID, repositories),
-		ErrorMessage:          job.ErrorMessage, ConflictFiles: conflicts, CreatedAt: job.CreatedAt, UpdatedAt: job.UpdatedAt,
-		StartedAt: job.StartedAt, CompletedAt: job.CompletedAt,
-	}, nil
 }
