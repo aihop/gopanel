@@ -251,7 +251,7 @@ func runCodeGitCommand(workDir string, timeout time.Duration, credentialID uint,
 	if credentialID > 0 {
 		commandArgs = append(commandArgs, "-c", "credential.helper=")
 	}
-	commandArgs = append(commandArgs, args...)
+	commandArgs = append(commandArgs, codeGitCredentialCommandArgs(credentialID, args)...)
 	command := exec.CommandContext(ctx, "git", commandArgs...)
 	env, cleanup, err := codeGitCredentialEnvironment(credentialID, codeGitEnvironment())
 	if err != nil {
@@ -271,6 +271,21 @@ func runCodeGitCommand(workDir string, timeout time.Duration, credentialID uint,
 		return "", fmt.Errorf("Git 操作失败：%w", normalizeCodeGitCommandError(message))
 	}
 	return strings.TrimSpace(string(output)), nil
+}
+
+func codeGitCredentialCommandArgs(credentialID uint, args []string) []string {
+	if credentialID == 0 {
+		return args
+	}
+	filtered := make([]string, 0, len(args))
+	for index := 0; index < len(args); index++ {
+		if index+1 < len(args) && args[index] == "-c" && args[index+1] == "credential.interactive=never" {
+			index++
+			continue
+		}
+		filtered = append(filtered, args[index])
+	}
+	return filtered
 }
 
 func codeGitEnvironment() []string {

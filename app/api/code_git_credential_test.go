@@ -57,6 +57,17 @@ func TestCodeGitCredentialEnvironmentUsesEncryptedTemporaryAskPass(t *testing.T)
 	}
 }
 
+func TestCodeGitCredentialCommandArgsAllowsManagedAskPass(t *testing.T) {
+	args := []string{"-c", "credential.interactive=never", "fetch", "--prune", "--", "origin"}
+	managed := codeGitCredentialCommandArgs(2, args)
+	if strings.Contains(strings.Join(managed, " "), "credential.interactive=never") {
+		t.Fatalf("managed credential args still disable AskPass: %v", managed)
+	}
+	if unmanaged := codeGitCredentialCommandArgs(0, args); !strings.Contains(strings.Join(unmanaged, " "), "credential.interactive=never") {
+		t.Fatalf("unmanaged credential args lost non-interactive guard: %v", unmanaged)
+	}
+}
+
 func TestCodeDeliveryFailureCodeClassifiesRemoteFailures(t *testing.T) {
 	for _, test := range []struct {
 		err  error
