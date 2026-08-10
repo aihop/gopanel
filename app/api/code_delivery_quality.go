@@ -182,6 +182,7 @@ func detectCodeDeliveryQualityChecks(projectID uint, roots []codeDeliveryQuality
 	}
 	checks := detectCodeQualityChecksInRoots(paths)
 	checks = mergeCodeQualityChecks(checks, loadConfiguredCodeQualityChecks(projectID, roots))
+	disableCodeDeliveryFlutterPub(checks)
 	deliveryFingerprint := codeDeliveryQualityFingerprint(roots)
 	for index := range checks {
 		check := &checks[index]
@@ -202,6 +203,20 @@ func detectCodeDeliveryQualityChecks(projectID uint, roots []codeDeliveryQuality
 		}
 	}
 	return checks
+}
+
+func disableCodeDeliveryFlutterPub(checks []codeQualityCheck) {
+	for index := range checks {
+		check := &checks[index]
+		if filepath.Base(check.Executable) != "flutter" || check.LocalScript || len(check.Args) == 0 {
+			continue
+		}
+		if check.Args[0] != "analyze" && check.Args[0] != "test" {
+			continue
+		}
+		check.Args = append(check.Args, "--no-pub")
+		check.Command += " --no-pub"
+	}
 }
 
 func codeDeliveryQualityFingerprint(roots []codeDeliveryQualityRoot) string {
