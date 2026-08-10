@@ -1,0 +1,193 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gopanel.cn/contracts/ai-task-v1.schema.json",
+  "title": "GoPanel AI Task Contract v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "title",
+    "problem",
+    "expectedOutcome",
+    "constraints",
+    "repositories",
+    "risks",
+    "acceptanceCriteria",
+    "verification",
+    "mobileSummary"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,63}$" },
+    "title": { "$ref": "#/$defs/nonEmptyString" },
+    "problem": { "$ref": "#/$defs/nonEmptyString" },
+    "expectedOutcome": { "$ref": "#/$defs/nonEmptyString" },
+    "constraints": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/nonEmptyString" },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "contractReferences": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/contractReference" },
+      "uniqueItems": true
+    },
+    "repositories": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/repository" },
+      "minItems": 1
+    },
+    "risks": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/risk" }
+    },
+    "acceptanceCriteria": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/acceptanceCriterion" },
+      "minItems": 1
+    },
+    "verification": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/verification" },
+      "minItems": 1,
+      "contains": {
+        "type": "object",
+        "required": ["required"],
+        "properties": {
+          "required": { "const": true }
+        }
+      }
+    },
+    "mobileSummary": { "$ref": "#/$defs/mobileSummary" }
+  },
+  "$defs": {
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{1,63}$"
+    },
+    "stringList": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/nonEmptyString" },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "scopeList": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/nonEmptyString" },
+      "uniqueItems": true
+    },
+    "contractReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "path", "purpose"],
+      "properties": {
+        "repository": { "$ref": "#/$defs/identifier" },
+        "path": { "$ref": "#/$defs/nonEmptyString" },
+        "purpose": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    },
+    "repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "path", "role", "dependsOn", "readScope", "writeScope"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "path": { "$ref": "#/$defs/nonEmptyString" },
+        "role": { "enum": ["primary", "supporting", "external"] },
+        "dependsOn": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/identifier" },
+          "uniqueItems": true
+        },
+        "readScope": { "$ref": "#/$defs/stringList" },
+        "writeScope": { "$ref": "#/$defs/scopeList" }
+      }
+    },
+    "risk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "level", "description", "actions", "approvalRequired"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "level": { "enum": ["low", "medium", "high", "critical"] },
+        "description": { "$ref": "#/$defs/nonEmptyString" },
+        "actions": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "filesystem_write",
+              "remote_execution",
+              "git_commit",
+              "git_push",
+              "merge",
+              "deploy",
+              "database_write",
+              "credential_use",
+              "destructive"
+            ]
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "approvalRequired": { "type": "boolean" }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "reference"],
+      "properties": {
+        "type": {
+          "enum": ["quality_check", "test", "api_response", "preview", "audit", "manual"]
+        },
+        "reference": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    },
+    "acceptanceCriterion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "description", "evidence"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "description": { "$ref": "#/$defs/nonEmptyString" },
+        "evidence": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/evidence" },
+          "minItems": 1
+        }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "repository", "kind", "required"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "repository": { "$ref": "#/$defs/identifier" },
+        "kind": { "enum": ["quality_check", "command", "preview", "manual"] },
+        "qualityCheck": { "$ref": "#/$defs/nonEmptyString" },
+        "command": { "$ref": "#/$defs/nonEmptyString" },
+        "workDir": { "$ref": "#/$defs/nonEmptyString" },
+        "instruction": { "$ref": "#/$defs/nonEmptyString" },
+        "required": { "type": "boolean" }
+      }
+    },
+    "mobileSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goal", "success", "attention"],
+      "properties": {
+        "goal": { "$ref": "#/$defs/nonEmptyString" },
+        "success": { "$ref": "#/$defs/nonEmptyString" },
+        "attention": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    }
+  }
+}
