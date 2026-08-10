@@ -36,10 +36,17 @@ func prepareCodeDeliveryQualityEnvironment(roots []codeDeliveryQualityRoot) (fun
 }
 
 func linkCodeDeliveryNodeModules(root codeDeliveryQualityRoot) (func() error, error) {
-	return linkFirstCodeDeliveryDependency(root, "node_modules", ".gopanel-quality-node_modules-*")
+	return linkCodeDeliveryManifestDependencies(root, "package.json", "node_modules", ".gopanel-quality-node_modules-*")
 }
 
 func linkCodeDeliveryDartTools(root codeDeliveryQualityRoot) (func() error, error) {
+	return linkCodeDeliveryManifestDependencies(root, "pubspec.yaml", ".dart_tool", ".gopanel-quality-dart_tool-*")
+}
+
+func linkCodeDeliveryManifestDependencies(
+	root codeDeliveryQualityRoot,
+	manifestName, dependencyName, temporaryPattern string,
+) (func() error, error) {
 	if strings.TrimSpace(root.WorkDir) == "" {
 		return nil, nil
 	}
@@ -55,18 +62,18 @@ func linkCodeDeliveryDartTools(root codeDeliveryQualityRoot) (func() error, erro
 		if walkErr != nil {
 			return walkErr
 		}
-		if entry.IsDir() && current != root.WorkDir && ignoredCodeDeliveryDartDirectory(entry.Name()) {
+		if entry.IsDir() && current != root.WorkDir && ignoredCodeDeliveryDependencyDirectory(entry.Name()) {
 			return filepath.SkipDir
 		}
-		if entry.IsDir() || entry.Name() != "pubspec.yaml" {
+		if entry.IsDir() || entry.Name() != manifestName {
 			return nil
 		}
 		packageDir, relativeErr := filepath.Rel(root.WorkDir, filepath.Dir(current))
 		if relativeErr != nil {
 			return relativeErr
 		}
-		relativeDartTool := filepath.Join(packageDir, ".dart_tool")
-		cleanup, linkErr := linkFirstCodeDeliveryDependency(root, relativeDartTool, ".gopanel-quality-dart_tool-*")
+		relativeDependency := filepath.Join(packageDir, dependencyName)
+		cleanup, linkErr := linkFirstCodeDeliveryDependency(root, relativeDependency, temporaryPattern)
 		if linkErr != nil {
 			return linkErr
 		}
@@ -112,7 +119,7 @@ func codeDeliveryRuntimeDirs(root codeDeliveryQualityRoot) []string {
 	return runtimeDirs
 }
 
-func ignoredCodeDeliveryDartDirectory(name string) bool {
+func ignoredCodeDeliveryDependencyDirectory(name string) bool {
 	if strings.HasPrefix(name, ".") {
 		return true
 	}

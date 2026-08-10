@@ -72,6 +72,15 @@ func TestDetectCodeDeliveryQualityChecksUsesSessionFlutterToolchain(t *testing.T
 func TestPrepareCodeDeliveryQualityEnvironmentRestoresNodeModules(t *testing.T) {
 	sourceDir := createCodeGitRepository(t)
 	deliveryDir := createCodeGitRepository(t)
+	packagePath := "admin"
+	for _, root := range []string{sourceDir, deliveryDir} {
+		if err := os.Mkdir(filepath.Join(root, packagePath), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, packagePath, "package.json"), []byte("{}"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if err := os.WriteFile(filepath.Join(deliveryDir, ".gitignore"), []byte("node_modules\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -81,14 +90,14 @@ func TestPrepareCodeDeliveryQualityEnvironmentRestoresNodeModules(t *testing.T) 
 	if _, err := runCodeGit(deliveryDir, "-c", "user.name=GoPanel Test", "-c", "user.email=test@gopanel.local", "commit", "-m", "ignore dependencies"); err != nil {
 		t.Fatal(err)
 	}
-	sourceModules := filepath.Join(sourceDir, "node_modules")
+	sourceModules := filepath.Join(sourceDir, packagePath, "node_modules")
 	if err := os.Mkdir(sourceModules, 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(sourceModules, "ready"), []byte("yes"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	deliveryModules := filepath.Join(deliveryDir, "node_modules")
+	deliveryModules := filepath.Join(deliveryDir, packagePath, "node_modules")
 	if err := os.Mkdir(deliveryModules, 0700); err != nil {
 		t.Fatal(err)
 	}
