@@ -23,15 +23,14 @@ const (
 	codeDeliveryJobConflict  = "conflict"
 	codeDeliveryJobFailed    = "failed"
 
-	codeDeliveryStageQueued           = "queued"
-	codeDeliveryStageStoppingTerminal = "stopping_terminal"
-	codeDeliveryStageSyncing          = "syncing"
-	codeDeliveryStageMerging          = "merging"
-	codeDeliveryStageQualityCheck     = "quality_check"
-	codeDeliveryStagePushing          = "pushing"
-	codeDeliveryStageVerifying        = "verifying"
-	codeDeliveryStageCleaning         = "cleaning"
-	codeDeliveryStageCompleted        = "completed"
+	codeDeliveryStageQueued       = "queued"
+	codeDeliveryStageSyncing      = "syncing"
+	codeDeliveryStageMerging      = "merging"
+	codeDeliveryStageQualityCheck = "quality_check"
+	codeDeliveryStagePushing      = "pushing"
+	codeDeliveryStageVerifying    = "verifying"
+	codeDeliveryStageCleaning     = "cleaning"
+	codeDeliveryStageCompleted    = "completed"
 
 	codeDeliveryLeaseDuration = 45 * time.Second
 )
@@ -193,6 +192,19 @@ func (runner *codeDeliveryRunner) claim(jobID uint) (*model.AICodeDeliveryJob, [
 
 func (runner *codeDeliveryRunner) acquireRepositoryLeases(job *model.AICodeDeliveryJob, keys []string) (bool, error) {
 	return acquireCodeRepositoryLeases(runner.owner, job.ID, keys)
+}
+
+// releaseCancelledJob 用于会话正在被删除的场景：不再回写会话状态，
+// 但必须归还作业租约和仓库租约，否则这些仓库要等租约过期才能被下一次操作使用。
+func (runner *codeDeliveryRunner) releaseCancelledJob(jobID uint) {
+	if err := global.DB.Where("job_id = ? AND lease_owner = ?", jobID, runner.owner).
+		Delete(&model.AICodeDeliveryLease{}).Error; err != nil {
+		global.LOG.Warnf("Release cancelled Code delivery %d repository leases failed: %v", jobID, err)
+	}
+	if err := global.DB.Model(&model.AICodeDeliveryJob{}).Where("id = ? AND lease_owner = ?", jobID, runner.owner).
+		Updates(map[string]any{"lease_owner": "", "lease_expires_at": nil}).Error; err != nil {
+		global.LOG.Warnf("Release cancelled Code delivery %d job lease failed: %v", jobID, err)
+	}
 }
 
 func (runner *codeDeliveryRunner) deferJob(jobID uint, err error) {
@@ -381,6 +393,7 @@ func (runner *codeDeliveryRunner) run(jobID uint) {
 		return
 	}
 	if runner.isSessionCancelled(job.SessionID) {
+		runner.releaseCancelledJob(job.ID)
 		return
 	}
 	acquired, err := runner.acquireRepositoryLeases(job, keys)
@@ -428,6 +441,7 @@ func (runner *codeDeliveryRunner) run(jobID uint) {
 		result, err = resumeCodeSessionDeliveryWithProgress(&session, job.UserID, reporter)
 	}
 	if runner.isSessionCancelled(job.SessionID) {
+		runner.releaseCancelledJob(job.ID)
 		return
 	}
 	runner.finish(job, result, err)

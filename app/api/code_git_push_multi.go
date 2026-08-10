@@ -16,10 +16,11 @@ func loadCodeMultiRepositoryPushStatus(session *model.AIDevSession) (codePushRes
 	if err != nil {
 		return codePushResult{}, err
 	}
+	mode := codeProjectDeliveryMode(session.ProjectID)
 	results := make([]codeRepositoryPushResult, 0, len(repositories))
 	for index := range repositories {
 		repository := &repositories[index]
-		remoteBranch := deliveryRemoteBranch(repository.RemoteBranch, repository.TargetBranch)
+		remoteBranch := codeDeliveryPushTarget(mode, session.ID, repository.RemoteBranch, repository.TargetBranch)
 		if strings.TrimSpace(repository.MergeCommit) == "" || !codeDeliveryHasRemote(repository.RemoteName, remoteBranch) {
 			continue
 		}
@@ -28,7 +29,9 @@ func loadCodeMultiRepositoryPushStatus(session *model.AIDevSession) (codePushRes
 			Status: repository.PushStatus, Remote: repository.RemoteName,
 			Branch: remoteBranch,
 			Commit: repository.MergeCommit, ErrorMessage: repository.PushError,
-			Ready: repository.Status == codeDeliveryCompleted && repository.SourceAppliedAt != nil && repository.MergeCommit != "",
+			LocalSynced: repository.SourceAppliedAt != nil, LocalSyncError: repository.LocalSyncError,
+			LocalSyncCommand: codeDeliveryLocalSyncCommand(repository.SourceDir, repository.MergeCommit),
+			Ready:            repository.Status == codeDeliveryCompleted && strings.TrimSpace(repository.MergeCommit) != "",
 		})
 	}
 	return summarizeCodePushResults(results), nil
@@ -89,19 +92,23 @@ func inspectCodeMultiRepositoryManualPushState(
 	session *model.AIDevSession,
 	repository *model.AIDevSessionRepository,
 ) (codeMultiRepositoryPublishState, error) {
+	mode := codeProjectDeliveryMode(session.ProjectID)
 	state := codeMultiRepositoryPublishState{
-		RemoteBranch: deliveryRemoteBranch(repository.RemoteBranch, repository.TargetBranch),
+		RemoteBranch: codeDeliveryPushTarget(mode, session.ID, repository.RemoteBranch, repository.TargetBranch),
+		Isolated:     codeDeliveryPushIsolated(mode),
 	}
-	if repository.Status != codeDeliveryCompleted || repository.SourceAppliedAt == nil ||
-		strings.TrimSpace(repository.MergeCommit) == "" {
-		return state, errors.New("仓库 " + repository.LinkName + " 尚未完成本地合并交付")
+	if repository.Status != codeDeliveryCompleted {
+		return state, errors.New("仓库 " + repository.LinkName + " 尚未完成合并交付")
 	}
 	if !codeDeliveryHasRemote(repository.RemoteName, state.RemoteBranch) {
 		return state, errors.New("仓库 " + repository.LinkName + " 没有可用的远端跟踪分支")
 	}
-	localCommit, err := runCodeGit(repository.SourceDir, "rev-parse", "refs/heads/"+repository.TargetBranch)
-	if err != nil || strings.TrimSpace(localCommit) != strings.TrimSpace(repository.MergeCommit) {
-		return state, errors.New("仓库 " + repository.LinkName + " 的目标分支已在交付后发生变化")
+	// 推送的是交付提交本身（commit-ish），不依赖本地分支指向它：
+	// 本地主仓未能快进时，交付提交仍在共享对象库中，推送照常可用。
+	if err := verifyCodeDeliveryCommitReachable(
+		repository.SourceDir, repository.MergeCommit, "仓库 "+repository.LinkName,
+	); err != nil {
+		return state, err
 	}
 	if _, err := fetchCodeRepositoryWithCredential(
 		repository.SourceDir, repository.RemoteName, codeProjectGitCredentialID(session.ProjectID),
@@ -112,6 +119,10 @@ func inspectCodeMultiRepositoryManualPushState(
 		repository.SourceDir, "rev-parse", "refs/remotes/"+repository.RemoteName+"/"+state.RemoteBranch,
 	)
 	if err != nil {
+		// 独占的会话交付分支首次推送时远端还不存在，这是正常的。
+		if state.Isolated {
+			return state, nil
+		}
 		return state, errCodePushRemoteAdvanced
 	}
 	state.RemoteCommit = strings.TrimSpace(remoteCommit)
@@ -119,8 +130,17 @@ func inspectCodeMultiRepositoryManualPushState(
 		state.AlreadyPushed = true
 		return state, nil
 	}
-	if !codeRemoteCommitCanFastForward(repository.SourceDir, state.RemoteCommit, repository.MergeCommit) {
+	if codeRemoteCommitCanFastForward(repository.SourceDir, state.RemoteCommit, repository.MergeCommit) {
+		return state, nil
+	}
+	if !state.Isolated {
 		return state, errCodePushRemoteAdvanced
 	}
+	// 会话分支重新交付后基线可能变化，允许覆盖自己上次推送的提交；
+	// 分支被外部改动过则拒绝，避免丢掉别人的工作。
+	if strings.TrimSpace(repository.PushedCommit) != state.RemoteCommit {
+		return state, errCodeDeliveryBranchAdvanced
+	}
+	state.ForceLease = state.RemoteCommit
 	return state, nil
 }

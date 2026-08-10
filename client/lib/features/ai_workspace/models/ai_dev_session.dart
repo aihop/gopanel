@@ -12,6 +12,7 @@ class AiDevSession {
   final String currentStage;
   final String approvalPolicy;
   final int lastTaskId;
+  final String currentTaskTitle;
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final DateTime? lastInstructionAt;
@@ -30,6 +31,7 @@ class AiDevSession {
     required this.currentStage,
     required this.approvalPolicy,
     required this.lastTaskId,
+    required this.currentTaskTitle,
     required this.createdAt,
     required this.updatedAt,
     required this.lastInstructionAt,
@@ -50,6 +52,7 @@ class AiDevSession {
       currentStage: (json['currentStage'] ?? '').toString(),
       approvalPolicy: (json['approvalPolicy'] ?? 'safe_auto').toString(),
       lastTaskId: (json['lastTaskId'] as num?)?.toInt() ?? 0,
+      currentTaskTitle: (json['currentTaskTitle'] ?? '').toString(),
       createdAt: DateTime.tryParse((json['createdAt'] ?? '').toString()),
       updatedAt: DateTime.tryParse((json['updatedAt'] ?? '').toString()),
       lastInstructionAt: DateTime.tryParse(

@@ -15,33 +15,40 @@ class DashboardAiSummaryCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(taskCenterControllerProvider);
-    final allTasks = [...state.localTasks, ...state.tasks];
-    final aiTasks = allTasks.where((task) => task.type == TaskType.ai).toList()
-      ..sort((a, b) {
-        final at =
-            a.updatedAt ?? a.startedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-        final bt =
-            b.updatedAt ?? b.startedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-        return bt.compareTo(at);
-      });
+    final aiTasks =
+        state.allTasks
+            .where((task) => task.type == TaskType.ai && !task.attentionOnly)
+            .toList()
+          ..sort((a, b) {
+            final at =
+                a.updatedAt ??
+                a.startedAt ??
+                DateTime.fromMillisecondsSinceEpoch(0);
+            final bt =
+                b.updatedAt ??
+                b.startedAt ??
+                DateTime.fromMillisecondsSinceEpoch(0);
+            return bt.compareTo(at);
+          });
 
     final runningTask = aiTasks.cast<TaskEntity?>().firstWhere(
-          (task) => task?.status == TaskStatus.running,
-          orElse: () => null,
-        );
+      (task) => task?.status == TaskStatus.running,
+      orElse: () => null,
+    );
     final previewTask = aiTasks.cast<TaskEntity?>().firstWhere(
-          (task) => int.tryParse(task?.meta['previewCount'] ?? '0') != null &&
-              int.parse(task!.meta['previewCount'] ?? '0') > 0,
-          orElse: () => null,
-        );
+      (task) =>
+          int.tryParse(task?.meta['previewCount'] ?? '0') != null &&
+          int.parse(task!.meta['previewCount'] ?? '0') > 0,
+      orElse: () => null,
+    );
     final latestEventTask = aiTasks.cast<TaskEntity?>().firstWhere(
-          (task) => (task?.meta['latestEventTitle'] ?? '').isNotEmpty,
-          orElse: () => null,
-        );
+      (task) => (task?.meta['latestEventTitle'] ?? '').isNotEmpty,
+      orElse: () => null,
+    );
     final failedTask = aiTasks.cast<TaskEntity?>().firstWhere(
-          (task) => task?.status == TaskStatus.failed,
-          orElse: () => null,
-        );
+      (task) => task?.status == TaskStatus.failed,
+      orElse: () => null,
+    );
 
     return PanelCard(
       title: const Text('AI 开发'),
@@ -185,10 +192,7 @@ class DashboardAiSummaryCard extends ConsumerWidget {
                 children: [
                   Text(
                     label,
-                    style: TextStyle(
-                      color: color,
-                      fontWeight: FontWeight.w700,
-                    ),
+                    style: TextStyle(color: color, fontWeight: FontWeight.w700),
                   ),
                   if (suffixText != null && suffixText.isNotEmpty) ...[
                     const SizedBox(width: 8),

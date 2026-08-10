@@ -14,6 +14,9 @@ type AIProject struct {
 	CreatorID          uint                       `gorm:"column:creator_id;type:integer;not null;index" json:"creatorId"`
 	PrimaryRepository  string                     `gorm:"column:primary_repository;type:varchar(1024)" json:"primaryRepository,omitempty"`
 	DeliveryBranch     string                     `gorm:"column:delivery_branch;type:varchar(255);not null;default:''" json:"deliveryBranch"`
+	// DeliveryMode 决定交付提交推往哪里：direct 直推交付目标分支；branch 推会话独占分支，
+	// 由平台的 PR/MR 负责合并，远端目标分支的推进不再阻断交付。
+	DeliveryMode       string                     `gorm:"column:delivery_mode;type:varchar(32);not null;default:'direct'" json:"deliveryMode"`
 	GitCredentialID    uint                       `gorm:"column:git_credential_id;type:integer;not null;default:0;index" json:"gitCredentialId"`
 	RequireQualityGate bool                       `gorm:"column:require_quality_gate;not null;default:false" json:"requireQualityGate"`
 	QualityChecks      []AIProjectQualityCheck    `gorm:"column:quality_checks;serializer:json;type:text" json:"qualityChecks"`

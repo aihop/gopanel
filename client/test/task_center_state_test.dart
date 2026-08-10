@@ -31,6 +31,14 @@ void main() {
     status: TaskStatus.running,
     attention: attention,
   );
+  const attentionOnlyTask = TaskEntity(
+    id: 'aiSession:14',
+    title: '初始化失败会话',
+    type: TaskType.ai,
+    status: TaskStatus.failed,
+    attention: attention,
+    attentionOnly: true,
+  );
 
   test('attention tasks include server and local tasks', () {
     const state = TaskCenterState(
@@ -49,5 +57,24 @@ void main() {
     );
 
     expect(state.visibleTasks, [attentionTask]);
+  });
+
+  test('default list hides attention-only synthetic entries', () {
+    const state = TaskCenterState(tasks: [regularTask, attentionOnlyTask]);
+
+    expect(state.visibleTasks, [regularTask]);
+    expect(state.attentionTasks, [attentionOnlyTask]);
+  });
+
+  test('server tasks replace local tasks with the same identity', () {
+    const local = TaskEntity(
+      id: 'pipeline:1',
+      title: '本地构建',
+      type: TaskType.pipeline,
+      status: TaskStatus.running,
+    );
+    const state = TaskCenterState(tasks: [regularTask], localTasks: [local]);
+
+    expect(state.allTasks, [regularTask]);
   });
 }

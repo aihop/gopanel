@@ -24,12 +24,15 @@ func integrateCodeDeliveryLocallyWithProgress(delivery *model.AICodeDelivery, re
 	if delivery.Status != codeDeliveryMerged {
 		return result, nil
 	}
-	if err := fastForwardCodeDeliverySource(delivery); err != nil {
+	if err := applyCodeDeliveryLocalSync(delivery); err != nil {
 		return codeGitDeliveryResult{}, err
 	}
 	if !codeDeliveryHasRemote(delivery.RemoteName, deliveryRemoteBranch(delivery.RemoteBranch, delivery.TargetBranch)) {
-		if err := markCodeDeliveryLocalPush(delivery); err != nil {
-			return codeGitDeliveryResult{}, err
+		// 本地主仓没能快进时，交付提交已经产出但还没落到任何地方，不能标记为本地完成。
+		if delivery.SourceAppliedAt != nil {
+			if err := markCodeDeliveryLocalPush(delivery); err != nil {
+				return codeGitDeliveryResult{}, err
+			}
 		}
 	} else if delivery.PushStatus != codePushPushed {
 		if err := global.DB.Model(delivery).Updates(map[string]any{
@@ -38,6 +41,10 @@ func integrateCodeDeliveryLocallyWithProgress(delivery *model.AICodeDelivery, re
 			return codeGitDeliveryResult{}, err
 		}
 		delivery.PushStatus, delivery.PushError = codePushPending, ""
+	}
+	// 与多仓路径保持一致：交付提交已产出，但既没同步本地也没推远端。
+	if delivery.SourceAppliedAt == nil && delivery.PushStatus != codePushPushed {
+		result.ResultType = "delivered"
 	}
 	return result, nil
 }

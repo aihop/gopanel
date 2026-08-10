@@ -89,7 +89,7 @@ export interface CodeGitDiff {
 
 export interface CodeGitDeliveryResult {
 	status: "committed" | "merged" | "partial" | "conflict" | "failed"
-	resultType?: "local" | "remote_verified" | "mixed"
+	resultType?: "local" | "remote_verified" | "mixed" | "delivered"
 	errorMessage?: string
 	commit?: string
 	branch?: string
@@ -112,7 +112,7 @@ export interface CodeDeliveryJob {
 	queuePosition: number
 	targetBranch?: string
 	resultCommit?: string
-	resultType?: "local" | "remote_verified" | "mixed"
+	resultType?: "local" | "remote_verified" | "mixed" | "delivered"
 	failureCode?:
 		| "source_dirty"
 		| "conflict"
@@ -147,13 +147,17 @@ export interface CodeDeliveryFact {
 export interface CodeDeliveryPushRepository {
 	repositoryId: string
 	repositoryName: string
-	status: "pending" | "pushed" | "failed"
+	status: "pending" | "pushed" | "failed" | "local"
 	remote?: string
 	branch?: string
 	commit?: string
-	snapshotReady: boolean
-	mergeReady: boolean
 	errorMessage?: string
+	/** 交付提交是否已快进到本地主仓。未同步不阻断推送。 */
+	localSynced: boolean
+	/** 本地主仓未能自动快进的原因。 */
+	localSyncError?: string
+	/** 可直接执行的手动同步命令。 */
+	localSyncCommand?: string
 	ready: boolean
 }
 
@@ -175,6 +179,12 @@ export interface CodeRepositoryDeliveryResult {
 	pushStatus: "pending" | "pushed" | "failed" | "local"
 	pushedCommit?: string
 	sourceAppliedAt?: string
+	/** 交付提交是否已经快进到本地主仓。未同步不影响交付结果，也不阻断推送。 */
+	localSynced: boolean
+	/** 本地主仓未能自动快进的原因。 */
+	localSyncError?: string
+	/** 可直接执行的手动同步命令。 */
+	localSyncCommand?: string
 	errorMessage?: string
 	conflictFiles?: string[]
 }

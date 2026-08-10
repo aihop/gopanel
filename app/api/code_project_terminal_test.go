@@ -47,7 +47,9 @@ func TestCodeProjectTerminalWorkDirRejectsSubAdmin(t *testing.T) {
 	}
 }
 
-func TestHostTerminalRejectedDuringCodeDelivery(t *testing.T) {
+// 交付在独立的集成 Worktree 中进行，不独占源仓工作区，
+// 因此交付进行中照常可以打开宿主终端；本地快进失败只会被降级记录，不会让交付失败。
+func TestHostTerminalStaysAvailableDuringCodeDelivery(t *testing.T) {
 	database := withCodeGovernanceDB(t)
 	if err := database.Create(&model.AIDevSession{
 		ID: 921, UserID: 7, Status: codeSessionStatusDelivering, WorkDir: t.TempDir(),
@@ -55,7 +57,9 @@ func TestHostTerminalRejectedDuringCodeDelivery(t *testing.T) {
 		t.Fatal(err)
 	}
 	manager := &hostTerminalManager{sessions: make(map[uint]*hostTerminal)}
-	if _, err := manager.create(createHostTerminalRequest{Shell: "default", WorkDir: t.TempDir()}, 7, "127.0.0.1"); err == nil {
-		t.Fatal("host terminal should be rejected while a Code session is delivering")
+	record, err := manager.create(createHostTerminalRequest{Shell: "default", WorkDir: t.TempDir()}, 7, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("host terminal should stay available while a Code session is delivering: %v", err)
 	}
+	t.Cleanup(func() { manager.stop(record.ID) })
 }

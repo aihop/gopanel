@@ -14,6 +14,7 @@ class TaskEntity {
   final String? error;
   final Map<String, String> meta;
   final TaskAttention? attention;
+  final bool attentionOnly;
 
   const TaskEntity({
     required this.id,
@@ -27,6 +28,7 @@ class TaskEntity {
     this.error,
     this.meta = const {},
     this.attention,
+    this.attentionOnly = false,
   });
 
   bool get requiresAttention => attention != null;

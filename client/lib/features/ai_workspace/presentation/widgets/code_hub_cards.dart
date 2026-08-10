@@ -155,7 +155,11 @@ class CodeSessionListCard extends StatelessWidget {
     final stage = session.currentStage.isEmpty
         ? session.status
         : session.currentStage;
-    final title = session.title.isEmpty ? '开发 #${session.id}' : session.title;
+    final title = session.currentTaskTitle.isNotEmpty
+        ? session.currentTaskTitle
+        : session.title.isEmpty
+        ? '开发 #${session.id}'
+        : session.title;
     final updatedAt =
         session.lastInstructionAt ?? session.updatedAt ?? session.createdAt;
 

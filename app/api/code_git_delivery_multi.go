@@ -24,9 +24,12 @@ type codeRepositoryDeliveryResult struct {
 	MergeReady      bool       `json:"mergeReady"`
 	PushStatus      string     `json:"pushStatus"`
 	PushedCommit    string     `json:"pushedCommit,omitempty"`
-	SourceAppliedAt *time.Time `json:"sourceAppliedAt,omitempty"`
-	ErrorMessage    string     `json:"errorMessage,omitempty"`
-	ConflictFiles   []string   `json:"conflictFiles,omitempty"`
+	SourceAppliedAt  *time.Time `json:"sourceAppliedAt,omitempty"`
+	LocalSynced      bool       `json:"localSynced"`
+	LocalSyncError   string     `json:"localSyncError,omitempty"`
+	LocalSyncCommand string     `json:"localSyncCommand,omitempty"`
+	ErrorMessage     string     `json:"errorMessage,omitempty"`
+	ConflictFiles    []string   `json:"conflictFiles,omitempty"`
 }
 
 func validateCodeMultiWorktreeDeliverySession(session *model.AIDevSession, claims *token.CustomClaims) error {
@@ -196,7 +199,11 @@ func codeStoredRepositoryDeliveryResult(repository *model.AIDevSessionRepository
 		Commit: repository.MergeCommit, PushStatus: pushStatus, PushedCommit: repository.PushedCommit,
 		SnapshotReady:   strings.TrimSpace(repository.WorktreeCommit) != "",
 		MergeReady:      strings.TrimSpace(repository.MergeCommit) != "",
-		SourceAppliedAt: repository.SourceAppliedAt, ErrorMessage: repository.PushError,
+		SourceAppliedAt:  repository.SourceAppliedAt,
+		LocalSynced:      repository.SourceAppliedAt != nil,
+		LocalSyncError:   repository.LocalSyncError,
+		LocalSyncCommand: codeDeliveryLocalSyncCommand(repository.SourceDir, repository.MergeCommit),
+		ErrorMessage:     repository.PushError,
 	}
 }
 
@@ -222,15 +229,21 @@ func hasCompletedCodeRepositoryResult(results []codeRepositoryDeliveryResult) bo
 }
 
 func codeMultiRepositoryResultType(results []codeRepositoryDeliveryResult) string {
-	hasLocal, hasRemote := false, false
+	hasLocal, hasRemote, hasPendingLocal := false, false, false
 	for _, result := range results {
-		if result.Status == codeDeliveryCompleted && result.SourceAppliedAt == nil {
+		// 没有产出交付提交的仓库（本次无变更）不参与结果归类。
+		if strings.TrimSpace(result.Commit) == "" {
 			continue
 		}
-		if result.PushStatus == codePushPushed {
+		switch {
+		case result.PushStatus == codePushPushed:
 			hasRemote = true
-		} else if result.SourceAppliedAt != nil {
+		case result.SourceAppliedAt != nil:
 			hasLocal = true
+		case result.Status == codeDeliveryCompleted:
+			// 已走完落地阶段，只是本地主仓没能快进：交付本身是成功的。
+			// 仅在集成 Worktree 中合并（merged）还没走到落地，不算已交付。
+			hasPendingLocal = true
 		}
 	}
 	if hasLocal && hasRemote {
@@ -241,6 +254,10 @@ func codeMultiRepositoryResultType(results []codeRepositoryDeliveryResult) strin
 	}
 	if hasLocal {
 		return "local"
+	}
+	// 交付提交已经产出，但本地主仓未同步、远端也还没推：交付本身是成功的。
+	if hasPendingLocal {
+		return "delivered"
 	}
 	return ""
 }

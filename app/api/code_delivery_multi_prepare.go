@@ -144,25 +144,24 @@ func validateCodeRepositorySnapshotCommit(repository *model.AIDevSessionReposito
 	return nil
 }
 
+// inspectCodeRepositoryDeliveryBaseline 只读取交付基线所需的 ref。
+// 合并发生在独立的集成 Worktree 中，不触碰源仓工作区，
+// 因此源仓是否有未提交变更、当前签出的是哪个分支，都不影响本次交付能否进行。
 func inspectCodeRepositoryDeliveryBaseline(repository *model.AIDevSessionRepository) (codeRepositoryDeliveryBaseline, error) {
-	status, err := runCodeGit(repository.SourceDir, "status", "--porcelain")
-	if err != nil || strings.TrimSpace(status) != "" {
-		return codeRepositoryDeliveryBaseline{}, fmt.Errorf("源仓库 %s 存在未提交变更，无法安全交付", repository.LinkName)
-	}
 	targetBranch := strings.TrimSpace(repository.TargetBranch)
-	currentBranch, err := runCodeGit(repository.SourceDir, "branch", "--show-current")
-	if err != nil {
-		return codeRepositoryDeliveryBaseline{}, err
-	}
 	if targetBranch == "" {
+		currentBranch, err := runCodeGit(repository.SourceDir, "branch", "--show-current")
+		if err != nil {
+			return codeRepositoryDeliveryBaseline{}, err
+		}
 		targetBranch = strings.TrimSpace(currentBranch)
 	}
-	if targetBranch == "" || strings.TrimSpace(currentBranch) != targetBranch {
-		return codeRepositoryDeliveryBaseline{}, fmt.Errorf("源仓库 %s 当前分支不是交付目标 %s", repository.LinkName, targetBranch)
+	if targetBranch == "" {
+		return codeRepositoryDeliveryBaseline{}, fmt.Errorf("源仓库 %s 没有可用的交付目标分支", repository.LinkName)
 	}
 	sourceCommit, err := runCodeGit(repository.SourceDir, "rev-parse", "refs/heads/"+targetBranch)
 	if err != nil {
-		return codeRepositoryDeliveryBaseline{}, err
+		return codeRepositoryDeliveryBaseline{}, fmt.Errorf("源仓库 %s 的交付目标分支 %s 不可用", repository.LinkName, targetBranch)
 	}
 	baseline := codeRepositoryDeliveryBaseline{
 		TargetBranch: targetBranch, SourceCommit: strings.TrimSpace(sourceCommit),
@@ -171,8 +170,8 @@ func inspectCodeRepositoryDeliveryBaseline(repository *model.AIDevSessionReposit
 	return baseline, nil
 }
 
-func codeRepositoryIntegrationBaseCommit(sourceDir, sourceCommit, remoteCommit string) (string, error) {
-	sourceCommit, remoteCommit = strings.TrimSpace(sourceCommit), strings.TrimSpace(remoteCommit)
+func codeRepositoryIntegrationBaseCommit(sourceCommit string) (string, error) {
+	sourceCommit = strings.TrimSpace(sourceCommit)
 	if sourceCommit == "" {
 		return "", errors.New("源分支提交不可用")
 	}
@@ -256,9 +255,7 @@ func exposeCodeRepositoryIntegrationConflict(repository *model.AIDevSessionRepos
 	if err != nil || strings.TrimSpace(head) != strings.TrimSpace(repository.WorktreeCommit) {
 		return err
 	}
-	baseCommit, err := codeRepositoryIntegrationBaseCommit(
-		repository.SourceDir, repository.SourceCommit, repository.RemoteCommit,
-	)
+	baseCommit, err := codeRepositoryIntegrationBaseCommit(repository.SourceCommit)
 	if err != nil {
 		return err
 	}

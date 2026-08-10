@@ -18,6 +18,24 @@ const result = ref<CodeDeliveryPushResult | null>(null)
 const pendingCount = computed(() => result.value?.repositories.filter(repository => repository.status !== "pushed").length || 0)
 const destinations = computed(() => result.value?.repositories.map(repository => `${repository.remote}/${repository.branch}`).join(", ") || "-")
 
+// 本地主仓未同步只是降级提示：交付提交已保留，推送远端不受影响。
+const localSyncPending = computed(() =>
+	(result.value?.repositories || []).filter(repository => !repository.localSynced && repository.localSyncError)
+)
+const localSyncCommands = computed(() =>
+	localSyncPending.value.map(repository => repository.localSyncCommand || "").filter(Boolean).join("\n")
+)
+
+const copyLocalSyncCommands = async () => {
+	if (!localSyncCommands.value) return
+	try {
+		await navigator.clipboard.writeText(localSyncCommands.value)
+		message.success(t("code.gitLocalSyncCopied"))
+	} catch (error) {
+		message.error(t("code.gitPushStatusFailed"))
+	}
+}
+
 const loadStatus = async () => {
 	loading.value = true
 	loadError.value = ""
@@ -65,18 +83,34 @@ onMounted(() => void loadStatus())
 					<n-button size="tiny" @click="loadStatus">{{ t("code.gitRetry") }}</n-button>
 				</div>
 			</n-alert>
-			<div v-else-if="result?.status === 'pushed'" class="text-xs text-emerald-600">
-				{{ t("code.gitPushCompleted", { count: result.repositories.length }) }}
-			</div>
-			<div v-else-if="result" class="space-y-2">
-				<p class="text-xs text-slate-500">
-					{{ result.available ? t("code.gitPushReady", { count: pendingCount }) : t("code.gitPushUnavailable") }}
-				</p>
-				<p v-if="result.available" class="truncate text-[11px] text-slate-400" :title="destinations">{{ destinations }}</p>
-				<n-button v-if="result.available" size="small" type="warning" secondary block :loading="pushing" @click="pushDelivery">
-					{{ t("code.gitPush") }}
-				</n-button>
-			</div>
+			<template v-else>
+				<div v-if="result?.status === 'pushed'" class="text-xs text-emerald-600">
+					{{ t("code.gitPushCompleted", { count: result.repositories.length }) }}
+				</div>
+				<div v-else-if="result" class="space-y-2">
+					<p class="text-xs text-slate-500">
+						{{ result.available ? t("code.gitPushReady", { count: pendingCount }) : t("code.gitPushUnavailable") }}
+					</p>
+					<p v-if="result.available" class="truncate text-[11px] text-slate-400" :title="destinations">{{ destinations }}</p>
+					<n-button v-if="result.available" size="small" type="warning" secondary block :loading="pushing" @click="pushDelivery">
+						{{ t("code.gitPush") }}
+					</n-button>
+				</div>
+
+				<!-- 本地主仓未同步是降级提示，不是交付失败：用 info 而非 error，并直接给出可执行命令。 -->
+				<n-alert v-if="localSyncPending.length" type="info" :show-icon="false" class="mt-2">
+					<div class="space-y-2">
+						<p class="text-xs font-medium text-slate-700">
+							{{ t("code.gitLocalSyncPending", { count: localSyncPending.length }) }}
+						</p>
+						<p class="text-[11px] leading-5 text-slate-500">{{ t("code.gitLocalSyncHint") }}</p>
+						<pre v-if="localSyncCommands" class="overflow-x-auto whitespace-pre rounded-lg bg-slate-900 p-2 font-mono text-[11px] leading-5 text-slate-100">{{ localSyncCommands }}</pre>
+						<n-button v-if="localSyncCommands" size="tiny" secondary @click="copyLocalSyncCommands">
+							{{ t("code.gitLocalSyncCopy") }}
+						</n-button>
+					</div>
+				</n-alert>
+			</template>
 		</n-spin>
 	</div>
 </template>

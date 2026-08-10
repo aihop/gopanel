@@ -118,16 +118,19 @@ func mergePreparedCodeDeliveryWithProgress(delivery *model.AICodeDelivery, repor
 	return codeGitDeliveryResult{Status: "merged", Commit: commit, Branch: snapshot.WorktreeBranch}, nil
 }
 
+// codeLocalDeliveryTarget 只读取交付基线 ref。
+// 合并在独立的交付 Worktree 中进行，不触碰本地主仓工作区，
+// 因此主仓有未提交变更或已切换到其它分支，都不影响本次交付。
 func codeLocalDeliveryTarget(sourceDir, targetBranch string) (string, error) {
-	status, err := runCodeGit(sourceDir, "status", "--porcelain")
-	if err != nil || strings.TrimSpace(status) != "" {
-		return "", errors.New("本地主仓存在未提交变更，无法安全合并")
+	targetBranch = strings.TrimSpace(targetBranch)
+	if targetBranch == "" {
+		return "", errors.New("本地主仓没有可用的交付目标分支")
 	}
-	currentBranch, err := runCodeGit(sourceDir, "branch", "--show-current")
-	if err != nil || strings.TrimSpace(currentBranch) != targetBranch {
-		return "", errors.New("本地主仓当前分支不是交付目标 " + targetBranch)
+	commit, err := runCodeGit(sourceDir, "rev-parse", "refs/heads/"+targetBranch)
+	if err != nil {
+		return "", errors.New("本地主仓的交付目标分支 " + targetBranch + " 不可用")
 	}
-	return runCodeGit(sourceDir, "rev-parse", "refs/heads/"+targetBranch)
+	return commit, nil
 }
 
 func mergeCodeDeliveryCommit(delivery *model.AICodeDelivery, commit, branch string) (*codeGitDeliveryResult, error) {
@@ -255,9 +258,13 @@ func codeSingleRepositoryDeliveryResult(delivery *model.AICodeDelivery, result c
 		RepositoryID: "session", RepositoryName: filepath.Base(delivery.SourceWorkDir), Status: result.Status,
 		Branch: delivery.WorktreeBranch, TargetBranch: delivery.TargetBranch, Remote: delivery.RemoteName,
 		RemoteBranch: deliveryRemoteBranch(delivery.RemoteBranch, delivery.TargetBranch), Commit: result.Commit,
-		SnapshotReady: strings.TrimSpace(delivery.WorktreeCommit) != "",
-		MergeReady:    strings.TrimSpace(delivery.MergeCommit) != "",
-		PushStatus:    pushStatus, PushedCommit: delivery.PushedCommit, ErrorMessage: delivery.PushError,
-		ConflictFiles: result.ConflictFiles,
+		SnapshotReady:   strings.TrimSpace(delivery.WorktreeCommit) != "",
+		MergeReady:      strings.TrimSpace(delivery.MergeCommit) != "",
+		SourceAppliedAt:  delivery.SourceAppliedAt,
+		LocalSynced:      delivery.SourceAppliedAt != nil,
+		LocalSyncError:   delivery.LocalSyncError,
+		LocalSyncCommand: codeDeliveryLocalSyncCommand(delivery.SourceWorkDir, delivery.MergeCommit),
+		PushStatus:       pushStatus, PushedCommit: delivery.PushedCommit, ErrorMessage: delivery.PushError,
+		ConflictFiles:    result.ConflictFiles,
 	}
 }

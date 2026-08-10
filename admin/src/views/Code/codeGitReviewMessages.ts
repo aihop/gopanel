@@ -94,7 +94,6 @@ export const codeGitReviewMessages = {
 			gitDeliveryStatus_conflict: "统一交付存在冲突",
 			gitDeliveryStatus_failed: "统一交付失败，可再次点击重试",
 			gitDeliveryStage_queued: "等待仓库租约",
-			gitDeliveryStage_stopping_terminal: "停止终端",
 			gitDeliveryStage_syncing: "准备本地基线",
 			gitDeliveryStage_quality_check: "质量检查",
 			gitDeliveryStage_merging: "本地合并",
@@ -121,12 +120,16 @@ export const codeGitReviewMessages = {
 			gitPushTitle: "推送已交付提交",
 			gitPushConfirm:
 				"确认将 {count} 个仓库的已交付提交按子仓到主仓的顺序推送到 {destinations}？系统禁止覆盖远端变化。",
-			gitPushReady: "本地交付完成，{count} 个仓库等待推送。",
-			gitPushUnavailable: "当前交付尚未完成，或仓库没有可用的远端跟踪分支。",
+			gitPushReady: "交付提交已就绪，{count} 个仓库等待推送。",
+			gitPushUnavailable: "当前交付尚未产出提交，或仓库没有可用的远端跟踪分支。",
 			gitPushSuccess: "已交付提交已推送并完成远端核验",
 			gitPushFailed: "Git 推送失败",
 			gitPushStatusFailed: "推送状态加载失败",
 			gitPushCompleted: "{count} 个仓库均已推送到远端",
+			gitLocalSyncPending: "{count} 个仓库未自动合入本地主仓",
+			gitLocalSyncHint: "本地主仓被其它进程占用（有未提交改动、已切换分支或已推进）。交付提交已安全保留，推送远端不受影响；需要本地同步时执行下面的命令。",
+			gitLocalSyncCopy: "复制同步命令",
+			gitLocalSyncCopied: "同步命令已复制",
 			gitRetry: "重试",
 			gitCancel: "取消"
 		}
@@ -233,7 +236,6 @@ export const codeGitReviewMessages = {
 			gitDeliveryStatus_conflict: "Delivery has conflicts",
 			gitDeliveryStatus_failed: "Delivery failed; click again to retry",
 			gitDeliveryStage_queued: "Waiting for repository lease",
-			gitDeliveryStage_stopping_terminal: "Stopping terminal",
 			gitDeliveryStage_syncing: "Preparing local baseline",
 			gitDeliveryStage_quality_check: "Quality checks",
 			gitDeliveryStage_merging: "Local merge",
@@ -261,12 +263,16 @@ export const codeGitReviewMessages = {
 			gitPushTitle: "Push delivered commits",
 			gitPushConfirm:
 				"Push delivered commits for {count} repositories to {destinations} in child-to-parent order? Remote changes are never overwritten.",
-			gitPushReady: "Local delivery is complete; {count} repositories are waiting to be pushed.",
-			gitPushUnavailable: "Delivery is incomplete or no tracked remote branch is available.",
+			gitPushReady: "Delivery commits are ready; {count} repositories are waiting to be pushed.",
+			gitPushUnavailable: "Delivery has produced no commit, or no tracked remote branch is available.",
 			gitPushSuccess: "Delivered commits were pushed and verified remotely",
 			gitPushFailed: "Git push failed",
 			gitPushStatusFailed: "Failed to load push status",
 			gitPushCompleted: "All {count} repositories were pushed remotely",
+			gitLocalSyncPending: "{count} repositories were not merged into the local main repository",
+			gitLocalSyncHint: "The local main repository is in use by another process (uncommitted changes, a switched branch, or new commits). The delivery commit is kept safely and pushing is unaffected; run the command below when you want the local copy in sync.",
+			gitLocalSyncCopy: "Copy sync commands",
+			gitLocalSyncCopied: "Sync commands copied",
 			gitRetry: "Retry",
 			gitCancel: "Cancel"
 		}

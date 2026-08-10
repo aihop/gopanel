@@ -17,6 +17,11 @@ type codeMultiRepositoryPublishState struct {
 	RemoteBranch  string
 	RemoteCommit  string
 	AlreadyPushed bool
+	// Isolated 表示推送目标是本会话独占的交付分支。
+	Isolated bool
+	// ForceLease 非空时用 --force-with-lease 覆盖自己上次推送的提交，
+	// 值为期望的远端当前提交，别人动过分支就会被 Git 拒绝。
+	ForceLease string
 }
 
 func publishCodeMultiRepositoryDeliveryWithProgress(
@@ -41,7 +46,7 @@ func publishCodeMultiRepositoryDeliveryWithProgress(
 		if repositories[index].Status == codeDeliveryCompleted {
 			continue
 		}
-		if err := fastForwardCodeMultiRepositorySource(&repositories[index], repositories); err != nil {
+		if err := applyCodeRepositoryLocalSync(&repositories[index], repositories); err != nil {
 			return codeMultiRepositoryFailure(codeStoredRepositoryDeliveryResults(repositories), err), err
 		}
 		if repositories[index].PushStatus != codePushPushed &&
@@ -173,10 +178,13 @@ func pushCodeMultiRepositoryCommit(
 		result.Status = codePushPushed
 		return result, nil
 	}
+	args := []string{"-c", "credential.interactive=never", "push"}
+	if state.ForceLease != "" {
+		args = append(args, "--force-with-lease=refs/heads/"+state.RemoteBranch+":"+state.ForceLease)
+	}
+	args = append(args, "--", repository.RemoteName, repository.MergeCommit+":refs/heads/"+state.RemoteBranch)
 	_, err := runCodeGitWithCredential(
-		repository.SourceDir, codeGitFetchTimeout, codeProjectGitCredentialID(session.ProjectID),
-		"-c", "credential.interactive=never", "push", "--", repository.RemoteName,
-		repository.MergeCommit+":refs/heads/"+state.RemoteBranch,
+		repository.SourceDir, codeGitFetchTimeout, codeProjectGitCredentialID(session.ProjectID), args...,
 	)
 	if err != nil {
 		return inspectCodeMultiRepositoryPushFailure(session, repository, state, result, err)
@@ -257,10 +265,19 @@ func markCodeMultiRepositorySourceApplied(repository *model.AIDevSessionReposito
 	}).Error
 }
 
+// completeCodeMultiRepositorySources 只要求交付提交已经产出并可用。
+// 本地主仓是否被快进属于 best-effort，未同步的仓库会带着 LocalSyncError 一起标记完成，
+// 让用户既能推送远端，也能拿到手动同步的命令。
 func completeCodeMultiRepositorySources(repositories []model.AIDevSessionRepository) error {
 	for index := range repositories {
-		if repositories[index].Status != codeDeliveryCompleted && repositories[index].SourceAppliedAt == nil {
-			return fmt.Errorf("源仓库 %s 尚未应用最终提交", repositories[index].LinkName)
+		repository := &repositories[index]
+		if repository.Status == codeDeliveryCompleted {
+			continue
+		}
+		if err := verifyCodeDeliveryCommitReachable(
+			repository.SourceDir, repository.MergeCommit, "仓库 "+repository.LinkName,
+		); err != nil {
+			return err
 		}
 	}
 	completedAt := time.Now()

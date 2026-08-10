@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -7,7 +8,9 @@ import '../../shared/models/server_connection.dart';
 
 class StorageService {
   static late SharedPreferences _prefs;
-  static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
+  static final FlutterSecureStorage _secureStorage = FlutterSecureStorage(
+    mOptions: buildMacOsSecureStorageOptions(releaseMode: kReleaseMode),
+  );
   static final Map<String, String> _serverTokens = {};
   static String? _activeServerToken;
   static String? _activeServerCookie;
@@ -176,4 +179,8 @@ class StorageService {
   }
 
   static String _serverTokenKey(String id) => 'secure_server_token_$id';
+}
+
+MacOsOptions buildMacOsSecureStorageOptions({required bool releaseMode}) {
+  return MacOsOptions(usesDataProtectionKeychain: releaseMode);
 }
