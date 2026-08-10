@@ -11,8 +11,8 @@ const { t } = useI18n({ messages: codeWorkspaceMessages })
 
 <template>
 	<n-radio-group :value="value" size="small" @update:value="emit('update:value', $event)">
+		<n-radio-button value="terminal">{{ t("code.terminalMode") }}</n-radio-button>
 		<n-radio-button value="editor">{{ t("code.editorMode") }}</n-radio-button>
 		<n-radio-button value="changes">{{ t("code.changesMode") }}</n-radio-button>
-		<n-radio-button value="terminal">{{ t("code.terminalMode") }}</n-radio-button>
 	</n-radio-group>
 </template>

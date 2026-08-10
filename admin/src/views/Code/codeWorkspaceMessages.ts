@@ -6,6 +6,7 @@ export const codeWorkspaceMessages = {
 			newSession: "新会话",
 			newAiTask: "新建 AI 任务",
 			aiTaskShort: "AI 任务",
+			taskHome: "任务主页",
 			terminalShort: "终端",
 			projectTerminal: "项目终端",
 			projectTerminalHint: "项目工作区 Shell，可直接运行命令",
@@ -15,6 +16,9 @@ export const codeWorkspaceMessages = {
 			projectTerminalEnded: "原生终端会话已结束",
 			reopenTerminal: "重新打开",
 			terminalSession: "终端",
+			taskTerminal: "任务终端",
+			sessionTerminal: "会话终端",
+			currentDirectory: "当前目录",
 			aiSession: "AI",
 			aiTools: "AI 工具",
 			deliveryAndQuality: "交付与质量",
@@ -125,8 +129,8 @@ export const codeWorkspaceMessages = {
 			saveChanges: "保存修改",
 			unsavedChanges: "未保存的修改",
 			switchSessionUnsavedHint: "当前会话有未保存的文件，继续后这些修改会丢失。",
-			discardAndContinue: "放弃并继续"
-		}
+			discardAndContinue: "放弃并继续",
+		},
 	},
 	en: {
 		code: {
@@ -135,6 +139,7 @@ export const codeWorkspaceMessages = {
 			newSession: "New session",
 			newAiTask: "New AI task",
 			aiTaskShort: "AI task",
+			taskHome: "Task home",
 			terminalShort: "Terminal",
 			projectTerminal: "Project terminal",
 			projectTerminalHint: "Project workspace shell for direct commands",
@@ -144,6 +149,9 @@ export const codeWorkspaceMessages = {
 			projectTerminalEnded: "The native terminal session has ended",
 			reopenTerminal: "Reopen",
 			terminalSession: "Terminal",
+			taskTerminal: "Task terminal",
+			sessionTerminal: "Session terminal",
+			currentDirectory: "Current directory",
 			aiSession: "AI",
 			aiTools: "AI tools",
 			deliveryAndQuality: "Delivery and quality",
@@ -254,7 +262,7 @@ export const codeWorkspaceMessages = {
 			saveChanges: "Save changes",
 			unsavedChanges: "Unsaved changes",
 			switchSessionUnsavedHint: "The current session has unsaved files. Continuing will discard those changes.",
-			discardAndContinue: "Discard and continue"
-		}
-	}
+			discardAndContinue: "Discard and continue",
+		},
+	},
 } as const

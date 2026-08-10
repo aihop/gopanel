@@ -31,7 +31,10 @@
 										</div>
 									</div>
 								</div>
-								<div class="grid gap-2" :class="projectTerminalAvailable ? 'grid-cols-2' : 'grid-cols-1'">
+								<div
+									class="grid gap-2"
+									:class="projectTerminalAvailable ? 'grid-cols-2' : 'grid-cols-1'"
+								>
 									<n-button
 										v-if="projectTerminalAvailable"
 										type="primary"
@@ -89,6 +92,7 @@
 						@toggle-fullscreen="toggleWorkspaceFullscreen"
 						@open-file="openFile"
 						@update-mode="switchWorkspaceMode"
+						@go-home="goTaskHome"
 					/>
 					<ProjectOverviewPanel
 						v-if="currentSessionId === null && currentTaskId === null && !isProjectTerminalActive"
@@ -137,27 +141,25 @@
 						</aside>
 					</div>
 
-					<ProjectNativeTerminalPanel
-						v-if="isProjectTerminalActive"
-						:session-id="projectTerminalSessionId"
-						:opening="projectTerminalOpening"
-						@closed="handleProjectTerminalClosed"
-						@reopen="openProjectTerminal"
+					<CodeWorkspaceTerminalPanel
+						:active="workspaceMode === 'terminal' && terminalMounted"
+						:is-project-terminal-active="isProjectTerminalActive"
+						:project-terminal-session-id="projectTerminalSessionId"
+						:project-terminal-work-dir="projectTerminalWorkDir"
+						:project-terminal-opening="projectTerminalOpening"
+						:task-id="currentTaskId"
+						:session-id="currentSessionId"
+						:task-title="currentTask?.title || ''"
+						:task-work-dir="currentTask?.workDir || ''"
+						:session-work-dir="currentSessionWorkDir"
+						:terminal-takeover-requested="terminalTakeoverRequested"
+						:terminal-key="terminalKey"
+						@open-project-terminal="openProjectTerminal"
+						@reopen-project-terminal="openProjectTerminal"
+						@close-project-terminal="handleProjectTerminalClosed"
+						@take-task-terminal="takeOverTerminal"
+						@task-created="handleTaskCreated"
 					/>
-
-					<div
-						v-if="!isProjectTerminalActive && terminalMounted && (currentTaskId !== null || currentSessionId !== null)"
-						v-show="workspaceMode === 'terminal'"
-						class="ai-workspace-terminal-panel min-h-0 flex-1 overflow-hidden rounded border border-slate-700 bg-[#1e1e1e] shadow-lg"
-					>
-						<CodeTerminal
-							:key="terminalKey"
-							:task-id="currentTaskId"
-							:session-id="currentSessionId"
-							:auto-take-control="terminalTakeoverRequested"
-							@task-created="handleTaskCreated"
-						/>
-					</div>
 				</div>
 			</n-layout-content>
 		</n-layout>
@@ -200,301 +202,75 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from "vue"
-import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from "vue-router"
-import { useDialog, useMessage } from "naive-ui"
-import { useI18n } from "vue-i18n"
-import { useAuthStore } from "@/store/auth"
-import { useHideLayoutFooter } from "@/composables/useHideLayoutFooter"
 import Icon from "@/components/common/Icon.vue"
-import CodeTerminal from "./components/CodeTerminal.vue"
+import CodeWorkspaceTerminalPanel from "./components/CodeWorkspaceTerminalPanel.vue"
 import NewSessionModal from "./components/NewSessionModal.vue"
 import CodeWorkspaceToolbar from "./components/CodeWorkspaceToolbar.vue"
-import ProjectNativeTerminalPanel from "./components/ProjectNativeTerminalPanel.vue"
 import SessionHistoryDrawer from "./components/SessionHistoryDrawer.vue"
 import ProjectStructurePanel from "./components/ProjectStructurePanel.vue"
 import SessionFileEditor from "./components/SessionFileEditor.vue"
 import ProjectTaskSidebar from "./components/ProjectTaskSidebar.vue"
 import ProjectOverviewPanel from "./components/ProjectOverviewPanel.vue"
 import CodeGitReview from "./components/CodeGitReview.vue"
-import type { CodeWorkspaceMode } from "./components/WorkspaceModeSwitch.vue"
-import { useCodeTaskPolling } from "./useCodeTaskPolling"
-import { useCodeWorkspaceFullscreen } from "./useCodeWorkspaceFullscreen"
-import { useProjectTerminal } from "./useProjectTerminal"
-import { deleteAITask, getAIProjects, updateAITask } from "@/api/modules/code"
-import type { AIProject, AITask, CodeSession } from "@/api/interface/code"
-import type { CodeTaskListItem } from "@/api/interface/codeTasks"
-import type { HostTerminalSession } from "@/api/interface/hostTerminal"
-import { codeWorkspaceMessages } from "./codeWorkspaceMessages"
+import { useCodeWorkspace } from "./useCodeWorkspace"
 
 const props = withDefaults(defineProps<{ projectId?: number; embedded?: boolean }>(), { embedded: false })
 const emit = defineEmits<{ close: [] }>()
-const route = useRoute()
-const router = useRouter()
-const message = useMessage()
-const dialog = useDialog()
-const authStore = useAuthStore()
-const { t } = useI18n({ messages: codeWorkspaceMessages })
-if (!props.embedded) useHideLayoutFooter()
-const currentProjectId = computed(() => props.projectId ?? Number(route.params.id))
-const projectTerminalAvailable = computed(() => authStore.role === "ADMIN" || authStore.role === "SUPER")
-const projectInfo = ref<AIProject | null>(null),
-	tasks = ref<CodeTaskListItem[]>([])
-const taskTotal = ref(0)
-const currentTaskId = ref<number | null>(null),
-	currentSessionId = ref<number | null>(null)
-const showNewSessionModal = ref(false),
-	showHistoryDrawer = ref(false)
-const showProjectStructure = ref(false),
-	showRenameModal = ref(false)
-const workspaceMode = ref<CodeWorkspaceMode>("terminal")
-const terminalMounted = ref(false),
-	terminalKey = ref(0)
-const terminalTakeoverRequested = ref(false)
-const isProjectTerminalActive = ref(false)
-const projectTerminalSessionId = ref<number | null>(null)
-const projectTerminalWorkDir = ref("")
-const { isWorkspaceFullscreen, fullscreenLabel, toggleWorkspaceFullscreen } = useCodeWorkspaceFullscreen(t)
-const selectedFile = ref({ path: "", extension: "" })
-const activeFilePath = ref("")
-const fileEditorRef = ref<{ hasUnsavedChanges: boolean } | null>(null)
-const editingTaskId = ref<number | null>(null),
-	editingTaskTitle = ref("")
-const renaming = ref(false)
-const aiTasks = computed(() => tasks.value.filter(task => task.agentName !== "terminal"))
-const aiTaskTotal = computed(() => Math.max(0, taskTotal.value - (tasks.value.length - aiTasks.value.length)))
-const currentTask = computed(() => tasks.value.find(task => task.id === currentTaskId.value) || null)
-const hasWorkspaceContext = computed(
-	() => isProjectTerminalActive.value || currentSessionId.value !== null || currentTaskId.value !== null
-)
-const isTerminalSession = computed(() => isProjectTerminalActive.value)
-const sessionLabel = computed(
-	() =>
-		(isProjectTerminalActive.value
-			? t("code.projectTerminal")
-			: currentTask.value?.title ||
-				(currentSessionId.value
-					? t("code.newSession")
-					: t("code.selectTaskToStart")))
-)
-const sessionSubtitle = computed(
-	() =>
-		(isProjectTerminalActive.value
-			? projectTerminalWorkDir.value || t("code.projectTerminalHint")
-			: activeFilePath.value || t("code.selectFileToEdit"))
-)
-const taskActionOptions = computed(() => [
-	{ label: t("code.renameTask"), key: "rename" },
-	{ label: t("code.deleteTask"), key: "delete", style: "color: red;" }
-])
-
-const fetchProjectInfo = async () => {
-	try {
-		const response = await getAIProjects({ page: 1, limit: 50 })
-		projectInfo.value =
-			response.code === 0 ? response.data.items.find(project => project.id === currentProjectId.value) || null : null
-	} catch (error) {
-		void 0
-	}
-}
-
-const { fetchTasks } = useCodeTaskPolling(currentProjectId, tasks, taskTotal, error => {
-	message.error(error instanceof Error ? error.message : t("code.taskLoadFailed"))
-})
-
-const resetSelectedFile = () => {
-	selectedFile.value = { path: "", extension: "" }
-	activeFilePath.value = ""
-}
-
-const openFile = async (file: { path: string; extension: string }) => {
-	workspaceMode.value = "editor"
-	if (selectedFile.value.path === file.path) {
-		selectedFile.value = { path: "", extension: "" }
-		await nextTick()
-	}
-	selectedFile.value = file
-}
-
-const openFileFromDrawer = async (file: { path: string; extension: string }) => {
-	await openFile(file)
-	showProjectStructure.value = false
-}
-
-const confirmDiscardEditorChanges = (action: () => void) => {
-	if (!fileEditorRef.value?.hasUnsavedChanges) {
-		action()
-		return
-	}
-	dialog.warning({
-		title: t("code.unsavedChanges"),
-		content: t("code.switchSessionUnsavedHint"),
-		positiveText: t("code.discardAndContinue"),
-		negativeText: t("code.cancel"),
-		onPositiveClick: action
-	})
-}
-
-const createNewTask = () =>
-	confirmDiscardEditorChanges(() => {
-		terminalTakeoverRequested.value = false
-		showNewSessionModal.value = true
-	})
-
-const handleSessionCreated = (session: CodeSession) => {
-	resetSelectedFile()
-	currentTaskId.value = null
-	currentSessionId.value = session.id
-	isProjectTerminalActive.value = false
-	terminalTakeoverRequested.value = false
-	workspaceMode.value = "terminal"
-	terminalMounted.value = true
-	terminalKey.value++
-	void fetchTasks()
-}
-
-const activateTask = (task: AITask) => {
-	resetSelectedFile()
-	currentTaskId.value = task.id
-	currentSessionId.value = task.sessionId || null
-	isProjectTerminalActive.value = false
-	terminalTakeoverRequested.value = false
-	workspaceMode.value = "terminal"
-	terminalMounted.value = true
-	terminalKey.value++
-}
-
-const selectTask = (task: AITask) => {
-	if (currentTaskId.value === task.id && currentSessionId.value === task.sessionId) return
-	confirmDiscardEditorChanges(() => activateTask(task))
-}
-
-const activateProjectTerminal = (session: HostTerminalSession) => {
-	resetSelectedFile()
-	currentTaskId.value = null
-	currentSessionId.value = null
-	projectTerminalSessionId.value = session.id
-	projectTerminalWorkDir.value = session.workDir
-	isProjectTerminalActive.value = true
-	workspaceMode.value = "terminal"
-}
-
-const { opening: projectTerminalOpening, open: openNativeProjectTerminal } = useProjectTerminal(
+const {
+	activeFilePath,
+	aiTaskTotal,
+	aiTasks,
+	backToLobby,
+	confirmLeaveWorkspace,
+	createNewTask,
 	currentProjectId,
-	activateProjectTerminal,
-	value => message.success(value),
-	value => message.error(value),
-	{
-		created: t("code.projectTerminalOpened"),
-		failed: t("code.projectTerminalOpenFailed"),
-		unavailable: t("code.projectTerminalUnavailable")
-	}
-)
+	currentSessionId,
+	currentSessionWorkDir,
+	currentTask,
+	currentTaskId,
+	editingTaskTitle,
+	fetchTasks,
+	fileEditorRef,
+	fullscreenLabel,
+	goTaskHome,
+	handleProjectTerminalClosed,
+	handleSessionCreated,
+	handleTaskAction,
+	handleTaskCreated,
+	hasWorkspaceContext,
+	isProjectTerminalActive,
+	isTerminalSession,
+	isWorkspaceFullscreen,
+	openFile,
+	openFileFromDrawer,
+	openProjectTerminal,
+	projectInfo,
+	projectTerminalAvailable,
+	projectTerminalOpening,
+	projectTerminalSessionId,
+	projectTerminalWorkDir,
+	renaming,
+	selectedFile,
+	sessionLabel,
+	sessionSubtitle,
+	selectTask,
+	taskActionOptions,
+	showHistoryDrawer,
+	showNewSessionModal,
+	showProjectStructure,
+	showRenameModal,
+	submitRename,
+	switchWorkspaceMode,
+	t,
+	takeOverTerminal,
+	terminalKey,
+	terminalMounted,
+	terminalTakeoverRequested,
+	toggleWorkspaceFullscreen,
+	workspaceMode
+} = useCodeWorkspace(props, emit)
 
-const openProjectTerminal = () => confirmDiscardEditorChanges(() => void openNativeProjectTerminal())
-const handleProjectTerminalClosed = () => {
-	projectTerminalSessionId.value = null
-}
-
-const takeOverTerminal = () => {
-	if (currentSessionId.value === null) return
-	terminalTakeoverRequested.value = true
-	workspaceMode.value = "terminal"
-	terminalMounted.value = true
-	terminalKey.value++
-}
-
-const switchWorkspaceMode = (mode: CodeWorkspaceMode) => {
-	workspaceMode.value = mode
-	if (mode === "terminal") terminalMounted.value = true
-}
-
-const handleTaskCreated = (taskId: number) => {
-	currentTaskId.value = taskId
-	void fetchTasks()
-}
-
-const handleTaskAction = (key: string, task: CodeTaskListItem) => {
-	if (key === "rename") {
-		editingTaskId.value = task.id
-		editingTaskTitle.value = task.title
-		showRenameModal.value = true
-		return
-	}
-	if (key !== "delete") return
-	dialog.warning({
-		title: t("code.deleteTask"),
-		content: t("code.deleteTaskConfirm", { name: task.title }),
-		positiveText: t("code.confirmDelete"),
-		negativeText: t("code.cancel"),
-		onPositiveClick: async () => {
-			try {
-				await deleteAITask(task.id)
-				message.success(t("code.taskDeleted"))
-				if (currentTaskId.value === task.id) {
-					currentTaskId.value = null
-					currentSessionId.value = null
-					workspaceMode.value = "terminal"
-					terminalMounted.value = false
-					resetSelectedFile()
-				}
-				await fetchTasks()
-			} catch (error) {
-				void 0
-			}
-		}
-	})
-}
-
-const submitRename = async () => {
-	if (!editingTaskTitle.value.trim() || !editingTaskId.value) return
-	renaming.value = true
-	try {
-		await updateAITask(editingTaskId.value, editingTaskTitle.value.trim())
-		message.success(t("code.taskRenamed"))
-		showRenameModal.value = false
-		await fetchTasks()
-	} catch (error) {
-		void 0
-	} finally {
-		renaming.value = false
-	}
-}
-
-const resetWorkspace = () => {
-	currentTaskId.value = null
-	currentSessionId.value = null
-	isProjectTerminalActive.value = false
-	projectTerminalSessionId.value = null
-	projectTerminalWorkDir.value = ""
-	tasks.value = []
-	taskTotal.value = 0
-	showNewSessionModal.value = false
-	showHistoryDrawer.value = false
-	showProjectStructure.value = false
-	workspaceMode.value = "terminal"
-	terminalMounted.value = false
-	isWorkspaceFullscreen.value = false
-	resetSelectedFile()
-}
-
-const backToLobby = () => (props.embedded ? emit("close") : router.push("/code/index"))
-const confirmLeaveWorkspace = () =>
-	!fileEditorRef.value?.hasUnsavedChanges || window.confirm(t("code.switchSessionUnsavedHint"))
 defineExpose({ confirmClose: confirmLeaveWorkspace })
-onBeforeRouteLeave(() => props.embedded || confirmLeaveWorkspace())
-onBeforeRouteUpdate(() => props.embedded || confirmLeaveWorkspace())
-
-onMounted(() => {
-	void fetchProjectInfo()
-	void fetchTasks()
-})
-watch(currentProjectId, newId => {
-	if (!newId) return
-	resetWorkspace()
-	void fetchProjectInfo()
-	void fetchTasks()
-})
 </script>
 
 <style scoped src="./workspace.css"></style>

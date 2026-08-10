@@ -28,6 +28,7 @@ const emit = defineEmits<{
 	toggleFullscreen: []
 	openFile: [file: { path: string; extension: string }]
 	updateMode: [mode: CodeWorkspaceMode]
+	goHome: []
 }>()
 
 const { t } = useI18n({ messages: codeWorkspaceMessages })
@@ -118,6 +119,14 @@ const sessionIcon = computed(() => (props.isTerminalSession ? "mdi:console-line"
 						</n-button>
 					</template>
 					{{ t("code.conversationHistory") }}
+				</n-tooltip>
+				<n-tooltip v-if="hasContext">
+					<template #trigger>
+						<n-button quaternary circle size="small" @click="emit('goHome')">
+							<template #icon><Icon name="mdi:view-dashboard-outline" /></template>
+						</n-button>
+					</template>
+					{{ t("code.taskHome") }}
 				</n-tooltip>
 				<n-tooltip v-if="!embedded">
 					<template #trigger>
