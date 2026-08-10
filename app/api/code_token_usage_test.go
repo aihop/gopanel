@@ -54,3 +54,31 @@ func TestLoadCodeTokenUsageAggregatesSessionProjectAndDay(t *testing.T) {
 		t.Fatalf("unexpected daily usage: %#v", usage.Daily)
 	}
 }
+
+func TestSumCodeTokenUsageBackfillsLegacyRawOutput(t *testing.T) {
+	oldDB := global.DB
+	database, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "tokens-backfill.db")), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	global.DB = database
+	t.Cleanup(func() { global.DB = oldDB })
+	if err := database.AutoMigrate(&model.AIExecutionRun{}); err != nil {
+		t.Fatal(err)
+	}
+	raw := `{"type":"turn.completed","usage":{"input_tokens":120,"cached_input_tokens":80,"output_tokens":30,"reasoning_output_tokens":10}}`
+	run := model.AIExecutionRun{ExecutorID: "codex", Prompt: "legacy", RawOutput: raw, Status: "completed", StartedAt: time.Now()}
+	if err := database.Create(&run).Error; err != nil {
+		t.Fatal(err)
+	}
+	usage, err := sumCodeTokenUsage(database.Model(&model.AIExecutionRun{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if usage.InputTokens != 120 || usage.OutputTokens != 30 || usage.CachedInputTokens != 80 || usage.ReasoningTokens != 10 || usage.TotalTokens != 150 {
+		t.Fatalf("unexpected backfilled usage: %#v", usage)
+	}
+	if err := database.First(&run, run.ID).Error; err != nil || run.TotalTokens != 150 {
+		t.Fatalf("legacy usage was not persisted: %#v, %v", run, err)
+	}
+}

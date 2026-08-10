@@ -4,7 +4,7 @@ import "testing"
 
 func TestParseCodexOutput(t *testing.T) {
 	raw := []byte("{\"type\":\"thread.started\",\"thread_id\":\"thread-1\"}\n" +
-		"{\"type\":\"turn.completed\",\"model\":\"gpt-5\",\"usage\":{\"input_tokens\":120,\"cached_input_tokens\":80,\"output_tokens\":30,\"reasoning_tokens\":10,\"total_tokens\":150}}\n" +
+		"{\"type\":\"turn.completed\",\"model\":\"gpt-5\",\"usage\":{\"input_tokens\":120,\"cached_input_tokens\":80,\"output_tokens\":30,\"reasoning_output_tokens\":10}}\n" +
 		"{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":\"done\"}}\n")
 	result := parseCodeExecutorOutput("codex", raw, "")
 	if result.NativeSessionID != "thread-1" || result.Message != "done" || result.RawOutput != string(raw) || result.Model != "gpt-5" || result.TotalTokens != 150 || result.CachedInputTokens != 80 {

@@ -36,6 +36,8 @@ const formatTaskDuration = (durationMs: number) => {
 		: t("code.taskDurationHours", { count: hours })
 }
 
+const formatTaskTokens = (tokens: number) => new Intl.NumberFormat().format(tokens)
+
 const taskGitMeta = (task: CodeTaskListItem) =>
 	task.summary.deliveryStatus === "queued"
 		? { icon: "mdi:clock-outline", color: "text-amber-500" }
@@ -69,6 +71,7 @@ const taskTooltip = (task: CodeTaskListItem) =>
 		task.summary.gitError,
 		task.summary.executor,
 		task.summary.model,
+		task.summary.totalTokens ? t("code.taskTokens", { count: formatTaskTokens(task.summary.totalTokens) }) : "",
 		task.summary.branch,
 		new Date(task.createdAt).toLocaleString()
 	]
@@ -142,6 +145,12 @@ const taskTooltip = (task: CodeTaskListItem) =>
 										<span class="text-slate-300">·</span>
 										<span class="whitespace-nowrap">
 											{{ formatTaskDuration(task.summary.durationMs) }}
+										</span>
+									</template>
+									<template v-if="task.summary.totalTokens > 0">
+										<span class="text-slate-300">·</span>
+										<span class="whitespace-nowrap text-blue-500">
+											{{ t("code.taskTokens", { count: formatTaskTokens(task.summary.totalTokens) }) }}
 										</span>
 									</template>
 								</div>

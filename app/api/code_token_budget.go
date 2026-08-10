@@ -35,14 +35,13 @@ func loadCodeTokenBudget(projectID uint, now time.Time) (codeTokenBudget, error)
 	if err != nil {
 		return codeTokenBudget{}, err
 	}
-	var used int64
-	err = global.DB.Model(&model.AIExecutionRun{}).
+	usage, err := sumCodeTokenUsage(global.DB.Model(&model.AIExecutionRun{}).
 		Joins("JOIN ai_dev_sessions ON ai_dev_sessions.id = ai_execution_runs.session_id").
-		Where("ai_dev_sessions.project_id = ? AND ai_execution_runs.created_at >= ?", projectID, codeMonthStart(now)).
-		Select("COALESCE(SUM(ai_execution_runs.total_tokens), 0)").Scan(&used).Error
+		Where("ai_dev_sessions.project_id = ? AND ai_execution_runs.created_at >= ?", projectID, codeMonthStart(now)))
 	if err != nil {
 		return codeTokenBudget{}, err
 	}
+	used := usage.TotalTokens
 	budget := codeTokenBudget{LimitTokens: project.MonthlyTokenBudget, UsedTokens: used, Unlimited: project.MonthlyTokenBudget <= 0}
 	if budget.Unlimited {
 		return budget, nil
