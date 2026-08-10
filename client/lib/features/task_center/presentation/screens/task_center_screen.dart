@@ -80,7 +80,7 @@ class TaskCenterScreen extends ConsumerWidget {
                     : AppTheme.textSecondary,
               ),
               label: Text(
-                '待我处理 ${state.tasks.where((task) => task.requiresAttention).length}',
+                '待我处理 ${state.attentionTasks.length}',
                 style: TextStyle(
                   color: state.attentionOnly
                       ? AppTheme.error

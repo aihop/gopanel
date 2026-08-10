@@ -46,13 +46,18 @@ class TaskCenterState {
   }
 
   List<TaskEntity> get visibleTasks {
-    final list = [...localTasks, ...tasks];
+    final list = allTasks;
     if (attentionOnly) {
       return list.where((task) => task.requiresAttention).toList();
     }
     if (filter == null) return list;
     return list.where((t) => t.status == filter).toList();
   }
+
+  List<TaskEntity> get allTasks => [...localTasks, ...tasks];
+
+  List<TaskEntity> get attentionTasks =>
+      allTasks.where((task) => task.requiresAttention).toList();
 }
 
 final taskCenterControllerProvider =
@@ -116,6 +121,14 @@ class TaskCenterController extends Notifier<TaskCenterState> {
     }
     state = state.copyWith(
       filter: status,
+      attentionOnly: false,
+      errorMessage: null,
+    );
+  }
+
+  void showAll() {
+    state = state.copyWith(
+      clearFilter: true,
       attentionOnly: false,
       errorMessage: null,
     );

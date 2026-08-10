@@ -7,6 +7,7 @@ import '../../models/system_info.dart';
 import '../../../task_center/presentation/controllers/task_center_controller.dart';
 import '../widgets/dashboard_base_card.dart';
 import '../widgets/dashboard_ai_summary_card.dart';
+import '../widgets/dashboard_attention_card.dart';
 import '../widgets/dashboard_disk_card.dart';
 import '../widgets/dashboard_metric_card.dart';
 import '../widgets/dashboard_monitor_card.dart';
@@ -32,6 +33,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       appBar: AppBar(
         title: const Text('服务器概览'),
         actions: [
+          const DashboardTaskCenterButton(),
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
             onPressed: () {
@@ -108,6 +110,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             DashboardBaseCard(osInfo: osInfo, currentInfo: currentInfo),
+            const SizedBox(height: 20),
+            const DashboardAttentionCard(),
             const SizedBox(height: 20),
             const DashboardAiSummaryCard(),
             const SizedBox(height: 20),
