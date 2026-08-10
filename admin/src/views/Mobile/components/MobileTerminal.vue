@@ -4,11 +4,17 @@ import { useI18n } from "vue-i18n"
 import { useMessage } from "naive-ui"
 import { FitAddon } from "@xterm/addon-fit"
 import { Terminal } from "@xterm/xterm"
+import useClipboard from "vue-clipboard3"
 import { updateMobileSessionTitle } from "@/api/modules/mobile"
 import Icon from "@/components/common/Icon.vue"
 import { mobileMessages } from "@/i18n/locales/mobile"
+import { mobileTerminalMessages } from "../mobileTerminalMessages"
+import MobileTerminalHeader from "./MobileTerminalHeader.vue"
 import MobileTerminalInput from "./MobileTerminalInput.vue"
+import MobileTerminalSelectionToolbar from "./MobileTerminalSelectionToolbar.vue"
+import { terminalBufferText } from "./mobileTerminalClipboard"
 import { MobileTerminalOutputQueue } from "./mobileTerminalOutputQueue"
+import { MobileTerminalTouchSelection } from "./mobileTerminalTouchSelection"
 import "./mobileTerminal.css"
 import "@xterm/xterm/css/xterm.css"
 
@@ -22,8 +28,13 @@ const props = withDefaults(
 	{ mode: "ai" }
 )
 const emit = defineEmits<{ back: []; openFiles: []; openStatus: []; renamed: [] }>()
-const { t } = useI18n({ messages: mobileMessages })
+const terminalMessages = {
+	zh: { mobile: { ...mobileMessages.zh.mobile, ...mobileTerminalMessages.zh.mobile } },
+	en: { mobile: { ...mobileMessages.en.mobile, ...mobileTerminalMessages.en.mobile } }
+}
+const { t } = useI18n({ messages: terminalMessages })
 const message = useMessage()
+const { toClipboard } = useClipboard()
 const terminalElement = ref<HTMLElement | null>(null)
 const connected = ref(false)
 const connecting = ref(true)
@@ -33,9 +44,11 @@ const ctrlActive = ref(false)
 const showRenameModal = ref(false)
 const renameTitle = ref("")
 const renameLoading = ref(false)
+const hasTerminalSelection = ref(false)
 let terminal: Terminal | null = null
 let fitAddon: FitAddon | null = null
 let outputQueue: MobileTerminalOutputQueue | null = null
+let touchSelection: MobileTerminalTouchSelection | null = null
 let socket: WebSocket | null = null
 let resizeObserver: ResizeObserver | null = null
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
@@ -132,6 +145,29 @@ function sendShortcut(data: string) {
 	ctrlActive.value = false
 	sendTerminalInput(data)
 	nextTick(() => terminal?.focus())
+}
+
+async function copyTerminalContent(selectionOnly: boolean) {
+	if (!terminal) return
+	const content = selectionOnly ? terminal.getSelection() : terminalBufferText(terminal.buffer.active)
+	if (!content) {
+		message.warning(t(selectionOnly ? "mobile.noTerminalSelection" : "mobile.noTerminalOutput"))
+		return
+	}
+	try {
+		await toClipboard(content)
+		terminal.clearSelection()
+		hasTerminalSelection.value = false
+		message.success(t("mobile.terminalCopied"))
+	} catch (error) {
+		void error
+		message.error(t("mobile.terminalCopyFailed"))
+	}
+}
+
+function clearTerminalSelection() {
+	terminal?.clearSelection()
+	hasTerminalSelection.value = false
 }
 
 function toggleCtrl() {
@@ -275,6 +311,8 @@ function openTerminal() {
 	})
 	const viewport = terminalElement.value.querySelector<HTMLElement>(".xterm-viewport")
 	if (viewport) outputQueue.bindTouchScrolling(viewport)
+	const screen = terminalElement.value.querySelector<HTMLElement>(".xterm-screen")
+	if (screen) touchSelection = new MobileTerminalTouchSelection(terminal, screen)
 	if (terminal.textarea) {
 		terminal.textarea.inputMode = "text"
 		terminal.textarea.autocapitalize = "none"
@@ -284,6 +322,9 @@ function openTerminal() {
 	}
 	terminal.onData(data => {
 		sendTerminalInput(applyCtrlModifier(data))
+	})
+	terminal.onSelectionChange(() => {
+		hasTerminalSelection.value = Boolean(terminal?.hasSelection())
 	})
 	resizeObserver = new ResizeObserver(scheduleFit)
 	resizeObserver.observe(terminalElement.value)
@@ -312,11 +353,14 @@ function closeTerminal() {
 	resizeObserver = null
 	outputQueue?.dispose()
 	outputQueue = null
+	touchSelection?.dispose()
+	touchSelection = null
 	const activeSocket = socket
 	socket = null
 	activeSocket?.close()
 	terminal?.dispose()
 	terminal = null
+	hasTerminalSelection.value = false
 	fitAddon = null
 }
 
@@ -365,83 +409,27 @@ onBeforeUnmount(closeTerminal)
 
 <template>
 	<section class="flex h-dvh w-full flex-col overflow-hidden bg-[#0b1020] text-white">
-		<header
-			class="flex shrink-0 items-center gap-2 border-b border-white/10 bg-slate-950/80 px-2 pb-2 pt-[max(8px,env(safe-area-inset-top))] backdrop-blur"
-		>
-			<button
-				class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-200 transition-colors active:bg-white/10"
-				type="button"
-				:title="t('commons.button.back')"
-				:aria-label="t('commons.button.back')"
-				@click="emit('back')"
-			>
-				<svg
-					viewBox="0 0 24 24"
-					aria-hidden="true"
-					class="h-6 w-6 fill-none stroke-current"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-				>
-					<path d="M19 12H5" />
-					<path d="m12 19-7-7 7-7" />
-				</svg>
-			</button>
-			<div class="min-w-0 flex-1">
-				<div class="truncate text-sm font-semibold">{{ taskName }}</div>
-			</div>
-			<div class="flex shrink-0 items-center gap-1.5">
-				<span class="max-w-[30vw] truncate text-right text-xs text-slate-400" :title="projectName">
-					{{ projectName }}
-				</span>
-				<span
-					class="h-2 w-2 rounded-full"
-					:class="connected ? 'bg-emerald-400' : reconnecting ? 'bg-amber-400' : 'bg-slate-500'"
-					:title="
-						connected
-							? t('mobile.connected')
-							: reconnecting
-								? t('mobile.reconnecting')
-								: t('mobile.disconnected')
-					"
-				/>
-				<n-button
-					v-if="mode === 'ai'"
-					size="small"
-					quaternary
-					circle
-					:title="t('mobile.renameSession')"
-					:aria-label="t('mobile.renameSession')"
-					@click="openRenameModal"
-				>
-					<template #icon><Icon name="mdi:pencil-outline" :size="18" color="#cbd5e1" /></template>
-				</n-button>
-				<n-button
-					v-if="mode === 'ai'"
-					size="small"
-					quaternary
-					circle
-					:title="t('mobile.taskStatus')"
-					:aria-label="t('mobile.taskStatus')"
-					@click="emit('openStatus')"
-				>
-					<template #icon><Icon name="mdi:timeline-clock-outline" :size="19" color="#cbd5e1" /></template>
-				</n-button>
-				<n-button
-					v-if="mode === 'ai'"
-					size="small"
-					quaternary
-					circle
-					:title="t('mobile.files')"
-					:aria-label="t('mobile.files')"
-					@click="emit('openFiles')"
-				>
-					<template #icon><Icon name="mdi:folder-outline" :size="19" color="#cbd5e1" /></template>
-				</n-button>
-			</div>
-		</header>
+		<MobileTerminalHeader
+			:task-name="taskName"
+			:project-name="projectName"
+			:mode="mode"
+			:connected="connected"
+			:reconnecting="reconnecting"
+			:has-selection="hasTerminalSelection"
+			@back="emit('back')"
+			@open-files="emit('openFiles')"
+			@open-status="emit('openStatus')"
+			@open-rename="openRenameModal"
+			@copy-selection="copyTerminalContent(true)"
+			@copy-output="copyTerminalContent(false)"
+		/>
 		<div class="mobile-terminal relative min-h-0 w-full flex-1 bg-[#0b1020]">
 			<div ref="terminalElement" class="h-full w-full" />
+			<MobileTerminalSelectionToolbar
+				:show="hasTerminalSelection"
+				@copy="copyTerminalContent(true)"
+				@clear="clearTerminalSelection"
+			/>
 			<div
 				v-if="connecting"
 				class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-[#0b1020] text-sm text-slate-300"
