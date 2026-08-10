@@ -107,6 +107,11 @@ func cleanupCodeIntegrationWorktree(delivery *model.AICodeDelivery) error {
 	} else if err != nil {
 		return err
 	}
+	if _, err := os.Stat(delivery.SourceWorkDir); errors.Is(err, os.ErrNotExist) {
+		return os.RemoveAll(delivery.DeliveryWorkDir)
+	} else if err != nil {
+		return err
+	}
 	if _, err := runCodeGit(delivery.SourceWorkDir, "worktree", "remove", delivery.DeliveryWorkDir); err != nil {
 		return err
 	}
