@@ -23,7 +23,6 @@ const (
 )
 
 var errCodePushRemoteAdvanced = errors.New("远端分支已在交付后更新，请先同步并重新交付")
-var errCodeMultiRepositoryManualPush = errors.New("多仓库会话不能单独推送，请通过统一交付重新执行质量检查并发布全部仓库")
 
 type codeRepositoryPushResult struct {
 	RepositoryID   string `json:"repositoryId"`
@@ -93,7 +92,7 @@ func PushCodeSessionDelivery(c fiber.Ctx) error {
 
 func loadCodeDeliveryPushStatus(session *model.AIDevSession) (codePushResult, error) {
 	if hasCodeMultiRepositoryDelivery(session.ID) {
-		return codePushResult{Status: "unavailable", Repositories: []codeRepositoryPushResult{}}, nil
+		return loadCodeMultiRepositoryPushStatus(session)
 	}
 	var delivery model.AICodeDelivery
 	if err := global.DB.Where("session_id = ?", session.ID).First(&delivery).Error; err != nil {
@@ -170,7 +169,7 @@ func summarizeCodePushResults(repositories []codeRepositoryPushResult) codePushR
 
 func pushCodeSessionDelivery(session *model.AIDevSession) (codePushResult, error) {
 	if hasCodeMultiRepositoryDelivery(session.ID) {
-		return codePushResult{}, errCodeMultiRepositoryManualPush
+		return pushCodeMultiRepositoryDelivery(session)
 	}
 	var delivery model.AICodeDelivery
 	if err := global.DB.Where("session_id = ?", session.ID).First(&delivery).Error; err != nil {

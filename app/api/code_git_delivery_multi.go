@@ -184,47 +184,6 @@ func codeMultiRepositoryDeliveryFrozen(repositories []model.AIDevSessionReposito
 	return true
 }
 
-func codeMultiRepositoryPublishStarted(
-	session *model.AIDevSession,
-	repositories []model.AIDevSessionRepository,
-) (bool, error) {
-	for index := range repositories {
-		repository := &repositories[index]
-		if repository.Status == codeDeliveryCompleted {
-			continue
-		}
-		if repository.SourceAppliedAt != nil || repository.PushStatus == codePushPushed {
-			return true, nil
-		}
-		if strings.TrimSpace(repository.MergeCommit) == "" || strings.TrimSpace(repository.TargetBranch) == "" {
-			continue
-		}
-		commit, err := runCodeGit(repository.SourceDir, "rev-parse", "refs/heads/"+repository.TargetBranch)
-		if err == nil && strings.TrimSpace(commit) == strings.TrimSpace(repository.MergeCommit) {
-			if err := markCodeMultiRepositorySourceApplied(repository); err != nil {
-				return false, err
-			}
-			return true, nil
-		}
-		remoteBranch := deliveryRemoteBranch(repository.RemoteBranch, repository.TargetBranch)
-		if !codeDeliveryHasRemote(repository.RemoteName, remoteBranch) {
-			continue
-		}
-		if _, err := fetchCodeRepositoryWithCredential(
-			repository.SourceDir, repository.RemoteName, codeProjectGitCredentialID(session.ProjectID),
-		); err != nil {
-			return false, err
-		}
-		remoteCommit, err := runCodeGit(
-			repository.SourceDir, "rev-parse", "refs/remotes/"+repository.RemoteName+"/"+remoteBranch,
-		)
-		if err == nil && strings.TrimSpace(remoteCommit) == strings.TrimSpace(repository.MergeCommit) {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
 func codeStoredRepositoryDeliveryResult(repository *model.AIDevSessionRepository) codeRepositoryDeliveryResult {
 	pushStatus := repository.PushStatus
 	if !codeDeliveryHasRemote(repository.RemoteName, deliveryRemoteBranch(repository.RemoteBranch, repository.TargetBranch)) {

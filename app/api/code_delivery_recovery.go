@@ -67,16 +67,14 @@ func mergePreparedCodeDeliveryWithProgress(delivery *model.AICodeDelivery, repor
 	if targetBranch == "" {
 		targetBranch, _ = runCodeGit(snapshot.SourceWorkDir, "branch", "--show-current")
 	}
-	targetCommit, err := refreshCodeRepositoryTargetWithCredential(
-		snapshot.SourceWorkDir, targetBranch, snapshot.RemoteName, codeProjectGitCredentialID(snapshot.ProjectID),
-	)
+	targetCommit, err := codeLocalDeliveryTarget(snapshot.SourceWorkDir, targetBranch)
 	if err != nil {
 		return codeGitDeliveryResult{}, err
 	}
-	if err := global.DB.Model(delivery).Update("remote_commit", targetCommit).Error; err != nil {
+	if err := global.DB.Model(delivery).Update("source_commit", targetCommit).Error; err != nil {
 		return codeGitDeliveryResult{}, err
 	}
-	delivery.RemoteCommit = targetCommit
+	delivery.SourceCommit = targetCommit
 	if err := prepareCodeDeliveryMergeWorktree(delivery, targetCommit); err != nil {
 		return codeGitDeliveryResult{}, err
 	}
@@ -118,6 +116,18 @@ func mergePreparedCodeDeliveryWithProgress(delivery *model.AICodeDelivery, repor
 	}
 	delivery.Status, delivery.MergeCommit, delivery.MergedAt = codeDeliveryMerged, commit, &now
 	return codeGitDeliveryResult{Status: "merged", Commit: commit, Branch: snapshot.WorktreeBranch}, nil
+}
+
+func codeLocalDeliveryTarget(sourceDir, targetBranch string) (string, error) {
+	status, err := runCodeGit(sourceDir, "status", "--porcelain")
+	if err != nil || strings.TrimSpace(status) != "" {
+		return "", errors.New("本地主仓存在未提交变更，无法安全合并")
+	}
+	currentBranch, err := runCodeGit(sourceDir, "branch", "--show-current")
+	if err != nil || strings.TrimSpace(currentBranch) != targetBranch {
+		return "", errors.New("本地主仓当前分支不是交付目标 " + targetBranch)
+	}
+	return runCodeGit(sourceDir, "rev-parse", "refs/heads/"+targetBranch)
 }
 
 func mergeCodeDeliveryCommit(delivery *model.AICodeDelivery, commit, branch string) (*codeGitDeliveryResult, error) {
@@ -208,7 +218,7 @@ func resumeCodeSessionDeliveryWithProgress(session *model.AIDevSession, userID u
 	if err != nil {
 		return codeGitDeliveryResult{}, err
 	}
-	result, err := integrateAndPushCodeDeliveryWithProgress(delivery, report)
+	result, err := integrateCodeDeliveryLocallyWithProgress(delivery, report)
 	if err != nil || result.Status == "conflict" {
 		result.Repositories = []codeRepositoryDeliveryResult{codeSingleRepositoryDeliveryResult(delivery, result)}
 		return result, err

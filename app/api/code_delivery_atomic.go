@@ -1,8 +1,6 @@
 package api
 
 import (
-	"errors"
-	"fmt"
 	"strings"
 	"time"
 
@@ -10,59 +8,38 @@ import (
 	"github.com/aihop/gopanel/global"
 )
 
-const codeDeliveryPushAttempts = 3
-
-func integrateAndPushCodeDelivery(delivery *model.AICodeDelivery) (codeGitDeliveryResult, error) {
-	return integrateAndPushCodeDeliveryWithProgress(delivery, nil)
-}
-
-func integrateAndPushCodeDeliveryWithProgress(delivery *model.AICodeDelivery, report codeDeliveryProgressReporter) (codeGitDeliveryResult, error) {
+func integrateCodeDeliveryLocallyWithProgress(delivery *model.AICodeDelivery, report codeDeliveryProgressReporter) (codeGitDeliveryResult, error) {
 	result := codeGitDeliveryResult{Status: "merged", ResultType: "local", Commit: delivery.MergeCommit, Branch: delivery.WorktreeBranch}
 	if delivery.PushStatus == codePushPushed {
 		result.ResultType = "remote_verified"
 	}
-	for attempt := 0; attempt < codeDeliveryPushAttempts; attempt++ {
-		if delivery.Status == codeDeliveryPrepared {
-			merged, err := mergePreparedCodeDeliveryWithProgress(delivery, report)
-			if err != nil || merged.Status == "conflict" {
-				return merged, err
-			}
-			result = merged
+	if delivery.Status == codeDeliveryPrepared {
+		merged, err := mergePreparedCodeDeliveryWithProgress(delivery, report)
+		if err != nil || merged.Status == "conflict" {
+			return merged, err
 		}
-		if delivery.Status != codeDeliveryMerged {
-			return result, nil
-		}
-		if !codeDeliveryHasRemote(delivery.RemoteName, deliveryRemoteBranch(delivery.RemoteBranch, delivery.TargetBranch)) {
-			if err := fastForwardCodeDeliverySource(delivery); err != nil {
-				return codeGitDeliveryResult{}, err
-			}
-			if err := markCodeDeliveryLocalPush(delivery); err != nil {
-				return codeGitDeliveryResult{}, err
-			}
-			return result, nil
-		}
-		if report != nil {
-			report(codeDeliveryStagePushing, 70)
-		}
-		pushResult, err := pushCodeIntegratedDeliveryWithProgress(delivery, report)
-		if persistErr := persistCodeDeliveryPushResult(delivery, pushResult); persistErr != nil {
-			return codeGitDeliveryResult{}, persistErr
-		}
-		if err == nil {
-			if err := fastForwardCodeDeliverySource(delivery); err != nil {
-				return codeGitDeliveryResult{}, err
-			}
-			result.ResultType = "remote_verified"
-			return result, nil
-		}
-		if !errors.Is(err, errCodePushRemoteAdvanced) || attempt == codeDeliveryPushAttempts-1 {
-			return codeGitDeliveryResult{}, err
-		}
-		if err := resetCodeDeliveryToRemote(delivery); err != nil {
-			return codeGitDeliveryResult{}, err
-		}
+		result = merged
+		result.ResultType = "local"
 	}
-	return codeGitDeliveryResult{}, errCodePushRemoteAdvanced
+	if delivery.Status != codeDeliveryMerged {
+		return result, nil
+	}
+	if err := fastForwardCodeDeliverySource(delivery); err != nil {
+		return codeGitDeliveryResult{}, err
+	}
+	if !codeDeliveryHasRemote(delivery.RemoteName, deliveryRemoteBranch(delivery.RemoteBranch, delivery.TargetBranch)) {
+		if err := markCodeDeliveryLocalPush(delivery); err != nil {
+			return codeGitDeliveryResult{}, err
+		}
+	} else if delivery.PushStatus != codePushPushed {
+		if err := global.DB.Model(delivery).Updates(map[string]any{
+			"push_status": codePushPending, "push_error": "",
+		}).Error; err != nil {
+			return codeGitDeliveryResult{}, err
+		}
+		delivery.PushStatus, delivery.PushError = codePushPending, ""
+	}
+	return result, nil
 }
 
 func codeDeliveryHasRemote(remoteName, remoteBranch string) bool {
@@ -80,29 +57,6 @@ func persistCodeDeliveryPushResult(delivery *model.AICodeDelivery, result codeRe
 		return err
 	}
 	delivery.PushStatus, delivery.PushError = result.Status, result.ErrorMessage
-	return nil
-}
-
-func resetCodeDeliveryToRemote(delivery *model.AICodeDelivery) error {
-	remoteBranch := deliveryRemoteBranch(delivery.RemoteBranch, delivery.TargetBranch)
-	remoteRef := "refs/remotes/" + delivery.RemoteName + "/" + remoteBranch
-	remoteCommit, err := runCodeGit(delivery.SourceWorkDir, "rev-parse", remoteRef)
-	if err != nil {
-		return err
-	}
-	if err := resetCodeDeliveryWorktree(delivery, remoteCommit); err != nil {
-		return fmt.Errorf("恢复最新远端基线失败：%w", err)
-	}
-	updates := map[string]any{
-		"status": codeDeliveryPrepared, "remote_commit": remoteCommit,
-		"merge_commit": "", "merged_at": nil, "push_status": codePushPending, "push_error": "",
-	}
-	if err := global.DB.Model(delivery).Updates(updates).Error; err != nil {
-		return err
-	}
-	delivery.Status, delivery.RemoteCommit = codeDeliveryPrepared, remoteCommit
-	delivery.MergeCommit, delivery.MergedAt = "", nil
-	delivery.PushStatus, delivery.PushError = codePushPending, ""
 	return nil
 }
 

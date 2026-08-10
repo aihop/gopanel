@@ -1,11 +1,8 @@
 package api
 
 import (
-	"errors"
 	"strings"
 	"testing"
-
-	"github.com/aihop/gopanel/app/model"
 )
 
 func prepareCodePushTestRepository(t *testing.T) (string, string, string, string) {
@@ -68,27 +65,39 @@ func TestPushCodeDeliveryRepositoryRejectsLaterLocalCommit(t *testing.T) {
 	}
 }
 
-func TestPushCodeSessionDeliveryRejectsMultiRepositoryBypass(t *testing.T) {
-	database := withCodeGovernanceDB(t)
-	session := &model.AIDevSession{ID: 101, ProjectID: 1}
-	repositories := []model.AIDevSessionRepository{{
-		SessionID: session.ID, ProjectID: session.ProjectID, SourceDir: t.TempDir(), WorktreeDir: t.TempDir(),
-		LinkName: "repository", Branch: "work", TargetBranch: "main", BaseCommit: "base",
-		Status: codeDeliveryMerged, PushStatus: codePushPending,
-	}}
-	if err := database.Create(&repositories).Error; err != nil {
+func TestPushCodeSessionDeliveryPushesCompletedMultiRepository(t *testing.T) {
+	session, _ := createRemoteCodeMultiRepositorySession(t, 101)
+	repositories, err := loadCodeSessionRepositories(session.ID)
+	if err != nil {
 		t.Fatal(err)
 	}
+	for index := range repositories {
+		commitCodeTestFile(t, repositories[index].WorktreeDir, "delivery.txt", repositories[index].LinkName+"\n")
+	}
+	result, err := resumeCodeMultiRepositoryDelivery(session, session.UserID)
+	if err != nil || result.ResultType != "local" {
+		t.Fatalf("local delivery failed: %#v, %v", result, err)
+	}
 	status, err := loadCodeDeliveryPushStatus(session)
-	if err != nil || status.Available || status.Status != "unavailable" || len(status.Repositories) != 0 {
+	if err != nil || !status.Available || status.Status != codePushPending || len(status.Repositories) != len(repositories) {
 		t.Fatalf("unexpected multi-repository push status: %#v, %v", status, err)
 	}
-	result, err := pushCodeSessionDelivery(session)
-	if !errors.Is(err, errCodeMultiRepositoryManualPush) || result.Available {
-		t.Fatalf("multi-repository push bypass was not rejected: %#v, %v", result, err)
+	pushResult, err := pushCodeSessionDelivery(session)
+	if err != nil || pushResult.Status != codePushPushed {
+		t.Fatalf("multi-repository push failed: %#v, %v", pushResult, err)
 	}
-	var stored model.AIDevSessionRepository
-	if err := database.First(&stored, repositories[0].ID).Error; err != nil || stored.PushStatus != codePushPending {
-		t.Fatalf("push bypass changed repository state: %#v, %v", stored, err)
+	pushStatus, err := loadCodeDeliveryPushStatus(session)
+	if err != nil || pushStatus.Status != codePushPushed {
+		t.Fatalf("multi-repository push was not completed: %#v, %v", pushStatus, err)
+	}
+	stored, err := loadCodeSessionRepositories(session.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index := range stored {
+		remoteHead, remoteErr := codeTestRemoteHead(t, stored[index].SourceDir)
+		if remoteErr != nil || remoteHead != stored[index].MergeCommit {
+			t.Fatalf("repository %s remote=%q want=%q: %v", stored[index].LinkName, remoteHead, stored[index].MergeCommit, remoteErr)
+		}
 	}
 }

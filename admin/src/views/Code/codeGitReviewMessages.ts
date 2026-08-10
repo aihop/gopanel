@@ -80,10 +80,10 @@ export const codeGitReviewMessages = {
 			gitMerge: "交付到主仓",
 			gitMergeTitle: "交付到主仓",
 			gitMergeConfirm:
-				"确认交付分支 {branch}？系统会排队同步远端、合并到本地项目分支并统一推送，远端核验成功后清理隔离工作区。",
+				"确认交付分支 {branch}？系统只会安全合并到本地目标分支并清理隔离工作区；需要发布时再单独点击“推送远端”。",
 			gitMultiMergeConfirm:
-				"确认统一交付 {count} 个仓库？系统会依次同步、合并并推送，发生冲突或推送失败时停止并保留未完成工作区。",
-			gitMergeSuccess: "变更已合并到本地项目目录并完成统一推送",
+				"确认交付 {count} 个仓库？系统会按依赖顺序安全合并到各本地目标分支，不访问远端；发生冲突时停止并保留未完成工作区。",
+			gitMergeSuccess: "变更已安全合并到本地目标分支",
 			gitDeliveryQueued: "统一交付已加入后台队列",
 			gitDeliveryStatus_queued: "排队中（第 {position} 位）",
 			gitDeliveryStatus_running: "交付进行中（{progress}%）",
@@ -95,7 +95,7 @@ export const codeGitReviewMessages = {
 			gitDeliveryStatus_failed: "统一交付失败，可再次点击重试",
 			gitDeliveryStage_queued: "等待仓库租约",
 			gitDeliveryStage_stopping_terminal: "停止终端",
-			gitDeliveryStage_syncing: "同步远端",
+			gitDeliveryStage_syncing: "准备本地基线",
 			gitDeliveryStage_quality_check: "质量检查",
 			gitDeliveryStage_merging: "本地合并",
 			gitDeliveryStage_pushing: "推送远端",
@@ -120,7 +120,7 @@ export const codeGitReviewMessages = {
 			gitPush: "推送远端",
 			gitPushTitle: "推送已交付提交",
 			gitPushConfirm:
-				"确认将 {count} 个仓库的已交付提交推送到 {destinations}？系统禁止强推，远端变化会立即停止。",
+				"确认将 {count} 个仓库的已交付提交按子仓到主仓的顺序推送到 {destinations}？系统禁止覆盖远端变化。",
 			gitPushReady: "本地交付完成，{count} 个仓库等待推送。",
 			gitPushUnavailable: "当前交付尚未完成，或仓库没有可用的远端跟踪分支。",
 			gitPushSuccess: "已交付提交已推送并完成远端核验",
@@ -219,10 +219,10 @@ export const codeGitReviewMessages = {
 			gitMerge: "Deliver to main repository",
 			gitMergeTitle: "Deliver to main repository",
 			gitMergeConfirm:
-				"Deliver branch {branch}? GoPanel queues the operation, syncs the remote, merges into the local project branch, pushes it, and cleans the isolated worktree after remote verification.",
+				"Deliver branch {branch}? GoPanel only merges it safely into the local target branch and cleans the isolated worktree. Use Push remote separately when ready to publish.",
 			gitMultiMergeConfirm:
-				"Deliver {count} repositories? GoPanel syncs, merges, and pushes each repository in order, stopping on conflicts or push failures while preserving unfinished worktrees.",
-			gitMergeSuccess: "Changes merged into the local project and pushed remotely",
+				"Deliver {count} repositories? GoPanel merges local target branches in dependency order without remote access, stopping on conflicts while preserving unfinished worktrees.",
+			gitMergeSuccess: "Changes were safely merged into local target branches",
 			gitDeliveryQueued: "Delivery was added to the background queue",
 			gitDeliveryStatus_queued: "Queued (position {position})",
 			gitDeliveryStatus_running: "Delivery running ({progress}%)",
@@ -234,7 +234,7 @@ export const codeGitReviewMessages = {
 			gitDeliveryStatus_failed: "Delivery failed; click again to retry",
 			gitDeliveryStage_queued: "Waiting for repository lease",
 			gitDeliveryStage_stopping_terminal: "Stopping terminal",
-			gitDeliveryStage_syncing: "Syncing remote",
+			gitDeliveryStage_syncing: "Preparing local baseline",
 			gitDeliveryStage_quality_check: "Quality checks",
 			gitDeliveryStage_merging: "Local merge",
 			gitDeliveryStage_pushing: "Pushing remote",
@@ -260,7 +260,7 @@ export const codeGitReviewMessages = {
 			gitPush: "Push delivery",
 			gitPushTitle: "Push delivered commits",
 			gitPushConfirm:
-				"Push delivered commits for {count} repositories to {destinations}? Force push is disabled and remote changes stop the operation.",
+				"Push delivered commits for {count} repositories to {destinations} in child-to-parent order? Remote changes are never overwritten.",
 			gitPushReady: "Local delivery is complete; {count} repositories are waiting to be pushed.",
 			gitPushUnavailable: "Delivery is incomplete or no tracked remote branch is available.",
 			gitPushSuccess: "Delivered commits were pushed and verified remotely",

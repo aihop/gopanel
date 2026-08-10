@@ -118,7 +118,7 @@ func TestCodeDeliveryCompletesAndIsIdempotent(t *testing.T) {
 	}
 }
 
-func TestCodeDeliveryMergesLocallyAndPushesRemote(t *testing.T) {
+func TestCodeDeliveryMergesLocallyWithoutPushingRemote(t *testing.T) {
 	database := withCodeGovernanceDB(t)
 	withAIProjectBaseDir(t)
 	sourceDir, remoteDir := createCodeRemoteRepository(t)
@@ -148,15 +148,16 @@ func TestCodeDeliveryMergesLocallyAndPushesRemote(t *testing.T) {
 	branch, _ := runCodeGit(sourceDir, "branch", "--show-current")
 	localHead, localErr := runCodeGit(sourceDir, "rev-parse", "refs/heads/"+branch)
 	remoteHead, remoteErr := runCodeGit(remoteDir, "rev-parse", "refs/heads/"+branch)
-	if localErr != nil || remoteErr != nil || localHead != result.Commit || remoteHead != result.Commit {
-		t.Fatalf("delivery commits differ: local=%q remote=%q want=%q errors=%v/%v", localHead, remoteHead, result.Commit, localErr, remoteErr)
+	if localErr != nil || remoteErr != nil || localHead != result.Commit || remoteHead == result.Commit {
+		t.Fatalf("local-only delivery mismatch: local=%q remote=%q delivered=%q errors=%v/%v", localHead, remoteHead, result.Commit, localErr, remoteErr)
 	}
 	if _, err := os.Stat(session.WorkDir); !os.IsNotExist(err) {
 		t.Fatalf("delivered worktree remained after remote verification: %v", err)
 	}
 	var delivery model.AICodeDelivery
-	if err := database.Where("session_id = ?", session.ID).First(&delivery).Error; err != nil || delivery.PushStatus != codePushPushed || delivery.PushedCommit != result.Commit {
-		t.Fatalf("push state was not persisted: %#v, %v", delivery, err)
+	if err := database.Where("session_id = ?", session.ID).First(&delivery).Error; err != nil ||
+		delivery.PushStatus != codePushPending || delivery.PushedCommit != "" {
+		t.Fatalf("manual push state was not retained: %#v, %v", delivery, err)
 	}
 }
 
@@ -217,7 +218,7 @@ func TestCodeDeliveryUsesCapturedCommitWhileTerminalContinues(t *testing.T) {
 	}
 }
 
-func TestCodeDeliveryKeepsWorktreeWhenPushFails(t *testing.T) {
+func TestCodeDeliveryCompletesWhenRemoteRejectsPush(t *testing.T) {
 	database := withCodeGovernanceDB(t)
 	withAIProjectBaseDir(t)
 	sourceDir, remoteDir := createCodeRemoteRepository(t)
@@ -246,19 +247,20 @@ func TestCodeDeliveryKeepsWorktreeWhenPushFails(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(remoteDir, "hooks", "pre-receive"), []byte("#!/bin/sh\nexit 1\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := resumeCodeSessionDelivery(session, session.UserID); err == nil {
-		t.Fatal("rejected push should fail delivery")
+	if _, err := resumeCodeSessionDelivery(session, session.UserID); err != nil {
+		t.Fatalf("remote hook blocked local delivery: %v", err)
 	}
-	if _, err := os.Stat(session.WorkDir); err != nil {
-		t.Fatalf("failed delivery removed worktree: %v", err)
+	if _, err := os.Stat(session.WorkDir); !os.IsNotExist(err) {
+		t.Fatalf("completed local delivery retained worktree: %v", err)
 	}
 	var delivery model.AICodeDelivery
-	if err := database.Where("session_id = ?", session.ID).First(&delivery).Error; err != nil || delivery.PushStatus != codePushFailed || delivery.Status != codeDeliveryMerged {
-		t.Fatalf("failed delivery state unavailable: %#v, %v", delivery, err)
+	if err := database.Where("session_id = ?", session.ID).First(&delivery).Error; err != nil ||
+		delivery.PushStatus != codePushPending || delivery.Status != codeDeliveryCompleted {
+		t.Fatalf("local delivery state unavailable: %#v, %v", delivery, err)
 	}
 }
 
-func TestCodeDeliveryRetriesWhenRemoteAdvancesAfterLocalMerge(t *testing.T) {
+func TestCodeDeliveryIgnoresRemoteAdvanceUntilManualPush(t *testing.T) {
 	database := withCodeGovernanceDB(t)
 	withAIProjectBaseDir(t)
 	sourceDir, remoteDir := createCodeRemoteRepository(t)
@@ -294,18 +296,19 @@ func TestCodeDeliveryRetriesWhenRemoteAdvancesAfterLocalMerge(t *testing.T) {
 	if _, err := runCodeGit(updater, "push", "origin", "HEAD"); err != nil {
 		t.Fatal(err)
 	}
-	result, err := integrateAndPushCodeDelivery(delivery)
-	if err != nil || result.Commit == "" || result.Commit == firstMerge.Commit {
-		t.Fatalf("delivery was not rebuilt on latest remote: %#v, %v", result, err)
+	result, err := integrateCodeDeliveryLocallyWithProgress(delivery, nil)
+	if err != nil || result.Commit != firstMerge.Commit {
+		t.Fatalf("local delivery unexpectedly changed after remote advance: %#v, %v", result, err)
 	}
 	branch, _ := runCodeGit(sourceDir, "branch", "--show-current")
 	localHead, _ := runCodeGit(sourceDir, "rev-parse", "refs/heads/"+branch)
 	remoteHead, _ := runCodeGit(remoteDir, "rev-parse", "refs/heads/"+branch)
-	if localHead != result.Commit || remoteHead != result.Commit {
-		t.Fatalf("retried delivery differs: local=%q remote=%q want=%q", localHead, remoteHead, result.Commit)
+	if localHead != result.Commit || remoteHead != remoteCommit {
+		t.Fatalf("local-only delivery changed remote: local=%q remote=%q want local=%q remote=%q", localHead, remoteHead, result.Commit, remoteCommit)
 	}
-	if _, err := runCodeGit(sourceDir, "merge-base", "--is-ancestor", remoteCommit, result.Commit); err != nil {
-		t.Fatalf("remote update missing from retried delivery: %v", err)
+	pushResult, pushErr := pushCodeSessionDelivery(session)
+	if !errors.Is(pushErr, errCodePushRemoteAdvanced) || pushResult.Status != codePushFailed {
+		t.Fatalf("manual push did not reject advanced remote: %#v, %v", pushResult, pushErr)
 	}
 	if _, err := os.Stat(filepath.Join(sourceDir, "session.txt")); err != nil {
 		t.Fatalf("session update missing from local project: %v", err)

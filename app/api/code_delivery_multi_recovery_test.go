@@ -12,7 +12,7 @@ import (
 	"github.com/aihop/gopanel/global"
 )
 
-func TestMultiRepositoryDeliveryRecoversRemotePushBeforeDatabaseUpdate(t *testing.T) {
+func TestMultiRepositoryManualPushRecoversRemotePushBeforeDatabaseUpdate(t *testing.T) {
 	session, _ := createRemoteCodeMultiRepositorySession(t, 943)
 	prepared := prepareCodeMultiRepositoryRecoveryFixture(t, session)
 	mergeCommits := codeTestRepositoryCommits(prepared)
@@ -26,8 +26,12 @@ func TestMultiRepositoryDeliveryRecoversRemotePushBeforeDatabaseUpdate(t *testin
 	}
 
 	result, err := resumeCodeMultiRepositoryDelivery(session, session.UserID)
-	if err != nil || result.Status != codeDeliveryMerged || result.ResultType != "remote_verified" {
-		t.Fatalf("remote push recovery failed: %#v, %v", result, err)
+	if err != nil || result.Status != codeDeliveryMerged || result.ResultType != "local" {
+		t.Fatalf("local delivery failed: %#v, %v", result, err)
+	}
+	pushResult, err := pushCodeSessionDelivery(session)
+	if err != nil || pushResult.Status != codePushPushed {
+		t.Fatalf("remote push recovery failed: %#v, %v", pushResult, err)
 	}
 	stored, err := loadCodeSessionRepositories(session.ID)
 	if err != nil {
@@ -48,7 +52,7 @@ func TestMultiRepositoryDeliveryRecoversRemotePushBeforeDatabaseUpdate(t *testin
 	assertCodeMultiIntegrationCleanup(t, session, stored)
 }
 
-func TestMultiRepositoryExternalPushDoesNotBypassQualityGate(t *testing.T) {
+func TestMultiRepositoryExternalPushDoesNotTriggerQualityGate(t *testing.T) {
 	session, _ := createRemoteCodeMultiRepositorySession(t, 950)
 	if err := global.DB.Model(&model.AIProject{}).Where("id = ?", session.ProjectID).
 		Update("require_quality_gate", true).Error; err != nil {
@@ -85,19 +89,19 @@ func TestMultiRepositoryExternalPushDoesNotBypassQualityGate(t *testing.T) {
 	}
 
 	result, err := resumeCodeMultiRepositoryDelivery(session, session.UserID)
-	if err == nil || !strings.Contains(err.Error(), "质量门禁未通过") || result.Status != codeDeliveryJobFailed {
-		t.Fatalf("external push bypassed quality gate: %#v, %v", result, err)
+	if err != nil || result.Status != codeDeliveryMerged || result.ResultType != "local" {
+		t.Fatalf("external push blocked local delivery: %#v, %v", result, err)
 	}
 	stored, err := loadCodeSessionRepositories(session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for index := range stored {
-		assertCodeTestSourceState(t, &stored[index], stored[index].SourceCommit)
+		assertCodeTestSourceState(t, &stored[index], stored[index].MergeCommit)
 	}
 }
 
-func TestMultiRepositoryDeliveryReportsPartialOnlyAfterVerifiedPush(t *testing.T) {
+func TestMultiRepositoryManualPushPreflightRejectsAdvancedRemote(t *testing.T) {
 	session, _ := createRemoteCodeMultiRepositorySession(t, 944)
 	prepared := prepareCodeMultiRepositoryRecoveryFixture(t, session)
 	pushed := &prepared[0]
@@ -116,9 +120,12 @@ func TestMultiRepositoryDeliveryReportsPartialOnlyAfterVerifiedPush(t *testing.T
 	}
 
 	result, err := resumeCodeMultiRepositoryDelivery(session, session.UserID)
-	if !errors.Is(err, errCodePushRemoteAdvanced) || result.Status != codeDeliveryJobPartial ||
-		result.ResultType != "remote_verified" {
-		t.Fatalf("verified partial publish was not reported: %#v, %v", result, err)
+	if err != nil || result.Status != codeDeliveryMerged || result.ResultType != "local" {
+		t.Fatalf("local delivery failed: %#v, %v", result, err)
+	}
+	pushResult, pushErr := pushCodeSessionDelivery(session)
+	if !errors.Is(pushErr, errCodePushRemoteAdvanced) || pushResult.Status != codePushFailed {
+		t.Fatalf("advanced remote was not rejected before manual push: %#v, %v", pushResult, pushErr)
 	}
 	stored, err := loadCodeSessionRepositories(session.ID)
 	if err != nil {
@@ -126,10 +133,7 @@ func TestMultiRepositoryDeliveryReportsPartialOnlyAfterVerifiedPush(t *testing.T
 	}
 	for index := range stored {
 		repository := &stored[index]
-		assertCodeTestSourceState(t, repository, repository.SourceCommit)
-		if repository.ID == pushed.ID && (repository.PushStatus != codePushPushed || repository.PushedCommit != repository.MergeCommit) {
-			t.Fatalf("verified push was not recovered: %#v", repository)
-		}
+		assertCodeTestSourceState(t, repository, repository.MergeCommit)
 		if repository.ID == advanced.ID {
 			remoteHead, remoteErr := codeTestRemoteHead(t, repository.SourceDir)
 			if remoteErr != nil || remoteHead != advancedCommit {

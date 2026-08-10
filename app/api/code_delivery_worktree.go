@@ -113,57 +113,6 @@ func cleanupCodeIntegrationWorktree(delivery *model.AICodeDelivery) error {
 	return nil
 }
 
-func pushCodeIntegratedDeliveryWithProgress(delivery *model.AICodeDelivery, report codeDeliveryProgressReporter) (codeRepositoryPushResult, error) {
-	remoteBranch := deliveryRemoteBranch(delivery.RemoteBranch, delivery.TargetBranch)
-	result := codeRepositoryPushResult{
-		Status: codePushPending, Remote: delivery.RemoteName, Branch: remoteBranch,
-		Commit: delivery.MergeCommit, Ready: delivery.MergeCommit != "",
-	}
-	if delivery.PushStatus == codePushPushed {
-		result.Status = codePushPushed
-		return result, nil
-	}
-	if delivery.RemoteName == "" || remoteBranch == "" {
-		return failedCodePushResult(result, errors.New("仓库没有可用的远端跟踪分支"))
-	}
-	if delivery.MergeCommit == "" || delivery.DeliveryWorkDir == "" {
-		return failedCodePushResult(result, errors.New("交付 Worktree 尚未完成隔离合并"))
-	}
-	credentialID := codeProjectGitCredentialID(delivery.ProjectID)
-	if _, err := fetchCodeRepositoryWithCredential(delivery.SourceWorkDir, delivery.RemoteName, credentialID); err != nil {
-		return failedCodePushResult(result, err)
-	}
-	remoteRef := "refs/remotes/" + delivery.RemoteName + "/" + remoteBranch
-	currentRemoteCommit, err := runCodeGit(delivery.SourceWorkDir, "rev-parse", remoteRef)
-	if err == nil && currentRemoteCommit == delivery.MergeCommit {
-		result.Status = codePushPushed
-		return result, nil
-	}
-	if err != nil || currentRemoteCommit != delivery.RemoteCommit {
-		return failedCodePushResult(result, errCodePushRemoteAdvanced)
-	}
-	if _, err := runCodeGitWithCredential(
-		delivery.DeliveryWorkDir, codeGitFetchTimeout,
-		credentialID,
-		"-c", "credential.interactive=never", "push", "--", delivery.RemoteName,
-		delivery.MergeCommit+":refs/heads/"+remoteBranch,
-	); err != nil {
-		return failedCodePushResult(result, err)
-	}
-	if report != nil {
-		report(codeDeliveryStageVerifying, 85)
-	}
-	if _, err := fetchCodeRepositoryWithCredential(delivery.SourceWorkDir, delivery.RemoteName, credentialID); err != nil {
-		return failedCodePushResult(result, err)
-	}
-	pushedCommit, err := runCodeGit(delivery.SourceWorkDir, "rev-parse", remoteRef)
-	if err != nil || pushedCommit != delivery.MergeCommit {
-		return failedCodePushResult(result, errors.New("推送后远端提交核验失败"))
-	}
-	result.Status, result.Commit = codePushPushed, delivery.MergeCommit
-	return result, nil
-}
-
 func fastForwardCodeDeliverySource(delivery *model.AICodeDelivery) error {
 	status, err := runCodeGit(delivery.SourceWorkDir, "status", "--porcelain")
 	if err != nil || strings.TrimSpace(status) != "" {
@@ -190,14 +139,14 @@ func fastForwardCodeDeliverySource(delivery *model.AICodeDelivery) error {
 	if localCommit == delivery.MergeCommit {
 		return nil
 	}
-	if localCommit != delivery.RemoteCommit {
+	sourceCommit := strings.TrimSpace(delivery.SourceCommit)
+	if sourceCommit == "" {
+		sourceCommit = strings.TrimSpace(delivery.RemoteCommit)
+	}
+	if localCommit != sourceCommit {
 		return errors.New("本地主仓在交付期间已推进，无法安全快进")
 	}
-	target := delivery.MergeCommit
-	if codeDeliveryHasRemote(delivery.RemoteName, deliveryRemoteBranch(delivery.RemoteBranch, delivery.TargetBranch)) {
-		target = "refs/remotes/" + delivery.RemoteName + "/" + deliveryRemoteBranch(delivery.RemoteBranch, delivery.TargetBranch)
-	}
-	if _, err := runCodeGit(delivery.SourceWorkDir, "merge", "--ff-only", target); err != nil {
+	if _, err := runCodeGit(delivery.SourceWorkDir, "merge", "--ff-only", delivery.MergeCommit); err != nil {
 		return err
 	}
 	updated, err := runCodeGit(delivery.SourceWorkDir, "rev-parse", "HEAD")

@@ -53,7 +53,7 @@ func prepareCodeMultiRepositoryDeliveryWithProgress(
 		if err := validateCodeRepositorySnapshotCommit(repository); err != nil {
 			return codeGitDeliveryResult{}, err
 		}
-		baseline, inspectErr := inspectCodeRepositoryDeliveryBaseline(session, repository)
+		baseline, inspectErr := inspectCodeRepositoryDeliveryBaseline(repository)
 		if inspectErr != nil {
 			return codeGitDeliveryResult{}, inspectErr
 		}
@@ -144,10 +144,7 @@ func validateCodeRepositorySnapshotCommit(repository *model.AIDevSessionReposito
 	return nil
 }
 
-func inspectCodeRepositoryDeliveryBaseline(
-	session *model.AIDevSession,
-	repository *model.AIDevSessionRepository,
-) (codeRepositoryDeliveryBaseline, error) {
+func inspectCodeRepositoryDeliveryBaseline(repository *model.AIDevSessionRepository) (codeRepositoryDeliveryBaseline, error) {
 	status, err := runCodeGit(repository.SourceDir, "status", "--porcelain")
 	if err != nil || strings.TrimSpace(status) != "" {
 		return codeRepositoryDeliveryBaseline{}, fmt.Errorf("源仓库 %s 存在未提交变更，无法安全交付", repository.LinkName)
@@ -167,24 +164,9 @@ func inspectCodeRepositoryDeliveryBaseline(
 	if err != nil {
 		return codeRepositoryDeliveryBaseline{}, err
 	}
-	remoteCommit := ""
-	remoteBranch := deliveryRemoteBranch(repository.RemoteBranch, targetBranch)
-	if codeDeliveryHasRemote(repository.RemoteName, remoteBranch) {
-		if _, err := fetchCodeRepositoryWithCredential(
-			repository.SourceDir, repository.RemoteName, codeProjectGitCredentialID(session.ProjectID),
-		); err != nil {
-			return codeRepositoryDeliveryBaseline{}, fmt.Errorf("仓库 %s 同步失败：%w", repository.LinkName, err)
-		}
-		remoteCommit, err = runCodeGit(repository.SourceDir, "rev-parse", "refs/remotes/"+repository.RemoteName+"/"+remoteBranch)
-		if err != nil {
-			return codeRepositoryDeliveryBaseline{}, fmt.Errorf("仓库 %s 的远端目标分支不可用", repository.LinkName)
-		}
-	}
 	baseline := codeRepositoryDeliveryBaseline{
-		TargetBranch: targetBranch, SourceCommit: strings.TrimSpace(sourceCommit), RemoteCommit: strings.TrimSpace(remoteCommit),
-	}
-	if _, err := codeRepositoryIntegrationBaseCommit(repository.SourceDir, baseline.SourceCommit, baseline.RemoteCommit); err != nil {
-		return codeRepositoryDeliveryBaseline{}, fmt.Errorf("仓库 %s 无法确定安全集成基线：%w", repository.LinkName, err)
+		TargetBranch: targetBranch, SourceCommit: strings.TrimSpace(sourceCommit),
+		RemoteCommit: strings.TrimSpace(repository.RemoteCommit),
 	}
 	return baseline, nil
 }
@@ -194,16 +176,7 @@ func codeRepositoryIntegrationBaseCommit(sourceDir, sourceCommit, remoteCommit s
 	if sourceCommit == "" {
 		return "", errors.New("源分支提交不可用")
 	}
-	if remoteCommit == "" || sourceCommit == remoteCommit {
-		return sourceCommit, nil
-	}
-	if _, err := runCodeGit(sourceDir, "merge-base", "--is-ancestor", sourceCommit, remoteCommit); err == nil {
-		return remoteCommit, nil
-	}
-	if _, err := runCodeGit(sourceDir, "merge-base", "--is-ancestor", remoteCommit, sourceCommit); err == nil {
-		return sourceCommit, nil
-	}
-	return "", errors.New("本地目标分支与远端目标分支已分叉")
+	return sourceCommit, nil
 }
 
 func codeRepositoryIntegrationReusable(

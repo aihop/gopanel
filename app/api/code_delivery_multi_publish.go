@@ -34,130 +34,27 @@ func publishCodeMultiRepositoryDeliveryWithProgress(
 	if codeMultiRepositoryAllCompleted(repositories) {
 		return finishCodeMultiRepositoryDelivery(session, repositories)
 	}
-	states := make([]codeMultiRepositoryPublishState, len(repositories))
+	if report != nil {
+		report(codeDeliveryStageCleaning, 70)
+	}
 	for index := range repositories {
 		if repositories[index].Status == codeDeliveryCompleted {
 			continue
 		}
-		state, inspectErr := inspectCodeMultiRepositoryPublishState(session, &repositories[index], repositories)
-		if inspectErr != nil {
-			return codeMultiRepositoryFailure(codeStoredRepositoryDeliveryResults(repositories), inspectErr), inspectErr
+		if err := fastForwardCodeMultiRepositorySource(&repositories[index], repositories); err != nil {
+			return codeMultiRepositoryFailure(codeStoredRepositoryDeliveryResults(repositories), err), err
 		}
-		if state.AlreadyPushed && repositories[index].PushStatus != codePushPushed {
-			result := codeRepositoryPushResult{
-				Status: codePushPushed, Remote: repositories[index].RemoteName,
-				Branch: state.RemoteBranch, Commit: repositories[index].MergeCommit, Ready: true,
-			}
-			if err := persistCodeRepositoryPushResult(&repositories[index], result); err != nil {
+		if repositories[index].PushStatus != codePushPushed &&
+			codeDeliveryHasRemote(repositories[index].RemoteName, deliveryRemoteBranch(repositories[index].RemoteBranch, repositories[index].TargetBranch)) {
+			if err := persistCodeRepositoryPushResult(&repositories[index], codeRepositoryPushResult{Status: codePushPending}); err != nil {
 				return codeMultiRepositoryFailure(codeStoredRepositoryDeliveryResults(repositories), err), err
 			}
 		}
-		states[index] = state
-	}
-	if report != nil {
-		report(codeDeliveryStagePushing, 70)
-	}
-	for index := range repositories {
-		repository := &repositories[index]
-		if repository.Status == codeDeliveryCompleted {
-			continue
-		}
-		result, pushErr := pushCodeMultiRepositoryCommit(session, repository, states[index], report)
-		if persistErr := persistCodeRepositoryPushResult(repository, result); persistErr != nil {
-			return codeMultiRepositoryFailure(codeStoredRepositoryDeliveryResults(repositories), persistErr), persistErr
-		}
-		if pushErr != nil {
-			wrapped := fmt.Errorf("仓库 %s 推送失败：%w", repository.LinkName, pushErr)
-			return codeMultiRepositoryFailure(codeStoredRepositoryDeliveryResults(repositories), wrapped), wrapped
-		}
-	}
-	for index := range repositories {
-		if repositories[index].Status == codeDeliveryCompleted {
-			continue
-		}
-		state, inspectErr := inspectCodeMultiRepositoryPublishState(session, &repositories[index], repositories)
-		if inspectErr != nil {
-			return codeMultiRepositoryFailure(codeStoredRepositoryDeliveryResults(repositories), inspectErr), inspectErr
-		}
-		if codeDeliveryHasRemote(repositories[index].RemoteName, state.RemoteBranch) && !state.AlreadyPushed {
-			return codeMultiRepositoryFailure(
-				codeStoredRepositoryDeliveryResults(repositories), errors.New("多仓库推送后的远端提交核验失败"),
-			), errors.New("多仓库推送后的远端提交核验失败")
-		}
-		states[index] = state
-	}
-	if report != nil {
-		report(codeDeliveryStageCleaning, 90)
-	}
-	parentFirst, err := codeDeliveryRepositoriesInOrder(repositories, true)
-	if err != nil {
-		return codeMultiRepositoryFailure(codeStoredRepositoryDeliveryResults(repositories), err), err
-	}
-	for index := range parentFirst {
-		if parentFirst[index].Status == codeDeliveryCompleted {
-			continue
-		}
-		if err := fastForwardCodeMultiRepositorySource(&parentFirst[index], parentFirst); err != nil {
-			syncCodeMultiRepositoryState(repositories, &parentFirst[index])
-			return codeMultiRepositoryFailure(codeStoredRepositoryDeliveryResults(repositories), err), err
-		}
-		syncCodeMultiRepositoryState(repositories, &parentFirst[index])
 	}
 	if err := completeCodeMultiRepositorySources(repositories); err != nil {
 		return codeMultiRepositoryFailure(codeStoredRepositoryDeliveryResults(repositories), err), err
 	}
 	return finishCodeMultiRepositoryDelivery(session, repositories)
-}
-
-func inspectCodeMultiRepositoryPublishState(
-	session *model.AIDevSession,
-	repository *model.AIDevSessionRepository,
-	repositories []model.AIDevSessionRepository,
-) (codeMultiRepositoryPublishState, error) {
-	if (repository.Status != codeDeliveryMerged && repository.Status != codeDeliveryCompleted) ||
-		strings.TrimSpace(repository.SourceCommit) == "" ||
-		strings.TrimSpace(repository.MergeCommit) == "" || strings.TrimSpace(repository.IntegrationWorkDir) == "" {
-		return codeMultiRepositoryPublishState{}, fmt.Errorf("仓库 %s 的最终集成提交不可用", repository.LinkName)
-	}
-	if err := verifyCodeDeliveryCommit(
-		repository.IntegrationWorkDir, repository.MergeCommit, "仓库 "+repository.LinkName+" 的最终集成提交",
-	); err != nil {
-		return codeMultiRepositoryPublishState{}, err
-	}
-	if _, err := validateCodeMultiRepositorySource(repository, repositories); err != nil {
-		return codeMultiRepositoryPublishState{}, err
-	}
-	if _, err := runCodeGit(repository.SourceDir, "merge-base", "--is-ancestor", repository.SourceCommit, repository.MergeCommit); err != nil {
-		return codeMultiRepositoryPublishState{}, fmt.Errorf("仓库 %s 的最终提交不包含源分支基线", repository.LinkName)
-	}
-	state := codeMultiRepositoryPublishState{
-		RemoteBranch: deliveryRemoteBranch(repository.RemoteBranch, repository.TargetBranch),
-	}
-	if !codeDeliveryHasRemote(repository.RemoteName, state.RemoteBranch) {
-		return state, nil
-	}
-	if _, err := fetchCodeRepositoryWithCredential(
-		repository.SourceDir, repository.RemoteName, codeProjectGitCredentialID(session.ProjectID),
-	); err != nil {
-		return state, err
-	}
-	remoteRef := "refs/remotes/" + repository.RemoteName + "/" + state.RemoteBranch
-	remoteCommit, err := runCodeGit(repository.SourceDir, "rev-parse", remoteRef)
-	if err != nil {
-		return state, errCodePushRemoteAdvanced
-	}
-	state.RemoteCommit = strings.TrimSpace(remoteCommit)
-	if state.RemoteCommit == repository.MergeCommit {
-		state.AlreadyPushed = true
-		return state, nil
-	}
-	if state.RemoteCommit != strings.TrimSpace(repository.RemoteCommit) {
-		return state, errCodePushRemoteAdvanced
-	}
-	if _, err := runCodeGit(repository.SourceDir, "merge-base", "--is-ancestor", state.RemoteCommit, repository.MergeCommit); err != nil {
-		return state, errCodePushRemoteAdvanced
-	}
-	return state, nil
 }
 
 func validateCodeMultiRepositorySource(
@@ -275,12 +172,10 @@ func pushCodeMultiRepositoryCommit(
 		result.Status = codePushPushed
 		return result, nil
 	}
-	remoteRef := "refs/heads/" + state.RemoteBranch
 	_, err := runCodeGitWithCredential(
 		repository.SourceDir, codeGitFetchTimeout, codeProjectGitCredentialID(session.ProjectID),
-		"-c", "credential.interactive=never", "push",
-		"--force-with-lease="+remoteRef+":"+state.RemoteCommit,
-		"--", repository.RemoteName, repository.MergeCommit+":"+remoteRef,
+		"-c", "credential.interactive=never", "push", "--", repository.RemoteName,
+		repository.MergeCommit+":refs/heads/"+state.RemoteBranch,
 	)
 	if err != nil {
 		return inspectCodeMultiRepositoryPushFailure(session, repository, state, result, err)
@@ -386,18 +281,6 @@ func completeCodeMultiRepositorySources(repositories []model.AIDevSessionReposit
 		}
 	}
 	return nil
-}
-
-func syncCodeMultiRepositoryState(
-	repositories []model.AIDevSessionRepository,
-	updated *model.AIDevSessionRepository,
-) {
-	for index := range repositories {
-		if repositories[index].ID == updated.ID {
-			repositories[index] = *updated
-			return
-		}
-	}
 }
 
 func finishCodeMultiRepositoryDelivery(
