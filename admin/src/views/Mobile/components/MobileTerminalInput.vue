@@ -3,8 +3,9 @@ import { nextTick, ref } from "vue"
 import { useI18n } from "vue-i18n"
 import Icon from "@/components/common/Icon.vue"
 import { mobileMessages } from "@/i18n/locales/mobile"
+import { insertTerminalSymbol } from "./mobileTerminalInput"
 
-defineProps<{ connected: boolean; hasControl: boolean; ctrlActive: boolean }>()
+const props = defineProps<{ connected: boolean; hasControl: boolean; ctrlActive: boolean }>()
 const emit = defineEmits<{
 	takeControl: []
 	releaseControl: []
@@ -21,15 +22,16 @@ function insertSymbol(symbol: string) {
 	const input = commandInput.value
 	const start = input?.selectionStart ?? commandDraft.value.length
 	const end = input?.selectionEnd ?? start
-	commandDraft.value = `${commandDraft.value.slice(0, start)}${symbol}${commandDraft.value.slice(end)}`
+	const result = insertTerminalSymbol(commandDraft.value, symbol, start, end)
+	commandDraft.value = result.value
 	nextTick(() => {
 		commandInput.value?.focus()
-		commandInput.value?.setSelectionRange(start + symbol.length, start + symbol.length)
+		commandInput.value?.setSelectionRange(result.cursor, result.cursor)
 	})
 }
 
 function submit() {
-	if (composing.value || !commandDraft.value) return
+	if (composing.value || !props.hasControl || !commandDraft.value) return
 	emit("send", `${commandDraft.value}\r`)
 	commandDraft.value = ""
 	nextTick(() => commandInput.value?.focus())
@@ -38,6 +40,14 @@ function submit() {
 function toggleControl(hasControl: boolean) {
 	if (hasControl) emit("releaseControl")
 	else emit("takeControl")
+}
+
+function requestControlOnFocus() {
+	if (props.connected && !props.hasControl) emit("takeControl")
+}
+
+function preserveClick(event: PointerEvent) {
+	if (event.pointerType === "mouse") event.preventDefault()
 }
 </script>
 
@@ -72,9 +82,10 @@ function toggleControl(hasControl: boolean) {
 			autocomplete="off"
 			autocorrect="off"
 			:spellcheck="false"
-			:disabled="!hasControl"
-			:placeholder="hasControl ? t('mobile.terminalInputPlaceholder') : t('mobile.terminalReadOnly')"
+			:disabled="!connected"
+			:placeholder="connected ? t('mobile.terminalInputPlaceholder') : t('mobile.disconnected')"
 			class="h-10 min-w-0 flex-1 rounded-xl border border-white/10 bg-white/5 px-3 text-base text-white outline-none transition placeholder:text-slate-500 focus:border-blue-400/70 focus:bg-white/[0.08] disabled:cursor-not-allowed"
+			@focus="requestControlOnFocus"
 			@compositionstart="composing = true"
 			@compositionend="composing = false"
 		/>
@@ -104,7 +115,7 @@ function toggleControl(hasControl: boolean) {
 			:disabled="!hasControl"
 			class="flex h-10 min-w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-2 font-mono text-sm font-medium text-slate-200 transition active:scale-95 active:bg-white/15 disabled:cursor-not-allowed"
 			:aria-label="shortcut.label"
-			@pointerdown.prevent
+			@pointerdown="preserveClick"
 			@click="emit('shortcut', shortcut.data)"
 		>
 			{{ shortcut.label }}
@@ -116,7 +127,7 @@ function toggleControl(hasControl: boolean) {
 			:class="ctrlActive ? 'border-blue-400 bg-blue-500/25 text-blue-200' : ''"
 			aria-label="Ctrl"
 			:aria-pressed="ctrlActive"
-			@pointerdown.prevent
+			@pointerdown="preserveClick"
 			@click="emit('toggleCtrl')"
 		>
 			Ctrl
@@ -125,10 +136,10 @@ function toggleControl(hasControl: boolean) {
 			v-for="symbol in ['/', '-', '_', '.', '~', '|']"
 			:key="symbol"
 			type="button"
-			:disabled="!hasControl"
+			:disabled="!connected"
 			class="flex h-10 min-w-10 shrink-0 items-center justify-center rounded-xl border border-blue-400/20 bg-blue-500/10 px-2 font-mono text-base font-medium text-blue-200 transition active:scale-95 active:bg-blue-500/25 disabled:cursor-not-allowed"
 			:aria-label="`${t('mobile.insertTerminalSymbol')} ${symbol}`"
-			@pointerdown.prevent
+			@pointerdown="preserveClick"
 			@click="insertSymbol(symbol)"
 		>
 			{{ symbol }}
@@ -148,7 +159,7 @@ function toggleControl(hasControl: boolean) {
 			class="flex h-10 min-w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-2 font-mono text-sm font-medium text-slate-200 transition active:scale-95 active:bg-white/15 disabled:cursor-not-allowed"
 			:class="shortcut.label === '↵' ? 'border-blue-500/40 bg-blue-500/15 text-blue-200' : ''"
 			:aria-label="shortcut.label"
-			@pointerdown.prevent
+			@pointerdown="preserveClick"
 			@click="emit('shortcut', shortcut.data)"
 		>
 			{{ shortcut.label }}
