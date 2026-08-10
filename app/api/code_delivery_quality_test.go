@@ -45,6 +45,71 @@ func TestRunCodeDeliveryQualityGateRunsMissingChecks(t *testing.T) {
 	}
 }
 
+func TestDetectCodeDeliveryQualityChecksUsesSessionFlutterToolchain(t *testing.T) {
+	deliveryDir := t.TempDir()
+	identityDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(deliveryDir, "pubspec.yaml"), []byte("name: example\ndependencies:\n  flutter:\n    sdk: flutter\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	toolchain := filepath.Join(identityDir, ".toolchains", "flutter", "bin")
+	if err := os.MkdirAll(toolchain, 0700); err != nil {
+		t.Fatal(err)
+	}
+	flutterPath := filepath.Join(toolchain, "flutter")
+	if err := os.WriteFile(flutterPath, []byte("#!/bin/sh\nexit 0\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	checks := detectCodeDeliveryQualityChecks([]codeDeliveryQualityRoot{{
+		WorkDir: deliveryDir, IdentityDir: identityDir, Commit: "commit", Label: "Flutter",
+	}})
+	if len(checks) != 1 || checks[0].Command != "flutter analyze" || checks[0].Executable != flutterPath {
+		t.Fatalf("unexpected Flutter delivery check: %#v", checks)
+	}
+}
+
+func TestPrepareCodeDeliveryQualityEnvironmentRestoresNodeModules(t *testing.T) {
+	sourceDir := createCodeGitRepository(t)
+	deliveryDir := createCodeGitRepository(t)
+	if err := os.WriteFile(filepath.Join(deliveryDir, ".gitignore"), []byte("node_modules\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(deliveryDir, "add", ".gitignore"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(deliveryDir, "-c", "user.name=GoPanel Test", "-c", "user.email=test@gopanel.local", "commit", "-m", "ignore dependencies"); err != nil {
+		t.Fatal(err)
+	}
+	sourceModules := filepath.Join(sourceDir, "node_modules")
+	if err := os.Mkdir(sourceModules, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceModules, "ready"), []byte("yes"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	deliveryModules := filepath.Join(deliveryDir, "node_modules")
+	if err := os.Mkdir(deliveryModules, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(deliveryModules, "cache"), []byte("keep"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cleanup, err := prepareCodeDeliveryQualityEnvironment([]codeDeliveryQualityRoot{{
+		WorkDir: deliveryDir, RuntimeDir: sourceDir,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if target, err := filepath.EvalSymlinks(deliveryModules); err != nil || target != sourceModules {
+		t.Fatalf("node_modules target=%q want=%q err=%v", target, sourceModules, err)
+	}
+	if err := cleanup(); err != nil {
+		t.Fatal(err)
+	}
+	if content, err := os.ReadFile(filepath.Join(deliveryModules, "cache")); err != nil || string(content) != "keep" {
+		t.Fatalf("delivery cache was not restored: %q, %v", content, err)
+	}
+}
+
 func TestRunCodeDeliveryQualityGateStopsFailedDelivery(t *testing.T) {
 	session := createQualityDeliverySession(t, 148, "false")
 	err := runCodeDeliveryQualityGate(session, session.UserID, nil, nil)

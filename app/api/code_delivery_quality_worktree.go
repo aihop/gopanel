@@ -32,7 +32,8 @@ func prepareCodeMultiRepositoryQualityRoots(session *model.AIDevSession) ([]code
 		}
 		roots = append(roots, codeDeliveryQualityRoot{
 			WorkDir: workDir, IdentityDir: repository.WorktreeDir,
-			Commit: commit, Label: "仓库 " + repository.LinkName,
+			RuntimeDir: repository.SourceDir,
+			Commit:     commit, Label: "仓库 " + repository.LinkName,
 		})
 	}
 	return roots, func() error { return nil }, nil

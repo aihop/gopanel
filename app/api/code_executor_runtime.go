@@ -53,6 +53,7 @@ func codeExecutorSearchDirs() []string {
 	for _, relativeDir := range []string{
 		"sdk/node/bin",
 		"sdk/go/bin",
+		"sdk/flutter/bin",
 		".local/bin",
 		".npm-global/bin",
 		".n/bin",

@@ -44,6 +44,38 @@ func TestDetectCodeQualityChecksAtSupportsGo(t *testing.T) {
 	}
 }
 
+func TestDetectCodeQualityChecksAtSupportsFlutter(t *testing.T) {
+	workDir := t.TempDir()
+	pubspec := "name: example\ndependencies:\n  flutter:\n    sdk: flutter\n"
+	if err := os.WriteFile(filepath.Join(workDir, "pubspec.yaml"), []byte(pubspec), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(workDir, "test"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	checks := detectCodeQualityChecksAt(workDir, workDir)
+	if len(checks) != 2 {
+		t.Fatalf("expected 2 checks, got %d", len(checks))
+	}
+	if checks[0].Command != "flutter analyze" || checks[1].Command != "flutter test" {
+		t.Fatalf("unexpected Flutter checks: %#v", checks)
+	}
+	if checks[0].Label != "Flutter analyze" || checks[1].Label != "Flutter test" {
+		t.Fatalf("unexpected Flutter labels: %#v", checks)
+	}
+}
+
+func TestDetectCodeQualityChecksAtSupportsDartPackage(t *testing.T) {
+	workDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workDir, "pubspec.yaml"), []byte("name: example\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	checks := detectCodeQualityChecksAt(workDir, workDir)
+	if len(checks) != 1 || checks[0].Command != "dart analyze" {
+		t.Fatalf("unexpected Dart checks: %#v", checks)
+	}
+}
+
 func TestTruncateCodeQualityOutputKeepsHeadAndTail(t *testing.T) {
 	output := "begin-" + string(make([]byte, 128)) + "-end"
 	truncated, changed := truncateCodeQualityOutput(output, 64)
