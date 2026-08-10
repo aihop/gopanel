@@ -11,7 +11,7 @@ import (
 	"github.com/aihop/gopanel/global"
 )
 
-func TestMultiRepositoryDeliveryQualityGateUsesFinalMergeCommit(t *testing.T) {
+func TestMultiRepositoryDeliveryDoesNotRunQualityChecks(t *testing.T) {
 	session, project, _ := createMultiRepositorySession(t, 940)
 	if err := global.DB.Model(project).Update("require_quality_gate", true).Error; err != nil {
 		t.Fatal(err)
@@ -32,7 +32,7 @@ func TestMultiRepositoryDeliveryQualityGateUsesFinalMergeCommit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sourceCommit := commitCodeTestFile(t, repository.SourceDir, "source-only.txt", "source\n")
+	commitCodeTestFile(t, repository.SourceDir, "source-only.txt", "source\n")
 	previousCoordinator := codeExecutions
 	codeExecutions = newCodeExecutionCoordinator(2)
 	t.Cleanup(func() { codeExecutions = previousCoordinator })
@@ -43,25 +43,11 @@ func TestMultiRepositoryDeliveryQualityGateUsesFinalMergeCommit(t *testing.T) {
 	if err := global.DB.First(job, job.ID).Error; err != nil {
 		t.Fatal(err)
 	}
-	if job.Status != codeDeliveryJobFailed || job.Stage != codeDeliveryStageQualityCheck || job.FailureCode != "quality_failed" {
-		t.Fatalf("unexpected quality job result: %#v", job)
+	if job.Status != codeDeliveryJobCompleted || job.Stage != codeDeliveryStageCompleted || job.FailureCode != "" {
+		t.Fatalf("quality check blocked multi-repository delivery: %#v", job)
 	}
-	stored, err := loadCodeSessionRepositories(session.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	storedRepository := codeTestRepositoryByID(t, stored, repository.ID)
-	observed, err := os.ReadFile(observation)
-	if err != nil || strings.TrimSpace(string(observed)) != storedRepository.MergeCommit ||
-		storedRepository.MergeCommit == storedRepository.WorktreeCommit {
-		t.Fatalf("quality checked %q, merge=%q snapshot=%q err=%v", observed, storedRepository.MergeCommit, storedRepository.WorktreeCommit, err)
-	}
-	if strings.Count(strings.TrimSpace(string(observed)), "\n") != 0 {
-		t.Fatalf("quality gate executed more than once: %q", observed)
-	}
-	currentSource, err := runCodeGit(repository.SourceDir, "rev-parse", "HEAD")
-	if err != nil || currentSource != sourceCommit {
-		t.Fatalf("quality failure changed source branch: got=%q want=%q err=%v", currentSource, sourceCommit, err)
+	if _, err := os.Stat(observation); !os.IsNotExist(err) {
+		t.Fatalf("Git delivery executed quality script: %v", err)
 	}
 }
 

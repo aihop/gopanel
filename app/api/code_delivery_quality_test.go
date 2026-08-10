@@ -201,12 +201,8 @@ func TestRunCodeDeliveryQualityGateSkipsDisabledProject(t *testing.T) {
 	}
 }
 
-func TestCodeDeliveryQualityFailureKeepsSourceAndRemoteUnchanged(t *testing.T) {
+func TestCodeDeliveryDoesNotRunQualityChecks(t *testing.T) {
 	session := createQualityDeliverySession(t, 149, "false")
-	sourceCommit, err := runCodeGit(session.SourceWorkDir, "rev-parse", "HEAD")
-	if err != nil {
-		t.Fatal(err)
-	}
 	var job model.AICodeDeliveryJob
 	if err := global.DB.Where("session_id = ?", session.ID).First(&job).Error; err != nil {
 		t.Fatal(err)
@@ -219,21 +215,15 @@ func TestCodeDeliveryQualityFailureKeepsSourceAndRemoteUnchanged(t *testing.T) {
 	if err := global.DB.First(&job, job.ID).Error; err != nil {
 		t.Fatal(err)
 	}
-	if job.Status != codeDeliveryJobFailed || job.Stage != codeDeliveryStageQualityCheck || job.FailureCode != "quality_failed" {
-		t.Fatalf("unexpected failed delivery state: %#v", job)
+	if job.Status != codeDeliveryJobCompleted || job.Stage != codeDeliveryStageCompleted || job.FailureCode != "" {
+		t.Fatalf("quality check blocked Git delivery: %#v", job)
 	}
-	currentSourceCommit, err := runCodeGit(session.SourceWorkDir, "rev-parse", "HEAD")
-	if err != nil || currentSourceCommit != sourceCommit {
-		t.Fatalf("quality failure changed source branch: got=%q want=%q err=%v", currentSourceCommit, sourceCommit, err)
-	}
-	var delivery model.AICodeDelivery
-	if err := global.DB.Where("session_id = ?", session.ID).First(&delivery).Error; err != nil {
+	var qualityEvents int64
+	if err := global.DB.Model(&model.AITimelineEvent{}).
+		Where("session_id = ? AND event_type = ?", session.ID, "quality_check").Count(&qualityEvents).Error; err != nil {
 		t.Fatal(err)
 	}
-	if delivery.Status != codeDeliveryMerged || delivery.DeliveryWorkDir == "" {
-		t.Fatalf("delivery worktree was not preserved: %#v", delivery)
-	}
-	if _, err := os.Stat(filepath.Join(delivery.DeliveryWorkDir, "package.json")); err != nil {
-		t.Fatalf("merged delivery worktree unavailable after quality failure: %v", err)
+	if qualityEvents != 0 {
+		t.Fatalf("Git delivery ran %d quality checks", qualityEvents)
 	}
 }

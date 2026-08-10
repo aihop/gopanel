@@ -131,8 +131,8 @@ func resumeCodeMultiRepositoryDelivery(session *model.AIDevSession, _ uint) (cod
 
 func resumeCodeMultiRepositoryDeliveryWithProgress(
 	session *model.AIDevSession,
-	userID uint,
-	lease *codeExecutionLease,
+	_ uint,
+	_ *codeExecutionLease,
 	report codeDeliveryProgressReporter,
 ) (codeGitDeliveryResult, error) {
 	repositories, err := loadCodeSessionRepositories(session.ID)
@@ -142,12 +142,8 @@ func resumeCodeMultiRepositoryDeliveryWithProgress(
 	if codeMultiRepositoryAllCompleted(repositories) {
 		return publishCodeMultiRepositoryDeliveryWithProgress(session, report)
 	}
-	publishingStarted := false
 	if codeMultiRepositoryDeliveryFrozen(repositories) {
 		if err := restoreCodeMultiRepositoryIntegrationWorktrees(session, repositories); err != nil {
-			return codeGitDeliveryResult{}, err
-		}
-		if publishingStarted, err = codeMultiRepositoryPublishStarted(session, repositories); err != nil {
 			return codeGitDeliveryResult{}, err
 		}
 	} else {
@@ -155,23 +151,6 @@ func resumeCodeMultiRepositoryDeliveryWithProgress(
 		if prepareErr != nil || prepared.Status == codeDeliveryJobConflict || prepared.Status == codeDeliveryJobPartial {
 			return prepared, prepareErr
 		}
-	}
-	runQualityGate := !publishingStarted
-	if publishingStarted {
-		runQualityGate, err = codeMultiRepositoryHasQualityChecks(session)
-		if err != nil {
-			return codeGitDeliveryResult{}, err
-		}
-	}
-	if runQualityGate {
-		err = runCodeDeliveryQualityGate(session, userID, lease, report)
-	}
-	if err != nil {
-		stored, loadErr := loadCodeSessionRepositories(session.ID)
-		if loadErr != nil {
-			return codeGitDeliveryResult{}, loadErr
-		}
-		return codeMultiRepositoryFailure(codeStoredRepositoryDeliveryResults(stored), err), err
 	}
 	return publishCodeMultiRepositoryDeliveryWithProgress(session, report)
 }

@@ -410,17 +410,9 @@ func (runner *codeDeliveryRunner) run(jobID uint) {
 		lease.SetCancel(cancel)
 		result, err = resumeCodeMultiRepositoryDeliveryWithProgress(&session, job.UserID, lease, reporter)
 	} else {
-		var delivery *model.AICodeDelivery
-		delivery, result, err = prepareCodeSessionDeliveryWithProgress(&session, job.UserID, reporter)
+		_, result, err = prepareCodeSessionDeliveryWithProgress(&session, job.UserID, reporter)
 		if err != nil || result.Status == "conflict" {
 			runner.finish(job, result, err)
-			return
-		}
-		qualitySession := session
-		qualitySession.WorkDir = delivery.DeliveryWorkDir
-		lease.SetCancel(cancel)
-		if err := runCodeDeliveryQualityGate(&qualitySession, job.UserID, lease, reporter); err != nil {
-			runner.finish(job, codeGitDeliveryResult{}, err)
 			return
 		}
 		result, err = resumeCodeSessionDeliveryWithProgress(&session, job.UserID, reporter)

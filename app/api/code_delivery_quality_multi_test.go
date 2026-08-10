@@ -3,7 +3,6 @@ package api
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/aihop/gopanel/app/model"
@@ -62,7 +61,7 @@ func TestMultiRepositoryDeliveryRunnerUsesCapturedQualitySnapshot(t *testing.T) 
 	}
 }
 
-func TestMultiRepositorySecondDeliveryRunsQualityForChangedRepository(t *testing.T) {
+func TestMultiRepositoryRepeatedDeliveryDoesNotRunQualityChecks(t *testing.T) {
 	session, project, _ := createMultiRepositorySession(t, 948)
 	if err := global.DB.Model(project).Update("require_quality_gate", true).Error; err != nil {
 		t.Fatal(err)
@@ -82,9 +81,8 @@ func TestMultiRepositorySecondDeliveryRunsQualityForChangedRepository(t *testing
 	if err != nil || first.Status != codeDeliveryMerged {
 		t.Fatalf("first delivery failed: %#v, %v", first, err)
 	}
-	firstRuns, err := os.ReadFile(marker)
-	if err != nil || string(firstRuns) != "run\n" {
-		t.Fatalf("first quality run = %q, %v", firstRuns, err)
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatalf("first Git delivery executed quality script: %v", err)
 	}
 	firstSourceHead, err := runCodeGit(changed.SourceDir, "rev-parse", "HEAD")
 	if err != nil {
@@ -114,16 +112,15 @@ func TestMultiRepositorySecondDeliveryRunsQualityForChangedRepository(t *testing
 		}
 	}
 	result, err := resumeCodeMultiRepositoryDelivery(session, session.UserID)
-	if err == nil || !strings.Contains(err.Error(), "质量门禁未通过") || result.Status != codeDeliveryJobFailed {
-		t.Fatalf("second delivery bypassed quality gate: %#v, %v", result, err)
+	if err != nil || result.Status != codeDeliveryMerged {
+		t.Fatalf("second Git delivery failed: %#v, %v", result, err)
 	}
-	secondRuns, err := os.ReadFile(marker)
-	if err != nil || string(secondRuns) != "run\nrun\n" {
-		t.Fatalf("second quality run = %q, %v", secondRuns, err)
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatalf("second Git delivery executed quality script: %v", err)
 	}
 	currentSourceHead, err := runCodeGit(changed.SourceDir, "rev-parse", "HEAD")
-	if err != nil || currentSourceHead != firstSourceHead {
-		t.Fatalf("quality failure changed source: got=%q want=%q err=%v", currentSourceHead, firstSourceHead, err)
+	if err != nil || currentSourceHead == firstSourceHead {
+		t.Fatalf("second Git delivery did not advance source: got=%q previous=%q err=%v", currentSourceHead, firstSourceHead, err)
 	}
 }
 
@@ -152,8 +149,7 @@ func TestMultiRepositorySecondDeliveryRerunsUnchangedRepositoryQuality(t *testin
 	if result, err := resumeCodeMultiRepositoryDelivery(session, session.UserID); err != nil || result.Status != codeDeliveryMerged {
 		t.Fatalf("second delivery failed: %#v, %v", result, err)
 	}
-	runs, err := os.ReadFile(marker)
-	if err != nil || string(runs) != "run\nrun\n" {
-		t.Fatalf("unchanged repository quality runs = %q, %v", runs, err)
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatalf("repeated Git delivery executed quality script: %v", err)
 	}
 }
