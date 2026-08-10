@@ -194,6 +194,44 @@ func TestGitlinkMultiRepositoryDeliveryResumesAfterParentFastForward(t *testing.
 	}
 }
 
+func TestGitlinkDeliveryRecoveryPreservesContinuedDevelopment(t *testing.T) {
+	session, parentSource, childSource := createCodeGitlinkDeliverySession(t, 951, false)
+	prepared := prepareCodeMultiRepositoryRecoveryFixture(t, session)
+	parent := codeTestRepositoryBySource(t, prepared, parentSource)
+	child := codeTestRepositoryBySource(t, prepared, childSource)
+	if _, err := runCodeGit(child.SourceDir, "merge", "--ff-only", child.MergeCommit); err != nil {
+		t.Fatal(err)
+	}
+	laterCommit := commitCodeTestFile(t, child.SourceDir, "continued.txt", "committed\n")
+	if err := os.WriteFile(filepath.Join(child.SourceDir, "continued.txt"), []byte("still working\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	untracked := filepath.Join(parent.SourceDir, "next-task.json")
+	if err := os.WriteFile(untracked, []byte("{}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := resumeCodeMultiRepositoryDelivery(session, session.UserID)
+	if err != nil || result.Status != codeDeliveryMerged || result.ResultType != "local" {
+		t.Fatalf("continued development blocked recovery: %#v, %v", result, err)
+	}
+	childHead, err := runCodeGit(child.SourceDir, "rev-parse", "HEAD")
+	if err != nil || childHead != laterCommit {
+		t.Fatalf("continued child commit changed: got=%q want=%q err=%v", childHead, laterCommit, err)
+	}
+	content, err := os.ReadFile(filepath.Join(child.SourceDir, "continued.txt"))
+	if err != nil || string(content) != "still working\n" {
+		t.Fatalf("continued child changes were not preserved: %q, %v", content, err)
+	}
+	if _, err := os.Stat(untracked); err != nil {
+		t.Fatalf("untracked parent file was not preserved: %v", err)
+	}
+	parentHead, err := runCodeGit(parent.SourceDir, "rev-parse", "HEAD")
+	if err != nil || parentHead != parent.MergeCommit {
+		t.Fatalf("parent delivery was not applied: got=%q want=%q err=%v", parentHead, parent.MergeCommit, err)
+	}
+}
+
 func TestMultiRepositoryDeliveryCompletesCleanupWithoutRerunningQuality(t *testing.T) {
 	session, project, _ := createMultiRepositorySession(t, 947)
 	if err := global.DB.Model(project).Update("require_quality_gate", true).Error; err != nil {

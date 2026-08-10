@@ -61,9 +61,6 @@ func validateCodeMultiRepositorySource(
 	repository *model.AIDevSessionRepository,
 	repositories []model.AIDevSessionRepository,
 ) (bool, error) {
-	if err := validateCodeMultiRepositorySourceStatus(repository, repositories); err != nil {
-		return false, err
-	}
 	branch, err := runCodeGit(repository.SourceDir, "branch", "--show-current")
 	if err != nil || strings.TrimSpace(branch) != repository.TargetBranch {
 		return false, fmt.Errorf("源仓库 %s 的交付目标分支已变化", repository.LinkName)
@@ -73,11 +70,14 @@ func validateCodeMultiRepositorySource(
 		return false, fmt.Errorf("源仓库 %s 的交付目标提交不可用", repository.LinkName)
 	}
 	commit = strings.TrimSpace(commit)
-	if commit == strings.TrimSpace(repository.MergeCommit) {
+	if _, err := runCodeGit(repository.SourceDir, "merge-base", "--is-ancestor", repository.MergeCommit, commit); err == nil {
 		return true, nil
 	}
 	if commit != strings.TrimSpace(repository.SourceCommit) {
 		return false, fmt.Errorf("源仓库 %s 在交付期间已推进", repository.LinkName)
+	}
+	if err := validateCodeMultiRepositorySourceStatus(repository, repositories); err != nil {
+		return false, err
 	}
 	return false, nil
 }
@@ -111,6 +111,9 @@ func validateCodeMultiRepositorySourceStatus(
 		if len(entry) == 0 {
 			continue
 		}
+		if len(entry) >= 3 && entry[0] == '?' && entry[1] == '?' {
+			continue
+		}
 		if len(entry) < 4 || entry[0] != ' ' || entry[1] != 'M' {
 			return fmt.Errorf("源仓库 %s 在交付期间出现未提交变更", repository.LinkName)
 		}
@@ -140,13 +143,11 @@ func validateCodeMultiRepositoryGitlinkTransition(
 		if err != nil || !strings.Contains(entry, "160000 commit "+child.MergeCommit+"\t"+path) {
 			return fmt.Errorf("源仓库 %s 的最终子仓库指针不可用", parent.LinkName)
 		}
-		childStatus, err := runCodeGit(child.SourceDir, "status", "--porcelain")
-		if err != nil || strings.TrimSpace(childStatus) != "" {
-			return fmt.Errorf("源仓库 %s 在交付期间出现未提交变更", child.LinkName)
-		}
 		childHead, err := runCodeGit(child.SourceDir, "rev-parse", "HEAD")
-		if err != nil || (strings.TrimSpace(childHead) != strings.TrimSpace(child.SourceCommit) &&
-			strings.TrimSpace(childHead) != strings.TrimSpace(child.MergeCommit)) {
+		if err != nil {
+			return fmt.Errorf("源仓库 %s 的当前提交不可用", child.LinkName)
+		}
+		if _, err := runCodeGit(child.SourceDir, "merge-base", "--is-ancestor", child.MergeCommit, childHead); err != nil {
 			return fmt.Errorf("源仓库 %s 在交付期间已推进", child.LinkName)
 		}
 		return nil
@@ -236,7 +237,10 @@ func fastForwardCodeMultiRepositorySource(
 		}
 	}
 	updated, err := runCodeGit(repository.SourceDir, "rev-parse", "HEAD")
-	if err != nil || strings.TrimSpace(updated) != repository.MergeCommit {
+	if err != nil {
+		return fmt.Errorf("源仓库 %s 快进结果核验失败", repository.LinkName)
+	}
+	if _, err := runCodeGit(repository.SourceDir, "merge-base", "--is-ancestor", repository.MergeCommit, updated); err != nil {
 		return fmt.Errorf("源仓库 %s 快进结果核验失败", repository.LinkName)
 	}
 	return markCodeMultiRepositorySourceApplied(repository)

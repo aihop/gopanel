@@ -114,10 +114,6 @@ func cleanupCodeIntegrationWorktree(delivery *model.AICodeDelivery) error {
 }
 
 func fastForwardCodeDeliverySource(delivery *model.AICodeDelivery) error {
-	status, err := runCodeGit(delivery.SourceWorkDir, "status", "--porcelain")
-	if err != nil || strings.TrimSpace(status) != "" {
-		return errors.New("本地主仓在交付期间出现未提交变更，已保留交付 Worktree")
-	}
 	branch, err := runCodeGit(delivery.SourceWorkDir, "branch", "--show-current")
 	if err != nil {
 		return err
@@ -136,8 +132,12 @@ func fastForwardCodeDeliverySource(delivery *model.AICodeDelivery) error {
 	if err != nil {
 		return err
 	}
-	if localCommit == delivery.MergeCommit {
+	if _, err := runCodeGit(delivery.SourceWorkDir, "merge-base", "--is-ancestor", delivery.MergeCommit, localCommit); err == nil {
 		return nil
+	}
+	status, err := runCodeGit(delivery.SourceWorkDir, "status", "--porcelain", "--untracked-files=no")
+	if err != nil || strings.TrimSpace(status) != "" {
+		return errors.New("本地主仓在交付期间出现未提交变更，已保留交付 Worktree")
 	}
 	sourceCommit := strings.TrimSpace(delivery.SourceCommit)
 	if sourceCommit == "" {
