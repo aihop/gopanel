@@ -98,7 +98,18 @@ func GetAISessions(c fiber.Ctx) error {
 	page, limit = normalizeCodePage(page, limit, 20)
 	projectID, _ := strconv.Atoi(c.Query("projectId", "0"))
 	sessionRepo := repo.NewAIDevSessionRepo()
-	sessions, total, err := sessionRepo.GetSessionsByUserID(claims.UserId, uint(projectID), page, limit)
+	var sessions []*model.AIDevSession
+	var total int64
+	var err error
+	if projectID > 0 && claims.Role == constant.UserRoleSuper {
+		project, projectErr := getCodeProjectWithPermission(uint(projectID), claims)
+		if projectErr != nil {
+			return c.JSON(e.Fail(projectErr))
+		}
+		sessions, total, err = sessionRepo.GetSessionsByProjectID(project.ID, page, limit)
+	} else {
+		sessions, total, err = sessionRepo.GetSessionsByUserID(claims.UserId, uint(projectID), page, limit)
+	}
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
