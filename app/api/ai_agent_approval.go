@@ -48,6 +48,14 @@ func shouldRequireAIApproval(content string, requireApproval bool) bool {
 	return false
 }
 
+func codeInstructionRequiresRiskApproval(
+	session *model.AIDevSession,
+	requested *bool,
+) bool {
+	return codeSessionRequiresRiskApproval(session) ||
+		(requested != nil && *requested)
+}
+
 func buildApprovalTitle(content string) string {
 	content = strings.TrimSpace(content)
 	if content == "" {

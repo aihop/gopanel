@@ -208,20 +208,16 @@ class AiWorkspaceRepository {
   Future<AiInstructionSendResult> sendAiCommand({
     required int sessionId,
     required String command,
-    bool allowCode = true,
     bool autoPreview = true,
     bool requireApproval = false,
-    bool analysisOnly = false,
   }) async {
     final response = await _apiClient.post<Map<String, dynamic>>(
       '/api/code/sessions/$sessionId/instructions',
-      data: {
-        'content': command,
-        'allowCode': allowCode,
-        'autoPreview': autoPreview,
-        'requireApproval': requireApproval,
-        'analysisOnly': analysisOnly,
-      },
+      data: buildCodeInstructionRequest(
+        command: command,
+        autoPreview: autoPreview,
+        requireApproval: requireApproval,
+      ),
     );
     return AiInstructionSendResult.fromJson(
       response.data ?? const <String, dynamic>{},
@@ -260,4 +256,18 @@ class AiWorkspaceRepository {
         .map((item) => fromJson(item.cast<String, dynamic>()))
         .toList();
   }
+}
+
+Map<String, dynamic> buildCodeInstructionRequest({
+  required String command,
+  required bool autoPreview,
+  required bool requireApproval,
+}) {
+  return {
+    'content': command,
+    'allowCode': true,
+    'autoPreview': autoPreview,
+    'requireApproval': requireApproval,
+    'analysisOnly': false,
+  };
 }

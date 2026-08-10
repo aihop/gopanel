@@ -6,6 +6,7 @@ import '../../../../core/network/api_client.dart';
 import '../../data/ai_workspace_repository.dart';
 import '../../models/ai_dev_session.dart';
 import '../../models/chat_message.dart';
+import '../../models/code_instruction_options.dart';
 import '../../models/code_delivery_job.dart';
 import '../../models/code_task.dart';
 import 'code_task_sessions.dart';
@@ -345,7 +346,10 @@ class AiWorkspaceController extends Notifier<AiWorkspaceState> {
     }
   }
 
-  Future<void> sendMessage(String text) async {
+  Future<void> sendMessage(
+    String text, {
+    CodeInstructionOptions options = const CodeInstructionOptions(),
+  }) async {
     final content = text.trim();
     if (content.isEmpty || state.isSending) return;
     final session = state.currentSession;
@@ -368,6 +372,8 @@ class AiWorkspaceController extends Notifier<AiWorkspaceState> {
       final result = await _repo.sendAiCommand(
         sessionId: session.id,
         command: content,
+        autoPreview: options.autoPreview,
+        requireApproval: options.requireApproval,
       );
       state = state.copyWith(
         currentSession: result.session,

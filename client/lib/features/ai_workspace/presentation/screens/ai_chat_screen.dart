@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../models/code_instruction_options.dart';
 import '../controllers/ai_workspace_controller.dart';
 import '../code_workspace_text.dart';
 import '../widgets/ai_approval_prompt.dart';
@@ -9,6 +10,7 @@ import '../widgets/ai_preview_strip.dart';
 import '../widgets/ai_session_overview_card.dart';
 import '../widgets/ai_timeline_panel.dart';
 import '../widgets/code_delivery_card.dart';
+import '../widgets/code_instruction_composer.dart';
 import 'ai_preview_detail_screen.dart';
 import 'ai_preview_list_screen.dart';
 import 'code_session_sheet.dart';
@@ -25,6 +27,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
   final _inputController = TextEditingController();
   final _scrollController = ScrollController();
   final _focusNode = FocusNode();
+  CodeInstructionOptions _instructionOptions = const CodeInstructionOptions();
 
   @override
   void dispose() {
@@ -38,7 +41,9 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
     final text = _inputController.text.trim();
     if (text.isEmpty) return;
     _inputController.clear();
-    ref.read(aiWorkspaceControllerProvider.notifier).sendMessage(text);
+    ref
+        .read(aiWorkspaceControllerProvider.notifier)
+        .sendMessage(text, options: _instructionOptions);
     _scrollToBottom();
   }
 
@@ -271,7 +276,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
               isStopping: state.isActionLoading,
               onStop: _confirmStop,
             ),
-          _CommandComposer(
+          CodeInstructionComposer(
             controller: _inputController,
             focusNode: _focusNode,
             enabled:
@@ -279,6 +284,10 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                 !state.isSending &&
                 !state.isDevelopmentClosed,
             closed: state.isDevelopmentClosed,
+            options: _instructionOptions,
+            onOptionsChanged: (options) {
+              setState(() => _instructionOptions = options);
+            },
             onSend: _sendMessage,
           ),
         ],
@@ -389,77 +398,6 @@ class _ExecutionIndicator extends StatelessWidget {
                   )
                 : const Icon(Icons.stop_circle_outlined, size: 18),
             label: Text(CodeWorkspaceText.t(context, 'action.stop')),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CommandComposer extends StatelessWidget {
-  const _CommandComposer({
-    required this.controller,
-    required this.focusNode,
-    required this.enabled,
-    required this.closed,
-    required this.onSend,
-  });
-
-  final TextEditingController controller;
-  final FocusNode focusNode;
-  final bool enabled;
-  final bool closed;
-  final VoidCallback onSend;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      color: const Color(0xFF1E293B),
-      padding: EdgeInsets.fromLTRB(
-        16,
-        10,
-        8,
-        MediaQuery.paddingOf(context).bottom + 10,
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          const Padding(
-            padding: EdgeInsets.only(bottom: 12, right: 8),
-            child: Text(
-              '\$',
-              style: TextStyle(
-                color: Colors.greenAccent,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-          Expanded(
-            child: TextField(
-              controller: controller,
-              focusNode: focusNode,
-              enabled: enabled,
-              maxLines: 5,
-              minLines: 1,
-              textInputAction: TextInputAction.send,
-              onSubmitted: (_) => onSend(),
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                hintText: closed
-                    ? '当前会话已进入统一交付，不能继续修改'
-                    : enabled
-                    ? '输入开发指令或补充要求...'
-                    : '请先选择开发会话',
-                hintStyle: const TextStyle(color: Colors.white38),
-                border: InputBorder.none,
-              ),
-            ),
-          ),
-          IconButton(
-            onPressed: enabled ? onSend : null,
-            icon: const Icon(Icons.send_rounded),
-            color: Colors.blueAccent,
           ),
         ],
       ),

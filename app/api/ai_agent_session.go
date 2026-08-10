@@ -301,7 +301,7 @@ func CreateAISessionInstruction(c fiber.Ctx) error {
 	}
 	unlockLifecycle := codeSessionLifecycles.lock(session.ID)
 	defer unlockLifecycle()
-	requireApproval := codeSessionRequiresRiskApproval(session)
+	requireApproval := codeInstructionRequiresRiskApproval(session, req.RequireApproval)
 	needsApproval := shouldRequireAIApproval(content, requireApproval)
 	instructionStatus := "queued"
 	if needsApproval {
@@ -316,7 +316,7 @@ func CreateAISessionInstruction(c fiber.Ctx) error {
 			return txErr
 		}
 		session = lockedSession
-		requireApproval = codeSessionRequiresRiskApproval(session)
+		requireApproval = codeInstructionRequiresRiskApproval(session, req.RequireApproval)
 		needsApproval = shouldRequireAIApproval(content, requireApproval)
 		instructionStatus = "queued"
 		if needsApproval {
