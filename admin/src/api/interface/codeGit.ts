@@ -128,12 +128,20 @@ export interface CodeDeliveryJob {
 	hasPendingCommits: boolean
 	hasUncommittedChanges: boolean
 	repositories?: CodeRepositoryDeliveryResult[]
+	facts?: CodeDeliveryFact[]
 	errorMessage?: string
 	conflictFiles: string[]
 	createdAt: string
 	updatedAt: string
 	startedAt?: string
 	completedAt?: string
+}
+
+export interface CodeDeliveryFact {
+	key: "snapshot" | "merge" | "local" | "remote"
+	status: "pending" | "partial" | "completed" | "skipped"
+	count?: number
+	total?: number
 }
 
 export interface CodeDeliveryPushRepository {
@@ -143,6 +151,8 @@ export interface CodeDeliveryPushRepository {
 	remote?: string
 	branch?: string
 	commit?: string
+	snapshotReady: boolean
+	mergeReady: boolean
 	errorMessage?: string
 	ready: boolean
 }
@@ -164,6 +174,7 @@ export interface CodeRepositoryDeliveryResult {
 	commit?: string
 	pushStatus: "pending" | "pushed" | "failed" | "local"
 	pushedCommit?: string
+	sourceAppliedAt?: string
 	errorMessage?: string
 	conflictFiles?: string[]
 }

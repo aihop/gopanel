@@ -59,7 +59,7 @@ func TestDetectCodeDeliveryQualityChecksUsesSessionFlutterToolchain(t *testing.T
 	if err := os.WriteFile(flutterPath, []byte("#!/bin/sh\nexit 0\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	checks := detectCodeDeliveryQualityChecks([]codeDeliveryQualityRoot{{
+	checks := detectCodeDeliveryQualityChecks(0, []codeDeliveryQualityRoot{{
 		WorkDir: deliveryDir, IdentityDir: identityDir, Commit: "commit", Label: "Flutter",
 	}})
 	if len(checks) != 1 || checks[0].Command != "flutter analyze" || checks[0].Executable != flutterPath {

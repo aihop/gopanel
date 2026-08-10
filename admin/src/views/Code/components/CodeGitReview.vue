@@ -5,6 +5,7 @@ import { useI18n } from "vue-i18n"
 import { useMessage } from "naive-ui"
 import Icon from "@/components/common/Icon.vue"
 import CodeDeliveryPush from "./CodeDeliveryPush.vue"
+import CodeDeliveryFacts from "./CodeDeliveryFacts.vue"
 import CodeSessionRepositorySync from "./CodeSessionRepositorySync.vue"
 import {
 	getCodeDeliveryJob,
@@ -347,6 +348,7 @@ useIntervalFn(() => {
 					<div v-if="deliveryJob.errorMessage" class="mt-2 break-words text-xs">
 						{{ deliveryJob.errorMessage }}
 					</div>
+					<CodeDeliveryFacts :facts="deliveryJob.facts" />
 				</n-alert>
 				<n-input
 					v-model:value="commitMessage"

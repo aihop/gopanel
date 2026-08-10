@@ -93,3 +93,18 @@ func TestCodeQualityFailureSummaryKeepsUsefulTail(t *testing.T) {
 		t.Fatalf("unexpected failure summary: %q", summary)
 	}
 }
+
+func TestCodeQualityFailureSummaryFindsGoTestFailureBeforeNoTestPackages(t *testing.T) {
+	output := `--- FAIL: TestDelivery (0.01s)
+    delivery_test.go:42: expected main to advance
+FAIL
+FAIL github.com/aihop/gopanel/app/api 0.12s
+? github.com/aihop/gopanel/utils/toolbox [no test files]
+? github.com/aihop/gopanel/utils/websocket [no test files]
+FAIL`
+	summary := codeQualityFailureSummary(output)
+	if !strings.Contains(summary, "TestDelivery") || !strings.Contains(summary, "expected main to advance") ||
+		strings.Contains(summary, "no test files") {
+		t.Fatalf("unexpected Go test failure summary: %q", summary)
+	}
+}

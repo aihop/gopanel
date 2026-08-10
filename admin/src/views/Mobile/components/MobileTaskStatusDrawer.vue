@@ -4,7 +4,9 @@ import { useI18n } from "vue-i18n"
 import type { CodeSession, CodeSessionState } from "@/api/interface/code"
 import Icon from "@/components/common/Icon.vue"
 import { mobileMessages } from "@/i18n/locales/mobile"
+import { mobileTaskDeliveryMessages } from "../mobileTaskDeliveryMessages"
 import MobileTaskDeliveryButton from "./MobileTaskDeliveryButton.vue"
+import CodeDeliveryFacts from "@/views/Code/components/CodeDeliveryFacts.vue"
 
 const props = defineProps<{
 	show: boolean
@@ -20,7 +22,11 @@ const emit = defineEmits<{
 	(event: "retry"): void
 	(event: "deliveryUpdated"): void
 }>()
-const { t } = useI18n({ messages: mobileMessages })
+const taskStatusMessages = {
+	zh: { mobile: { ...mobileMessages.zh.mobile, ...mobileTaskDeliveryMessages.zh.mobile } },
+	en: { mobile: { ...mobileMessages.en.mobile, ...mobileTaskDeliveryMessages.en.mobile } }
+}
+const { t } = useI18n({ messages: taskStatusMessages })
 const approvalReason = ref("")
 const canRetry = computed(() => ["failed", "cancelled"].includes(props.state?.latestInstruction?.status || ""))
 const isRunning = computed(
@@ -47,7 +53,7 @@ const deliveryStageLabel = computed(() => t(`mobile.deliveryStage_${props.state?
 const deliveryStatusType = computed(() => {
 	const status = props.state?.delivery?.status
 	if (status === "completed") return "success"
-	if (status === "failed" || status === "conflict") return "error"
+	if (status === "failed" || status === "conflict" || status === "partial") return "error"
 	return "info"
 })
 const deliverySession = computed(() => props.state?.session || props.session)
@@ -89,7 +95,7 @@ watch(
 								type="line"
 								:percentage="state.delivery.progress"
 								:status="
-									state.delivery.status === 'failed' || state.delivery.status === 'conflict'
+									state.delivery.status === 'failed' || state.delivery.status === 'conflict' || state.delivery.status === 'partial'
 										? 'error'
 										: state.delivery.status === 'completed'
 											? 'success'
@@ -109,6 +115,7 @@ watch(
 							<n-alert v-if="state.delivery.errorMessage" class="mt-3" type="error" :show-icon="false">
 								{{ state.delivery.errorMessage }}
 							</n-alert>
+							<CodeDeliveryFacts :facts="state.delivery.facts" />
 						</template>
 						<div class="mt-3 flex justify-end">
 							<MobileTaskDeliveryButton

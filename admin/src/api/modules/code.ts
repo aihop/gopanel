@@ -14,6 +14,8 @@ import type {
 	CodeApprovalPolicy,
 	CodeAuditEvent,
 	CodeQualityCheck,
+	CodeProjectQualityCheck,
+	CodeQualityPreflight,
 	CodeQualityCheckResult,
 	CodeWorktreeCapability,
 	CodeProjectRepositoryOption,
@@ -36,12 +38,16 @@ export function getAIProjects(params: { page: number; limit: number }) {
 	return http.get<{ items: AIProject[]; total: number }>("/code/projects", params)
 }
 
-export function createAIProject(data: { name: string; description: string; sourceDirs: string[]; primaryRepository: string; deliveryBranch: string; gitCredentialId: number; requireQualityGate: boolean; monthlyTokenBudget: number }) {
+export function createAIProject(data: { name: string; description: string; sourceDirs: string[]; primaryRepository: string; deliveryBranch: string; gitCredentialId: number; requireQualityGate: boolean; qualityChecks: CodeProjectQualityCheck[]; monthlyTokenBudget: number }) {
 	return http.post<AIProject>("/code/projects", data)
 }
 
-export function updateAIProject(id: number, data: { name: string; description: string; sourceDirs: string[]; primaryRepository: string; deliveryBranch: string; gitCredentialId: number; requireQualityGate: boolean; monthlyTokenBudget: number }) {
+export function updateAIProject(id: number, data: { name: string; description: string; sourceDirs: string[]; primaryRepository: string; deliveryBranch: string; gitCredentialId: number; requireQualityGate: boolean; qualityChecks: CodeProjectQualityCheck[]; monthlyTokenBudget: number }) {
 	return http.put<AIProject>(`/code/projects/${id}`, data)
+}
+
+export function preflightCodeProjectQualityChecks(sourceDirs: string[], qualityChecks: CodeProjectQualityCheck[]) {
+	return http.post<CodeQualityPreflight>("/code/projects/quality-checks/preflight", { sourceDirs, qualityChecks })
 }
 
 export function discoverCodeProjectRepositories(sourceDirs: string[]) {

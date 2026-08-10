@@ -16,9 +16,18 @@ type AIProject struct {
 	DeliveryBranch     string                     `gorm:"column:delivery_branch;type:varchar(255);not null;default:''" json:"deliveryBranch"`
 	GitCredentialID    uint                       `gorm:"column:git_credential_id;type:integer;not null;default:0;index" json:"gitCredentialId"`
 	RequireQualityGate bool                       `gorm:"column:require_quality_gate;not null;default:false" json:"requireQualityGate"`
+	QualityChecks      []AIProjectQualityCheck    `gorm:"column:quality_checks;serializer:json;type:text" json:"qualityChecks"`
 	MonthlyTokenBudget int64                      `gorm:"column:monthly_token_budget;not null;default:0" json:"monthlyTokenBudget"`
 	TaskCount          int64                      `gorm:"-" json:"taskCount"`
 	ExecutionSummary   *AIProjectExecutionSummary `gorm:"-" json:"executionSummary"`
+}
+
+type AIProjectQualityCheck struct {
+	Name       string `json:"name"`
+	Kind       string `json:"kind"`
+	Repository string `json:"repository"`
+	WorkDir    string `json:"workDir"`
+	Command    string `json:"command"`
 }
 
 type AIProjectExecutionSummary struct {

@@ -129,6 +129,7 @@
       <n-modal
         v-model:show="showCreateProjectModal"
         preset="dialog"
+		style="width: min(760px, 94vw)"
         :title="editingProjectId ? t('code.editProject') : t('code.createProject')"
       >
         <div class="flex flex-col gap-4 mt-4">
@@ -137,12 +138,13 @@
             :placeholder="t('code.projectName')"
             placeholder-class="text-[var(--n-text-color-3)]"
           />
-		  <div class="rounded-xl bg-[var(--n-color-embedded)] p-3">
-			<div class="flex items-start justify-between gap-3">
-				<div><div class="text-sm font-medium">{{ t("code.requireQualityGate") }}</div><div class="mt-1 text-xs text-[var(--n-text-color-3)]">{{ t("code.requireQualityGateHint") }}</div></div>
-				<n-switch :value="true" disabled />
-			</div>
-		  </div>
+		  <ProjectQualityGateSettings
+			v-model="projectForm.requireQualityGate"
+			:checks="projectForm.qualityChecks"
+			:source-dirs="projectForm.sourceDirs"
+			:repositories="repositoryOptions"
+			@update:checks="projectForm.qualityChecks = $event"
+		  />
 		  <n-input-number v-model:value="projectForm.monthlyTokenBudget" :min="0" :step="100000" style="width: 100%" :placeholder="t('code.monthlyTokenBudget')">
 			<template #prefix>{{ t("code.monthlyTokenBudget") }}</template>
 		  </n-input-number>
@@ -208,11 +210,12 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import { getAIProjects, createAIProject, discoverCodeProjectRepositories, updateAIProject } from '@/api/modules/code'
-import type { AIProject } from '@/api/interface/code'
+import type { AIProject, CodeProjectQualityCheck } from '@/api/interface/code'
 import Icon from '@/components/common/Icon.vue'
 import ProjectDirectoryPicker from './components/ProjectDirectoryPicker.vue'
 import ProjectGitCredentialSelect from './components/ProjectGitCredentialSelect.vue'
 import ProjectQuickPanels from './components/ProjectQuickPanels.vue'
+import ProjectQualityGateSettings from './components/ProjectQualityGateSettings.vue'
 import { codeProjectMessages } from '@/i18n/locales/codeProject'
 
 defineOptions({ name: "CodeIndex" })
@@ -229,7 +232,8 @@ const creatingProject = ref(false)
 const repositoriesLoading = ref(false)
 const repositoryOptions = ref<Array<{ label: string; value: string }>>([])
 const editingProjectId = ref<number | null>(null)
-const projectForm = ref({ name: '', desc: '', workDir: '', sourceDirs: [] as string[], primaryRepository: '', deliveryBranch: '', gitCredentialId: 0, requireQualityGate: true, monthlyTokenBudget: 0 })
+const emptyQualityChecks = (): CodeProjectQualityCheck[] => []
+const projectForm = ref({ name: '', desc: '', workDir: '', sourceDirs: [] as string[], primaryRepository: '', deliveryBranch: '', gitCredentialId: 0, requireQualityGate: true, qualityChecks: emptyQualityChecks(), monthlyTokenBudget: 0 })
 
 const projects = ref<AIProject[]>([])
 const projectsLoading = ref(false)
@@ -318,7 +322,7 @@ const formatUpdatedAt = (value: string) => new Date(value).toLocaleString(undefi
 
 const openCreateProjectModal = () => {
   editingProjectId.value = null
-  projectForm.value = { name: '', desc: '', workDir: defaultWorkDir.value, sourceDirs: [], primaryRepository: '', deliveryBranch: '', gitCredentialId: 0, requireQualityGate: true, monthlyTokenBudget: 0 }
+  projectForm.value = { name: '', desc: '', workDir: defaultWorkDir.value, sourceDirs: [], primaryRepository: '', deliveryBranch: '', gitCredentialId: 0, requireQualityGate: true, qualityChecks: emptyQualityChecks(), monthlyTokenBudget: 0 }
   showCreateProjectModal.value = true
   repositoryOptions.value = []
 }
@@ -326,7 +330,7 @@ const openCreateProjectModal = () => {
 const openEditProjectModal = (project: AIProject) => {
   editingProjectId.value = project.id
   const sourceDirs = project.sourceDirs?.length ? project.sourceDirs : project.workDir ? [project.workDir] : []
-  projectForm.value = { name: project.name, desc: project.description || '', workDir: sourceDirs[0] || defaultWorkDir.value, sourceDirs, primaryRepository: project.primaryRepository || '', deliveryBranch: project.deliveryBranch || 'main', gitCredentialId: project.gitCredentialId || 0, requireQualityGate: true, monthlyTokenBudget: project.monthlyTokenBudget || 0 }
+  projectForm.value = { name: project.name, desc: project.description || '', workDir: sourceDirs[0] || defaultWorkDir.value, sourceDirs, primaryRepository: project.primaryRepository || '', deliveryBranch: project.deliveryBranch || 'main', gitCredentialId: project.gitCredentialId || 0, requireQualityGate: project.requireQualityGate, qualityChecks: (project.qualityChecks || []).map(check => ({ ...check })), monthlyTokenBudget: project.monthlyTokenBudget || 0 }
   showCreateProjectModal.value = true
   void loadRepositoryOptions()
 }
@@ -360,6 +364,7 @@ const submitProject = async () => {
 	  deliveryBranch: projectForm.value.deliveryBranch.trim(),
 	  gitCredentialId: projectForm.value.gitCredentialId,
       requireQualityGate: projectForm.value.requireQualityGate,
+	  qualityChecks: projectForm.value.qualityChecks,
       monthlyTokenBudget: projectForm.value.monthlyTokenBudget || 0,
     }
     const res = editingProjectId.value

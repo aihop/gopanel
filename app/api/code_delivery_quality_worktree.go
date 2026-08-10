@@ -48,6 +48,6 @@ func codeMultiRepositoryHasQualityChecks(session *model.AIDevSession) (bool, err
 	if err != nil {
 		return false, err
 	}
-	hasChecks := len(detectCodeDeliveryQualityChecks(roots)) > 0
+	hasChecks := len(detectCodeDeliveryQualityChecks(session.ProjectID, roots)) > 0
 	return hasChecks, cleanup()
 }

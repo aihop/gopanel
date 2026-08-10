@@ -245,7 +245,9 @@ func codeSingleRepositoryDeliveryResult(delivery *model.AICodeDelivery, result c
 		RepositoryID: "session", RepositoryName: filepath.Base(delivery.SourceWorkDir), Status: result.Status,
 		Branch: delivery.WorktreeBranch, TargetBranch: delivery.TargetBranch, Remote: delivery.RemoteName,
 		RemoteBranch: deliveryRemoteBranch(delivery.RemoteBranch, delivery.TargetBranch), Commit: result.Commit,
-		PushStatus: pushStatus, PushedCommit: delivery.PushedCommit, ErrorMessage: delivery.PushError,
+		SnapshotReady: strings.TrimSpace(delivery.WorktreeCommit) != "",
+		MergeReady:    strings.TrimSpace(delivery.MergeCommit) != "",
+		PushStatus:    pushStatus, PushedCommit: delivery.PushedCommit, ErrorMessage: delivery.PushError,
 		ConflictFiles: result.ConflictFiles,
 	}
 }

@@ -54,6 +54,7 @@ type codeDeliveryJobView struct {
 	HasPendingCommits     bool                           `json:"hasPendingCommits"`
 	HasUncommittedChanges bool                           `json:"hasUncommittedChanges"`
 	Repositories          []codeRepositoryDeliveryResult `json:"repositories,omitempty"`
+	Facts                 []codeDeliveryFact             `json:"facts,omitempty"`
 	ErrorMessage          string                         `json:"errorMessage,omitempty"`
 	ConflictFiles         []string                       `json:"conflictFiles"`
 	CreatedAt             time.Time                      `json:"createdAt"`
@@ -459,6 +460,7 @@ func loadCodeDeliveryJobView(sessionID uint) (*codeDeliveryJobView, error) {
 		HasPendingChanges: pending.HasChanges, HasPendingCommits: pending.HasCommits,
 		HasUncommittedChanges: pending.HasUncommittedChanges,
 		Repositories:          repositories,
+		Facts:                 loadCodeDeliveryFacts(sessionID, repositories),
 		ErrorMessage:          job.ErrorMessage, ConflictFiles: conflicts, CreatedAt: job.CreatedAt, UpdatedAt: job.UpdatedAt,
 		StartedAt: job.StartedAt, CompletedAt: job.CompletedAt,
 	}, nil

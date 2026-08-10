@@ -20,6 +20,8 @@ type codeRepositoryDeliveryResult struct {
 	Remote          string     `json:"remote,omitempty"`
 	RemoteBranch    string     `json:"remoteBranch,omitempty"`
 	Commit          string     `json:"commit,omitempty"`
+	SnapshotReady   bool       `json:"snapshotReady"`
+	MergeReady      bool       `json:"mergeReady"`
 	PushStatus      string     `json:"pushStatus"`
 	PushedCommit    string     `json:"pushedCommit,omitempty"`
 	SourceAppliedAt *time.Time `json:"sourceAppliedAt,omitempty"`
@@ -254,6 +256,8 @@ func codeStoredRepositoryDeliveryResult(repository *model.AIDevSessionRepository
 		Status: repository.Status, Branch: repository.Branch, TargetBranch: repository.TargetBranch,
 		Remote: repository.RemoteName, RemoteBranch: deliveryRemoteBranch(repository.RemoteBranch, repository.TargetBranch),
 		Commit: repository.MergeCommit, PushStatus: pushStatus, PushedCommit: repository.PushedCommit,
+		SnapshotReady:   strings.TrimSpace(repository.WorktreeCommit) != "",
+		MergeReady:      strings.TrimSpace(repository.MergeCommit) != "",
 		SourceAppliedAt: repository.SourceAppliedAt, ErrorMessage: repository.PushError,
 	}
 }

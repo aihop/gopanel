@@ -39,6 +39,7 @@ type codeQualityCheck struct {
 	WorkDir     string   `json:"workDir"`
 	Args        []string `json:"-"`
 	Executable  string   `json:"-"`
+	LocalScript bool     `json:"-"`
 	workDirPath string
 	LastResult  *codeQualityCheckResult `json:"lastResult,omitempty"`
 }
@@ -141,7 +142,10 @@ func detectCodeQualityChecks(session *model.AIDevSession) ([]codeQualityCheck, e
 	if err != nil {
 		return nil, err
 	}
-	return detectCodeQualityChecksInRoots(roots), nil
+	checks := detectCodeQualityChecksInRoots(roots)
+	configured := loadConfiguredCodeQualityChecks(session.ProjectID, codeSessionQualityRoots(session, roots))
+	checks = mergeCodeQualityChecks(checks, configured)
+	return checks, nil
 }
 
 func detectCodeQualityChecksInRoots(roots []string) []codeQualityCheck {
@@ -299,7 +303,7 @@ func executeCodeQualityCheck(lease *codeExecutionLease, check codeQualityCheck) 
 	defer cancel()
 	lease.SetCancel(cancel)
 	output := &boundedCodeOutput{}
-	commandPath, commandEnv, resolveErr := resolveCodeExecutorCommand(check.Executable)
+	commandPath, commandEnv, resolveErr := resolveCodeQualityCommand(check)
 	if resolveErr != nil {
 		completedAt := time.Now()
 		return codeQualityCheckResult{
@@ -329,24 +333,6 @@ func executeCodeQualityCheck(lease *codeExecutionLease, check codeQualityCheck) 
 		DurationMS: completedAt.Sub(startedAt).Milliseconds(), Output: text,
 		OutputTruncated: truncated, StartedAt: startedAt, CompletedAt: completedAt,
 	}
-}
-
-func codeQualityFailureSummary(output string) string {
-	lines := strings.Split(strings.TrimSpace(output), "\n")
-	filtered := make([]string, 0, len(lines))
-	for _, line := range lines {
-		if trimmed := strings.TrimSpace(line); trimmed != "" {
-			filtered = append(filtered, trimmed)
-		}
-	}
-	if len(filtered) > 4 {
-		filtered = filtered[len(filtered)-4:]
-	}
-	summary := strings.Join(filtered, " | ")
-	if runes := []rune(summary); len(runes) > 500 {
-		summary = string(runes[len(runes)-500:])
-	}
-	return summary
 }
 
 func findCodeQualityCheck(checks []codeQualityCheck, checkID string) *codeQualityCheck {

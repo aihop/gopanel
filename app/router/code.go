@@ -25,6 +25,7 @@ func CodeRouter(r fiber.Router) {
 		// Projects APIs
 		group.Get("/projects", api.GetAIProjects)
 		group.Post("/projects/repositories/discover", api.DiscoverCodeProjectRepositories)
+		group.Post("/projects/quality-checks/preflight", api.PreflightCodeProjectQualityChecks)
 		group.Post("/projects", api.CreateAIProject)
 		group.Put("/projects/:id", api.UpdateAIProject)
 		group.Get("/projects/:id/overview", api.GetCodeProjectOverview)

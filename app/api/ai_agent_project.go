@@ -107,15 +107,16 @@ func GetAIProjects(c fiber.Ctx) error {
 func CreateAIProject(c fiber.Ctx) error {
 	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
 	var req struct {
-		Name               string   `json:"name"`
-		Description        string   `json:"description"`
-		WorkDir            string   `json:"workDir"`
-		SourceDirs         []string `json:"sourceDirs"`
-		PrimaryRepository  *string  `json:"primaryRepository"`
-		DeliveryBranch     *string  `json:"deliveryBranch"`
-		GitCredentialID    uint     `json:"gitCredentialId"`
-		RequireQualityGate bool     `json:"requireQualityGate"`
-		MonthlyTokenBudget int64    `json:"monthlyTokenBudget"`
+		Name               string                        `json:"name"`
+		Description        string                        `json:"description"`
+		WorkDir            string                        `json:"workDir"`
+		SourceDirs         []string                      `json:"sourceDirs"`
+		PrimaryRepository  *string                       `json:"primaryRepository"`
+		DeliveryBranch     *string                       `json:"deliveryBranch"`
+		GitCredentialID    uint                          `json:"gitCredentialId"`
+		RequireQualityGate bool                          `json:"requireQualityGate"`
+		QualityChecks      []model.AIProjectQualityCheck `json:"qualityChecks"`
+		MonthlyTokenBudget int64                         `json:"monthlyTokenBudget"`
 	}
 	if bindErr := c.Bind().JSON(&req); bindErr != nil {
 		return c.JSON(e.Fail(bindErr))
@@ -138,6 +139,10 @@ func CreateAIProject(c fiber.Ctx) error {
 	if err := validateCodeGitCredentialAccess(req.GitCredentialID, claims.UserId); err != nil {
 		return c.JSON(e.Fail(err))
 	}
+	qualityChecks, err := normalizeCodeProjectQualityChecks(req.QualityChecks, sourceDirs)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
 	primaryRepository, deliveryBranch := "", ""
 	if req.PrimaryRepository != nil {
 		primaryRepository = strings.TrimSpace(*req.PrimaryRepository)
@@ -148,7 +153,8 @@ func CreateAIProject(c fiber.Ctx) error {
 	project := &model.AIProject{
 		Name: name, Description: strings.TrimSpace(req.Description), SourceDirs: sourceDirs,
 		CreatorID: claims.UserId, PrimaryRepository: primaryRepository,
-		DeliveryBranch: deliveryBranch, GitCredentialID: req.GitCredentialID, RequireQualityGate: true,
+		DeliveryBranch: deliveryBranch, GitCredentialID: req.GitCredentialID,
+		RequireQualityGate: req.RequireQualityGate, QualityChecks: qualityChecks,
 		MonthlyTokenBudget: req.MonthlyTokenBudget,
 	}
 	if err := applyCodeProjectDeliveryPolicy(project, sourceDirs); err != nil {
@@ -188,15 +194,16 @@ func UpdateAIProject(c fiber.Ctx) error {
 		return c.JSON(e.Fail(errors.New("无权修改该项目")))
 	}
 	var req struct {
-		Name               string   `json:"name"`
-		Description        string   `json:"description"`
-		WorkDir            string   `json:"workDir"`
-		SourceDirs         []string `json:"sourceDirs"`
-		PrimaryRepository  *string  `json:"primaryRepository"`
-		DeliveryBranch     *string  `json:"deliveryBranch"`
-		GitCredentialID    uint     `json:"gitCredentialId"`
-		RequireQualityGate bool     `json:"requireQualityGate"`
-		MonthlyTokenBudget int64    `json:"monthlyTokenBudget"`
+		Name               string                        `json:"name"`
+		Description        string                        `json:"description"`
+		WorkDir            string                        `json:"workDir"`
+		SourceDirs         []string                      `json:"sourceDirs"`
+		PrimaryRepository  *string                       `json:"primaryRepository"`
+		DeliveryBranch     *string                       `json:"deliveryBranch"`
+		GitCredentialID    uint                          `json:"gitCredentialId"`
+		RequireQualityGate bool                          `json:"requireQualityGate"`
+		QualityChecks      []model.AIProjectQualityCheck `json:"qualityChecks"`
+		MonthlyTokenBudget int64                         `json:"monthlyTokenBudget"`
 	}
 	if bindErr := c.Bind().JSON(&req); bindErr != nil {
 		return c.JSON(e.Fail(bindErr))
@@ -228,8 +235,13 @@ func UpdateAIProject(c fiber.Ctx) error {
 	if err := validateCodeGitCredentialAccess(req.GitCredentialID, claims.UserId); err != nil {
 		return c.JSON(e.Fail(err))
 	}
+	qualityChecks, err := normalizeCodeProjectQualityChecks(req.QualityChecks, sourceDirs)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
 	project.GitCredentialID = req.GitCredentialID
-	project.RequireQualityGate = true
+	project.RequireQualityGate = req.RequireQualityGate
+	project.QualityChecks = qualityChecks
 	project.MonthlyTokenBudget = req.MonthlyTokenBudget
 	if err := applyCodeProjectDeliveryPolicy(project, sourceDirs); err != nil {
 		return c.JSON(e.Fail(err))

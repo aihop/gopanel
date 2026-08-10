@@ -11,10 +11,36 @@ export interface AIProject {
 	deliveryBranch: string
 	gitCredentialId: number
 	requireQualityGate: boolean
+	qualityChecks: CodeProjectQualityCheck[]
 	monthlyTokenBudget: number
 	memberCount?: number
 	taskCount?: number
 	executionSummary: AIProjectExecutionSummary
+}
+
+export type CodeQualityKind = "test" | "lint" | "typecheck" | "build"
+
+export interface CodeProjectQualityCheck {
+	name: string
+	kind: CodeQualityKind
+	repository: string
+	workDir: string
+	command: string
+}
+
+export interface CodeQualityPreflightItem {
+	id: string
+	kind: CodeQualityKind
+	label: string
+	command: string
+	workDir: string
+	available: boolean
+	reason?: string
+}
+
+export interface CodeQualityPreflight {
+	ready: boolean
+	items: CodeQualityPreflightItem[]
 }
 
 export interface CodeGitCredential {
@@ -281,7 +307,6 @@ export interface CodeSessionState {
 	delivery: import("./codeGit").CodeDeliveryJob | null
 }
 
-export type CodeQualityKind = "test" | "lint" | "typecheck" | "build"
 export type CodeQualityStatus = "passed" | "failed" | "timed_out"
 
 export interface CodeQualityCheckResult {

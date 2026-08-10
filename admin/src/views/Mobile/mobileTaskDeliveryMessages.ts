@@ -16,8 +16,9 @@ export const mobileTaskDeliveryMessages = {
 			deliveredShort: "已交付",
 			deliverLatest: "交付后续提交",
 			retryDelivery: "重新交付",
-			deliveryQueuedSuccess: "任务已进入统一交付队列",
-			deliveryQueueFailed: "任务交付失败"
+				deliveryQueuedSuccess: "任务已进入统一交付队列",
+				deliveryQueueFailed: "任务交付失败",
+				deliveryStatus_partial: "部分仓库已完成"
 		}
 	},
 	en: {
@@ -37,8 +38,9 @@ export const mobileTaskDeliveryMessages = {
 			deliveredShort: "Delivered",
 			deliverLatest: "Deliver newer commits",
 			retryDelivery: "Retry delivery",
-			deliveryQueuedSuccess: "Task added to the delivery queue",
-			deliveryQueueFailed: "Failed to queue task delivery"
+				deliveryQueuedSuccess: "Task added to the delivery queue",
+				deliveryQueueFailed: "Failed to queue task delivery",
+				deliveryStatus_partial: "Some repositories completed"
 		}
 	}
 } as const
