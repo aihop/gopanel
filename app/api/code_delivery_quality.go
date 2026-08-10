@@ -15,6 +15,7 @@ import (
 type codeDeliveryQualityRoot struct {
 	WorkDir     string
 	IdentityDir string
+	RuntimeDir  string
 	Commit      string
 	Label       string
 }
@@ -50,13 +51,18 @@ func codeDeliveryQualityGateEnabled(session *model.AIDevSession) (bool, error) {
 	return project.RequireQualityGate, nil
 }
 
-func runCodeDeliveryQualityGateAtRoots(session *model.AIDevSession, userID uint, lease *codeExecutionLease, report codeDeliveryProgressReporter, roots []codeDeliveryQualityRoot) error {
+func runCodeDeliveryQualityGateAtRoots(session *model.AIDevSession, userID uint, lease *codeExecutionLease, report codeDeliveryProgressReporter, roots []codeDeliveryQualityRoot) (returnErr error) {
 	if len(roots) == 0 {
 		return errors.New("项目已启用质量门禁，但交付快照不可用")
 	}
 	if err := validateCodeDeliveryQualityRoots(roots); err != nil {
 		return err
 	}
+	cleanup, err := prepareCodeDeliveryQualityEnvironment(roots)
+	if err != nil {
+		return err
+	}
+	defer func() { returnErr = errors.Join(returnErr, cleanup()) }()
 	checks := detectCodeDeliveryQualityChecks(roots)
 	if len(checks) == 0 {
 		return errors.New("项目已启用质量门禁，但未识别到可执行检查")
@@ -146,7 +152,8 @@ func codeDeliveryQualityRoots(session *model.AIDevSession) ([]codeDeliveryQualit
 			}
 			roots = append(roots, codeDeliveryQualityRoot{
 				WorkDir: repository.WorktreeDir, IdentityDir: repository.WorktreeDir,
-				Commit: repository.WorktreeCommit, Label: "仓库 " + repository.LinkName,
+				RuntimeDir: repository.SourceDir,
+				Commit:     repository.WorktreeCommit, Label: "仓库 " + repository.LinkName,
 			})
 		}
 		return roots, nil
@@ -162,7 +169,10 @@ func codeDeliveryQualityRoots(session *model.AIDevSession) ([]codeDeliveryQualit
 	} else if workDir != strings.TrimSpace(delivery.WorkDir) {
 		return nil, errors.New("质量检查目录与交付快照不一致")
 	}
-	return []codeDeliveryQualityRoot{{WorkDir: workDir, IdentityDir: workDir, Commit: commit, Label: label}}, nil
+	return []codeDeliveryQualityRoot{{
+		WorkDir: workDir, IdentityDir: delivery.WorkDir, RuntimeDir: delivery.SourceWorkDir,
+		Commit: commit, Label: label,
+	}}, nil
 }
 
 func detectCodeDeliveryQualityChecks(roots []codeDeliveryQualityRoot) []codeQualityCheck {
