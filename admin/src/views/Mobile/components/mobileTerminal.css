@@ -8,3 +8,12 @@
 	-webkit-overflow-scrolling: touch;
 	touch-action: pan-y;
 }
+
+.mobile-terminal .xterm-accessibility,
+.mobile-terminal .xterm-accessibility-tree {
+	pointer-events: auto;
+	user-select: text;
+	-webkit-user-select: text;
+	-webkit-touch-callout: default;
+	touch-action: pan-y;
+}

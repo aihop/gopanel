@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -68,5 +69,32 @@ func TestCodeDeliveryConflictCanResumeFromIntegrationWorktree(t *testing.T) {
 	content, err := os.ReadFile(filepath.Join(sourceDir, "README.md"))
 	if err != nil || string(content) != "resolved\n" {
 		t.Fatalf("resolved content was not delivered: %q, %v", content, err)
+	}
+}
+
+func TestCleanupCodeDeliveryWorktreesWhenSourceDirectoryIsMissing(t *testing.T) {
+	session, sourceDir := createDeliveryWorktree(t, 69)
+	deliveryDir := aiSessionDeliveryWorktreeDir(session.UserID, session.ID)
+	if err := os.MkdirAll(deliveryDir, 0750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(deliveryDir, "snapshot"), []byte("ready\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(sourceDir); err != nil {
+		t.Fatal(err)
+	}
+	delivery := &model.AICodeDelivery{
+		SessionID: session.ID, UserID: session.UserID, Status: codeDeliveryCompleted,
+		SourceWorkDir: sourceDir, WorkDir: session.WorkDir, WorktreeBranch: session.WorktreeBranch,
+		DeliveryWorkDir: deliveryDir,
+	}
+	if err := cleanupCodeDeliveryWorktree(delivery); err != nil {
+		t.Fatal(err)
+	}
+	for _, workDir := range []string{deliveryDir, session.WorkDir} {
+		if _, err := os.Stat(workDir); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("missing source cleanup retained %s: %v", workDir, err)
+		}
 	}
 }

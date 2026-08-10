@@ -81,6 +81,12 @@ func runCodeDeliveryQualityGateAtRoots(session *model.AIDevSession, userID uint,
 			return err
 		}
 		result := executeCodeQualityCheck(lease, check)
+		if changedRoot := changedCodeDeliveryQualityRoot(check, roots); changedRoot != nil {
+			return errors.Join(
+				fmt.Errorf("质量检查修改了交付快照：%s", check.Label),
+				restoreCodeDeliveryQualityRoot(*changedRoot),
+			)
+		}
 		currentRevision, currentErr := codeQualityRevision(check.workDirPath)
 		result.Revision = revision
 		result.Current = currentErr == nil && currentRevision == revision
@@ -103,6 +109,29 @@ func runCodeDeliveryQualityGateAtRoots(session *model.AIDevSession, userID uint,
 	}
 	loadCodeQualityResults(session.ID, checks)
 	return validateCodeQualityCheckResults(checks)
+}
+
+func changedCodeDeliveryQualityRoot(check codeQualityCheck, roots []codeDeliveryQualityRoot) *codeDeliveryQualityRoot {
+	for index := range roots {
+		root := &roots[index]
+		if !pathWithinDirectory(root.WorkDir, check.workDirPath) {
+			continue
+		}
+		status, err := runCodeGit(root.WorkDir, "status", "--porcelain", "--untracked-files=no")
+		if err == nil && strings.TrimSpace(status) != "" {
+			return root
+		}
+		return nil
+	}
+	return nil
+}
+
+func restoreCodeDeliveryQualityRoot(root codeDeliveryQualityRoot) error {
+	if _, err := runCodeGit(root.WorkDir, "reset", "--hard", root.Commit); err != nil {
+		return err
+	}
+	_, err := runCodeGit(root.WorkDir, "clean", "-d", "-f")
+	return err
 }
 
 func persistCodeDeliveryQualityResult(
@@ -182,6 +211,7 @@ func detectCodeDeliveryQualityChecks(projectID uint, roots []codeDeliveryQuality
 	}
 	checks := automaticCodeDeliveryQualityChecks(detectCodeQualityChecksInRoots(paths))
 	checks = mergeCodeQualityChecks(checks, loadConfiguredCodeQualityChecks(projectID, roots))
+	disableCodeDeliveryFlutterPub(checks)
 	deliveryFingerprint := codeDeliveryQualityFingerprint(roots)
 	for index := range checks {
 		check := &checks[index]
@@ -212,6 +242,20 @@ func automaticCodeDeliveryQualityChecks(detected []codeQualityCheck) []codeQuali
 		}
 	}
 	return checks
+}
+
+func disableCodeDeliveryFlutterPub(checks []codeQualityCheck) {
+	for index := range checks {
+		check := &checks[index]
+		if filepath.Base(check.Executable) != "flutter" || check.LocalScript || len(check.Args) == 0 {
+			continue
+		}
+		if check.Args[0] != "analyze" && check.Args[0] != "test" {
+			continue
+		}
+		check.Args = append(check.Args, "--no-pub")
+		check.Command += " --no-pub"
+	}
 }
 
 func codeDeliveryQualityFingerprint(roots []codeDeliveryQualityRoot) string {

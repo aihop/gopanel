@@ -30,6 +30,23 @@ func TestDetectNodeQualityChecksUsesLockfileManager(t *testing.T) {
 	}
 }
 
+func TestDetectNodeQualityChecksSkipsMutatingScripts(t *testing.T) {
+	workDir := t.TempDir()
+	packageJSON := `{"scripts":{"test":"vitest","lint":"eslint . --fix","type-check":"vue-tsc","build":"vite build"}}`
+	if err := os.WriteFile(filepath.Join(workDir, "package.json"), []byte(packageJSON), 0600); err != nil {
+		t.Fatal(err)
+	}
+	checks := detectNodeQualityChecks(workDir, workDir)
+	if len(checks) != 3 {
+		t.Fatalf("mutating lint should be skipped: %#v", checks)
+	}
+	for _, check := range checks {
+		if check.Kind == "lint" {
+			t.Fatalf("mutating lint was detected: %#v", check)
+		}
+	}
+}
+
 func TestDetectCodeQualityChecksAtSupportsGo(t *testing.T) {
 	workDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(workDir, "go.mod"), []byte("module example.com/test\n"), 0600); err != nil {

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -62,7 +63,8 @@ func TestDetectCodeDeliveryQualityChecksUsesSessionFlutterToolchain(t *testing.T
 	checks := detectCodeDeliveryQualityChecks(0, []codeDeliveryQualityRoot{{
 		WorkDir: deliveryDir, IdentityDir: identityDir, Commit: "commit", Label: "Flutter",
 	}})
-	if len(checks) != 1 || checks[0].Command != "flutter analyze" || checks[0].Executable != flutterPath {
+	if len(checks) != 1 || checks[0].Command != "flutter analyze --no-pub" || checks[0].Executable != flutterPath ||
+		len(checks[0].Args) != 2 || checks[0].Args[1] != "--no-pub" {
 		t.Fatalf("unexpected Flutter delivery check: %#v", checks)
 	}
 }
@@ -128,6 +130,15 @@ func TestDetectCodeDeliveryQualityChecksKeepsConfiguredBuild(t *testing.T) {
 func TestPrepareCodeDeliveryQualityEnvironmentRestoresNodeModules(t *testing.T) {
 	sourceDir := createCodeGitRepository(t)
 	deliveryDir := createCodeGitRepository(t)
+	packagePath := "admin"
+	for _, root := range []string{sourceDir, deliveryDir} {
+		if err := os.Mkdir(filepath.Join(root, packagePath), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, packagePath, "package.json"), []byte("{}"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if err := os.WriteFile(filepath.Join(deliveryDir, ".gitignore"), []byte("node_modules\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -137,14 +148,14 @@ func TestPrepareCodeDeliveryQualityEnvironmentRestoresNodeModules(t *testing.T) 
 	if _, err := runCodeGit(deliveryDir, "-c", "user.name=GoPanel Test", "-c", "user.email=test@gopanel.local", "commit", "-m", "ignore dependencies"); err != nil {
 		t.Fatal(err)
 	}
-	sourceModules := filepath.Join(sourceDir, "node_modules")
+	sourceModules := filepath.Join(sourceDir, packagePath, "node_modules")
 	if err := os.Mkdir(sourceModules, 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(sourceModules, "ready"), []byte("yes"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	deliveryModules := filepath.Join(deliveryDir, "node_modules")
+	deliveryModules := filepath.Join(deliveryDir, packagePath, "node_modules")
 	if err := os.Mkdir(deliveryModules, 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -165,6 +176,117 @@ func TestPrepareCodeDeliveryQualityEnvironmentRestoresNodeModules(t *testing.T) 
 	}
 	if content, err := os.ReadFile(filepath.Join(deliveryModules, "cache")); err != nil || string(content) != "keep" {
 		t.Fatalf("delivery cache was not restored: %q, %v", content, err)
+	}
+}
+
+func TestPrepareCodeDeliveryQualityEnvironmentRestoresNestedDartTool(t *testing.T) {
+	sourceDir := createCodeGitRepository(t)
+	mainRepositoryDir := createCodeGitRepository(t)
+	deliveryDir := createCodeGitRepository(t)
+	packagePath := filepath.Join("packages", "plugin", "example")
+	for _, root := range []string{sourceDir, deliveryDir} {
+		if err := os.MkdirAll(filepath.Join(root, packagePath), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, packagePath, "pubspec.yaml"), []byte("name: example\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(deliveryDir, ".gitignore"), []byte(".dart_tool/\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	sourceDartTool := filepath.Join(sourceDir, packagePath, ".dart_tool")
+	if err := os.Mkdir(sourceDartTool, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceDartTool, "package_config.json"), []byte("{}"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	deliveryDartTool := filepath.Join(deliveryDir, packagePath, ".dart_tool")
+	if err := os.Mkdir(deliveryDartTool, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(deliveryDartTool, "keep"), []byte("original"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(sourceDir, ".toolchains", "ignored", ".dart_tool"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(deliveryDir, ".toolchains", "ignored"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(deliveryDir, ".toolchains", "ignored", "pubspec.yaml"), []byte("name: ignored\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceDir, ".toolchains", "ignored", "pubspec.yaml"), []byte("name: ignored\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	cleanup, err := prepareCodeDeliveryQualityEnvironment([]codeDeliveryQualityRoot{{
+		WorkDir: deliveryDir, IdentityDir: sourceDir, RuntimeDir: mainRepositoryDir,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if target, err := filepath.EvalSymlinks(deliveryDartTool); err != nil || target != sourceDartTool {
+		t.Fatalf(".dart_tool target=%q want=%q err=%v", target, sourceDartTool, err)
+	}
+	if _, err := os.Lstat(filepath.Join(deliveryDir, ".toolchains", "ignored", ".dart_tool")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("ignored toolchain was traversed: %v", err)
+	}
+	if err := cleanup(); err != nil {
+		t.Fatal(err)
+	}
+	if content, err := os.ReadFile(filepath.Join(deliveryDartTool, "keep")); err != nil || string(content) != "original" {
+		t.Fatalf("delivery .dart_tool was not restored: %q, %v", content, err)
+	}
+}
+
+func TestPrepareCodeDeliveryQualityEnvironmentSkipsTrackedDartTool(t *testing.T) {
+	sourceDir := createCodeGitRepository(t)
+	deliveryDir := createCodeGitRepository(t)
+	for _, root := range []string{sourceDir, deliveryDir} {
+		if err := os.WriteFile(filepath.Join(root, "pubspec.yaml"), []byte("name: example\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Mkdir(filepath.Join(sourceDir, ".dart_tool"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	cleanup, err := prepareCodeDeliveryQualityEnvironment([]codeDeliveryQualityRoot{{
+		WorkDir: deliveryDir, RuntimeDir: sourceDir,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	if _, err := os.Lstat(filepath.Join(deliveryDir, ".dart_tool")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("non-ignored .dart_tool should not be linked: %v", err)
+	}
+}
+
+func TestChangedCodeDeliveryQualityRootRestoresTrackedChanges(t *testing.T) {
+	workDir := createCodeGitRepository(t)
+	commit, err := runCodeGit(workDir, "rev-parse", "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	readme := filepath.Join(workDir, "README.md")
+	if err := os.WriteFile(readme, []byte("changed\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	root := codeDeliveryQualityRoot{WorkDir: workDir, Commit: commit}
+	check := newCodeQualityCheck("lint", "Lint", workDir, workDir, "true")
+	changed := changedCodeDeliveryQualityRoot(check, []codeDeliveryQualityRoot{root})
+	if changed == nil {
+		t.Fatal("tracked quality mutation was not detected")
+	}
+	if err := restoreCodeDeliveryQualityRoot(*changed); err != nil {
+		t.Fatal(err)
+	}
+	content, err := os.ReadFile(readme)
+	if err != nil || string(content) != "test\n" {
+		t.Fatalf("quality snapshot was not restored: %q, %v", content, err)
 	}
 }
 
