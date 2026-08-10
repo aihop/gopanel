@@ -11,10 +11,8 @@ import { mobileMessages } from "@/i18n/locales/mobile"
 import { mobileTerminalMessages } from "../mobileTerminalMessages"
 import MobileTerminalHeader from "./MobileTerminalHeader.vue"
 import MobileTerminalInput from "./MobileTerminalInput.vue"
-import MobileTerminalSelectionToolbar from "./MobileTerminalSelectionToolbar.vue"
 import { terminalBufferText } from "./mobileTerminalClipboard"
 import { MobileTerminalOutputQueue } from "./mobileTerminalOutputQueue"
-import { MobileTerminalTouchSelection } from "./mobileTerminalTouchSelection"
 import "./mobileTerminal.css"
 import "@xterm/xterm/css/xterm.css"
 
@@ -48,7 +46,6 @@ const hasTerminalSelection = ref(false)
 let terminal: Terminal | null = null
 let fitAddon: FitAddon | null = null
 let outputQueue: MobileTerminalOutputQueue | null = null
-let touchSelection: MobileTerminalTouchSelection | null = null
 let socket: WebSocket | null = null
 let resizeObserver: ResizeObserver | null = null
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
@@ -163,11 +160,6 @@ async function copyTerminalContent(selectionOnly: boolean) {
 		void error
 		message.error(t("mobile.terminalCopyFailed"))
 	}
-}
-
-function clearTerminalSelection() {
-	terminal?.clearSelection()
-	hasTerminalSelection.value = false
 }
 
 function toggleCtrl() {
@@ -289,6 +281,7 @@ function openTerminal() {
 	reportedRows = 0
 	terminal = new Terminal({
 		disableStdin: true,
+		screenReaderMode: true,
 		cursorBlink: false,
 		cursorStyle: "bar",
 		fontSize: window.innerWidth < 640 ? 12 : 14,
@@ -311,8 +304,6 @@ function openTerminal() {
 	})
 	const viewport = terminalElement.value.querySelector<HTMLElement>(".xterm-viewport")
 	if (viewport) outputQueue.bindTouchScrolling(viewport)
-	const screen = terminalElement.value.querySelector<HTMLElement>(".xterm-screen")
-	if (screen) touchSelection = new MobileTerminalTouchSelection(terminal, screen)
 	if (terminal.textarea) {
 		terminal.textarea.inputMode = "text"
 		terminal.textarea.autocapitalize = "none"
@@ -353,8 +344,6 @@ function closeTerminal() {
 	resizeObserver = null
 	outputQueue?.dispose()
 	outputQueue = null
-	touchSelection?.dispose()
-	touchSelection = null
 	const activeSocket = socket
 	socket = null
 	activeSocket?.close()
@@ -425,11 +414,6 @@ onBeforeUnmount(closeTerminal)
 		/>
 		<div class="mobile-terminal relative min-h-0 w-full flex-1 bg-[#0b1020]">
 			<div ref="terminalElement" class="h-full w-full" />
-			<MobileTerminalSelectionToolbar
-				:show="hasTerminalSelection"
-				@copy="copyTerminalContent(true)"
-				@clear="clearTerminalSelection"
-			/>
 			<div
 				v-if="connecting"
 				class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-[#0b1020] text-sm text-slate-300"
