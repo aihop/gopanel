@@ -52,6 +52,9 @@ type codeTokenUsageResponse struct {
 }
 
 func sumCodeTokenUsage(query *gorm.DB) (codeTokenUsage, error) {
+	if err := backfillCodeTokenUsage(query); err != nil {
+		return codeTokenUsage{}, err
+	}
 	var usage codeTokenUsage
 	err := query.Select(`COALESCE(SUM(input_tokens), 0) AS input_tokens,
 		COALESCE(SUM(output_tokens), 0) AS output_tokens,
@@ -59,6 +62,33 @@ func sumCodeTokenUsage(query *gorm.DB) (codeTokenUsage, error) {
 		COALESCE(SUM(reasoning_tokens), 0) AS reasoning_tokens,
 		COALESCE(SUM(total_tokens), 0) AS total_tokens, COUNT(*) AS runs`).Scan(&usage).Error
 	return usage, err
+}
+
+func backfillCodeTokenUsage(query *gorm.DB) error {
+	var runs []model.AIExecutionRun
+	if err := query.Session(&gorm.Session{}).
+		Select("ai_execution_runs.id, ai_execution_runs.executor_id, ai_execution_runs.raw_output").
+		Where("ai_execution_runs.total_tokens = 0 AND ai_execution_runs.raw_output <> ''").Find(&runs).Error; err != nil {
+		return err
+	}
+	for index := range runs {
+		run := &runs[index]
+		parsed := parseCodeExecutorOutput(run.ExecutorID, []byte(run.RawOutput), "")
+		if parsed.TotalTokens <= 0 {
+			continue
+		}
+		updates := map[string]any{
+			"input_tokens":        parsed.InputTokens,
+			"output_tokens":       parsed.OutputTokens,
+			"cached_input_tokens": parsed.CachedInputTokens,
+			"reasoning_tokens":    parsed.ReasoningTokens,
+			"total_tokens":        parsed.TotalTokens,
+		}
+		if err := global.DB.Model(&model.AIExecutionRun{}).Where("id = ? AND total_tokens = 0", run.ID).Updates(updates).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func loadCodeTokenUsage(session *model.AIDevSession) (codeTokenUsageResponse, error) {

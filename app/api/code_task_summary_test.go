@@ -40,8 +40,8 @@ func TestBuildCodeTaskListItemsSummarizesRunsAndCommittedWorktree(t *testing.T) 
 	older := time.Now().Add(-time.Minute)
 	newer := time.Now()
 	runs := []model.AIExecutionRun{
-		{CreatedAt: older, SessionID: session.ID, TaskID: task.ID, ExecutorID: "codex", Model: "old-model", Prompt: "one", Status: "completed", DurationMS: 1250, StartedAt: older},
-		{CreatedAt: newer, SessionID: session.ID, TaskID: task.ID, ExecutorID: "claude", Model: "new-model", Prompt: "two", Status: "completed", DurationMS: 2750, StartedAt: newer},
+		{CreatedAt: older, SessionID: session.ID, TaskID: task.ID, ExecutorID: "codex", Model: "old-model", Prompt: "one", Status: "completed", DurationMS: 1250, TotalTokens: 120, StartedAt: older},
+		{CreatedAt: newer, SessionID: session.ID, TaskID: task.ID, ExecutorID: "claude", Model: "new-model", Prompt: "two", Status: "completed", DurationMS: 2750, TotalTokens: 80, StartedAt: newer},
 	}
 	if err := database.Create(&runs).Error; err != nil {
 		t.Fatal(err)
@@ -55,7 +55,7 @@ func TestBuildCodeTaskListItemsSummarizesRunsAndCommittedWorktree(t *testing.T) 
 		t.Fatalf("unexpected item count: %d", len(items))
 	}
 	summary := items[0].Summary
-	if summary.DurationMS != 4000 || summary.Executor != "claude" || summary.Model != "new-model" {
+	if summary.DurationMS != 4000 || summary.TotalTokens != 200 || summary.Executor != "claude" || summary.Model != "new-model" {
 		t.Fatalf("unexpected run summary: %#v", summary)
 	}
 	if summary.GitStatus != "committed" || summary.Branch != "task-summary" {
