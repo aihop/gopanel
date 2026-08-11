@@ -54,6 +54,8 @@ type codeProjectBranchRepository struct {
 	Detached      bool                `json:"detached"`
 	Dirty         bool                `json:"dirty"`
 	ChangedFiles  int                 `json:"changedFiles"`
+	Additions     int                 `json:"additions"`
+	Deletions     int                 `json:"deletions"`
 	Branches      []codeProjectBranch `json:"branches"`
 }
 
@@ -297,18 +299,21 @@ func inspectCodeProjectBranchRepository(project *model.AIProject, root string, e
 		branches = append(branches, branch)
 	}
 	changedFiles := 0
+	additions, deletions := 0, 0
 	if strings.TrimSpace(status) != "" {
-		changedFiles = len(strings.Split(strings.TrimSpace(status), "\n"))
+		unsavedStats := loadCodeProjectWorktreeStats(root)
+		changedFiles = unsavedStats.Files
+		additions, deletions = unsavedStats.Additions, unsavedStats.Deletions
 		branch := codeProjectRepositoryDeliveryBranch(project, root, strings.TrimSpace(currentBranch))
 		_, remoteRef := codeRepositoryRemoteTracking(root, branch)
 		if matchesRemote, matchErr := codeGitWorktreeMatchesCommit(root, remoteRef); matchErr == nil && matchesRemote {
-			changedFiles = 0
+			changedFiles, additions, deletions = 0, 0, 0
 		}
 	}
 	return codeProjectBranchRepository{
 		Name: filepath.Base(root), Path: root, Excluded: excluded, CurrentBranch: strings.TrimSpace(currentBranch),
 		Detached: strings.TrimSpace(currentBranch) == "", Dirty: changedFiles > 0,
-		ChangedFiles: changedFiles, Branches: branches,
+		ChangedFiles: changedFiles, Additions: additions, Deletions: deletions, Branches: branches,
 	}, nil
 }
 

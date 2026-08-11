@@ -18,7 +18,16 @@ func TestInspectCodeProjectBranchesReturnsLocalAndRemoteBranches(t *testing.T) {
 	if _, err := runCodeGit(repositoryDir, "update-ref", "refs/remotes/origin/main", "HEAD"); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(repositoryDir, "changed.txt"), []byte("changed\n"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(repositoryDir, "README.md"), []byte("test\nstaged\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(repositoryDir, "add", "README.md"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repositoryDir, "README.md"), []byte("staged\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repositoryDir, "changed.txt"), []byte("first\nsecond\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -30,7 +39,8 @@ func TestInspectCodeProjectBranchesReturnsLocalAndRemoteBranches(t *testing.T) {
 		t.Fatalf("unexpected project branches: %#v", result)
 	}
 	repository := result.Repositories[0]
-	if repository.CurrentBranch == "" || !repository.Dirty || repository.ChangedFiles != 1 {
+	if repository.CurrentBranch == "" || !repository.Dirty || repository.ChangedFiles != 2 ||
+		repository.Additions != 3 || repository.Deletions != 1 {
 		t.Fatalf("unexpected repository state: %#v", repository)
 	}
 	scopes := map[string]int{}
@@ -63,7 +73,8 @@ func TestInspectCodeProjectBranchesIgnoresWorktreeAlreadyMatchingRemote(t *testi
 	if err != nil || len(result.Repositories) != 1 {
 		t.Fatalf("inspect branches: %#v, %v", result, err)
 	}
-	if result.Repositories[0].Dirty || result.Repositories[0].ChangedFiles != 0 {
+	if result.Repositories[0].Dirty || result.Repositories[0].ChangedFiles != 0 ||
+		result.Repositories[0].Additions != 0 || result.Repositories[0].Deletions != 0 {
 		t.Fatalf("delivered worktree was reported as unfinished: %#v", result.Repositories[0])
 	}
 }

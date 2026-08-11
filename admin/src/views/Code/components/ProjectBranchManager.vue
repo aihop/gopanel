@@ -128,6 +128,10 @@ watch(
 						<Icon name="mdi:source-branch-check" :size="13" class="shrink-0 text-blue-500" />
 						<span>{{ t("code.currentBranchLabel") }}</span>
 						<span class="min-w-0 truncate font-mono text-slate-700">{{ currentBranch(repository)?.name || repository.currentBranch || t("code.detachedHead") }}</span>
+						<template v-if="repository.dirty">
+							<span class="ml-auto shrink-0 font-medium text-emerald-600">+{{ repository.additions }}</span>
+							<span class="shrink-0 font-medium text-red-500">-{{ repository.deletions }}</span>
+						</template>
 					</div>
 					<div v-if="otherBranches(repository).length" class="mt-1 flex min-w-0 items-start gap-1.5 text-[10px] text-slate-400">
 						<span class="shrink-0">{{ t("code.otherBranches") }}</span>

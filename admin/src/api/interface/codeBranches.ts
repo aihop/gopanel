@@ -24,6 +24,8 @@ export interface CodeProjectBranchRepository {
 	detached: boolean
 	dirty: boolean
 	changedFiles: number
+	additions: number
+	deletions: number
 	branches: CodeProjectBranch[]
 }
 
