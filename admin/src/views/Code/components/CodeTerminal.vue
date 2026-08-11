@@ -8,6 +8,7 @@ import { useI18n } from "vue-i18n"
 import { getCodeSession, getCodexRuntimeState } from "@/api/modules/code"
 import type { CodexRuntimeState } from "@/api/interface/code"
 import { codeProjectMessages } from "@/i18n/locales/codeProject"
+import { isDeliveredCodeSession } from "./codeTerminalSession"
 
 const authStore = useAuthStore()
 const { t } = useI18n({ messages: codeProjectMessages })
@@ -20,6 +21,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
 	(e: "task-created", taskId: number): void
+	(e: "new-session"): void
 }>()
 
 const terminalRef = ref<HTMLElement | null>(null)
@@ -41,12 +43,40 @@ const nativeProtocol = ref(false)
 const hasTerminalControl = ref(true)
 const reconnecting = ref(false)
 const connectionFailed = ref(false)
+const sessionDelivered = ref(false)
 const runtimeState = ref<CodexRuntimeState | null>(null)
 const runtimeLoading = ref(false)
 const runtimeError = ref(false)
 const runtimeSupported = ref(true)
 const executorId = ref("")
 let runtimePollInterval: ReturnType<typeof setInterval> | null = null
+
+const markSessionDelivered = () => {
+	sessionDelivered.value = true
+	runtimeSupported.value = false
+	hasTerminalControl.value = false
+	reconnecting.value = false
+	if (pingInterval) clearInterval(pingInterval)
+	pingInterval = null
+	if (runtimePollInterval) clearInterval(runtimePollInterval)
+	runtimePollInterval = null
+	resizeObserver?.disconnect()
+	if (term) term.dispose()
+}
+
+const refreshDeliveredSession = async () => {
+	if (!props.sessionId) return false
+	try {
+		const response = await getCodeSession(props.sessionId)
+		const session = response.data.session
+		executorId.value = session.agentName || ""
+		if (!isDeliveredCodeSession(session.status)) return false
+		markSessionDelivered()
+		return true
+	} catch {
+		return false
+	}
+}
 
 const sendTerminalAck = (sequence: number) => {
 	if (ws?.readyState === WebSocket.OPEN && sequence > 0) {
@@ -247,8 +277,10 @@ const connectWebSocket = () => {
 		if (!connectionFailed.value && (nativeProtocol.value || canRetryInitialConnection) && !reconnectTimer) {
 			initialReconnectAttempts++
 			reconnecting.value = true
-			reconnectTimer = setTimeout(() => {
+			reconnectTimer = setTimeout(async () => {
 				reconnectTimer = null
+				if (await refreshDeliveredSession()) return
+				if (intentionalClose) return
 				connectWebSocket()
 			}, 1500)
 		}
@@ -292,10 +324,16 @@ const handleResize = () => {
 	}
 }
 
-onMounted(() => {
+const initializeSessionTerminal = async () => {
+	if (await refreshDeliveredSession()) return
+	if (intentionalClose) return
 	initTerminal()
 	void loadRuntimeState()
 	runtimePollInterval = setInterval(() => void loadRuntimeState(), 3000)
+}
+
+onMounted(() => {
+	void initializeSessionTerminal()
 	window.addEventListener("resize", handleResize)
 	if (terminalRef.value && typeof ResizeObserver !== "undefined") {
 		resizeObserver = new ResizeObserver(() => {
@@ -361,7 +399,19 @@ onBeforeUnmount(() => {
 				</template>
 			</div>
 		</div>
-		<div ref="terminalRef" class="min-h-0 w-full flex-1"></div>
+		<div
+			v-if="sessionDelivered"
+			class="flex min-h-0 flex-1 items-center justify-center p-6 text-center text-slate-200"
+		>
+			<div class="max-w-md">
+				<div class="text-base font-medium">{{ t("code.deliveredSessionTerminalClosed") }}</div>
+				<div class="mt-2 text-sm text-slate-400">{{ t("code.deliveredSessionTerminalHint") }}</div>
+				<n-button class="mt-5" type="primary" @click="emit('new-session')">
+					{{ t("code.createNextSession") }}
+				</n-button>
+			</div>
+		</div>
+		<div v-else ref="terminalRef" class="min-h-0 w-full flex-1"></div>
 	</div>
 </template>
 

@@ -27,6 +27,7 @@ const emit = defineEmits<{
 	closeProjectTerminal: []
 	takeTaskTerminal: []
 	taskCreated: [taskId: number]
+	newSession: []
 }>()
 
 const { t } = useI18n({ messages: codeWorkspaceMessages })
@@ -110,6 +111,7 @@ function onTaskTabClick() {
 				:session-id="sessionId"
 				:auto-take-control="terminalTakeoverRequested"
 				@task-created="emit('taskCreated', $event)"
+				@new-session="emit('newSession')"
 			/>
 		</div>
 	</div>

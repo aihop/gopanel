@@ -159,6 +159,7 @@
 						@close-project-terminal="handleProjectTerminalClosed"
 						@take-task-terminal="takeOverTerminal"
 						@task-created="handleTaskCreated"
+						@new-session="createNewTask"
 					/>
 				</div>
 			</n-layout-content>
