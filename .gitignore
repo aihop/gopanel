@@ -13,6 +13,7 @@ gopanel
 .DS_Store
 
 conf.yaml
+conf.dev.yaml
 PROMPT.md
 
 # Dev config & Secrets

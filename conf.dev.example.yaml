@@ -1,0 +1,22 @@
+config: ./conf.dev.yaml
+help: false
+log:
+  level: debug
+  log_name: default
+  log_suffix: .log
+  max_backup: 10
+reset-password: false
+show-config: false
+system:
+  base_dir: /path/to/home/.gopanel-dev
+  container_runtime: podman
+  # 留空即可：首次启动会自动生成 32 位随机密钥。
+  # 这个 key 同时用于 JWT 签名，不要在多个实例间共用，也不要提交。
+  encrypt_key: ""
+  entrance: default
+  gp_agent_socket_path: /path/to/home/.gopanel-dev/agent/run/gp-agent.sock
+  gpc_socket_path: /path/to/home/.gopanel-dev/gpc.sock
+  mode: dev
+  port: :5470
+  version: 1.0.0
+version: false

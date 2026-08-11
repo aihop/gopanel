@@ -23,6 +23,19 @@ Security issues do **not** belong here — see [SECURITY.md](./SECURITY.md).
 - Node.js 20 (the console declares `>=18`, CI runs 20)
 - Flutter 3.41.8 — only if you touch `client/`
 
+## Local configuration
+
+`conf.dev.yaml` is ignored by Git — it holds machine-specific paths and the
+instance encryption key. Copy the template to get started:
+
+```bash
+cp conf.dev.example.yaml conf.dev.yaml
+```
+
+Leave `encrypt_key` empty: the panel generates a 32-character random key on
+first start. That key also signs JWTs, so never share it between instances and
+never commit it.
+
 ## Running the checks
 
 CI runs exactly these. Run them locally before opening a PR:
@@ -120,6 +133,17 @@ so.
 - Go 1.25.1
 - Node.js 20（管理台声明 `>=18`，CI 用 20）
 - Flutter 3.41.8 —— 仅在改动 `client/` 时需要
+
+## 本地配置
+
+`conf.dev.yaml` 已被 Git 忽略——它含本机路径和实例加密密钥。从模板开始：
+
+```bash
+cp conf.dev.example.yaml conf.dev.yaml
+```
+
+`encrypt_key` 留空即可，首次启动会自动生成 32 位随机密钥。
+这个 key 同时用于 JWT 签名，不要在多个实例间共用，也不要提交。
 
 ## 本地检查
 
