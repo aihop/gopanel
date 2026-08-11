@@ -14,6 +14,7 @@ export type CodeDeliveryPhase =
 	| "needs_save" // 有未提交改动，需先保存
 	| "deliverable" // 已交付过，但仍有可交付的新提交
 	| "delivered" // 已交付且没有待交付内容
+	| "resume" // 已生成交付提交，继续完成本地主仓同步
 	| "retry" // 上次交付失败，可重试
 
 type MaybeRef<T> = Ref<T> | ComputedRef<T> | T
@@ -57,6 +58,11 @@ export function useCodeDelivery(options: UseCodeDeliveryOptions) {
 	const canDeliverPending = computed(() => hasPendingCommits.value && !hasUncommittedChanges.value)
 	const canDeliver = computed(() => !completed.value || canDeliverPending.value)
 	const failed = computed(() => failedStatuses.includes(status.value))
+	const resumable = computed(
+		() =>
+			["failed", "partial"].includes(status.value) &&
+			Boolean(job.value?.repositories?.some(repository => repository.mergeReady && !repository.localSynced))
+	)
 
 	const phase = computed<CodeDeliveryPhase>(() => {
 		if (status.value === "queued") return "queued"
@@ -65,11 +71,14 @@ export function useCodeDelivery(options: UseCodeDeliveryOptions) {
 		if (hasLocalChanges.value) return "needs_save"
 		if (canDeliverPending.value) return "deliverable"
 		if (delivered.value) return "delivered"
+		if (resumable.value) return "resume"
 		if (failed.value) return "retry"
 		return "idle"
 	})
 
-	const busy = computed(() => phase.value === "queued" || phase.value === "quality_check" || phase.value === "running")
+	const busy = computed(
+		() => phase.value === "queued" || phase.value === "quality_check" || phase.value === "running"
+	)
 
 	/**
 	 * 交付完成了，但交付提交还没进本地主仓。
@@ -90,7 +99,7 @@ export function useCodeDelivery(options: UseCodeDeliveryOptions) {
 	 */
 	const localFact = computed(() => job.value?.facts?.find(fact => fact.key === "local") || null)
 	const pendingLocalSync = computed(
-		() => phase.value === "delivered" && Boolean(localFact.value) && localFact.value?.status !== "completed",
+		() => phase.value === "delivered" && Boolean(localFact.value) && localFact.value?.status !== "completed"
 	)
 
 	return {

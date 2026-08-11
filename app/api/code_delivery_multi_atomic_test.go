@@ -117,6 +117,40 @@ func TestGitlinkMultiRepositoryDeliveryUsesLocalChildTree(t *testing.T) {
 	}
 }
 
+func TestGitlinkParentPreflightAllowsChildAtRecordedBaseline(t *testing.T) {
+	session, parentSource, childSource := createCodeGitlinkDeliverySession(t, 951, false)
+	commitCodeTestFile(t, childSource, "source-only.txt", "source\n")
+	repositories, err := loadCodeSessionRepositories(session.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	child := codeTestRepositoryBySource(t, repositories, childSource)
+	commitCodeTestFile(t, child.WorktreeDir, "task-only.txt", "task\n")
+	if err := captureCodeMultiRepositoryDeliverySnapshot(session); err != nil {
+		t.Fatal(err)
+	}
+	if result, err := prepareCodeMultiRepositoryDeliveryWithProgress(session, nil); err != nil || result.Status != codeDeliveryMerged {
+		t.Fatalf("prepare gitlink delivery: %#v, %v", result, err)
+	}
+	prepared, err := loadCodeSessionRepositories(session.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parent := codeTestRepositoryBySource(t, prepared, parentSource)
+	child = codeTestRepositoryBySource(t, prepared, childSource)
+	status, err := runCodeGit(parent.SourceDir, "status", "--porcelain")
+	if err != nil || !strings.Contains(status, child.GitlinkPath) {
+		t.Fatalf("fixture parent does not expose child baseline transition: %q, %v", status, err)
+	}
+	if err := validateCodeMultiRepositorySourceStatus(parent, prepared); err != nil {
+		t.Fatalf("child at recorded source baseline blocked parent preflight: %v", err)
+	}
+	commitCodeTestFile(t, child.SourceDir, "external.txt", "external\n")
+	if err := validateCodeMultiRepositorySourceStatus(parent, prepared); err == nil || !strings.Contains(err.Error(), "交付期间已推进") {
+		t.Fatalf("external child advance was not blocked: %v", err)
+	}
+}
+
 func TestMultiRepositoryManualPushRejectsAdvancedRemoteBeforeAnyPush(t *testing.T) {
 	session, _ := createRemoteCodeMultiRepositorySession(t, 942)
 	repositories, err := loadCodeSessionRepositories(session.ID)

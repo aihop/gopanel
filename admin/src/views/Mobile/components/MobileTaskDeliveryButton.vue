@@ -57,6 +57,7 @@ const labelKeys: Record<CodeDeliveryPhase, string> = {
 	needs_save: "mobile.saveChanges",
 	deliverable: "mobile.deliverLatest",
 	delivered: "mobile.deliveredShort",
+	resume: "mobile.resumeDelivery",
 	retry: "mobile.retryDelivery",
 	idle: "mobile.deliverToMain"
 }

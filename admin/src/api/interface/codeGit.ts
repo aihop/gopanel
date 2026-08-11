@@ -261,6 +261,7 @@ export interface CodeRepositoryDeliveryResult {
 	remote?: string
 	remoteBranch?: string
 	commit?: string
+	mergeReady?: boolean
 	pushStatus: "pending" | "pushed" | "failed" | "local"
 	pushedCommit?: string
 	sourceAppliedAt?: string

@@ -31,6 +31,7 @@ export const codeWorkspaceMessages = {
 			deliveredToMain: "已交付主仓",
 			deliveredPendingLocalSync: "已交付，主仓待同步",
 			deliverLatestToMain: "交付后续提交",
+			resumeDeliveryToMain: "继续交付",
 			saveLatestBeforeDelivery: "请先保存后续修改",
 			reviewTaskChangesBeforeDelivery: "先保存并评审任务变更",
 			retryDeliveryToMain: "重新交付",
@@ -150,8 +151,8 @@ export const codeWorkspaceMessages = {
 			saveChanges: "保存修改",
 			unsavedChanges: "未保存的修改",
 			switchSessionUnsavedHint: "当前会话有未保存的文件，继续后这些修改会丢失。",
-			discardAndContinue: "放弃并继续",
-		},
+			discardAndContinue: "放弃并继续"
+		}
 	},
 	en: {
 		code: {
@@ -185,6 +186,7 @@ export const codeWorkspaceMessages = {
 			deliveredToMain: "Delivered to main",
 			deliveredPendingLocalSync: "Delivered, main pending sync",
 			deliverLatestToMain: "Deliver newer commits",
+			resumeDeliveryToMain: "Continue delivery",
 			saveLatestBeforeDelivery: "Save newer changes first",
 			reviewTaskChangesBeforeDelivery: "Save and review task changes first",
 			retryDeliveryToMain: "Retry delivery",
@@ -252,7 +254,8 @@ export const codeWorkspaceMessages = {
 			deleteBranchTitle: "Delete merged branch",
 			deleteBranchConfirm: 'Delete local branch "{branch}"? Its commits are already merged.',
 			forceDeleteBranchTitle: "Force delete unmerged branch",
-			forceDeleteBranchConfirm: 'Local branch "{branch}" is not merged. Force deletion may discard commits that only exist on this branch. Continue?',
+			forceDeleteBranchConfirm:
+				'Local branch "{branch}" is not merged. Force deletion may discard commits that only exist on this branch. Continue?',
 			confirmDeleteBranch: "Delete branch",
 			confirmForceDeleteBranch: "Force delete",
 			branchDeleted: 'Branch "{branch}" deleted',
@@ -304,7 +307,7 @@ export const codeWorkspaceMessages = {
 			saveChanges: "Save changes",
 			unsavedChanges: "Unsaved changes",
 			switchSessionUnsavedHint: "The current session has unsaved files. Continuing will discard those changes.",
-			discardAndContinue: "Discard and continue",
-		},
-	},
+			discardAndContinue: "Discard and continue"
+		}
+	}
 } as const

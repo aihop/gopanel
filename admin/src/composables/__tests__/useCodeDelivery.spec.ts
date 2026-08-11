@@ -28,7 +28,10 @@ function desktop(current: CodeDeliveryJob | null) {
 }
 
 // 移动端：不要求 completed，并额外接受会话状态与本地改动信号。
-function mobile(current: CodeDeliveryJob | null, extra: { delivering?: boolean; delivered?: boolean; local?: boolean } = {}) {
+function mobile(
+	current: CodeDeliveryJob | null,
+	extra: { delivering?: boolean; delivered?: boolean; local?: boolean } = {}
+) {
 	return useCodeDelivery({
 		job: ref(current),
 		available: true,
@@ -73,6 +76,54 @@ describe("useCodeDelivery phase (desktop)", () => {
 		}
 	})
 
+	it("continues a delivery when merge commits are already prepared", () => {
+		const state = desktop(
+			job({
+				status: "failed",
+				repositories: [
+					{
+						repositoryId: "repository",
+						repositoryName: "repository",
+						status: "merged",
+						branch: "task",
+						additions: 1,
+						deletions: 0,
+						changedFiles: 1,
+						targetBranch: "main",
+						mergeReady: true,
+						pushStatus: "pending",
+						localSynced: false
+					}
+				]
+			})
+		)
+		expect(state.phase.value).toBe("resume")
+	})
+
+	it("keeps unresolved conflicts in retry even when sibling commits are ready", () => {
+		const state = desktop(
+			job({
+				status: "conflict",
+				repositories: [
+					{
+						repositoryId: "repository",
+						repositoryName: "repository",
+						status: "merged",
+						branch: "task",
+						additions: 1,
+						deletions: 0,
+						changedFiles: 1,
+						targetBranch: "main",
+						mergeReady: true,
+						pushStatus: "pending",
+						localSynced: false
+					}
+				]
+			})
+		)
+		expect(state.phase.value).toBe("retry")
+	})
+
 	// 桌面端沿用「completed 才判定待交付」，未完成时的 pending 标记不应把按钮切成保存态。
 	it("ignores pending flags while the job has not completed", () => {
 		const state = desktop(job({ status: "failed", hasUncommittedChanges: true, hasPendingCommits: true }))
@@ -104,6 +155,30 @@ describe("useCodeDelivery phase (mobile)", () => {
 	it("keeps delivering ahead of local changes", () => {
 		expect(mobile(job({ status: "running" }), { local: true }).phase.value).toBe("running")
 	})
+
+	it("uses the same resume phase as desktop", () => {
+		const state = mobile(
+			job({
+				status: "partial",
+				repositories: [
+					{
+						repositoryId: "repository",
+						repositoryName: "repository",
+						status: "merged",
+						branch: "task",
+						additions: 1,
+						deletions: 0,
+						changedFiles: 1,
+						targetBranch: "main",
+						mergeReady: true,
+						pushStatus: "pending",
+						localSynced: false
+					}
+				]
+			})
+		)
+		expect(state.phase.value).toBe("resume")
+	})
 })
 
 describe("phase presentation", () => {
@@ -133,9 +208,9 @@ describe("useCodeDelivery pendingLocalSync", () => {
 				facts: [
 					{ key: "merge", status: "completed", count: 9, total: 9 },
 					{ key: "local", status: "partial", count: 8, total: 9 },
-					{ key: "remote", status: "completed", count: 9, total: 9 },
-				],
-			}),
+					{ key: "remote", status: "completed", count: 9, total: 9 }
+				]
+			})
 		)
 		expect(pendingLocalSync.value).toBe(true)
 	})
@@ -144,15 +219,15 @@ describe("useCodeDelivery pendingLocalSync", () => {
 		const { pendingLocalSync } = desktop(
 			job({
 				resultType: "mixed",
-				facts: [{ key: "local", status: "completed", count: 9, total: 9 }],
-			}),
+				facts: [{ key: "local", status: "completed", count: 9, total: 9 }]
+			})
 		)
 		expect(pendingLocalSync.value).toBe(false)
 	})
 
 	it("一个都没同步时也要提示", () => {
 		const { pendingLocalSync } = desktop(
-			job({ resultType: "delivered", facts: [{ key: "local", status: "pending", count: 0, total: 1 }] }),
+			job({ resultType: "delivered", facts: [{ key: "local", status: "pending", count: 0, total: 1 }] })
 		)
 		expect(pendingLocalSync.value).toBe(true)
 	})
@@ -163,7 +238,7 @@ describe("useCodeDelivery pendingLocalSync", () => {
 
 	it("交付还在跑的时候不提示", () => {
 		const { pendingLocalSync } = desktop(
-			job({ status: "running", facts: [{ key: "local", status: "pending", count: 0, total: 1 }] }),
+			job({ status: "running", facts: [{ key: "local", status: "pending", count: 0, total: 1 }] })
 		)
 		expect(pendingLocalSync.value).toBe(false)
 	})

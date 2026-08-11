@@ -48,6 +48,7 @@ const labelKeys: Record<CodeDeliveryPhase, string> = {
 	needs_save: "code.saveLatestBeforeDelivery",
 	deliverable: "code.deliverLatestToMain",
 	delivered: "code.deliveredToMain",
+	resume: "code.resumeDeliveryToMain",
 	retry: "code.retryDeliveryToMain",
 	idle: "code.deliverToMain"
 }
