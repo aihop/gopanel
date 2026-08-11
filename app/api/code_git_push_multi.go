@@ -8,7 +8,7 @@ import (
 )
 
 func loadCodeMultiRepositoryPushStatus(session *model.AIDevSession) (codePushResult, error) {
-	repositories, err := loadCodeSessionRepositories(session.ID)
+	repositories, err := loadCodeDeliverySessionRepositories(session)
 	if err != nil || len(repositories) == 0 {
 		return codePushResult{Status: "unavailable", Repositories: []codeRepositoryPushResult{}}, nil
 	}
@@ -41,7 +41,7 @@ func loadCodeMultiRepositoryPushStatus(session *model.AIDevSession) (codePushRes
 }
 
 func pushCodeMultiRepositoryDelivery(session *model.AIDevSession) (codePushResult, error) {
-	repositories, err := loadCodeSessionRepositories(session.ID)
+	repositories, err := loadCodeDeliverySessionRepositories(session)
 	if err != nil || len(repositories) == 0 {
 		return codePushResult{}, errors.New("会话尚未完成多仓库本地合并交付")
 	}

@@ -28,7 +28,7 @@ func publishCodeMultiRepositoryDeliveryWithProgress(
 	session *model.AIDevSession,
 	report codeDeliveryProgressReporter,
 ) (codeGitDeliveryResult, error) {
-	repositories, err := loadCodeSessionRepositories(session.ID)
+	repositories, err := loadCodeDeliverySessionRepositories(session)
 	if err != nil || len(repositories) == 0 {
 		return codeGitDeliveryResult{}, errors.New("会话多仓库交付记录不可用")
 	}

@@ -47,7 +47,7 @@ func validateCodeMultiWorktreeDeliverySession(session *model.AIDevSession, claim
 	if err != nil {
 		return err
 	}
-	repositories, err := loadCodeSessionRepositories(session.ID)
+	repositories, err := loadCodeDeliverySessionRepositories(session)
 	if err != nil || len(repositories) == 0 {
 		return errors.New("会话多仓库 Worktree 元数据不完整")
 	}
@@ -142,7 +142,7 @@ func resumeCodeMultiRepositoryDeliveryWithProgress(
 	_ *codeExecutionLease,
 	report codeDeliveryProgressReporter,
 ) (codeGitDeliveryResult, error) {
-	repositories, err := loadCodeSessionRepositories(session.ID)
+	repositories, err := loadCodeDeliverySessionRepositories(session)
 	if err != nil || len(repositories) == 0 {
 		return codeGitDeliveryResult{}, errors.New("会话多仓库 Worktree 元数据不可用")
 	}
@@ -199,7 +199,7 @@ func codeStoredRepositoryDeliveryResult(repository *model.AIDevSessionRepository
 	return codeRepositoryDeliveryResult{
 		RepositoryID: codeSessionRepositoryID(repository.ID), RepositoryName: repository.LinkName,
 		RepositoryPath: repository.SourceDir,
-		Status: repository.Status, Branch: repository.Branch, TargetBranch: repository.TargetBranch,
+		Status:         repository.Status, Branch: repository.Branch, TargetBranch: repository.TargetBranch,
 		Additions: repository.StatAdditions, Deletions: repository.StatDeletions, ChangedFiles: repository.StatFiles,
 		Remote: repository.RemoteName, RemoteBranch: deliveryRemoteBranch(repository.RemoteBranch, repository.TargetBranch),
 		Commit: repository.MergeCommit, PushStatus: pushStatus, PushedCommit: repository.PushedCommit,

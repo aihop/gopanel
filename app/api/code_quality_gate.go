@@ -181,7 +181,7 @@ func detectCodeQualityChecksInRoots(roots []string) []codeQualityCheck {
 
 func codeQualityRoots(session *model.AIDevSession) ([]string, error) {
 	if session.IsolationMode == codeIsolationMultiWorktree {
-		repositories, err := loadCodeSessionRepositories(session.ID)
+		repositories, err := loadCodeDeliverySessionRepositories(session)
 		if err != nil {
 			return nil, err
 		}

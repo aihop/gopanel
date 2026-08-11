@@ -12,14 +12,14 @@ func prepareCodeMultiRepositoryQualityRoots(session *model.AIDevSession) ([]code
 	if session == nil || session.IsolationMode != codeIsolationMultiWorktree {
 		return nil, nil, errors.New("多仓库交付会话不可用")
 	}
-	repositories, err := loadCodeSessionRepositories(session.ID)
+	repositories, err := loadCodeDeliverySessionRepositories(session)
 	if err != nil || len(repositories) == 0 {
 		return nil, nil, errors.New("会话多仓库交付快照不可用")
 	}
 	if err := restoreCodeMultiRepositoryIntegrationWorktrees(session, repositories); err != nil {
 		return nil, nil, err
 	}
-	repositories, err = loadCodeSessionRepositories(session.ID)
+	repositories, err = loadCodeDeliverySessionRepositories(session)
 	if err != nil {
 		return nil, nil, err
 	}

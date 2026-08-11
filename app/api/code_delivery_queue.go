@@ -57,7 +57,7 @@ var codeDeliveryRecoveryOnce sync.Once
 
 func codeDeliveryRepositoryKeys(session *model.AIDevSession) ([]string, string, error) {
 	if session.IsolationMode == codeIsolationMultiWorktree || hasCodeMultiRepositoryDelivery(session.ID) {
-		repositories, err := loadCodeSessionRepositories(session.ID)
+		repositories, err := loadCodeDeliverySessionRepositories(session)
 		if err != nil || len(repositories) == 0 {
 			return nil, "", errors.New("会话多仓库交付记录不可用")
 		}

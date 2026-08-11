@@ -100,7 +100,7 @@ func commitCodeSourceGitlinkUpdates(repository *model.AIDevSessionRepository, re
 }
 
 func captureCodeMultiRepositoryDeliverySnapshot(session *model.AIDevSession) error {
-	repositories, err := loadCodeSessionRepositories(session.ID)
+	repositories, err := loadCodeDeliverySessionRepositories(session)
 	if err != nil || len(repositories) == 0 {
 		return errors.New("会话多仓库 Worktree 元数据不可用")
 	}
