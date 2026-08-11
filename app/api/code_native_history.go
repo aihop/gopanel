@@ -9,6 +9,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/aihop/gopanel/app/model"
@@ -17,8 +18,66 @@ import (
 
 const nativeHistoryDuplicateWindow = 5 * time.Minute
 
+// 每个进程内每个会话只补拉一次原生历史。
+// 补拉要读并解析磁盘上的 rollout 文件，而终端重连很频繁（断网、切任务、刷新页面都会重连），
+// 不去重就变成每次重连都全量解析一遍。进程重启后标记自然清空，正好对应「重启后要补一次」。
+var recoveredNativeHistorySessions sync.Map
+
+// recoverNativeCodeHistoryOnce 供终端连接时调用：只在本进程内第一次连接该会话时补拉。
+//
+// 面板重启会丢掉内存里的 PTY 缓冲，但执行器写在磁盘上的原生对话还在。
+// 以前只有「查看完整对话」接口会把它补回数据库，用户不点那里就以为记录全没了。
+func recoverNativeCodeHistoryOnce(session *model.AIDevSession) {
+	if session == nil || session.ID == 0 || !supportsNativeCodeHistory(session.AgentName) {
+		return
+	}
+	if _, loaded := recoveredNativeHistorySessions.LoadOrStore(session.ID, struct{}{}); loaded {
+		return
+	}
+	if _, err := recoverNativeCodeHistory(session); err != nil {
+		// 补拉失败不能影响终端连接：历史是附加能力，终端本身要照常可用。
+		recoveredNativeHistorySessions.Delete(session.ID)
+		global.LOG.Warnf("Recover native %s history for session %d failed: %v", session.AgentName, session.ID, err)
+	}
+}
+
 func supportsNativeCodeHistory(executorID string) bool {
 	return executorID == "codex" || executorID == "claude" || executorID == "opencode"
+}
+
+// recoverNativeCodeHistory 把执行器留在磁盘上的原生对话补回数据库，并返回这批消息。
+//
+// 三步缺一不可：
+//  1. 修绑定 —— 交付完成后 session.WorkDir 会被改写成源仓路径，
+//     而 rollout 记录的是当初的隔离 Worktree，不修就永久失联；
+//  2. 读盘 —— 原生历史一直在 ~/.codex 等目录下，进程重启不会丢；
+//  3. 落库 —— 写进 ai_messages，之后不依赖磁盘文件也能查。
+//
+// 这套流程原先只长在「查看完整对话」接口里，所以面板重启后不点开那个入口
+// 就永远补不回来。抽出来给终端打开时也能调用。
+func recoverNativeCodeHistory(session *model.AIDevSession) ([]*model.AIMessage, error) {
+	if session == nil || !supportsNativeCodeHistory(session.AgentName) {
+		return nil, nil
+	}
+	switch session.AgentName {
+	case "codex":
+		if err := repairNativeCodexSessionBinding(session); err != nil {
+			return nil, err
+		}
+	case "opencode":
+		if err := repairNativeOpenCodeSessionBinding(session); err != nil {
+			return nil, err
+		}
+	}
+	messages, err := getNativeCodeMessages(session)
+	if err != nil {
+		return nil, err
+	}
+	if err := persistNativeCodexMessages(session.ID, messages); err != nil {
+		// 落库失败不该让调用方拿不到历史：磁盘上的内容仍然是可用的。
+		global.LOG.Warnf("Persist native %s history for session %d failed: %v", session.AgentName, session.ID, err)
+	}
+	return messages, nil
 }
 
 func getNativeCodeMessages(session *model.AIDevSession) ([]*model.AIMessage, error) {

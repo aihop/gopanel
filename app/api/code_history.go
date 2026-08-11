@@ -8,7 +8,6 @@ import (
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
 	"github.com/aihop/gopanel/constant"
-	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/utils/token"
 	"github.com/gofiber/fiber/v3"
 )
@@ -41,22 +40,9 @@ func GetCodeSessionHistory(c fiber.Ctx) error {
 		return c.JSON(e.Fail(err))
 	}
 	if supportsNativeCodeHistory(session.AgentName) {
-		if session.AgentName == "codex" {
-			if err := repairNativeCodexSessionBinding(session); err != nil {
-				return c.JSON(e.Fail(err))
-			}
-		}
-		if session.AgentName == "opencode" {
-			if err := repairNativeOpenCodeSessionBinding(session); err != nil {
-				return c.JSON(e.Fail(err))
-			}
-		}
-		nativeMessages, nativeErr := getNativeCodeMessages(session)
+		nativeMessages, nativeErr := recoverNativeCodeHistory(session)
 		if nativeErr != nil {
 			return c.JSON(e.Fail(nativeErr))
-		}
-		if persistErr := persistNativeCodexMessages(session.ID, nativeMessages); persistErr != nil {
-			global.LOG.Warnf("Persist native %s history for session %d failed: %v", session.AgentName, session.ID, persistErr)
 		}
 		if taskID == 0 || uint(taskID) == session.LastTaskID {
 			messages = mergeCodeHistoryMessages(messages, nativeMessages)

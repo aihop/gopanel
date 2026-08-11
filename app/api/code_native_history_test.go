@@ -294,3 +294,95 @@ func TestGetMessagesBySessionAndTaskIDIsolatesTasks(t *testing.T) {
 		t.Fatalf("history crossed the session boundary: %#v", crossed)
 	}
 }
+
+// 面板重启的核心场景：会话没绑定 native_session_id、库里一条消息都没有，
+// 但执行器写在磁盘上的对话还在。补拉必须把绑定修好并把历史落库。
+func TestRecoverNativeCodeHistoryRestoresConversationAfterRestart(t *testing.T) {
+	database := withCodeGovernanceDB(t)
+	withAIProjectBaseDir(t)
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	startedAt := time.Now().Add(-time.Minute)
+	session := &model.AIDevSession{UserID: 7, Title: "s", AgentName: "codex", WorkDir: t.TempDir(), CreatedAt: startedAt}
+	if err := database.Create(session).Error; err != nil {
+		t.Fatal(err)
+	}
+	worktreeDir := aiSessionWorktreeDir(session.UserID, session.ID)
+	if err := os.MkdirAll(worktreeDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	sessionDir := filepath.Join(homeDir, ".codex", "sessions", "2026", "08", "11")
+	if err := os.MkdirAll(sessionDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	lines := []map[string]any{
+		{"timestamp": startedAt, "type": "session_meta", "payload": map[string]any{"session_id": "native-restart", "cwd": worktreeDir, "timestamp": startedAt}},
+		{"timestamp": startedAt, "type": "response_item", "payload": map[string]any{"type": "message", "role": "user", "content": []map[string]any{{"type": "input_text", "text": "帮我修一下"}}}},
+		{"timestamp": startedAt, "type": "response_item", "payload": map[string]any{"type": "message", "role": "assistant", "content": []map[string]any{{"type": "output_text", "text": "已经修好了"}}}},
+	}
+	var buffer []byte
+	for _, line := range lines {
+		data, err := json.Marshal(line)
+		if err != nil {
+			t.Fatal(err)
+		}
+		buffer = append(append(buffer, data...), '\n')
+	}
+	path := filepath.Join(sessionDir, "rollout-native-restart.jsonl")
+	if err := os.WriteFile(path, buffer, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	written := startedAt.Add(time.Second)
+	if err := os.Chtimes(path, written, written); err != nil {
+		t.Fatal(err)
+	}
+
+	messages, err := recoverNativeCodeHistory(session)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(messages) != 2 {
+		t.Fatalf("应读回 2 条对话，实际 %d 条", len(messages))
+	}
+	if session.NativeSessionID != "native-restart" {
+		t.Fatalf("绑定没修好: %q", session.NativeSessionID)
+	}
+	var stored int64
+	if err := database.Model(&model.AIMessage{}).Where("session_id = ?", session.ID).Count(&stored).Error; err != nil {
+		t.Fatal(err)
+	}
+	if stored != 2 {
+		t.Fatalf("历史应已落库 2 条，实际 %d 条", stored)
+	}
+
+	// 重复补拉不能造重复记录：终端重连、再次打开都会走到这里。
+	if _, err := recoverNativeCodeHistory(session); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.Model(&model.AIMessage{}).Where("session_id = ?", session.ID).Count(&stored).Error; err != nil {
+		t.Fatal(err)
+	}
+	if stored != 2 {
+		t.Fatalf("重复补拉后应仍为 2 条，实际 %d 条", stored)
+	}
+}
+
+func TestRecoverNativeCodeHistoryOnceSkipsRepeatedTerminalConnects(t *testing.T) {
+	withCodeGovernanceDB(t)
+	session := &model.AIDevSession{AgentName: "codex"}
+	session.ID = 4242
+	t.Cleanup(func() { recoveredNativeHistorySessions.Delete(session.ID) })
+
+	recoverNativeCodeHistoryOnce(session)
+	if _, marked := recoveredNativeHistorySessions.Load(session.ID); !marked {
+		t.Fatal("首次连接应记下已补拉标记")
+	}
+	// 非原生执行器不该占用标记位。
+	other := &model.AIDevSession{AgentName: "shell"}
+	other.ID = 4243
+	recoverNativeCodeHistoryOnce(other)
+	if _, marked := recoveredNativeHistorySessions.Load(other.ID); marked {
+		t.Fatal("不支持原生历史的执行器不该被标记")
+	}
+}

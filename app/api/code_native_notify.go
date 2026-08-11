@@ -12,6 +12,11 @@ import (
 
 const nativeCodeNotifyPollInterval = time.Second
 
+// 每多少个轮询周期兜底固化一次原生历史。
+// 轮询是 1 秒一跳，固化要读并解析 rollout 文件，不能每跳都做；
+// 30 秒一次足够把进程被 kill 的损失限制在可接受范围，开销也可以忽略。
+const nativeCodeHistoryPersistTicks = 30
+
 type nativeCodeNotifyTracker struct {
 	initialized bool
 	activeTurn  bool
@@ -84,10 +89,18 @@ func watchNativeCodeNotifications(sessionID uint, done <-chan struct{}) {
 	check()
 	ticker := time.NewTicker(nativeCodeNotifyPollInterval)
 	defer ticker.Stop()
+	ticks := 0
 	for {
 		select {
 		case <-ticker.C:
 			check()
+			// 定期落库。原先只在「跑完/失败」和「优雅退出」两个时机固化，
+			// 面板被直接 kill 时 done 分支根本不会执行，整段历史就只剩在内存的 PTY 缓冲里。
+			// 这里按周期兜底，把进程异常退出的损失从「全部」压到「最后一个周期」。
+			ticks++
+			if ticks%nativeCodeHistoryPersistTicks == 0 {
+				persistNativeCodeHistory(sessionID)
+			}
 		case <-done:
 			check()
 			persistNativeCodeHistory(sessionID)

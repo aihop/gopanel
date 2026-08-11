@@ -257,6 +257,10 @@ func serveNativeCodeTerminal(
 	cols, rows uint16,
 	claims *token.CustomClaims,
 ) {
+	// 面板重启后内存里的 PTY 缓冲没了，但执行器写在磁盘上的对话还在。
+	// 在这里补回数据库：用户一打开任务就能看到历史，不用先去点「完整对话」。
+	// 每个进程每个会话只做一次，终端重连不会重复解析。
+	recoverNativeCodeHistoryOnce(session)
 	terminal, _, err := codeNativeTerminals.attach(session, cols, rows)
 	if err != nil {
 		_ = wsConn.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("启动原生 %s 会话失败: %v", session.AgentName, err)))
