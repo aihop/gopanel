@@ -1,58 +1,90 @@
 <template>
-	<Teleport to="body">
-		<div v-if="panels.length" class="quick-panel-layer">
-			<section
-				v-for="panel in panels"
-				:key="panel.project.id"
-				class="quick-panel"
-				:style="panelStyle(panel)"
-				@pointerdown="focusPanel(panel)"
-			>
-				<header class="quick-panel__header" @pointerdown="startDrag($event, panel)">
-					<div class="flex min-w-0 items-center gap-2">
-						<Icon name="mdi:dock-window" :size="18" />
-						<span class="truncate font-semibold">{{ panel.project.name }}</span>
-						<span class="quick-panel__label">{{ t("code.quickPanel") }}</span>
-					</div>
-					<div class="flex shrink-0 items-center gap-1" @pointerdown.stop>
-						<n-tooltip>
-							<template #trigger>
-								<n-button quaternary circle size="small" @click="openFullProject(panel)">
-									<template #icon><Icon name="mdi:open-in-new" :size="17" /></template>
-								</n-button>
-							</template>
-							{{ t("code.openFullProject") }}
-						</n-tooltip>
-						<n-tooltip>
-							<template #trigger>
-								<n-button quaternary circle size="small" @click="closePanel(panel)">
-									<template #icon><Icon name="mdi:close" :size="18" /></template>
-								</n-button>
-							</template>
-							{{ t("code.closeQuickPanel") }}
-						</n-tooltip>
-					</div>
-				</header>
+  <Teleport to="body">
+    <div
+      v-if="panels.length"
+      class="quick-panel-layer"
+    >
+      <section
+        v-for="panel in panels"
+        :key="panel.project.id"
+        class="quick-panel"
+        :style="panelStyle(panel)"
+        @pointerdown="focusPanel(panel)"
+      >
+        <header
+          class="quick-panel__header"
+          @pointerdown="startDrag($event, panel)"
+        >
+          <div class="flex min-w-0 items-center gap-2">
+            <Icon
+              name="mdi:dock-window"
+              :size="18"
+            />
+            <span class="truncate font-semibold">{{ panel.project.name }}</span>
+            <span class="quick-panel__label">{{ t("code.quickPanel") }}</span>
+          </div>
+          <div
+            class="flex shrink-0 items-center gap-1"
+            @pointerdown.stop
+          >
+            <n-tooltip>
+              <template #trigger>
+                <n-button
+                  quaternary
+                  circle
+                  size="small"
+                  @click="openFullProject(panel)"
+                >
+                  <template #icon>
+                    <Icon
+                      name="mdi:open-in-new"
+                      :size="17"
+                    />
+                  </template>
+                </n-button>
+              </template>
+              {{ t("code.openFullProject") }}
+            </n-tooltip>
+            <n-tooltip>
+              <template #trigger>
+                <n-button
+                  quaternary
+                  circle
+                  size="small"
+                  @click="closePanel(panel)"
+                >
+                  <template #icon>
+                    <Icon
+                      name="mdi:close"
+                      :size="18"
+                    />
+                  </template>
+                </n-button>
+              </template>
+              {{ t("code.closeQuickPanel") }}
+            </n-tooltip>
+          </div>
+        </header>
 
-				<div class="quick-panel__content">
-					<Workspace
-						:ref="instance => setWorkspaceRef(panel.project.id, instance)"
-						:project-id="panel.project.id"
-						embedded
-						@close="closePanel(panel)"
-					/>
-				</div>
+        <div class="quick-panel__content">
+          <Workspace
+            :ref="instance => setWorkspaceRef(panel.project.id, instance)"
+            :project-id="panel.project.id"
+            embedded
+            @close="closePanel(panel)"
+          />
+        </div>
 
-				<div
-					v-for="direction in resizeDirections"
-					:key="direction"
-					class="quick-panel__resize-handle"
-					:class="`quick-panel__resize-handle--${direction}`"
-					@pointerdown.stop.prevent="startResize($event, panel, direction)"
-				></div>
-			</section>
-		</div>
-	</Teleport>
+        <div
+          v-for="direction in resizeDirections"
+          :key="direction"
+          class="quick-panel__resize-handle"
+          :class="`quick-panel__resize-handle--${direction}`"
+          @pointerdown.stop.prevent="startResize($event, panel, direction)"
+        />
+      </section>
+    </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
@@ -105,7 +137,7 @@ function panelStyle(panel: QuickPanel) {
 		top: `${panel.y}px`,
 		width: `${panel.width}px`,
 		height: `${panel.height}px`,
-		zIndex: panel.zIndex
+		zIndex: panel.zIndex,
 	}
 }
 
@@ -136,7 +168,7 @@ function open(project: AIProject) {
 		y: Math.max(SCREEN_GAP, (window.innerHeight - height) / 2 + offset),
 		width,
 		height,
-		zIndex: ++topZIndex
+		zIndex: ++topZIndex,
 	}
 	clampPanel(panel)
 	panels.value.push(panel)
