@@ -16,14 +16,24 @@ const tagType = computed<TagProps["type"]>(() => {
 	return "default"
 })
 const isActive = computed(() => ["queued", "running"].includes(normalizedStatus.value))
+const isRunning = computed(() => normalizedStatus.value === "running")
 </script>
 
 <template>
 	<n-tag size="small" :type="tagType" round :bordered="false">
 		<span
-			class="mr-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-current"
-			:class="isActive ? 'animate-pulse' : ''"
-		/>
+			class="relative mr-1.5 inline-flex shrink-0 items-center justify-center"
+			:class="isRunning ? 'h-3.5 w-3.5' : 'h-1.5 w-1.5'"
+		>
+			<span
+				v-if="isRunning"
+				class="absolute inset-0 animate-spin rounded-full border border-current border-r-transparent motion-reduce:animate-none"
+			/>
+			<span
+				class="inline-block h-1.5 w-1.5 rounded-full bg-current"
+				:class="isActive ? 'animate-pulse motion-reduce:animate-none' : ''"
+			/>
+		</span>
 		{{ t(`code.taskStatus_${normalizedStatus}`) }}
 	</n-tag>
 </template>

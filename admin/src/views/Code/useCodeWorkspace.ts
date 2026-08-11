@@ -11,6 +11,7 @@ import { deleteAITask, getAIProjects, updateAITask } from "@/api/modules/code"
 import type { AIProject, AITask, CodeSession } from "@/api/interface/code"
 import type { CodeTaskListItem } from "@/api/interface/codeTasks"
 import type { HostTerminalSession } from "@/api/interface/hostTerminal"
+import { sortCodeTasksStably } from "./codeDashboardBuckets"
 import { codeWorkspaceMessages } from "./codeWorkspaceMessages"
 import { codeTerminalIdentity } from "./components/codeTerminalSession"
 import type { CodeWorkspaceMode } from "./components/WorkspaceModeSwitch.vue"
@@ -53,7 +54,7 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 	const editingTaskId = ref<number | null>(null),
 		editingTaskTitle = ref("")
 	const renaming = ref(false)
-	const aiTasks = computed(() => tasks.value.filter(task => task.agentName !== "terminal"))
+	const aiTasks = computed(() => sortCodeTasksStably(tasks.value.filter(task => task.agentName !== "terminal")))
 	const aiTaskTotal = computed(() => Math.max(0, taskTotal.value - (tasks.value.length - aiTasks.value.length)))
 	const currentTask = computed(() => tasks.value.find(task => task.id === currentTaskId.value) || null)
 	// 以前这里是个自增计数器，切任务就 +1 强制重建终端；
