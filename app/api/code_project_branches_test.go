@@ -100,6 +100,21 @@ func TestDiscoverCodeProjectBranchRepositoriesFindsNestedRepositories(t *testing
 	}
 }
 
+func TestInspectCodeProjectBranchesKeepsGitlinkRepositoryActive(t *testing.T) {
+	parent, child := createGitlinkRepositoryTree(t)
+	result, err := inspectCodeProjectBranches(&model.AIProject{SourceDirs: []string{parent}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	active := make(map[string]bool, len(result.Repositories))
+	for _, repository := range result.Repositories {
+		active[filepath.Clean(repository.Path)] = !repository.Excluded
+	}
+	if !active[filepath.Clean(parent)] || !active[filepath.Clean(child)] {
+		t.Fatalf("gitlink repository was marked as removed: %#v", result.Repositories)
+	}
+}
+
 func TestCodeProjectBranchDeletionProtectsLifecycleBranches(t *testing.T) {
 	database := withCodeGovernanceDB(t)
 	repositoryDir := createCodeGitRepository(t)

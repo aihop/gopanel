@@ -3,9 +3,6 @@ package api
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
-	"io/fs"
-	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -19,14 +16,6 @@ import (
 	"github.com/aihop/gopanel/utils/token"
 	"github.com/gofiber/fiber/v3"
 )
-
-const maxCodeProjectBranchRepositories = 50
-
-var codeProjectBranchScanExcludedDirs = map[string]struct{}{
-	".git": {}, ".cache": {}, ".next": {}, ".nuxt": {}, ".output": {},
-	".pnpm-store": {}, ".turbo": {}, ".venv": {}, "build": {}, "coverage": {},
-	"dist": {}, "node_modules": {}, "target": {}, "vendor": {},
-}
 
 type codeProjectBranch struct {
 	Name              string `json:"name"`
@@ -189,51 +178,7 @@ func loadCodeProjectHistoricalRepositoryRoots(projectID uint) []string {
 }
 
 func discoverCodeProjectBranchRepositories(sourceDirs []string) ([]string, error) {
-	seen := make(map[string]struct{})
-	repositories := make([]string, 0, len(sourceDirs))
-	for _, sourceDir := range sourceDirs {
-		boundary, err := filepath.EvalSymlinks(filepath.Clean(strings.TrimSpace(sourceDir)))
-		if err != nil {
-			return nil, fmt.Errorf("项目目录不可访问：%s", sourceDir)
-		}
-		err = filepath.WalkDir(boundary, func(path string, entry fs.DirEntry, walkErr error) error {
-			if walkErr != nil {
-				return walkErr
-			}
-			if !entry.IsDir() {
-				return nil
-			}
-			if path != boundary {
-				if _, excluded := codeProjectBranchScanExcludedDirs[entry.Name()]; excluded {
-					return filepath.SkipDir
-				}
-			}
-			if _, statErr := os.Lstat(filepath.Join(path, ".git")); statErr != nil {
-				return nil
-			}
-			root, gitErr := runCodeGit(path, "rev-parse", "--show-toplevel")
-			if gitErr != nil {
-				return nil
-			}
-			root, gitErr = filepath.EvalSymlinks(filepath.Clean(root))
-			if gitErr != nil || root != path {
-				return nil
-			}
-			if _, exists := seen[root]; !exists {
-				seen[root] = struct{}{}
-				repositories = append(repositories, root)
-				if len(repositories) > maxCodeProjectBranchRepositories {
-					return fmt.Errorf("项目目录中 Git 仓库超过 %d 个，请缩小目录范围", maxCodeProjectBranchRepositories)
-				}
-			}
-			return filepath.SkipDir
-		})
-		if err != nil {
-			return nil, err
-		}
-	}
-	sort.Strings(repositories)
-	return repositories, nil
+	return discoverCodeRepositoryRoots(sourceDirs)
 }
 
 func inspectCodeProjectBranchRepository(project *model.AIProject, root string, excludedOverride ...bool) (codeProjectBranchRepository, error) {
