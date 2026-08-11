@@ -191,7 +191,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { computed, h, ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
@@ -199,6 +199,7 @@ import { getAIProjects, createAIProject, discoverCodeProjectRepositories, update
 import type { AIProject, CodeProjectQualityCheck } from '@/api/interface/code'
 import type { CodeTaskListItem } from '@/api/interface/codeTasks'
 import Icon from '@/components/common/Icon.vue'
+import CodeProjectIdentity from './components/CodeProjectIdentity.vue'
 import CodeDashboard from './components/CodeDashboard.vue'
 import ProjectDirectoryPicker from './components/ProjectDirectoryPicker.vue'
 import ProjectGitCredentialSelect from './components/ProjectGitCredentialSelect.vue'
@@ -371,7 +372,7 @@ const openTask = (task: CodeTaskListItem) => {
 // 省掉再维护一张 key → 项目的映射表。
 const projectMenuOptions = computed(() =>
   projects.value.map(project => ({
-    label: project.name,
+    label: () => h(CodeProjectIdentity, { projectId: project.id, name: project.name }),
     key: `project-${project.id}`,
     children: [
       { label: t('code.enterProject'), key: `enter:${project.id}` },

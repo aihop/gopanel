@@ -5,6 +5,7 @@ import type { CodeTaskListItem } from "@/api/interface/codeTasks"
 import Icon from "@/components/common/Icon.vue"
 import { codeProjectMessages } from "@/i18n/locales/codeProject"
 import { codeTaskTimestamp } from "../codeDashboardBuckets"
+import CodeProjectIdentity from "./CodeProjectIdentity.vue"
 import CodeTaskAgentSnippet from "./CodeTaskAgentSnippet.vue"
 import CodeTaskFocusMarker from "./CodeTaskFocusMarker.vue"
 import CodeTaskMetaLine from "./CodeTaskMetaLine.vue"
@@ -51,9 +52,11 @@ const executorLabel = computed(() =>
           :size="14"
           class="shrink-0 text-slate-500"
         />
-        <span class="dashboard-task-row__project shrink-0 rounded-full px-2 py-0.5 text-[11px]">
-          {{ projectName || t("code.projectFallback") }}
-        </span>
+        <CodeProjectIdentity
+          class="max-w-[140px] shrink-0 text-[11px] text-[var(--n-text-color-3)]"
+          :project-id="task.projectId"
+          :name="projectName || t('code.projectFallback')"
+        />
         <span
           class="truncate text-sm font-semibold text-[var(--n-text-color)]"
           :title="task.title"
@@ -163,11 +166,6 @@ const executorLabel = computed(() =>
 	background: color-mix(in srgb, var(--primary-color) 10%, transparent);
 }
 
-.dashboard-task-row--selected .dashboard-task-row__project {
-	color: var(--primary-color);
-	background: color-mix(in srgb, var(--primary-color) 16%, transparent);
-}
-
 /*
 	:not(--selected) 是必要的：`.row:hover` 的优先级(0,2,0)高于 `.row--selected`(0,1,0)，
 	不排除的话鼠标划过选中行反而会把它洗淡，正好和「锁住焦点」相反。
@@ -176,8 +174,4 @@ const executorLabel = computed(() =>
 	background: color-mix(in srgb, var(--primary-color) 7%, transparent);
 }
 
-.dashboard-task-row__project {
-	color: var(--n-text-color-3);
-	background: color-mix(in srgb, var(--n-border-color) 45%, transparent);
-}
 </style>

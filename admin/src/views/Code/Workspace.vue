@@ -37,9 +37,11 @@
                     </template>
                   </n-button>
                   <div class="min-w-0 flex-1">
-                    <div class="truncate text-lg font-semibold text-[var(--n-text-color)]">
-                      {{ projectInfo?.name || t("code.projectFallback") }}
-                    </div>
+                    <CodeProjectIdentity
+                      class="text-lg font-semibold text-[var(--n-text-color)]"
+                      :project-id="currentProjectId"
+                      :name="projectInfo?.name || t('code.projectFallback')"
+                    />
                   </div>
                   <n-tooltip v-if="hasWorkspaceContext">
                     <template #trigger>
@@ -252,6 +254,7 @@
 
 <script setup lang="ts">
 import Icon from "@/components/common/Icon.vue"
+import CodeProjectIdentity from "./components/CodeProjectIdentity.vue"
 import CodeWorkspaceTerminalPanel from "./components/CodeWorkspaceTerminalPanel.vue"
 import NewSessionModal from "./components/NewSessionModal.vue"
 import CodeWorkspaceToolbar from "./components/CodeWorkspaceToolbar.vue"
