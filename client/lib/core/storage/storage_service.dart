@@ -21,6 +21,7 @@ class StorageService {
   static const String _keyActiveServerCookie = 'active_server_cookie';
   static const String _secureActiveToken = 'secure_active_server_token';
   static const String _secureActiveCookie = 'secure_active_server_cookie';
+  static const int _maxCodeDraftLength = 8000;
 
   static Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
@@ -110,6 +111,22 @@ class StorageService {
     _activeServerCookie = null;
   }
 
+  static String getCodeInstructionDraft(int sessionId) {
+    return _prefs.getString(
+          buildCodeInstructionDraftKey(activeServerUrl, sessionId),
+        ) ??
+        '';
+  }
+
+  static Future<bool> saveCodeInstructionDraft(int sessionId, String content) {
+    final key = buildCodeInstructionDraftKey(activeServerUrl, sessionId);
+    if (content.isEmpty) return _prefs.remove(key);
+    final value = content.length > _maxCodeDraftLength
+        ? content.substring(content.length - _maxCodeDraftLength)
+        : content;
+    return _prefs.setString(key, value);
+  }
+
   static Future<void> _migrateActiveCredentials() async {
     await _migratePreference(_keyActiveServerToken, _secureActiveToken);
     await _migratePreference(_keyActiveServerCookie, _secureActiveCookie);
@@ -179,6 +196,12 @@ class StorageService {
   }
 
   static String _serverTokenKey(String id) => 'secure_server_token_$id';
+}
+
+String buildCodeInstructionDraftKey(String? serverUrl, int sessionId) {
+  final server = (serverUrl ?? '').trim().toLowerCase();
+  final encoded = base64Url.encode(utf8.encode(server)).replaceAll('=', '');
+  return 'code_instruction_draft_${encoded.isEmpty ? 'local' : encoded}_$sessionId';
 }
 
 MacOsOptions buildMacOsSecureStorageOptions({required bool releaseMode}) {

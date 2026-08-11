@@ -1,17 +1,24 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/storage/storage_service.dart';
+import '../../models/code_instruction_options.dart';
 import '../controllers/ai_workspace_controller.dart';
 import '../code_workspace_text.dart';
 import '../widgets/ai_approval_prompt.dart';
 import '../widgets/ai_chat_message_item.dart';
+import '../widgets/ai_chat_state_widgets.dart';
 import '../widgets/ai_preview_strip.dart';
 import '../widgets/ai_session_overview_card.dart';
 import '../widgets/ai_timeline_panel.dart';
 import '../widgets/code_delivery_card.dart';
+import '../widgets/code_instruction_composer.dart';
 import 'ai_preview_detail_screen.dart';
 import 'ai_preview_list_screen.dart';
 import 'code_session_sheet.dart';
+import 'code_session_recovery_screen.dart';
 import 'code_workspace_files_screen.dart';
 
 class AiChatScreen extends ConsumerStatefulWidget {
@@ -25,21 +32,99 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
   final _inputController = TextEditingController();
   final _scrollController = ScrollController();
   final _focusNode = FocusNode();
+  Timer? _draftTimer;
+  int? _draftSessionId;
+  bool _restoringDraft = false;
+  CodeInstructionOptions _instructionOptions = const CodeInstructionOptions();
+
+  @override
+  void initState() {
+    super.initState();
+    _inputController.addListener(_scheduleDraftSave);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _activateDraftSession(
+        ref.read(aiWorkspaceControllerProvider).currentSession?.id,
+      );
+    });
+  }
 
   @override
   void dispose() {
+    _draftTimer?.cancel();
+    final sessionId = _draftSessionId;
+    if (sessionId != null) {
+      unawaited(
+        StorageService.saveCodeInstructionDraft(
+          sessionId,
+          _inputController.text,
+        ),
+      );
+    }
+    _inputController.removeListener(_scheduleDraftSave);
     _inputController.dispose();
     _scrollController.dispose();
     _focusNode.dispose();
     super.dispose();
   }
 
-  void _sendMessage() {
+  Future<void> _sendMessage() async {
     final text = _inputController.text.trim();
     if (text.isEmpty) return;
-    _inputController.clear();
-    ref.read(aiWorkspaceControllerProvider.notifier).sendMessage(text);
+    final sessionId = _draftSessionId;
+    final sent = await ref
+        .read(aiWorkspaceControllerProvider.notifier)
+        .sendMessage(text, options: _instructionOptions);
+    if (!mounted || !sent || _draftSessionId != sessionId) return;
+    _setInputText('');
+    if (sessionId != null) {
+      await StorageService.saveCodeInstructionDraft(sessionId, '');
+    }
     _scrollToBottom();
+  }
+
+  void _scheduleDraftSave() {
+    if (_restoringDraft || _draftSessionId == null) return;
+    _draftTimer?.cancel();
+    final sessionId = _draftSessionId!;
+    _draftTimer = Timer(const Duration(milliseconds: 400), () {
+      if (_draftSessionId != sessionId) return;
+      unawaited(
+        StorageService.saveCodeInstructionDraft(
+          sessionId,
+          _inputController.text,
+        ),
+      );
+    });
+  }
+
+  void _activateDraftSession(int? sessionId) {
+    if (_draftSessionId == sessionId) return;
+    _draftTimer?.cancel();
+    final previousSessionId = _draftSessionId;
+    if (previousSessionId != null) {
+      unawaited(
+        StorageService.saveCodeInstructionDraft(
+          previousSessionId,
+          _inputController.text,
+        ),
+      );
+    }
+    _draftSessionId = sessionId;
+    _setInputText(
+      sessionId == null
+          ? ''
+          : StorageService.getCodeInstructionDraft(sessionId),
+    );
+  }
+
+  void _setInputText(String text) {
+    _restoringDraft = true;
+    _inputController.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+    _restoringDraft = false;
   }
 
   void _scrollToBottom() {
@@ -71,7 +156,26 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
         builder: (_) => CodeWorkspaceFilesScreen(
           sessionId: session.id,
           sessionTitle: session.title.isEmpty
-              ? '开发 #${session.id}'
+              ? CodeWorkspaceText.format(context, 'chat.sessionFallback', {
+                  'id': session.id,
+                })
+              : session.title,
+        ),
+      ),
+    );
+  }
+
+  void _openRecovery() {
+    final session = ref.read(aiWorkspaceControllerProvider).currentSession;
+    if (session == null) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => CodeSessionRecoveryScreen(
+          sessionId: session.id,
+          sessionTitle: session.title.isEmpty
+              ? CodeWorkspaceText.format(context, 'chat.sessionFallback', {
+                  'id': session.id,
+                })
               : session.title,
         ),
       ),
@@ -148,6 +252,9 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
       if (previous?.chatHistory.length != next.chatHistory.length) {
         _scrollToBottom();
       }
+      if (previous?.currentSession?.id != next.currentSession?.id) {
+        _activateDraftSession(next.currentSession?.id);
+      }
     });
 
     return Scaffold(
@@ -155,11 +262,17 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF1E293B),
         foregroundColor: Colors.white,
-        title: const Text(
-          'GoPanel 开发',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        title: Text(
+          CodeWorkspaceText.t(context, 'chat.title'),
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
         actions: [
+          if (session != null)
+            IconButton(
+              tooltip: CodeWorkspaceText.t(context, 'recovery.title'),
+              onPressed: _openRecovery,
+              icon: const Icon(Icons.history_rounded),
+            ),
           if (session != null)
             IconButton(
               tooltip: CodeWorkspaceText.t(context, 'files.title'),
@@ -167,14 +280,14 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
               icon: const Icon(Icons.folder_open_rounded),
             ),
           IconButton(
-            tooltip: '刷新状态',
+            tooltip: CodeWorkspaceText.t(context, 'chat.refresh'),
             onPressed: session == null
                 ? controller.loadWorkspace
                 : () => controller.refreshCurrentSession(showLoading: true),
             icon: const Icon(Icons.refresh_rounded),
           ),
           IconButton(
-            tooltip: '选择或创建会话',
+            tooltip: CodeWorkspaceText.t(context, 'chat.chooseSession'),
             onPressed: _openSessionSheet,
             icon: const Icon(Icons.add_to_photos_outlined),
           ),
@@ -183,7 +296,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
       body: Column(
         children: [
           if (state.errorMessage != null)
-            _ErrorBanner(
+            AiChatErrorBanner(
               message: state.errorMessage!,
               onRetry: session == null
                   ? controller.loadWorkspace
@@ -193,7 +306,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
           if (state.isLoading) const LinearProgressIndicator(minHeight: 2),
           Expanded(
             child: session == null
-                ? _EmptyWorkspace(onOpenSessions: _openSessionSheet)
+                ? AiChatEmptyWorkspace(onOpenSessions: _openSessionSheet)
                 : ListView(
                     controller: _scrollController,
                     children: [
@@ -240,7 +353,10 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                             MaterialPageRoute(
                               builder: (_) => AiPreviewListScreen(
                                 sessionId: session.id,
-                                title: '会话预览',
+                                title: CodeWorkspaceText.t(
+                                  context,
+                                  'chat.previewTitle',
+                                ),
                               ),
                             ),
                           );
@@ -267,11 +383,11 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                   ),
           ),
           if (session != null && state.isAiThinking)
-            _ExecutionIndicator(
+            AiChatExecutionIndicator(
               isStopping: state.isActionLoading,
               onStop: _confirmStop,
             ),
-          _CommandComposer(
+          CodeInstructionComposer(
             controller: _inputController,
             focusNode: _focusNode,
             enabled:
@@ -279,187 +395,11 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                 !state.isSending &&
                 !state.isDevelopmentClosed,
             closed: state.isDevelopmentClosed,
+            options: _instructionOptions,
+            onOptionsChanged: (options) {
+              setState(() => _instructionOptions = options);
+            },
             onSend: _sendMessage,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ErrorBanner extends StatelessWidget {
-  const _ErrorBanner({
-    required this.message,
-    required this.onRetry,
-    required this.onDismiss,
-  });
-
-  final String message;
-  final VoidCallback onRetry;
-  final VoidCallback onDismiss;
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialBanner(
-      backgroundColor: const Color(0xFF451A1A),
-      content: Text(message, style: const TextStyle(color: Colors.white)),
-      leading: const Icon(Icons.error_outline_rounded, color: Colors.redAccent),
-      actions: [
-        TextButton(onPressed: onDismiss, child: const Text('关闭')),
-        TextButton(onPressed: onRetry, child: const Text('重试')),
-      ],
-    );
-  }
-}
-
-class _EmptyWorkspace extends StatelessWidget {
-  const _EmptyWorkspace({required this.onOpenSessions});
-
-  final VoidCallback onOpenSessions;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.terminal_rounded, color: Colors.white54, size: 52),
-            const SizedBox(height: 16),
-            const Text(
-              '开始一个开发会话',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              '绑定已有项目与服务器执行器，在手机上发指令、看过程、开预览并处理审批。',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white60, height: 1.5),
-            ),
-            const SizedBox(height: 20),
-            FilledButton.icon(
-              onPressed: onOpenSessions,
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('选择或创建会话'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ExecutionIndicator extends StatelessWidget {
-  const _ExecutionIndicator({required this.isStopping, required this.onStop});
-
-  final bool isStopping;
-  final VoidCallback onStop;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 8, 8),
-      child: Row(
-        children: [
-          const SizedBox.square(
-            dimension: 16,
-            child: CircularProgressIndicator(
-              color: Colors.greenAccent,
-              strokeWidth: 2,
-            ),
-          ),
-          const SizedBox(width: 10),
-          const Expanded(
-            child: Text(
-              '开发任务正在执行，状态会自动刷新',
-              style: TextStyle(color: Colors.greenAccent),
-            ),
-          ),
-          TextButton.icon(
-            onPressed: isStopping ? null : onStop,
-            icon: isStopping
-                ? const SizedBox.square(
-                    dimension: 14,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.stop_circle_outlined, size: 18),
-            label: Text(CodeWorkspaceText.t(context, 'action.stop')),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CommandComposer extends StatelessWidget {
-  const _CommandComposer({
-    required this.controller,
-    required this.focusNode,
-    required this.enabled,
-    required this.closed,
-    required this.onSend,
-  });
-
-  final TextEditingController controller;
-  final FocusNode focusNode;
-  final bool enabled;
-  final bool closed;
-  final VoidCallback onSend;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      color: const Color(0xFF1E293B),
-      padding: EdgeInsets.fromLTRB(
-        16,
-        10,
-        8,
-        MediaQuery.paddingOf(context).bottom + 10,
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          const Padding(
-            padding: EdgeInsets.only(bottom: 12, right: 8),
-            child: Text(
-              '\$',
-              style: TextStyle(
-                color: Colors.greenAccent,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-          Expanded(
-            child: TextField(
-              controller: controller,
-              focusNode: focusNode,
-              enabled: enabled,
-              maxLines: 5,
-              minLines: 1,
-              textInputAction: TextInputAction.send,
-              onSubmitted: (_) => onSend(),
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                hintText: closed
-                    ? '当前会话已进入统一交付，不能继续修改'
-                    : enabled
-                    ? '输入开发指令或补充要求...'
-                    : '请先选择开发会话',
-                hintStyle: const TextStyle(color: Colors.white38),
-                border: InputBorder.none,
-              ),
-            ),
-          ),
-          IconButton(
-            onPressed: enabled ? onSend : null,
-            icon: const Icon(Icons.send_rounded),
-            color: Colors.blueAccent,
           ),
         ],
       ),
