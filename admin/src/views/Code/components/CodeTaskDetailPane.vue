@@ -12,6 +12,7 @@ import { CODE_TERMINAL_POOL_SIZE, codeTerminalIdentity } from "./codeTerminalSes
 const props = defineProps<{ task: CodeTaskListItem | null; projectName?: string; showHeader?: boolean }>()
 const emit = defineEmits<{
 	openWorkspace: [task: CodeTaskListItem]
+	openHistory: [task: CodeTaskListItem]
 	taskCreated: [taskId: number]
 }>()
 const { t } = useI18n({ messages: codeProjectMessages })
@@ -78,8 +79,23 @@ const terminalIdentity = computed(() =>
       </header>
 
       <div class="relative min-h-0 flex-1 bg-[#1e1e1e]">
-        <!-- 只留全屏。「进入完整工作台」在左边任务行上，不在这儿重复一遍。 -->
-        <div class="detail-pane__floating absolute right-3 top-2 z-[2]">
+        <!-- 对话和全屏都属于当前执行任务，浮在终端上避免占用输出高度。 -->
+        <div class="detail-pane__floating absolute right-3 top-2 z-[2] flex items-center gap-1">
+          <n-button
+            v-if="task.agentName !== 'terminal'"
+            quaternary
+            circle
+            size="tiny"
+            :title="t('code.conversationHistory')"
+            @click="emit('openHistory', task)"
+          >
+            <template #icon>
+              <Icon
+                name="mdi:message-text-clock-outline"
+                :size="16"
+              />
+            </template>
+          </n-button>
           <n-button
             quaternary
             circle
