@@ -138,10 +138,11 @@ export function updateMobileSessionTitle(sessionId: number, title: string) {
 	return mobileRequest(mobileHttp.put<ResultData<CodeSession>>(`/mobile/app/sessions/${sessionId}/title`, { title }))
 }
 
-export function deliverMobileSession(sessionId: number) {
+export function deliverMobileSession(sessionId: number, reviewRevision: string) {
 	return mobileRequest(
 		mobileHttp.post<ResultData<CodeDeliveryJob>>(`/mobile/app/sessions/${sessionId}/worktree/merge`, {
-			confirm: true
+			confirm: true,
+			reviewRevision
 		})
 	)
 }

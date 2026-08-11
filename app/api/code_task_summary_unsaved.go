@@ -75,6 +75,9 @@ func countCodeTaskUntrackedLines(filePath string) int {
 	if info.Mode()&os.ModeSymlink != 0 {
 		return 1
 	}
+	if !info.Mode().IsRegular() {
+		return 0
+	}
 	file, err := os.Open(filePath)
 	if err != nil {
 		return 0
