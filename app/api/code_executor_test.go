@@ -70,6 +70,12 @@ func TestClaudeConfigurationUsesAuthHealthCheck(t *testing.T) {
 	}
 }
 
+func TestClaudeDefaultConnectionIsNotBlockedByAuthDetection(t *testing.T) {
+	if err := validateCodeExecutorConfigured("claude", nil); err != nil {
+		t.Fatalf("Claude default connection should remain user-selectable: %v", err)
+	}
+}
+
 func TestSubAdminCannotUseHostExecutor(t *testing.T) {
 	if _, err := validateCodeExecutorAvailable("codex", constant.UserRoleSubAdmin); err == nil {
 		t.Fatal("sub-admin should not be allowed to use host executors")

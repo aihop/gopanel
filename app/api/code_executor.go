@@ -183,11 +183,11 @@ func validateCodeExecutorConfigured(executorID string, provider *codeProviderReq
 	if err != nil {
 		return err
 	}
-	if definition.ID != "claude" && definition.ID != "opencode" {
+	if definition.ID != "opencode" {
 		return nil
 	}
 	status := detectCodeExecutor(definition)
-	if status.Configured || definition.ID == "terminal" {
+	if status.Configured {
 		return nil
 	}
 	return errors.New(status.Name + " 尚未登录或配置模型连接")
