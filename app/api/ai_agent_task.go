@@ -23,6 +23,9 @@ func GetAITasks(c fiber.Ctx) error {
 	page, limit = normalizeCodePage(page, limit, 20)
 	projectID, _ := strconv.Atoi(c.Query("projectId", "0"))
 	includeGit := c.Query("includeGit") != "false"
+	// 默认只列没归档的：归档就是「别再让我看到它」。
+	// 传 archived=1 才单独看归档列表，用于找回误归档的任务。
+	archived := c.Query("archived") == "1"
 	aiRepo := repo.NewAITaskRepo()
 	var tasks []*model.AITask
 	var total int64
@@ -33,12 +36,12 @@ func GetAITasks(c fiber.Ctx) error {
 			return c.JSON(e.Fail(projectErr))
 		}
 		if claims.Role == constant.UserRoleSuper {
-			tasks, total, err = aiRepo.GetTasksByProjectID(project.ID, page, limit)
+			tasks, total, err = aiRepo.GetTasksByProjectID(project.ID, page, limit, archived)
 		} else {
-			tasks, total, err = aiRepo.GetTasksByProjectAndUserID(project.ID, claims.UserId, page, limit)
+			tasks, total, err = aiRepo.GetTasksByProjectAndUserID(project.ID, claims.UserId, page, limit, archived)
 		}
 	} else {
-		tasks, total, err = aiRepo.GetTasksByUserID(claims.UserId, page, limit)
+		tasks, total, err = aiRepo.GetTasksByUserID(claims.UserId, page, limit, archived)
 	}
 	if err != nil {
 		return c.JSON(e.Fail(err))
@@ -69,8 +72,11 @@ func GetAITaskMessages(c fiber.Ctx) error {
 func UpdateAITask(c fiber.Ctx) error {
 	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
 	taskID, _ := strconv.Atoi(c.Params("id"))
+	// 指针字段：改名和归档走同一个接口，没传的字段保持原样。
+	// 用值类型的话，只想归档时会把标题一起清空。
 	var req struct {
-		Title string `json:"title"`
+		Title    *string `json:"title"`
+		Archived *bool   `json:"archived"`
 	}
 	if bindErr := c.Bind().JSON(&req); bindErr != nil {
 		return c.JSON(e.Fail(bindErr))
@@ -83,7 +89,17 @@ func UpdateAITask(c fiber.Ctx) error {
 	if task.UserID != claims.UserId && claims.Role != constant.UserRoleSuper {
 		return c.JSON(e.Fail(errors.New("无权修改该 AI 任务")))
 	}
-	task.Title = req.Title
+	if req.Title != nil {
+		task.Title = *req.Title
+	}
+	if req.Archived != nil {
+		if *req.Archived {
+			now := time.Now()
+			task.ArchivedAt = &now
+		} else {
+			task.ArchivedAt = nil
+		}
+	}
 	if err := aiRepo.UpdateTask(task); err != nil {
 		return c.JSON(e.Fail(err))
 	}

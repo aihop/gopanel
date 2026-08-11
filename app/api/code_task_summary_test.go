@@ -3,6 +3,7 @@ package api
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -179,5 +180,61 @@ func TestApplyCodeTaskRepositorySummariesHidesLowerPriorityPushError(t *testing.
 	applyCodeTaskRepositorySummaries(&summary, repositories, make(map[string]codeTaskDiffStats))
 	if summary.GitStatus != "conflict" || summary.GitError != "" {
 		t.Fatalf("unexpected repository summary: %#v", summary)
+	}
+}
+
+func TestBuildCodeTaskListItemsIncludesStageAndLatestAgentMessage(t *testing.T) {
+	database := withCodeGovernanceDB(t)
+	lastInstructionAt := time.Now().Add(-10 * time.Minute)
+	session := &model.AIDevSession{
+		UserID: 1, ProjectID: 1, Title: "session", WorkDir: t.TempDir(),
+		CurrentStage: "awaiting_approval", LastInstructionAt: &lastInstructionAt,
+	}
+	if err := database.Create(session).Error; err != nil {
+		t.Fatal(err)
+	}
+	task := &model.AITask{UserID: 1, SessionID: session.ID, ProjectID: 1, Title: "task", WorkDir: "/tmp"}
+	if err := database.Create(task).Error; err != nil {
+		t.Fatal(err)
+	}
+	olderMessage := time.Now().Add(-5 * time.Minute)
+	newerMessage := time.Now().Add(-time.Minute)
+	messages := []model.AIMessage{
+		{CreatedAt: olderMessage, SessionID: session.ID, TaskID: task.ID, Role: "agent", Content: "旧的回复"},
+		{CreatedAt: newerMessage, SessionID: session.ID, TaskID: task.ID, Role: "agent", Content: "  正在跑 npm test\n已通过 15 个用例  "},
+		{CreatedAt: time.Now(), SessionID: session.ID, TaskID: task.ID, Role: "user", Content: "这条是用户说的，不该被当成执行器输出"},
+	}
+	if err := database.Create(&messages).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	// includeGit=false：阶段和最后输出属于纯 SQL 那一档，不该被昂贵路径的开关挡掉。
+	items, err := buildCodeTaskListItems([]*model.AITask{task}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	summary := items[0].Summary
+	if summary.Stage != "awaiting_approval" {
+		t.Fatalf("stage = %q, want awaiting_approval", summary.Stage)
+	}
+	if summary.LastAgentMessage != "正在跑 npm test 已通过 15 个用例" {
+		t.Fatalf("last agent message = %q", summary.LastAgentMessage)
+	}
+	if summary.LastActivityAt == nil || summary.LastActivityAt.Before(lastInstructionAt) {
+		t.Fatalf("last activity should follow the newest agent message: %#v", summary.LastActivityAt)
+	}
+}
+
+func TestTruncateCodeTaskMessage(t *testing.T) {
+	if got := truncateCodeTaskMessage("  多行\n输出  "); got != "多行 输出" {
+		t.Fatalf("got %q", got)
+	}
+	long := strings.Repeat("字", codeTaskAgentMessageLimit+40)
+	got := truncateCodeTaskMessage(long)
+	if []rune(got)[codeTaskAgentMessageLimit] != '…' || len([]rune(got)) != codeTaskAgentMessageLimit+1 {
+		t.Fatalf("unexpected truncation length: %d", len([]rune(got)))
+	}
+	if truncateCodeTaskMessage("   ") != "" {
+		t.Fatal("blank content should stay empty")
 	}
 }

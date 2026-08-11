@@ -22,6 +22,11 @@ export interface CodeTaskSummary {
 	deliveryQueuePosition: number
 	deliveryAttempt: number
 	deliveryError?: string
+	/** 会话当前阶段，比任务 status 细一档：卡在哪一步。 */
+	stage?: string
+	/** 执行器最后说的那句话（后端已截断到 160 字）。 */
+	lastAgentMessage?: string
+	lastActivityAt?: string
 }
 
 export interface CodeTaskListItem extends AITask {

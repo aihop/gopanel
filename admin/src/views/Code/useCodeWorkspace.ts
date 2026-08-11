@@ -12,6 +12,7 @@ import type { AIProject, AITask, CodeSession } from "@/api/interface/code"
 import type { CodeTaskListItem } from "@/api/interface/codeTasks"
 import type { HostTerminalSession } from "@/api/interface/hostTerminal"
 import { codeWorkspaceMessages } from "./codeWorkspaceMessages"
+import { codeTerminalIdentity } from "./components/codeTerminalSession"
 import type { CodeWorkspaceMode } from "./components/WorkspaceModeSwitch.vue"
 
 export interface UseCodeWorkspaceProps {
@@ -39,8 +40,7 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 	const showProjectStructure = ref(false),
 		showRenameModal = ref(false)
 	const workspaceMode = ref<CodeWorkspaceMode>("terminal")
-	const terminalMounted = ref(false),
-		terminalKey = ref(0)
+	const terminalMounted = ref(false)
 	const terminalTakeoverRequested = ref(false)
 	const isProjectTerminalActive = ref(false)
 	const projectTerminalSessionId = ref<number | null>(null)
@@ -56,23 +56,26 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 	const aiTasks = computed(() => tasks.value.filter(task => task.agentName !== "terminal"))
 	const aiTaskTotal = computed(() => Math.max(0, taskTotal.value - (tasks.value.length - aiTasks.value.length)))
 	const currentTask = computed(() => tasks.value.find(task => task.id === currentTaskId.value) || null)
+	// 以前这里是个自增计数器，切任务就 +1 强制重建终端；
+	// 现在换成稳定身份，切回同一个任务命中 KeepAlive 缓存，连接和滚屏都还在。
+	const terminalIdentity = computed(() => codeTerminalIdentity(currentSessionId.value, currentTaskId.value))
 	const hasWorkspaceContext = computed(
-		() => isProjectTerminalActive.value || currentSessionId.value !== null || currentTaskId.value !== null
+		() => isProjectTerminalActive.value || currentSessionId.value !== null || currentTaskId.value !== null,
 	)
 	const isTerminalSession = computed(() => isProjectTerminalActive.value)
 	const sessionLabel = computed(() =>
 		isProjectTerminalActive.value
 			? t("code.projectTerminal")
-			: currentTask.value?.title || (currentSessionId.value ? t("code.newSession") : t("code.selectTaskToStart"))
+			: currentTask.value?.title || (currentSessionId.value ? t("code.newSession") : t("code.selectTaskToStart")),
 	)
 	const sessionSubtitle = computed(() =>
 		isProjectTerminalActive.value
 			? projectTerminalWorkDir.value || t("code.projectTerminalHint")
-			: activeFilePath.value || t("code.selectFileToEdit")
+			: activeFilePath.value || t("code.selectFileToEdit"),
 	)
 	const taskActionOptions = computed(() => [
 		{ label: t("code.renameTask"), key: "rename" },
-		{ label: t("code.deleteTask"), key: "delete", style: "color: red;" }
+		{ label: t("code.deleteTask"), key: "delete", style: "color: red;" },
 	])
 
 	const fetchProjectInfo = async () => {
@@ -87,9 +90,16 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 		}
 	}
 
-	const { fetchTasks } = useCodeTaskPolling(currentProjectId, tasks, taskTotal, error => {
-		message.error(error instanceof Error ? error.message : t("code.taskLoadFailed"))
-	})
+	const { fetchTasks } = useCodeTaskPolling(
+		currentProjectId,
+		tasks,
+		taskTotal,
+		error => {
+			message.error(error instanceof Error ? error.message : t("code.taskLoadFailed"))
+		},
+		// 工作台的 3 秒节奏只在真有任务在跑时才需要；全空闲时降到 15 秒。
+		{ idleIntervalMs: 15000 },
+	)
 
 	const resetSelectedFile = () => {
 		selectedFile.value = { path: "", extension: "" }
@@ -120,7 +130,7 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 			content: t("code.switchSessionUnsavedHint"),
 			positiveText: t("code.discardAndContinue"),
 			negativeText: t("code.cancel"),
-			onPositiveClick: action
+			onPositiveClick: action,
 		})
 	}
 
@@ -153,7 +163,6 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 		terminalTakeoverRequested.value = false
 		workspaceMode.value = "terminal"
 		terminalMounted.value = true
-		terminalKey.value++
 		void fetchTasks()
 	}
 
@@ -166,7 +175,6 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 		terminalTakeoverRequested.value = false
 		workspaceMode.value = "terminal"
 		terminalMounted.value = true
-		terminalKey.value++
 	}
 
 	const selectTask = (task: AITask) => {
@@ -191,8 +199,8 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 		{
 			created: t("code.projectTerminalOpened"),
 			failed: t("code.projectTerminalOpenFailed"),
-			unavailable: t("code.projectTerminalUnavailable")
-		}
+			unavailable: t("code.projectTerminalUnavailable"),
+		},
 	)
 
 	const openProjectTerminal = () => {
@@ -215,7 +223,6 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 		terminalTakeoverRequested.value = true
 		workspaceMode.value = "terminal"
 		terminalMounted.value = true
-		terminalKey.value++
 	}
 
 	const switchWorkspaceMode = (mode: CodeWorkspaceMode) => {
@@ -256,7 +263,7 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 				} catch (error) {
 					void 0
 				}
-			}
+			},
 		})
 	}
 
@@ -325,7 +332,7 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 		showRenameModal,
 		workspaceMode,
 		terminalMounted,
-		terminalKey,
+		terminalIdentity,
 		terminalTakeoverRequested,
 		isProjectTerminalActive,
 		projectTerminalSessionId,
@@ -369,6 +376,6 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 		submitRename,
 		resetWorkspace,
 		backToLobby,
-		confirmLeaveWorkspace
+		confirmLeaveWorkspace,
 	}
 }

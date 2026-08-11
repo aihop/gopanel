@@ -1,135 +1,65 @@
 <template>
+  <!--
+    用布局自带的 page-wrapped 拿确定高度（100svh - 工具栏 - 视图内边距），
+    不要手写 min-height：祖先链没有确定高度时 height:100% 会失效，
+    flex 链就没有可分配的高度，终端只能被最小高度撑着，怎么调间距都不管用。
+  -->
   <div
-    class="bg-base-accent border-base-accent rounded-[28px] w-full relative"
-    style="min-height: calc(100vh - 130px); height: 100%; display: flex; flex-direction: column;"
+    class="page page-wrapped page-mobile-full page-without-footer bg-base-accent border-base-accent relative flex w-full flex-col rounded-[28px]"
   >
-    <div class="project-lobby flex-1 overflow-y-auto p-6 md:p-10">
-      <div class="lobby-header mb-10 flex justify-between items-center">
-        <div>
-          <h1 class="text-2xl font-bold text-[var(--n-text-color)] mb-2">{{ $t('code.workspace') }}</h1>
-          <p class="text-[var(--n-text-color-3)] text-sm">{{ $t('code.workspaceDesc') }}</p>
-        </div>
-        <n-button
-          type="primary"
-          size="large"
-          @click="openCreateProjectModal"
-          round
-        >
-          <template #icon>
-            <AddIcon />
-          </template>
-          {{ t("code.createProject") }}
-        </n-button>
-      </div>
-
-      <div
-        v-if="projectsLoading"
-        class="flex justify-center items-center h-64"
+    <!-- 整页不滚：右侧是终端，页面滚起来终端会跟着跑。滚动交给左右两栏各自处理。 -->
+    <!-- 横向可以给足，纵向省着用：只有纵向内边距会从终端高度里扣 -->
+    <div class="project-lobby flex min-h-0 flex-1 flex-col overflow-hidden px-5 py-4 md:px-7 md:py-5">
+      <CodeDashboard
+        :projects="projects"
+        :loading="projectsLoading"
+        :load-error="projectsLoadError"
+        @retry="fetchProjects()"
+        @create-project="openCreateProjectModal"
+        @open-task="openTask"
       >
-        <n-spin size="large" />
-      </div>
+        <!--
+          项目管理入口。刻意不做成任务列表的筛选器：
+          首页列的是「所有在做的任务」，按项目切会把这个口径打散。
+          这里只负责进入 / 浮窗 / 编辑，不影响下面的列表。
+        -->
+        <template #toolbar>
+          <n-dropdown
+            v-if="projects.length"
+            trigger="click"
+            :options="projectMenuOptions"
+            @select="handleProjectMenuSelect"
+          >
+            <n-button
+              size="small"
+              quaternary
+            >
+              <template #icon>
+                <Icon
+                  name="mdi:folder-multiple-outline"
+                  :size="16"
+                />
+              </template>
+              {{ t("code.project") }}
+            </n-button>
+          </n-dropdown>
+          <n-button
+            type="primary"
+            size="small"
+            @click="openCreateProjectModal"
+          >
+            <template #icon>
+              <AddIcon />
+            </template>
+            {{ t("code.createProject") }}
+          </n-button>
+        </template>
+      </CodeDashboard>
 
-      <n-alert
-        v-else-if="projectsLoadError"
-        type="error"
-        :show-icon="false"
-      >
-        <div class="flex items-center justify-between gap-3">
-          <span>{{ t("code.projectLoadFailed") }}</span>
-          <n-button text type="primary" @click="fetchProjects()">{{ t("code.retry") }}</n-button>
-        </div>
-      </n-alert>
-
-      <div
-        v-else-if="projects.length === 0"
-        class="flex justify-center items-center h-64"
-      >
-        <n-empty
-          :description="t('code.noProject')"
-          size="huge"
-        />
-      </div>
-
-      <div
-        v-else
-        class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
-      >
-        <div
-          v-for="project in projects"
-          :key="project.id"
-          class="project-card relative flex cursor-pointer flex-col overflow-hidden rounded-[24px] p-5"
-          :class="`project-card--${projectStatusMeta(project).status}`"
-          @click="enterProject(project.id)"
-        >
-          <div class="mb-5 flex items-start justify-between gap-3">
-            <div class="flex min-w-0 items-center gap-3.5">
-              <div class="project-card__avatar flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] text-lg font-bold">
-                {{ project.name.substring(0, 1).toUpperCase() }}
-              </div>
-              <div class="min-w-0">
-                <h3 class="project-card__title truncate text-lg font-semibold">{{ project.name }}</h3>
-                <div class="mt-1 flex items-center gap-1.5 text-xs text-[var(--n-text-color-3)]">
-                  <Icon name="mdi:folder-outline" :size="15" />
-                  <span class="truncate">
-                    {{ project.sourceDirs?.length ? t("code.projectDirectoryCount", { count: project.sourceDirs.length }) : project.workDir || t("code.projectDirectoryRequired") }}
-                  </span>
-                </div>
-              </div>
-            </div>
-            <div class="relative z-[2] shrink-0" @click.stop>
-              <n-button quaternary circle size="small" :aria-label="t('code.editProject')" @click="openEditProjectModal(project)">
-                <template #icon><Icon name="mdi:pencil-outline" :size="16" /></template>
-              </n-button>
-            </div>
-          </div>
-          <p class="project-card__desc mb-5 line-clamp-2 min-h-11 text-sm">{{ project.description || $t('code.noDesc') }}</p>
-          <div class="project-card__status mb-5 rounded-[18px] p-3.5">
-            <div class="flex items-center justify-between gap-3">
-              <div class="flex min-w-0 items-center gap-2.5">
-                <span class="project-card__status-icon flex h-8 w-8 shrink-0 items-center justify-center rounded-xl">
-                  <Icon :name="projectStatusMeta(project).icon" :size="17" />
-                </span>
-                <span class="truncate text-sm font-semibold">
-                  {{ t(projectStatusMeta(project).labelKey) }}
-                </span>
-              </div>
-              <span v-if="project.executionSummary.updatedAt" class="shrink-0 text-[11px] text-[var(--n-text-color-3)]">
-                {{ formatUpdatedAt(project.executionSummary.updatedAt) }}
-              </span>
-            </div>
-            <div class="mt-3 truncate text-xs text-[var(--n-text-color-2)]" :title="project.executionSummary.currentTaskTitle">
-              {{ project.executionSummary.currentTaskTitle || t("code.projectIdleHint") }}
-            </div>
-            <div v-if="project.executionSummary.activeTaskCount" class="mt-3 flex flex-wrap gap-2 text-[11px]">
-              <span class="rounded-full bg-black/5 px-2 py-1 text-[var(--n-text-color-3)] dark:bg-white/10">
-                {{ t("code.activeTaskCount", { count: project.executionSummary.activeTaskCount }) }}
-              </span>
-              <span v-if="project.executionSummary.pendingApprovalCount" class="rounded-full bg-amber-500/10 px-2 py-1 font-medium text-amber-600 dark:text-amber-400">
-                {{ t("code.pendingApprovalCount", { count: project.executionSummary.pendingApprovalCount }) }}
-              </span>
-            </div>
-          </div>
-          <div class="project-card__footer mt-auto flex items-center justify-between gap-3 pt-4 text-xs">
-            <span class="flex items-center gap-1.5">
-              <Icon name="mdi:checkbox-marked-circle-outline" :size="15" />
-              {{ project.taskCount || 0 }} {{ $t('code.task') }}
-            </span>
-            <div class="relative z-[2] flex items-center gap-2" @click.stop>
-              <n-button quaternary circle type="primary" size="small" :title="t('code.quickPanel')" :aria-label="t('code.quickPanel')" @click="openQuickPanel(project)">
-                <template #icon><Icon name="mdi:dock-window" :size="16" /></template>
-              </n-button>
-              <n-button text type="primary" size="small" @click="enterProject(project.id)">
-                <template #icon><Icon name="mdi:arrow-right" :size="16" /></template>
-                {{ t("code.enterProject") }}
-              </n-button>
-            </div>
-          </div>
-        </div>
-      </div>
       <n-modal
         v-model:show="showCreateProjectModal"
         preset="dialog"
-		style="width: min(760px, 94vw)"
+        style="width: min(760px, 94vw)"
         :title="editingProjectId ? t('code.editProject') : t('code.createProject')"
       >
         <div class="flex flex-col gap-4 mt-4">
@@ -138,28 +68,57 @@
             :placeholder="t('code.projectName')"
             placeholder-class="text-[var(--n-text-color-3)]"
           />
-		  <ProjectQualityGateSettings
-			v-model="projectForm.requireQualityGate"
-			:checks="projectForm.qualityChecks"
-			:source-dirs="projectForm.sourceDirs"
-			:repositories="repositoryOptions"
-			@update:checks="projectForm.qualityChecks = $event"
-		  />
-		  <n-input-number v-model:value="projectForm.monthlyTokenBudget" :min="0" :step="100000" style="width: 100%" :placeholder="t('code.monthlyTokenBudget')">
-			<template #prefix>{{ t("code.monthlyTokenBudget") }}</template>
-		  </n-input-number>
-		  <div class="-mt-3 text-xs text-[var(--n-text-color-3)]">{{ t("code.monthlyTokenBudgetHint") }}</div>
-		  <n-select v-model:value="projectForm.primaryRepository" :options="primaryRepositoryOptions" :loading="repositoriesLoading" clearable :placeholder="t('code.primaryRepositoryPlaceholder')" />
-		  <div class="-mt-3 text-xs text-[var(--n-text-color-3)]">{{ t("code.primaryRepositoryHint") }}</div>
-		  <n-input v-model:value="projectForm.deliveryBranch" :placeholder="t('code.deliveryBranchPlaceholder')">
-			<template #prefix>{{ t("code.deliveryBranch") }}</template>
-		  </n-input>
-		  <div class="-mt-3 text-xs text-[var(--n-text-color-3)]">{{ t("code.deliveryBranchHint") }}</div>
-		  <n-select v-model:value="projectForm.deliveryMode" :options="deliveryModeOptions" :placeholder="t('code.deliveryMode')" />
-		  <div class="-mt-3 text-xs text-[var(--n-text-color-3)]">
-			{{ projectForm.deliveryMode === "branch" ? t("code.deliveryModeBranchHint") : t("code.deliveryModeDirectHint") }}
-		  </div>
-		  <ProjectGitCredentialSelect v-model="projectForm.gitCredentialId" />
+          <ProjectQualityGateSettings
+            v-model="projectForm.requireQualityGate"
+            :checks="projectForm.qualityChecks"
+            :source-dirs="projectForm.sourceDirs"
+            :repositories="repositoryOptions"
+            @update:checks="projectForm.qualityChecks = $event"
+          />
+          <n-input-number
+            v-model:value="projectForm.monthlyTokenBudget"
+            :min="0"
+            :step="100000"
+            style="width: 100%"
+            :placeholder="t('code.monthlyTokenBudget')"
+          >
+            <template #prefix>
+              {{ t("code.monthlyTokenBudget") }}
+            </template>
+          </n-input-number>
+          <div class="-mt-3 text-xs text-[var(--n-text-color-3)]">
+            {{ t("code.monthlyTokenBudgetHint") }}
+          </div>
+          <n-select
+            v-model:value="projectForm.primaryRepository"
+            :options="primaryRepositoryOptions"
+            :loading="repositoriesLoading"
+            clearable
+            :placeholder="t('code.primaryRepositoryPlaceholder')"
+          />
+          <div class="-mt-3 text-xs text-[var(--n-text-color-3)]">
+            {{ t("code.primaryRepositoryHint") }}
+          </div>
+          <n-input
+            v-model:value="projectForm.deliveryBranch"
+            :placeholder="t('code.deliveryBranchPlaceholder')"
+          >
+            <template #prefix>
+              {{ t("code.deliveryBranch") }}
+            </template>
+          </n-input>
+          <div class="-mt-3 text-xs text-[var(--n-text-color-3)]">
+            {{ t("code.deliveryBranchHint") }}
+          </div>
+          <n-select
+            v-model:value="projectForm.deliveryMode"
+            :options="deliveryModeOptions"
+            :placeholder="t('code.deliveryMode')"
+          />
+          <div class="-mt-3 text-xs text-[var(--n-text-color-3)]">
+            {{ projectForm.deliveryMode === "branch" ? t("code.deliveryModeBranchHint") : t("code.deliveryModeDirectHint") }}
+          </div>
+          <ProjectGitCredentialSelect v-model="projectForm.gitCredentialId" />
           <n-input
             v-model:value="projectForm.desc"
             type="textarea"
@@ -167,41 +126,64 @@
           />
           <div>
             <div class="mb-2 flex items-center justify-between gap-3">
-              <div class="text-sm font-medium text-[var(--n-text-color)]">{{ t("code.projectDirectories") }}</div>
-              <n-button type="primary" secondary size="small" @click="showDirectoryPicker = true">
+              <div class="text-sm font-medium text-[var(--n-text-color)]">
+                {{ t("code.projectDirectories") }}
+              </div>
+              <n-button
+                type="primary"
+                secondary
+                size="small"
+                @click="showDirectoryPicker = true"
+              >
                 {{ t("code.browseDirectory") }}
               </n-button>
             </div>
-            <div v-if="projectForm.sourceDirs.length" class="flex flex-wrap gap-2 rounded-xl bg-[var(--n-color-embedded)] p-3">
+            <div
+              v-if="projectForm.sourceDirs.length"
+              class="flex flex-wrap gap-2 rounded-xl bg-[var(--n-color-embedded)] p-3"
+            >
               <n-tag
                 v-for="sourceDir in projectForm.sourceDirs"
                 :key="sourceDir"
                 closable
                 :title="sourceDir"
                 @close="removeSourceDir(sourceDir)"
-              >{{ sourceDir }}</n-tag>
+              >
+                {{ sourceDir }}
+              </n-tag>
             </div>
-            <n-empty v-else size="small" :description="t('code.projectDirectoryRequired')" />
-            <div class="mt-2 text-xs text-[var(--n-text-color-3)]">{{ t("code.projectDirectoriesHint") }}</div>
+            <n-empty
+              v-else
+              size="small"
+              :description="t('code.projectDirectoryRequired')"
+            />
+            <div class="mt-2 text-xs text-[var(--n-text-color-3)]">
+              {{ t("code.projectDirectoriesHint") }}
+            </div>
           </div>
         </div>
         <template #action>
-          <n-button :disabled="creatingProject" @click="showCreateProjectModal = false">
+          <n-button
+            :disabled="creatingProject"
+            @click="showCreateProjectModal = false"
+          >
             {{ $t('commons.button.cancel') }}
           </n-button>
           <n-button
             type="primary"
             :loading="creatingProject"
             @click="submitProject"
-          >{{ editingProjectId ? t("code.saveChanges") : $t('commons.button.confirm') }}</n-button>
+          >
+            {{ editingProjectId ? t("code.saveChanges") : $t('commons.button.confirm') }}
+          </n-button>
         </template>
       </n-modal>
       <ProjectDirectoryPicker
         v-model:show="showDirectoryPicker"
-		:initial-path="projectForm.workDir || defaultWorkDir"
-		:root-path="directoryRoot"
-		:selected-paths="projectForm.sourceDirs"
-		@select="handleSourceDirsSelected"
+        :initial-path="projectForm.workDir || defaultWorkDir"
+        :root-path="directoryRoot"
+        :selected-paths="projectForm.sourceDirs"
+        @select="handleSourceDirsSelected"
       />
       <ProjectQuickPanels ref="quickPanelsRef" />
     </div>
@@ -215,7 +197,9 @@ import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import { getAIProjects, createAIProject, discoverCodeProjectRepositories, updateAIProject } from '@/api/modules/code'
 import type { AIProject, CodeProjectQualityCheck } from '@/api/interface/code'
+import type { CodeTaskListItem } from '@/api/interface/codeTasks'
 import Icon from '@/components/common/Icon.vue'
+import CodeDashboard from './components/CodeDashboard.vue'
 import ProjectDirectoryPicker from './components/ProjectDirectoryPicker.vue'
 import ProjectGitCredentialSelect from './components/ProjectGitCredentialSelect.vue'
 import ProjectQuickPanels from './components/ProjectQuickPanels.vue'
@@ -311,24 +295,6 @@ onUnmounted(() => {
   if (refreshTimer) clearInterval(refreshTimer)
 })
 
-const projectStatusMeta = (project: AIProject) => {
-  const status = project.executionSummary.pendingApprovalCount > 0 ? "pending_approval" : project.executionSummary.status
-  return {
-    idle: { status: "idle", labelKey: "code.projectStatus_idle", icon: "mdi:circle-slice-8" },
-	queued: { status: "queued", labelKey: "code.projectStatus_queued", icon: "mdi:progress-clock" },
-	running: { status: "running", labelKey: "code.projectStatus_running", icon: "mdi:play-circle-outline" },
-	delivering: { status: "running", labelKey: "code.projectStatus_delivering", icon: "mdi:source-merge" },
-	pending_approval: { status: "pending-approval", labelKey: "code.projectStatus_pendingApproval", icon: "mdi:shield-alert-outline" },
-  }[status] || { status: "idle", labelKey: "code.projectStatus_idle", icon: "mdi:circle-slice-8" }
-}
-
-const formatUpdatedAt = (value: string) => new Date(value).toLocaleString(undefined, {
-  month: "2-digit",
-  day: "2-digit",
-  hour: "2-digit",
-	minute: "2-digit",
-})
-
 const openCreateProjectModal = () => {
   editingProjectId.value = null
   projectForm.value = { name: '', desc: '', workDir: defaultWorkDir.value, sourceDirs: [], primaryRepository: '', deliveryBranch: '', deliveryMode: 'direct' as 'direct' | 'branch', gitCredentialId: 0, requireQualityGate: true, qualityChecks: emptyQualityChecks(), monthlyTokenBudget: 0 }
@@ -396,78 +362,33 @@ const enterProject = (id: number) => {
   router.push(`/code/project/${id}`)
 }
 
+// 面板上点任务要落到那条任务，不是只落到项目首页，否则还得在侧栏里再找一次。
+const openTask = (task: CodeTaskListItem) => {
+  router.push({ path: `/code/project/${task.projectId}`, query: { taskId: String(task.id) } })
+}
+
+// 每个项目一个子菜单：进入 / 快捷面板 / 编辑。key 编码成 "动作:项目号"，
+// 省掉再维护一张 key → 项目的映射表。
+const projectMenuOptions = computed(() =>
+  projects.value.map(project => ({
+    label: project.name,
+    key: `project-${project.id}`,
+    children: [
+      { label: t('code.enterProject'), key: `enter:${project.id}` },
+      { label: t('code.quickPanel'), key: `panel:${project.id}` },
+      { label: t('code.editProject'), key: `edit:${project.id}` },
+    ],
+  })),
+)
+
+const handleProjectMenuSelect = (key: string) => {
+  const [action, rawId] = String(key).split(':')
+  const project = projects.value.find(item => item.id === Number(rawId))
+  if (!project) return
+  if (action === 'enter') enterProject(project.id)
+  else if (action === 'panel') openQuickPanel(project)
+  else if (action === 'edit') openEditProjectModal(project)
+}
+
 const openQuickPanel = (project: AIProject) => quickPanelsRef.value?.open(project)
 </script>
-
-<style scoped>
-.project-card {
-  --status-accent: #94a3b8;
-  background: color-mix(in srgb, var(--n-color) 97%, transparent);
-  border: 1px solid color-mix(in srgb, var(--n-border-color) 92%, transparent);
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.045);
-  transition:
-    transform 0.22s ease,
-    box-shadow 0.22s ease,
-    border-color 0.22s ease;
-}
-
-.project-card::before {
-  position: absolute;
-  inset: 24px auto 24px 0;
-  width: 3px;
-  border-radius: 0 999px 999px 0;
-  background: var(--n-primary-color);
-  content: "";
-}
-
-.project-card--queued {
-  --status-accent: #3b82f6;
-}
-
-.project-card--running {
-  --status-accent: #10b981;
-}
-
-.project-card--pending-approval {
-  --status-accent: #f59e0b;
-}
-
-.project-card:hover {
-  transform: translateY(-3px);
-  border-color: color-mix(in srgb, var(--n-primary-color) 34%, var(--n-border-color));
-  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.085);
-}
-
-.project-card__avatar {
-  color: var(--n-primary-color);
-  background: color-mix(in srgb, var(--n-primary-color) 10%, var(--n-color));
-  border: 1px solid color-mix(in srgb, var(--n-primary-color) 20%, transparent);
-}
-
-.project-card__title {
-  color: var(--n-text-color);
-  letter-spacing: -0.01em;
-}
-
-.project-card__desc {
-  color: var(--n-text-color-3);
-  line-height: 1.6;
-}
-
-.project-card__status {
-  color: var(--status-accent);
-  background: color-mix(in srgb, var(--n-color-embedded) 92%, var(--n-color));
-  border: 1px solid color-mix(in srgb, var(--n-border-color) 82%, transparent);
-}
-
-.project-card__status-icon {
-  color: var(--status-accent);
-  background: color-mix(in srgb, var(--status-accent) 10%, var(--n-color));
-  border: 1px solid color-mix(in srgb, var(--status-accent) 16%, transparent);
-}
-
-.project-card__footer {
-  color: var(--n-text-color-3);
-  border-top: 1px solid color-mix(in srgb, var(--n-border-color) 76%, transparent);
-}
-</style>

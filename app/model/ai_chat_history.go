@@ -61,6 +61,10 @@ type AITask struct {
 	NativeSessionID string    `gorm:"column:native_session_id;type:varchar(255)" json:"nativeSessionId"`
 	WorkDir         string    `gorm:"column:work_dir;type:varchar(255);not null" json:"workDir"`
 	Status          string    `gorm:"column:status;type:varchar(32);default:'active'" json:"status"`
+	// 归档是「不想在列表里再看到它」，和执行状态是两回事：
+	// 一个 completed 的任务可以没归档，一个 running 的任务也可以被归档。
+	// 用可空时间而不是布尔，顺带留下归档时间，将来要按归档时间清理也够用。
+	ArchivedAt *time.Time `gorm:"column:archived_at;index" json:"archivedAt,omitempty"`
 }
 
 func (AITask) TableName() string {
