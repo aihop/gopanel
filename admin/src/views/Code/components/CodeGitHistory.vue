@@ -25,10 +25,11 @@ const selectCommit = async (repository: CodeGitHistoryRepository, commit: CodeGi
 	try {
 		const response = await getCodeGitHistoryDiff(props.sessionId as number, repository.id, commit.commit)
 		if (selectedKey.value !== key) return
+		const repositoryLabels = repository.branch ? [repository.branch, repository.name] : [repository.name]
 		emit("selected", {
 			...response.data,
 			title: commit.subject,
-			subtitle: `${repository.name} · ${commit.shortCommit} · ${commit.author}`
+			subtitle: [...repositoryLabels, commit.shortCommit, commit.author].join(" · ")
 		})
 	} catch (error) {
 		if (selectedKey.value === key) emit("selected", null)
@@ -68,9 +69,19 @@ watch(
 		<n-scrollbar v-else class="h-full">
 			<div class="space-y-4 p-2.5">
 				<section v-for="repository in history?.repositories || []" :key="repository.id">
-					<div class="mb-2 flex items-center gap-2 px-2 text-xs font-semibold text-slate-700">
+					<div class="mb-2 flex items-start gap-2 px-2 text-slate-700">
 						<Icon name="mdi:source-repository" :size="16" />
-						<span class="min-w-0 flex-1 truncate">{{ repository.name }}</span>
+						<div class="min-w-0 flex-1">
+							<div class="truncate font-mono text-xs font-semibold" :title="repository.branch">
+								{{ repository.branch || repository.name }}
+							</div>
+							<div
+								v-if="repository.branch"
+								class="mt-0.5 truncate text-[11px] font-normal text-slate-400"
+							>
+								{{ repository.name }}
+							</div>
+						</div>
 						<span class="font-mono text-[11px] text-slate-400">{{ repository.commits.length }}</span>
 					</div>
 					<button
