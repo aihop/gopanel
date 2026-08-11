@@ -21,7 +21,15 @@ func TestBuildNativeCodeCommandSupportsInstalledExecutors(t *testing.T) {
 		}
 	}
 	t.Setenv("PATH", binDir)
-	t.Setenv("HOME", t.TempDir())
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	claudeProjectDir := filepath.Join(homeDir, ".claude", "projects", "project")
+	if err := os.MkdirAll(claudeProjectDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(claudeProjectDir, "native-1.jsonl"), []byte("{}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	workDir := t.TempDir()
 	tests := []struct {
 		executorID      string

@@ -34,6 +34,9 @@ func buildNativeCodeCommand(session *model.AIDevSession) (*exec.Cmd, string, err
 	switch definition.ID {
 	case "claude":
 		args = append(args, claudeApprovalArgs(session.ApprovalPolicy)...)
+		if nativeSessionID != "" && !nativeClaudeSessionExists(nativeSessionID, commandEnv) {
+			nativeSessionID = ""
+		}
 		if nativeSessionID == "" {
 			nativeSessionID = uuid.NewString()
 			args = append(args, "--session-id", nativeSessionID)
