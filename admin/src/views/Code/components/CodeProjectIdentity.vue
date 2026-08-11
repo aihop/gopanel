@@ -11,7 +11,10 @@ const color = computed(() => codeProjectColor(props.projectId))
 </script>
 
 <template>
-	<span class="inline-flex min-w-0 items-center gap-1.5">
+	<span
+		class="inline-flex min-w-0 items-center gap-1.5 rounded-full border px-2 py-0.5"
+		:style="{ backgroundColor: `${color}14`, borderColor: `${color}2b` }"
+	>
 		<span
 			class="h-2 w-2 shrink-0 rounded-full"
 			aria-hidden="true"

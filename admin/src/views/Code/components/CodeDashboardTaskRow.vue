@@ -53,7 +53,7 @@ const executorLabel = computed(() =>
           class="shrink-0 text-slate-500"
         />
         <CodeProjectIdentity
-          class="dashboard-task-row__project max-w-[140px] shrink-0 rounded-full px-2 py-0.5 text-[11px]"
+          class="max-w-[140px] shrink-0 text-[11px] text-[var(--n-text-color-3)]"
           :project-id="task.projectId"
           :name="projectName || t('code.projectFallback')"
         />
@@ -166,11 +166,6 @@ const executorLabel = computed(() =>
 	background: color-mix(in srgb, var(--primary-color) 10%, transparent);
 }
 
-.dashboard-task-row--selected .dashboard-task-row__project {
-	color: var(--primary-color);
-	background: color-mix(in srgb, var(--primary-color) 16%, transparent);
-}
-
 /*
 	:not(--selected) 是必要的：`.row:hover` 的优先级(0,2,0)高于 `.row--selected`(0,1,0)，
 	不排除的话鼠标划过选中行反而会把它洗淡，正好和「锁住焦点」相反。
@@ -179,8 +174,4 @@ const executorLabel = computed(() =>
 	background: color-mix(in srgb, var(--primary-color) 7%, transparent);
 }
 
-.dashboard-task-row__project {
-	color: var(--n-text-color-3);
-	background: color-mix(in srgb, var(--n-border-color) 45%, transparent);
-}
 </style>
