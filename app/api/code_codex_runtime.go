@@ -83,7 +83,16 @@ func GetCodexRuntimeState(c fiber.Ctx) error {
 }
 
 func getCodexRuntimeState(session *model.AIDevSession) *codexRuntimeState {
-	if session.AgentName != "codex" {
+	if session == nil {
+		return nil
+	}
+	switch session.AgentName {
+	case "claude":
+		return getNativeClaudeRuntimeState(session)
+	case "opencode":
+		return getNativeOpenCodeRuntimeState(session)
+	case "codex":
+	default:
 		return nil
 	}
 	path := findCodexRuntimePath(session)

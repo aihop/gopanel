@@ -27,7 +27,7 @@ const formatTokens = (count: number) => new Intl.NumberFormat().format(count)
 
 <template>
 	<!--
-		终端顶部的状态条：codex 运行状态 + 连接/控制权操作 + token 计数。
+		终端顶部的状态条：原生执行器运行状态 + 连接/控制权操作 + token 计数。
 		从 CodeTerminal 拆出来是为了守住 500 行门禁 —— 它是纯展示，
 		所有状态由父组件传入，自己不碰 xterm 也不碰 WebSocket。
 	-->

@@ -28,7 +28,7 @@ const worktreeCapability = ref<CodeWorktreeCapability | null>(null)
 const capabilityLoading = ref(false)
 
 const projectOptions = computed(() => projects.value.map(project => ({ label: project.name, value: project.id })))
-const availableExecutors = computed(() => executors.value.filter(executor => executor.available && executor.id !== "terminal"))
+const availableExecutors = computed(() => executors.value.filter(executor => executor.available && executor.configured && executor.id !== "terminal"))
 const executorOptions = computed(() => availableExecutors.value.map(executor => ({
 	label: `${executor.name}${executor.version ? ` · ${executor.version}` : ""}`,
 	value: executor.id

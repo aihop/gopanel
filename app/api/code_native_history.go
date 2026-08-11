@@ -17,6 +17,26 @@ import (
 
 const nativeHistoryDuplicateWindow = 5 * time.Minute
 
+func supportsNativeCodeHistory(executorID string) bool {
+	return executorID == "codex" || executorID == "claude" || executorID == "opencode"
+}
+
+func getNativeCodeMessages(session *model.AIDevSession) ([]*model.AIMessage, error) {
+	if session == nil {
+		return nil, nil
+	}
+	switch session.AgentName {
+	case "codex":
+		return getNativeCodexMessages(session)
+	case "claude":
+		return getNativeClaudeMessages(session)
+	case "opencode":
+		return getNativeOpenCodeMessages(session)
+	default:
+		return nil, nil
+	}
+}
+
 func getNativeCodexMessages(session *model.AIDevSession) ([]*model.AIMessage, error) {
 	if session == nil || strings.TrimSpace(session.NativeSessionID) == "" {
 		return nil, nil

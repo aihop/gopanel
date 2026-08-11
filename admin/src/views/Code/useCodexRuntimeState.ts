@@ -4,7 +4,7 @@ import { getCodeSession, getCodexRuntimeState } from "@/api/modules/code"
 import type { CodexRuntimeState } from "@/api/interface/code"
 
 /**
- * Codex 运行状态轮询。
+ * 原生代码执行器运行状态轮询。
  *
  * 从 CodeTerminal 拆出来：它跟 xterm / WebSocket 那套没有任何耦合，
  * 走的是普通 HTTP 轮询，混在一个文件里只会把终端组件顶过 500 行门禁。
@@ -30,8 +30,7 @@ export function useCodexRuntimeState(sessionId: () => number | null | undefined,
 				const sessionResponse = await getCodeSession(currentSessionId)
 				executorId.value = sessionResponse.data.session.agentName || ""
 			}
-			// 只有 codex 有运行时状态文件，其它执行器直接关掉这块 UI，别白轮询。
-			if (executorId.value !== "codex") {
+			if (!["codex", "claude", "opencode"].includes(executorId.value)) {
 				runtimeSupported.value = false
 				return
 			}

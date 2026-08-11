@@ -49,6 +49,12 @@ type nativeCodeTerminalManager struct {
 	sessions map[uint]*nativeCodeTerminal
 }
 
+func (manager *nativeCodeTerminalManager) running(sessionID uint) bool {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	return manager.sessions[sessionID] != nil
+}
+
 var codeNativeTerminals = &nativeCodeTerminalManager{sessions: make(map[uint]*nativeCodeTerminal)}
 
 func supportsNativeCodeTerminal(executorID string) bool {
@@ -235,10 +241,10 @@ func (terminal *nativeCodeTerminal) wait(manager *nativeCodeTerminalManager) {
 		close(subscription.Events)
 	}
 	terminal.mu.Unlock()
-	close(terminal.done)
 	manager.mu.Lock()
 	delete(manager.sessions, terminal.sessionID)
 	manager.mu.Unlock()
+	close(terminal.done)
 	terminal.lease.Release()
 	_ = global.DB.Model(&model.AIDevSession{}).
 		Where("id = ? AND current_stage = ?", terminal.sessionID, "interactive").

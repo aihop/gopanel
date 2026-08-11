@@ -40,21 +40,24 @@ func GetCodeSessionHistory(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	if session.AgentName == "codex" {
-		if err := repairNativeCodexSessionBinding(session); err != nil {
-			return c.JSON(e.Fail(err))
+	if supportsNativeCodeHistory(session.AgentName) {
+		if session.AgentName == "codex" {
+			if err := repairNativeCodexSessionBinding(session); err != nil {
+				return c.JSON(e.Fail(err))
+			}
 		}
-		nativeMessages, nativeErr := getNativeCodexMessages(session)
+		if session.AgentName == "opencode" {
+			if err := repairNativeOpenCodeSessionBinding(session); err != nil {
+				return c.JSON(e.Fail(err))
+			}
+		}
+		nativeMessages, nativeErr := getNativeCodeMessages(session)
 		if nativeErr != nil {
 			return c.JSON(e.Fail(nativeErr))
 		}
-		// 固化到库里：之后 rollout 文件被清理或 codex 再改格式，历史都不会丢。
-		// 固化失败不影响本次展示，只记日志。
 		if persistErr := persistNativeCodexMessages(session.ID, nativeMessages); persistErr != nil {
-			global.LOG.Warnf("Persist native Codex history for session %d failed: %v", session.ID, persistErr)
+			global.LOG.Warnf("Persist native %s history for session %d failed: %v", session.AgentName, session.ID, persistErr)
 		}
-		// rollout 文件本身没有任务概念，整份记录归属会话当前任务。
-		// 查看更早的任务时不该把它混进去。
 		if taskID == 0 || uint(taskID) == session.LastTaskID {
 			messages = mergeCodeHistoryMessages(messages, nativeMessages)
 		}

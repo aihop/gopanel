@@ -7,6 +7,7 @@ const providerMessages = {
 		providerDefault: "沿用终端默认",
 		providerCustom: "本会话自定义",
 		providerDefaultHint: "使用主机现有的 {executor} 模型和认证配置。",
+		executorNeedsProvider: "主机默认连接尚未配置，请为本会话填写模型连接。",
 		providerCustomHint: "仅覆盖本次会话；API Key 将加密保存、仅注入子进程且不会回传。",
 		providerFieldRequired: "请填写 {field}",
 		providerField_baseUrl: "Base URL",
@@ -25,6 +26,7 @@ const providerMessages = {
 		providerDefault: "Use terminal default",
 		providerCustom: "Customize this session",
 		providerDefaultHint: "Uses the host's existing {executor} model and authentication configuration.",
+		executorNeedsProvider: "The host connection is not configured. Add a model connection for this session.",
 		providerCustomHint:
 			"Overrides only this session. The API key is encrypted, injected only into the child process, and never returned.",
 		providerFieldRequired: "Enter {field}",
