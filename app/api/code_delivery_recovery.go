@@ -218,6 +218,7 @@ func prepareCodeSessionDeliveryWithProgress(session *model.AIDevSession, userID 
 	if delivery.Status == codeDeliveryPrepared {
 		result, err = mergePreparedCodeDeliveryWithProgress(delivery, report)
 		if err != nil || result.Status == "conflict" {
+			result.Repositories = []codeRepositoryDeliveryResult{codeSingleRepositoryDeliveryResult(delivery, result)}
 			return delivery, result, err
 		}
 	}

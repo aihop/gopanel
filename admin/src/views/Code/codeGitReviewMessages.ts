@@ -92,6 +92,8 @@ export const codeGitReviewMessages = {
 			gitDeliveryStatus_unsaved: "本批已交付，后续修改尚未保存，请先保存修改",
 			gitDeliveryStatus_partial: "部分仓库已完成，请检查失败仓库后重试",
 			gitDeliveryStatus_conflict: "统一交付存在冲突",
+			gitConflictManualMerge:
+				"仓库 {repository} 的本地任务分支 {branch} 已保留，请人工合并到 {target} 并解决冲突。",
 			gitDeliveryStatus_failed: "统一交付失败，可再次点击重试",
 			gitDeliveryStage_queued: "等待仓库租约",
 			gitDeliveryStage_syncing: "准备本地基线",
@@ -235,6 +237,8 @@ export const codeGitReviewMessages = {
 			gitDeliveryStatus_unsaved: "This batch completed; save the newer working tree changes before delivery",
 			gitDeliveryStatus_partial: "Some repositories completed; inspect failed repositories and retry",
 			gitDeliveryStatus_conflict: "Delivery has conflicts",
+			gitConflictManualMerge:
+				"Local task branch {branch} was kept for repository {repository}. Merge it into {target} manually and resolve the conflicts.",
 			gitDeliveryStatus_failed: "Delivery failed; click again to retry",
 			gitDeliveryStage_queued: "Waiting for repository lease",
 			gitDeliveryStage_syncing: "Preparing local baseline",

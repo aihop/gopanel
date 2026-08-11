@@ -34,9 +34,16 @@ func TestCodeDeliveryConflictCanResumeFromIntegrationWorktree(t *testing.T) {
 	if _, err := runCodeGit(sourceDir, "commit", "-m", "feat: source conflict"); err != nil {
 		t.Fatal(err)
 	}
-	result, err := resumeCodeSessionDelivery(session, session.UserID)
+	_, result, err := prepareCodeSessionDeliveryWithProgress(session, session.UserID, nil)
 	if err != nil || result.Status != "conflict" || len(result.ConflictFiles) != 1 {
 		t.Fatalf("unexpected conflict result: %#v, %v", result, err)
+	}
+	if len(result.Repositories) != 1 || result.Repositories[0].Branch != session.WorktreeBranch ||
+		result.Repositories[0].TargetBranch != session.TargetBranch || result.Repositories[0].Status != "conflict" {
+		t.Fatalf("conflict result did not preserve the local task branch: %#v", result.Repositories)
+	}
+	if _, err := runCodeGit(sourceDir, "show-ref", "--verify", "refs/heads/"+session.WorktreeBranch); err != nil {
+		t.Fatalf("local task branch was not retained in the source repository: %v", err)
 	}
 	var delivery model.AICodeDelivery
 	if err := database.Where("session_id = ?", session.ID).First(&delivery).Error; err != nil {
@@ -69,6 +76,58 @@ func TestCodeDeliveryConflictCanResumeFromIntegrationWorktree(t *testing.T) {
 	content, err := os.ReadFile(filepath.Join(sourceDir, "README.md"))
 	if err != nil || string(content) != "resolved\n" {
 		t.Fatalf("resolved content was not delivered: %q, %v", content, err)
+	}
+}
+
+func TestCodeDeliveryConflictRecognizesManualSourceMerge(t *testing.T) {
+	database := withCodeGovernanceDB(t)
+	session, sourceDir := createDeliveryWorktree(t, 72)
+	session.ProjectID = 16
+	if err := database.Create(&model.AIProject{ID: session.ProjectID, Name: "manual-conflict", CreatorID: session.UserID}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := database.Create(session).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(session.WorkDir, "README.md"), []byte("session\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := saveCodeSessionWorktree(session, "feat: session conflict"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceDir, "README.md"), []byte("source\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(sourceDir, "add", "README.md"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(sourceDir, "commit", "-m", "feat: source conflict"); err != nil {
+		t.Fatal(err)
+	}
+	if _, result, err := prepareCodeSessionDeliveryWithProgress(session, session.UserID, nil); err != nil || result.Status != "conflict" {
+		t.Fatalf("unexpected conflict result: %#v, %v", result, err)
+	}
+	if _, err := runCodeGit(sourceDir, "merge", "--no-ff", "--no-edit", session.WorktreeBranch); err == nil {
+		t.Fatal("manual source merge should require conflict resolution")
+	}
+	if err := os.WriteFile(filepath.Join(sourceDir, "README.md"), []byte("manual resolution\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(sourceDir, "add", "README.md"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(sourceDir, "commit", "--no-edit"); err != nil {
+		t.Fatal(err)
+	}
+	result, err := resumeCodeSessionDelivery(session, session.UserID)
+	if err != nil || result.Status != "merged" {
+		t.Fatalf("manual source merge was not recognized: %#v, %v", result, err)
+	}
+	if result.Commit == "" {
+		t.Fatalf("manual source merge did not produce a delivery commit: %#v", result)
+	}
+	if conflicts := codeGitConflictFiles(sourceDir); len(conflicts) != 0 {
+		t.Fatalf("source repository retained conflicts after manual resolution: %#v", conflicts)
 	}
 }
 

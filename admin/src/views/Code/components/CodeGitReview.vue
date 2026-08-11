@@ -4,6 +4,7 @@ import { useIntervalFn } from "@vueuse/core"
 import { useI18n } from "vue-i18n"
 import { useMessage } from "naive-ui"
 import Icon from "@/components/common/Icon.vue"
+import CodeConflictManualMerge from "./CodeConflictManualMerge.vue"
 import CodeDeliveryPush from "./CodeDeliveryPush.vue"
 import CodeDeliveryFacts from "./CodeDeliveryFacts.vue"
 import CodeLocalSyncPending from "./CodeLocalSyncPending.vue"
@@ -84,6 +85,10 @@ const savedCommitCount = computed(() =>
 )
 const hasIsolation = computed(() => Boolean(worktreeBranch.value || isolationMode.value === "multi_worktree"))
 const deliveryActive = computed(() => ["queued", "running"].includes(deliveryJob.value?.status || ""))
+const conflictRepositories = computed(() => {
+	if (deliveryJob.value?.status !== "conflict") return []
+	return (deliveryJob.value.repositories || []).filter(repository => repository.status === "conflict")
+})
 const canSave = computed(() => Boolean(hasIsolation.value && !deliveryActive.value && hasChanges.value))
 const deliveryStatusLabel = computed(() => {
 	if (!deliveryJob.value) return ""
@@ -349,12 +354,9 @@ useIntervalFn(() => {
 					<div v-if="deliveryJob.errorMessage" class="mt-2 break-words text-xs">
 						{{ deliveryJob.errorMessage }}
 					</div>
+					<CodeConflictManualMerge :repositories="conflictRepositories" />
 					<CodeDeliveryFacts :facts="deliveryJob.facts" />
 				</n-alert>
-				<!--
-					多仓交付的「主仓待同步」提示。以前只挂在单仓路径（CodeDeliveryPush）上，
-					而多仓恰恰是本地快进最容易失败的场景，结果最该看到提示的地方反而没有。
-				-->
 				<CodeLocalSyncPending
 					v-if="deliveryJob?.repositories?.length"
 					:repositories="deliveryJob.repositories"

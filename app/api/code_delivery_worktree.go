@@ -80,6 +80,11 @@ func prepareCodeDeliveryMergeWorktree(delivery *model.AICodeDelivery, targetComm
 		return err
 	}
 	if conflicts := codeGitConflictFiles(delivery.DeliveryWorkDir); len(conflicts) > 0 {
+		if _, err := runCodeGit(
+			delivery.SourceWorkDir, "merge-base", "--is-ancestor", delivery.WorktreeCommit, targetCommit,
+		); err == nil {
+			return resetCodeDeliveryWorktree(delivery, targetCommit)
+		}
 		return nil
 	}
 	status, err := runCodeGit(delivery.DeliveryWorkDir, "status", "--porcelain")
