@@ -41,4 +41,26 @@ void main() {
       isTrue,
     );
   });
+
+  test('Code instruction drafts are isolated by server and session', () {
+    final firstServer = buildCodeInstructionDraftKey(
+      'https://one.example.com',
+      12,
+    );
+    final secondServer = buildCodeInstructionDraftKey(
+      'https://two.example.com',
+      12,
+    );
+
+    expect(firstServer, isNot(secondServer));
+    expect(firstServer, isNot(buildCodeInstructionDraftKey(null, 12)));
+    expect(
+      firstServer,
+      isNot(buildCodeInstructionDraftKey('https://one.example.com', 13)),
+    );
+    expect(
+      firstServer,
+      buildCodeInstructionDraftKey(' HTTPS://ONE.EXAMPLE.COM ', 12),
+    );
+  });
 }

@@ -1,9 +1,8 @@
 package api
 
 import (
-	"fmt"
-	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/global"
@@ -32,6 +31,30 @@ type codeTaskSummary struct {
 	DeliveryAttempt       int    `json:"deliveryAttempt"`
 	DeliveryResultType    string `json:"deliveryResultType,omitempty"`
 	DeliveryError         string `json:"deliveryError,omitempty"`
+	// 会话当前阶段（executing / awaiting_approval / instruction_queued / completed…）。
+	// 比任务 status 细一档，用来回答「卡在哪一步」。
+	Stage string `json:"stage,omitempty"`
+	// 执行器最后说的那句话（截断）。对话已经由 code_native_history 固化进 ai_messages，
+	// 所以拿这个不用碰终端、不用解析 codex 的 rollout 文件，一次 SQL 就有。
+	LastAgentMessage string     `json:"lastAgentMessage,omitempty"`
+	LastActivityAt   *time.Time `json:"lastActivityAt,omitempty"`
+}
+
+// 列表里只需要一眼扫过的摘要，整段回复没必要传给前端。
+const codeTaskAgentMessageLimit = 160
+
+func truncateCodeTaskMessage(content string) string {
+	trimmed := strings.TrimSpace(content)
+	if trimmed == "" {
+		return ""
+	}
+	// 折叠换行：多行回复在单行行内显示时，换行只会变成一堆空白。
+	trimmed = strings.Join(strings.Fields(trimmed), " ")
+	runes := []rune(trimmed)
+	if len(runes) <= codeTaskAgentMessageLimit {
+		return trimmed
+	}
+	return string(runes[:codeTaskAgentMessageLimit]) + "…"
 }
 
 type codeTaskListItem struct {
@@ -56,12 +79,6 @@ type codeTaskDurationSummaryRow struct {
 	PendingRuns     int64
 }
 
-type codeTaskDiffStats struct {
-	Additions int
-	Deletions int
-	Files     int
-}
-
 func buildCodeTaskListItems(tasks []*model.AITask, includeGit bool) ([]codeTaskListItem, error) {
 	items := make([]codeTaskListItem, 0, len(tasks))
 	if len(tasks) == 0 {
@@ -80,6 +97,9 @@ func buildCodeTaskListItems(tasks []*model.AITask, includeGit bool) ([]codeTaskL
 		return nil, err
 	}
 	if err := loadCodeTaskDeliverySummaries(sessionIDs, summaries, tasks); err != nil {
+		return nil, err
+	}
+	if err := loadCodeTaskActivitySummaries(tasks, sessionIDs, summaries); err != nil {
 		return nil, err
 	}
 	if includeGit {
@@ -167,6 +187,78 @@ func loadCodeTaskRunSummaries(taskIDs []uint, summaries map[uint]codeTaskSummary
 	return nil
 }
 
+// loadCodeTaskActivitySummaries 补上「现在卡在哪一步」和「执行器最后说了什么」。
+//
+// 两条纯 SQL，刻意不放在 includeGit 门控里：git 汇总要按会话读工作区算 diff（磁盘 IO），
+// 这两条只是走索引的批量查询，每轮都带得起。
+//
+// 另一条没走的路：codex 的 lastAssistantPreview 信息更好，但它要在磁盘上定位并解析
+// rollout 文件（见 getCodexRuntimeState），还只对 codex 执行器有效 ——
+// 列表里 N 条任务就是 N 次文件解析，扛不住。ai_messages 里已经固化了同样的对话。
+func loadCodeTaskActivitySummaries(tasks []*model.AITask, sessionIDs []uint, summaries map[uint]codeTaskSummary) error {
+	taskIDs := make([]uint, 0, len(tasks))
+	for _, task := range tasks {
+		taskIDs = append(taskIDs, task.ID)
+	}
+	if len(taskIDs) == 0 {
+		return nil
+	}
+
+	if len(sessionIDs) > 0 {
+		type sessionStageRow struct {
+			ID                uint
+			CurrentStage      string
+			LastInstructionAt *time.Time
+		}
+		var stages []sessionStageRow
+		if err := global.DB.Model(&model.AIDevSession{}).
+			Select("id, current_stage, last_instruction_at").
+			Where("id IN ?", sessionIDs).Scan(&stages).Error; err != nil {
+			return err
+		}
+		stagesBySession := make(map[uint]sessionStageRow, len(stages))
+		for _, row := range stages {
+			stagesBySession[row.ID] = row
+		}
+		for _, task := range tasks {
+			row, exists := stagesBySession[task.SessionID]
+			if !exists {
+				continue
+			}
+			summary := summaries[task.ID]
+			summary.Stage = row.CurrentStage
+			summary.LastActivityAt = row.LastInstructionAt
+			summaries[task.ID] = summary
+		}
+	}
+
+	// 每个任务取最新一条 agent 消息，写法和 loadCodeTaskRunSummaries 里取最新 run 一致。
+	type latestMessageRow struct {
+		TaskID    uint
+		Content   string
+		CreatedAt time.Time
+	}
+	var latestMessages []latestMessageRow
+	rankedMessages := global.DB.Model(&model.AIMessage{}).
+		Select("task_id, content, created_at, ROW_NUMBER() OVER (PARTITION BY task_id ORDER BY created_at DESC, id DESC) AS row_number").
+		Where("task_id IN ? AND role = ?", taskIDs, "agent")
+	if err := global.DB.Table("(?) AS ranked_messages", rankedMessages).
+		Select("task_id, content, created_at").Where("row_number = 1").Scan(&latestMessages).Error; err != nil {
+		return err
+	}
+	for _, row := range latestMessages {
+		summary := summaries[row.TaskID]
+		summary.LastAgentMessage = truncateCodeTaskMessage(row.Content)
+		// 有实际输出时，它比 last_instruction_at 更能代表「最后一次动静」。
+		if summary.LastActivityAt == nil || row.CreatedAt.After(*summary.LastActivityAt) {
+			createdAt := row.CreatedAt
+			summary.LastActivityAt = &createdAt
+		}
+		summaries[row.TaskID] = summary
+	}
+	return nil
+}
+
 func codeTaskTokenUsageStatus(row codeTaskDurationSummaryRow) string {
 	knownRuns := row.RecordedRuns + row.RecoveredRuns
 	missingRuns := row.UnavailableRuns + row.PendingRuns
@@ -183,233 +275,4 @@ func codeTaskTokenUsageStatus(row codeTaskDurationSummaryRow) string {
 		return codeTokenUsagePending
 	}
 	return codeTokenUsageUnavailable
-}
-
-func loadCodeTaskGitSummaries(tasks []*model.AITask, sessionIDs []uint, summaries map[uint]codeTaskSummary, diffStatsCache map[string]codeTaskDiffStats) error {
-	if len(sessionIDs) == 0 {
-		return nil
-	}
-	var sessions []model.AIDevSession
-	if err := global.DB.Select("id, work_dir, source_work_dir, worktree_branch, base_commit, isolation_mode").Where("id IN ?", sessionIDs).Find(&sessions).Error; err != nil {
-		return err
-	}
-	var deliveries []model.AICodeDelivery
-	if err := global.DB.Where("session_id IN ?", sessionIDs).Find(&deliveries).Error; err != nil {
-		return err
-	}
-	var repositories []model.AIDevSessionRepository
-	if err := global.DB.Where("session_id IN ?", sessionIDs).Find(&repositories).Error; err != nil {
-		return err
-	}
-	sessionsByID := make(map[uint]model.AIDevSession, len(sessions))
-	for _, session := range sessions {
-		sessionsByID[session.ID] = session
-	}
-	deliveriesBySession := make(map[uint]model.AICodeDelivery, len(deliveries))
-	for _, delivery := range deliveries {
-		deliveriesBySession[delivery.SessionID] = delivery
-	}
-	repositoriesBySession := make(map[uint][]model.AIDevSessionRepository)
-	for _, repository := range repositories {
-		repositoriesBySession[repository.SessionID] = append(repositoriesBySession[repository.SessionID], repository)
-	}
-	for _, task := range tasks {
-		summary := summaries[task.ID]
-		session := sessionsByID[task.SessionID]
-		summary.Branch = session.WorktreeBranch
-		if session.IsolationMode == codeIsolationMultiWorktree || len(repositoriesBySession[task.SessionID]) > 0 {
-			applyCodeTaskRepositorySummaries(&summary, repositoriesBySession[task.SessionID], diffStatsCache)
-		} else if delivery, exists := deliveriesBySession[task.SessionID]; exists {
-			applyCodeTaskDeliverySummary(&summary, delivery, diffStatsCache)
-		} else if summary.Branch != "" {
-			applyCodeTaskWorktreeSummary(&summary, session.WorkDir, session.BaseCommit, diffStatsCache)
-		}
-		summaries[task.ID] = summary
-	}
-	return nil
-}
-
-func applyCodeTaskDeliverySummary(summary *codeTaskSummary, delivery model.AICodeDelivery, diffStatsCache map[string]codeTaskDiffStats) {
-	summary.Branch = delivery.WorktreeBranch
-	summary.GitStatus = codeTaskDeliveryStatus(delivery.Status, delivery.PushStatus)
-	if summary.GitStatus == "push_failed" {
-		summary.GitError = delivery.PushError
-	}
-	// 优先用交付快照时固化的统计：worktree 提交可能已被回收，实时 diff 会静默算不出来。
-	if delivery.StatFiles > 0 {
-		applyCodeTaskDiffStats(summary, codeTaskDiffStats{
-			Additions: delivery.StatAdditions, Deletions: delivery.StatDeletions, Files: delivery.StatFiles,
-		})
-		return
-	}
-	if delivery.BaseCommit == "" || delivery.WorktreeCommit == "" {
-		return
-	}
-	stats, ok := loadCodeTaskDiffStats(delivery.SourceWorkDir, delivery.BaseCommit, delivery.WorktreeCommit, diffStatsCache)
-	if ok {
-		applyCodeTaskDiffStats(summary, stats)
-	}
-}
-
-func applyCodeTaskRepositorySummaries(summary *codeTaskSummary, repositories []model.AIDevSessionRepository, diffStatsCache map[string]codeTaskDiffStats) {
-	if len(repositories) == 0 {
-		return
-	}
-	statuses := make([]string, 0, len(repositories))
-	for _, repository := range repositories {
-		if summary.Branch == "" {
-			summary.Branch = repository.Branch
-		}
-		repositoryStatus := codeTaskDeliveryStatus(repository.Status, repository.PushStatus)
-		if repositoryStatus == "push_failed" && summary.GitError == "" {
-			summary.GitError = repository.PushError
-		}
-		if repository.WorktreeCommit == "" && repositoryStatus == "working" {
-			worktreeSummary := codeTaskSummary{GitStatus: repositoryStatus}
-			applyCodeTaskWorktreeSummary(&worktreeSummary, repository.WorktreeDir, repository.BaseCommit, diffStatsCache)
-			repositoryStatus = worktreeSummary.GitStatus
-			if worktreeSummary.HasDiff {
-				applyCodeTaskDiffStats(summary, codeTaskDiffStats{
-					Additions: worktreeSummary.Additions,
-					Deletions: worktreeSummary.Deletions,
-					Files:     worktreeSummary.ChangedFiles,
-				})
-			}
-		}
-		statuses = append(statuses, repositoryStatus)
-		// 优先用交付快照时固化的统计，理由同单仓路径。
-		if repository.StatFiles > 0 {
-			applyCodeTaskDiffStats(summary, codeTaskDiffStats{
-				Additions: repository.StatAdditions, Deletions: repository.StatDeletions,
-				Files: repository.StatFiles,
-			})
-			continue
-		}
-		if repository.BaseCommit == "" || repository.WorktreeCommit == "" {
-			continue
-		}
-		if stats, ok := loadCodeTaskDiffStats(repository.SourceDir, repository.BaseCommit, repository.WorktreeCommit, diffStatsCache); ok {
-			applyCodeTaskDiffStats(summary, stats)
-		}
-	}
-	summary.GitStatus = aggregateCodeTaskGitStatuses(statuses)
-	if summary.GitStatus != "push_failed" {
-		summary.GitError = ""
-	}
-}
-
-func applyCodeTaskWorktreeSummary(summary *codeTaskSummary, worktreeDir, baseCommit string, diffStatsCache map[string]codeTaskDiffStats) {
-	summary.GitStatus = "working"
-	if strings.TrimSpace(worktreeDir) == "" || strings.TrimSpace(baseCommit) == "" {
-		return
-	}
-	headCommit, err := runCodeGit(worktreeDir, "rev-parse", "HEAD")
-	if err != nil || headCommit == baseCommit {
-		return
-	}
-	status, err := runCodeGit(worktreeDir, "status", "--porcelain")
-	if err != nil || strings.TrimSpace(status) != "" {
-		return
-	}
-	summary.GitStatus = "committed"
-	if stats, ok := loadCodeTaskDiffStats(worktreeDir, baseCommit, headCommit, diffStatsCache); ok {
-		applyCodeTaskDiffStats(summary, stats)
-	}
-}
-
-func codeTaskDeliveryStatus(status, pushStatus string) string {
-	if status == "conflict" {
-		return "conflict"
-	}
-	if pushStatus == codePushFailed {
-		return "push_failed"
-	}
-	if pushStatus == "pushed" {
-		return "pushed"
-	}
-	switch status {
-	case codeDeliveryCompleted, codeDeliveryMerged, codeDeliveryWorktreeCleaned:
-		return "merged"
-	case codeDeliveryPrepared:
-		return "committed"
-	default:
-		return "working"
-	}
-}
-
-func aggregateCodeTaskGitStatuses(statuses []string) string {
-	if len(statuses) == 0 {
-		return ""
-	}
-	for _, candidate := range []string{"conflict", "push_failed", "working", "committed", "merged"} {
-		for _, status := range statuses {
-			if status == candidate {
-				return candidate
-			}
-		}
-	}
-	return "pushed"
-}
-
-// codeTaskDiffExcludedFiles 是统计任务产出行数时排除的机器生成文件。
-// 一次依赖安装刷新 lock 文件就能贡献上万行，让「这个任务改了多少代码」完全失真。
-// 只排除公认由工具生成的 lock 文件：dist/、vendor/ 之类一旦进了版本库，
-// 说明项目有意跟踪它们，排除掉反而会漏算真实改动。
-var codeTaskDiffExcludedFiles = []string{
-	"package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "pnpm-lock.yaml",
-	"go.sum", "Cargo.lock", "composer.lock", "Gemfile.lock",
-	"Podfile.lock", "poetry.lock", "Pipfile.lock", "pubspec.lock",
-}
-
-// codeTaskDiffPathspec 生成排除用的 pathspec。
-// 前缀 * 让匹配跨目录层级——裸文件名只会匹配仓库根目录下的同名文件，
-// 子目录里的 lock 文件会漏网。
-func codeTaskDiffPathspec() []string {
-	pathspec := make([]string, 0, len(codeTaskDiffExcludedFiles)+1)
-	pathspec = append(pathspec, "--")
-	for _, name := range codeTaskDiffExcludedFiles {
-		pathspec = append(pathspec, ":(exclude)*"+name)
-	}
-	return pathspec
-}
-
-func loadCodeTaskDiffStats(root, baseCommit, headCommit string, cache map[string]codeTaskDiffStats) (codeTaskDiffStats, bool) {
-	root = filepath.Clean(strings.TrimSpace(root))
-	if root == "." || baseCommit == "" || headCommit == "" {
-		return codeTaskDiffStats{}, false
-	}
-	cacheKey := fmt.Sprintf("%s\x00%s\x00%s", root, baseCommit, headCommit)
-	if cached, exists := cache[cacheKey]; exists {
-		return cached, true
-	}
-	args := append(
-		[]string{"diff", "--numstat", "--no-renames", baseCommit + ".." + headCommit},
-		codeTaskDiffPathspec()...,
-	)
-	output, err := runCodeGit(root, args...)
-	if err != nil {
-		return codeTaskDiffStats{}, false
-	}
-	stats := codeTaskDiffStats{}
-	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
-		if strings.TrimSpace(line) == "" {
-			continue
-		}
-		stats.Files++
-		added, deleted := parseCodeGitNumstat(line)
-		stats.Additions += added
-		stats.Deletions += deleted
-	}
-	cache[cacheKey] = stats
-	return stats, true
-}
-
-func applyCodeTaskDiffStats(summary *codeTaskSummary, stats codeTaskDiffStats) {
-	if stats.Files == 0 {
-		return
-	}
-	summary.HasDiff = true
-	summary.Additions += stats.Additions
-	summary.Deletions += stats.Deletions
-	summary.ChangedFiles += stats.Files
 }

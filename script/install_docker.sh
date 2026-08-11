@@ -30,7 +30,6 @@ mirror_list_registry=(
     "毫秒镜像（推荐）@docker.1ms.run"
     "Docker Proxy@dockerproxy.net"
     "DaoCloud 道客@docker.m.daocloud.io"
-    "1Panel 镜像@docker.1panel.live"
     "阿里云（杭州）@registry.cn-hangzhou.aliyuncs.com"
     "阿里云（上海）@registry.cn-shanghai.aliyuncs.com"
     "阿里云（青岛）@registry.cn-qingdao.aliyuncs.com"
@@ -60,7 +59,6 @@ mirror_list_registry=(
 
 ## 赞助商广告
 SPONSOR_ADS=(
-    "1Panel · Linux 面板｜极简运维 ➜  \033[3mhttps://1panel.cn\033[0m"
     "多途云 · 智能化防护，每一次连接皆在安全之下 ➜  \033[3mhttps://www.duotuyun.com\033[0m"
     "毫秒镜像 · 专为中国开发者提供Docker镜像加速下载服务 ➜  \033[3mhttps://1ms.run\033[0m"
     "速拓云 · 国内高防云28元/月｜香港云100M优化线路9元/月 ➜  \033[3mhttps://www.sutuoyun.com\033[0m"

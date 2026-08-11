@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, onBeforeUnmount, nextTick } from "vue"
+import { computed, ref, onMounted, onBeforeUnmount, onActivated, onDeactivated, nextTick, watch } from "vue"
 import { FitAddon } from "@xterm/addon-fit"
 import { Terminal } from "@xterm/xterm"
 import "@xterm/xterm/css/xterm.css"
 import { useAuthStore } from "@/store/auth"
 import { useI18n } from "vue-i18n"
-import { getCodeSession, getCodexRuntimeState } from "@/api/modules/code"
-import type { CodexRuntimeState } from "@/api/interface/code"
+import { getCodeSession } from "@/api/modules/code"
 import { codeProjectMessages } from "@/i18n/locales/codeProject"
+import { useCodexRuntimeState } from "../useCodexRuntimeState"
+import CodeTerminalStatusBar from "./CodeTerminalStatusBar.vue"
+import { isDeliveredCodeSession } from "./codeTerminalSession"
 
 const authStore = useAuthStore()
 const { t } = useI18n({ messages: codeProjectMessages })
@@ -20,6 +22,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
 	(e: "task-created", taskId: number): void
+	(e: "new-session"): void
 }>()
 
 const terminalRef = ref<HTMLElement | null>(null)
@@ -37,16 +40,50 @@ let pendingResyncId = ""
 let receivedServerMessage = false
 let initialReconnectAttempts = 0
 let autoTakeControlPending = Boolean(props.autoTakeControl)
+let activatedOnce = false
+// 实例会被 KeepAlive 缓存复用：切走时 DOM 进隐藏容器但 WebSocket 不断，
+// isActive 用来把「只有在屏幕上才该做」的事（fit、codex 状态轮询）关掉。
+const isActive = ref(true)
 const nativeProtocol = ref(false)
 const hasTerminalControl = ref(true)
 const reconnecting = ref(false)
 const connectionFailed = ref(false)
-const runtimeState = ref<CodexRuntimeState | null>(null)
-const runtimeLoading = ref(false)
-const runtimeError = ref(false)
-const runtimeSupported = ref(true)
-const executorId = ref("")
-let runtimePollInterval: ReturnType<typeof setInterval> | null = null
+const sessionDelivered = ref(false)
+const {
+	runtimeState,
+	runtimeError,
+	runtimeSupported,
+	executorId,
+	loadRuntimeState,
+	startRuntimePolling,
+	stopRuntimePolling,
+	disableRuntimeState,
+} = useCodexRuntimeState(() => props.sessionId, isActive)
+
+const markSessionDelivered = () => {
+	sessionDelivered.value = true
+	hasTerminalControl.value = false
+	reconnecting.value = false
+	if (pingInterval) clearInterval(pingInterval)
+	pingInterval = null
+	disableRuntimeState()
+	resizeObserver?.disconnect()
+	if (term) term.dispose()
+}
+
+const refreshDeliveredSession = async () => {
+	if (!props.sessionId) return false
+	try {
+		const response = await getCodeSession(props.sessionId)
+		const session = response.data.session
+		executorId.value = session.agentName || ""
+		if (!isDeliveredCodeSession(session.status)) return false
+		markSessionDelivered()
+		return true
+	} catch {
+		return false
+	}
+}
 
 const sendTerminalAck = (sequence: number) => {
 	if (ws?.readyState === WebSocket.OPEN && sequence > 0) {
@@ -67,40 +104,8 @@ const requestTerminalResync = () => {
 	pendingResyncId = `${Date.now()}-${++resyncRequest}`
 	ws.send(JSON.stringify({
 		type: "resync",
-		data: JSON.stringify({ sequence: lastSequence, requestId: pendingResyncId })
+		data: JSON.stringify({ sequence: lastSequence, requestId: pendingResyncId }),
 	}))
-}
-
-const runtimeTagType = computed(() => {
-	if (runtimeState.value?.responseState === "failed") return "error"
-	if (runtimeState.value?.responseState === "needsInput") return "warning"
-	if (runtimeState.value?.responseState === "completed") return "success"
-	return "info"
-})
-
-const formatTokens = (count: number) => new Intl.NumberFormat().format(count)
-
-const loadRuntimeState = async () => {
-	if (!props.sessionId || runtimeLoading.value || !runtimeSupported.value) return
-	runtimeLoading.value = true
-	try {
-		if (!executorId.value) {
-			const sessionResponse = await getCodeSession(props.sessionId)
-			executorId.value = sessionResponse.data.session.agentName || ""
-		}
-		if (executorId.value !== "codex") {
-			runtimeSupported.value = false
-			return
-		}
-		const response = await getCodexRuntimeState(props.sessionId)
-		runtimeState.value = response.data
-		runtimeSupported.value = response.data !== null
-		runtimeError.value = false
-	} catch {
-		runtimeError.value = true
-	} finally {
-		runtimeLoading.value = false
-	}
 }
 
 const initTerminal = () => {
@@ -247,8 +252,10 @@ const connectWebSocket = () => {
 		if (!connectionFailed.value && (nativeProtocol.value || canRetryInitialConnection) && !reconnectTimer) {
 			initialReconnectAttempts++
 			reconnecting.value = true
-			reconnectTimer = setTimeout(() => {
+			reconnectTimer = setTimeout(async () => {
 				reconnectTimer = null
+				if (await refreshDeliveredSession()) return
+				if (intentionalClose) return
 				connectWebSocket()
 			}, 1500)
 		}
@@ -280,22 +287,31 @@ const takeTerminalControl = () => {
 }
 
 const handleResize = () => {
-	if (fitAddon) {
-		try {
-			fitAddon.fit()
-			if (ws && ws.readyState === WebSocket.OPEN) {
-				ws.send(JSON.stringify({ type: "resize", data: JSON.stringify({ cols: term.cols, rows: term.rows }) }))
-			}
-		} catch (e) {
-			console.warn("Fit addon resize error", e)
+	if (!fitAddon) return
+	// 实例被缓存起来时 DOM 会被挪进隐藏容器，ResizeObserver 会以 0×0 触发一次。
+	// 这时 fit() 算出来的 cols/rows 是垃圾值，发给后端会把 PTY 尺寸改坏，所以直接跳过。
+	if (!isActive.value) return
+	const element = terminalRef.value
+	if (!element || element.clientWidth === 0 || element.clientHeight === 0) return
+	try {
+		fitAddon.fit()
+		if (ws && ws.readyState === WebSocket.OPEN) {
+			ws.send(JSON.stringify({ type: "resize", data: JSON.stringify({ cols: term.cols, rows: term.rows }) }))
 		}
+	} catch (e) {
+		console.warn("Fit addon resize error", e)
 	}
 }
 
-onMounted(() => {
+const initializeSessionTerminal = async () => {
+	if (await refreshDeliveredSession()) return
+	if (intentionalClose) return
 	initTerminal()
-	void loadRuntimeState()
-	runtimePollInterval = setInterval(() => void loadRuntimeState(), 3000)
+	startRuntimePolling()
+}
+
+onMounted(() => {
+	void initializeSessionTerminal()
 	window.addEventListener("resize", handleResize)
 	if (terminalRef.value && typeof ResizeObserver !== "undefined") {
 		resizeObserver = new ResizeObserver(() => {
@@ -305,11 +321,40 @@ onMounted(() => {
 	}
 })
 
+// 接管终端不再靠重建实例：连接是活的，直接在这条连接上发 take_control。
+// 走不到 ws 的情况（还没连上）落回连接参数，跟首次挂载的行为一致。
+watch(
+	() => props.autoTakeControl,
+	requested => {
+		if (!requested || sessionDelivered.value) return
+		if (ws?.readyState === WebSocket.OPEN) takeTerminalControl()
+		else autoTakeControlPending = true
+	},
+)
+
+// 缓存复用的两个 Vue 生命周期。挂载那一次不会走 onActivated 之外的路径，
+// 所以第一次激活直接跳过，避免和 onMounted 里的初始化重复。
+onActivated(() => {
+	isActive.value = true
+	if (!activatedOnce) {
+		activatedOnce = true
+		return
+	}
+	void nextTick(() => {
+		handleResize()
+		void loadRuntimeState()
+	})
+})
+
+onDeactivated(() => {
+	isActive.value = false
+})
+
 onBeforeUnmount(() => {
 	window.removeEventListener("resize", handleResize)
 	resizeObserver?.disconnect()
 	if (pingInterval) clearInterval(pingInterval)
-	if (runtimePollInterval) clearInterval(runtimePollInterval)
+	stopRuntimePolling()
 	if (reconnectTimer) clearTimeout(reconnectTimer)
 	intentionalClose = true
 	if (ws) ws.close()
@@ -318,51 +363,44 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-	<div class="flex h-full min-h-0 w-full flex-col bg-[#1e1e1e]">
-		<div
-			v-if="sessionId && runtimeSupported"
-			class="flex min-h-12 items-center justify-between gap-3 border-b border-slate-700 bg-slate-900 px-4 py-2 text-slate-300"
-		>
-			<div class="flex min-w-0 items-center gap-3">
-				<n-tag v-if="runtimeState" :type="runtimeTagType" size="small" round :bordered="false">
-					{{ t(`code.codexState_${runtimeState.responseState}`) }}
-				</n-tag>
-				<span v-else class="text-xs text-slate-400">
-					{{ t(runtimeError ? "code.codexRuntimeUnavailable" : "code.codexRuntimeStarting") }}
-				</span>
-				<span v-if="runtimeState?.awaitingApproval" class="truncate text-xs font-medium text-amber-300">
-					{{ t("code.codexApprovalHint") }}
-				</span>
-				<span v-else-if="runtimeState?.lastAssistantPreview" class="truncate text-xs text-slate-400">
-					{{ runtimeState.lastAssistantPreview }}
-				</span>
-			</div>
-			<div class="flex shrink-0 items-center gap-3 text-xs text-slate-400">
-				<n-button v-if="connectionFailed && !reconnecting" size="tiny" type="warning" @click="reconnectTerminal">
-					{{ t("code.reconnectTerminal") }}
-				</n-button>
-				<n-tag v-else-if="reconnecting" size="small" type="warning" :bordered="false">
-					{{ t("code.terminalReconnecting") }}
-				</n-tag>
-				<n-tag v-else-if="nativeProtocol && hasTerminalControl" size="small" type="success" :bordered="false">
-					{{ t("code.terminalControlling") }}
-				</n-tag>
-				<n-button v-else-if="nativeProtocol" size="tiny" type="warning" @click="takeTerminalControl">
-					{{ t("code.takeTerminalControl") }}
-				</n-button>
-				<template v-if="runtimeState">
-					<span v-if="runtimeState.model">{{ runtimeState.model }}</span>
-					<span v-if="runtimeState.totalTokens">
-						{{ t("code.codexTokenUsage", { count: formatTokens(runtimeState.totalTokens) }) }}
-					</span>
-					<span v-if="runtimeState.cachedInputTokens" class="hidden md:inline">
-						{{ t("code.codexCachedTokens", { count: formatTokens(runtimeState.cachedInputTokens) }) }}
-					</span>
-				</template>
-			</div>
-		</div>
-		<div ref="terminalRef" class="min-h-0 w-full flex-1"></div>
-	</div>
+  <div class="flex h-full min-h-0 w-full flex-col bg-[#1e1e1e]">
+    <CodeTerminalStatusBar
+      v-if="sessionId && runtimeSupported"
+      :runtime-state="runtimeState"
+      :runtime-error="runtimeError"
+      :native-protocol="nativeProtocol"
+      :has-control="hasTerminalControl"
+      :reconnecting="reconnecting"
+      :connection-failed="connectionFailed"
+      @reconnect="reconnectTerminal"
+      @take-control="takeTerminalControl"
+    />
+    <div
+      v-if="sessionDelivered"
+      class="flex min-h-0 flex-1 items-center justify-center p-6 text-center text-slate-200"
+    >
+      <div class="max-w-md">
+        <div class="text-base font-medium">
+          {{ t("code.deliveredSessionTerminalClosed") }}
+        </div>
+        <div class="mt-2 text-sm text-slate-400">
+          {{ t("code.deliveredSessionTerminalHint") }}
+        </div>
+        <n-button
+          class="mt-5"
+          type="primary"
+          @click="emit('new-session')"
+        >
+          {{ t("code.createNextSession") }}
+        </n-button>
+      </div>
+    </div>
+    <div
+      v-else
+      ref="terminalRef"
+      class="min-h-0 w-full flex-1"
+    />
+  </div>
 </template>
 
 <style scoped>

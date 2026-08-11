@@ -100,13 +100,13 @@ export function createCodeSession(
 		includeUncommitted: boolean
 		provider?: CodeExecutorConfig
 	},
-	messages: { initializationFailed: string; initializationTimedOut: string }
+	messages: { initializationFailed: string; initializationTimedOut: string },
 ) {
 	return http.post<CodeSession>("/code/sessions", data).then(async response => {
 		if (response.data.status !== "initializing") return response
 		await waitForCodeSessionInitialization(
 			() => http.get<import("../interface/code").CodeSessionInitialization>(`/code/sessions/${response.data.id}/initialization`).then(result => result.data),
-			{ failed: messages.initializationFailed, timedOut: messages.initializationTimedOut }
+			{ failed: messages.initializationFailed, timedOut: messages.initializationTimedOut },
 		)
 		const initialized = await getCodeSession(response.data.id)
 		return { ...response, data: initialized.data.session }
@@ -125,7 +125,7 @@ export function updateCodeSessionApprovalPolicy(sessionId: number, approvalPolic
 export function getCodeSessionHistory(sessionId: number, taskId?: number) {
 	return http.get<CodeSessionHistory>(
 		`/code/sessions/${sessionId}/history`,
-		taskId ? { taskId } : undefined
+		taskId ? { taskId } : undefined,
 	)
 }
 
@@ -142,7 +142,7 @@ export function getCodeSessionState(sessionId: number) {
 			previews: response.data.previews || [],
 			timelineEvents: response.data.timelineEvents || [],
 			changedFiles: response.data.changedFiles || [],
-		}
+		},
 	}))
 }
 
@@ -212,8 +212,14 @@ export function retryCodeInstruction(instructionId: number) {
 
 // === Task APIs ===
 
-// 获取任务列表
-export function getAITasks(params: { page: number; limit: number; projectId?: number; includeGit?: boolean }) {
+// 获取任务列表。archived 传 1 时只列归档的，不传则只列没归档的。
+export function getAITasks(params: {
+	page: number
+	limit: number
+	projectId?: number
+	includeGit?: boolean
+	archived?: 1
+}) {
 	return http.get<{ items: CodeTaskListItem[]; total: number }>("/code/tasks", params)
 }
 
@@ -225,6 +231,11 @@ export function getAITaskMessages(taskId: number) {
 // 重命名任务
 export function updateAITask(taskId: number, title: string) {
 	return http.put(`/code/tasks/${taskId}`, { title })
+}
+
+// 归档 / 取消归档。归档后任务不再出现在任务列表里，但数据保留，可以在归档列表里找回。
+export function setAITaskArchived(taskId: number, archived: boolean) {
+	return http.put(`/code/tasks/${taskId}`, { archived })
 }
 
 // 删除任务

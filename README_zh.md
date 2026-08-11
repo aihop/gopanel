@@ -1,8 +1,34 @@
-# GoPanel
+<p align="center">
+  <a href="https://gopanel.cn/">
+    <img src="./admin/src/assets/images/logo-text.svg" alt="GoPanel" width="360" />
+  </a>
+</p>
 
-_[English version](./README.md)_
+<p align="center"><strong>面向开发者与小型团队的轻量级、Docker 优先服务器控制平面。</strong></p>
 
-官方网站：https://gopanel.cn/
+<p align="center">
+  在一个清爽的工作台中统一管理网站、容器、数据库、流水线、证书与 AI 辅助开发。
+</p>
+
+<p align="center">
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-2563EB.svg" alt="License: GPL v3" /></a>
+  <a href="https://github.com/aihop/gopanel/releases"><img src="https://img.shields.io/github/v/release/aihop/gopanel?color=4F46E5" alt="GitHub release" /></a>
+  <a href="https://github.com/aihop/gopanel"><img src="https://img.shields.io/github/stars/aihop/gopanel?style=flat&color=7C3AED" alt="GitHub stars" /></a>
+  <a href="https://gopanel.cn/"><img src="https://img.shields.io/badge/%E5%AE%98%E7%BD%91-gopanel.cn-0891B2.svg" alt="GoPanel 官网" /></a>
+</p>
+
+<p align="center">
+  <a href="./README.md"><img src="https://img.shields.io/badge/English-E2E8F0.svg" alt="English" /></a>
+  <a href="./README_zh.md"><img src="https://img.shields.io/badge/%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-2563EB.svg" alt="简体中文" /></a>
+</p>
+
+<p align="center">
+  <a href="https://gopanel.cn/">官方网站</a> ·
+  <a href="https://github.com/aihop/gopanel/releases">版本发布</a> ·
+  <a href="https://github.com/aihop/gopanel/issues">问题反馈</a>
+</p>
+
+---
 
 GoPanel 是一款由 Golang 开发、面向开发者与独立团队的现代化轻量级服务器管理面板，也是一个以 Docker 为核心的应用运行与网站部署平台。它不追求“大而全”的功能堆砌，而是把高频、关键的运维与交付动作收敛成一套更清爽、更快、更好理解的工作流。
 
@@ -110,3 +136,7 @@ cd gopanel
 go run main.go
 
 ```
+
+## 许可证
+
+本项目采用 [GNU General Public License v3.0](./LICENSE) 许可协议。

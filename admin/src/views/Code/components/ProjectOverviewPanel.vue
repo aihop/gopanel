@@ -44,6 +44,7 @@ const status = computed(() =>
 )
 const statusMeta = computed(() => {
 	if (status.value === "pending_approval") return { type: "warning" as const, icon: "mdi:shield-alert-outline" }
+	if (status.value === "delivering") return { type: "info" as const, icon: "mdi:source-merge" }
 	if (status.value === "running") return { type: "info" as const, icon: "mdi:progress-clock" }
 	if (status.value === "queued") return { type: "default" as const, icon: "mdi:clock-outline" }
 	return { type: "success" as const, icon: "mdi:check-circle-outline" }

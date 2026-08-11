@@ -96,12 +96,67 @@ func TestGetTasksByProjectIDPrioritizesActiveTasks(t *testing.T) {
 	if err := database.Create(&tasks).Error; err != nil {
 		t.Fatal(err)
 	}
-	items, total, err := (&aiTaskRepo{}).GetTasksByProjectID(1, 1, 2)
+	items, total, err := (&aiTaskRepo{}).GetTasksByProjectID(1, 1, 2, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if total != 3 || len(items) != 2 || items[0].Status != "pending_approval" || items[1].Status != "running" {
 		t.Fatalf("unexpected task order: total=%d items=%#v", total, items)
+	}
+}
+
+func TestListCodeTasksSeparatesArchived(t *testing.T) {
+	oldDB := global.DB
+	t.Cleanup(func() { global.DB = oldDB })
+	database, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "task-archive.db")), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := database.AutoMigrate(&model.AITask{}); err != nil {
+		t.Fatal(err)
+	}
+	global.DB = database
+	now := time.Now()
+	archivedAt := now.Add(-time.Minute)
+	tasks := []*model.AITask{
+		{CreatedAt: now, UserID: 1, ProjectID: 1, Title: "visible", WorkDir: "/tmp", Status: "running"},
+		{CreatedAt: now, UserID: 1, ProjectID: 1, Title: "archived running", WorkDir: "/tmp", Status: "running", ArchivedAt: &archivedAt},
+		{CreatedAt: now, UserID: 1, ProjectID: 2, Title: "other project", WorkDir: "/tmp", Status: "completed"},
+	}
+	if err := database.Create(&tasks).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	// 默认列表：归档的不出现，而且总数也不能把它算进去，否则前端分页对不上。
+	items, total, err := (&aiTaskRepo{}).GetTasksByUserID(1, 1, 50, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 2 || len(items) != 2 {
+		t.Fatalf("active list should exclude archived: total=%d items=%d", total, len(items))
+	}
+	for _, item := range items {
+		if item.ArchivedAt != nil {
+			t.Fatalf("archived task leaked into active list: %#v", item)
+		}
+	}
+
+	// 归档列表：只出归档的，这是找回误归档任务的唯一入口。
+	archivedItems, archivedTotal, err := (&aiTaskRepo{}).GetTasksByUserID(1, 1, 50, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if archivedTotal != 1 || len(archivedItems) != 1 || archivedItems[0].Title != "archived running" {
+		t.Fatalf("unexpected archived list: total=%d items=%#v", archivedTotal, archivedItems)
+	}
+
+	// 归档过滤要和项目过滤叠加，不能互相覆盖。
+	_, projectTotal, err := (&aiTaskRepo{}).GetTasksByProjectAndUserID(1, 1, 1, 50, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if projectTotal != 1 {
+		t.Fatalf("project + archived filters should combine: total=%d", projectTotal)
 	}
 }
 

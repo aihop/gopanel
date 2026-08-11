@@ -151,15 +151,15 @@ const logStatusText = computed(() => {
 		case "connecting":
 			return "正在建立日志连接，请稍候..."
 		case "streaming":
-			return "正在下载并替换文件，日志将实时刷新。"
+			return "正在下载并替换文件，日志将实时刷新"
 		case "restarting":
-			return "文件已替换完成，正在等待服务重启恢复。"
+			return "文件已替换完成，正在等待服务重启恢复"
 		case "success":
-			return "更新完成，版本信息已同步刷新。"
+			return "更新完成，版本信息已同步刷新"
 		case "failed":
-			return "更新未成功完成，请根据日志排查。"
+			return "更新未成功完成，请根据日志排查"
 		default:
-			return "准备查看更新日志。"
+			return "准备查看更新日志"
 	}
 })
 

@@ -367,3 +367,50 @@ func TestCodeTaskSummaryIncludesDeliveryProgress(t *testing.T) {
 		t.Fatalf("delivery summary mismatch: %#v", summary)
 	}
 }
+
+// 会话里还有交互式执行时，交付拿不到工作区独占权。
+// 必须在超时后明确失败，而不是把作业永远停在 5%。
+func TestCodeDeliveryFailsWhenWorkspaceStaysBusy(t *testing.T) {
+	database := withCodeGovernanceDB(t)
+	previousTimeout := codeDeliveryQueueTimeout
+	codeDeliveryQueueTimeout = 200 * time.Millisecond
+	t.Cleanup(func() { codeDeliveryQueueTimeout = previousTimeout })
+
+	previousCoordinator := codeExecutions
+	codeExecutions = newCodeExecutionCoordinator(2)
+	t.Cleanup(func() { codeExecutions = previousCoordinator })
+
+	workDir := t.TempDir()
+	session := &model.AIDevSession{
+		ID: 951, UserID: 1, ProjectID: 1, Title: "busy", WorkDir: workDir,
+		SourceWorkDir: workDir, WorktreeBranch: "busy-branch",
+	}
+	if err := database.Create(session).Error; err != nil {
+		t.Fatal(err)
+	}
+	// 交互式执行持有同一工作区，交付必须等它释放。
+	holder, err := codeExecutions.acquireSession(
+		context.Background(), session, codeExecutionInteractive, false,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer holder.Release()
+
+	job := createCodeDeliveryQueueJob(t, session.ID, "busy-repository")
+	backgroundCodeDelivery.run(job.ID)
+
+	var stored model.AICodeDeliveryJob
+	if err := database.First(&stored, job.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if stored.Status != codeDeliveryJobFailed {
+		t.Fatalf("busy workspace must fail the job instead of hanging: %#v", stored)
+	}
+	if stored.FailureCode != "workspace_busy" {
+		t.Fatalf("failure code = %q, want workspace_busy", stored.FailureCode)
+	}
+	if !strings.Contains(stored.ErrorMessage, "停止会话中的执行") {
+		t.Fatalf("error message should tell the user what to do: %q", stored.ErrorMessage)
+	}
+}

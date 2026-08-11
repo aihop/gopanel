@@ -71,6 +71,8 @@ export interface AIProjectExecutionSummary {
 export interface AITask {
 	id: number
 	createdAt: string
+	/** 后端一直有下发，老接口没声明；开发面板按它判断「今天」。 */
+	updatedAt?: string
 	sessionId: number
 	projectId: number
 	title: string

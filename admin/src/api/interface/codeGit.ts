@@ -115,6 +115,8 @@ export interface CodeDeliveryJob {
 	resultType?: "local" | "remote_verified" | "mixed" | "delivered"
 	failureCode?:
 		| "source_dirty"
+		/** 会话里还有运行中的 AI 执行或终端，交付拿不到工作区独占权。 */
+		| "workspace_busy"
 		| "conflict"
 		| "quality_failed"
 		| "remote_advanced"

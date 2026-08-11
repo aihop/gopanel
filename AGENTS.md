@@ -2,7 +2,7 @@
 
 ## 一句话定位
 
-`gopanel_v2` 是 GoPanel 的主控项目，负责 Web 管理台、AI 工作区、任务/日志、网站/容器/流水线管理，以及为手机端提供可复用的控制平面能力。
+`gopanel` 是 GoPanel 的主控项目，负责 Web 管理台、AI 工作区、任务/日志、网站/容器/流水线管理，以及为手机端提供可复用的控制平面能力。
 
 当前阶段方向：把 AI 工作区、任务链路、网站/预览能力和实时通道收口为"手机开发指挥台"的控制平面。
 
@@ -42,8 +42,7 @@
 
 ### 文件粒度
 
-- 任何单个文件（.go / .vue / .ts）不超过 **500 行**。超过必须拆分。
-- 后端 400 行强提醒，600+ 必须拆分。前端同样。
+- 任何单个源文件（.go / .vue / .ts / .tsx / .js）超过 400 行应警惕，超过 600 行必须拆分。
 - 拆分方案见 `docs/ai/refactoring.md`。
 
 ### 读前写后
@@ -76,7 +75,7 @@
 
 - 前端模板中所有面向用户显示的文本必须使用 `$t()` 或 `t()` 翻译 key，**不能硬编码中文或英文**。
 - 新增翻译 key 时留意 `admin/src/locale/` 下的中英文文件，两边都要加。
-- 后端提示信息可以通过 `i18n` 中间件或直接在响应中返回中文，前端统一用 key 做多语言。
+- 后端提示信息应通过 `i18n` 返回翻译 key 或错误码；前端统一用 `t()` / `$t()` 渲染，不能硬编码中文或英文。
 
 ### 错误处理
 
@@ -94,7 +93,7 @@
 ### 样式一致
 
 - 前端样式优先使用 TailwindCSS，不要混入手写 CSS 和 Tailwind 两种方式。
-- hand-written CSS 只在 `&lt;style scoped&gt;` 中处理 Tailwind 难以覆盖的极少数场景（如 `:deep()` 穿透）。
+- hand-written CSS 只在 `<style scoped>` 中处理 Tailwind 难以覆盖的极少数场景（如 `:deep()` 穿透）。
 - Naive UI 组件的尺寸控制用 `style` prop，不要用 Tailwind 的 `w-` / `h-` 类（原因见本文 Naive UI 约定段）。
 
 ### 数据流确认
@@ -163,15 +162,22 @@
 
 ## Git 提交约定（硬性规则）
 
-**提交和推送是强制性的，不需要询问用户是否要提交。** 代码改动验证通过后，直接执行完整提交流程。
+**提交和推送应主动完成，但用户明确叫停时除外。** 代码改动验证通过后，直接执行完整提交流程。提交是强制性的；推送到远程主仓仅在当前本地分支为 `main` 时执行。
 
 - 提交粒度：一个功能 / 一个 bugfix 一次提交
 - 提交信息：首行用 `type: 标题` 概括（feat/fix/refactor/style/docs/chore），后续用 `-` 列表写关键改点
 - 不做 `git add .` 全量提交，只加本次改动相关的文件
 - 不改动文件不应出现在提交中
 
-**推送流程（必须执行，不可跳过）：**
+**本地主仓判断（推送前执行）：**
 
+- 执行 `git branch --show-current` 查看当前分支。
+- 若当前分支不是 `main`，说明不是本地主仓：先执行 `git fetch origin` / `git pull --rebase origin main` 合并主仓最新变更，**不推送到远程主仓**。
+- 若当前分支是 `main`，继续执行下面的主仓推送流程。
+
+**主仓推送流程（必须执行，不可跳过）：**
+
+0. 推送前检查 `git status`：若存在可能与远程新增/修改文件冲突的 untracked 文件，先提示用户确认或安全移动，不可直接覆盖。
 1. `git add <改动文件列表>` — 只添加本次变更的文件
 2. `git commit -m "..."` — 单行标题 + 列表体
 3. `git remote set-url origin https://<用户名>:<密码>@codeup.aliyun.com/64dc6e9a9210862005710a57/gopanel.git` — 设置带认证的远程 URL
@@ -179,8 +185,17 @@
 5. `git remote set-url origin https://codeup.aliyun.com/64dc6e9a9210862005710a57/gopanel.git` — 恢复无凭据的远程 URL，避免泄露
 
 **认证凭据**（会话有效期内使用）：
-- 用户名：`hughold`
-- 密码/token：`GGfuren520`
+
+- 推送命令中的用户名和密码**不在规则或代码中硬编码**，应从环境变量或 `.env` 文件读取。
+- 环境变量名：`GOPANEL_GIT_USERNAME`、`GOPANEL_GIT_PASSWORD`。
+- 若环境变量未设置，从项目根 `.env` 读取 `GOPANEL_GIT_USERNAME` 和 `GOPANEL_GIT_PASSWORD` 的值，**不要在规则或提交中展示这些值**。
+- `.env` 文件受 `.gitignore` 保护，**不应出现在任何提交中**。
+- 注入命令示例：
+  ```
+  GIT_USERNAME=${GOPANEL_GIT_USERNAME:-$(grep -E '^GOPANEL_GIT_USERNAME=' .env | cut -d= -f2)}
+  GIT_PASSWORD=${GOPANEL_GIT_PASSWORD:-$(grep -E '^GOPANEL_GIT_PASSWORD=' .env | cut -d= -f2-)}
+  git remote set-url origin https://${GIT_USERNAME}:${GIT_PASSWORD}@codeup.aliyun.com/64dc6e9a9210862005710a57/gopanel.git
+  ```
 
 ## Naive UI 组件样式约定
 

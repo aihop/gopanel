@@ -4,8 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/ai_dev_session.dart';
 import '../code_workspace_text.dart';
 import '../controllers/ai_workspace_controller.dart';
+import '../controllers/code_attention_controller.dart';
+import '../widgets/code_attention_card.dart';
 import '../widgets/code_hub_cards.dart';
 import '../widgets/code_project_terminal_card.dart';
+import 'code_attention_screen.dart';
 import 'code_project_terminal_sheet.dart';
 import 'code_session_sheet.dart';
 import 'code_terminal_screen.dart';
@@ -19,7 +22,19 @@ class CodeHubScreen extends ConsumerStatefulWidget {
 
 class _CodeHubScreenState extends ConsumerState<CodeHubScreen> {
   Future<void> _refresh() async {
-    await ref.read(aiWorkspaceControllerProvider.notifier).loadWorkspace();
+    await Future.wait([
+      ref.read(aiWorkspaceControllerProvider.notifier).loadWorkspace(),
+      ref.read(codeAttentionControllerProvider.notifier).load(),
+    ]);
+  }
+
+  Future<void> _openAttention() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const CodeAttentionScreen()));
+    if (mounted) {
+      await ref.read(codeAttentionControllerProvider.notifier).load();
+    }
   }
 
   Future<void> _openSessionCreator() async {
@@ -78,6 +93,7 @@ class _CodeHubScreenState extends ConsumerState<CodeHubScreen> {
   @override
   Widget build(BuildContext context) {
     final workspace = ref.watch(aiWorkspaceControllerProvider);
+    final attention = ref.watch(codeAttentionControllerProvider);
 
     return Scaffold(
       appBar: AppBar(title: Text(CodeWorkspaceText.t(context, 'hub.title'))),
@@ -93,6 +109,14 @@ class _CodeHubScreenState extends ConsumerState<CodeHubScreen> {
               onCreate: () {
                 _openSessionCreator();
               },
+            ),
+            const SizedBox(height: 16),
+            CodeAttentionCard(
+              isLoading: attention.isLoading,
+              errorMessage: attention.errorMessage,
+              items: attention.items,
+              onOpen: _openAttention,
+              onRetry: ref.read(codeAttentionControllerProvider.notifier).load,
             ),
             const SizedBox(height: 16),
             if (workspace.projects.isNotEmpty) ...[

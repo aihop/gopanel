@@ -44,6 +44,29 @@ func TestInspectCodeProjectBranchesReturnsLocalAndRemoteBranches(t *testing.T) {
 	}
 }
 
+func TestInspectCodeProjectBranchesIgnoresWorktreeAlreadyMatchingRemote(t *testing.T) {
+	repositoryDir, remote := createCodeRemoteRepository(t)
+	updater := cloneCodeRepository(t, remote)
+	commitCodeTestFile(t, updater, "delivered.txt", "delivered\n")
+	if _, err := runCodeGit(updater, "push", "origin", "HEAD"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(repositoryDir, "fetch", "origin"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repositoryDir, "delivered.txt"), []byte("delivered\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	project := codeProjectForRepository(t, repositoryDir)
+	result, err := inspectCodeProjectBranches(project)
+	if err != nil || len(result.Repositories) != 1 {
+		t.Fatalf("inspect branches: %#v, %v", result, err)
+	}
+	if result.Repositories[0].Dirty || result.Repositories[0].ChangedFiles != 0 {
+		t.Fatalf("delivered worktree was reported as unfinished: %#v", result.Repositories[0])
+	}
+}
+
 func TestDiscoverCodeProjectBranchRepositoriesFindsNestedRepositories(t *testing.T) {
 	projectDir := t.TempDir()
 	first := filepath.Join(projectDir, "apps", "api")

@@ -9,9 +9,9 @@ import (
 type IAITaskRepo interface {
 	CreateTask(task *model.AITask) error
 	GetTaskByID(id uint) (*model.AITask, error)
-	GetTasksByUserID(userID uint, page, limit int) ([]*model.AITask, int64, error)
-	GetTasksByProjectID(projectID uint, page, limit int) ([]*model.AITask, int64, error)
-	GetTasksByProjectAndUserID(projectID, userID uint, page, limit int) ([]*model.AITask, int64, error)
+	GetTasksByUserID(userID uint, page, limit int, archived bool) ([]*model.AITask, int64, error)
+	GetTasksByProjectID(projectID uint, page, limit int, archived bool) ([]*model.AITask, int64, error)
+	GetTasksByProjectAndUserID(projectID, userID uint, page, limit int, archived bool) ([]*model.AITask, int64, error)
 	UpdateTask(task *model.AITask) error
 	DeleteTask(id uint) error
 	DeleteTaskAndSession(taskID, sessionID uint) error
@@ -38,28 +38,31 @@ func (r *aiTaskRepo) GetTaskByID(id uint) (*model.AITask, error) {
 	return &task, err
 }
 
-func (r *aiTaskRepo) GetTasksByUserID(userID uint, page, limit int) ([]*model.AITask, int64, error) {
-	var tasks []*model.AITask
-	var total int64
-	db := global.DB.Model(&model.AITask{}).Where("user_id = ?", userID)
-	db.Count(&total)
-	err := db.Order("created_at desc").Offset((page - 1) * limit).Limit(limit).Find(&tasks).Error
-	return tasks, total, err
+func (r *aiTaskRepo) GetTasksByUserID(userID uint, page, limit int, archived bool) ([]*model.AITask, int64, error) {
+	// 和按项目查询用同一套排序：开发面板跨项目只取首页，
+	// 纯按 created_at 排会让跑了几天的任务被当天新建的任务挤出去，面板上就看不见了。
+	return listCodeTasks(global.DB.Model(&model.AITask{}).Where("user_id = ?", userID), page, limit, archived)
 }
 
-func (r *aiTaskRepo) GetTasksByProjectID(projectID uint, page, limit int) ([]*model.AITask, int64, error) {
-	var tasks []*model.AITask
-	var total int64
-	db := global.DB.Model(&model.AITask{}).Where("project_id = ?", projectID)
-	db.Count(&total)
-	err := orderCodeTasks(db).Offset((page - 1) * limit).Limit(limit).Find(&tasks).Error
-	return tasks, total, err
+func (r *aiTaskRepo) GetTasksByProjectID(projectID uint, page, limit int, archived bool) ([]*model.AITask, int64, error) {
+	return listCodeTasks(global.DB.Model(&model.AITask{}).Where("project_id = ?", projectID), page, limit, archived)
 }
 
-func (r *aiTaskRepo) GetTasksByProjectAndUserID(projectID, userID uint, page, limit int) ([]*model.AITask, int64, error) {
-	var tasks []*model.AITask
-	var total int64
+func (r *aiTaskRepo) GetTasksByProjectAndUserID(projectID, userID uint, page, limit int, archived bool) ([]*model.AITask, int64, error) {
 	db := global.DB.Model(&model.AITask{}).Where("project_id = ? AND user_id = ?", projectID, userID)
+	return listCodeTasks(db, page, limit, archived)
+}
+
+// listCodeTasks 是三个列表查询的共同部分：归档过滤 + 计数 + 排序 + 分页。
+// 归档过滤必须在 Count 之前，否则总数会把归档的也算进去，前端分页就对不上。
+func listCodeTasks(db *gorm.DB, page, limit int, archived bool) ([]*model.AITask, int64, error) {
+	var tasks []*model.AITask
+	var total int64
+	if archived {
+		db = db.Where("archived_at IS NOT NULL")
+	} else {
+		db = db.Where("archived_at IS NULL")
+	}
 	db.Count(&total)
 	err := orderCodeTasks(db).Offset((page - 1) * limit).Limit(limit).Find(&tasks).Error
 	return tasks, total, err
