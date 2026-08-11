@@ -152,9 +152,6 @@ func loadCodeGitResultRepositoryStatus(repository codeGitRepository) (codeGitRep
 		clean = strings.TrimSpace(status) == ""
 	}
 	ref := repository.BaseCommit + ".." + repository.ResultCommit
-	if repository.resultLive && !clean {
-		ref = repository.BaseCommit
-	}
 	nameStatus, truncated, err := runCodeGitReviewCommand(
 		repository.root, false, 4*codeGitDiffOutputLimit,
 		"--literal-pathspecs", "diff", "--name-status", "-z", "--find-renames", ref,
@@ -166,15 +163,6 @@ func loadCodeGitResultRepositoryStatus(repository codeGitRepository) (codeGitRep
 		return repository, clean, errors.New("Git 任务差异输出过大，请减少单次任务变更")
 	}
 	repository.Files = parseCodeGitResultFiles(nameStatus, repository.workspacePrefix)
-	if repository.resultLive && !clean {
-		untracked, _, untrackedErr := runCodeGitReviewCommand(
-			repository.root, false, codeGitDiffOutputLimit, "ls-files", "--others", "--exclude-standard", "-z",
-		)
-		if untrackedErr != nil {
-			return repository, clean, untrackedErr
-		}
-		repository.Files = appendCodeGitResultUntracked(repository.Files, untracked, repository.workspacePrefix)
-	}
 	if len(repository.Files) > codeGitStatusFileLimit {
 		repository.Files = repository.Files[:codeGitStatusFileLimit]
 		repository.Truncated = true
@@ -214,26 +202,6 @@ func parseCodeGitResultFiles(output, workspacePrefix string) []codeGitFile {
 	return files
 }
 
-func appendCodeGitResultUntracked(files []codeGitFile, output, workspacePrefix string) []codeGitFile {
-	known := make(map[string]struct{}, len(files))
-	for _, file := range files {
-		known[filepath.ToSlash(file.Path)] = struct{}{}
-	}
-	for _, filePath := range strings.Split(output, "\x00") {
-		if filePath == "" {
-			continue
-		}
-		if _, exists := known[filepath.ToSlash(filePath)]; exists {
-			continue
-		}
-		files = append(files, codeGitFile{
-			Path: filePath, WorkspacePath: path.Join(workspacePrefix, filepath.ToSlash(filePath)),
-			ResultStatus: "A", Changed: true, Untracked: true,
-		})
-	}
-	return files
-}
-
 func codeGitReviewRevision(repositories []codeGitRepository) string {
 	parts := make([]string, 0, len(repositories))
 	for _, repository := range repositories {
@@ -268,7 +236,7 @@ func loadCodeGitResultFileDiff(
 	if cleanPath == "." || path.IsAbs(cleanPath) || strings.HasPrefix(cleanPath, "../") {
 		return "", false, errors.New("Git 文件路径无效")
 	}
-	loaded, clean, err := loadCodeGitResultRepositoryStatus(*repository)
+	loaded, _, err := loadCodeGitResultRepositoryStatus(*repository)
 	if err != nil {
 		return "", false, err
 	}
@@ -282,16 +250,7 @@ func loadCodeGitResultFileDiff(
 	if file == nil {
 		return "", false, errors.New("文件不在当前任务变更中")
 	}
-	if file.Untracked {
-		return runCodeGitReviewCommand(
-			repository.root, true, codeGitDiffOutputLimit,
-			"--literal-pathspecs", "diff", "--no-index", "--no-ext-diff", "--unified=3", "--", "/dev/null", file.Path,
-		)
-	}
 	ref := repository.BaseCommit + ".." + repository.ResultCommit
-	if repository.resultLive && !clean {
-		ref = repository.BaseCommit
-	}
 	return runCodeGitReviewCommand(
 		repository.root, false, codeGitDiffOutputLimit,
 		"--literal-pathspecs", "diff", "--no-ext-diff", "--unified=3", ref, "--", file.Path,

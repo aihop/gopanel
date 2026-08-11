@@ -36,7 +36,7 @@ func TestLoadCodeGitResultStatusIncludesSavedChanges(t *testing.T) {
 	}
 }
 
-func TestLoadCodeGitResultStatusRequiresSavedWorkspace(t *testing.T) {
+func TestLoadCodeGitResultStatusExcludesUnsavedWorkspace(t *testing.T) {
 	session, _ := createDeliveryWorktree(t, 932)
 	if err := os.WriteFile(filepath.Join(session.WorkDir, "pending.txt"), []byte("pending\n"), 0600); err != nil {
 		t.Fatal(err)
@@ -46,12 +46,37 @@ func TestLoadCodeGitResultStatusRequiresSavedWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if status.ReviewReady || status.ReviewRevision != "" || status.Files != 1 {
-		t.Fatalf("dirty result should be visible but not reviewable: %#v", status)
+	if status.ReviewReady || status.ReviewRevision != "" || status.Files != 0 {
+		t.Fatalf("unsaved workspace leaked into task changes: %#v", status)
 	}
-	diff, _, err := loadCodeGitResultFileDiff(session, nil, "session", "pending.txt")
-	if err != nil || !strings.Contains(diff, "+pending") {
-		t.Fatalf("pending result diff unavailable: %v, %q", err, diff)
+	if _, _, err := loadCodeGitResultFileDiff(session, nil, "session", "pending.txt"); err == nil {
+		t.Fatal("unsaved file should only be available in commit and merge")
+	}
+}
+
+func TestLoadCodeGitResultStatusKeepsUnsavedEditsOutOfCommittedDiff(t *testing.T) {
+	session, _ := createDeliveryWorktree(t, 934)
+	filePath := filepath.Join(session.WorkDir, "result.txt")
+	if err := os.WriteFile(filePath, []byte("saved\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := saveCodeSessionWorktree(session, "test: save result before later edits"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filePath, []byte("saved\nunsaved\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	status, err := loadCodeGitResultStatus(session, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.ReviewReady || status.Files != 1 || status.Additions != 1 {
+		t.Fatalf("unexpected committed task changes: %#v", status)
+	}
+	diff, truncated, err := loadCodeGitResultFileDiff(session, nil, "session", "result.txt")
+	if err != nil || truncated || !strings.Contains(diff, "+saved") || strings.Contains(diff, "+unsaved") {
+		t.Fatalf("unsaved edit leaked into committed diff: truncated=%v err=%v output=%q", truncated, err, diff)
 	}
 }
 
