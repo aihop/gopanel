@@ -67,7 +67,14 @@ func codeMultiRepositoryDeliveryFacts(repositories []codeRepositoryDeliveryResul
 		if repository.MergeReady || strings.TrimSpace(repository.Commit) != "" {
 			merged++
 		}
-		if repository.SourceAppliedAt != nil || repository.Status == codeDeliveryCompleted {
+		// 只认 SourceAppliedAt：它由 fastForwardCodeMultiRepositorySource 在
+		// merge-base --is-ancestor 校验通过后才写入，是「确实进了本地目标分支」的唯一真相。
+		//
+		// 这里曾经并上 `|| Status == completed`，但本地快进失败是被刻意降级为非阻断的
+		// （见 code_delivery_local_sync.go 顶部注释），失败后仓库照样标 completed。
+		// 于是主仓根本没合进去，界面却显示「本地主仓 9/9 已完成」。
+		// 单仓路径（loadCodeDeliveryFacts）一直用真实可达性判断，这里要和它口径一致。
+		if repository.SourceAppliedAt != nil {
 			localApplied++
 		}
 		if codeDeliveryHasRemote(repository.Remote, repository.RemoteBranch) {
