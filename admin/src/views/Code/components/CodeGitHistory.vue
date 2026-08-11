@@ -11,7 +11,14 @@ import type {
 import Icon from "@/components/common/Icon.vue"
 import { codeGitReviewMessages } from "../codeGitReviewMessages"
 
-const props = defineProps<{ sessionId: number | null; active: boolean; refreshKey: number }>()
+const props = withDefaults(defineProps<{
+	sessionId: number | null
+	active: boolean
+	refreshKey: number
+	loadHistory?: (sessionId: number) => Promise<CodeGitHistory>
+	loadDiff?: (sessionId: number, repositoryId: string, commit: string) => Promise<CodeGitHistoryDiff>
+	autoSelect?: boolean
+}>(), { autoSelect: true })
 const emit = defineEmits<{ selected: [selection: CodeGitHistorySelection | null] }>()
 const { t } = useI18n({ messages: codeGitReviewMessages })
 const history = ref<CodeGitHistory | null>(null)
@@ -19,15 +26,22 @@ const loading = ref(false)
 const loadError = ref("")
 const selectedKey = ref("")
 
+const requestHistory = async (sessionId: number) =>
+	props.loadHistory ? props.loadHistory(sessionId) : (await getCodeGitHistory(sessionId)).data
+const requestDiff = async (sessionId: number, repositoryId: string, commit: string) =>
+	props.loadDiff
+		? props.loadDiff(sessionId, repositoryId, commit)
+		: (await getCodeGitHistoryDiff(sessionId, repositoryId, commit)).data
+
 const selectCommit = async (repository: CodeGitHistoryRepository, commit: CodeGitHistoryCommit) => {
 	const key = `${repository.id}:${commit.commit}`
 	selectedKey.value = key
 	try {
-		const response = await getCodeGitHistoryDiff(props.sessionId as number, repository.id, commit.commit)
+		const response = await requestDiff(props.sessionId as number, repository.id, commit.commit)
 		if (selectedKey.value !== key) return
 		const repositoryLabels = repository.branch ? [repository.branch, repository.name] : [repository.name]
 		emit("selected", {
-			...response.data,
+			...response,
 			title: commit.subject,
 			subtitle: [...repositoryLabels, commit.shortCommit, commit.author].join(" · ")
 		})
@@ -40,10 +54,10 @@ const loadHistory = async () => {
 	if (!props.sessionId || !props.active) return
 	loading.value = true
 	try {
-		history.value = (await getCodeGitHistory(props.sessionId)).data
+		history.value = await requestHistory(props.sessionId)
 		loadError.value = ""
 		const repository = history.value.repositories.find(item => item.commits.length)
-		if (repository) await selectCommit(repository, repository.commits[0])
+		if (repository && props.autoSelect) await selectCommit(repository, repository.commits[0])
 		else emit("selected", null)
 	} catch (error) {
 		loadError.value = error instanceof Error ? error.message : t("code.gitHistoryLoadFailed")

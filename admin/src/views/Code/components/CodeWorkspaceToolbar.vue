@@ -61,7 +61,7 @@ const sessionIcon = computed(() => (props.isTerminalSession ? "mdi:console-line"
             {{ t(isTerminalSession ? "code.terminalSession" : "code.aiSession") }}
           </n-tag>
         </div>
-        <div class="truncate text-xs text-[var(--n-text-color-3)]">
+        <div class="truncate text-xs text-gray-500">
           {{ sessionSubtitle }}
         </div>
       </div>

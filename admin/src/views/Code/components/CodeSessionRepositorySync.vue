@@ -6,7 +6,12 @@ import { checkCodeSessionGitSync, syncCodeSessionGitRepository } from "@/api/mod
 import type { CodeSessionGitSyncRepository, CodeSessionGitSyncStatus } from "@/api/interface/codeGit"
 import { codeGitReviewMessages } from "../codeGitReviewMessages"
 
-const props = defineProps<{ sessionId: number; disabled: boolean }>()
+const props = defineProps<{
+	sessionId: number
+	disabled: boolean
+	check?: (sessionId: number) => Promise<CodeSessionGitSyncStatus>
+	sync?: (sessionId: number, repositoryId: string) => Promise<CodeSessionGitSyncStatus>
+}>()
 const emit = defineEmits<{ (event: "synced"): void }>()
 const { t } = useI18n({ messages: codeGitReviewMessages })
 const dialog = useDialog()
@@ -15,6 +20,13 @@ const loading = ref(false)
 const syncingId = ref("")
 const loadError = ref("")
 const result = ref<CodeSessionGitSyncStatus | null>(null)
+
+const requestCheck = async () =>
+	props.check ? props.check(props.sessionId) : (await checkCodeSessionGitSync(props.sessionId)).data
+const requestSync = async (repositoryId: string) =>
+	props.sync
+		? props.sync(props.sessionId, repositoryId)
+		: (await syncCodeSessionGitRepository(props.sessionId, repositoryId)).data
 
 const hasResult = computed(() => Boolean(result.value?.repositories.length))
 const statusLabel = (repository: CodeSessionGitSyncRepository) =>
@@ -34,7 +46,7 @@ const checkUpdates = async () => {
 	loading.value = true
 	loadError.value = ""
 	try {
-		result.value = (await checkCodeSessionGitSync(props.sessionId)).data
+		result.value = await requestCheck()
 	} catch (error) {
 		loadError.value = error instanceof Error ? error.message : t("code.gitSyncCheckFailed")
 	} finally {
@@ -55,7 +67,7 @@ const syncRepository = (repository: CodeSessionGitSyncRepository) => {
 		onPositiveClick: async () => {
 			syncingId.value = repository.id
 			try {
-				result.value = (await syncCodeSessionGitRepository(props.sessionId, repository.id)).data
+				result.value = await requestSync(repository.id)
 				message.success(
 					t(repository.status === "integrated" ? "code.gitSyncIntegratedSuccess" : "code.gitSyncSuccess", {
 						repository: repository.name

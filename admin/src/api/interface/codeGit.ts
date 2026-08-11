@@ -192,6 +192,7 @@ export interface CodeDeliveryFact {
 export interface CodeDeliveryPushRepository {
 	repositoryId: string
 	repositoryName: string
+	repositoryPath?: string
 	status: "pending" | "pushed" | "failed" | "local"
 	remote?: string
 	branch?: string
@@ -215,6 +216,7 @@ export interface CodeDeliveryPushResult {
 export interface CodeRepositoryDeliveryResult {
 	repositoryId: string
 	repositoryName: string
+	repositoryPath?: string
 	status: string
 	branch: string
 	additions: number

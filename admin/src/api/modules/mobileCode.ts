@@ -14,7 +14,13 @@ import type {
 	CodeDeliveryJob,
 	CodeDeliveryPushResult,
 	CodeGitDeliveryResult,
-	CodeGitStatus
+	CodeGitDiff,
+	CodeGitDiffKind,
+	CodeGitHistory,
+	CodeGitHistoryDiff,
+	CodeGitScope,
+	CodeGitStatus,
+	CodeSessionGitSyncStatus
 } from "@/api/interface/codeGit"
 import { waitForCodeSessionInitialization } from "./codeSessionInitialization"
 import { mobileHttp, mobileRequest } from "./mobileClient"
@@ -134,9 +140,69 @@ export function deliverMobileSession(sessionId: number) {
 	)
 }
 
-export function getMobileGitStatus(sessionId: number) {
+export function getMobileGitStatus(sessionId: number, scope: CodeGitScope = "workspace") {
 	return mobileRequest(
-		mobileHttp.get<ResultData<CodeGitStatus>>(`/mobile/app/sessions/${sessionId}/git/status`)
+		mobileHttp.get<ResultData<CodeGitStatus>>(`/mobile/app/sessions/${sessionId}/git/status`, {
+			params: { scope }
+		})
+	)
+}
+
+export function getMobileGitDiff(
+	sessionId: number,
+	repositoryId: string,
+	path: string,
+	kind: CodeGitDiffKind,
+	scope: CodeGitScope = "workspace"
+) {
+	return mobileRequest(
+		mobileHttp.get<ResultData<CodeGitDiff>>(`/mobile/app/sessions/${sessionId}/git/diff`, {
+			params: { repositoryId, path, kind, scope }
+		})
+	)
+}
+
+export function getMobileGitHistory(sessionId: number) {
+	return mobileRequest(
+		mobileHttp.get<ResultData<CodeGitHistory>>(`/mobile/app/sessions/${sessionId}/git/history`)
+	)
+}
+
+export function getMobileGitHistoryDiff(sessionId: number, repositoryId: string, commit: string) {
+	return mobileRequest(
+		mobileHttp.get<ResultData<CodeGitHistoryDiff>>(`/mobile/app/sessions/${sessionId}/git/history/diff`, {
+			params: { repositoryId, commit }
+		})
+	)
+}
+
+export function updateMobileGitStage(sessionId: number, repositoryId: string, paths: string[], staged: boolean) {
+	return mobileRequest(
+		mobileHttp.put<ResultData<CodeGitStatus>>(`/mobile/app/sessions/${sessionId}/git/stage`, {
+			repositoryId,
+			paths,
+			staged
+		})
+	)
+}
+
+export function checkMobileSessionGitSync(sessionId: number) {
+	return mobileRequest(
+		mobileHttp.post<ResultData<CodeSessionGitSyncStatus>>(
+			`/mobile/app/sessions/${sessionId}/git/sync/check`,
+			{},
+			{ timeout: 70000 }
+		)
+	)
+}
+
+export function syncMobileSessionGitRepository(sessionId: number, repositoryId: string) {
+	return mobileRequest(
+		mobileHttp.post<ResultData<CodeSessionGitSyncStatus>>(
+			`/mobile/app/sessions/${sessionId}/git/sync`,
+			{ repositoryId, confirm: true },
+			{ timeout: 70000 }
+		)
 	)
 }
 

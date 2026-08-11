@@ -6,7 +6,7 @@ export const codeGitReviewHeaderMessages = {
 			...codeGitReviewMessages.zh.code,
 			gitTaskChanges: "提交",
 			gitUnsavedChanges: "任务变更",
-			gitCommitHistory: "提交记录"
+			gitCommitHistory: "Git记录"
 		}
 	},
 	en: {
