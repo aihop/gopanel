@@ -113,6 +113,7 @@ function pickCodeTaskGitSummary(task: CodeTaskListItem) {
 		deliveryAttempt: task.summary.deliveryAttempt,
 		deliveryError: task.summary.deliveryError,
 		branch: task.summary.branch,
+		repositories: task.summary.repositories,
 		additions: task.summary.additions,
 		deletions: task.summary.deletions,
 		changedFiles: task.summary.changedFiles,

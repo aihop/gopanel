@@ -151,7 +151,7 @@ func createCodeSessionWorktreeFromCandidates(session *model.AIDevSession, projec
 	if err := os.MkdirAll(filepath.Dir(worktreeDir), 0750); err != nil {
 		return fmt.Errorf("创建 Worktree 管理目录失败：%w", err)
 	}
-	branch := fmt.Sprintf("gopanel/code-%d-%d", session.ID, time.Now().Unix())
+	branch := codeSessionWorktreeBranch(session.ID, "")
 	if _, err := runCodeGit(repository.SourceDir, "worktree", "add", "-b", branch, worktreeDir, repository.BaseCommit); err != nil {
 		return err
 	}

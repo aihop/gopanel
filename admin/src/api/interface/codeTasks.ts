@@ -12,6 +12,7 @@ export interface CodeTaskSummary {
 	gitStatus?: "working" | "committed" | "merged" | "pushed" | "push_failed" | "conflict"
 	gitError?: string
 	branch?: string
+	repositories?: CodeTaskRepositorySummary[]
 	additions: number
 	deletions: number
 	changedFiles: number
@@ -29,6 +30,15 @@ export interface CodeTaskSummary {
 	/** 执行器最后说的那句话（后端已截断到 160 字）。 */
 	lastAgentMessage?: string
 	lastActivityAt?: string
+}
+
+export interface CodeTaskRepositorySummary {
+	name: string
+	branch: string
+	additions: number
+	deletions: number
+	changedFiles: number
+	hasDiff: boolean
 }
 
 export interface CodeTaskListItem extends AITask {

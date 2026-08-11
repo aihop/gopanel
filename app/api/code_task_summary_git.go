@@ -52,17 +52,67 @@ func loadCodeTaskGitSummaries(tasks []*model.AITask, sessionIDs []uint, summarie
 	for _, task := range tasks {
 		summary := summaries[task.ID]
 		session := sessionsByID[task.SessionID]
-		summary.Branch = session.WorktreeBranch
-		if session.IsolationMode == codeIsolationMultiWorktree || len(repositoriesBySession[task.SessionID]) > 0 {
+		if len(repositoriesBySession[task.SessionID]) > 0 {
+			resetCodeTaskGitSummary(&summary)
 			applyCodeTaskRepositorySummaries(&summary, repositoriesBySession[task.SessionID], diffStatsCache)
 		} else if delivery, exists := deliveriesBySession[task.SessionID]; exists {
+			resetCodeTaskGitSummary(&summary)
 			applyCodeTaskDeliverySummary(&summary, delivery, diffStatsCache)
-		} else if summary.Branch != "" {
-			applyCodeTaskWorktreeSummary(&summary, session.WorkDir, session.BaseCommit, diffStatsCache)
+		} else if session.WorktreeBranch != "" {
+			resetCodeTaskGitSummary(&summary)
+			summary.Branch = session.WorktreeBranch
+			worktreeSummary := codeTaskSummary{}
+			applyCodeTaskWorktreeSummary(&worktreeSummary, session.WorkDir, session.BaseCommit, diffStatsCache)
+			summary.GitStatus = worktreeSummary.GitStatus
+			stats := codeTaskSummaryStats(worktreeSummary)
+			applyCodeTaskDiffStats(&summary, stats)
+			summary.Repositories = append(summary.Repositories, codeTaskRepositorySummaryFromStats(
+				filepath.Base(session.SourceWorkDir), summary.Branch, stats,
+			))
 		}
 		summaries[task.ID] = summary
 	}
 	return nil
+}
+
+func resetCodeTaskGitSummary(summary *codeTaskSummary) {
+	summary.GitStatus, summary.GitError, summary.Branch = "", "", ""
+	summary.Repositories = nil
+	summary.Additions, summary.Deletions, summary.ChangedFiles = 0, 0, 0
+	summary.HasDiff = false
+}
+
+func applyCodeTaskStoredRepositorySummaries(summary *codeTaskSummary, repositories []codeRepositoryDeliveryResult) {
+	if len(repositories) == 0 {
+		return
+	}
+	statuses := make([]string, 0, len(repositories))
+	for _, repository := range repositories {
+		if strings.TrimSpace(repository.Branch) == "" {
+			continue
+		}
+		stats := codeTaskDiffStats{
+			Additions: repository.Additions, Deletions: repository.Deletions, Files: repository.ChangedFiles,
+		}
+		if summary.Branch == "" {
+			summary.Branch = repository.Branch
+		}
+		status := codeTaskDeliveryStatus(repository.Status, repository.PushStatus)
+		statuses = append(statuses, status)
+		if status == "push_failed" && summary.GitError == "" {
+			summary.GitError = repository.ErrorMessage
+		}
+		applyCodeTaskDiffStats(summary, stats)
+		summary.Repositories = append(summary.Repositories, codeTaskRepositorySummaryFromStats(
+			repository.RepositoryName, repository.Branch, stats,
+		))
+	}
+	if len(statuses) > 0 {
+		summary.GitStatus = aggregateCodeTaskGitStatuses(statuses)
+	}
+	if summary.GitStatus != "push_failed" {
+		summary.GitError = ""
+	}
 }
 
 func applyCodeTaskDeliverySummary(summary *codeTaskSummary, delivery model.AICodeDelivery, diffStatsCache map[string]codeTaskDiffStats) {
@@ -71,20 +121,19 @@ func applyCodeTaskDeliverySummary(summary *codeTaskSummary, delivery model.AICod
 	if summary.GitStatus == "push_failed" {
 		summary.GitError = delivery.PushError
 	}
+	stats := codeTaskDiffStats{}
 	// 优先用交付快照时固化的统计：worktree 提交可能已被回收，实时 diff 会静默算不出来。
 	if delivery.StatFiles > 0 {
-		applyCodeTaskDiffStats(summary, codeTaskDiffStats{
+		stats = codeTaskDiffStats{
 			Additions: delivery.StatAdditions, Deletions: delivery.StatDeletions, Files: delivery.StatFiles,
-		})
-		return
+		}
+	} else if delivery.BaseCommit != "" && delivery.WorktreeCommit != "" {
+		stats, _ = loadCodeTaskDiffStats(delivery.SourceWorkDir, delivery.BaseCommit, delivery.WorktreeCommit, diffStatsCache)
 	}
-	if delivery.BaseCommit == "" || delivery.WorktreeCommit == "" {
-		return
-	}
-	stats, ok := loadCodeTaskDiffStats(delivery.SourceWorkDir, delivery.BaseCommit, delivery.WorktreeCommit, diffStatsCache)
-	if ok {
-		applyCodeTaskDiffStats(summary, stats)
-	}
+	applyCodeTaskDiffStats(summary, stats)
+	summary.Repositories = append(summary.Repositories, codeTaskRepositorySummaryFromStats(
+		filepath.Base(delivery.SourceWorkDir), delivery.WorktreeBranch, stats,
+	))
 }
 
 func applyCodeTaskRepositorySummaries(summary *codeTaskSummary, repositories []model.AIDevSessionRepository, diffStatsCache map[string]codeTaskDiffStats) {
@@ -93,6 +142,7 @@ func applyCodeTaskRepositorySummaries(summary *codeTaskSummary, repositories []m
 	}
 	statuses := make([]string, 0, len(repositories))
 	for _, repository := range repositories {
+		stats := codeTaskDiffStats{}
 		if summary.Branch == "" {
 			summary.Branch = repository.Branch
 		}
@@ -104,33 +154,39 @@ func applyCodeTaskRepositorySummaries(summary *codeTaskSummary, repositories []m
 			worktreeSummary := codeTaskSummary{GitStatus: repositoryStatus}
 			applyCodeTaskWorktreeSummary(&worktreeSummary, repository.WorktreeDir, repository.BaseCommit, diffStatsCache)
 			repositoryStatus = worktreeSummary.GitStatus
-			if worktreeSummary.HasDiff {
-				applyCodeTaskDiffStats(summary, codeTaskDiffStats{
-					Additions: worktreeSummary.Additions,
-					Deletions: worktreeSummary.Deletions,
-					Files:     worktreeSummary.ChangedFiles,
-				})
-			}
+			stats = codeTaskSummaryStats(worktreeSummary)
 		}
 		statuses = append(statuses, repositoryStatus)
 		// 优先用交付快照时固化的统计，理由同单仓路径。
 		if repository.StatFiles > 0 {
-			applyCodeTaskDiffStats(summary, codeTaskDiffStats{
+			stats = codeTaskDiffStats{
 				Additions: repository.StatAdditions, Deletions: repository.StatDeletions,
 				Files: repository.StatFiles,
-			})
-			continue
+			}
+		} else if repository.WorktreeCommit != "" && repository.BaseCommit != "" {
+			stats, _ = loadCodeTaskDiffStats(repository.SourceDir, repository.BaseCommit, repository.WorktreeCommit, diffStatsCache)
 		}
-		if repository.BaseCommit == "" || repository.WorktreeCommit == "" {
-			continue
-		}
-		if stats, ok := loadCodeTaskDiffStats(repository.SourceDir, repository.BaseCommit, repository.WorktreeCommit, diffStatsCache); ok {
-			applyCodeTaskDiffStats(summary, stats)
-		}
+		applyCodeTaskDiffStats(summary, stats)
+		summary.Repositories = append(summary.Repositories, codeTaskRepositorySummaryFromStats(
+			repository.LinkName, repository.Branch, stats,
+		))
 	}
 	summary.GitStatus = aggregateCodeTaskGitStatuses(statuses)
 	if summary.GitStatus != "push_failed" {
 		summary.GitError = ""
+	}
+}
+
+func codeTaskSummaryStats(summary codeTaskSummary) codeTaskDiffStats {
+	return codeTaskDiffStats{
+		Additions: summary.Additions, Deletions: summary.Deletions, Files: summary.ChangedFiles,
+	}
+}
+
+func codeTaskRepositorySummaryFromStats(name, branch string, stats codeTaskDiffStats) codeTaskRepositorySummary {
+	return codeTaskRepositorySummary{
+		Name: name, Branch: branch, Additions: stats.Additions, Deletions: stats.Deletions,
+		ChangedFiles: stats.Files, HasDiff: stats.Files > 0,
 	}
 }
 

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { CodeTaskListItem } from "@/api/interface/codeTasks"
 import Icon from "@/components/common/Icon.vue"
+import CodeTaskRepositoryPopover from "./CodeTaskRepositoryPopover.vue"
 import { useCodeTaskMeta } from "../useCodeTaskMeta"
 
 defineProps<{ task: CodeTaskListItem }>()
@@ -56,11 +57,15 @@ const {
         :class="taskGitMeta(task)!.color"
       />
     </template>
-    <template v-if="task.summary.hasDiff">
+    <template v-if="task.summary.hasDiff || task.summary.repositories?.length">
       <span class="text-slate-300">·</span>
-      <span class="font-medium text-emerald-600">+{{ task.summary.additions }}</span>
-      <span class="font-medium text-red-500">-{{ task.summary.deletions }}</span>
-      <span>{{ t("code.taskChangedFiles", { count: task.summary.changedFiles }) }}</span>
+      <CodeTaskRepositoryPopover
+			:repositories="task.summary.repositories || []"
+			:branch="task.summary.branch"
+			:additions="task.summary.additions"
+			:deletions="task.summary.deletions"
+			:changed-files="task.summary.changedFiles"
+		/>
     </template>
     <template v-if="task.summary.durationMs > 0">
       <span class="text-slate-300">·</span>

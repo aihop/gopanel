@@ -271,9 +271,11 @@ func TestCodeStoredRepositoryDeliveryResultDoesNotNeedWorktree(t *testing.T) {
 		ID: 12, LinkName: "child", Status: codeDeliveryCompleted, TargetBranch: "main",
 		RemoteName: "origin", RemoteBranch: "main", MergeCommit: "merge", PushStatus: codePushPushed,
 		PushedCommit: "merge", WorktreeDir: filepath.Join(t.TempDir(), "missing"),
+		StatAdditions: 12, StatDeletions: 3, StatFiles: 4,
 	}
 	result := codeStoredRepositoryDeliveryResult(repository)
-	if result.Status != codeDeliveryCompleted || result.PushStatus != codePushPushed || result.PushedCommit != "merge" {
+	if result.Status != codeDeliveryCompleted || result.PushStatus != codePushPushed || result.PushedCommit != "merge" ||
+		result.Additions != 12 || result.Deletions != 3 || result.ChangedFiles != 4 {
 		t.Fatalf("stored repository result was not reconstructed: %#v", result)
 	}
 }

@@ -65,6 +65,9 @@ func TestCreateMultiRepositorySessionWorktrees(t *testing.T) {
 		if repository.TargetBranch == "" || repository.BaseCommit == "" || repository.SyncStatus != "local" {
 			t.Fatalf("repository baseline metadata unavailable: %#v", repository)
 		}
+		if repository.Branch != codeSessionWorktreeBranch(session.ID, repository.LinkName) {
+			t.Fatalf("repository branch = %q, want short task branch for %q", repository.Branch, repository.LinkName)
+		}
 		if _, err := os.Stat(filepath.Join(repository.WorktreeDir, "README.md")); err != nil {
 			t.Fatalf("worktree content unavailable: %v", err)
 		}

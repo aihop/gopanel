@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"strings"
 	"time"
 
@@ -9,28 +10,29 @@ import (
 )
 
 type codeTaskSummary struct {
-	DurationMS            int64  `json:"durationMs"`
-	TotalTokens           int64  `json:"totalTokens"`
-	TokenUsageStatus      string `json:"tokenUsageStatus"`
-	TokenRecoveredRuns    int64  `json:"tokenRecoveredRuns"`
-	TokenUnavailableRuns  int64  `json:"tokenUnavailableRuns"`
-	TokenPendingRuns      int64  `json:"tokenPendingRuns"`
-	Executor              string `json:"executor,omitempty"`
-	Model                 string `json:"model,omitempty"`
-	GitStatus             string `json:"gitStatus,omitempty"`
-	GitError              string `json:"gitError,omitempty"`
-	Branch                string `json:"branch,omitempty"`
-	Additions             int    `json:"additions"`
-	Deletions             int    `json:"deletions"`
-	ChangedFiles          int    `json:"changedFiles"`
-	HasDiff               bool   `json:"hasDiff"`
-	DeliveryStatus        string `json:"deliveryStatus,omitempty"`
-	DeliveryStage         string `json:"deliveryStage,omitempty"`
-	DeliveryProgress      int    `json:"deliveryProgress"`
-	DeliveryQueuePosition int    `json:"deliveryQueuePosition"`
-	DeliveryAttempt       int    `json:"deliveryAttempt"`
-	DeliveryResultType    string `json:"deliveryResultType,omitempty"`
-	DeliveryError         string `json:"deliveryError,omitempty"`
+	DurationMS            int64                       `json:"durationMs"`
+	TotalTokens           int64                       `json:"totalTokens"`
+	TokenUsageStatus      string                      `json:"tokenUsageStatus"`
+	TokenRecoveredRuns    int64                       `json:"tokenRecoveredRuns"`
+	TokenUnavailableRuns  int64                       `json:"tokenUnavailableRuns"`
+	TokenPendingRuns      int64                       `json:"tokenPendingRuns"`
+	Executor              string                      `json:"executor,omitempty"`
+	Model                 string                      `json:"model,omitempty"`
+	GitStatus             string                      `json:"gitStatus,omitempty"`
+	GitError              string                      `json:"gitError,omitempty"`
+	Branch                string                      `json:"branch,omitempty"`
+	Repositories          []codeTaskRepositorySummary `json:"repositories,omitempty"`
+	Additions             int                         `json:"additions"`
+	Deletions             int                         `json:"deletions"`
+	ChangedFiles          int                         `json:"changedFiles"`
+	HasDiff               bool                        `json:"hasDiff"`
+	DeliveryStatus        string                      `json:"deliveryStatus,omitempty"`
+	DeliveryStage         string                      `json:"deliveryStage,omitempty"`
+	DeliveryProgress      int                         `json:"deliveryProgress"`
+	DeliveryQueuePosition int                         `json:"deliveryQueuePosition"`
+	DeliveryAttempt       int                         `json:"deliveryAttempt"`
+	DeliveryResultType    string                      `json:"deliveryResultType,omitempty"`
+	DeliveryError         string                      `json:"deliveryError,omitempty"`
 	// 会话当前阶段（executing / awaiting_approval / instruction_queued / completed…）。
 	// 比任务 status 细一档，用来回答「卡在哪一步」。
 	Stage string `json:"stage,omitempty"`
@@ -39,6 +41,15 @@ type codeTaskSummary struct {
 	LastUserMessage  string     `json:"lastUserMessage,omitempty"`
 	LastAgentMessage string     `json:"lastAgentMessage,omitempty"`
 	LastActivityAt   *time.Time `json:"lastActivityAt,omitempty"`
+}
+
+type codeTaskRepositorySummary struct {
+	Name         string `json:"name"`
+	Branch       string `json:"branch"`
+	Additions    int    `json:"additions"`
+	Deletions    int    `json:"deletions"`
+	ChangedFiles int    `json:"changedFiles"`
+	HasDiff      bool   `json:"hasDiff"`
 }
 
 // 列表里只需要一眼扫过的摘要，整段回复没必要传给前端。
@@ -138,6 +149,10 @@ func loadCodeTaskDeliverySummaries(sessionIDs []uint, summaries map[uint]codeTas
 		summary.DeliveryAttempt = job.Attempt
 		summary.DeliveryResultType = job.ResultType
 		summary.DeliveryError = job.ErrorMessage
+		var repositories []codeRepositoryDeliveryResult
+		if json.Unmarshal([]byte(job.RepositoryResults), &repositories) == nil {
+			applyCodeTaskStoredRepositorySummaries(&summary, repositories)
+		}
 		if job.Status == codeDeliveryJobQueued {
 			if view, err := loadCodeDeliveryJobView(job.SessionID); err == nil {
 				summary.DeliveryQueuePosition = view.QueuePosition

@@ -174,6 +174,9 @@ export interface CodeRepositoryDeliveryResult {
 	repositoryName: string
 	status: string
 	branch: string
+	additions: number
+	deletions: number
+	changedFiles: number
 	targetBranch: string
 	remote?: string
 	remoteBranch?: string

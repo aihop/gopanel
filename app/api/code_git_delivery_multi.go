@@ -12,18 +12,21 @@ import (
 )
 
 type codeRepositoryDeliveryResult struct {
-	RepositoryID    string     `json:"repositoryId"`
-	RepositoryName  string     `json:"repositoryName"`
-	Status          string     `json:"status"`
-	Branch          string     `json:"branch"`
-	TargetBranch    string     `json:"targetBranch"`
-	Remote          string     `json:"remote,omitempty"`
-	RemoteBranch    string     `json:"remoteBranch,omitempty"`
-	Commit          string     `json:"commit,omitempty"`
-	SnapshotReady   bool       `json:"snapshotReady"`
-	MergeReady      bool       `json:"mergeReady"`
-	PushStatus      string     `json:"pushStatus"`
-	PushedCommit    string     `json:"pushedCommit,omitempty"`
+	RepositoryID     string     `json:"repositoryId"`
+	RepositoryName   string     `json:"repositoryName"`
+	Status           string     `json:"status"`
+	Branch           string     `json:"branch"`
+	Additions        int        `json:"additions"`
+	Deletions        int        `json:"deletions"`
+	ChangedFiles     int        `json:"changedFiles"`
+	TargetBranch     string     `json:"targetBranch"`
+	Remote           string     `json:"remote,omitempty"`
+	RemoteBranch     string     `json:"remoteBranch,omitempty"`
+	Commit           string     `json:"commit,omitempty"`
+	SnapshotReady    bool       `json:"snapshotReady"`
+	MergeReady       bool       `json:"mergeReady"`
+	PushStatus       string     `json:"pushStatus"`
+	PushedCommit     string     `json:"pushedCommit,omitempty"`
 	SourceAppliedAt  *time.Time `json:"sourceAppliedAt,omitempty"`
 	LocalSynced      bool       `json:"localSynced"`
 	LocalSyncError   string     `json:"localSyncError,omitempty"`
@@ -195,10 +198,11 @@ func codeStoredRepositoryDeliveryResult(repository *model.AIDevSessionRepository
 	return codeRepositoryDeliveryResult{
 		RepositoryID: codeSessionRepositoryID(repository.ID), RepositoryName: repository.LinkName,
 		Status: repository.Status, Branch: repository.Branch, TargetBranch: repository.TargetBranch,
+		Additions: repository.StatAdditions, Deletions: repository.StatDeletions, ChangedFiles: repository.StatFiles,
 		Remote: repository.RemoteName, RemoteBranch: deliveryRemoteBranch(repository.RemoteBranch, repository.TargetBranch),
 		Commit: repository.MergeCommit, PushStatus: pushStatus, PushedCommit: repository.PushedCommit,
-		SnapshotReady:   strings.TrimSpace(repository.WorktreeCommit) != "",
-		MergeReady:      strings.TrimSpace(repository.MergeCommit) != "",
+		SnapshotReady:    strings.TrimSpace(repository.WorktreeCommit) != "",
+		MergeReady:       strings.TrimSpace(repository.MergeCommit) != "",
 		SourceAppliedAt:  repository.SourceAppliedAt,
 		LocalSynced:      repository.SourceAppliedAt != nil,
 		LocalSyncError:   repository.LocalSyncError,

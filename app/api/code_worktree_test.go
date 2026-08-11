@@ -116,7 +116,7 @@ func TestCreateAndRollbackCodeSessionWorktree(t *testing.T) {
 	if err := createCodeSessionWorktree(session, project); err != nil {
 		t.Fatal(err)
 	}
-	if session.SourceWorkDir != repositoryDir || !strings.HasPrefix(session.WorktreeBranch, "gopanel/code-21-") {
+	if session.SourceWorkDir != repositoryDir || session.WorktreeBranch != "gopanel/code-21" {
 		t.Fatalf("unexpected session worktree metadata: %#v", session)
 	}
 	if _, err := os.Stat(filepath.Join(session.WorkDir, "README.md")); err != nil {

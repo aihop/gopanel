@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/global"
@@ -108,16 +107,17 @@ func createCodeSessionRepositoryWorktrees(session *model.AIDevSession, project *
 		}
 		_ = os.RemoveAll(workspaceDir)
 	}
-	stamp := time.Now().Unix()
 	sourceDirs := make([]string, 0, len(prepared))
 	preparedBySource := make(map[string]codePreparedRepository, len(prepared))
 	for _, repository := range prepared {
 		sourceDirs = append(sourceDirs, repository.SourceDir)
 		preparedBySource[repository.SourceDir] = repository
 	}
-	for index, source := range sessionRepositoryLinkNames(sourceDirs) {
+	sources := sessionRepositoryLinkNames(sourceDirs)
+	branches := codeSessionRepositoryBranches(session.ID, sources)
+	for _, source := range sources {
 		repository := preparedBySource[source.Path]
-		branch := fmt.Sprintf("gopanel/code-%d-%d-%d", session.ID, stamp, index+1)
+		branch := branches[source.Path]
 		worktreeDir := filepath.Join(workspaceDir, source.LinkName)
 		if _, err := runCodeGit(source.Path, "worktree", "add", "-b", branch, worktreeDir, repository.BaseCommit); err != nil {
 			rollback()

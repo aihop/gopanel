@@ -166,7 +166,8 @@ func TestApplyCodeTaskRepositorySummariesAggregatesMixedRepositories(t *testing.
 		{Branch: "task-b", Status: codeDeliveryPrepared},
 	}
 	applyCodeTaskRepositorySummaries(&summary, repositories, make(map[string]codeTaskDiffStats))
-	if summary.GitStatus != "committed" || summary.Branch != "task-a" {
+	if summary.GitStatus != "committed" || summary.Branch != "task-a" || len(summary.Repositories) != 2 ||
+		summary.Repositories[0].Branch != "task-a" || summary.Repositories[1].Branch != "task-b" {
 		t.Fatalf("unexpected repository summary: %#v", summary)
 	}
 }

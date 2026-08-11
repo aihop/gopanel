@@ -220,6 +220,7 @@ func codeWorktreeIsClean(worktreeDir string) bool {
 }
 
 func isCodeSessionWorktreeBranch(branch string, sessionID uint) bool {
-	prefix := fmt.Sprintf("gopanel/code-%d-", sessionID)
-	return strings.HasPrefix(strings.TrimSpace(branch), prefix) && len(strings.TrimSpace(branch)) > len(prefix)
+	base := codeSessionWorktreeBranch(sessionID, "")
+	branch = strings.TrimSpace(branch)
+	return branch == base || strings.HasPrefix(branch, base+"-")
 }

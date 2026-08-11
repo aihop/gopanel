@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -118,7 +119,9 @@ func TestCodeTaskSummaryUsesStoredStatsWhenCommitUnreachable(t *testing.T) {
 		t.Fatal(err)
 	}
 	summary := items[0].Summary
-	if summary.Additions != 137 || summary.Deletions != 42 || summary.ChangedFiles != 9 || !summary.HasDiff {
+	if summary.Additions != 137 || summary.Deletions != 42 || summary.ChangedFiles != 9 || !summary.HasDiff ||
+		len(summary.Repositories) != 1 || summary.Repositories[0].Branch != "stats-branch" ||
+		summary.Repositories[0].Additions != 137 || summary.Repositories[0].ChangedFiles != 9 {
 		t.Fatalf("stored delivery stats were not used: %#v", summary)
 	}
 }
@@ -160,5 +163,52 @@ func TestCodeTaskSummaryFallsBackToLiveDiffWithoutStoredStats(t *testing.T) {
 	summary := items[0].Summary
 	if !summary.HasDiff || summary.Additions != 3 || summary.ChangedFiles != 1 {
 		t.Fatalf("legacy rows must fall back to live diff: %#v", summary)
+	}
+}
+
+func TestCodeTaskSummaryRestoresCleanedMultiRepositoryHistory(t *testing.T) {
+	database := withCodeGovernanceDB(t)
+	session := &model.AIDevSession{
+		UserID: 1, ProjectID: 1, Title: "history", WorkDir: t.TempDir(),
+		IsolationMode: codeIsolationMultiWorktree,
+	}
+	if err := database.Create(session).Error; err != nil {
+		t.Fatal(err)
+	}
+	task := &model.AITask{UserID: 1, SessionID: session.ID, ProjectID: 1, Title: "task", WorkDir: session.WorkDir}
+	if err := database.Create(task).Error; err != nil {
+		t.Fatal(err)
+	}
+	repositoryResults, err := json.Marshal([]codeRepositoryDeliveryResult{
+		{
+			RepositoryName: "api", Branch: "gopanel/code-96-api", Status: codeDeliveryCompleted,
+			PushStatus: "local", Additions: 21, Deletions: 5, ChangedFiles: 3,
+		},
+		{
+			RepositoryName: "web", Branch: "gopanel/code-96-web", Status: codeDeliveryCompleted,
+			PushStatus: "local", Additions: 8, Deletions: 2, ChangedFiles: 1,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	job := &model.AICodeDeliveryJob{
+		SessionID: session.ID, TaskID: task.ID, ProjectID: 1, UserID: 1,
+		Status: codeDeliveryJobCompleted, Stage: codeDeliveryStageCompleted, Progress: 100,
+		RepositoryResults: string(repositoryResults),
+	}
+	if err := database.Create(job).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	items, err := buildCodeTaskListItems([]*model.AITask{task}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	summary := items[0].Summary
+	if summary.Branch != "gopanel/code-96-api" || summary.GitStatus != "merged" ||
+		summary.Additions != 29 || summary.Deletions != 7 || summary.ChangedFiles != 4 ||
+		len(summary.Repositories) != 2 || summary.Repositories[1].Branch != "gopanel/code-96-web" {
+		t.Fatalf("cleaned repository history was not restored: %#v", summary)
 	}
 }
