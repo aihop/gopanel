@@ -5,20 +5,24 @@ import { getCodeGitHistory, getCodeGitHistoryDiff } from "@/api/modules/codeGit"
 import type {
 	CodeGitHistory,
 	CodeGitHistoryCommit,
+	CodeGitHistoryDiff,
 	CodeGitHistoryRepository,
 	CodeGitHistorySelection
 } from "@/api/interface/codeGit"
 import Icon from "@/components/common/Icon.vue"
 import { codeGitReviewMessages } from "../codeGitReviewMessages"
 
-const props = withDefaults(defineProps<{
-	sessionId: number | null
-	active: boolean
-	refreshKey: number
-	loadHistory?: (sessionId: number) => Promise<CodeGitHistory>
-	loadDiff?: (sessionId: number, repositoryId: string, commit: string) => Promise<CodeGitHistoryDiff>
-	autoSelect?: boolean
-}>(), { autoSelect: true })
+const props = withDefaults(
+	defineProps<{
+		sessionId: number | null
+		active: boolean
+		refreshKey: number
+		loadHistory?: (sessionId: number) => Promise<CodeGitHistory>
+		loadDiff?: (sessionId: number, repositoryId: string, commit: string) => Promise<CodeGitHistoryDiff>
+		autoSelect?: boolean
+	}>(),
+	{ autoSelect: true }
+)
 const emit = defineEmits<{ selected: [selection: CodeGitHistorySelection | null] }>()
 const { t } = useI18n({ messages: codeGitReviewMessages })
 const history = ref<CodeGitHistory | null>(null)

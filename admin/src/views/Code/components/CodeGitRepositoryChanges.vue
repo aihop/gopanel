@@ -2,19 +2,13 @@
 import { computed } from "vue"
 import { useI18n } from "vue-i18n"
 import Icon from "@/components/common/Icon.vue"
-import type { CodeGitDiffKind, CodeGitFile, CodeGitRepository, CodeGitScope } from "@/api/interface/codeGit"
+import type { CodeGitDiffKind, CodeGitRepository, CodeGitScope } from "@/api/interface/codeGit"
+import type { CodeGitReviewEntry } from "../codeGitReviewEntries"
 import { codeGitReviewMessages } from "../codeGitReviewMessages"
-
-export interface GitRepositoryChangeEntry {
-	repository: CodeGitRepository
-	file: CodeGitFile
-	kind: CodeGitDiffKind
-	key: string
-}
 
 const props = defineProps<{
 	repositories: CodeGitRepository[]
-	entries: GitRepositoryChangeEntry[]
+	entries: CodeGitReviewEntry[]
 	scope: CodeGitScope
 	selectedKey: string
 	stagingKey: string
@@ -22,8 +16,8 @@ const props = defineProps<{
 }>()
 
 defineEmits<{
-	(event: "select", entry: GitRepositoryChangeEntry): void
-	(event: "update-stage", payload: { entry: GitRepositoryChangeEntry; staged: boolean }): void
+	(event: "select", entry: CodeGitReviewEntry): void
+	(event: "update-stage", payload: { entry: CodeGitReviewEntry; staged: boolean }): void
 }>()
 
 const { t } = useI18n({ messages: codeGitReviewMessages })

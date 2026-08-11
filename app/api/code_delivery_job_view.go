@@ -46,6 +46,9 @@ func loadCodeDeliveryJobView(sessionID uint) (*codeDeliveryJobView, error) {
 	_ = json.Unmarshal([]byte(job.ConflictFiles), &conflicts)
 	var repositories []codeRepositoryDeliveryResult
 	_ = json.Unmarshal([]byte(job.RepositoryResults), &repositories)
+	if job.Status == codeDeliveryJobConflict && len(conflicts) > 0 {
+		enrichCodeDeliveryConflictRepository(job.SessionID, repositories, conflicts)
+	}
 	position := 0
 	if job.Status == codeDeliveryJobQueued {
 		var count int64
@@ -70,4 +73,25 @@ func loadCodeDeliveryJobView(sessionID uint) (*codeDeliveryJobView, error) {
 		ErrorMessage:          job.ErrorMessage, ConflictFiles: conflicts, CreatedAt: job.CreatedAt, UpdatedAt: job.UpdatedAt,
 		StartedAt: job.StartedAt, CompletedAt: job.CompletedAt,
 	}, nil
+}
+
+func enrichCodeDeliveryConflictRepository(sessionID uint, repositories []codeRepositoryDeliveryResult, conflicts []string) {
+	for index := range repositories {
+		if repositories[index].Status == codeDeliveryJobConflict {
+			repositories[index].ConflictFiles = conflicts
+			return
+		}
+	}
+	var repository model.AIDevSessionRepository
+	if err := global.DB.Where("session_id = ? AND status = ?", sessionID, codeDeliveryJobConflict).First(&repository).Error; err != nil {
+		return
+	}
+	repositoryID := codeSessionRepositoryID(repository.ID)
+	for index := range repositories {
+		if repositories[index].RepositoryID == repositoryID {
+			repositories[index].Status = codeDeliveryJobConflict
+			repositories[index].ConflictFiles = conflicts
+			return
+		}
+	}
 }

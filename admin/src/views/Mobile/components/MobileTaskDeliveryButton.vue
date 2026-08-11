@@ -19,6 +19,7 @@ const props = defineProps<{
 	delivery?: CodeDeliveryJob | null
 	active: boolean
 	revision?: string
+	block?: boolean
 }>()
 const emit = defineEmits<{ updated: [] }>()
 const { t } = useI18n({ messages: mobileTaskDeliveryMessages })
@@ -162,6 +163,7 @@ watch(
 		secondary
 		:loading="loading || statusLoading"
 		:disabled="delivering || (!statusError && delivered && !hasChanges && !canDeliverPending)"
+		:block="block"
 		:type="codeDeliveryPhaseType(phase)"
 		class="!h-10 !rounded-xl"
 		@click.stop="deliver"

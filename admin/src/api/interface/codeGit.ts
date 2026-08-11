@@ -184,6 +184,39 @@ export interface CodeDeliveryJob {
 	completedAt?: string
 }
 
+export interface CodeDeliveryConflictRepository {
+	id: string
+	name: string
+	branch: string
+	targetBranch: string
+	files: string[]
+	unresolvedFiles: string[]
+	resolved: number
+	total: number
+}
+
+export interface CodeDeliveryConflicts {
+	repositories: CodeDeliveryConflictRepository[]
+}
+
+export type CodeDeliveryConflictResolution = "content" | "main" | "task" | "delete"
+
+export interface CodeDeliveryConflictFile {
+	repositoryId: string
+	path: string
+	baseContent?: string
+	mainContent?: string
+	taskContent?: string
+	resultContent?: string
+	baseExists: boolean
+	mainExists: boolean
+	taskExists: boolean
+	resultExists: boolean
+	binary: boolean
+	resolved: boolean
+	version: string
+}
+
 export interface CodeDeliveryFact {
 	key: "snapshot" | "merge" | "local" | "remote"
 	status: "pending" | "partial" | "completed" | "skipped"

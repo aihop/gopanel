@@ -1,6 +1,8 @@
 export const mobileTaskDeliveryMessages = {
 	zh: {
 		mobile: {
+			gitReviewOpen: "查看任务变更",
+			gitReviewHint: "按任务变更、提交、Git 记录的顺序审查；保存与交付使用和电脑端相同的流程。",
 			saveChanges: "保存修改",
 			checkingChanges: "检查修改",
 			retryGitStatus: "重新检查",
@@ -38,6 +40,9 @@ export const mobileTaskDeliveryMessages = {
 	},
 	en: {
 		mobile: {
+			gitReviewOpen: "Review task changes",
+			gitReviewHint:
+				"Review task changes, commit, and Git history in order. Saving and delivery use the same flow as desktop.",
 			saveChanges: "Save changes",
 			checkingChanges: "Checking changes",
 			retryGitStatus: "Check again",
@@ -61,14 +66,16 @@ export const mobileTaskDeliveryMessages = {
 			gitRetry: "Retry",
 			gitPush: "Push delivery",
 			gitPushTitle: "Push delivered commits",
-			gitPushConfirm: "Push delivered commits for {count} repositories to {destinations}? Remote changes are never overwritten.",
+			gitPushConfirm:
+				"Push delivered commits for {count} repositories to {destinations}? Remote changes are never overwritten.",
 			gitPushPending: "Push delivery ({count})",
 			gitPushSuccess: "Delivered commits were pushed and verified remotely",
 			gitPushFailed: "Push failed",
 			gitPushStatusFailed: "Failed to load push status",
 			gitPushCompleted: "All {count} repositories were pushed remotely",
 			gitLocalSyncPending: "{count} repositories were not merged into the local main repository",
-			gitLocalSyncHint: "The delivery commit is kept safely and pushing is unaffected. Run the copied command on your computer when you want the local copy in sync.",
+			gitLocalSyncHint:
+				"The delivery commit is kept safely and pushing is unaffected. Run the copied command on your computer when you want the local copy in sync.",
 			gitLocalSyncCopy: "Copy sync commands",
 			gitLocalSyncCopied: "Sync commands copied"
 		}

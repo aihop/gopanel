@@ -1,5 +1,8 @@
 import http from "@/api"
 import type {
+	CodeDeliveryConflictFile,
+	CodeDeliveryConflictResolution,
+	CodeDeliveryConflicts,
 	CodeDeliveryJob,
 	CodeDeliveryPushResult,
 	CodeGitDeliveryResult,
@@ -45,6 +48,45 @@ export function mergeCodeSessionWorktree(sessionId: number, reviewRevision?: str
 
 export function getCodeDeliveryJob(sessionId: number) {
 	return http.get<CodeDeliveryJob | null>(`/code/sessions/${sessionId}/delivery`, undefined, { timeout: 10000 })
+}
+
+export function getCodeDeliveryConflicts(sessionId: number) {
+	return http.get<CodeDeliveryConflicts>(`/code/sessions/${sessionId}/delivery/conflicts`, undefined, {
+		timeout: 15000
+	})
+}
+
+export function getCodeDeliveryConflictFile(sessionId: number, repositoryId: string, path: string) {
+	return http.get<CodeDeliveryConflictFile>(
+		`/code/sessions/${sessionId}/delivery/conflicts/file`,
+		{ repositoryId, path },
+		{ timeout: 15000 }
+	)
+}
+
+export function saveCodeDeliveryConflictFile(
+	sessionId: number,
+	repositoryId: string,
+	path: string,
+	resolution: CodeDeliveryConflictResolution,
+	content: string,
+	baseVersion: string
+) {
+	return http.put<CodeDeliveryConflictFile>(`/code/sessions/${sessionId}/delivery/conflicts/file`, {
+		repositoryId,
+		path,
+		resolution,
+		content,
+		baseVersion
+	})
+}
+
+export function completeCodeDeliveryConflicts(sessionId: number) {
+	return http.post<CodeDeliveryJob>(`/code/sessions/${sessionId}/delivery/conflicts/complete`, {}, 70000)
+}
+
+export function confirmManualCodeDeliveryConflict(sessionId: number) {
+	return http.post<CodeDeliveryJob>(`/code/sessions/${sessionId}/delivery/conflicts/manual-confirm`, {}, 70000)
 }
 
 export function getCodeDeliveryPushStatus(sessionId: number) {

@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/aihop/gopanel/app/model"
 )
 
 const unresolvedCodeConflict = "<<<" + "<<<< HEAD\n" +
@@ -82,4 +84,21 @@ func TestCommitCodeSessionRepositoryRejectsConflictMarkers(t *testing.T) {
 		"test: reject conflict marker",
 	)
 	requireCodeConflictMarkerRejected(t, repository.WorktreeDir, before, commitErr)
+}
+
+func TestSaveCodeGitChangesRejectsActiveDeliveryConflict(t *testing.T) {
+	database := withCodeGovernanceDB(t)
+	session, _ := createDeliveryWorktree(t, 921)
+	if err := database.Create(session).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := database.Create(&model.AICodeDeliveryJob{
+		SessionID: session.ID, ProjectID: session.ProjectID, UserID: session.UserID,
+		Status: codeDeliveryJobConflict, Stage: codeDeliveryStageMerging, RepositoryKeys: "[]",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := validateCodeSessionDeliveryConflictIdle(session.ID); err == nil || !strings.Contains(err.Error(), "在网页处理") {
+		t.Fatalf("active conflict was not rejected with guidance: %v", err)
+	}
 }

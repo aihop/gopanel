@@ -143,9 +143,25 @@ func SaveCodeGitChanges(c fiber.Ctx) error {
 		return c.JSON(e.Fail(err))
 	}
 	return runCodeGitDelivery(c, "git_save_all", func(session *model.AIDevSession) (codeGitDeliveryResult, error) {
+		if err := validateCodeSessionDeliveryConflictIdle(session.ID); err != nil {
+			return codeGitDeliveryResult{}, err
+		}
 		if session.IsolationMode == codeIsolationMultiWorktree {
 			return saveCodeSessionRepositories(session, req.Message)
 		}
 		return saveCodeSessionWorktree(session, req.Message)
 	})
+}
+
+func validateCodeSessionDeliveryConflictIdle(sessionID uint) error {
+	var conflictJobs int64
+	if err := global.DB.Model(&model.AICodeDeliveryJob{}).Where(
+		"session_id = ? AND status = ?", sessionID, codeDeliveryJobConflict,
+	).Count(&conflictJobs).Error; err != nil {
+		return err
+	}
+	if conflictJobs > 0 {
+		return errors.New("当前交付存在合并冲突，请使用“在网页处理”，或在终端合并后点击“核验手动合并”")
+	}
+	return nil
 }

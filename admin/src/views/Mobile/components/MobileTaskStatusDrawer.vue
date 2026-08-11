@@ -5,8 +5,7 @@ import type { CodeSession, CodeSessionState } from "@/api/interface/code"
 import Icon from "@/components/common/Icon.vue"
 import { mobileMessages } from "@/i18n/locales/mobile"
 import { mobileTaskDeliveryMessages } from "../mobileTaskDeliveryMessages"
-import MobileTaskDeliveryButton from "./MobileTaskDeliveryButton.vue"
-import MobileDeliveryPush from "./MobileDeliveryPush.vue"
+import MobileGitReviewDrawer from "./MobileGitReviewDrawer.vue"
 import CodeDeliveryFacts from "@/views/Code/components/CodeDeliveryFacts.vue"
 
 const props = defineProps<{
@@ -29,6 +28,7 @@ const taskStatusMessages = {
 }
 const { t } = useI18n({ messages: taskStatusMessages })
 const approvalReason = ref("")
+const showGitReview = ref(false)
 const canRetry = computed(() => ["failed", "cancelled"].includes(props.state?.latestInstruction?.status || ""))
 const isRunning = computed(
 	() => props.state?.currentStage === "executing" || props.state?.latestRun?.status === "running"
@@ -125,20 +125,20 @@ watch(
 							</n-alert>
 							<CodeDeliveryFacts :facts="state.delivery.facts" :job-status="state.delivery.status" />
 						</template>
-						<div class="mt-3 flex justify-end">
-							<MobileTaskDeliveryButton
-								:session="deliverySession"
-								:delivery="state?.delivery"
-								:active="show"
-								:revision="`${state?.latestRun?.id || 0}:${state?.changedFiles.join('|') || ''}`"
-								@updated="emit('deliveryUpdated')"
-							/>
-						</div>
-						<MobileDeliveryPush
-							:session-id="deliverySession?.id ?? null"
-							:active="show"
-							:refresh-key="`${state?.delivery?.status || ''}:${state?.delivery?.resultCommit || ''}`"
-						/>
+						<n-button
+							block
+							size="large"
+							type="primary"
+							secondary
+							class="mt-3 !h-11 !rounded-xl"
+							@click="showGitReview = true"
+						>
+							<template #icon><Icon name="mdi:source-branch-check" :size="18" /></template>
+							{{ t("mobile.gitReviewOpen") }}
+						</n-button>
+						<p class="mt-2 text-[11px] leading-5 text-slate-500">
+							{{ t("mobile.gitReviewHint") }}
+						</p>
 					</section>
 					<n-alert v-if="state?.pendingApproval" type="warning" :title="state.pendingApproval.title">
 						<div class="whitespace-pre-wrap text-sm">{{ state.pendingApproval.content }}</div>
@@ -288,4 +288,11 @@ watch(
 			</template>
 		</n-drawer-content>
 	</n-drawer>
+	<MobileGitReviewDrawer
+		v-if="deliverySession"
+		v-model:show="showGitReview"
+		:session="deliverySession"
+		:delivery="state?.delivery"
+		@updated="emit('deliveryUpdated')"
+	/>
 </template>

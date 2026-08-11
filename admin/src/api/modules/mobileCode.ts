@@ -11,6 +11,9 @@ import type {
 import type { HostTerminalSession } from "@/api/interface/hostTerminal"
 import type { CodeProjectSyncStatus } from "@/api/interface/codeOverview"
 import type {
+	CodeDeliveryConflictFile,
+	CodeDeliveryConflictResolution,
+	CodeDeliveryConflicts,
 	CodeDeliveryJob,
 	CodeDeliveryPushResult,
 	CodeGitDeliveryResult,
@@ -118,9 +121,12 @@ export function createMobileSession(
 	).then(async session => {
 		if (session.status !== "initializing") return session
 		await waitForCodeSessionInitialization(
-			() => mobileRequest(
-				mobileHttp.get<ResultData<import("@/api/interface/code").CodeSessionInitialization>>(`/mobile/app/sessions/${session.id}/initialization`)
-			),
+			() =>
+				mobileRequest(
+					mobileHttp.get<ResultData<import("@/api/interface/code").CodeSessionInitialization>>(
+						`/mobile/app/sessions/${session.id}/initialization`
+					)
+				),
 			{ failed: messages.initializationFailed, timedOut: messages.initializationTimedOut }
 		)
 		const state = await getMobileSessionState(session.id)
@@ -163,9 +169,7 @@ export function getMobileGitDiff(
 }
 
 export function getMobileGitHistory(sessionId: number) {
-	return mobileRequest(
-		mobileHttp.get<ResultData<CodeGitHistory>>(`/mobile/app/sessions/${sessionId}/git/history`)
-	)
+	return mobileRequest(mobileHttp.get<ResultData<CodeGitHistory>>(`/mobile/app/sessions/${sessionId}/git/history`))
 }
 
 export function getMobileGitHistoryDiff(sessionId: number, repositoryId: string, commit: string) {
@@ -209,6 +213,57 @@ export function syncMobileSessionGitRepository(sessionId: number, repositoryId: 
 export function getMobileDeliveryPushStatus(sessionId: number) {
 	return mobileRequest(
 		mobileHttp.get<ResultData<CodeDeliveryPushResult>>(`/mobile/app/sessions/${sessionId}/delivery/push`)
+	)
+}
+
+export function getMobileDeliveryConflicts(sessionId: number) {
+	return mobileRequest(
+		mobileHttp.get<ResultData<CodeDeliveryConflicts>>(`/mobile/app/sessions/${sessionId}/delivery/conflicts`)
+	)
+}
+
+export function getMobileDeliveryConflictFile(sessionId: number, repositoryId: string, path: string) {
+	return mobileRequest(
+		mobileHttp.get<ResultData<CodeDeliveryConflictFile>>(
+			`/mobile/app/sessions/${sessionId}/delivery/conflicts/file`,
+			{ params: { repositoryId, path } }
+		)
+	)
+}
+
+export function saveMobileDeliveryConflictFile(
+	sessionId: number,
+	repositoryId: string,
+	path: string,
+	resolution: CodeDeliveryConflictResolution,
+	content: string,
+	baseVersion: string
+) {
+	return mobileRequest(
+		mobileHttp.put<ResultData<CodeDeliveryConflictFile>>(
+			`/mobile/app/sessions/${sessionId}/delivery/conflicts/file`,
+			{ repositoryId, path, resolution, content, baseVersion }
+		)
+	)
+}
+
+export function completeMobileDeliveryConflicts(sessionId: number) {
+	return mobileRequest(
+		mobileHttp.post<ResultData<CodeDeliveryJob>>(
+			`/mobile/app/sessions/${sessionId}/delivery/conflicts/complete`,
+			{},
+			{ timeout: 70000 }
+		)
+	)
+}
+
+export function confirmMobileManualDeliveryConflict(sessionId: number) {
+	return mobileRequest(
+		mobileHttp.post<ResultData<CodeDeliveryJob>>(
+			`/mobile/app/sessions/${sessionId}/delivery/conflicts/manual-confirm`,
+			{},
+			{ timeout: 70000 }
+		)
 	)
 }
 

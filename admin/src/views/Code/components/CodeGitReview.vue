@@ -4,6 +4,7 @@ import { useIntervalFn } from "@vueuse/core"
 import { useI18n } from "vue-i18n"
 import { useMessage } from "naive-ui"
 import CodeConflictManualMerge from "./CodeConflictManualMerge.vue"
+import CodeConflictResolverDrawer from "./CodeConflictResolverDrawer.vue"
 import CodeDeliveryPush from "./CodeDeliveryPush.vue"
 import CodeDeliveryFacts from "./CodeDeliveryFacts.vue"
 import CodeGitDiffViewer from "./CodeGitDiffViewer.vue"
@@ -20,14 +21,8 @@ import {
 	updateCodeGitStage
 } from "@/api/modules/codeGit"
 import { getCodeSession } from "@/api/modules/code"
-import type {
-	CodeDeliveryJob,
-	CodeGitDiffKind,
-	CodeGitFile,
-	CodeGitHistorySelection,
-	CodeGitRepository,
-	CodeGitStatus
-} from "@/api/interface/codeGit"
+import type { CodeDeliveryJob, CodeGitHistorySelection, CodeGitStatus } from "@/api/interface/codeGit"
+import { codeGitReviewEntries, codeGitReviewTotals, type CodeGitReviewEntry } from "../codeGitReviewEntries"
 import { codeGitReviewMessages } from "../codeGitReviewMessages"
 import type { CodeGitReviewView } from "../codeGitReviewView"
 
@@ -54,32 +49,13 @@ const showAdvancedOperations = ref(false)
 const deliveryLoading = ref(false)
 const deliveryPushKey = ref(0)
 const deliveryJob = ref<CodeDeliveryJob | null>(null)
+const conflictResolverVisible = ref(false)
 let statusPending = false
 let diffSequence = 0
-interface GitReviewEntry {
-	repository: CodeGitRepository
-	file: CodeGitFile
-	kind: CodeGitDiffKind
-	key: string
-}
-const entries = computed<GitReviewEntry[]>(() => {
-	const result: GitReviewEntry[] = []
-	for (const repository of status.value?.repositories || []) {
-		for (const file of repository.files) {
-			if (file.staged) {
-				result.push({ repository, file, kind: "staged", key: `${repository.id}:staged:${file.path}` })
-			}
-			if (file.changed || file.untracked) {
-				result.push({ repository, file, kind: "working", key: `${repository.id}:working:${file.path}` })
-			}
-		}
-	}
-	return result
-})
+const entries = computed(() => codeGitReviewEntries(status.value))
 const selectedEntry = computed(() => entries.value.find(entry => entry.key === selectedKey.value) || null)
 const hasChanges = computed(() => entries.value.length > 0)
-const totalAdditions = computed(() => (status.value?.additions || 0) + (status.value?.stagedAdditions || 0))
-const totalDeletions = computed(() => (status.value?.deletions || 0) + (status.value?.stagedDeletions || 0))
+const totals = computed(() => codeGitReviewTotals(status.value))
 const isolatedRepositories = computed(() =>
 	(status.value?.repositories || []).filter(repository => repository.isolated)
 )
@@ -90,7 +66,13 @@ const conflictRepositories = computed(() => {
 	return (deliveryJob.value.repositories || []).filter(repository => repository.status === "conflict")
 })
 const canSave = computed(() =>
-	Boolean(view.value === "commit" && hasIsolation.value && !deliveryActive.value && hasChanges.value)
+	Boolean(
+		view.value === "commit" &&
+			hasIsolation.value &&
+			!deliveryActive.value &&
+			deliveryJob.value?.status !== "conflict" &&
+			hasChanges.value
+	)
 )
 const deliveryStatusLabel = computed(() => {
 	if (!deliveryJob.value) return ""
@@ -111,7 +93,8 @@ const deliveryLabel = computed(() => {
 	}
 	return t("code.gitWorktreeBranch", { branch: worktreeBranch.value })
 })
-const loadDiff = async (entry: GitReviewEntry, preserveContent = false) => {
+const reviewScope = computed(() => (view.value === "changes" ? "result" : "workspace"))
+const loadDiff = async (entry: CodeGitReviewEntry, preserveContent = false) => {
 	const sequence = ++diffSequence
 	selectedKey.value = entry.key
 	if (!preserveContent) {
@@ -125,7 +108,7 @@ const loadDiff = async (entry: GitReviewEntry, preserveContent = false) => {
 			entry.repository.id,
 			entry.file.path,
 			entry.kind,
-			"workspace"
+			entry.kind === "result" ? "result" : "workspace"
 		)
 		if (sequence !== diffSequence || selectedKey.value !== entry.key) return
 		diffContent.value = response.data.content || ""
@@ -155,7 +138,7 @@ const loadStatus = async (silent = false) => {
 	else refreshing.value = true
 	try {
 		const [response, sessionResponse, deliveryResponse] = await Promise.all([
-			getCodeGitStatus(props.sessionId, "workspace"),
+			getCodeGitStatus(props.sessionId, reviewScope.value),
 			getCodeSession(props.sessionId),
 			getCodeDeliveryJob(props.sessionId)
 		])
@@ -191,7 +174,7 @@ const saveChanges = async () => {
 	}
 }
 
-const updateStage = async (entry: GitReviewEntry, staged: boolean) => {
+const updateStage = async (entry: CodeGitReviewEntry, staged: boolean) => {
 	if (!props.sessionId) return
 	stagingKey.value = entry.key
 	try {
@@ -270,7 +253,13 @@ useIntervalFn(() => {
 			:title="historySelection?.title || selectedEntry?.file.path || ''"
 			:subtitle="
 				historySelection?.subtitle ||
-					t(selectedEntry?.kind === 'staged' ? 'code.gitStagedDiff' : 'code.gitWorkingDiff')
+				t(
+					selectedEntry?.kind === 'result'
+						? 'code.gitResultDiff'
+						: selectedEntry?.kind === 'staged'
+							? 'code.gitStagedDiff'
+							: 'code.gitWorkingDiff'
+				)
 			"
 			:content="diffContent"
 			:truncated="diffTruncated"
@@ -291,12 +280,12 @@ useIntervalFn(() => {
 			@open-file="openSelectedFile"
 		/>
 
-		<aside class="flex w-80 shrink-0 flex-col border-l border-slate-200 bg-slate-50/70">
+		<aside class="flex min-h-0 w-80 shrink-0 flex-col overflow-hidden border-l border-slate-200 bg-slate-50/70">
 			<CodeGitReviewHeader
 				v-model="view"
 				:status="status"
-				:additions="totalAdditions"
-				:deletions="totalDeletions"
+				:additions="totals.additions"
+				:deletions="totals.deletions"
 				:refreshing="refreshing"
 				@refresh="refreshReview"
 			/>
@@ -306,7 +295,10 @@ useIntervalFn(() => {
 				:disabled="deliveryActive"
 				@synced="loadStatus(true)"
 			/>
-			<div v-if="view === 'commit' && hasIsolation" class="space-y-2 border-b border-slate-200 p-3">
+			<div
+				v-if="view === 'commit' && hasIsolation"
+				class="max-h-[46%] shrink-0 space-y-2 overflow-y-auto border-b border-slate-200 p-3"
+			>
 				<div class="truncate text-xs text-slate-500" :title="deliveryLabel">{{ deliveryLabel }}</div>
 				<n-alert
 					v-if="deliveryJob"
@@ -332,10 +324,18 @@ useIntervalFn(() => {
 						:percentage="deliveryJob.progress"
 						:show-indicator="false"
 					/>
-					<div v-if="deliveryJob.errorMessage && !conflictRepositories.length" class="mt-2 break-words text-xs">
+					<div
+						v-if="deliveryJob.errorMessage && !conflictRepositories.length"
+						class="mt-2 break-words text-xs"
+					>
 						{{ deliveryJob.errorMessage }}
 					</div>
-					<CodeConflictManualMerge :repositories="conflictRepositories" />
+					<CodeConflictManualMerge
+						:repositories="conflictRepositories"
+						:session-id="sessionId"
+						@resolve="conflictResolverVisible = true"
+						@completed="loadStatus(true)"
+					/>
 					<CodeDeliveryFacts :facts="deliveryJob.facts" :job-status="deliveryJob.status" />
 				</n-alert>
 				<CodeLocalSyncPending
@@ -389,12 +389,12 @@ useIntervalFn(() => {
 				</div>
 				<n-empty
 					v-else-if="status && !status.available"
-					:description="t('code.gitNoRepository')"
+					:description="t(view === 'changes' ? 'code.gitResultUnavailable' : 'code.gitNoRepository')"
 					class="mt-16"
 				/>
 				<n-empty
 					v-else-if="status && !hasChanges"
-					:description="t('code.gitNoChanges')"
+					:description="t(view === 'changes' ? 'code.gitResultEmpty' : 'code.gitNoChanges')"
 					class="mt-16"
 				/>
 				<CodeGitRepositoryChanges
@@ -402,7 +402,7 @@ useIntervalFn(() => {
 					class="min-h-0 flex-1"
 					:repositories="status?.repositories || []"
 					:entries="entries"
-					scope="workspace"
+					:scope="reviewScope"
 					:selected-key="selectedKey"
 					:staging-key="stagingKey"
 					:show-advanced-operations="view === 'commit' && showAdvancedOperations"
@@ -412,4 +412,10 @@ useIntervalFn(() => {
 			</n-spin>
 		</aside>
 	</div>
+	<CodeConflictResolverDrawer
+		v-if="sessionId"
+		v-model:show="conflictResolverVisible"
+		:session-id="sessionId"
+		@completed="loadStatus(true)"
+	/>
 </template>
