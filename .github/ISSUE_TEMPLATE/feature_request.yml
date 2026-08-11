@@ -1,0 +1,20 @@
+name: Feature request / 功能建议
+description: Suggest a capability / 提出新能力
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you hitting? / 你遇到的问题
+      description: Describe the situation, not the solution you have in mind.
+    validations:
+      required: true
+  - type: textarea
+    id: workaround
+    attributes:
+      label: How do you work around it today? / 目前怎么绕过
+      description: This tells us how painful it is and what a fix must beat.
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like instead? / 你希望怎样

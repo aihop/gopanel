@@ -1,0 +1,10 @@
+# 默认由维护者评审。
+# 语法见 https://docs.github.com/articles/about-code-owners
+
+* @aihop
+
+# 特权与安全边界改动需要额外留意
+/gpc/           @aihop
+/gp-agent/      @aihop
+/SECURITY.md    @aihop
+/.github/       @aihop

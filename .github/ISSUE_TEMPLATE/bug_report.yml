@@ -1,0 +1,51 @@
+name: Bug report / 缺陷报告
+description: Something is broken / 有功能不正常
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Security issues do **not** belong here — use private reporting, see [SECURITY.md](../blob/main/SECURITY.md).
+
+        安全问题**请勿**在此提交，走私密渠道，见 [SECURITY.md](../blob/main/SECURITY.md)。
+  - type: input
+    id: version
+    attributes:
+      label: GoPanel version / 版本
+      placeholder: "1.3.3"
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Platform / 平台
+      description: OS, architecture, and how you installed it
+      placeholder: "Ubuntu 24.04 amd64, install.sh"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect? / 预期行为
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened instead? / 实际行为
+      description: Include the error message verbatim if there is one.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Smallest reproduction / 最小复现
+      description: The shorter this is, the faster it gets fixed.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / 日志
+      description: Redact credentials and tokens before pasting. / 粘贴前请去掉凭据和令牌。
+      render: shell

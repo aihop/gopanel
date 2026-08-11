@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability / 安全漏洞
+    url: https://github.com/aihop/gopanel/security/advisories/new
+    about: Report privately, never in a public issue. / 请私密报告，不要开公开 issue。
+  - name: Documentation and website / 文档与官网
+    url: https://gopanel.cn/
+    about: Installation and usage guides. / 安装与使用说明。
