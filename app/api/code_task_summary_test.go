@@ -183,7 +183,7 @@ func TestApplyCodeTaskRepositorySummariesHidesLowerPriorityPushError(t *testing.
 	}
 }
 
-func TestBuildCodeTaskListItemsIncludesStageAndLatestAgentMessage(t *testing.T) {
+func TestBuildCodeTaskListItemsIncludesStageAndLatestMessages(t *testing.T) {
 	database := withCodeGovernanceDB(t)
 	lastInstructionAt := time.Now().Add(-10 * time.Minute)
 	session := &model.AIDevSession{
@@ -197,12 +197,15 @@ func TestBuildCodeTaskListItemsIncludesStageAndLatestAgentMessage(t *testing.T) 
 	if err := database.Create(task).Error; err != nil {
 		t.Fatal(err)
 	}
-	olderMessage := time.Now().Add(-5 * time.Minute)
-	newerMessage := time.Now().Add(-time.Minute)
+	olderUserMessage := time.Now().Add(-6 * time.Minute)
+	olderAgentMessage := time.Now().Add(-5 * time.Minute)
+	newerUserMessage := time.Now().Add(-2 * time.Minute)
+	newerAgentMessage := time.Now().Add(-time.Minute)
 	messages := []model.AIMessage{
-		{CreatedAt: olderMessage, SessionID: session.ID, TaskID: task.ID, Role: "agent", Content: "旧的回复"},
-		{CreatedAt: newerMessage, SessionID: session.ID, TaskID: task.ID, Role: "agent", Content: "  正在跑 npm test\n已通过 15 个用例  "},
-		{CreatedAt: time.Now(), SessionID: session.ID, TaskID: task.ID, Role: "user", Content: "这条是用户说的，不该被当成执行器输出"},
+		{CreatedAt: olderUserMessage, SessionID: session.ID, TaskID: task.ID, Role: "user", Content: "旧的指令"},
+		{CreatedAt: olderAgentMessage, SessionID: session.ID, TaskID: task.ID, Role: "agent", Content: "旧的回复"},
+		{CreatedAt: newerUserMessage, SessionID: session.ID, TaskID: task.ID, Role: "user", Content: "  帮我检查测试\n并修好失败用例  "},
+		{CreatedAt: newerAgentMessage, SessionID: session.ID, TaskID: task.ID, Role: "agent", Content: "  正在跑 npm test\n已通过 15 个用例  "},
 	}
 	if err := database.Create(&messages).Error; err != nil {
 		t.Fatal(err)
@@ -217,11 +220,14 @@ func TestBuildCodeTaskListItemsIncludesStageAndLatestAgentMessage(t *testing.T) 
 	if summary.Stage != "awaiting_approval" {
 		t.Fatalf("stage = %q, want awaiting_approval", summary.Stage)
 	}
+	if summary.LastUserMessage != "帮我检查测试 并修好失败用例" {
+		t.Fatalf("last user message = %q", summary.LastUserMessage)
+	}
 	if summary.LastAgentMessage != "正在跑 npm test 已通过 15 个用例" {
 		t.Fatalf("last agent message = %q", summary.LastAgentMessage)
 	}
-	if summary.LastActivityAt == nil || summary.LastActivityAt.Before(lastInstructionAt) {
-		t.Fatalf("last activity should follow the newest agent message: %#v", summary.LastActivityAt)
+	if summary.LastActivityAt == nil || summary.LastActivityAt.Before(newerAgentMessage) {
+		t.Fatalf("last activity should follow the newest message: %#v", summary.LastActivityAt)
 	}
 }
 
@@ -229,9 +235,9 @@ func TestTruncateCodeTaskMessage(t *testing.T) {
 	if got := truncateCodeTaskMessage("  多行\n输出  "); got != "多行 输出" {
 		t.Fatalf("got %q", got)
 	}
-	long := strings.Repeat("字", codeTaskAgentMessageLimit+40)
+	long := strings.Repeat("字", codeTaskMessageLimit+40)
 	got := truncateCodeTaskMessage(long)
-	if []rune(got)[codeTaskAgentMessageLimit] != '…' || len([]rune(got)) != codeTaskAgentMessageLimit+1 {
+	if []rune(got)[codeTaskMessageLimit] != '…' || len([]rune(got)) != codeTaskMessageLimit+1 {
 		t.Fatalf("unexpected truncation length: %d", len([]rune(got)))
 	}
 	if truncateCodeTaskMessage("   ") != "" {

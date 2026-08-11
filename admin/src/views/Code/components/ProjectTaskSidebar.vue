@@ -3,7 +3,7 @@ import { useI18n } from "vue-i18n"
 import type { CodeTaskListItem } from "@/api/interface/codeTasks"
 import Icon from "@/components/common/Icon.vue"
 import { codeWorkspaceMessages } from "../codeWorkspaceMessages"
-import CodeTaskAgentSnippet from "./CodeTaskAgentSnippet.vue"
+import CodeTaskUserSnippet from "./CodeTaskUserSnippet.vue"
 import CodeTaskFocusMarker from "./CodeTaskFocusMarker.vue"
 import CodeTaskMetaLine from "./CodeTaskMetaLine.vue"
 import ProjectBranchManager from "./ProjectBranchManager.vue"
@@ -84,10 +84,7 @@ const { t } = useI18n({ messages: codeWorkspaceMessages })
                   </template>
                 </CodeTaskMetaLine>
 
-                <CodeTaskAgentSnippet
-                  v-if="currentTaskId === task.id"
-                  :task="task"
-                />
+                <CodeTaskUserSnippet :task="task" />
               </div>
               <!-- self-start：行改成 items-stretch 让竖线通高后，这里要单独顶对齐 -->
               <div

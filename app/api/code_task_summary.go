@@ -34,14 +34,15 @@ type codeTaskSummary struct {
 	// 会话当前阶段（executing / awaiting_approval / instruction_queued / completed…）。
 	// 比任务 status 细一档，用来回答「卡在哪一步」。
 	Stage string `json:"stage,omitempty"`
-	// 执行器最后说的那句话（截断）。对话已经由 code_native_history 固化进 ai_messages，
-	// 所以拿这个不用碰终端、不用解析 codex 的 rollout 文件，一次 SQL 就有。
+	// 最后一条用户消息和执行器回复（截断）。对话已经由 code_native_history 固化进 ai_messages，
+	// 所以拿这些不用碰终端、不用解析 codex 的 rollout 文件，一次 SQL 就有。
+	LastUserMessage  string     `json:"lastUserMessage,omitempty"`
 	LastAgentMessage string     `json:"lastAgentMessage,omitempty"`
 	LastActivityAt   *time.Time `json:"lastActivityAt,omitempty"`
 }
 
 // 列表里只需要一眼扫过的摘要，整段回复没必要传给前端。
-const codeTaskAgentMessageLimit = 160
+const codeTaskMessageLimit = 160
 
 func truncateCodeTaskMessage(content string) string {
 	trimmed := strings.TrimSpace(content)
@@ -51,10 +52,10 @@ func truncateCodeTaskMessage(content string) string {
 	// 折叠换行：多行回复在单行行内显示时，换行只会变成一堆空白。
 	trimmed = strings.Join(strings.Fields(trimmed), " ")
 	runes := []rune(trimmed)
-	if len(runes) <= codeTaskAgentMessageLimit {
+	if len(runes) <= codeTaskMessageLimit {
 		return trimmed
 	}
-	return string(runes[:codeTaskAgentMessageLimit]) + "…"
+	return string(runes[:codeTaskMessageLimit]) + "…"
 }
 
 type codeTaskListItem struct {
@@ -187,7 +188,7 @@ func loadCodeTaskRunSummaries(taskIDs []uint, summaries map[uint]codeTaskSummary
 	return nil
 }
 
-// loadCodeTaskActivitySummaries 补上「现在卡在哪一步」和「执行器最后说了什么」。
+// loadCodeTaskActivitySummaries 补上「现在卡在哪一步」和对话双方最后说了什么。
 //
 // 两条纯 SQL，刻意不放在 includeGit 门控里：git 汇总要按会话读工作区算 diff（磁盘 IO），
 // 这两条只是走索引的批量查询，每轮都带得起。
@@ -232,24 +233,29 @@ func loadCodeTaskActivitySummaries(tasks []*model.AITask, sessionIDs []uint, sum
 		}
 	}
 
-	// 每个任务取最新一条 agent 消息，写法和 loadCodeTaskRunSummaries 里取最新 run 一致。
+	// 每个任务分别取最新一条 user / agent 消息，写法和 loadCodeTaskRunSummaries 里取最新 run 一致。
 	type latestMessageRow struct {
 		TaskID    uint
+		Role      string
 		Content   string
 		CreatedAt time.Time
 	}
 	var latestMessages []latestMessageRow
 	rankedMessages := global.DB.Model(&model.AIMessage{}).
-		Select("task_id, content, created_at, ROW_NUMBER() OVER (PARTITION BY task_id ORDER BY created_at DESC, id DESC) AS row_number").
-		Where("task_id IN ? AND role = ?", taskIDs, "agent")
+		Select("task_id, role, content, created_at, ROW_NUMBER() OVER (PARTITION BY task_id, role ORDER BY created_at DESC, id DESC) AS row_number").
+		Where("task_id IN ? AND role IN ?", taskIDs, []string{"user", "agent"})
 	if err := global.DB.Table("(?) AS ranked_messages", rankedMessages).
-		Select("task_id, content, created_at").Where("row_number = 1").Scan(&latestMessages).Error; err != nil {
+		Select("task_id, role, content, created_at").Where("row_number = 1").Scan(&latestMessages).Error; err != nil {
 		return err
 	}
 	for _, row := range latestMessages {
 		summary := summaries[row.TaskID]
-		summary.LastAgentMessage = truncateCodeTaskMessage(row.Content)
-		// 有实际输出时，它比 last_instruction_at 更能代表「最后一次动静」。
+		if row.Role == "user" {
+			summary.LastUserMessage = truncateCodeTaskMessage(row.Content)
+		} else {
+			summary.LastAgentMessage = truncateCodeTaskMessage(row.Content)
+		}
+		// 有实际消息时，它比 last_instruction_at 更能代表「最后一次动静」。
 		if summary.LastActivityAt == nil || row.CreatedAt.After(*summary.LastActivityAt) {
 			createdAt := row.CreatedAt
 			summary.LastActivityAt = &createdAt
