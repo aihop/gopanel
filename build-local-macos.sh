@@ -4,13 +4,13 @@ set -Eeuo pipefail
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INSTALL_DIR="${GOPANEL_BASE_DIR:-${HOME}/.gopanel}"
 TARGET_BINARY="${INSTALL_DIR}/gopanel"
+LOCAL_BINARY="${PROJECT_ROOT}/dist/local/gopanel"
 SERVICE_LABEL="${GOPANEL_SERVICE_LABEL:-io.aihop.gopanel}"
 HEALTH_URL="${GOPANEL_HEALTH_URL:-}"
 HEALTH_TIMEOUT="${GOPANEL_HEALTH_TIMEOUT:-45}"
-GPC_BINARY="${GOPANEL_GPC_BINARY:-}"
 NPM_CACHE_DIR="${GOPANEL_NPM_CACHE_DIR:-${INSTALL_DIR}/cache/npm-local-build}"
 GO_CACHE_DIR="${GOPANEL_GO_CACHE_DIR:-${INSTALL_DIR}/cache/go-local-build}"
-TEMP_DIR=""
+GPC_BINARY="${GOPANEL_GPC_BINARY:-}"
 BACKUP_BINARY=""
 REPLACED=0
 
@@ -23,35 +23,18 @@ fail() {
   exit 1
 }
 
-cleanup() {
-  if [ -n "${TEMP_DIR}" ] && [ -d "${TEMP_DIR}" ]; then
-    rm -rf "${TEMP_DIR}"
-  fi
-}
-
-trap cleanup EXIT
-
 require_command() {
   command -v "$1" >/dev/null 2>&1 || fail "缺少命令: $1"
-}
-
-detect_arch() {
-  case "$(uname -m)" in
-    arm64|aarch64) printf 'arm64\n' ;;
-    x86_64|amd64) printf 'amd64\n' ;;
-    *) fail "不支持的 Mac 架构: $(uname -m)" ;;
-  esac
 }
 
 detect_health_url() {
   if [ -n "${HEALTH_URL}" ]; then
     return
   fi
-  local config_file="${INSTALL_DIR}/conf.yaml"
   local port="15470"
-  if [ -f "${config_file}" ]; then
+  if [ -f "${INSTALL_DIR}/conf.yaml" ]; then
     local configured_port
-    configured_port="$(awk '$1 == "port:" {gsub(/[\"\047]/, "", $2); sub(/^:/, "", $2); print $2; exit}' "${config_file}")"
+    configured_port="$(awk '$1 == "port:" {gsub(/[\"\047]/, "", $2); sub(/^:/, "", $2); print $2; exit}' "${INSTALL_DIR}/conf.yaml")"
     if [[ "${configured_port}" =~ ^[0-9]+$ ]]; then
       port="${configured_port}"
     fi
@@ -64,10 +47,8 @@ detect_version() {
     printf '%s\n' "${GOPANEL_VERSION#v}"
     return
   fi
-  local health_json=""
-  health_json="$(curl -fsS --max-time 2 "${HEALTH_URL}" 2>/dev/null || true)"
   local running_version
-  running_version="$(printf '%s' "${health_json}" | sed -n 's/.*"appVersion":"\([^"]*\)".*/\1/p')"
+  running_version="$(curl -fsS --max-time 2 "${HEALTH_URL}" 2>/dev/null | sed -n 's/.*"appVersion":"\([^"]*\)".*/\1/p' || true)"
   if [ -n "${running_version}" ]; then
     printf '%s\n' "${running_version#v}"
     return
@@ -109,11 +90,8 @@ find_gpc() {
 
 restart_service() {
   find_gpc
-  if [ -n "${GPC_BINARY}" ]; then
-    if "${GPC_BINARY}" --base-dir "${INSTALL_DIR}" panel restart; then
-      return
-    fi
-    log "gpc 重启失败，改用 launchctl"
+  if [ -n "${GPC_BINARY}" ] && "${GPC_BINARY}" --base-dir "${INSTALL_DIR}" panel restart; then
+    return
   fi
   sudo launchctl kickstart -k "system/${SERVICE_LABEL}"
 }
@@ -130,14 +108,13 @@ wait_for_health() {
 }
 
 rollback() {
-  if [ "${REPLACED}" -ne 1 ] || [ -z "${BACKUP_BINARY}" ] || [ ! -f "${BACKUP_BINARY}" ]; then
+  if [ "${REPLACED}" -ne 1 ] || [ ! -f "${BACKUP_BINARY}" ]; then
     return
   fi
-  log "新版本未能正常启动，正在回滚"
-  local rollback_temp="${TARGET_BINARY}.rollback.$$"
-  cp -p "${BACKUP_BINARY}" "${rollback_temp}"
-  chmod 755 "${rollback_temp}"
-  mv -f "${rollback_temp}" "${TARGET_BINARY}"
+  log "启动失败，正在恢复旧程序"
+  cp -p "${BACKUP_BINARY}" "${TARGET_BINARY}.rollback"
+  chmod 755 "${TARGET_BINARY}.rollback"
+  mv -f "${TARGET_BINARY}.rollback" "${TARGET_BINARY}"
   restart_service || true
   wait_for_health || true
 }
@@ -147,42 +124,43 @@ main() {
   [ -x "${TARGET_BINARY}" ] || fail "未找到本机 GoPanel: ${TARGET_BINARY}"
   [[ "${HEALTH_TIMEOUT}" =~ ^[0-9]+$ ]] || fail "GOPANEL_HEALTH_TIMEOUT 必须是整数"
   require_command go
+  require_command node
   require_command npm
   require_command curl
-  require_command tar
   require_command file
 
   detect_health_url
-  local arch version version_code package_path extracted_binary
-  arch="$(detect_arch)"
+  local version version_code build_time git_commit ldflags
   version="$(detect_version)"
   version_code="$(derive_version_code "${version}")"
-  package_path="${PROJECT_ROOT}/dist/v${version}/gopanel-darwin-${arch}.tar.gz"
-  TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/gopanel-local-install.XXXXXX")"
+  build_time="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  git_commit="$(git -C "${PROJECT_ROOT}" rev-parse --short HEAD 2>/dev/null || true)"
+  ldflags="-s -w -X github.com/aihop/gopanel/constant.AppVersion=${version} -X github.com/aihop/gopanel/constant.BuildTime=${build_time} -X github.com/aihop/gopanel/constant.BuildVersionCode=${version_code} -X github.com/aihop/gopanel/constant.AppBrand=GoPanel"
 
-  log "构建 GoPanel ${version} (darwin/${arch})"
+  log "构建前端资源"
   mkdir -p "${NPM_CACHE_DIR}" "${GO_CACHE_DIR}"
+  if [ ! -f "${PROJECT_ROOT}/admin/node_modules/vite/bin/vite.js" ]; then
+    (
+      cd "${PROJECT_ROOT}/admin"
+      npm_config_cache="${NPM_CACHE_DIR}" npm_config_fetch_retries=2 \
+        npm_config_fetch_timeout=30000 npm ci --legacy-peer-deps \
+        --prefer-offline --no-audit --no-fund
+    )
+  fi
   (
     cd "${PROJECT_ROOT}/admin"
-    npm_config_cache="${NPM_CACHE_DIR}" npm_config_fetch_retries=2 \
-      npm_config_fetch_timeout=30000 npm ci --legacy-peer-deps \
-      --prefer-offline --no-audit --no-fund
+    node node_modules/vite/bin/vite.js build --mode prod --outDir ../public --emptyOutDir
   )
+
+  log "构建当前 Mac 使用的单一 gopanel 程序"
+  mkdir -p "$(dirname "${LOCAL_BINARY}")"
   (
     cd "${PROJECT_ROOT}"
-    npm_config_cache="${NPM_CACHE_DIR}" GOCACHE="${GO_CACHE_DIR}" \
-      LOCAL_FRONTEND_BUILD=1 KEEP_DIST_DIR=0 \
-      bash ./build.sh "${version}" "${version_code}" GoPanel "darwin/${arch}"
+    GOCACHE="${GO_CACHE_DIR}" CGO_ENABLED=0 \
+      go build -trimpath -ldflags "${ldflags}" -o "${LOCAL_BINARY}" ./main.go
   )
-  [ -f "${package_path}" ] || fail "构建完成但未找到安装包: ${package_path}"
-
-  tar -xzf "${package_path}" -C "${TEMP_DIR}"
-  extracted_binary="${TEMP_DIR}/gopanel-darwin-${arch}/gopanel"
-  [ -x "${extracted_binary}" ] || fail "安装包中缺少 gopanel 可执行文件"
-  file "${extracted_binary}"
-  if ! file "${extracted_binary}" | grep -q "${arch/amd64/x86_64}"; then
-    fail "构建产物架构与本机不匹配"
-  fi
+  chmod 755 "${LOCAL_BINARY}"
+  file "${LOCAL_BINARY}"
 
   local backup_dir install_temp
   backup_dir="${INSTALL_DIR}/backups/local-build"
@@ -190,29 +168,23 @@ main() {
   BACKUP_BINARY="${backup_dir}/gopanel.$(date '+%Y%m%d-%H%M%S')"
   cp -p "${TARGET_BINARY}" "${BACKUP_BINARY}"
 
-  log "替换 ${TARGET_BINARY}"
+  log "替换并重启本机 GoPanel"
   install_temp="${TARGET_BINARY}.new.$$"
-  cp "${extracted_binary}" "${install_temp}"
+  cp "${LOCAL_BINARY}" "${install_temp}"
   chmod 755 "${install_temp}"
   mv -f "${install_temp}" "${TARGET_BINARY}"
   REPLACED=1
-
-  log "重启 ${SERVICE_LABEL}"
-  if ! restart_service; then
+  if ! restart_service || ! wait_for_health; then
     rollback
-    fail "服务重启失败，已尝试恢复旧版本"
-  fi
-  if ! wait_for_health; then
-    rollback
-    fail "健康检查超时，已恢复旧版本；请检查 /tmp/gopanel.err.log"
+    fail "本机服务未能正常启动，已尝试恢复旧程序"
   fi
 
   REPLACED=0
-  log "本地安装完成"
-  printf '安装包: %s\n' "${package_path}"
-  printf '当前程序: %s\n' "${TARGET_BINARY}"
+  log "完成"
+  printf '开发产物: %s\n' "${LOCAL_BINARY}"
+  printf '本机程序: %s\n' "${TARGET_BINARY}"
   printf '旧版备份: %s\n' "${BACKUP_BINARY}"
-  printf '健康检查: %s\n' "${HEALTH_URL}"
+  printf '提交版本: %s\n' "${git_commit}"
 }
 
 main "$@"
