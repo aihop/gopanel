@@ -16,6 +16,10 @@ const {
   taskStage,
   taskDeliveryProgress,
 } = useCodeTaskMeta()
+
+const taskHasGitDetails = (task: CodeTaskListItem) =>
+  task.summary.hasUnsavedChanges || task.summary.hasDiff || Boolean(task.summary.branch) ||
+  Boolean(task.summary.repositories?.length)
 </script>
 
 <template>
@@ -48,7 +52,7 @@ const {
       <span class="text-slate-300">·</span>
       <span class="whitespace-nowrap text-[var(--n-text-color-2)]">{{ taskStage(task) }}</span>
     </template>
-    <template v-if="taskGitMeta(task)">
+    <template v-if="taskGitMeta(task) && !taskHasGitDetails(task)">
       <span class="text-slate-300">·</span>
       <Icon
         :name="taskGitMeta(task)!.icon"
@@ -57,7 +61,7 @@ const {
         :class="taskGitMeta(task)!.color"
       />
     </template>
-    <template v-if="task.summary.hasDiff || task.summary.repositories?.length">
+    <template v-if="taskHasGitDetails(task)">
       <span class="text-slate-300">·</span>
       <CodeTaskRepositoryPopover
 			:project-id="task.projectId"
@@ -67,6 +71,12 @@ const {
 			:additions="task.summary.additions"
 			:deletions="task.summary.deletions"
 			:changed-files="task.summary.changedFiles"
+			:unsaved-additions="task.summary.unsavedAdditions"
+			:unsaved-deletions="task.summary.unsavedDeletions"
+			:unsaved-files="task.summary.unsavedFiles"
+			:has-unsaved-changes="task.summary.hasUnsavedChanges"
+			:status-icon="taskGitMeta(task)?.icon"
+			:status-color="taskGitMeta(task)?.color"
 		/>
     </template>
     <template v-if="task.summary.durationMs > 0">

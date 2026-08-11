@@ -17,6 +17,10 @@ export interface CodeTaskSummary {
 	deletions: number
 	changedFiles: number
 	hasDiff: boolean
+	unsavedAdditions: number
+	unsavedDeletions: number
+	unsavedFiles: number
+	hasUnsavedChanges: boolean
 	deliveryStatus?: "queued" | "running" | "completed" | "conflict" | "failed"
 	deliveryStage?: string
 	deliveryProgress: number

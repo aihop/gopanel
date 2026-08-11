@@ -86,6 +86,90 @@ func TestLoadCodeTaskDiffStatsCountsRealCodeInNestedDirs(t *testing.T) {
 	}
 }
 
+func TestLoadCodeTaskUnsavedStatsCountsTrackedAndUntrackedChanges(t *testing.T) {
+	repositoryDir := createCodeGitRepository(t)
+	if err := os.WriteFile(filepath.Join(repositoryDir, "README.md"), []byte("test\nstaged\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(repositoryDir, "add", "README.md"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repositoryDir, "README.md"), []byte("test\nstaged\nworking\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repositoryDir, "notes.txt"), []byte("one\ntwo"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repositoryDir, "package-lock.json"), []byte(longCodeFixtureText(100)), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	stats := loadCodeTaskUnsavedStats(repositoryDir)
+	if stats.Files != 2 || stats.Additions != 4 || stats.Deletions != 0 {
+		t.Fatalf("unexpected unsaved stats: %#v", stats)
+	}
+}
+
+func TestLoadCodeTaskUnsavedStatsHandlesRenameAndCleanWorktree(t *testing.T) {
+	repositoryDir := createCodeGitRepository(t)
+	commitCodeSummaryFiles(t, repositoryDir, map[string]string{"old.txt": "old\n"})
+	if _, err := runCodeGit(repositoryDir, "mv", "old.txt", "renamed.txt"); err != nil {
+		t.Fatal(err)
+	}
+
+	stats := loadCodeTaskUnsavedStats(repositoryDir)
+	if stats.Files != 1 || stats.Additions != 1 || stats.Deletions != 1 {
+		t.Fatalf("rename must count as one changed file: %#v", stats)
+	}
+	if _, err := runCodeGit(repositoryDir, "reset", "--hard", "HEAD"); err != nil {
+		t.Fatal(err)
+	}
+	if stats := loadCodeTaskUnsavedStats(repositoryDir); stats != (codeTaskDiffStats{}) {
+		t.Fatalf("clean worktree has unsaved stats: %#v", stats)
+	}
+}
+
+func TestApplyCodeTaskWorktreeSummaryKeepsCommittedAndUnsavedStatsSeparate(t *testing.T) {
+	repositoryDir := createCodeGitRepository(t)
+	base, err := runCodeGit(repositoryDir, "rev-parse", "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	commitCodeSummaryFiles(t, repositoryDir, map[string]string{"saved.txt": "saved\n"})
+	if err := os.WriteFile(filepath.Join(repositoryDir, "draft.txt"), []byte("draft\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	summary := codeTaskSummary{}
+	applyCodeTaskWorktreeSummary(&summary, repositoryDir, base, map[string]codeTaskDiffStats{})
+	applyCodeTaskUnsavedStats(&summary, loadCodeTaskUnsavedStats(repositoryDir))
+	if !summary.HasDiff || summary.Additions != 1 || summary.ChangedFiles != 1 ||
+		!summary.HasUnsavedChanges || summary.UnsavedAdditions != 1 || summary.UnsavedFiles != 1 {
+		t.Fatalf("committed and unsaved stats were not kept separate: %#v", summary)
+	}
+}
+
+func TestApplyCodeTaskRepositorySummariesAggregatesUnsavedChanges(t *testing.T) {
+	first := createCodeGitRepository(t)
+	second := createCodeGitRepository(t)
+	if err := os.WriteFile(filepath.Join(first, "first.txt"), []byte("one\ntwo\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(second, "second.txt"), []byte("three\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	repositories := []model.AIDevSessionRepository{
+		{Branch: "task-a", Status: "working", WorktreeDir: first},
+		{Branch: "task-b", Status: "working", WorktreeDir: second},
+	}
+
+	summary := codeTaskSummary{}
+	applyCodeTaskRepositorySummaries(&summary, repositories, map[string]codeTaskDiffStats{})
+	if !summary.HasUnsavedChanges || summary.UnsavedFiles != 2 || summary.UnsavedAdditions != 3 {
+		t.Fatalf("multi-repository unsaved stats were not aggregated: %#v", summary)
+	}
+}
+
 // 交付快照固化统计后，即使 worktree 提交已不可达，历史任务的行数也不该归零。
 func TestCodeTaskSummaryUsesStoredStatsWhenCommitUnreachable(t *testing.T) {
 	database := withCodeGovernanceDB(t)

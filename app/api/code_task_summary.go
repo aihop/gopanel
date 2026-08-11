@@ -26,6 +26,10 @@ type codeTaskSummary struct {
 	Deletions             int                         `json:"deletions"`
 	ChangedFiles          int                         `json:"changedFiles"`
 	HasDiff               bool                        `json:"hasDiff"`
+	UnsavedAdditions      int                         `json:"unsavedAdditions"`
+	UnsavedDeletions      int                         `json:"unsavedDeletions"`
+	UnsavedFiles          int                         `json:"unsavedFiles"`
+	HasUnsavedChanges     bool                        `json:"hasUnsavedChanges"`
 	DeliveryStatus        string                      `json:"deliveryStatus,omitempty"`
 	DeliveryStage         string                      `json:"deliveryStage,omitempty"`
 	DeliveryProgress      int                         `json:"deliveryProgress"`

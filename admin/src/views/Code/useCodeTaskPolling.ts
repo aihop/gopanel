@@ -118,5 +118,9 @@ function pickCodeTaskGitSummary(task: CodeTaskListItem) {
 		deletions: task.summary.deletions,
 		changedFiles: task.summary.changedFiles,
 		hasDiff: task.summary.hasDiff,
+		unsavedAdditions: task.summary.unsavedAdditions,
+		unsavedDeletions: task.summary.unsavedDeletions,
+		unsavedFiles: task.summary.unsavedFiles,
+		hasUnsavedChanges: task.summary.hasUnsavedChanges,
 	}
 }

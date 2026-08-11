@@ -5,6 +5,7 @@ import { useI18n } from "vue-i18n"
 import { deleteCodeProjectBranch, getCodeProjectBranches } from "@/api/modules/code"
 import type { CodeProjectBranch, CodeProjectBranches } from "@/api/interface/codeBranches"
 import type { CodeTaskRepositorySummary } from "@/api/interface/codeTasks"
+import Icon from "@/components/common/Icon.vue"
 import { taskRepositoryMessages } from "../taskRepositoryMessages"
 import CodeTaskDeliveryButton from "./CodeTaskDeliveryButton.vue"
 
@@ -16,6 +17,12 @@ const props = defineProps<{
 	additions: number
 	deletions: number
 	changedFiles: number
+	unsavedAdditions: number
+	unsavedDeletions: number
+	unsavedFiles: number
+	hasUnsavedChanges: boolean
+	statusIcon?: string
+	statusColor?: string
 }>()
 
 const { t } = useI18n({ messages: taskRepositoryMessages })
@@ -103,10 +110,20 @@ watch(show, opened => {
 <template>
 	<n-popover v-model:show="show" trigger="click" placement="bottom-start" style="max-width: 480px">
 		<template #trigger>
-			<button type="button" class="flex items-center gap-1 hover:text-blue-500" @click.stop>
-				<span class="font-medium text-emerald-600">+{{ additions }}</span>
-				<span class="font-medium text-red-500">-{{ deletions }}</span>
-				<span>{{ t("code.taskChangedFiles", { count: changedFiles }) }}</span>
+			<button
+				type="button"
+				class="flex items-center gap-1 hover:text-blue-500"
+				:class="hasUnsavedChanges ? 'text-amber-600' : ''"
+				:title="t(hasUnsavedChanges ? 'code.taskUnsavedChanges' : 'code.taskGitDetails')"
+				@click.stop
+			>
+				<Icon :name="statusIcon || 'mdi:source-branch'" :size="13" :class="statusColor" />
+				<template v-if="hasUnsavedChanges">
+					<span class="font-medium">{{ t("code.taskUnsaved") }}</span>
+					<span class="font-medium text-emerald-600">+{{ unsavedAdditions }}</span>
+					<span class="font-medium text-red-500">-{{ unsavedDeletions }}</span>
+					<span>{{ t("code.taskChangedFiles", { count: unsavedFiles }) }}</span>
+				</template>
 			</button>
 		</template>
 		<div class="min-w-[320px] space-y-2">
@@ -115,6 +132,17 @@ watch(show, opened => {
 				<n-spin v-if="branchStateLoading" :size="12" />
 			</div>
 			<p v-if="branchStateFailed" class="text-[11px] text-red-500">{{ t("code.zombieBranchStateFailed") }}</p>
+			<div v-if="hasUnsavedChanges" class="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+				<div class="font-medium">{{ t("code.taskUnsavedChanges") }}</div>
+				<div class="mt-1 flex items-center gap-1.5">
+					<span class="font-medium text-emerald-600">+{{ unsavedAdditions }}</span>
+					<span class="font-medium text-red-500">-{{ unsavedDeletions }}</span>
+					<span>{{ t("code.taskChangedFiles", { count: unsavedFiles }) }}</span>
+				</div>
+			</div>
+			<p v-if="involvedRepositories.length" class="text-[11px] font-medium text-slate-500">
+				{{ t("code.taskCumulativeOutput") }}
+			</p>
 			<div
 				v-for="repository in involvedRepositories"
 				:key="`${repository.name}:${repository.branch}`"

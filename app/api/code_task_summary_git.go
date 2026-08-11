@@ -66,6 +66,7 @@ func loadCodeTaskGitSummaries(tasks []*model.AITask, sessionIDs []uint, summarie
 			summary.GitStatus = worktreeSummary.GitStatus
 			stats := codeTaskSummaryStats(worktreeSummary)
 			applyCodeTaskDiffStats(&summary, stats)
+			applyCodeTaskUnsavedStats(&summary, loadCodeTaskUnsavedStats(session.WorkDir))
 			summary.Repositories = append(summary.Repositories, codeTaskRepositorySummaryFromStats(
 				filepath.Base(session.SourceWorkDir), session.SourceWorkDir, summary.Branch, session.TargetBranch, stats,
 			))
@@ -80,6 +81,8 @@ func resetCodeTaskGitSummary(summary *codeTaskSummary) {
 	summary.Repositories = nil
 	summary.Additions, summary.Deletions, summary.ChangedFiles = 0, 0, 0
 	summary.HasDiff = false
+	summary.UnsavedAdditions, summary.UnsavedDeletions, summary.UnsavedFiles = 0, 0, 0
+	summary.HasUnsavedChanges = false
 }
 
 func applyCodeTaskStoredRepositorySummaries(summary *codeTaskSummary, repositories []codeRepositoryDeliveryResult) {
@@ -131,6 +134,7 @@ func applyCodeTaskDeliverySummary(summary *codeTaskSummary, delivery model.AICod
 		stats, _ = loadCodeTaskDiffStats(delivery.SourceWorkDir, delivery.BaseCommit, delivery.WorktreeCommit, diffStatsCache)
 	}
 	applyCodeTaskDiffStats(summary, stats)
+	applyCodeTaskUnsavedStats(summary, loadCodeTaskUnsavedStats(delivery.WorkDir))
 	summary.Repositories = append(summary.Repositories, codeTaskRepositorySummaryFromStats(
 		filepath.Base(delivery.SourceWorkDir), delivery.SourceWorkDir, delivery.WorktreeBranch, delivery.TargetBranch, stats,
 	))
@@ -167,6 +171,7 @@ func applyCodeTaskRepositorySummaries(summary *codeTaskSummary, repositories []m
 			stats, _ = loadCodeTaskDiffStats(repository.SourceDir, repository.BaseCommit, repository.WorktreeCommit, diffStatsCache)
 		}
 		applyCodeTaskDiffStats(summary, stats)
+		applyCodeTaskUnsavedStats(summary, loadCodeTaskUnsavedStats(repository.WorktreeDir))
 		summary.Repositories = append(summary.Repositories, codeTaskRepositorySummaryFromStats(
 			repository.LinkName, repository.SourceDir, repository.Branch, repository.TargetBranch, stats,
 		))
@@ -207,15 +212,21 @@ func applyCodeTaskWorktreeSummary(summary *codeTaskSummary, worktreeDir, baseCom
 		return
 	}
 	headCommit, err := runCodeGit(worktreeDir, "rev-parse", "HEAD")
-	if err != nil || headCommit == baseCommit {
+	if err != nil {
 		return
 	}
 	status, err := runCodeGit(worktreeDir, "status", "--porcelain")
-	if err != nil || strings.TrimSpace(status) != "" {
+	if err != nil {
 		return
 	}
-	summary.GitStatus = "committed"
-	if stats, ok := loadCodeTaskDiffStats(worktreeDir, baseCommit, headCommit, diffStatsCache); ok {
+	if strings.TrimSpace(status) == "" {
+		summary.GitStatus = "committed"
+	}
+	if headCommit != baseCommit {
+		stats, ok := loadCodeTaskDiffStats(worktreeDir, baseCommit, headCommit, diffStatsCache)
+		if !ok {
+			return
+		}
 		applyCodeTaskDiffStats(summary, stats)
 	}
 }
