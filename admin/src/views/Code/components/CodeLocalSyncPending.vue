@@ -11,6 +11,7 @@ import { codeGitReviewMessages } from "../codeGitReviewMessages"
  */
 interface LocalSyncRepository {
 	repositoryName: string
+	commit?: string
 	localSynced: boolean
 	localSyncError?: string
 	localSyncCommand?: string
@@ -26,7 +27,17 @@ const message = useMessage()
  * localSynced 由后端的 SourceAppliedAt 推出，而它只在 merge-base --is-ancestor
  * 校验通过后才写入 —— 这是「确实进了本地目标分支」的唯一可信信号。
  */
-const pending = computed(() => props.repositories.filter(item => !item.localSynced && item.localSyncError))
+/**
+ * 产出了交付提交、但没进本地主仓的仓库。
+ *
+ * 不能只看 localSyncError：重试路径下已标 completed 的仓库会跳过同步，
+ * 结果 localSynced 为 false 而 localSyncError 为空，那样这条提示就漏了 ——
+ * 而按钮那边（useCodeDelivery 的 pendingLocalSync）是按 facts.local 判的，
+ * 两边口径必须一致，否则会出现「按钮说待同步、下面却什么都不列」。
+ */
+const pending = computed(() =>
+	props.repositories.filter(item => !item.localSynced && (item.localSyncError || item.commit)),
+)
 
 const commands = computed(() =>
 	pending.value
@@ -73,7 +84,7 @@ async function copyCommands() {
         >
           <span class="font-medium text-slate-600">{{ item.repositoryName }}</span>
           <span class="mx-1 text-slate-300">·</span>
-          <span>{{ item.localSyncError }}</span>
+          <span>{{ item.localSyncError || t("code.gitLocalSyncUnknownReason") }}</span>
         </li>
       </ul>
       <pre

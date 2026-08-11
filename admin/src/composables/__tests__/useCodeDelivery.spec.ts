@@ -122,3 +122,49 @@ describe("phase presentation", () => {
 		expect(codeDeliveryPhaseIcon("idle")).toBe("mdi:source-merge")
 	})
 })
+
+describe("useCodeDelivery pendingLocalSync", () => {
+	it("按 facts.local 判断，而不是 resultType", () => {
+		// 推成了远端，resultType 因此是 remote_verified —— 但本地主仓只同步了 8/9。
+		// 早期版本按 resultType 判定，这种情况会被漏掉，界面照样说「已交付主仓」。
+		const { pendingLocalSync } = desktop(
+			job({
+				resultType: "remote_verified",
+				facts: [
+					{ key: "merge", status: "completed", count: 9, total: 9 },
+					{ key: "local", status: "partial", count: 8, total: 9 },
+					{ key: "remote", status: "completed", count: 9, total: 9 },
+				],
+			}),
+		)
+		expect(pendingLocalSync.value).toBe(true)
+	})
+
+	it("本地主仓全部同步时不提示待同步", () => {
+		const { pendingLocalSync } = desktop(
+			job({
+				resultType: "mixed",
+				facts: [{ key: "local", status: "completed", count: 9, total: 9 }],
+			}),
+		)
+		expect(pendingLocalSync.value).toBe(false)
+	})
+
+	it("一个都没同步时也要提示", () => {
+		const { pendingLocalSync } = desktop(
+			job({ resultType: "delivered", facts: [{ key: "local", status: "pending", count: 0, total: 1 }] }),
+		)
+		expect(pendingLocalSync.value).toBe(true)
+	})
+
+	it("旧任务没有 facts 时不误报", () => {
+		expect(desktop(job({ resultType: "local" })).pendingLocalSync.value).toBe(false)
+	})
+
+	it("交付还在跑的时候不提示", () => {
+		const { pendingLocalSync } = desktop(
+			job({ status: "running", facts: [{ key: "local", status: "pending", count: 0, total: 1 }] }),
+		)
+		expect(pendingLocalSync.value).toBe(false)
+	})
+})

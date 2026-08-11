@@ -130,6 +130,7 @@ export const codeGitReviewMessages = {
 			gitLocalSyncHint: "本地主仓被其它进程占用（有未提交改动、已切换分支或已推进）。交付提交已安全保留，推送远端不受影响；需要本地同步时执行下面的命令。",
 			gitLocalSyncCopy: "复制同步命令",
 			gitLocalSyncCopied: "同步命令已复制",
+			gitLocalSyncUnknownReason: "未同步到本地主仓",
 			gitRetry: "重试",
 			gitCancel: "取消"
 		}
@@ -273,6 +274,7 @@ export const codeGitReviewMessages = {
 			gitLocalSyncHint: "The local main repository is in use by another process (uncommitted changes, a switched branch, or new commits). The delivery commit is kept safely and pushing is unaffected; run the command below when you want the local copy in sync.",
 			gitLocalSyncCopy: "Copy sync commands",
 			gitLocalSyncCopied: "Sync commands copied",
+			gitLocalSyncUnknownReason: "Not synced into the local main repository",
 			gitRetry: "Retry",
 			gitCancel: "Cancel"
 		}

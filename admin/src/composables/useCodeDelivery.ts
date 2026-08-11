@@ -79,9 +79,19 @@ export function useCodeDelivery(options: UseCodeDeliveryOptions) {
 	 * code_delivery_local_sync.go 顶部注释）。这两种情况必须给不同文案，
 	 * 否则主仓根本没这份代码，界面却说「已交付主仓」。
 	 *
+	 * 判据用 facts 里的 local，不用 resultType —— resultType 回答的是
+	 * 「交付到哪儿了」，一旦推成远端就会变成 remote_verified/mixed，
+	 * 把本地未同步整个盖掉（多仓 codeMultiRepositoryResultType 是 switch，
+	 * 命中 PushStatus==pushed 后根本不看 SourceAppliedAt；单仓
+	 * code_delivery_atomic.go 也要求 PushStatus!=pushed 才标 delivered）。
+	 * facts.local 在单仓走实时可达性判断、多仓按 SourceAppliedAt 计数，两条路径都是真相。
+	 *
 	 * 只共享判定不共享文案 key：桌面用 code.*，移动端用 mobile.*，各自映射。
 	 */
-	const pendingLocalSync = computed(() => phase.value === "delivered" && job.value?.resultType === "delivered")
+	const localFact = computed(() => job.value?.facts?.find(fact => fact.key === "local") || null)
+	const pendingLocalSync = computed(
+		() => phase.value === "delivered" && Boolean(localFact.value) && localFact.value?.status !== "completed",
+	)
 
 	return {
 		available,
