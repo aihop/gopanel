@@ -227,6 +227,10 @@ func rollbackCodeSessionRepositoryWorktrees(session *model.AIDevSession) {
 }
 
 func cleanupCodeSessionRepositoryWorktrees(session *model.AIDevSession) error {
+	return cleanupCodeSessionRepositoryWorktreesWithMetadata(session, false)
+}
+
+func cleanupCodeSessionRepositoryWorktreesWithMetadata(session *model.AIDevSession, preserveMetadata bool) error {
 	repositories, err := loadCodeSessionRepositories(session.ID)
 	if err != nil {
 		return err
@@ -266,8 +270,10 @@ func cleanupCodeSessionRepositoryWorktrees(session *model.AIDevSession) error {
 			return err
 		}
 	}
-	if err := global.DB.Where("session_id = ?", session.ID).Delete(&model.AIDevSessionRepository{}).Error; err != nil {
-		return err
+	if !preserveMetadata {
+		if err := global.DB.Where("session_id = ?", session.ID).Delete(&model.AIDevSessionRepository{}).Error; err != nil {
+			return err
+		}
 	}
 	return os.RemoveAll(session.WorkDir)
 }
@@ -298,10 +304,9 @@ func removeCodeSessionRepositoryWorktree(repository *model.AIDevSessionRepositor
 	if !codeWorktreeBranchExists(repository.SourceDir, repository.Branch) {
 		return nil
 	}
-	deleteFlag := "-d"
-	if force {
-		deleteFlag = "-D"
+	if !force {
+		return nil
 	}
-	_, err := runCodeGit(repository.SourceDir, "branch", deleteFlag, "--", repository.Branch)
+	_, err := runCodeGit(repository.SourceDir, "branch", "-D", "--", repository.Branch)
 	return err
 }

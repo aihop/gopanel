@@ -229,3 +229,26 @@ func TestCleanupCodeSessionWorktreePreservesUnmergedCommit(t *testing.T) {
 	}
 	rollbackCodeSessionWorktree(session)
 }
+
+func TestCleanupCodeSessionWorktreePreservesMergedTaskBranch(t *testing.T) {
+	withAIProjectBaseDir(t)
+	repositoryDir := createCodeGitRepository(t)
+	session := &model.AIDevSession{ID: 24, UserID: 7, WorkDir: repositoryDir}
+	project := &model.AIProject{SourceDirs: []string{repositoryDir}}
+	if err := createCodeSessionWorktree(session, project); err != nil {
+		t.Fatal(err)
+	}
+	commitCodeTestFile(t, session.WorkDir, "result.txt", "finished\n")
+	if _, err := runCodeGit(repositoryDir, "merge", "--ff-only", session.WorktreeBranch); err != nil {
+		t.Fatal(err)
+	}
+	if err := cleanupCodeSessionWorktree(session); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(session.WorkDir); !os.IsNotExist(err) {
+		t.Fatalf("merged worktree remained: %v", err)
+	}
+	if _, err := runCodeGit(repositoryDir, "show-ref", "--verify", "refs/heads/"+session.WorktreeBranch); err != nil {
+		t.Fatalf("merged task branch was removed: %v", err)
+	}
+}

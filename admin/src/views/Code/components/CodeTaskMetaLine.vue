@@ -60,6 +60,8 @@ const {
     <template v-if="task.summary.hasDiff || task.summary.repositories?.length">
       <span class="text-slate-300">·</span>
       <CodeTaskRepositoryPopover
+			:project-id="task.projectId"
+			:session-id="task.sessionId"
 			:repositories="task.summary.repositories || []"
 			:branch="task.summary.branch"
 			:additions="task.summary.additions"

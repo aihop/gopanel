@@ -172,6 +172,25 @@ func TestApplyCodeTaskRepositorySummariesAggregatesMixedRepositories(t *testing.
 	}
 }
 
+func TestCodeTaskRepositorySummaryIncludesCanonicalRepositoryPath(t *testing.T) {
+	repositoryDir := t.TempDir()
+	summary := codeTaskRepositorySummaryFromStats(
+		"repository", repositoryDir, "gopanel/code-1", "main", codeTaskDiffStats{Files: 1},
+	)
+	evaluatedPath, err := filepath.EvalSymlinks(repositoryDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.RepositoryPath != evaluatedPath || summary.Branch != "gopanel/code-1" || summary.TargetBranch != "main" {
+		t.Fatalf("unexpected repository identity: %#v", summary)
+	}
+
+	legacy := codeTaskRepositorySummaryFromStats("legacy", "", "gopanel/code-old", "", codeTaskDiffStats{})
+	if legacy.RepositoryPath != "" {
+		t.Fatalf("empty historical repository path normalized incorrectly: %#v", legacy)
+	}
+}
+
 func TestApplyCodeTaskRepositorySummariesHidesLowerPriorityPushError(t *testing.T) {
 	summary := codeTaskSummary{}
 	repositories := []model.AIDevSessionRepository{

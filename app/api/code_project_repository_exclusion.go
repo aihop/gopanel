@@ -28,6 +28,9 @@ func normalizeCodeExcludedRepositories(paths []string) []string {
 			continue
 		}
 		cleaned = filepath.Clean(cleaned)
+		if resolved, err := filepath.EvalSymlinks(cleaned); err == nil {
+			cleaned = filepath.Clean(resolved)
+		}
 		if _, exists := seen[cleaned]; exists {
 			continue
 		}

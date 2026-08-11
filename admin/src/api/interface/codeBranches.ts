@@ -9,8 +9,9 @@ export interface CodeProjectBranch {
 	updatedAt: string
 	merged: boolean
 	managed: boolean
+	taskBranch: boolean
 	deletable: boolean
-	deleteBlockReason?: "remote" | "current" | "delivery" | "worktree" | "session"
+	deleteBlockReason?: "remote" | "current" | "delivery" | "worktree" | "session" | "task"
 	additions: number
 	deletions: number
 }
@@ -18,6 +19,7 @@ export interface CodeProjectBranch {
 export interface CodeProjectBranchRepository {
 	name: string
 	path: string
+	excluded: boolean
 	currentBranch?: string
 	detached: boolean
 	dirty: boolean

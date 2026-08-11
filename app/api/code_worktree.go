@@ -229,9 +229,6 @@ func cleanupCodeSessionWorktree(session *model.AIDevSession) error {
 	if _, err := runCodeGit(session.SourceWorkDir, "worktree", "remove", session.WorkDir); err != nil {
 		return err
 	}
-	if _, err := runCodeGit(session.SourceWorkDir, "branch", "-d", "--", session.WorktreeBranch); err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -256,7 +253,7 @@ func cleanupDeliveredCodeSessionWorktrees(session *model.AIDevSession) error {
 	snapshot := *session
 	snapshot.WorkDir = workspaceDir
 	snapshot.IsolationMode = codeIsolationMultiWorktree
-	return cleanupCodeSessionRepositoryWorktrees(&snapshot)
+	return cleanupCodeSessionRepositoryWorktreesWithMetadata(&snapshot, true)
 }
 
 func runCodeGit(workDir string, args ...string) (string, error) {

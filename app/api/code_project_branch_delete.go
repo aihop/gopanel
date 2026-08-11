@@ -23,15 +23,19 @@ const (
 	codeBranchDeleteBlockDelivery = "delivery"
 	codeBranchDeleteBlockWorktree = "worktree"
 	codeBranchDeleteBlockSession  = "session"
+	codeBranchDeleteBlockTask     = "task"
 )
 
 type codeProjectProtectedBranches struct {
 	Worktrees map[string]struct{}
 	Sessions  map[string]struct{}
+	Tasks     map[string]struct{}
 }
 
-func inspectCodeProjectProtectedBranches(root string) (codeProjectProtectedBranches, error) {
-	result := codeProjectProtectedBranches{Worktrees: map[string]struct{}{}, Sessions: map[string]struct{}{}}
+func inspectCodeProjectProtectedBranches(root string, protectTasks bool) (codeProjectProtectedBranches, error) {
+	result := codeProjectProtectedBranches{
+		Worktrees: map[string]struct{}{}, Sessions: map[string]struct{}{}, Tasks: map[string]struct{}{},
+	}
 	worktrees, err := runCodeGit(root, "worktree", "list", "--porcelain")
 	if err != nil {
 		return result, err
@@ -60,6 +64,32 @@ func inspectCodeProjectProtectedBranches(root string) (codeProjectProtectedBranc
 	for _, branch := range append(sessionBranches, repositoryBranches...) {
 		result.Sessions[strings.TrimSpace(branch)] = struct{}{}
 	}
+	if !protectTasks {
+		return result, nil
+	}
+	var taskBranches, taskDeliveryBranches, taskRepositoryBranches []string
+	if err := global.DB.Model(&model.AIDevSession{}).
+		Joins("JOIN ai_tasks ON ai_tasks.session_id = ai_dev_sessions.id").
+		Where("ai_dev_sessions.source_work_dir = ? AND ai_dev_sessions.worktree_branch <> ''", root).
+		Pluck("ai_dev_sessions.worktree_branch", &taskBranches).Error; err != nil {
+		return result, err
+	}
+	if err := global.DB.Model(&model.AICodeDelivery{}).
+		Joins("JOIN ai_tasks ON ai_tasks.session_id = ai_code_deliveries.session_id").
+		Where("ai_code_deliveries.source_work_dir = ? AND ai_code_deliveries.worktree_branch <> ''", root).
+		Pluck("ai_code_deliveries.worktree_branch", &taskDeliveryBranches).Error; err != nil {
+		return result, err
+	}
+	if err := global.DB.Model(&model.AIDevSessionRepository{}).
+		Joins("JOIN ai_tasks ON ai_tasks.session_id = ai_dev_session_repositories.session_id").
+		Where("ai_dev_session_repositories.source_dir = ? AND ai_dev_session_repositories.branch <> ''", root).
+		Pluck("ai_dev_session_repositories.branch", &taskRepositoryBranches).Error; err != nil {
+		return result, err
+	}
+	branches := append(taskBranches, taskDeliveryBranches...)
+	for _, branch := range append(branches, taskRepositoryBranches...) {
+		result.Tasks[strings.TrimSpace(branch)] = struct{}{}
+	}
 	return result, nil
 }
 
@@ -82,6 +112,9 @@ func codeProjectBranchDeleteBlockReason(
 	}
 	if _, exists := protected.Sessions[branch.Name]; exists {
 		return codeBranchDeleteBlockSession
+	}
+	if _, exists := protected.Tasks[branch.Name]; exists {
+		return codeBranchDeleteBlockTask
 	}
 	return ""
 }
@@ -120,14 +153,14 @@ func deleteCodeProjectLocalBranch(project *model.AIProject, repositoryPath, bran
 	if project == nil {
 		return errors.New("项目不可用")
 	}
-	specs, err := codeProjectRepositorySpecs(project)
+	root, err := resolveCodeProjectBranchRepository(project, repositoryPath)
 	if err != nil {
 		return err
 	}
-	keys := make([]string, 0, len(specs))
-	for _, spec := range specs {
-		keys = append(keys, spec.LeaseKey)
-	}
+	currentBranch, _ := runCodeGit(root, "branch", "--show-current")
+	leaseBranch := codeProjectRepositoryDeliveryBranch(project, root, strings.TrimSpace(currentBranch))
+	remote, _ := codeRepositoryRemoteTracking(root, leaseBranch)
+	keys := []string{codeDeliveryRepositoryKey(root, remote, leaseBranch)}
 	owner := newCodeRepositoryLeaseOwner("branch-delete")
 	acquired, err := acquireCodeRepositoryLeases(owner, 0, keys)
 	if err != nil {
@@ -138,10 +171,6 @@ func deleteCodeProjectLocalBranch(project *model.AIProject, repositoryPath, bran
 	}
 	defer func() { _ = releaseCodeRepositoryLeases(owner, keys) }()
 
-	root, err := resolveCodeProjectBranchRepository(project, repositoryPath)
-	if err != nil {
-		return err
-	}
 	if branch == "" {
 		return errors.New("分支名称不能为空")
 	}
@@ -151,7 +180,12 @@ func deleteCodeProjectLocalBranch(project *model.AIProject, repositoryPath, bran
 	if _, err := runCodeGit(root, "show-ref", "--verify", "refs/heads/"+branch); err != nil {
 		return errors.New("本地分支不存在或已删除")
 	}
-	repository, err := inspectCodeProjectBranchRepository(project, root)
+	_, activeRoots, err := codeProjectBranchRepositoryRoots(project)
+	if err != nil {
+		return err
+	}
+	_, active := activeRoots[root]
+	repository, err := inspectCodeProjectBranchRepository(project, root, !active)
 	if err != nil {
 		return err
 	}
@@ -182,7 +216,7 @@ func resolveCodeProjectBranchRepository(project *model.AIProject, requested stri
 	if err != nil {
 		return "", errors.New("项目仓库不可访问")
 	}
-	roots, err := discoverCodeProjectBranchRepositories(codeProjectSourceDirs(project))
+	roots, _, err := codeProjectBranchRepositoryRoots(project)
 	if err != nil {
 		return "", err
 	}
@@ -201,6 +235,7 @@ func codeProjectBranchDeleteBlockedError(reason string) error {
 		codeBranchDeleteBlockDelivery: "不能删除项目交付目标分支",
 		codeBranchDeleteBlockWorktree: "分支仍被 Git Worktree 使用",
 		codeBranchDeleteBlockSession:  "分支仍被 GoPanel Code 会话引用，请先处理对应会话",
+		codeBranchDeleteBlockTask:     "GoPanel 任务分支与任务记录绑定，不能删除",
 	}
 	if message := messages[reason]; message != "" {
 		return errors.New(message)

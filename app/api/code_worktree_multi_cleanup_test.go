@@ -37,15 +37,15 @@ func TestMultiRepositoryDeliveredCleanupResumesAfterPartialRemoval(t *testing.T)
 		t.Fatalf("partial cleanup did not resume: %v", err)
 	}
 	stored, err := loadCodeSessionRepositories(session.ID)
-	if err != nil || len(stored) != 0 {
-		t.Fatalf("cleanup metadata remained: %#v, %v", stored, err)
+	if err != nil || len(stored) != len(repositories) {
+		t.Fatalf("delivery review metadata was not preserved: %#v, %v", stored, err)
 	}
 	if _, err := os.Stat(session.WorkDir); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("cleanup workspace remained: %v", err)
 	}
 }
 
-func TestFinalizedMultiRepositorySessionAutomaticallyCleansBranches(t *testing.T) {
+func TestFinalizedMultiRepositorySessionPreservesTaskBranches(t *testing.T) {
 	session, _, _ := createMultiRepositorySession(t, 823)
 	if err := global.DB.Model(session).Update("status", codeSessionStatusDelivered).Error; err != nil {
 		t.Fatal(err)
@@ -62,21 +62,21 @@ func TestFinalizedMultiRepositorySessionAutomaticallyCleansBranches(t *testing.T
 	cleanupFinalizedCodeSessionWorktrees(session.ID)
 
 	stored, err := loadCodeSessionRepositories(session.ID)
-	if err != nil || len(stored) != 0 {
-		t.Fatalf("finalized repository metadata remained: %#v, %v", stored, err)
+	if err != nil || len(stored) != len(repositories) {
+		t.Fatalf("finalized repository review metadata was not preserved: %#v, %v", stored, err)
 	}
 	if _, err := os.Stat(session.WorkDir); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("finalized multi-repository workspace remained: %v", err)
 	}
 	for sourceDir, branch := range branches {
 		listed, listErr := runCodeGit(sourceDir, "branch", "--list", branch)
-		if listErr != nil || strings.TrimSpace(listed) != "" {
-			t.Fatalf("finalized branch %s remained in %s: %q, %v", branch, sourceDir, listed, listErr)
+		if listErr != nil || strings.TrimSpace(listed) == "" {
+			t.Fatalf("finalized task branch %s was not preserved in %s: %q, %v", branch, sourceDir, listed, listErr)
 		}
 	}
 }
 
-func TestDeliveryRunnerFinalizationCleansMultiRepositoryBranches(t *testing.T) {
+func TestDeliveryRunnerFinalizationPreservesMultiRepositoryTaskBranches(t *testing.T) {
 	session, _, _ := createMultiRepositorySession(t, 824)
 	repositories, err := loadCodeSessionRepositories(session.ID)
 	if err != nil || len(repositories) < 2 {
@@ -108,13 +108,13 @@ func TestDeliveryRunnerFinalizationCleansMultiRepositoryBranches(t *testing.T) {
 		t.Fatalf("multi-repository session was not finalized: %#v, %v", session, err)
 	}
 	stored, err := loadCodeSessionRepositories(session.ID)
-	if err != nil || len(stored) != 0 {
-		t.Fatalf("runner cleanup metadata remained: %#v, %v", stored, err)
+	if err != nil || len(stored) != len(repositories) {
+		t.Fatalf("runner cleanup review metadata was not preserved: %#v, %v", stored, err)
 	}
 	for sourceDir, branch := range branches {
 		listed, listErr := runCodeGit(sourceDir, "branch", "--list", branch)
-		if listErr != nil || strings.TrimSpace(listed) != "" {
-			t.Fatalf("runner cleanup retained branch %s: %q, %v", branch, listed, listErr)
+		if listErr != nil || strings.TrimSpace(listed) == "" {
+			t.Fatalf("runner cleanup removed task branch %s: %q, %v", branch, listed, listErr)
 		}
 	}
 }

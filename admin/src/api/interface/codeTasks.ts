@@ -34,7 +34,9 @@ export interface CodeTaskSummary {
 
 export interface CodeTaskRepositorySummary {
 	name: string
+	repositoryPath?: string
 	branch: string
+	targetBranch?: string
 	additions: number
 	deletions: number
 	changedFiles: number

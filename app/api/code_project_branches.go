@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -14,6 +15,7 @@ import (
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
 	"github.com/aihop/gopanel/constant"
+	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/utils/token"
 	"github.com/gofiber/fiber/v3"
 )
@@ -37,6 +39,7 @@ type codeProjectBranch struct {
 	UpdatedAt         string `json:"updatedAt"`
 	Merged            bool   `json:"merged"`
 	Managed           bool   `json:"managed"`
+	TaskBranch        bool   `json:"taskBranch"`
 	Deletable         bool   `json:"deletable"`
 	DeleteBlockReason string `json:"deleteBlockReason,omitempty"`
 	Additions         int    `json:"additions"`
@@ -46,6 +49,7 @@ type codeProjectBranch struct {
 type codeProjectBranchRepository struct {
 	Name          string              `json:"name"`
 	Path          string              `json:"path"`
+	Excluded      bool                `json:"excluded"`
 	CurrentBranch string              `json:"currentBranch,omitempty"`
 	Detached      bool                `json:"detached"`
 	Dirty         bool                `json:"dirty"`
@@ -79,20 +83,14 @@ func GetCodeProjectBranches(c fiber.Ctx) error {
 }
 
 func inspectCodeProjectBranches(project *model.AIProject) (codeProjectBranches, error) {
-	sourceDirs := project.SourceDirs
-	if len(sourceDirs) == 0 && strings.TrimSpace(project.WorkDir) != "" {
-		sourceDirs = aiProjectWorkspaceSourceDirs(project.WorkDir)
-		if len(sourceDirs) == 0 {
-			sourceDirs = []string{project.WorkDir}
-		}
-	}
-	repositoryRoots, err := discoverCodeProjectBranchRepositories(sourceDirs)
+	repositoryRoots, activeRoots, err := codeProjectBranchRepositoryRoots(project)
 	if err != nil {
 		return codeProjectBranches{}, err
 	}
 	result := codeProjectBranches{Repositories: make([]codeProjectBranchRepository, 0, len(repositoryRoots))}
 	for _, root := range repositoryRoots {
-		repository, inspectErr := inspectCodeProjectBranchRepository(project, root)
+		_, active := activeRoots[root]
+		repository, inspectErr := inspectCodeProjectBranchRepository(project, root, !active)
 		if inspectErr != nil {
 			return codeProjectBranches{}, inspectErr
 		}
@@ -100,6 +98,92 @@ func inspectCodeProjectBranches(project *model.AIProject) (codeProjectBranches, 
 		result.Repositories = append(result.Repositories, repository)
 	}
 	return result, nil
+}
+
+func codeProjectBranchRepositoryRoots(project *model.AIProject) ([]string, map[string]struct{}, error) {
+	if project == nil {
+		return nil, nil, errors.New("项目不可用")
+	}
+	sourceDirs := codeProjectSourceDirs(project)
+	currentRoots, err := discoverCodeProjectBranchRepositories(sourceDirs)
+	if err != nil {
+		return nil, nil, err
+	}
+	activeRoots := make(map[string]struct{}, len(currentRoots))
+	excluded := normalizeCodeExcludedRepositories(project.ExcludedRepositories)
+	allRoots := make(map[string]struct{}, len(currentRoots))
+	for _, root := range currentRoots {
+		allRoots[root] = struct{}{}
+		if !isCodeRepositoryExcluded(root, excluded) {
+			activeRoots[root] = struct{}{}
+		}
+	}
+	for _, root := range loadCodeProjectHistoricalRepositoryRoots(project.ID) {
+		allRoots[root] = struct{}{}
+	}
+	result := make([]string, 0, len(allRoots))
+	for root := range allRoots {
+		result = append(result, root)
+	}
+	sort.Strings(result)
+	return result, activeRoots, nil
+}
+
+func loadCodeProjectHistoricalRepositoryRoots(projectID uint) []string {
+	if global.DB == nil || projectID == 0 {
+		return nil
+	}
+	paths := make([]string, 0)
+	queries := []struct {
+		model any
+		field string
+		join  string
+	}{
+		{&model.AIDevSession{}, "ai_dev_sessions.source_work_dir", "JOIN ai_tasks ON ai_tasks.session_id = ai_dev_sessions.id"},
+		{&model.AICodeDelivery{}, "ai_code_deliveries.source_work_dir", "JOIN ai_tasks ON ai_tasks.session_id = ai_code_deliveries.session_id"},
+		{&model.AIDevSessionRepository{}, "ai_dev_session_repositories.source_dir", "JOIN ai_tasks ON ai_tasks.session_id = ai_dev_session_repositories.session_id"},
+	}
+	for _, query := range queries {
+		var values []string
+		if err := global.DB.Model(query.model).Joins(query.join).
+			Where("ai_tasks.project_id = ? AND "+query.field+" <> ''", projectID).
+			Pluck(query.field, &values).Error; err == nil {
+			paths = append(paths, values...)
+		}
+	}
+	var storedResults []string
+	if err := global.DB.Model(&model.AICodeDeliveryJob{}).
+		Joins("JOIN ai_tasks ON ai_tasks.session_id = ai_code_delivery_jobs.session_id").
+		Where("ai_tasks.project_id = ? AND ai_code_delivery_jobs.repository_results <> ''", projectID).
+		Pluck("ai_code_delivery_jobs.repository_results", &storedResults).Error; err == nil {
+		for _, stored := range storedResults {
+			var repositories []codeRepositoryDeliveryResult
+			if json.Unmarshal([]byte(stored), &repositories) != nil {
+				continue
+			}
+			for _, repository := range repositories {
+				paths = append(paths, repository.RepositoryPath)
+			}
+		}
+	}
+	seen := make(map[string]struct{}, len(paths))
+	result := make([]string, 0, len(paths))
+	for _, path := range paths {
+		root, err := filepath.EvalSymlinks(filepath.Clean(strings.TrimSpace(path)))
+		if err != nil || root == "." {
+			continue
+		}
+		gitRoot, err := runCodeGit(root, "rev-parse", "--show-toplevel")
+		if err != nil || filepath.Clean(gitRoot) != filepath.Clean(root) {
+			continue
+		}
+		if _, exists := seen[root]; exists {
+			continue
+		}
+		seen[root] = struct{}{}
+		result = append(result, root)
+	}
+	return result
 }
 
 func discoverCodeProjectBranchRepositories(sourceDirs []string) ([]string, error) {
@@ -150,7 +234,13 @@ func discoverCodeProjectBranchRepositories(sourceDirs []string) ([]string, error
 	return repositories, nil
 }
 
-func inspectCodeProjectBranchRepository(project *model.AIProject, root string) (codeProjectBranchRepository, error) {
+func inspectCodeProjectBranchRepository(project *model.AIProject, root string, excludedOverride ...bool) (codeProjectBranchRepository, error) {
+	excluded := len(excludedOverride) > 0 && excludedOverride[0]
+	if len(excludedOverride) == 0 {
+		excluded = project != nil && isCodeRepositoryExcluded(
+			root, normalizeCodeExcludedRepositories(project.ExcludedRepositories),
+		)
+	}
 	currentBranch, _ := runCodeGit(root, "symbolic-ref", "--quiet", "--short", "HEAD")
 	status, err := runCodeGit(root, "status", "--porcelain")
 	if err != nil {
@@ -174,7 +264,7 @@ func inspectCodeProjectBranchRepository(project *model.AIProject, root string) (
 	branches := make([]codeProjectBranch, 0)
 	commitStats := make(map[string][2]int)
 	deliveryBranch := codeProjectRepositoryDeliveryBranch(project, root, strings.TrimSpace(currentBranch))
-	protected, err := inspectCodeProjectProtectedBranches(root)
+	protected, err := inspectCodeProjectProtectedBranches(root, !excluded)
 	if err != nil {
 		return codeProjectBranchRepository{}, err
 	}
@@ -201,6 +291,7 @@ func inspectCodeProjectBranchRepository(project *model.AIProject, root string) (
 			Commit: fields[3], Subject: fields[4], UpdatedAt: fields[5], Upstream: fields[6], Merged: merged,
 			Managed: strings.HasPrefix(fields[1], "gopanel/code-"), Additions: stats[0], Deletions: stats[1],
 		}
+		_, branch.TaskBranch = protected.Tasks[branch.Name]
 		branch.DeleteBlockReason = codeProjectBranchDeleteBlockReason(deliveryBranch, branch, protected)
 		branch.Deletable = branch.DeleteBlockReason == ""
 		branches = append(branches, branch)
@@ -215,7 +306,7 @@ func inspectCodeProjectBranchRepository(project *model.AIProject, root string) (
 		}
 	}
 	return codeProjectBranchRepository{
-		Name: filepath.Base(root), Path: root, CurrentBranch: strings.TrimSpace(currentBranch),
+		Name: filepath.Base(root), Path: root, Excluded: excluded, CurrentBranch: strings.TrimSpace(currentBranch),
 		Detached: strings.TrimSpace(currentBranch) == "", Dirty: changedFiles > 0,
 		ChangedFiles: changedFiles, Branches: branches,
 	}, nil

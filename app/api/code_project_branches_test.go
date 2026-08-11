@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -220,6 +221,128 @@ func TestCodeProjectBranchDeletionRemovesMergedBranchAndRejectsForeignRepository
 	if err := deleteCodeProjectLocalBranch(project, foreign, currentBranch, true); err == nil ||
 		!strings.Contains(err.Error(), "不属于") {
 		t.Fatalf("foreign repository error = %v", err)
+	}
+}
+
+func TestCodeProjectBranchDeletionProtectsTaskBranchAfterSessionCleanup(t *testing.T) {
+	database := withCodeGovernanceDB(t)
+	repositoryDir := createCodeGitRepository(t)
+	currentBranch, err := runCodeGit(repositoryDir, "branch", "--show-current")
+	if err != nil {
+		t.Fatal(err)
+	}
+	project := &model.AIProject{SourceDirs: []string{repositoryDir}, DeliveryBranch: currentBranch}
+	branch := "gopanel/code-703"
+	if _, err := runCodeGit(repositoryDir, "branch", branch); err != nil {
+		t.Fatal(err)
+	}
+	session := &model.AIDevSession{
+		ID: 703, UserID: 7, ProjectID: 1, SourceWorkDir: repositoryDir,
+		WorktreeBranch: branch, Status: codeSessionStatusDelivered,
+	}
+	if err := database.Create(session).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := database.Create(&model.AITask{
+		UserID: 7, SessionID: session.ID, ProjectID: 1, Title: "task", WorkDir: repositoryDir,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	result, err := inspectCodeProjectBranches(project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	taskBranches := map[string]bool{}
+	for _, inspectedBranch := range result.Repositories[0].Branches {
+		taskBranches[inspectedBranch.Name] = inspectedBranch.TaskBranch
+	}
+	if !taskBranches[branch] || taskBranches[currentBranch] {
+		t.Fatalf("unexpected task branch markers: %#v", taskBranches)
+	}
+	if err := deleteCodeProjectLocalBranch(project, repositoryDir, branch, false); err == nil ||
+		!strings.Contains(err.Error(), "任务分支") {
+		t.Fatalf("task branch deletion error = %v", err)
+	}
+	if _, err := runCodeGit(repositoryDir, "show-ref", "--verify", "refs/heads/"+branch); err != nil {
+		t.Fatalf("task branch was deleted: %v", err)
+	}
+	if err := database.Where("session_id = ?", session.ID).Delete(&model.AITask{}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := database.Delete(session).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := deleteCodeProjectLocalBranch(project, repositoryDir, branch, false); err != nil {
+		t.Fatalf("orphaned merged task branch should be deletable: %v", err)
+	}
+}
+
+func TestRemovedRepositoryAllowsZombieTaskBranchDeletion(t *testing.T) {
+	database := withCodeGovernanceDB(t)
+	activeRepository := createCodeGitRepository(t)
+	repositoryDir := createCodeGitRepository(t)
+	currentBranch, err := runCodeGit(repositoryDir, "branch", "--show-current")
+	if err != nil {
+		t.Fatal(err)
+	}
+	branch := "gopanel/code-704-legacy"
+	if _, err := runCodeGit(repositoryDir, "branch", branch); err != nil {
+		t.Fatal(err)
+	}
+	project := &model.AIProject{
+		ID: 1, SourceDirs: []string{activeRepository}, DeliveryBranch: currentBranch,
+	}
+	session := &model.AIDevSession{ID: 704, UserID: 7, ProjectID: 1, Status: codeSessionStatusDelivered}
+	if err := database.Create(session).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := database.Create(&model.AITask{
+		UserID: 7, SessionID: session.ID, ProjectID: 1, Title: "legacy", WorkDir: repositoryDir,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	repositoryResults, err := json.Marshal([]codeRepositoryDeliveryResult{{
+		RepositoryName: "legacy", RepositoryPath: repositoryDir, Branch: branch,
+		TargetBranch: currentBranch, Status: codeDeliveryCompleted, PushStatus: "local",
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := database.Create(&model.AICodeDeliveryJob{
+		SessionID: session.ID, TaskID: 1, ProjectID: 1, UserID: 7,
+		Status: codeDeliveryJobCompleted, Stage: codeDeliveryStageCompleted,
+		RepositoryResults: string(repositoryResults),
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := inspectCodeProjectBranches(project)
+	if err != nil || len(result.Repositories) != 2 {
+		t.Fatalf("removed repository was not marked: %#v, %v", result, err)
+	}
+	var removedRepository *codeProjectBranchRepository
+	for index := range result.Repositories {
+		if filepath.Clean(result.Repositories[index].Path) == filepath.Clean(repositoryDir) {
+			removedRepository = &result.Repositories[index]
+		}
+	}
+	if removedRepository == nil || !removedRepository.Excluded {
+		t.Fatalf("removed repository was not marked: %#v", result)
+	}
+	var taskBranch *codeProjectBranch
+	for index := range removedRepository.Branches {
+		if removedRepository.Branches[index].Name == branch {
+			taskBranch = &removedRepository.Branches[index]
+		}
+	}
+	if taskBranch == nil || !taskBranch.Deletable {
+		t.Fatalf("zombie task branch should be deletable: %#v", taskBranch)
+	}
+	if taskBranch.TaskBranch {
+		t.Fatalf("removed repository branch should not be presented as an active task branch: %#v", taskBranch)
+	}
+	if err := deleteCodeProjectLocalBranch(project, repositoryDir, branch, false); err != nil {
+		t.Fatalf("delete zombie task branch: %v", err)
 	}
 }
 

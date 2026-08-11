@@ -14,6 +14,7 @@ import (
 type codeRepositoryDeliveryResult struct {
 	RepositoryID     string     `json:"repositoryId"`
 	RepositoryName   string     `json:"repositoryName"`
+	RepositoryPath   string     `json:"repositoryPath,omitempty"`
 	Status           string     `json:"status"`
 	Branch           string     `json:"branch"`
 	Additions        int        `json:"additions"`
@@ -197,6 +198,7 @@ func codeStoredRepositoryDeliveryResult(repository *model.AIDevSessionRepository
 	}
 	return codeRepositoryDeliveryResult{
 		RepositoryID: codeSessionRepositoryID(repository.ID), RepositoryName: repository.LinkName,
+		RepositoryPath: repository.SourceDir,
 		Status: repository.Status, Branch: repository.Branch, TargetBranch: repository.TargetBranch,
 		Additions: repository.StatAdditions, Deletions: repository.StatDeletions, ChangedFiles: repository.StatFiles,
 		Remote: repository.RemoteName, RemoteBranch: deliveryRemoteBranch(repository.RemoteBranch, repository.TargetBranch),

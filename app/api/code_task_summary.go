@@ -44,12 +44,14 @@ type codeTaskSummary struct {
 }
 
 type codeTaskRepositorySummary struct {
-	Name         string `json:"name"`
-	Branch       string `json:"branch"`
-	Additions    int    `json:"additions"`
-	Deletions    int    `json:"deletions"`
-	ChangedFiles int    `json:"changedFiles"`
-	HasDiff      bool   `json:"hasDiff"`
+	Name           string `json:"name"`
+	RepositoryPath string `json:"repositoryPath,omitempty"`
+	Branch         string `json:"branch"`
+	TargetBranch   string `json:"targetBranch,omitempty"`
+	Additions      int    `json:"additions"`
+	Deletions      int    `json:"deletions"`
+	ChangedFiles   int    `json:"changedFiles"`
+	HasDiff        bool   `json:"hasDiff"`
 }
 
 // 列表里只需要一眼扫过的摘要，整段回复没必要传给前端。

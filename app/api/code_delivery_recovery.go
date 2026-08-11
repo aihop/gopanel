@@ -186,17 +186,6 @@ func cleanupCodeDeliveryWorktree(delivery *model.AICodeDelivery) error {
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	if isCodeGitWorktree(snapshot.SourceWorkDir) {
-		branches, err := runCodeGit(snapshot.SourceWorkDir, "branch", "--list", snapshot.WorktreeBranch)
-		if err != nil {
-			return err
-		}
-		if strings.TrimSpace(branches) != "" {
-			if _, err := runCodeGit(snapshot.SourceWorkDir, "branch", "-d", "--", snapshot.WorktreeBranch); err != nil {
-				return err
-			}
-		}
-	}
 	if delivery.Status == codeDeliveryCompleted {
 		return nil
 	}
@@ -270,7 +259,8 @@ func codeSingleRepositoryDeliveryResult(delivery *model.AICodeDelivery, result c
 	}
 	return codeRepositoryDeliveryResult{
 		RepositoryID: "session", RepositoryName: filepath.Base(delivery.SourceWorkDir), Status: result.Status,
-		Branch: delivery.WorktreeBranch, TargetBranch: delivery.TargetBranch, Remote: delivery.RemoteName,
+		RepositoryPath: delivery.SourceWorkDir,
+		Branch:         delivery.WorktreeBranch, TargetBranch: delivery.TargetBranch, Remote: delivery.RemoteName,
 		Additions: delivery.StatAdditions, Deletions: delivery.StatDeletions, ChangedFiles: delivery.StatFiles,
 		RemoteBranch: deliveryRemoteBranch(delivery.RemoteBranch, delivery.TargetBranch), Commit: result.Commit,
 		SnapshotReady:    strings.TrimSpace(delivery.WorktreeCommit) != "",

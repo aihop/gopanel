@@ -26,7 +26,7 @@ func loadCodeTaskGitSummaries(tasks []*model.AITask, sessionIDs []uint, summarie
 		return nil
 	}
 	var sessions []model.AIDevSession
-	if err := global.DB.Select("id, work_dir, source_work_dir, worktree_branch, base_commit, isolation_mode").Where("id IN ?", sessionIDs).Find(&sessions).Error; err != nil {
+	if err := global.DB.Select("id, work_dir, source_work_dir, worktree_branch, target_branch, base_commit, isolation_mode").Where("id IN ?", sessionIDs).Find(&sessions).Error; err != nil {
 		return err
 	}
 	var deliveries []model.AICodeDelivery
@@ -67,7 +67,7 @@ func loadCodeTaskGitSummaries(tasks []*model.AITask, sessionIDs []uint, summarie
 			stats := codeTaskSummaryStats(worktreeSummary)
 			applyCodeTaskDiffStats(&summary, stats)
 			summary.Repositories = append(summary.Repositories, codeTaskRepositorySummaryFromStats(
-				filepath.Base(session.SourceWorkDir), summary.Branch, stats,
+				filepath.Base(session.SourceWorkDir), session.SourceWorkDir, summary.Branch, session.TargetBranch, stats,
 			))
 		}
 		summaries[task.ID] = summary
@@ -104,7 +104,7 @@ func applyCodeTaskStoredRepositorySummaries(summary *codeTaskSummary, repositori
 		}
 		applyCodeTaskDiffStats(summary, stats)
 		summary.Repositories = append(summary.Repositories, codeTaskRepositorySummaryFromStats(
-			repository.RepositoryName, repository.Branch, stats,
+			repository.RepositoryName, repository.RepositoryPath, repository.Branch, repository.TargetBranch, stats,
 		))
 	}
 	if len(statuses) > 0 {
@@ -132,7 +132,7 @@ func applyCodeTaskDeliverySummary(summary *codeTaskSummary, delivery model.AICod
 	}
 	applyCodeTaskDiffStats(summary, stats)
 	summary.Repositories = append(summary.Repositories, codeTaskRepositorySummaryFromStats(
-		filepath.Base(delivery.SourceWorkDir), delivery.WorktreeBranch, stats,
+		filepath.Base(delivery.SourceWorkDir), delivery.SourceWorkDir, delivery.WorktreeBranch, delivery.TargetBranch, stats,
 	))
 }
 
@@ -168,7 +168,7 @@ func applyCodeTaskRepositorySummaries(summary *codeTaskSummary, repositories []m
 		}
 		applyCodeTaskDiffStats(summary, stats)
 		summary.Repositories = append(summary.Repositories, codeTaskRepositorySummaryFromStats(
-			repository.LinkName, repository.Branch, stats,
+			repository.LinkName, repository.SourceDir, repository.Branch, repository.TargetBranch, stats,
 		))
 	}
 	summary.GitStatus = aggregateCodeTaskGitStatuses(statuses)
@@ -183,9 +183,20 @@ func codeTaskSummaryStats(summary codeTaskSummary) codeTaskDiffStats {
 	}
 }
 
-func codeTaskRepositorySummaryFromStats(name, branch string, stats codeTaskDiffStats) codeTaskRepositorySummary {
+func codeTaskRepositorySummaryFromStats(
+	name, repositoryPath, branch, targetBranch string,
+	stats codeTaskDiffStats,
+) codeTaskRepositorySummary {
+	repositoryPath = strings.TrimSpace(repositoryPath)
+	if repositoryPath != "" {
+		repositoryPath = filepath.Clean(repositoryPath)
+		if evaluatedPath, err := filepath.EvalSymlinks(repositoryPath); err == nil {
+			repositoryPath = evaluatedPath
+		}
+	}
 	return codeTaskRepositorySummary{
-		Name: name, Branch: branch, Additions: stats.Additions, Deletions: stats.Deletions,
+		Name: name, RepositoryPath: repositoryPath, Branch: branch, TargetBranch: targetBranch,
+		Additions: stats.Additions, Deletions: stats.Deletions,
 		ChangedFiles: stats.Files, HasDiff: stats.Files > 0,
 	}
 }
