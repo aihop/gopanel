@@ -205,6 +205,10 @@ func validateCodeMultiRepositoryGitlinkTransition(
 		if err != nil {
 			return fmt.Errorf("源仓库 %s 的当前提交不可用", child.LinkName)
 		}
+		childHead = strings.TrimSpace(childHead)
+		if childHead == strings.TrimSpace(child.SourceCommit) {
+			return nil
+		}
 		if _, err := runCodeGit(child.SourceDir, "merge-base", "--is-ancestor", child.MergeCommit, childHead); err != nil {
 			return fmt.Errorf("源仓库 %s 在交付期间已推进", child.LinkName)
 		}

@@ -405,7 +405,9 @@ func (runner *codeDeliveryRunner) run(jobID uint) {
 		job.Stage, job.Progress = stage, progress
 		runner.updateProgress(job.ID, stage, progress)
 	}
-	reporter(codeDeliveryStageQueued, 5)
+	if job.Stage == codeDeliveryStageQueued || job.Progress < 5 {
+		reporter(codeDeliveryStageQueued, 5)
+	}
 	var session model.AIDevSession
 	if err := global.DB.First(&session, job.SessionID).Error; err != nil {
 		runner.finish(job, codeGitDeliveryResult{}, err)

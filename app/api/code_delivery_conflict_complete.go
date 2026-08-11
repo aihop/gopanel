@@ -135,8 +135,13 @@ func abortCodeDeliveryConflictWorktree(workDir string) error {
 }
 
 func requeueCodeDeliveryConflictJob(tx *gorm.DB, job *model.AICodeDeliveryJob) error {
+	stage := job.Stage
+	if stage == "" || stage == codeDeliveryStageQueued {
+		stage = codeDeliveryStageMerging
+	}
+	progress := max(job.Progress, 35)
 	updates := map[string]any{
-		"status": codeDeliveryJobQueued, "stage": codeDeliveryStageQueued, "progress": 0,
+		"status": codeDeliveryJobQueued, "stage": stage, "progress": progress,
 		"result_commit": "", "result_type": "", "failure_code": "", "error_message": "",
 		"conflict_files": "", "repository_results": "", "lease_owner": "", "lease_expires_at": nil,
 		"started_at": nil, "completed_at": nil,
