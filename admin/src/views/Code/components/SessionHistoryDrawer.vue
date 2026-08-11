@@ -31,7 +31,7 @@ const messagePreviewMaxCharacters = 800
 const messagePreviewMaxLines = 8
 
 const visibleMessages = computed(() =>
-	hideExecutorMessages.value ? messages.value.filter(item => item.role === "user") : messages.value
+	hideExecutorMessages.value ? messages.value.filter(item => item.role === "user") : messages.value,
 )
 
 const isLongMessage = (content: string) =>
@@ -71,7 +71,7 @@ const loadHistory = async () => {
 			runs.value = []
 		}
 	} catch (error) {
-		void 0
+		message.error(error instanceof Error ? error.message : t("code.historyLoadFailed"))
 	} finally {
 		loading.value = false
 	}
@@ -81,7 +81,7 @@ watch(
 	() => [props.show, props.sessionId, props.taskId] as const,
 	([show]) => {
 		if (show) void loadHistory()
-	}
+	},
 )
 
 const showRunRawOutput = async (runId: number) => {
@@ -92,7 +92,7 @@ const showRunRawOutput = async (runId: number) => {
 		const response = await getCodeExecutionRun(runId)
 		rawOutput.value = response.data.rawOutput || response.data.output || ""
 	} catch (error) {
-		void 0
+		message.error(error instanceof Error ? error.message : t("code.rawOutputLoadFailed"))
 	} finally {
 		detailLoading.value = false
 	}

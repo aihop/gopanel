@@ -17,6 +17,7 @@ import {
 } from "../codeDashboardBuckets"
 import { useCodeTaskPolling } from "../useCodeTaskPolling"
 import CodeDashboardTaskRow from "./CodeDashboardTaskRow.vue"
+import SessionHistoryDrawer from "./SessionHistoryDrawer.vue"
 import CodeTaskDetailPane from "./CodeTaskDetailPane.vue"
 
 const props = defineProps<{ projects: AIProject[]; loading: boolean; loadError: boolean }>()
@@ -35,6 +36,7 @@ const activeFilter = ref<CodeDashboardBucket | "delivering" | null>(null)
 const selectedProjectId = ref<number | null>(null)
 const showArchived = ref(false)
 const selectedTaskId = ref<number | null>(null)
+const showHistoryDrawer = ref(false)
 // 折叠状态存起来：习惯用宽终端的人不该每次进页面都再折一次。
 const listCollapsed = useStorage("code-dashboard-list-collapsed", false)
 // 分组要按「现在」判断今天，用一个随轮询推进的时间戳，跨零点也不会停在昨天。
@@ -387,9 +389,16 @@ const toggleArchived = async (task: CodeTaskListItem) => {
         :project-name="selectedTask ? projectNameById.get(selectedTask.projectId) || '' : ''"
         :show-header="listCollapsed"
         @open-workspace="emit('openTask', $event)"
+        @open-history="showHistoryDrawer = true"
         @task-created="refreshTasks(true)"
       />
     </div>
+
+    <SessionHistoryDrawer
+      v-model:show="showHistoryDrawer"
+      :session-id="selectedTask?.sessionId || null"
+      :task-id="selectedTask?.id || null"
+    />
   </div>
 </template>
 
