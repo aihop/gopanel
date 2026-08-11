@@ -17,6 +17,7 @@ import '../widgets/code_delivery_card.dart';
 import '../widgets/code_instruction_composer.dart';
 import 'ai_preview_detail_screen.dart';
 import 'ai_preview_list_screen.dart';
+import 'code_git_review_screen.dart';
 import 'code_session_sheet.dart';
 import 'code_session_recovery_screen.dart';
 import 'code_workspace_files_screen.dart';
@@ -165,6 +166,14 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
     );
   }
 
+  void _openGitReview() {
+    final session = ref.read(aiWorkspaceControllerProvider).currentSession;
+    if (session == null) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => CodeGitReviewScreen(session: session)),
+    );
+  }
+
   void _openRecovery() {
     final session = ref.read(aiWorkspaceControllerProvider).currentSession;
     if (session == null) return;
@@ -272,6 +281,12 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
               tooltip: CodeWorkspaceText.t(context, 'recovery.title'),
               onPressed: _openRecovery,
               icon: const Icon(Icons.history_rounded),
+            ),
+          if (session != null)
+            IconButton(
+              tooltip: CodeWorkspaceText.t(context, 'chat.gitReview'),
+              onPressed: _openGitReview,
+              icon: const Icon(Icons.source_outlined),
             ),
           if (session != null)
             IconButton(
