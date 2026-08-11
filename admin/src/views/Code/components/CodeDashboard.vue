@@ -80,7 +80,20 @@ const projectNameById = computed(() => {
 	return map
 })
 
-const projectOptions = computed(() => props.projects.map(project => ({ label: project.name, value: project.id })))
+// 「全部项目」放在最前面用来清除筛选；下拉的 key 用字符串，0 代表不筛。
+const projectOptions = computed(() => [
+	{ label: t("code.dashboardAllProjects"), key: "0" },
+	...props.projects.map(project => ({ label: project.name, key: String(project.id) })),
+])
+
+const selectedProjectName = computed(
+	() => props.projects.find(project => project.id === selectedProjectId.value)?.name || "",
+)
+
+const handleProjectFilterSelect = (key: string) => {
+	const id = Number(key)
+	selectedProjectId.value = id > 0 ? id : null
+}
 const projectTasks = computed(() => filterCodeDashboardTasksByProject(tasks.value, selectedProjectId.value))
 const grouped = computed(() => groupCodeDashboardTasks(projectTasks.value, now.value))
 
@@ -187,16 +200,32 @@ const toggleArchived = async (task: CodeTaskListItem) => {
       <span class="shrink-0 text-base font-semibold tracking-[-0.01em] text-[var(--n-text-color)]">
         {{ t("code.workspace") }}
       </span>
-      <n-select
-        v-model:value="selectedProjectId"
+      <!--
+        项目筛选做成文字按钮而不是带边框的 select：
+        首页列的是「所有在做的任务」，筛选只是偶尔用一下的能力，
+        不该在顶栏里抢一块和标题同等重量的位置。
+      -->
+      <n-dropdown
+        v-if="projects.length"
+        trigger="click"
         :options="projectOptions"
-        size="small"
-        clearable
-        filterable
-        style="width: 168px"
-        :placeholder="t('code.dashboardAllProjects')"
-        :disabled="loading || !projects.length"
-      />
+        @select="handleProjectFilterSelect"
+      >
+        <n-button
+          text
+          size="small"
+          :type="selectedProjectId ? 'primary' : 'default'"
+          class="shrink-0"
+        >
+          {{ selectedProjectName || t("code.dashboardAllProjects") }}
+          <template #icon>
+            <Icon
+              name="mdi:chevron-down"
+              :size="15"
+            />
+          </template>
+        </n-button>
+      </n-dropdown>
       <div
         v-show="!showArchived"
         class="flex flex-1 flex-wrap items-center gap-2"
