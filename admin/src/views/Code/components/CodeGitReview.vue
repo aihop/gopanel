@@ -26,16 +26,16 @@ import type {
 	CodeGitFile,
 	CodeGitHistorySelection,
 	CodeGitRepository,
-	CodeGitScope,
 	CodeGitStatus
 } from "@/api/interface/codeGit"
 import { codeGitReviewMessages } from "../codeGitReviewMessages"
+import type { CodeGitReviewView } from "../codeGitReviewView"
 
 const props = defineProps<{ sessionId: number | null; active: boolean }>()
 const emit = defineEmits<{ (event: "open-file", file: { path: string; extension: string }): void }>()
 const { t } = useI18n({ messages: codeGitReviewMessages })
 const message = useMessage()
-const scope = ref<CodeGitScope | "history">("result")
+const view = ref<CodeGitReviewView>("changes")
 const status = ref<CodeGitStatus | null>(null)
 const historySelection = ref<CodeGitHistorySelection | null>(null)
 const historyRefreshKey = ref(0)
@@ -66,10 +66,6 @@ const entries = computed<GitReviewEntry[]>(() => {
 	const result: GitReviewEntry[] = []
 	for (const repository of status.value?.repositories || []) {
 		for (const file of repository.files) {
-			if (scope.value === "result") {
-				result.push({ repository, file, kind: "result", key: `${repository.id}:result:${file.path}` })
-				continue
-			}
 			if (file.staged) {
 				result.push({ repository, file, kind: "staged", key: `${repository.id}:staged:${file.path}` })
 			}
@@ -82,24 +78,10 @@ const entries = computed<GitReviewEntry[]>(() => {
 })
 const selectedEntry = computed(() => entries.value.find(entry => entry.key === selectedKey.value) || null)
 const hasChanges = computed(() => entries.value.length > 0)
-const totalAdditions = computed(() =>
-	scope.value === "result"
-		? status.value?.additions || 0
-		: (status.value?.additions || 0) + (status.value?.stagedAdditions || 0)
-)
-const totalDeletions = computed(() =>
-	scope.value === "result"
-		? status.value?.deletions || 0
-		: (status.value?.deletions || 0) + (status.value?.stagedDeletions || 0)
-)
+const totalAdditions = computed(() => (status.value?.additions || 0) + (status.value?.stagedAdditions || 0))
+const totalDeletions = computed(() => (status.value?.deletions || 0) + (status.value?.stagedDeletions || 0))
 const isolatedRepositories = computed(() =>
 	(status.value?.repositories || []).filter(repository => repository.isolated)
-)
-const savedRepositories = computed(() =>
-	isolatedRepositories.value.filter(repository => (repository.savedCommits || 0) > 0)
-)
-const savedCommitCount = computed(() =>
-	savedRepositories.value.reduce((total, repository) => total + (repository.savedCommits || 0), 0)
 )
 const hasIsolation = computed(() => Boolean(worktreeBranch.value || isolationMode.value === "multi_worktree"))
 const deliveryActive = computed(() => ["queued", "running"].includes(deliveryJob.value?.status || ""))
@@ -108,7 +90,7 @@ const conflictRepositories = computed(() => {
 	return (deliveryJob.value.repositories || []).filter(repository => repository.status === "conflict")
 })
 const canSave = computed(() =>
-	Boolean(scope.value === "workspace" && hasIsolation.value && !deliveryActive.value && hasChanges.value)
+	Boolean(view.value === "commit" && hasIsolation.value && !deliveryActive.value && hasChanges.value)
 )
 const deliveryStatusLabel = computed(() => {
 	if (!deliveryJob.value) return ""
@@ -143,7 +125,7 @@ const loadDiff = async (entry: GitReviewEntry, preserveContent = false) => {
 			entry.repository.id,
 			entry.file.path,
 			entry.kind,
-			scope.value as CodeGitScope
+			"workspace"
 		)
 		if (sequence !== diffSequence || selectedKey.value !== entry.key) return
 		diffContent.value = response.data.content || ""
@@ -166,18 +148,18 @@ const reconcileSelection = async () => {
 }
 
 const loadStatus = async (silent = false) => {
-	if (!props.sessionId || statusPending || scope.value === "history") return
-	const requestedScope = scope.value
+	if (!props.sessionId || statusPending || view.value === "history") return
+	const requestedView = view.value
 	statusPending = true
 	if (!silent) loading.value = true
 	else refreshing.value = true
 	try {
 		const [response, sessionResponse, deliveryResponse] = await Promise.all([
-			getCodeGitStatus(props.sessionId, requestedScope),
+			getCodeGitStatus(props.sessionId, "workspace"),
 			getCodeSession(props.sessionId),
 			getCodeDeliveryJob(props.sessionId)
 		])
-		if (requestedScope !== scope.value) return
+		if (requestedView !== view.value) return
 		status.value = response.data
 		deliveryJob.value = deliveryResponse.data
 		worktreeBranch.value = sessionResponse.data.session.worktreeBranch || ""
@@ -190,7 +172,7 @@ const loadStatus = async (silent = false) => {
 		statusPending = false
 		loading.value = false
 		refreshing.value = false
-		if (requestedScope !== scope.value && props.active) void loadStatus()
+		if (requestedView !== view.value && props.active) void loadStatus()
 	}
 }
 
@@ -234,7 +216,7 @@ const openSelectedFile = () => {
 	emit("open-file", { path: entry.file.workspacePath, extension })
 }
 
-watch(scope, () => {
+watch(view, () => {
 	status.value = null
 	historySelection.value = null
 	selectedKey.value = ""
@@ -243,7 +225,7 @@ watch(scope, () => {
 	if (props.active) void loadStatus()
 })
 const refreshReview = () => {
-	if (scope.value === "history") {
+	if (view.value === "history") {
 		historyRefreshKey.value++
 		return
 	}
@@ -258,6 +240,7 @@ const selectHistoryCommit = (selection: CodeGitHistorySelection | null) => {
 watch(
 	() => props.sessionId,
 	() => {
+		view.value = "changes"
 		status.value = null
 		deliveryJob.value = null
 		selectedKey.value = ""
@@ -287,18 +270,12 @@ useIntervalFn(() => {
 			:title="historySelection?.title || selectedEntry?.file.path || ''"
 			:subtitle="
 				historySelection?.subtitle ||
-				t(
-					selectedEntry?.kind === 'result'
-						? 'code.gitResultDiff'
-						: selectedEntry?.kind === 'staged'
-							? 'code.gitStagedDiff'
-							: 'code.gitWorkingDiff'
-				)
+					t(selectedEntry?.kind === 'staged' ? 'code.gitStagedDiff' : 'code.gitWorkingDiff')
 			"
 			:content="diffContent"
 			:truncated="diffTruncated"
 			:loading="diffLoading"
-			:empty-description="t(scope === 'history' ? 'code.gitHistorySelect' : 'code.gitSelectFile')"
+			:empty-description="t(view === 'history' ? 'code.gitHistorySelect' : 'code.gitSelectFile')"
 			:diff-empty-description="t('code.gitDiffEmpty')"
 			:truncated-description="t('code.gitDiffTruncated')"
 			:open-file-label="t('code.gitOpenFile')"
@@ -316,7 +293,7 @@ useIntervalFn(() => {
 
 		<aside class="flex w-80 shrink-0 flex-col border-l border-slate-200 bg-slate-50/70">
 			<CodeGitReviewHeader
-				v-model="scope"
+				v-model="view"
 				:status="status"
 				:additions="totalAdditions"
 				:deletions="totalDeletions"
@@ -324,12 +301,12 @@ useIntervalFn(() => {
 				@refresh="refreshReview"
 			/>
 			<CodeSessionRepositorySync
-				v-if="scope === 'workspace' && hasIsolation && sessionId"
+				v-if="view === 'commit' && hasIsolation && sessionId"
 				:session-id="sessionId"
 				:disabled="deliveryActive"
 				@synced="loadStatus(true)"
 			/>
-			<div v-if="scope === 'workspace' && hasIsolation" class="space-y-2 border-b border-slate-200 p-3">
+			<div v-if="view === 'commit' && hasIsolation" class="space-y-2 border-b border-slate-200 p-3">
 				<div class="truncate text-xs text-slate-500" :title="deliveryLabel">{{ deliveryLabel }}</div>
 				<n-alert
 					v-if="deliveryJob"
@@ -355,7 +332,7 @@ useIntervalFn(() => {
 						:percentage="deliveryJob.progress"
 						:show-indicator="false"
 					/>
-					<div v-if="deliveryJob.errorMessage" class="mt-2 break-words text-xs">
+					<div v-if="deliveryJob.errorMessage && !conflictRepositories.length" class="mt-2 break-words text-xs">
 						{{ deliveryJob.errorMessage }}
 					</div>
 					<CodeConflictManualMerge :repositories="conflictRepositories" />
@@ -390,57 +367,45 @@ useIntervalFn(() => {
 				</n-button>
 			</div>
 			<CodeDeliveryPush
-				v-if="scope === 'workspace' && !hasIsolation && sessionId"
+				v-if="view === 'commit' && !hasIsolation && sessionId"
 				:session-id="sessionId"
 				:refresh-key="deliveryPushKey"
 			/>
 			<CodeGitHistory
-				v-if="scope === 'history'"
+				v-if="view === 'history'"
 				:session-id="sessionId"
 				:active="active"
 				:refresh-key="historyRefreshKey"
 				@selected="selectHistoryCommit"
 			/>
-			<n-spin v-else :show="loading" class="min-h-0 flex-1">
+			<n-spin
+				v-else
+				:show="loading"
+				class="min-h-0 flex-1 overflow-hidden"
+				content-class="flex h-full min-h-0 flex-col"
+			>
 				<div v-if="loadError" class="p-4">
 					<n-alert type="error" :title="t('code.gitLoadFailed')">{{ loadError }}</n-alert>
 				</div>
 				<n-empty
 					v-else-if="status && !status.available"
-					:description="t(scope === 'result' ? 'code.gitResultUnavailable' : 'code.gitNoRepository')"
+					:description="t('code.gitNoRepository')"
 					class="mt-16"
 				/>
-				<div
-					v-else-if="scope === 'workspace' && status && !hasChanges && savedCommitCount"
-					class="space-y-3 p-4"
-				>
-					<n-alert type="success" :title="t('code.gitSavedTitle')">
-						{{ t("code.gitSavedDescription", { count: savedCommitCount }) }}
-					</n-alert>
-					<div class="space-y-2">
-						<div
-							v-for="repository in savedRepositories"
-							:key="repository.id"
-							class="flex items-center justify-between rounded-lg bg-white px-3 py-2 text-xs text-slate-600 shadow-sm"
-						>
-							<span class="min-w-0 truncate">{{ repository.name }}</span>
-							<span class="shrink-0 font-mono text-slate-400">{{ repository.headCommit }}</span>
-						</div>
-					</div>
-				</div>
 				<n-empty
 					v-else-if="status && !hasChanges"
-					:description="t(scope === 'result' ? 'code.gitResultEmpty' : 'code.gitNoChanges')"
+					:description="t('code.gitNoChanges')"
 					class="mt-16"
 				/>
 				<CodeGitRepositoryChanges
 					v-else
+					class="min-h-0 flex-1"
 					:repositories="status?.repositories || []"
 					:entries="entries"
-					:scope="scope as CodeGitScope"
+					scope="workspace"
 					:selected-key="selectedKey"
 					:staging-key="stagingKey"
-					:show-advanced-operations="showAdvancedOperations"
+					:show-advanced-operations="view === 'commit' && showAdvancedOperations"
 					@select="loadDiff"
 					@update-stage="({ entry, staged }) => updateStage(entry, staged)"
 				/>

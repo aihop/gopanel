@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { useI18n } from "vue-i18n"
 import type { CodeRepositoryDeliveryResult } from "@/api/interface/codeGit"
-import { codeGitReviewMessages } from "../codeGitReviewMessages"
+import { codeConflictManualMergeMessages } from "../codeConflictManualMergeMessages"
 
 defineProps<{ repositories: CodeRepositoryDeliveryResult[] }>()
-const { t } = useI18n({ messages: codeGitReviewMessages })
+const { t } = useI18n({ messages: codeConflictManualMergeMessages })
 </script>
 
 <template>

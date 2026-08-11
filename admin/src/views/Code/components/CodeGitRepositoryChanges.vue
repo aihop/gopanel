@@ -36,6 +36,9 @@ const groups = computed(() =>
 				{ kind: "untracked" as const, label: t("code.gitUntracked") }
 			]
 )
+const visibleRepositories = computed(() =>
+	props.repositories.filter(repository => props.entries.some(entry => entry.repository.id === repository.id))
+)
 const entriesFor = (repositoryId: string, kind: CodeGitDiffKind | "untracked") =>
 	props.entries.filter(entry => {
 		if (entry.repository.id !== repositoryId) return false
@@ -47,9 +50,9 @@ const entriesFor = (repositoryId: string, kind: CodeGitDiffKind | "untracked") =
 </script>
 
 <template>
-	<n-scrollbar class="h-full">
+	<n-scrollbar class="h-full min-h-0">
 		<div class="space-y-4 p-2.5">
-			<section v-for="repository in repositories" :key="repository.id">
+			<section v-for="repository in visibleRepositories" :key="repository.id">
 				<div class="mb-2 flex items-center gap-2 px-2">
 					<Icon name="mdi:source-repository" :size="16" />
 					<span class="min-w-0 flex-1 truncate text-xs font-semibold text-slate-700">
