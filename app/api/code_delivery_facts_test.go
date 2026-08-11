@@ -22,6 +22,20 @@ func TestCodeMultiRepositoryDeliveryFactsExposePartialProgress(t *testing.T) {
 	}
 }
 
+func TestCodeMultiRepositoryDeliveryFactsSkipUnchangedRepositories(t *testing.T) {
+	now := time.Now()
+	facts := codeMultiRepositoryDeliveryFacts([]codeRepositoryDeliveryResult{
+		{Status: codeDeliveryCompleted, SnapshotReady: true, PushStatus: codePushPending},
+		{Status: codeDeliveryCompleted, Commit: "changed", SnapshotReady: true, MergeReady: true, SourceAppliedAt: &now},
+	})
+	for _, key := range []string{"snapshot", "merge", "local"} {
+		fact := codeDeliveryFactByKey(facts, key)
+		if fact.Total != 1 || fact.Count != 1 || fact.Status != "completed" {
+			t.Fatalf("unchanged repository affected %s progress: %#v", key, fact)
+		}
+	}
+}
+
 func TestLoadCodeDeliveryFactsDistinguishesIsolatedMergeFromLocalMain(t *testing.T) {
 	database := withCodeGovernanceDB(t)
 	sourceDir := createCodeGitRepository(t)

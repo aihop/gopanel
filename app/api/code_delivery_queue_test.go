@@ -342,6 +342,40 @@ func TestCodeDeliveryRepositoryLeaseSerializesJobs(t *testing.T) {
 	}
 }
 
+func TestCodeDeliveryRepositoryKeysOnlyIncludeAffectedRepositories(t *testing.T) {
+	session, _, _ := createMultiRepositorySession(t, 916)
+	repositories, err := loadCodeSessionRepositories(session.ID)
+	if err != nil || len(repositories) != 2 {
+		t.Fatalf("load repositories: %#v, %v", repositories, err)
+	}
+	changed := &repositories[0]
+	commitCodeTestFile(t, changed.WorktreeDir, "delivery.txt", "changed\n")
+	if err := captureCodeMultiRepositoryDeliverySnapshot(session); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := loadCodeSessionRepositories(session.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index := range stored {
+		repository := &stored[index]
+		if repository.ID == changed.ID && repository.Status != codeDeliveryPrepared {
+			t.Fatalf("changed repository was skipped: %#v", repository)
+		}
+		if repository.ID != changed.ID && (repository.Status != codeDeliveryCompleted || repository.MergeCommit != "") {
+			t.Fatalf("unchanged repository entered delivery: %#v", repository)
+		}
+	}
+	keys, _, err := codeDeliveryRepositoryKeys(session)
+	if err != nil || len(keys) != 1 {
+		t.Fatalf("affected repository keys = %#v, %v", keys, err)
+	}
+	want := codeDeliveryRepositoryKey(changed.SourceDir, changed.RemoteName, changed.TargetBranch)
+	if keys[0] != want {
+		t.Fatalf("affected repository key = %q, want %q", keys[0], want)
+	}
+}
+
 func TestCodeTaskSummaryIncludesDeliveryProgress(t *testing.T) {
 	database := withCodeGovernanceDB(t)
 	session := &model.AIDevSession{ID: 905, UserID: 1, ProjectID: 1, WorkDir: t.TempDir()}

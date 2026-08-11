@@ -9,9 +9,8 @@ import (
 	"github.com/aihop/gopanel/global"
 )
 
-// 本地主仓是用户、项目终端和其它会话共享的工作区，交付流程无法独占它。
-// 交付的真相是「交付提交已经产出、可被推送」，把它快进到本地主仓只是顺带的便利。
-// 因此本地快进失败会被降级记录，既不让整次交付失败，也不阻断推送远端。
+// 单仓交付仍允许把本地快进失败记录为可恢复状态；多仓交付必须保证每个参与仓库
+// 都真实进入目标分支，因此 applyCodeRepositoryLocalSync 会把快进失败返回给批次流程。
 
 func shortCodeCommit(commit string) string {
 	commit = strings.TrimSpace(commit)
@@ -88,7 +87,11 @@ func applyCodeRepositoryLocalSync(
 		return err
 	}
 	if err := fastForwardCodeMultiRepositorySource(repository, repositories); err != nil {
-		return persistCodeRepositoryLocalSync(repository, nil, codeDeliveryLocalSyncReason(err.Error()))
+		syncError := codeDeliveryLocalSyncReason(err.Error())
+		if persistErr := persistCodeRepositoryLocalSync(repository, nil, syncError); persistErr != nil {
+			return persistErr
+		}
+		return fmt.Errorf("仓库 %s 未能交付到本地目标分支：%s", repository.LinkName, syncError)
 	}
 	return persistCodeRepositoryLocalSync(repository, repository.SourceAppliedAt, "")
 }

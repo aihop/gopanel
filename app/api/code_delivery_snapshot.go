@@ -112,6 +112,7 @@ func captureCodeMultiRepositoryDeliverySnapshot(session *model.AIDevSession) err
 	}
 	commits := make([]string, len(repositories))
 	reset := make([]bool, len(repositories))
+	affected := make([]bool, len(repositories))
 	repositoryBySource := make(map[string]int, len(repositories))
 	for index := range repositories {
 		repository := &repositories[index]
@@ -128,18 +129,24 @@ func captureCodeMultiRepositoryDeliverySnapshot(session *model.AIDevSession) err
 			}
 		}
 		previousCommit := strings.TrimSpace(repository.WorktreeCommit)
-		reset[index] = previousCommit == "" || commit != previousCommit ||
+		reset[index] = commit != previousCommit ||
 			(repository.Status != codeDeliveryCompleted && repository.Status != codeDeliveryMerged &&
 				repository.Status != codeDeliveryPrepared)
+		affected[index] = commit != strings.TrimSpace(repository.BaseCommit)
+		if previousCommit != "" && commit == previousCommit &&
+			(repository.Status == codeDeliveryCompleted || repository.Status == codeDeliveryMerged) {
+			affected[index] = false
+		}
 	}
 	for changed := true; changed; {
 		changed = false
 		for index := range repositories {
-			if !reset[index] || strings.TrimSpace(repositories[index].ParentSourceDir) == "" {
+			if !affected[index] || strings.TrimSpace(repositories[index].ParentSourceDir) == "" {
 				continue
 			}
 			parentIndex, exists := repositoryBySource[filepath.Clean(repositories[index].ParentSourceDir)]
-			if exists && !reset[parentIndex] {
+			if exists && !affected[parentIndex] {
+				affected[parentIndex] = true
 				reset[parentIndex] = true
 				changed = true
 			}
@@ -151,14 +158,10 @@ func captureCodeMultiRepositoryDeliverySnapshot(session *model.AIDevSession) err
 		}
 		repository := &repositories[index]
 		targetBranch := strings.TrimSpace(repository.TargetBranch)
-		if targetBranch == "" {
-			if codeRepositoryHasResetDescendant(index, repositories, reset, repositoryBySource) {
-				repository.Status = codeDeliveryPrepared
-			} else {
-				repository.Status = codeDeliveryCompleted
-			}
-		} else {
+		if affected[index] {
 			repository.Status = codeDeliveryPrepared
+		} else {
+			repository.Status = codeDeliveryCompleted
 		}
 		repository.TargetBranch, repository.WorktreeCommit = targetBranch, commits[index]
 	}
@@ -206,31 +209,6 @@ func captureCodeMultiRepositoryDeliverySnapshot(session *model.AIDevSession) err
 		}
 		return nil
 	})
-}
-
-func codeRepositoryHasResetDescendant(
-	index int,
-	repositories []model.AIDevSessionRepository,
-	reset []bool,
-	repositoryBySource map[string]int,
-) bool {
-	for childIndex := range repositories {
-		if childIndex == index || !reset[childIndex] {
-			continue
-		}
-		parentSource := strings.TrimSpace(repositories[childIndex].ParentSourceDir)
-		for parentSource != "" {
-			parentIndex, exists := repositoryBySource[filepath.Clean(parentSource)]
-			if !exists {
-				break
-			}
-			if parentIndex == index {
-				return true
-			}
-			parentSource = strings.TrimSpace(repositories[parentIndex].ParentSourceDir)
-		}
-	}
-	return false
 }
 
 func cleanCodeDeliveryCommit(workDir, label string) (string, error) {

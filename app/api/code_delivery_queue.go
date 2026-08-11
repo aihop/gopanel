@@ -63,6 +63,9 @@ func codeDeliveryRepositoryKeys(session *model.AIDevSession) ([]string, string, 
 		}
 		keys := make([]string, 0, len(repositories))
 		for _, repository := range repositories {
+			if repository.Status == codeDeliveryCompleted {
+				continue
+			}
 			targetBranch := repository.TargetBranch
 			if strings.TrimSpace(targetBranch) == "" {
 				targetBranch, _ = runCodeGit(repository.SourceDir, "branch", "--show-current")
@@ -143,7 +146,7 @@ func enqueueCodeDelivery(jobID uint) {
 
 func decodeCodeDeliveryKeys(job *model.AICodeDeliveryJob) ([]string, error) {
 	var keys []string
-	if err := json.Unmarshal([]byte(job.RepositoryKeys), &keys); err != nil || len(keys) == 0 {
+	if err := json.Unmarshal([]byte(job.RepositoryKeys), &keys); err != nil {
 		return nil, errors.New("交付仓库租约信息无效")
 	}
 	sort.Strings(keys)
@@ -171,6 +174,9 @@ func (runner *codeDeliveryRunner) claim(jobID uint) (*model.AICodeDeliveryJob, [
 }
 
 func (runner *codeDeliveryRunner) acquireRepositoryLeases(job *model.AICodeDeliveryJob, keys []string) (bool, error) {
+	if len(keys) == 0 {
+		return true, nil
+	}
 	return acquireCodeRepositoryLeases(runner.owner, job.ID, keys)
 }
 

@@ -9,8 +9,7 @@ import (
 	"github.com/aihop/gopanel/app/model"
 )
 
-// 本地主仓被用户、项目终端和其它会话共享，交付期间它随时可能变脏、推进或切换分支。
-// 这些情况都不该让交付失败：交付提交已经在共享对象库中产出，推送远端不依赖本地分支位置。
+// 多仓交付只有在每个参与仓库真实进入目标分支后才算完成。
 
 func deliverCodeMultiRepositorySession(t *testing.T, sessionID uint) (*model.AIDevSession, []string) {
 	t.Helper()
@@ -75,8 +74,8 @@ func assertAllCodeRepositoriesCompleted(t *testing.T, sessionID uint) []model.AI
 	return stored
 }
 
-// 用户开着编辑器或 dev server，源仓有未提交改动时，交付必须照常完成。
-func TestCodeDeliveryCompletesWhenSourceRepositoryIsDirty(t *testing.T) {
+// 当前签出的目标分支有未提交改动时不能安全推进，整次交付必须明确失败。
+func TestCodeDeliveryFailsWhenTargetRepositoryIsDirty(t *testing.T) {
 	session, sourceDirs := deliverCodeMultiRepositorySession(t, 611)
 	dirty := filepath.Join(sourceDirs[0], "delivery.txt")
 	if err := os.WriteFile(dirty, []byte("uncommitted local edit\n"), 0600); err != nil {
@@ -84,27 +83,57 @@ func TestCodeDeliveryCompletesWhenSourceRepositoryIsDirty(t *testing.T) {
 	}
 
 	result, err := resumeCodeMultiRepositoryDelivery(session, session.UserID)
-	if err != nil {
-		t.Fatalf("dirty source repository must not fail delivery: %v (%#v)", err, result)
+	if err == nil || !strings.Contains(err.Error(), "会被交付覆盖") {
+		t.Fatalf("dirty target repository must fail delivery: %v (%#v)", err, result)
 	}
-
-	stored := assertAllCodeRepositoriesCompleted(t, session.ID)
-	degraded := false
+	stored, loadErr := loadCodeSessionRepositories(session.ID)
+	if loadErr != nil {
+		t.Fatal(loadErr)
+	}
 	for index := range stored {
-		repository := &stored[index]
-		if repository.SourceAppliedAt != nil || strings.TrimSpace(repository.LocalSyncError) == "" {
-			continue
-		}
-		degraded = true
-		command := codeDeliveryLocalSyncCommand(repository.SourceDir, repository.MergeCommit)
-		if !strings.Contains(command, "merge --ff-only") || !strings.Contains(command, repository.MergeCommit) {
-			t.Fatalf("degraded repository must expose a runnable sync command, got %q", command)
+		if stored[index].Status == codeDeliveryCompleted || stored[index].SourceAppliedAt != nil {
+			t.Fatalf("failed batch was reported as delivered: %#v", stored[index])
 		}
 	}
-	if !degraded {
-		t.Fatal("dirty source repository should have been reported as a degraded local sync")
+}
+
+func TestCodeDeliveryOnlyAdvancesAffectedRepository(t *testing.T) {
+	session, _, _ := createMultiRepositorySession(t, 614)
+	repositories, err := loadCodeSessionRepositories(session.ID)
+	if err != nil || len(repositories) != 2 {
+		t.Fatalf("load repositories: %#v, %v", repositories, err)
 	}
-	assertCodeDeliveryPushableToRemote(t, session)
+	changed := &repositories[0]
+	unchanged := &repositories[1]
+	unchangedBefore, err := runCodeGit(unchanged.SourceDir, "rev-parse", "refs/heads/"+unchanged.TargetBranch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	commitCodeTestFile(t, changed.WorktreeDir, "delivery.txt", "changed\n")
+	result, err := resumeCodeMultiRepositoryDelivery(session, session.UserID)
+	if err != nil || result.Status != codeDeliveryMerged {
+		t.Fatalf("affected repository delivery failed: %#v, %v", result, err)
+	}
+	stored, err := loadCodeSessionRepositories(session.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed = codeTestRepositoryByID(t, stored, changed.ID)
+	unchanged = codeTestRepositoryByID(t, stored, unchanged.ID)
+	if changed.Status != codeDeliveryCompleted || changed.SourceAppliedAt == nil || changed.MergeCommit == "" {
+		t.Fatalf("changed repository was not delivered: %#v", changed)
+	}
+	changedTarget, err := runCodeGit(changed.SourceDir, "rev-parse", "refs/heads/"+changed.TargetBranch)
+	if err != nil || changedTarget != changed.MergeCommit {
+		t.Fatalf("changed target branch = %q, want %q: %v", changedTarget, changed.MergeCommit, err)
+	}
+	unchangedTarget, err := runCodeGit(unchanged.SourceDir, "rev-parse", "refs/heads/"+unchanged.TargetBranch)
+	if err != nil || unchangedTarget != unchangedBefore {
+		t.Fatalf("unchanged target branch moved: before=%q after=%q err=%v", unchangedBefore, unchangedTarget, err)
+	}
+	if unchanged.MergeCommit != "" || unchanged.SourceAppliedAt != nil {
+		t.Fatalf("unchanged repository produced a delivery result: %#v", unchanged)
+	}
 }
 
 // 用户在源仓自己提交了东西之后再交付：交付基线取当前源仓状态，

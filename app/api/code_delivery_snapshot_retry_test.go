@@ -144,11 +144,17 @@ func TestCodeMultiRepositoryDeliverySnapshotResetsChangedAndFailedRepositories(t
 		if stored[index].ID == repositories[0].ID {
 			expectedCommit = changedHead
 		}
-		if stored[index].Status != codeDeliveryPrepared || stored[index].WorktreeCommit != expectedCommit ||
+		expectedStatus := codeDeliveryCompleted
+		expectedCompleted := true
+		if stored[index].ID == repositories[0].ID {
+			expectedStatus = codeDeliveryPrepared
+			expectedCompleted = false
+		}
+		if stored[index].Status != expectedStatus || stored[index].WorktreeCommit != expectedCommit ||
 			stored[index].RemoteCommit != repositories[index].RemoteCommit || stored[index].MergeCommit != "" ||
 			stored[index].PushStatus != codePushPending || stored[index].PushedCommit != "" ||
-			stored[index].PushError != "" || stored[index].MergedAt != nil ||
-			stored[index].SourceAppliedAt != nil || stored[index].CompletedAt != nil || stored[index].PushedAt != nil {
+			stored[index].PushError != "" || stored[index].MergedAt != nil || stored[index].SourceAppliedAt != nil ||
+			(stored[index].CompletedAt != nil) != expectedCompleted || stored[index].PushedAt != nil {
 			t.Fatalf("repository was not reset for retry: %#v", stored[index])
 		}
 	}

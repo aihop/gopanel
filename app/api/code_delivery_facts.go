@@ -58,9 +58,13 @@ func codeDeliverySourceContainsCommit(delivery *model.AICodeDelivery) bool {
 }
 
 func codeMultiRepositoryDeliveryFacts(repositories []codeRepositoryDeliveryResult) []codeDeliveryFact {
-	total := len(repositories)
+	total := 0
 	prepared, merged, localApplied, remoteVerified, remoteTotal := 0, 0, 0, 0, 0
 	for _, repository := range repositories {
+		if repository.Status == codeDeliveryCompleted && strings.TrimSpace(repository.Commit) == "" {
+			continue
+		}
+		total++
 		if repository.SnapshotReady {
 			prepared++
 		}

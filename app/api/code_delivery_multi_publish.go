@@ -46,6 +46,14 @@ func publishCodeMultiRepositoryDeliveryWithProgress(
 		if repositories[index].Status == codeDeliveryCompleted {
 			continue
 		}
+		if _, err := validateCodeMultiRepositorySource(&repositories[index], repositories); err != nil {
+			return codeMultiRepositoryFailure(codeStoredRepositoryDeliveryResults(repositories), err), err
+		}
+	}
+	for index := range repositories {
+		if repositories[index].Status == codeDeliveryCompleted {
+			continue
+		}
 		if err := applyCodeRepositoryLocalSync(&repositories[index], repositories); err != nil {
 			return codeMultiRepositoryFailure(codeStoredRepositoryDeliveryResults(repositories), err), err
 		}
@@ -67,9 +75,10 @@ func validateCodeMultiRepositorySource(
 	repositories []model.AIDevSessionRepository,
 ) (bool, error) {
 	branch, err := runCodeGit(repository.SourceDir, "branch", "--show-current")
-	if err != nil || strings.TrimSpace(branch) != repository.TargetBranch {
-		return false, fmt.Errorf("源仓库 %s 的交付目标分支已变化", repository.LinkName)
+	if err != nil {
+		return false, fmt.Errorf("源仓库 %s 的当前分支不可用", repository.LinkName)
 	}
+	branch = strings.TrimSpace(branch)
 	commit, err := runCodeGit(repository.SourceDir, "rev-parse", "refs/heads/"+repository.TargetBranch)
 	if err != nil {
 		return false, fmt.Errorf("源仓库 %s 的交付目标提交不可用", repository.LinkName)
@@ -81,8 +90,16 @@ func validateCodeMultiRepositorySource(
 	if commit != strings.TrimSpace(repository.SourceCommit) {
 		return false, fmt.Errorf("源仓库 %s 在交付期间已推进", repository.LinkName)
 	}
-	if err := validateCodeMultiRepositorySourceStatus(repository, repositories); err != nil {
-		return false, err
+	if branch == repository.TargetBranch {
+		if err := validateCodeMultiRepositorySourceStatus(repository, repositories); err != nil {
+			return false, err
+		}
+	}
+	if _, err := runCodeGit(repository.SourceDir, "merge-base", "--is-ancestor", commit, repository.MergeCommit); err != nil {
+		return false, fmt.Errorf("仓库 %s 的交付提交无法从目标分支安全快进", repository.LinkName)
+	}
+	if branch != repository.TargetBranch {
+		return false, nil
 	}
 	return false, nil
 }
@@ -91,6 +108,10 @@ func validateCodeMultiRepositorySourceStatus(
 	repository *model.AIDevSessionRepository,
 	repositories []model.AIDevSessionRepository,
 ) error {
+	changedPaths, err := codeMultiRepositoryDeliveryChangedPaths(repository)
+	if err != nil {
+		return err
+	}
 	status, err := runCodeGitBytes(
 		repository.SourceDir, nil, "status", "--porcelain=v1", "-z", "--ignore-submodules=dirty",
 	)
@@ -117,6 +138,10 @@ func validateCodeMultiRepositorySourceStatus(
 			continue
 		}
 		if len(entry) >= 3 && entry[0] == '?' && entry[1] == '?' {
+			path := filepath.ToSlash(string(entry[3:]))
+			if codeRepositoryPathOverlaps(path, changedPaths) {
+				return fmt.Errorf("源仓库 %s 的未跟踪文件会被交付覆盖：%s", repository.LinkName, path)
+			}
 			continue
 		}
 		if len(entry) < 4 || entry[0] != ' ' || entry[1] != 'M' {
@@ -131,6 +156,34 @@ func validateCodeMultiRepositorySourceStatus(
 		}
 	}
 	return nil
+}
+
+func codeMultiRepositoryDeliveryChangedPaths(repository *model.AIDevSessionRepository) ([]string, error) {
+	output, err := runCodeGitBytes(
+		repository.SourceDir, nil, "diff", "--name-only", "-z",
+		repository.SourceCommit, repository.MergeCommit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	paths := make([]string, 0)
+	for _, path := range bytes.Split(output, []byte{0}) {
+		if len(path) > 0 {
+			paths = append(paths, filepath.ToSlash(string(path)))
+		}
+	}
+	return paths, nil
+}
+
+func codeRepositoryPathOverlaps(path string, changedPaths []string) bool {
+	path = strings.Trim(filepath.ToSlash(path), "/")
+	for _, changedPath := range changedPaths {
+		changedPath = strings.Trim(filepath.ToSlash(changedPath), "/")
+		if path == changedPath || strings.HasPrefix(path, changedPath+"/") || strings.HasPrefix(changedPath, path+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 func validateCodeMultiRepositoryGitlinkTransition(
@@ -240,11 +293,22 @@ func fastForwardCodeMultiRepositorySource(
 		return err
 	}
 	if !applied {
-		if _, err := runCodeGit(repository.SourceDir, "merge", "--ff-only", repository.MergeCommit); err != nil {
-			return fmt.Errorf("源仓库 %s 无法安全快进：%w", repository.LinkName, err)
+		branch, err := runCodeGit(repository.SourceDir, "branch", "--show-current")
+		if err != nil {
+			return fmt.Errorf("源仓库 %s 的当前分支不可用", repository.LinkName)
+		}
+		if strings.TrimSpace(branch) == repository.TargetBranch {
+			if _, err := runCodeGit(repository.SourceDir, "merge", "--ff-only", repository.MergeCommit); err != nil {
+				return fmt.Errorf("源仓库 %s 无法安全快进：%w", repository.LinkName, err)
+			}
+		} else if _, err := runCodeGit(
+			repository.SourceDir, "update-ref", "refs/heads/"+repository.TargetBranch,
+			repository.MergeCommit, repository.SourceCommit,
+		); err != nil {
+			return fmt.Errorf("源仓库 %s 的目标分支无法安全推进：%w", repository.LinkName, err)
 		}
 	}
-	updated, err := runCodeGit(repository.SourceDir, "rev-parse", "HEAD")
+	updated, err := runCodeGit(repository.SourceDir, "rev-parse", "refs/heads/"+repository.TargetBranch)
 	if err != nil {
 		return fmt.Errorf("源仓库 %s 快进结果核验失败", repository.LinkName)
 	}
@@ -265,9 +329,7 @@ func markCodeMultiRepositorySourceApplied(repository *model.AIDevSessionReposito
 	}).Error
 }
 
-// completeCodeMultiRepositorySources 只要求交付提交已经产出并可用。
-// 本地主仓是否被快进属于 best-effort，未同步的仓库会带着 LocalSyncError 一起标记完成，
-// 让用户既能推送远端，也能拿到手动同步的命令。
+// completeCodeMultiRepositorySources 只有在每个参与仓库的目标分支都真实包含交付提交后才标记完成。
 func completeCodeMultiRepositorySources(repositories []model.AIDevSessionRepository) error {
 	for index := range repositories {
 		repository := &repositories[index]
@@ -278,6 +340,9 @@ func completeCodeMultiRepositorySources(repositories []model.AIDevSessionReposit
 			repository.SourceDir, repository.MergeCommit, "仓库 "+repository.LinkName,
 		); err != nil {
 			return err
+		}
+		if repository.SourceAppliedAt == nil {
+			return fmt.Errorf("仓库 %s 的交付提交尚未进入本地目标分支", repository.LinkName)
 		}
 	}
 	completedAt := time.Now()
