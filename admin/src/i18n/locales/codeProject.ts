@@ -164,7 +164,7 @@ export const codeProjectMessages = {
 			takeTerminalControl: "接管终端",
 			terminalControlBusy: "其他设备正在控制终端，请稍后重试",
 			deliveredSessionTerminalClosed: "当前会话已完成统一交付",
-			deliveredSessionTerminalHint: "该会话已结束，终端不会继续连接。历史任务和交付结果仍可查看。",
+			deliveredSessionTerminalHint: "该会话已结束，终端不会继续连接，历史任务和交付结果仍可查看",
 			createNextSession: "新建会话继续开发",
 			approvalCenter: "待审批",
 			approvalLoadFailed: "待审批任务加载失败",

@@ -56,7 +56,6 @@
 - [AI 任务契约（目标、范围、风险与验收）](../../.ai/README.md)
 - [知识库（已解决问题 & 技术债）](./knowledge-base.md)
 - [文件拆分方案（重构参考）](./refactoring.md)
-- [1Panel 相似文件审计基线](./1panel-similarity-audit.md)
 - 项目根 `AGENTS.md`：历史完整版，含全部细节约定
 
 ---

@@ -12,8 +12,6 @@ gopanel
 # macOS
 .DS_Store
 
-# OSS Credentials
-.oss_env
 conf.yaml
 PROMPT.md
 
@@ -31,3 +29,5 @@ init.yaml.dev
 /gp-agent/gp-agent
 /gpc/gpc
 *.bak
+
+/private
