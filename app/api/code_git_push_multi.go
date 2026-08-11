@@ -24,6 +24,9 @@ func loadCodeMultiRepositoryPushStatus(session *model.AIDevSession) (codePushRes
 		if strings.TrimSpace(repository.MergeCommit) == "" || !codeDeliveryHasRemote(repository.RemoteName, remoteBranch) {
 			continue
 		}
+		// 提交可能已经在远端了（手动推的，或推成功但结果没落库），把陈旧的 pending 补正，
+		// 否则界面会一直说「未推送」。只查本地的远端跟踪引用，不发网络请求。
+		reconcileCodeRepositoryPushStatus(repository, remoteBranch)
 		results = append(results, codeRepositoryPushResult{
 			RepositoryID: codeSessionRepositoryID(repository.ID), RepositoryName: repository.LinkName,
 			Status: repository.PushStatus, Remote: repository.RemoteName,
