@@ -19,7 +19,7 @@
 
 <p align="center">
   <a href="./README.md"><img src="https://img.shields.io/badge/English-2563EB.svg" alt="English" /></a>
-  <a href="./README_zh.md"><img src="https://img.shields.io/badge/%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-E2E8F0.svg" alt="简体中文" /></a>
+  <a href="./README_zh.md"><img src="https://img.shields.io/badge/简体中文-E2E8F0.svg" alt="简体中文" /></a>
 </p>
 
 <p align="center">
@@ -136,7 +136,3 @@ cd gopanel
 
 go run main.go
 ```
-
-## License
-
-Licensed under the [GNU General Public License v3.0](./LICENSE).
