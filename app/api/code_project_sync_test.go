@@ -30,7 +30,6 @@ func TestSyncCodeProjectFastForwardsRemoteChanges(t *testing.T) {
 	if _, err := runCodeGit(updater, "push", "origin", "HEAD"); err != nil {
 		t.Fatal(err)
 	}
-
 	result, err := syncCodeProject(codeProjectForRepository(t, local), false)
 	if err != nil || result.Status != "synced" || !result.Updated || len(result.Repositories) != 1 {
 		t.Fatalf("unexpected sync result: %#v, %v", result, err)
@@ -53,11 +52,69 @@ func TestSyncCodeProjectDoesNotModifyDirtyRepository(t *testing.T) {
 	if _, err := runCodeGit(updater, "push", "origin", "HEAD"); err != nil {
 		t.Fatal(err)
 	}
+	status, err := inspectCodeProjectSync(codeProjectForRepository(t, local))
+	if err != nil || status.Status != "dirty" || !status.CanSync {
+		t.Fatalf("dirty repository must allow a safe sync attempt: %#v, %v", status, err)
+	}
 
 	result, err := syncCodeProject(codeProjectForRepository(t, local), false)
 	after, _ := runCodeGit(local, "rev-parse", "HEAD")
 	if err != nil || result.Status != "dirty" || before != after {
 		t.Fatalf("dirty repository changed: %#v before=%s after=%s err=%v", result, before, after, err)
+	}
+}
+
+func TestSyncCodeProjectReconcilesWorktreeAlreadyMatchingRemote(t *testing.T) {
+	withCodeGovernanceDB(t)
+	local, remote := createCodeRemoteRepository(t)
+	updater := cloneCodeRepository(t, remote)
+	remoteCommit := commitCodeTestFile(t, updater, "delivered.txt", "delivered\n")
+	if _, err := runCodeGit(updater, "push", "origin", "HEAD"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(local, "delivered.txt"), []byte("delivered\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := syncCodeProject(codeProjectForRepository(t, local), false)
+	if err != nil || result.Status != "synced" || !result.Updated {
+		t.Fatalf("matching delivered worktree was not reconciled: %#v, %v", result, err)
+	}
+	localCommit, _ := runCodeGit(local, "rev-parse", "HEAD")
+	status, _ := runCodeGit(local, "status", "--porcelain")
+	if localCommit != remoteCommit || status != "" {
+		t.Fatalf("local repository was not normalized: head=%s status=%q", localCommit, status)
+	}
+}
+
+func TestSyncCodeProjectPreservesStagedChangesWhenWorktreeMatchesRemote(t *testing.T) {
+	withCodeGovernanceDB(t)
+	local, remote := createCodeRemoteRepository(t)
+	updater := cloneCodeRepository(t, remote)
+	commitCodeTestFile(t, updater, "delivered.txt", "delivered\n")
+	if _, err := runCodeGit(updater, "push", "origin", "HEAD"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(local, "staged.txt"), []byte("keep staged\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(local, "add", "staged.txt"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(local, "staged.txt")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(local, "delivered.txt"), []byte("delivered\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := syncCodeProject(codeProjectForRepository(t, local), false)
+	if err != nil || result.Status != "dirty" {
+		t.Fatalf("staged changes were not protected: %#v, %v", result, err)
+	}
+	staged, _ := runCodeGit(local, "show", ":staged.txt")
+	if staged != "keep staged" {
+		t.Fatalf("staged content changed: %q", staged)
 	}
 }
 

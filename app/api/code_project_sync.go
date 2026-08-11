@@ -161,8 +161,11 @@ func inspectCodeProjectRepositorySync(spec codeProjectRepositorySpec) codeProjec
 		return result
 	}
 	if strings.TrimSpace(dirty) != "" {
-		result.Status, result.Reason = "dirty", "uncommitted_changes"
-		return result
+		matchesRemote, matchErr := codeGitWorktreeMatchesCommit(spec.Path, spec.RemoteRef)
+		if matchErr != nil || !matchesRemote {
+			result.Status, result.Reason = "dirty", "uncommitted_changes"
+			return result
+		}
 	}
 	localTarget := spec.Branch
 	if localTarget == "" {
@@ -313,7 +316,7 @@ func inspectCodeProjectSyncIgnoringOwner(project *model.AIProject, ignoredOwner 
 			result.Status = repository.Status
 		}
 	}
-	result.CanSync = hasRemote && (result.Status == "synced" || result.Status == "behind" || result.Status == "offline")
+	result.CanSync = hasRemote && (result.Status == "synced" || result.Status == "behind" || result.Status == "offline" || result.Status == "dirty")
 	return result, nil
 }
 
@@ -366,7 +369,7 @@ func syncCodeProject(project *model.AIProject, automatic bool) (codeProjectSyncS
 	for _, spec := range specs {
 		state := inspectCodeProjectRepositorySync(spec)
 		initial = append(initial, state)
-		if state.Status == "dirty" || state.Status == "blocked" {
+		if state.Status == "blocked" {
 			return codeProjectSyncStatus{ProjectID: project.ID, Status: state.Status, Repositories: initial}, nil
 		}
 	}
@@ -408,6 +411,20 @@ func syncCodeProject(project *model.AIProject, automatic bool) (codeProjectSyncS
 	}
 	updated := false
 	for _, spec := range specs {
+		dirty, statusErr := runCodeGit(spec.Path, "status", "--porcelain")
+		if statusErr != nil {
+			return codeProjectSyncStatus{}, statusErr
+		}
+		if strings.TrimSpace(dirty) != "" {
+			matchesRemote, matchErr := codeGitWorktreeMatchesCommit(spec.Path, spec.RemoteRef)
+			if matchErr != nil || !matchesRemote {
+				return inspectCodeProjectSyncIgnoringOwner(project, owner)
+			}
+			if _, resetErr := runCodeGit(spec.Path, "reset", "--mixed", spec.RemoteRef); resetErr != nil {
+				return codeProjectSyncStatus{}, resetErr
+			}
+			updated = true
+		}
 		state := inspectCodeProjectRepositorySync(spec)
 		if state.Status == "behind" {
 			if _, err := runCodeGit(spec.Path, "merge", "--ff-only", spec.RemoteRef); err != nil {

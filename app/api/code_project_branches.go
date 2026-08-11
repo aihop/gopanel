@@ -208,6 +208,11 @@ func inspectCodeProjectBranchRepository(project *model.AIProject, root string) (
 	changedFiles := 0
 	if strings.TrimSpace(status) != "" {
 		changedFiles = len(strings.Split(strings.TrimSpace(status), "\n"))
+		branch := codeProjectRepositoryDeliveryBranch(project, root, strings.TrimSpace(currentBranch))
+		_, remoteRef := codeRepositoryRemoteTracking(root, branch)
+		if matchesRemote, matchErr := codeGitWorktreeMatchesCommit(root, remoteRef); matchErr == nil && matchesRemote {
+			changedFiles = 0
+		}
 	}
 	return codeProjectBranchRepository{
 		Name: filepath.Base(root), Path: root, CurrentBranch: strings.TrimSpace(currentBranch),
