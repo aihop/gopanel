@@ -76,6 +76,9 @@ func watchNativeCodeNotifications(sessionID uint, done <-chan struct{}) {
 		if notifyState == "" {
 			return
 		}
+		if notifyState == service.CodeNotifyCompleted || notifyState == service.CodeNotifyFailed {
+			persistNativeCodeHistory(session.ID)
+		}
 		go service.NotifyCodeSession(session, nil, notifyState, codeRuntimeNotifySummary(state))
 	}
 	check()
@@ -87,8 +90,24 @@ func watchNativeCodeNotifications(sessionID uint, done <-chan struct{}) {
 			check()
 		case <-done:
 			check()
+			persistNativeCodeHistory(sessionID)
 			return
 		}
+	}
+}
+
+func persistNativeCodeHistory(sessionID uint) {
+	session, err := repo.NewAIDevSessionRepo().GetSessionByID(sessionID)
+	if err != nil || !supportsNativeCodeHistory(session.AgentName) {
+		return
+	}
+	messages, err := getNativeCodeMessages(session)
+	if err != nil {
+		global.LOG.Warnf("Read native %s history for session %d failed: %v", session.AgentName, session.ID, err)
+		return
+	}
+	if err := persistNativeCodexMessages(session.ID, messages); err != nil {
+		global.LOG.Warnf("Persist native %s history for session %d failed: %v", session.AgentName, session.ID, err)
 	}
 }
 

@@ -94,6 +94,8 @@ watch(
 )
 
 watch(selectedExecutorId, value => {
+	const executor = executors.value.find(item => item.id === value)
+	providerMode.value = executor?.configured ? "default" : "custom"
 	if (value && !approvalPolicies.value.includes(approvalPolicy.value)) {
 		approvalPolicy.value = approvalPolicies.value.includes("safe_auto")
 			? "safe_auto"
@@ -210,6 +212,9 @@ const submit = async () => {
 								<div v-if="executor.version" class="mt-2 truncate text-xs text-slate-400">
 									{{ executor.version }}
 								</div>
+								<div v-if="executor.available && !executor.configured" class="mt-2 text-xs text-amber-600">
+									{{ t("code.executorNeedsProvider") }}
+								</div>
 								<div v-if="!executor.available" class="mt-2 text-xs text-amber-600">
 									{{ t(`code.executorReason_${executor.reasonCode || "unavailable"}`) }}
 								</div>
@@ -225,7 +230,7 @@ const submit = async () => {
 							<div class="w-full space-y-3">
 								<n-radio-group v-model:value="providerMode">
 									<n-space>
-										<n-radio value="default">{{ t("code.providerDefault") }}</n-radio>
+										<n-radio value="default" :disabled="!selectedExecutor?.configured">{{ t("code.providerDefault") }}</n-radio>
 										<n-radio value="custom">{{ t("code.providerCustom") }}</n-radio>
 									</n-space>
 								</n-radio-group>

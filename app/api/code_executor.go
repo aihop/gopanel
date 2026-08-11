@@ -1,7 +1,9 @@
 package api
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"os/exec"
@@ -119,6 +121,12 @@ func detectCodeExecutor(definition codeExecutorDefinition) codeExecutorStatus {
 	status.Installed = true
 	status.Configured = hasCodeExecutorConfig(definition.ConfigPaths)
 	status.Version = detectCodeExecutorVersion(commandPath, definition.VersionArgs, commandEnv)
+	if definition.ID == "claude" {
+		status.Configured = detectClaudeAuthenticated(commandPath, commandEnv)
+	}
+	if definition.ID == "opencode" {
+		status.Configured = detectOpenCodeConfigured()
+	}
 	if !definition.AutomationSupported {
 		status.Reason = "当前 CLI 不支持非交互自动执行"
 		status.ReasonCode = "automation_unsupported"
@@ -126,6 +134,63 @@ func detectCodeExecutor(definition codeExecutorDefinition) codeExecutorStatus {
 	}
 	status.Available = true
 	return status
+}
+
+func detectClaudeAuthenticated(commandPath string, commandEnv []string) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	command := exec.CommandContext(ctx, commandPath, "auth", "status", "--json")
+	command.Env = commandEnv
+	output, err := command.Output()
+	if err != nil {
+		return false
+	}
+	var status struct {
+		LoggedIn bool `json:"loggedIn"`
+	}
+	return json.Unmarshal(bytes.TrimSpace(output), &status) == nil && status.LoggedIn
+}
+
+func detectOpenCodeConfigured() bool {
+	if nativeOpenCodeAuthFileHasCredentials() || nativeOpenCodeDatabaseHasCredentials() {
+		return true
+	}
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return false
+	}
+	for _, name := range []string{"opencode.json", "opencode.jsonc"} {
+		content, readErr := os.ReadFile(filepath.Join(homeDir, ".config", "opencode", name))
+		if readErr == nil && openCodeConfigHasProvider(content) {
+			return true
+		}
+	}
+	return false
+}
+
+func openCodeConfigHasProvider(content []byte) bool {
+	var config struct {
+		Provider map[string]json.RawMessage `json:"provider"`
+	}
+	return json.Unmarshal(content, &config) == nil && len(config.Provider) > 0
+}
+
+func validateCodeExecutorConfigured(executorID string, provider *codeProviderRequest) error {
+	if provider != nil {
+		return nil
+	}
+	definition, err := getCodeExecutorDefinition(executorID)
+	if err != nil {
+		return err
+	}
+	if definition.ID != "claude" && definition.ID != "opencode" {
+		return nil
+	}
+	status := detectCodeExecutor(definition)
+	if status.Configured || definition.ID == "terminal" {
+		return nil
+	}
+	return errors.New(status.Name + " 尚未登录或配置模型连接")
 }
 
 func hasCodeExecutorConfig(configPaths []string) bool {

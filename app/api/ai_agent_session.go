@@ -201,6 +201,9 @@ func CreateAISession(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
+	if err := validateCodeExecutorConfigured(executorID, provider); err != nil {
+		return c.JSON(e.Fail(err))
+	}
 	approvalPolicy, err := normalizeCodeApprovalPolicy(req.ApprovalPolicy)
 	if err != nil {
 		return c.JSON(e.Fail(err))

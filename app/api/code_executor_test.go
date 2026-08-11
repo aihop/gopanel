@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -44,6 +45,28 @@ func TestMissingExecutorIsUnavailable(t *testing.T) {
 	})
 	if status.Installed || status.Available || status.Reason == "" {
 		t.Fatalf("missing executor should be unavailable: %#v", status)
+	}
+}
+
+func TestClaudeConfigurationUsesAuthHealthCheck(t *testing.T) {
+	binDir := t.TempDir()
+	commandPath := filepath.Join(binDir, "claude")
+	if err := os.WriteFile(commandPath, []byte("#!/bin/sh\nif [ \"$1\" = auth ]; then printf '{\"loggedIn\":true}'; else printf '2.1.0'; fi\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir)
+	definition, err := getCodeExecutorDefinition("claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status := detectCodeExecutor(definition); !status.Available || !status.Configured {
+		t.Fatalf("authenticated Claude was not configured: %#v", status)
+	}
+	if err := os.WriteFile(commandPath, []byte("#!/bin/sh\nif [ \"$1\" = auth ]; then printf '{\"loggedIn\":false}'; else printf '2.1.0'; fi\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if status := detectCodeExecutor(definition); !status.Available || status.Configured {
+		t.Fatalf("logged-out Claude status is wrong: %#v", status)
 	}
 }
 
