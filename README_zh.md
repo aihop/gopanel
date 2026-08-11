@@ -14,12 +14,12 @@
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-2563EB.svg" alt="License: GPL v3" /></a>
   <a href="https://github.com/aihop/gopanel/releases"><img src="https://img.shields.io/github/v/release/aihop/gopanel?color=4F46E5" alt="GitHub release" /></a>
   <a href="https://github.com/aihop/gopanel"><img src="https://img.shields.io/github/stars/aihop/gopanel?style=flat&color=7C3AED" alt="GitHub stars" /></a>
-  <a href="https://gopanel.cn/"><img src="https://img.shields.io/badge/官网-gopanel.cn-0891B2.svg" alt="GoPanel 官网" /></a>
+  <a href="https://gopanel.cn/"><img src="https://img.shields.io/badge/%E5%AE%98%E7%BD%91-gopanel.cn-0891B2.svg" alt="GoPanel 官网" /></a>
 </p>
 
 <p align="center">
   <a href="./README.md"><img src="https://img.shields.io/badge/English-E2E8F0.svg" alt="English" /></a>
-  <a href="./README_zh.md"><img src="https://img.shields.io/badge/简体中文-2563EB.svg" alt="简体中文" /></a>
+  <a href="./README_zh.md"><img src="https://img.shields.io/badge/%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-2563EB.svg" alt="简体中文" /></a>
 </p>
 
 <p align="center">
@@ -136,3 +136,7 @@ cd gopanel
 go run main.go
 
 ```
+
+## 许可证
+
+本项目采用 [GNU General Public License v3.0](./LICENSE) 许可协议。
