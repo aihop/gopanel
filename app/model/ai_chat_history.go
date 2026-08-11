@@ -11,6 +11,11 @@ type AIProject struct {
 	Description       string    `gorm:"column:description;type:text" json:"description"`
 	WorkDir           string    `gorm:"column:work_dir;type:varchar(1024);not null;default:''" json:"workDir"`
 	SourceDirs        []string  `gorm:"column:source_dirs;serializer:json;type:text" json:"sourceDirs"`
+	// ExcludedRepositories 是不参与开发的仓库，存绝对路径。
+	// 典型场景：项目目录本身是个仓库，里面又嵌了一堆子仓库（如 app/themes/*），
+	// 发现逻辑会沿 gitlink 递归全部带进来，但用户只想开发外层那个。
+	// 排除后这些仓库不进快照、不建 worktree、不参与交付推送和本地主仓同步。
+	ExcludedRepositories []string `gorm:"column:excluded_repositories;serializer:json;type:text" json:"excludedRepositories"`
 	CreatorID         uint      `gorm:"column:creator_id;type:integer;not null;index" json:"creatorId"`
 	PrimaryRepository string    `gorm:"column:primary_repository;type:varchar(1024)" json:"primaryRepository,omitempty"`
 	DeliveryBranch    string    `gorm:"column:delivery_branch;type:varchar(255);not null;default:''" json:"deliveryBranch"`

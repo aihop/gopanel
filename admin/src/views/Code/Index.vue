@@ -99,6 +99,30 @@
           <div class="-mt-3 text-xs text-[var(--n-text-color-3)]">
             {{ t("code.primaryRepositoryHint") }}
           </div>
+          <!--
+            复用已经发现到的仓库列表：项目目录本身是仓库、里面又嵌了子仓库时
+            （如 app/themes/*），发现逻辑会沿 gitlink 递归全部带进来。
+            这里让用户把不参与开发的摘掉，主交付仓库不允许排除。
+          -->
+          <div v-if="repositoryOptions.length > 1">
+            <div class="mb-2 text-sm font-medium text-[var(--n-text-color)]">
+              {{ t("code.includedRepositories") }}
+            </div>
+            <div class="flex flex-col gap-2 rounded-xl bg-[var(--n-color-embedded)] p-3">
+              <n-checkbox
+                v-for="option in repositoryOptions"
+                :key="option.value"
+                :checked="!projectForm.excludedRepositories.includes(option.value)"
+                :disabled="option.value === projectForm.primaryRepository"
+                @update:checked="checked => toggleRepositoryIncluded(option.value, checked)"
+              >
+                <span class="text-xs">{{ option.label }}</span>
+              </n-checkbox>
+            </div>
+            <div class="mt-2 text-xs text-[var(--n-text-color-3)]">
+              {{ t("code.includedRepositoriesHint") }}
+            </div>
+          </div>
           <n-input
             v-model:value="projectForm.deliveryBranch"
             :placeholder="t('code.deliveryBranchPlaceholder')"
@@ -222,7 +246,7 @@ const repositoriesLoading = ref(false)
 const repositoryOptions = ref<Array<{ label: string; value: string }>>([])
 const editingProjectId = ref<number | null>(null)
 const emptyQualityChecks = (): CodeProjectQualityCheck[] => []
-const projectForm = ref({ name: '', desc: '', workDir: '', sourceDirs: [] as string[], primaryRepository: '', deliveryBranch: '', deliveryMode: 'direct' as 'direct' | 'branch', gitCredentialId: 0, requireQualityGate: true, qualityChecks: emptyQualityChecks(), monthlyTokenBudget: 0 })
+const projectForm = ref({ name: '', desc: '', workDir: '', sourceDirs: [] as string[], excludedRepositories: [] as string[], primaryRepository: '', deliveryBranch: '', deliveryMode: 'direct' as 'direct' | 'branch', gitCredentialId: 0, requireQualityGate: true, qualityChecks: emptyQualityChecks(), monthlyTokenBudget: 0 })
 
 const projects = ref<AIProject[]>([])
 const projectsLoading = ref(false)
@@ -298,7 +322,7 @@ onUnmounted(() => {
 
 const openCreateProjectModal = () => {
   editingProjectId.value = null
-  projectForm.value = { name: '', desc: '', workDir: defaultWorkDir.value, sourceDirs: [], primaryRepository: '', deliveryBranch: '', deliveryMode: 'direct' as 'direct' | 'branch', gitCredentialId: 0, requireQualityGate: true, qualityChecks: emptyQualityChecks(), monthlyTokenBudget: 0 }
+  projectForm.value = { name: '', desc: '', workDir: defaultWorkDir.value, sourceDirs: [], excludedRepositories: [], primaryRepository: '', deliveryBranch: '', deliveryMode: 'direct' as 'direct' | 'branch', gitCredentialId: 0, requireQualityGate: true, qualityChecks: emptyQualityChecks(), monthlyTokenBudget: 0 }
   showCreateProjectModal.value = true
   repositoryOptions.value = []
 }
@@ -306,7 +330,7 @@ const openCreateProjectModal = () => {
 const openEditProjectModal = (project: AIProject) => {
   editingProjectId.value = project.id
   const sourceDirs = project.sourceDirs?.length ? project.sourceDirs : project.workDir ? [project.workDir] : []
-  projectForm.value = { name: project.name, desc: project.description || '', workDir: sourceDirs[0] || defaultWorkDir.value, sourceDirs, primaryRepository: project.primaryRepository || '', deliveryBranch: project.deliveryBranch || 'main', deliveryMode: project.deliveryMode === 'branch' ? 'branch' : 'direct', gitCredentialId: project.gitCredentialId || 0, requireQualityGate: project.requireQualityGate, qualityChecks: (project.qualityChecks || []).map(check => ({ ...check })), monthlyTokenBudget: project.monthlyTokenBudget || 0 }
+  projectForm.value = { name: project.name, desc: project.description || '', workDir: sourceDirs[0] || defaultWorkDir.value, sourceDirs, excludedRepositories: [...(project.excludedRepositories || [])], primaryRepository: project.primaryRepository || '', deliveryBranch: project.deliveryBranch || 'main', deliveryMode: project.deliveryMode === 'branch' ? 'branch' : 'direct', gitCredentialId: project.gitCredentialId || 0, requireQualityGate: project.requireQualityGate, qualityChecks: (project.qualityChecks || []).map(check => ({ ...check })), monthlyTokenBudget: project.monthlyTokenBudget || 0 }
   showCreateProjectModal.value = true
   void loadRepositoryOptions()
 }
@@ -336,6 +360,7 @@ const submitProject = async () => {
       name: projectForm.value.name.trim(),
 	  description: projectForm.value.desc.trim(),
 	  sourceDirs: projectForm.value.sourceDirs,
+	  excludedRepositories: projectForm.value.excludedRepositories,
 	  primaryRepository: projectForm.value.primaryRepository?.trim() || '',
 	  deliveryBranch: projectForm.value.deliveryBranch.trim(),
 	  deliveryMode: projectForm.value.deliveryMode,
@@ -389,6 +414,16 @@ const handleProjectMenuSelect = (key: string) => {
   if (action === 'enter') enterProject(project.id)
   else if (action === 'panel') openQuickPanel(project)
   else if (action === 'edit') openEditProjectModal(project)
+}
+
+// 勾掉某个仓库即写入排除清单。主交付仓库在模板里已经禁用，这里再兜一层：
+// 排除主仓会让交付无处落地，后端保存时也会拒绝。
+const toggleRepositoryIncluded = (path: string, included: boolean) => {
+  if (!included && path === projectForm.value.primaryRepository) return
+  const excluded = new Set(projectForm.value.excludedRepositories)
+  if (included) excluded.delete(path)
+  else excluded.add(path)
+  projectForm.value.excludedRepositories = [...excluded]
 }
 
 const openQuickPanel = (project: AIProject) => quickPanelsRef.value?.open(project)

@@ -111,6 +111,7 @@ func CreateAIProject(c fiber.Ctx) error {
 		Description        string                        `json:"description"`
 		WorkDir            string                        `json:"workDir"`
 		SourceDirs         []string                      `json:"sourceDirs"`
+		ExcludedRepos      []string                      `json:"excludedRepositories"`
 		PrimaryRepository  *string                       `json:"primaryRepository"`
 		DeliveryBranch     *string                       `json:"deliveryBranch"`
 		DeliveryMode       *string                       `json:"deliveryMode"`
@@ -151,8 +152,13 @@ func CreateAIProject(c fiber.Ctx) error {
 	if req.DeliveryBranch != nil {
 		deliveryBranch = strings.TrimSpace(*req.DeliveryBranch)
 	}
+	excludedRepositories := normalizeCodeExcludedRepositories(req.ExcludedRepos)
+	if err := validateCodeExcludedRepositories(primaryRepository, excludedRepositories); err != nil {
+		return c.JSON(e.Fail(err))
+	}
 	project := &model.AIProject{
 		Name: name, Description: strings.TrimSpace(req.Description), SourceDirs: sourceDirs,
+		ExcludedRepositories: excludedRepositories,
 		CreatorID: claims.UserId, PrimaryRepository: primaryRepository,
 		DeliveryBranch: deliveryBranch, GitCredentialID: req.GitCredentialID,
 		DeliveryMode:       normalizeCodeDeliveryMode(req.DeliveryMode),
@@ -200,6 +206,7 @@ func UpdateAIProject(c fiber.Ctx) error {
 		Description        string                        `json:"description"`
 		WorkDir            string                        `json:"workDir"`
 		SourceDirs         []string                      `json:"sourceDirs"`
+		ExcludedRepos      []string                      `json:"excludedRepositories"`
 		PrimaryRepository  *string                       `json:"primaryRepository"`
 		DeliveryBranch     *string                       `json:"deliveryBranch"`
 		DeliveryMode       *string                       `json:"deliveryMode"`
@@ -234,6 +241,11 @@ func UpdateAIProject(c fiber.Ctx) error {
 	}
 	if req.DeliveryMode != nil {
 		project.DeliveryMode = normalizeCodeDeliveryMode(req.DeliveryMode)
+	}
+	project.ExcludedRepositories = normalizeCodeExcludedRepositories(req.ExcludedRepos)
+	// 校验放在主交付仓库已经落到 project 之后：两个字段可能在同一次请求里一起改。
+	if err := validateCodeExcludedRepositories(project.PrimaryRepository, project.ExcludedRepositories); err != nil {
+		return c.JSON(e.Fail(err))
 	}
 	if req.MonthlyTokenBudget < 0 {
 		return c.JSON(e.Fail(errors.New("Token 月度预算不能为负数")))

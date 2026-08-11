@@ -98,7 +98,7 @@ func inspectCodeWorktreeCapability(project *model.AIProject) codeWorktreeCapabil
 	if len(sourceDirs) == 0 {
 		return codeWorktreeCapability{Reason: "source_unavailable"}
 	}
-	candidates, err := discoverCodeRepositoryCandidates(sourceDirs)
+	candidates, err := discoverCodeProjectRepositoryCandidates(project, sourceDirs)
 	if err != nil {
 		return codeWorktreeCapability{Reason: "source_unavailable"}
 	}
@@ -121,7 +121,7 @@ func inspectCodeWorktreeCapability(project *model.AIProject) codeWorktreeCapabil
 
 func createCodeSessionWorktree(session *model.AIDevSession, project *model.AIProject, includeUncommitted ...bool) error {
 	sourceDirs := codeProjectSourceDirs(project)
-	candidates, err := discoverCodeRepositoryCandidates(sourceDirs)
+	candidates, err := discoverCodeProjectRepositoryCandidates(project, sourceDirs)
 	if err != nil {
 		return fmt.Errorf("当前项目不支持 Git Worktree 隔离：%w", err)
 	}

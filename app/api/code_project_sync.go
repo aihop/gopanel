@@ -64,7 +64,7 @@ func codeProjectSourceDirs(project *model.AIProject) []string {
 
 func codeProjectRepositorySpecs(project *model.AIProject) ([]codeProjectRepositorySpec, error) {
 	sourceDirs := codeProjectSourceDirs(project)
-	candidates, err := discoverCodeRepositoryCandidates(sourceDirs)
+	candidates, err := discoverCodeProjectRepositoryCandidates(project, sourceDirs)
 	if err != nil {
 		return nil, err
 	}
@@ -243,7 +243,7 @@ func createCodeSessionWorktreeWithLease(session *model.AIDevSession, project *mo
 	}
 	defer endCodeRepositoryOperation(project)
 	sourceDirs := codeProjectSourceDirs(project)
-	candidates, err := discoverCodeRepositoryCandidates(sourceDirs)
+	candidates, err := discoverCodeProjectRepositoryCandidates(project, sourceDirs)
 	if err != nil {
 		return err
 	}

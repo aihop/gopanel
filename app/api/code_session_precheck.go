@@ -22,7 +22,7 @@ func validateCodeSessionPrerequisites(project *model.AIProject, includeUncommitt
 		return nil
 	}
 	sourceDirs := codeProjectSourceDirs(project)
-	candidates, err := discoverCodeRepositoryCandidates(sourceDirs)
+	candidates, err := discoverCodeProjectRepositoryCandidates(project, sourceDirs)
 	if err != nil {
 		return err
 	}

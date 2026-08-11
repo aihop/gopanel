@@ -6,6 +6,8 @@ export interface AIProject {
 	description: string
 	workDir: string
 	sourceDirs: string[]
+	/** 不参与开发的仓库（绝对路径）。不进快照、不建 worktree、不参与交付和本地主仓同步。 */
+	excludedRepositories?: string[]
 	creatorId: number
 	primaryRepository?: string
 	deliveryBranch: string

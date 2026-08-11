@@ -38,11 +38,11 @@ export function getAIProjects(params: { page: number; limit: number }) {
 	return http.get<{ items: AIProject[]; total: number }>("/code/projects", params)
 }
 
-export function createAIProject(data: { name: string; description: string; sourceDirs: string[]; primaryRepository: string; deliveryBranch: string; deliveryMode: string; gitCredentialId: number; requireQualityGate: boolean; qualityChecks: CodeProjectQualityCheck[]; monthlyTokenBudget: number }) {
+export function createAIProject(data: { name: string; description: string; sourceDirs: string[]; excludedRepositories?: string[]; primaryRepository: string; deliveryBranch: string; deliveryMode: string; gitCredentialId: number; requireQualityGate: boolean; qualityChecks: CodeProjectQualityCheck[]; monthlyTokenBudget: number }) {
 	return http.post<AIProject>("/code/projects", data)
 }
 
-export function updateAIProject(id: number, data: { name: string; description: string; sourceDirs: string[]; primaryRepository: string; deliveryBranch: string; deliveryMode: string; gitCredentialId: number; requireQualityGate: boolean; qualityChecks: CodeProjectQualityCheck[]; monthlyTokenBudget: number }) {
+export function updateAIProject(id: number, data: { name: string; description: string; sourceDirs: string[]; excludedRepositories?: string[]; primaryRepository: string; deliveryBranch: string; deliveryMode: string; gitCredentialId: number; requireQualityGate: boolean; qualityChecks: CodeProjectQualityCheck[]; monthlyTokenBudget: number }) {
 	return http.put<AIProject>(`/code/projects/${id}`, data)
 }
 

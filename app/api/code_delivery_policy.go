@@ -89,7 +89,7 @@ func applyCodeProjectDeliveryPolicy(project *model.AIProject, sourceDirs []strin
 	if project == nil {
 		return errors.New("项目交付策略不可用")
 	}
-	candidates, err := discoverCodeRepositoryCandidates(sourceDirs)
+	candidates, err := discoverCodeProjectRepositoryCandidates(project, sourceDirs)
 	if err != nil {
 		return err
 	}
