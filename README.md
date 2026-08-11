@@ -1,8 +1,34 @@
-# GoPanel
+<p align="center">
+  <a href="https://gopanel.cn/">
+    <img src="./admin/src/assets/images/logo-text.svg" alt="GoPanel" width="360" />
+  </a>
+</p>
 
-_[简体中文 (Simplified Chinese)](./README_zh.md)_
+<p align="center"><strong>A lightweight, Docker-first server control plane for developers and small teams.</strong></p>
 
-Official website: https://gopanel.cn/
+<p align="center">
+  Manage websites, containers, databases, pipelines, certificates, and AI-assisted development from one clean workspace.
+</p>
+
+<p align="center">
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-2563EB.svg" alt="License: GPL v3" /></a>
+  <a href="https://github.com/aihop/gopanel/releases"><img src="https://img.shields.io/github/v/release/aihop/gopanel?color=4F46E5" alt="GitHub release" /></a>
+  <a href="https://github.com/aihop/gopanel"><img src="https://img.shields.io/github/stars/aihop/gopanel?style=flat&color=7C3AED" alt="GitHub stars" /></a>
+  <a href="https://gopanel.cn/"><img src="https://img.shields.io/badge/website-gopanel.cn-0891B2.svg" alt="GoPanel website" /></a>
+</p>
+
+<p align="center">
+  <a href="./README.md"><img src="https://img.shields.io/badge/English-2563EB.svg" alt="English" /></a>
+  <a href="./README_zh.md"><img src="https://img.shields.io/badge/%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-E2E8F0.svg" alt="简体中文" /></a>
+</p>
+
+<p align="center">
+  <a href="https://gopanel.cn/">Website</a> ·
+  <a href="https://github.com/aihop/gopanel/releases">Releases</a> ·
+  <a href="https://github.com/aihop/gopanel/issues">Issues</a>
+</p>
+
+---
 
 GoPanel is a modern, lightweight server management panel built for developers and small teams. It is also a Docker-first application runtime and website deployment platform. Instead of stuffing every possible feature into one bloated backend, GoPanel focuses on the operational actions you actually do every day and turns them into a cleaner, faster, and easier-to-understand workflow.
 
