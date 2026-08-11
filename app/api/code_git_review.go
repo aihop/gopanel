@@ -1,16 +1,12 @@
 package api
 
 import (
-	"bytes"
-	"context"
 	"errors"
 	"fmt"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/aihop/gopanel/app/e"
 	"github.com/aihop/gopanel/app/model"
@@ -22,7 +18,6 @@ import (
 const (
 	codeGitStatusFileLimit = 500
 	codeGitDiffOutputLimit = 1024 * 1024
-	codeGitCommandTimeout  = 15 * time.Second
 )
 
 type codeGitFile struct {
@@ -69,101 +64,6 @@ type codeGitStatus struct {
 	Deletions       int                 `json:"deletions"`
 	StagedAdditions int                 `json:"stagedAdditions"`
 	StagedDeletions int                 `json:"stagedDeletions"`
-}
-
-type codeGitCappedBuffer struct {
-	data      bytes.Buffer
-	limit     int
-	truncated bool
-}
-
-func (buffer *codeGitCappedBuffer) Write(content []byte) (int, error) {
-	written := len(content)
-	remaining := buffer.limit - buffer.data.Len()
-	if remaining > 0 {
-		if len(content) > remaining {
-			content = content[:remaining]
-			buffer.truncated = true
-		}
-		_, _ = buffer.data.Write(content)
-	} else if len(content) > 0 {
-		buffer.truncated = true
-	}
-	return written, nil
-}
-
-func runCodeGitReviewCommand(workDir string, allowDiffExit bool, outputLimit int, args ...string) (string, bool, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), codeGitCommandTimeout)
-	defer cancel()
-	commandArgs := append([]string{"-C", workDir}, args...)
-	command := exec.CommandContext(ctx, "git", commandArgs...)
-	command.Env = codeGitEnvironment()
-	output := &codeGitCappedBuffer{limit: outputLimit}
-	command.Stdout = output
-	command.Stderr = output
-	err := command.Run()
-	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		return "", output.truncated, errors.New("Git 操作超时")
-	}
-	if err != nil {
-		var exitError *exec.ExitError
-		if !(allowDiffExit && errors.As(err, &exitError) && exitError.ExitCode() == 1) {
-			message := strings.TrimSpace(output.data.String())
-			if message == "" {
-				message = err.Error()
-			}
-			return "", output.truncated, fmt.Errorf("Git 操作失败：%s", message)
-		}
-	}
-	return output.data.String(), output.truncated, nil
-}
-
-func parseCodeGitStatus(output string, workspacePrefix string) []codeGitFile {
-	records := strings.Split(output, "\x00")
-	files := make([]codeGitFile, 0, len(records))
-	for index := 0; index < len(records); index++ {
-		record := records[index]
-		if len(record) < 4 || record[2] != ' ' {
-			continue
-		}
-		indexStatus := string(record[0])
-		worktreeStatus := string(record[1])
-		filePath := record[3:]
-		oldPath := ""
-		if strings.Contains("RC", indexStatus) || strings.Contains("RC", worktreeStatus) {
-			if index+1 < len(records) {
-				index++
-				oldPath = records[index]
-			}
-		}
-		untracked := indexStatus == "?" && worktreeStatus == "?"
-		workspacePath := path.Join(workspacePrefix, filepath.ToSlash(filePath))
-		files = append(files, codeGitFile{
-			Path: filePath, OldPath: oldPath, WorkspacePath: workspacePath,
-			IndexStatus: indexStatus, WorktreeStatus: worktreeStatus,
-			Staged: !untracked && indexStatus != " ", Changed: !untracked && worktreeStatus != " ", Untracked: untracked,
-		})
-	}
-	return files
-}
-
-func parseCodeGitNumstat(output string) (int, int) {
-	additions, deletions := 0, 0
-	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
-		fields := strings.SplitN(line, "\t", 3)
-		if len(fields) < 3 {
-			continue
-		}
-		added, addedErr := strconv.Atoi(fields[0])
-		deleted, deletedErr := strconv.Atoi(fields[1])
-		if addedErr == nil {
-			additions += added
-		}
-		if deletedErr == nil {
-			deletions += deleted
-		}
-	}
-	return additions, deletions
 }
 
 func codeGitWorkspacePrefixes(session *model.AIDevSession) map[string]string {
@@ -215,10 +115,15 @@ func loadCodeGitSavedState(repository *codeGitRepository, baseCommit string) {
 	repository.HeadCommit, _ = runCodeGit(repository.root, "rev-parse", "--short=8", "HEAD")
 }
 
-func discoverCodeGitRepositories(session *model.AIDevSession, sourceDirs []string) []codeGitRepository {
+func discoverCodeGitRepositories(
+	session *model.AIDevSession,
+	sourceDirs []string,
+	excludedRepositories []string,
+) []codeGitRepository {
 	if session == nil {
 		return nil
 	}
+	excludedRepositories = normalizeCodeExcludedRepositories(excludedRepositories)
 	if session.IsolationMode == codeIsolationMultiWorktree {
 		sessionRepositories, err := loadCodeSessionRepositories(session.ID)
 		if err != nil {
@@ -226,6 +131,9 @@ func discoverCodeGitRepositories(session *model.AIDevSession, sourceDirs []strin
 		}
 		repositories := make([]codeGitRepository, 0, len(sessionRepositories))
 		for _, sessionRepository := range sessionRepositories {
+			if isCodeRepositoryExcluded(sessionRepository.SourceDir, excludedRepositories) {
+				continue
+			}
 			repository, ok := inspectCodeGitRepository(
 				codeSessionRepositoryID(sessionRepository.ID), sessionRepository.LinkName,
 				sessionRepository.WorktreeDir, sessionRepository.LinkName,
@@ -252,6 +160,9 @@ func discoverCodeGitRepositories(session *model.AIDevSession, sourceDirs []strin
 	seen := make(map[string]struct{})
 	for index, sourceDir := range sourceDirs {
 		cleanSource := filepath.Clean(sourceDir)
+		if isCodeRepositoryExcluded(cleanSource, excludedRepositories) {
+			continue
+		}
 		if _, exists := seen[cleanSource]; exists {
 			continue
 		}
@@ -298,8 +209,12 @@ func loadCodeGitRepositoryStatus(repository codeGitRepository) (codeGitRepositor
 	return repository, nil
 }
 
-func loadCodeGitStatus(session *model.AIDevSession, sourceDirs []string) (codeGitStatus, error) {
-	repositories := discoverCodeGitRepositories(session, sourceDirs)
+func loadCodeGitStatus(
+	session *model.AIDevSession,
+	sourceDirs []string,
+	excludedRepositories []string,
+) (codeGitStatus, error) {
+	repositories := discoverCodeGitRepositories(session, sourceDirs, excludedRepositories)
 	result := codeGitStatus{Available: len(repositories) > 0, Reason: "no_repository", Repositories: make([]codeGitRepository, 0, len(repositories))}
 	if result.Available {
 		result.Reason = ""
@@ -322,7 +237,7 @@ func loadCodeGitStatus(session *model.AIDevSession, sourceDirs []string) (codeGi
 	return result, nil
 }
 
-func getCodeGitSessionContext(c fiber.Ctx) (*model.AIDevSession, []string, error) {
+func getCodeGitSessionContext(c fiber.Ctx) (*model.AIDevSession, *model.AIProject, error) {
 	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
 	sessionID, err := strconv.ParseUint(c.Params("id"), 10, 64)
 	if err != nil || sessionID == 0 {
@@ -335,8 +250,11 @@ func getCodeGitSessionContext(c fiber.Ctx) (*model.AIDevSession, []string, error
 	if err := validateAIProjectWorkDirForClaims(session.WorkDir, claims); err != nil {
 		return nil, nil, err
 	}
-	sourceDirs, err := getAISessionSourceDirs(session.ProjectID, claims)
-	return session, sourceDirs, err
+	if session.ProjectID == 0 {
+		return session, &model.AIProject{}, nil
+	}
+	project, err := getCodeProjectWithPermission(session.ProjectID, claims)
+	return session, project, err
 }
 
 func findCodeGitRepository(repositories []codeGitRepository, repositoryID string) (*codeGitRepository, error) {
@@ -401,11 +319,11 @@ func updateCodeGitPathsStage(repository codeGitRepository, paths []string, stage
 }
 
 func GetCodeGitStatus(c fiber.Ctx) error {
-	session, sourceDirs, err := getCodeGitSessionContext(c)
+	session, project, err := getCodeGitSessionContext(c)
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	status, err := loadCodeGitStatus(session, sourceDirs)
+	status, err := loadCodeGitStatus(session, project.SourceDirs, project.ExcludedRepositories)
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
@@ -413,11 +331,14 @@ func GetCodeGitStatus(c fiber.Ctx) error {
 }
 
 func GetCodeGitDiff(c fiber.Ctx) error {
-	session, sourceDirs, err := getCodeGitSessionContext(c)
+	session, project, err := getCodeGitSessionContext(c)
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	repository, err := findCodeGitRepository(discoverCodeGitRepositories(session, sourceDirs), c.Query("repositoryId"))
+	repository, err := findCodeGitRepository(
+		discoverCodeGitRepositories(session, project.SourceDirs, project.ExcludedRepositories),
+		c.Query("repositoryId"),
+	)
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
@@ -448,13 +369,16 @@ func UpdateCodeGitStage(c fiber.Ctx) error {
 	if len(req.Paths) == 0 || len(req.Paths) > 200 {
 		return c.JSON(e.Fail(errors.New("请选择 1 到 200 个 Git 文件")))
 	}
-	session, sourceDirs, err := getCodeGitSessionContext(c)
+	session, project, err := getCodeGitSessionContext(c)
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
 	var updated codeGitStatus
 	err = runCodeSessionGitMutation(session, func(current *model.AIDevSession) error {
-		repository, mutationErr := findCodeGitRepository(discoverCodeGitRepositories(current, sourceDirs), req.RepositoryID)
+		repository, mutationErr := findCodeGitRepository(
+			discoverCodeGitRepositories(current, project.SourceDirs, project.ExcludedRepositories),
+			req.RepositoryID,
+		)
 		if mutationErr != nil {
 			return mutationErr
 		}
@@ -483,7 +407,9 @@ func UpdateCodeGitStage(c fiber.Ctx) error {
 		if mutationErr = updateCodeGitPathsStage(*repository, paths, req.Staged); mutationErr != nil {
 			return mutationErr
 		}
-		updated, mutationErr = loadCodeGitStatus(current, sourceDirs)
+		updated, mutationErr = loadCodeGitStatus(
+			current, project.SourceDirs, project.ExcludedRepositories,
+		)
 		return mutationErr
 	})
 	if err != nil {

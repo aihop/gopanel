@@ -44,7 +44,7 @@ func TestLoadCodeGitStatusAndDiff(t *testing.T) {
 		t.Fatal(err)
 	}
 	session := &model.AIDevSession{WorkDir: repositoryDir}
-	status, err := loadCodeGitStatus(session, nil)
+	status, err := loadCodeGitStatus(session, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,13 +78,40 @@ func TestLoadCodeGitStatusShowsSavedCommits(t *testing.T) {
 	if _, err := saveCodeSessionWorktree(session, "test: saved state"); err != nil {
 		t.Fatal(err)
 	}
-	status, err := loadCodeGitStatus(session, nil)
+	status, err := loadCodeGitStatus(session, nil, nil)
 	if err != nil || len(status.Repositories) != 1 {
 		t.Fatalf("load saved status: %#v, %v", status, err)
 	}
 	repository := status.Repositories[0]
 	if repository.SavedCommits != 1 || len(repository.HeadCommit) != 8 || len(repository.Files) != 0 {
 		t.Fatalf("unexpected saved state: %#v", repository)
+	}
+}
+
+func TestLoadCodeGitStatusHidesRepositoryExcludedAfterSessionCreation(t *testing.T) {
+	session, _, sourceDirs := createMultiRepositorySession(t, 147)
+	repositories, err := loadCodeSessionRepositories(session.ID)
+	if err != nil || len(repositories) != 2 {
+		t.Fatalf("load repositories: %#v, %v", repositories, err)
+	}
+	excluded := sourceDirs[0]
+	status, err := loadCodeGitStatus(session, sourceDirs, []string{excluded})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(status.Repositories) != 1 {
+		t.Fatalf("excluded historical repository remained visible: %#v", status.Repositories)
+	}
+	for _, repository := range repositories {
+		if repository.SourceDir != excluded {
+			continue
+		}
+		if _, err := findCodeGitRepository(
+			discoverCodeGitRepositories(session, sourceDirs, []string{excluded}),
+			codeSessionRepositoryID(repository.ID),
+		); err == nil {
+			t.Fatal("excluded repository remained addressable by repository ID")
+		}
 	}
 }
 
