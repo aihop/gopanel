@@ -85,10 +85,24 @@ bash "${PROJECT_ROOT}/scripts/check-file-size.sh"
 # 前端构建逻辑 (保持不变)
 if [ -d "${PROJECT_ROOT}/admin" ]; then
   echo "Building frontend..."
-  if [ "${APP_BRAND}" = "ConsoleX" ]; then
-    (cd "${PROJECT_ROOT}/admin" && npm install && npm run build:consolex)
+  if [ "${LOCAL_FRONTEND_BUILD:-0}" = "1" ]; then
+    if [ ! -f "${PROJECT_ROOT}/admin/node_modules/vue-tsc/bin/vue-tsc.js" ] ||
+       [ ! -f "${PROJECT_ROOT}/admin/node_modules/vite/bin/vite.js" ]; then
+      echo "LOCAL_FRONTEND_BUILD=1 but frontend dependencies are missing." >&2
+      exit 1
+    fi
+    (
+      cd "${PROJECT_ROOT}/admin"
+      node node_modules/vue-tsc/bin/vue-tsc.js --build --force
+      node node_modules/vite/bin/vite.js build --mode prod
+    )
   else
-    (cd "${PROJECT_ROOT}/admin" && npm install && npm run build)
+    (cd "${PROJECT_ROOT}/admin" && npm install)
+    if [ "${APP_BRAND}" = "ConsoleX" ]; then
+      (cd "${PROJECT_ROOT}/admin" && npm run build:consolex)
+    else
+      (cd "${PROJECT_ROOT}/admin" && npm run build)
+    fi
   fi
   mkdir -p "${PROJECT_ROOT}/public"
   cp -r "${PROJECT_ROOT}/admin/dist/"* "${PROJECT_ROOT}/public/"
