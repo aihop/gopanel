@@ -334,8 +334,9 @@ func prepareCodeRepositoryIntegration(
 		conflicts = codeGitConflictFiles(repository.IntegrationWorkDir)
 		if len(conflicts) > 0 {
 			result.Status, result.ConflictFiles = codeDeliveryJobConflict, conflicts
+			repository.Status, repository.ErrorMessage = codeDeliveryJobConflict, strings.Join(conflicts, ", ")
 			_ = global.DB.Model(repository).Updates(map[string]any{
-				"status": codeDeliveryJobConflict, "error_message": strings.Join(conflicts, ", "),
+				"status": repository.Status, "error_message": repository.ErrorMessage,
 			}).Error
 			return result, nil
 		}

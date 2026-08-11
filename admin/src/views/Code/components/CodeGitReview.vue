@@ -93,7 +93,6 @@ const deliveryLabel = computed(() => {
 	}
 	return t("code.gitWorktreeBranch", { branch: worktreeBranch.value })
 })
-const reviewScope = computed(() => (view.value === "changes" ? "result" : "workspace"))
 const loadDiff = async (entry: CodeGitReviewEntry, preserveContent = false) => {
 	const sequence = ++diffSequence
 	selectedKey.value = entry.key
@@ -138,7 +137,7 @@ const loadStatus = async (silent = false) => {
 	else refreshing.value = true
 	try {
 		const [response, sessionResponse, deliveryResponse] = await Promise.all([
-			getCodeGitStatus(props.sessionId, reviewScope.value),
+			getCodeGitStatus(props.sessionId, "workspace"),
 			getCodeSession(props.sessionId),
 			getCodeDeliveryJob(props.sessionId)
 		])
@@ -389,12 +388,12 @@ useIntervalFn(() => {
 				</div>
 				<n-empty
 					v-else-if="status && !status.available"
-					:description="t(view === 'changes' ? 'code.gitResultUnavailable' : 'code.gitNoRepository')"
+					:description="t('code.gitNoRepository')"
 					class="mt-16"
 				/>
 				<n-empty
 					v-else-if="status && !hasChanges"
-					:description="t(view === 'changes' ? 'code.gitResultEmpty' : 'code.gitNoChanges')"
+					:description="t('code.gitNoChanges')"
 					class="mt-16"
 				/>
 				<CodeGitRepositoryChanges
@@ -402,7 +401,7 @@ useIntervalFn(() => {
 					class="min-h-0 flex-1"
 					:repositories="status?.repositories || []"
 					:entries="entries"
-					:scope="reviewScope"
+					:scope="'workspace'"
 					:selected-key="selectedKey"
 					:staging-key="stagingKey"
 					:show-advanced-operations="view === 'commit' && showAdvancedOperations"

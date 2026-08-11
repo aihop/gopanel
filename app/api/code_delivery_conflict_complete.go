@@ -12,34 +12,45 @@ import (
 )
 
 func completeCodeDeliveryConflict(job *model.AICodeDeliveryJob, contexts []codeDeliveryConflictContext) error {
-	if len(contexts) != 1 {
-		return errors.New("当前只能完成正在处理的一个冲突仓库")
+	if len(contexts) == 0 {
+		return errors.New("当前没有可完成的冲突仓库")
 	}
-	context := &contexts[0]
-	if conflicts := codeGitConflictFiles(context.WorkDir); len(conflicts) > 0 {
-		return fmt.Errorf("仍有 %d 个冲突文件未解决", len(conflicts))
+	for index := range contexts {
+		if conflicts := discoverCodeDeliveryConflictFiles(contexts[index].WorkDir); len(conflicts) > 0 {
+			return fmt.Errorf("仓库 %s 仍有 %d 个冲突文件未解决", contexts[index].Name, len(conflicts))
+		}
 	}
-	commit, err := finalizeCodeDeliveryConflictCommit(context)
-	if err != nil {
-		return err
+	commits := make([]string, len(contexts))
+	for index := range contexts {
+		commit, err := finalizeCodeDeliveryConflictCommit(&contexts[index])
+		if err != nil {
+			return fmt.Errorf("完成仓库 %s 的冲突合并失败：%w", contexts[index].Name, err)
+		}
+		commits[index] = commit
 	}
-	if context.Repository != nil {
-		if err := cleanupExposedCodeRepositoryConflict(context.Repository); err != nil {
+	for index := range contexts {
+		if contexts[index].Repository == nil {
+			continue
+		}
+		if err := cleanupExposedCodeRepositoryConflict(contexts[index].Repository); err != nil {
 			return err
 		}
 	}
 	now := time.Now()
 	if err := global.DB.Transaction(func(tx *gorm.DB) error {
-		if context.Delivery != nil {
-			if err := tx.Model(&model.AICodeDelivery{}).Where("id = ?", context.Delivery.ID).Updates(map[string]any{
-				"status": codeDeliveryMerged, "merge_commit": commit, "merged_at": now, "error_message": "",
+		for index := range contexts {
+			context := &contexts[index]
+			if context.Delivery != nil {
+				if err := tx.Model(&model.AICodeDelivery{}).Where("id = ?", context.Delivery.ID).Updates(map[string]any{
+					"status": codeDeliveryMerged, "merge_commit": commits[index], "merged_at": now, "error_message": "",
+				}).Error; err != nil {
+					return err
+				}
+			} else if err := tx.Model(&model.AIDevSessionRepository{}).Where("id = ?", context.Repository.ID).Updates(map[string]any{
+				"status": codeDeliveryMerged, "merge_commit": commits[index], "merged_at": now, "error_message": "",
 			}).Error; err != nil {
 				return err
 			}
-		} else if err := tx.Model(&model.AIDevSessionRepository{}).Where("id = ?", context.Repository.ID).Updates(map[string]any{
-			"status": codeDeliveryMerged, "merge_commit": commit, "merged_at": now, "error_message": "",
-		}).Error; err != nil {
-			return err
 		}
 		return requeueCodeDeliveryConflictJob(tx, job)
 	}); err != nil {
@@ -50,24 +61,33 @@ func completeCodeDeliveryConflict(job *model.AICodeDeliveryJob, contexts []codeD
 }
 
 func confirmManualCodeDeliveryConflict(job *model.AICodeDeliveryJob, contexts []codeDeliveryConflictContext) error {
-	if len(contexts) != 1 {
-		return errors.New("当前只能核验正在处理的一个冲突仓库")
+	if len(contexts) == 0 {
+		return errors.New("当前没有可核验的冲突仓库")
 	}
-	context := &contexts[0]
-	if err := verifyManualCodeDeliveryConflict(context); err != nil {
-		return err
+	for index := range contexts {
+		if err := verifyManualCodeDeliveryConflict(&contexts[index]); err != nil {
+			return err
+		}
 	}
-	if err := abortCodeDeliveryConflictWorktree(context.WorkDir); err != nil {
-		return err
+	for index := range contexts {
+		if err := abortCodeDeliveryConflictWorktree(contexts[index].WorkDir); err != nil {
+			return err
+		}
 	}
-	if context.Repository != nil {
-		if err := cleanupExposedCodeRepositoryConflict(context.Repository); err != nil {
+	for index := range contexts {
+		if contexts[index].Repository == nil {
+			continue
+		}
+		if err := cleanupExposedCodeRepositoryConflict(contexts[index].Repository); err != nil {
 			return err
 		}
 	}
 	if err := global.DB.Transaction(func(tx *gorm.DB) error {
-		if context.Repository != nil {
-			if err := tx.Model(&model.AIDevSessionRepository{}).Where("id = ?", context.Repository.ID).Updates(map[string]any{
+		for index := range contexts {
+			if contexts[index].Repository == nil {
+				continue
+			}
+			if err := tx.Model(&model.AIDevSessionRepository{}).Where("id = ?", contexts[index].Repository.ID).Updates(map[string]any{
 				"status": codeDeliveryPrepared, "error_message": "",
 			}).Error; err != nil {
 				return err
@@ -140,13 +160,6 @@ func cleanupExposedCodeRepositoryConflict(repository *model.AIDevSessionReposito
 		return nil
 	}
 	if _, err := runCodeGit(repository.WorktreeDir, "rev-parse", "-q", "--verify", "MERGE_HEAD"); err != nil {
-		status, statusErr := runCodeGit(repository.WorktreeDir, "status", "--porcelain")
-		if statusErr != nil {
-			return statusErr
-		}
-		if strings.TrimSpace(status) != "" {
-			return errors.New("任务 Worktree 中存在另一次人工冲突处理，请先完成或撤销后再继续网页交付")
-		}
 		return nil
 	}
 	if _, err := runCodeGit(repository.WorktreeDir, "merge", "--abort"); err != nil {

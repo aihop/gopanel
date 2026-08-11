@@ -96,8 +96,14 @@ func loadCodeDeliveryConflictContexts(sessionID uint) (*model.AICodeDeliveryJob,
 		}
 		for index := range repositories {
 			repository := &repositories[index]
-			files := filesByRepository[codeSessionRepositoryID(repository.ID)]
-			if len(files) == 0 || strings.TrimSpace(repository.IntegrationWorkDir) == "" {
+			if strings.TrimSpace(repository.IntegrationWorkDir) == "" {
+				continue
+			}
+			files := mergeCodeConflictFiles(
+				filesByRepository[codeSessionRepositoryID(repository.ID)],
+				discoverCodeDeliveryConflictFiles(repository.IntegrationWorkDir),
+			)
+			if len(files) == 0 {
 				continue
 			}
 			contexts = append(contexts, codeDeliveryConflictContext{
@@ -151,6 +157,33 @@ func normalizedCodeConflictFiles(files []string) []string {
 	return result
 }
 
+func mergeCodeConflictFiles(groups ...[]string) []string {
+	files := make([]string, 0)
+	for _, group := range groups {
+		files = append(files, group...)
+	}
+	return normalizedCodeConflictFiles(files)
+}
+
+func discoverCodeDeliveryConflictFiles(workDir string) []string {
+	files := codeGitConflictFiles(workDir)
+	changed, err := runCodeGitBytes(workDir, nil, "diff", "--name-only", "--diff-filter=ACMR", "-z", "HEAD")
+	if err != nil {
+		return normalizedCodeConflictFiles(files)
+	}
+	for _, rawPath := range bytes.Split(changed, []byte{0}) {
+		file := strings.TrimSpace(string(rawPath))
+		if file == "" {
+			continue
+		}
+		content, exists, readErr := readCodeConflictResultFile(workDir, filepath.ToSlash(file))
+		if readErr == nil && exists && hasCodeConflictMarkerLines(content) {
+			files = append(files, file)
+		}
+	}
+	return normalizedCodeConflictFiles(files)
+}
+
 func validateCodeDeliveryConflictWorktree(sessionID, userID uint, context *codeDeliveryConflictContext) error {
 	if context == nil || strings.TrimSpace(context.WorkDir) == "" {
 		return errors.New("交付冲突 Worktree 不可用")
@@ -173,7 +206,7 @@ func codeDeliveryConflictRepositoryViews(contexts []codeDeliveryConflictContext)
 	views := make([]codeDeliveryConflictRepository, 0, len(contexts))
 	for index := range contexts {
 		context := &contexts[index]
-		unresolved := codeGitConflictFiles(context.WorkDir)
+		unresolved := discoverCodeDeliveryConflictFiles(context.WorkDir)
 		unresolvedSet := make(map[string]struct{}, len(unresolved))
 		for _, file := range unresolved {
 			unresolvedSet[filepath.ToSlash(file)] = struct{}{}
@@ -234,7 +267,7 @@ func readCodeDeliveryConflictFile(context *codeDeliveryConflictContext, file str
 	binary := isCodeConflictBinary(base, baseExists) || isCodeConflictBinary(main, mainExists) ||
 		isCodeConflictBinary(task, taskExists) || isCodeConflictBinary(result, resultExists)
 	unresolved := false
-	for _, conflict := range codeGitConflictFiles(context.WorkDir) {
+	for _, conflict := range discoverCodeDeliveryConflictFiles(context.WorkDir) {
 		if filepath.ToSlash(conflict) == file {
 			unresolved = true
 			break

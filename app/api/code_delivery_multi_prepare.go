@@ -98,9 +98,14 @@ func prepareCodeMultiRepositoryDeliveryWithProgress(
 		return codeGitDeliveryResult{}, err
 	}
 	results := make([]codeRepositoryDeliveryResult, 0, len(working))
+	hasConflicts := false
 	for index := range working {
 		repository := &working[index]
 		if repository.Status == codeDeliveryCompleted || !rebuildByID[repository.ID] {
+			results = append(results, codeStoredRepositoryDeliveryResult(repository))
+			continue
+		}
+		if codeRepositoryHasConflictedDescendant(repository, working) {
 			results = append(results, codeStoredRepositoryDeliveryResult(repository))
 			continue
 		}
@@ -113,13 +118,31 @@ func prepareCodeMultiRepositoryDeliveryWithProgress(
 			return codeMultiRepositoryFailure(codeStoredRepositoryDeliveryResults(working), mergeErr), mergeErr
 		}
 		if result.Status == codeDeliveryJobConflict {
-			_ = exposeCodeRepositoryIntegrationConflict(repository)
-			return codeMultiRepositoryConflictResult(codeStoredRepositoryDeliveryResults(working), result), nil
+			hasConflicts = true
 		}
+	}
+	if hasConflicts {
+		return codeMultiRepositoryConflictResult(results), nil
 	}
 	return codeGitDeliveryResult{
 		Status: codeDeliveryMerged, ResultType: codeMultiRepositoryResultType(results), Repositories: results,
 	}, nil
+}
+
+func codeRepositoryHasConflictedDescendant(
+	repository *model.AIDevSessionRepository,
+	repositories []model.AIDevSessionRepository,
+) bool {
+	for index := range repositories {
+		child := &repositories[index]
+		if filepath.Clean(child.ParentSourceDir) != filepath.Clean(repository.SourceDir) {
+			continue
+		}
+		if child.Status == codeDeliveryJobConflict || codeRepositoryHasConflictedDescendant(child, repositories) {
+			return true
+		}
+	}
+	return false
 }
 
 func codeMultiRepositoryNeedsSnapshot(repositories []model.AIDevSessionRepository) bool {
@@ -246,37 +269,16 @@ func persistCodeRepositoryDeliveryBaselines(
 	})
 }
 
-func exposeCodeRepositoryIntegrationConflict(repository *model.AIDevSessionRepository) error {
-	status, err := runCodeGit(repository.WorktreeDir, "status", "--porcelain")
-	if err != nil || strings.TrimSpace(status) != "" {
-		return err
-	}
-	head, err := runCodeGit(repository.WorktreeDir, "rev-parse", "HEAD")
-	if err != nil || strings.TrimSpace(head) != strings.TrimSpace(repository.WorktreeCommit) {
-		return err
-	}
-	baseCommit, err := codeRepositoryIntegrationBaseCommit(repository.SourceCommit)
-	if err != nil {
-		return err
-	}
-	_, mergeErr := runCodeGit(
-		repository.WorktreeDir,
-		"-c", "user.name=GoPanel Code", "-c", "user.email=code@gopanel.local",
-		"-c", "commit.gpgsign=false", "merge", "--no-edit", baseCommit,
-	)
-	if mergeErr != nil && len(codeGitConflictFiles(repository.WorktreeDir)) == 0 {
-		_, _ = runCodeGit(repository.WorktreeDir, "merge", "--abort")
-	}
-	return nil
-}
-
 func codeMultiRepositoryConflictResult(
 	results []codeRepositoryDeliveryResult,
-	conflict codeRepositoryDeliveryResult,
 ) codeGitDeliveryResult {
+	conflicts := make([]string, 0)
+	for index := range results {
+		if results[index].Status == codeDeliveryJobConflict {
+			conflicts = append(conflicts, results[index].ConflictFiles...)
+		}
+	}
 	return codeGitDeliveryResult{
-		Status:       codeDeliveryJobConflict,
-		RepositoryID: conflict.RepositoryID, RepositoryName: conflict.RepositoryName,
-		Branch: conflict.Branch, ConflictFiles: conflict.ConflictFiles, Repositories: results,
+		Status: codeDeliveryJobConflict, ConflictFiles: normalizedCodeConflictFiles(conflicts), Repositories: results,
 	}
 }

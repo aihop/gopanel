@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -69,6 +70,107 @@ func TestCodeDeliveryConflictRejectsRemainingConflictMarkers(t *testing.T) {
 	current, readErr := readCodeDeliveryConflictFile(context, file.Path)
 	if readErr != nil || current.Version != file.Version {
 		t.Fatalf("rejected conflict marker changed the file: %#v, %v", current, readErr)
+	}
+}
+
+func TestDiscoverCodeDeliveryConflictFilesIncludesStagedMarkers(t *testing.T) {
+	context := createCodeDeliveryConflictFixture(t)
+	if _, err := runCodeGit(context.WorkDir, "add", "--", "conflict.txt"); err != nil {
+		t.Fatal(err)
+	}
+	if conflicts := codeGitConflictFiles(context.WorkDir); len(conflicts) != 0 {
+		t.Fatalf("fixture should no longer have unmerged index entries: %#v", conflicts)
+	}
+	files := discoverCodeDeliveryConflictFiles(context.WorkDir)
+	if len(files) != 1 || files[0] != "conflict.txt" {
+		t.Fatalf("staged conflict markers were not discovered: %#v", files)
+	}
+	view := codeDeliveryConflictRepositoryViews([]codeDeliveryConflictContext{*context})
+	if len(view) != 1 || view[0].Resolved != 0 || len(view[0].UnresolvedFiles) != 1 {
+		t.Fatalf("staged conflict markers were shown as resolved: %#v", view)
+	}
+}
+
+func TestMultiRepositoryDeliveryCollectsAllConflicts(t *testing.T) {
+	session, _, _ := createMultiRepositorySession(t, 950)
+	repositories, err := loadCodeSessionRepositories(session.ID)
+	if err != nil || len(repositories) != 2 {
+		t.Fatalf("load repositories: %#v, %v", repositories, err)
+	}
+	for index := range repositories {
+		commitCodeTestFile(t, repositories[index].SourceDir, "README.md", fmt.Sprintf("main-%d\n", index))
+		commitCodeTestFile(t, repositories[index].WorktreeDir, "README.md", fmt.Sprintf("task-%d\n", index))
+	}
+	if err := captureCodeMultiRepositoryDeliverySnapshot(session); err != nil {
+		t.Fatal(err)
+	}
+	result, err := prepareCodeMultiRepositoryDeliveryWithProgress(session, nil)
+	if err != nil || result.Status != codeDeliveryJobConflict {
+		t.Fatalf("prepare multi repository conflict: %#v, %v", result, err)
+	}
+	conflicted := 0
+	for index := range result.Repositories {
+		if result.Repositories[index].Status != codeDeliveryJobConflict {
+			continue
+		}
+		conflicted++
+		if len(result.Repositories[index].ConflictFiles) != 1 || result.Repositories[index].ConflictFiles[0] != "README.md" {
+			t.Fatalf("repository conflict files are incomplete: %#v", result.Repositories[index])
+		}
+	}
+	if conflicted != 2 {
+		t.Fatalf("collected %d conflicted repositories, want 2: %#v", conflicted, result.Repositories)
+	}
+	stored, err := loadCodeSessionRepositories(session.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index := range stored {
+		if files := discoverCodeDeliveryConflictFiles(stored[index].IntegrationWorkDir); len(files) != 1 || files[0] != "README.md" {
+			t.Fatalf("integration conflict missing for %s: %#v", stored[index].LinkName, files)
+		}
+		status, statusErr := runCodeGit(stored[index].WorktreeDir, "status", "--porcelain")
+		if statusErr != nil || strings.TrimSpace(status) != "" {
+			t.Fatalf("task worktree %s was polluted: %q, %v", stored[index].LinkName, status, statusErr)
+		}
+	}
+}
+
+func TestCodeRepositoryConflictBlocksAllAncestors(t *testing.T) {
+	root := model.AIDevSessionRepository{SourceDir: "/workspace/root"}
+	child := model.AIDevSessionRepository{SourceDir: "/workspace/root/child", ParentSourceDir: root.SourceDir}
+	leaf := model.AIDevSessionRepository{
+		SourceDir: "/workspace/root/child/leaf", ParentSourceDir: child.SourceDir, Status: codeDeliveryJobConflict,
+	}
+	repositories := []model.AIDevSessionRepository{root, child, leaf}
+	if !codeRepositoryHasConflictedDescendant(&repositories[0], repositories) ||
+		!codeRepositoryHasConflictedDescendant(&repositories[1], repositories) ||
+		codeRepositoryHasConflictedDescendant(&repositories[2], repositories) {
+		t.Fatalf("nested conflict dependency was not propagated: %#v", repositories)
+	}
+}
+
+func TestCompleteCodeDeliveryConflictFinalizesMultipleRepositories(t *testing.T) {
+	contexts := []codeDeliveryConflictContext{*createCodeDeliveryConflictFixture(t), *createCodeDeliveryConflictFixture(t)}
+	for index := range contexts {
+		contexts[index].Name = fmt.Sprintf("repository-%d", index)
+		file, err := readCodeDeliveryConflictFile(&contexts[index], "conflict.txt")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := saveCodeDeliveryConflictFile(&contexts[index], file.Path, "content", fmt.Sprintf("resolved-%d\n", index), file.Version); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for index := range contexts {
+		commit, err := finalizeCodeDeliveryConflictCommit(&contexts[index])
+		if err != nil {
+			t.Fatalf("finalize repository %d: %v", index, err)
+		}
+		parents, err := runCodeGit(contexts[index].WorkDir, "show", "-s", "--format=%P", commit)
+		if err != nil || !strings.Contains(parents, contexts[index].SourceCommit) || !strings.Contains(parents, contexts[index].TaskCommit) {
+			t.Fatalf("repository %d merge parents are incomplete: %q, %v", index, parents, err)
+		}
 	}
 }
 
