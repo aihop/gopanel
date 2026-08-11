@@ -264,6 +264,7 @@ void main() {
     addTearDown(tester.binding.platformDispatcher.clearLocaleTestValue);
     final failed = _run(id: 1, instructionId: 11);
     CodeExecutionRun? retried;
+    CodeExecutionRun? opened;
 
     await tester.pumpWidget(
       MaterialApp(
@@ -276,6 +277,7 @@ void main() {
               retryingInstructionId: null,
               retriedInstructionIds: const {},
               onRetry: (run) => retried = run,
+              onOpenDetail: (run) => opened = run,
               onLoadMore: () {},
             ),
           ),
@@ -284,6 +286,9 @@ void main() {
     );
 
     expect(find.text('失败'), findsOneWidget);
+    expect(find.text('查看详情'), findsOneWidget);
+    await tester.tap(find.text('查看详情'));
+    expect(opened?.id, 1);
     expect(find.text('重试指令'), findsOneWidget);
     await tester.tap(find.text('重试指令'));
     expect(retried?.instructionId, 11);
@@ -307,6 +312,7 @@ void main() {
               retryingInstructionId: null,
               retriedInstructionIds: const {12},
               onRetry: (_) {},
+              onOpenDetail: (_) {},
               onLoadMore: () {},
             ),
           ),

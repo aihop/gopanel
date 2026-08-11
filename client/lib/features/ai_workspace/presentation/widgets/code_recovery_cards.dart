@@ -112,6 +112,7 @@ class CodeExecutionRunsCard extends StatelessWidget {
     required this.retryingInstructionId,
     required this.retriedInstructionIds,
     required this.onRetry,
+    required this.onOpenDetail,
     required this.onLoadMore,
   });
 
@@ -121,6 +122,7 @@ class CodeExecutionRunsCard extends StatelessWidget {
   final int? retryingInstructionId;
   final Set<int> retriedInstructionIds;
   final ValueChanged<CodeExecutionRun> onRetry;
+  final ValueChanged<CodeExecutionRun> onOpenDetail;
   final VoidCallback onLoadMore;
 
   @override
@@ -144,6 +146,7 @@ class CodeExecutionRunsCard extends StatelessWidget {
                       runs[index].instructionId,
                     ),
                     onRetry: () => onRetry(runs[index]),
+                    onOpenDetail: () => onOpenDetail(runs[index]),
                   ),
                   if (index != runs.length - 1) const Divider(height: 24),
                 ],
@@ -217,12 +220,14 @@ class _ExecutionRunItem extends StatelessWidget {
     required this.isRetrying,
     required this.wasRetried,
     required this.onRetry,
+    required this.onOpenDetail,
   });
 
   final CodeExecutionRun run;
   final bool isRetrying;
   final bool wasRetried;
   final VoidCallback onRetry;
+  final VoidCallback onOpenDetail;
 
   @override
   Widget build(BuildContext context) {
@@ -287,6 +292,13 @@ class _ExecutionRunItem extends StatelessWidget {
                 }),
                 style: const TextStyle(color: AppTheme.textLight, fontSize: 11),
               ),
+            TextButton.icon(
+              onPressed: onOpenDetail,
+              icon: const Icon(Icons.article_outlined, size: 17),
+              label: Text(
+                CodeWorkspaceText.t(context, 'recovery.viewRunDetail'),
+              ),
+            ),
             if (run.canRetry && !wasRetried)
               TextButton.icon(
                 onPressed: isRetrying ? null : onRetry,

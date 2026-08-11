@@ -7,6 +7,7 @@ import '../code_workspace_text.dart';
 import '../controllers/ai_workspace_controller.dart';
 import '../controllers/code_session_recovery_controller.dart';
 import '../widgets/code_recovery_cards.dart';
+import 'code_execution_run_screen.dart';
 
 class CodeSessionRecoveryScreen extends ConsumerStatefulWidget {
   const CodeSessionRecoveryScreen({
@@ -148,6 +149,7 @@ class _CodeSessionRecoveryScreenState
           retryingInstructionId: state.retryingInstructionId,
           retriedInstructionIds: state.retriedInstructionIds,
           onRetry: _retryInstruction,
+          onOpenDetail: _openRunDetail,
           onLoadMore: _controller.loadMore,
         ),
         const SizedBox(height: 16),
@@ -170,6 +172,12 @@ class _CodeSessionRecoveryScreenState
           .refreshCurrentSession(showLoading: true);
     }
     _showResult(success);
+  }
+
+  void _openRunDetail(CodeExecutionRun run) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => CodeExecutionRunScreen(runId: run.id)),
+    );
   }
 
   Future<void> _retryInitialization() async {

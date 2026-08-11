@@ -6,6 +6,7 @@ import '../models/ai_session_state_info.dart';
 import '../models/code_task.dart';
 import '../models/code_workspace_file.dart';
 import '../models/code_delivery_job.dart';
+import '../models/code_execution_run_detail.dart';
 import '../models/code_project_terminal_session.dart';
 import '../models/code_session_recovery.dart';
 
@@ -126,6 +127,15 @@ class AiWorkspaceRepository {
       data: const <String, dynamic>{},
     );
     return AiInstruction.fromJson(response.data ?? const <String, dynamic>{});
+  }
+
+  Future<CodeExecutionRunDetail> getExecutionRun(int runId) async {
+    final response = await _apiClient.get<Map<String, dynamic>>(
+      '/api/code/runs/$runId',
+    );
+    return CodeExecutionRunDetail.fromJson(
+      response.data ?? const <String, dynamic>{},
+    );
   }
 
   Future<CodeSessionInitialization> getSessionInitialization(
