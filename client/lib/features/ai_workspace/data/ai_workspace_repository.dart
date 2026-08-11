@@ -7,6 +7,7 @@ import '../models/code_task.dart';
 import '../models/code_workspace_file.dart';
 import '../models/code_delivery_job.dart';
 import '../models/code_execution_run_detail.dart';
+import '../models/code_git_review.dart';
 import '../models/code_project_terminal_session.dart';
 import '../models/code_session_recovery.dart';
 
@@ -134,6 +135,43 @@ class AiWorkspaceRepository {
       '/api/code/runs/$runId',
     );
     return CodeExecutionRunDetail.fromJson(
+      response.data ?? const <String, dynamic>{},
+    );
+  }
+
+  Future<CodeGitStatus> getGitStatus(int sessionId) async {
+    final response = await _apiClient.get<Map<String, dynamic>>(
+      '/api/code/sessions/$sessionId/git/status',
+    );
+    return CodeGitStatus.fromJson(response.data ?? const <String, dynamic>{});
+  }
+
+  Future<CodeGitDiff> getGitDiff({
+    required int sessionId,
+    required String repositoryId,
+    required String path,
+    required String kind,
+  }) async {
+    final response = await _apiClient.get<Map<String, dynamic>>(
+      '/api/code/sessions/$sessionId/git/diff',
+      queryParameters: {
+        'repositoryId': repositoryId,
+        'path': path,
+        'kind': kind,
+      },
+    );
+    return CodeGitDiff.fromJson(response.data ?? const <String, dynamic>{});
+  }
+
+  Future<CodeGitSaveResult> saveGitChanges(
+    int sessionId,
+    String message,
+  ) async {
+    final response = await _apiClient.post<Map<String, dynamic>>(
+      '/api/code/sessions/$sessionId/git/save',
+      data: {'message': message.trim()},
+    );
+    return CodeGitSaveResult.fromJson(
       response.data ?? const <String, dynamic>{},
     );
   }
