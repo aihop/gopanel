@@ -51,14 +51,14 @@ const executorLabel = computed(() =>
           :size="14"
           class="shrink-0 text-slate-500"
         />
+        <span class="dashboard-task-row__project shrink-0 rounded-full px-2 py-0.5 text-[11px]">
+          {{ projectName || t("code.projectFallback") }}
+        </span>
         <span
           class="truncate text-sm font-semibold text-[var(--n-text-color)]"
           :title="task.title"
         >
           {{ task.title }}
-        </span>
-        <span class="dashboard-task-row__project shrink-0 rounded-full px-2 py-0.5 text-[11px]">
-          {{ projectName || t("code.projectFallback") }}
         </span>
       </div>
       <CodeTaskMetaLine
