@@ -147,6 +147,7 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 			workspaceMode.value = "terminal"
 			terminalMounted.value = false
 			resetSelectedFile()
+			syncTaskQuery(null)
 		})
 
 	const createNewTask = () =>
@@ -164,7 +165,26 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 		terminalTakeoverRequested.value = false
 		workspaceMode.value = "terminal"
 		terminalMounted.value = true
+		syncTaskQuery(null)
 		void fetchTasks()
+	}
+
+	/**
+	 * 把当前任务写进地址栏，刷新后还能回到同一条任务。
+	 *
+	 * 用 replace 不用 push：切任务是浏览同一个工作台，不该在历史里堆一串条目，
+	 * 否则「后退」要点很多次才出得去。
+	 * 内嵌模式（快捷浮窗）不写：它和主页面共用路由，写了会篡改主页面的地址。
+	 */
+	const syncTaskQuery = (taskId: number | null) => {
+		if (props.embedded) return
+		const current = route.query.taskId ? String(route.query.taskId) : ""
+		const next = taskId ? String(taskId) : ""
+		if (current === next) return
+		const query = { ...route.query }
+		if (next) query.taskId = next
+		else delete query.taskId
+		void router.replace({ path: route.path, query })
 	}
 
 	const activateTask = (task: AITask) => {
@@ -176,6 +196,7 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 		terminalTakeoverRequested.value = false
 		workspaceMode.value = "terminal"
 		terminalMounted.value = true
+		syncTaskQuery(task.id)
 	}
 
 	const selectTask = (task: AITask) => {
@@ -233,6 +254,7 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 
 	const handleTaskCreated = (taskId: number) => {
 		currentTaskId.value = taskId
+		syncTaskQuery(taskId)
 		void fetchTasks()
 	}
 
@@ -304,7 +326,12 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 	const confirmLeaveWorkspace = () =>
 		!fileEditorRef.value?.hasUnsavedChanges || window.confirm(t("code.switchSessionUnsavedHint"))
 	onBeforeRouteLeave(() => props.embedded || confirmLeaveWorkspace())
-	onBeforeRouteUpdate(() => props.embedded || confirmLeaveWorkspace())
+	onBeforeRouteUpdate((to, from) => {
+		// 只是把当前任务写进 query，不算离开工作台，不该再弹一次未保存提示 ——
+		// selectTask 已经走过 confirmDiscardEditorChanges 了，这里再弹就是第二次。
+		if (to.path === from.path) return true
+		return props.embedded || confirmLeaveWorkspace()
+	})
 
 	onMounted(() => {
 		void fetchProjectInfo()
