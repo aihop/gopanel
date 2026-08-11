@@ -5,6 +5,7 @@ import type { CodeTaskListItem } from "@/api/interface/codeTasks"
 import Icon from "@/components/common/Icon.vue"
 import { codeProjectMessages } from "@/i18n/locales/codeProject"
 import { useCodeWorkspaceFullscreen } from "../useCodeWorkspaceFullscreen"
+import CodeProjectIdentity from "./CodeProjectIdentity.vue"
 import CodeTerminal from "./CodeTerminal.vue"
 import TaskStatusBadge from "./TaskStatusBadge.vue"
 import { CODE_TERMINAL_POOL_SIZE, codeTerminalIdentity } from "./codeTerminalSession"
@@ -69,12 +70,12 @@ const terminalIdentity = computed(() =>
           :status="task.status"
           class="shrink-0"
         />
-        <span
+        <CodeProjectIdentity
           v-if="projectName"
           class="shrink-0 text-[11px] text-[var(--n-text-color-3)]"
-        >
-          {{ projectName }}
-        </span>
+          :project-id="task.projectId"
+          :name="projectName"
+        />
       </header>
 
       <div class="relative min-h-0 flex-1 bg-[#1e1e1e]">

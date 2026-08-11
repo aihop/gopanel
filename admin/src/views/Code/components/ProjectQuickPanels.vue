@@ -20,7 +20,11 @@
               name="mdi:dock-window"
               :size="18"
             />
-            <span class="truncate font-semibold">{{ panel.project.name }}</span>
+            <CodeProjectIdentity
+              class="font-semibold"
+              :project-id="panel.project.id"
+              :name="panel.project.name"
+            />
             <span class="quick-panel__label">{{ t("code.quickPanel") }}</span>
           </div>
           <div
@@ -95,6 +99,7 @@ import { onBeforeUnmount, onMounted, ref } from "vue"
 import { onBeforeRouteLeave, useRouter } from "vue-router"
 import { useI18n } from "vue-i18n"
 import Workspace from "../Workspace.vue"
+import CodeProjectIdentity from "./CodeProjectIdentity.vue"
 
 type ResizeDirection = "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | "nw"
 type WorkspaceInstance = { confirmClose: () => boolean }

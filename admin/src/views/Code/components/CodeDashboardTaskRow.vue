@@ -5,6 +5,7 @@ import type { CodeTaskListItem } from "@/api/interface/codeTasks"
 import Icon from "@/components/common/Icon.vue"
 import { codeProjectMessages } from "@/i18n/locales/codeProject"
 import { codeTaskTimestamp } from "../codeDashboardBuckets"
+import CodeProjectIdentity from "./CodeProjectIdentity.vue"
 import CodeTaskAgentSnippet from "./CodeTaskAgentSnippet.vue"
 import CodeTaskFocusMarker from "./CodeTaskFocusMarker.vue"
 import CodeTaskMetaLine from "./CodeTaskMetaLine.vue"
@@ -51,9 +52,11 @@ const executorLabel = computed(() =>
           :size="14"
           class="shrink-0 text-slate-500"
         />
-        <span class="dashboard-task-row__project shrink-0 rounded-full px-2 py-0.5 text-[11px]">
-          {{ projectName || t("code.projectFallback") }}
-        </span>
+        <CodeProjectIdentity
+          class="dashboard-task-row__project max-w-[140px] shrink-0 rounded-full px-2 py-0.5 text-[11px]"
+          :project-id="task.projectId"
+          :name="projectName || t('code.projectFallback')"
+        />
         <span
           class="truncate text-sm font-semibold text-[var(--n-text-color)]"
           :title="task.title"
