@@ -26,7 +26,7 @@ const loading = ref(false)
 let pollTimer: ReturnType<typeof setTimeout> | null = null
 
 // 交付状态判定与移动端共用，这里只负责把 phase 映射成桌面文案。
-const { phase, busy: active, completed, canDeliver, progress } = useCodeDelivery({
+const { phase, busy: active, completed, canDeliver, progress, pendingLocalSync } = useCodeDelivery({
 	job,
 	available,
 	pendingRequiresCompleted: true
@@ -42,11 +42,14 @@ const labelKeys: Record<CodeDeliveryPhase, string> = {
 	retry: "code.retryDeliveryToMain",
 	idle: "code.deliverToMain"
 }
-const label = computed(() =>
-	phase.value === "running"
-		? t("code.deliveringToMain", { progress: progress.value })
-		: t(labelKeys[phase.value])
-)
+const label = computed(() => {
+	if (phase.value === "running") return t("code.deliveringToMain", { progress: progress.value })
+	// 已交付态要区分主仓是否真的同步了，判定在 useCodeDelivery 里，两端一致。
+	if (phase.value === "delivered") {
+		return t(pendingLocalSync.value ? "code.deliveredPendingLocalSync" : "code.deliveredToMain")
+	}
+	return t(labelKeys[phase.value])
+})
 
 function clearPoll() {
 	if (pollTimer) clearTimeout(pollTimer)

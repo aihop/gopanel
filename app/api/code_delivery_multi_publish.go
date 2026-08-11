@@ -274,7 +274,7 @@ func completeCodeMultiRepositorySources(repositories []model.AIDevSessionReposit
 		if repository.Status == codeDeliveryCompleted {
 			continue
 		}
-		if err := verifyCodeDeliveryCommitReachable(
+		if err := verifyCodeDeliveryCommitExists(
 			repository.SourceDir, repository.MergeCommit, "仓库 "+repository.LinkName,
 		); err != nil {
 			return err

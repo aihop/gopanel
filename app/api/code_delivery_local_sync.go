@@ -21,9 +21,14 @@ func shortCodeCommit(commit string) string {
 	return commit
 }
 
-// verifyCodeDeliveryCommitReachable 校验交付提交在仓库对象库中真实存在。
-// 集成 Worktree 与源仓共享对象库，因此这里通过后即可推送，无需本地分支指向它。
-func verifyCodeDeliveryCommitReachable(gitDir, commit, label string) error {
+// verifyCodeDeliveryCommitExists 只校验交付提交在仓库对象库中真实存在，
+// 不校验它是否已经进入某个分支 —— 集成 Worktree 与源仓共享对象库，
+// 提交造出来就能推送，不需要本地分支指向它。
+//
+// 原名是 ...CommitReachable，但它从来没做过可达性判断，
+// 结果被 completeCodeMultiRepositorySources 当成「已落地」的前置校验用，
+// 快进失败时这道校验照样通过。判断是否真的进了目标分支要看 SourceAppliedAt。
+func verifyCodeDeliveryCommitExists(gitDir, commit, label string) error {
 	commit = strings.TrimSpace(commit)
 	if commit == "" {
 		return fmt.Errorf("%s尚未产出交付提交", label)
@@ -54,7 +59,7 @@ func codeDeliveryLocalSyncCommand(sourceDir, mergeCommit string) string {
 }
 
 func applyCodeDeliveryLocalSync(delivery *model.AICodeDelivery) error {
-	if err := verifyCodeDeliveryCommitReachable(delivery.SourceWorkDir, delivery.MergeCommit, "本次交付"); err != nil {
+	if err := verifyCodeDeliveryCommitExists(delivery.SourceWorkDir, delivery.MergeCommit, "本次交付"); err != nil {
 		return err
 	}
 	if err := fastForwardCodeDeliverySource(delivery); err != nil {
@@ -79,7 +84,7 @@ func applyCodeRepositoryLocalSync(
 	repositories []model.AIDevSessionRepository,
 ) error {
 	label := "仓库 " + repository.LinkName
-	if err := verifyCodeDeliveryCommitReachable(repository.SourceDir, repository.MergeCommit, label); err != nil {
+	if err := verifyCodeDeliveryCommitExists(repository.SourceDir, repository.MergeCommit, label); err != nil {
 		return err
 	}
 	if err := fastForwardCodeMultiRepositorySource(repository, repositories); err != nil {

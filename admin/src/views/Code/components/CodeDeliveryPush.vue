@@ -5,6 +5,7 @@ import { useI18n } from "vue-i18n"
 import { getCodeDeliveryPushStatus, pushCodeSessionDelivery } from "@/api/modules/codeGit"
 import { useCodeDeliveryPush } from "@/composables/useCodeDeliveryPush"
 import { codeGitReviewMessages } from "../codeGitReviewMessages"
+import CodeLocalSyncPending from "./CodeLocalSyncPending.vue"
 
 const props = defineProps<{ sessionId: number; refreshKey: number }>()
 const { t } = useI18n({ messages: codeGitReviewMessages })
@@ -19,8 +20,7 @@ const {
 	pushed,
 	pendingCount,
 	destinations,
-	localSyncPending,
-	localSyncCommands,
+	repositories,
 	visible,
 	loadStatus,
 	runPush
@@ -48,15 +48,6 @@ const pushDelivery = () => {
 	})
 }
 
-const copyLocalSyncCommands = async () => {
-	if (!localSyncCommands.value) return
-	try {
-		await navigator.clipboard.writeText(localSyncCommands.value)
-		message.success(t("code.gitLocalSyncCopied"))
-	} catch (error) {
-		message.error(t("code.gitPushStatusFailed"))
-	}
-}
 
 watch(() => [props.sessionId, props.refreshKey], () => void loadStatus())
 onMounted(() => void loadStatus())
@@ -95,22 +86,7 @@ onMounted(() => void loadStatus())
 					</n-button>
 				</div>
 
-				<!-- 本地主仓未同步是降级提示，不是交付失败：用 info 而非 error，并直接给出可执行命令。 -->
-				<n-alert v-if="localSyncPending.length" type="info" :show-icon="false" class="mt-2">
-					<div class="space-y-2">
-						<p class="text-xs font-medium text-slate-700">
-							{{ t("code.gitLocalSyncPending", { count: localSyncPending.length }) }}
-						</p>
-						<p class="text-[11px] leading-5 text-slate-500">{{ t("code.gitLocalSyncHint") }}</p>
-						<pre
-							v-if="localSyncCommands"
-							class="overflow-x-auto whitespace-pre rounded-lg bg-slate-900 p-2 font-mono text-[11px] leading-5 text-slate-100"
-						>{{ localSyncCommands }}</pre>
-						<n-button v-if="localSyncCommands" size="tiny" secondary @click="copyLocalSyncCommands">
-							{{ t("code.gitLocalSyncCopy") }}
-						</n-button>
-					</div>
-				</n-alert>
+				<CodeLocalSyncPending :repositories="repositories" />
 			</template>
 		</n-spin>
 	</div>

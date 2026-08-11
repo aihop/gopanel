@@ -37,7 +37,8 @@ const {
 	delivering,
 	delivered,
 	hasLocalChanges: hasChanges,
-	canDeliverPending
+	canDeliverPending,
+	pendingLocalSync
 } = useCodeDelivery({
 	job: computed(() => props.delivery ?? null),
 	available: computed(() =>
@@ -61,6 +62,8 @@ const labelKeys: Record<CodeDeliveryPhase, string> = {
 const label = computed(() => {
 	if (statusError.value) return t("mobile.retryGitStatus")
 	if (statusLoading.value) return t("mobile.checkingChanges")
+	// 已交付态要区分主仓是否真的同步了，判定和桌面端共用 useCodeDelivery。
+	if (phase.value === "delivered" && pendingLocalSync.value) return t("mobile.deliveredPendingSync")
 	return t(labelKeys[phase.value])
 })
 

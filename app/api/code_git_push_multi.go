@@ -105,7 +105,7 @@ func inspectCodeMultiRepositoryManualPushState(
 	}
 	// 推送的是交付提交本身（commit-ish），不依赖本地分支指向它：
 	// 本地主仓未能快进时，交付提交仍在共享对象库中，推送照常可用。
-	if err := verifyCodeDeliveryCommitReachable(
+	if err := verifyCodeDeliveryCommitExists(
 		repository.SourceDir, repository.MergeCommit, "仓库 "+repository.LinkName,
 	); err != nil {
 		return state, err

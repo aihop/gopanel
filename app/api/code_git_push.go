@@ -244,7 +244,7 @@ func pushCodeDeliveryRepositoryWithCredential(request codeDeliveryPushRequest, r
 		return failedCodePushResult(result, errors.New("仓库没有可用的远端跟踪分支"))
 	}
 	// 推送的是交付提交本身（commit-ish），不要求本地目标分支已经指向它。
-	if err := verifyCodeDeliveryCommitReachable(sourceDir, mergeCommit, "本次交付"); err != nil {
+	if err := verifyCodeDeliveryCommitExists(sourceDir, mergeCommit, "本次交付"); err != nil {
 		return failedCodePushResult(result, err)
 	}
 	if _, err := fetchCodeRepositoryWithCredential(sourceDir, remoteName, credentialID); err != nil {

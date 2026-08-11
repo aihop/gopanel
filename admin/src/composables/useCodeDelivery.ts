@@ -71,10 +71,23 @@ export function useCodeDelivery(options: UseCodeDeliveryOptions) {
 
 	const busy = computed(() => phase.value === "queued" || phase.value === "quality_check" || phase.value === "running")
 
+	/**
+	 * 交付完成了，但交付提交还没进本地主仓。
+	 *
+	 * phase 是按 job.status 推的，completed 既包含「真的合进了主仓」也包含
+	 * 「提交产出了、本地快进失败」（快进失败被刻意降级为非阻断，见后端
+	 * code_delivery_local_sync.go 顶部注释）。这两种情况必须给不同文案，
+	 * 否则主仓根本没这份代码，界面却说「已交付主仓」。
+	 *
+	 * 只共享判定不共享文案 key：桌面用 code.*，移动端用 mobile.*，各自映射。
+	 */
+	const pendingLocalSync = computed(() => phase.value === "delivered" && job.value?.resultType === "delivered")
+
 	return {
 		available,
 		phase,
 		busy,
+		pendingLocalSync,
 		delivering,
 		delivered,
 		completed,

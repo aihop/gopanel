@@ -6,6 +6,7 @@ import { useMessage } from "naive-ui"
 import Icon from "@/components/common/Icon.vue"
 import CodeDeliveryPush from "./CodeDeliveryPush.vue"
 import CodeDeliveryFacts from "./CodeDeliveryFacts.vue"
+import CodeLocalSyncPending from "./CodeLocalSyncPending.vue"
 import CodeSessionRepositorySync from "./CodeSessionRepositorySync.vue"
 import {
 	getCodeDeliveryJob,
@@ -350,6 +351,14 @@ useIntervalFn(() => {
 					</div>
 					<CodeDeliveryFacts :facts="deliveryJob.facts" />
 				</n-alert>
+				<!--
+					多仓交付的「主仓待同步」提示。以前只挂在单仓路径（CodeDeliveryPush）上，
+					而多仓恰恰是本地快进最容易失败的场景，结果最该看到提示的地方反而没有。
+				-->
+				<CodeLocalSyncPending
+					v-if="deliveryJob?.repositories?.length"
+					:repositories="deliveryJob.repositories"
+				/>
 				<n-input
 					v-model:value="commitMessage"
 					size="small"
