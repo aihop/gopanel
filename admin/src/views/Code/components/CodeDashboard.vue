@@ -9,6 +9,7 @@ import { setAITaskArchived } from "@/api/modules/code"
 import Icon from "@/components/common/Icon.vue"
 import { codeProjectMessages } from "@/i18n/locales/codeProject"
 import {
+	filterCodeDashboardTasksByProject,
 	groupCodeDashboardTasks,
 	matchesCodeDashboardFilter,
 	sortCodeTasksStably,
@@ -31,6 +32,7 @@ const tasks = ref<CodeTaskListItem[]>([])
 const taskTotal = ref(0)
 const tasksLoadError = ref(false)
 const activeFilter = ref<CodeDashboardBucket | "delivering" | null>(null)
+const selectedProjectId = ref<number | null>(null)
 const showArchived = ref(false)
 const selectedTaskId = ref<number | null>(null)
 // 折叠状态存起来：习惯用宽终端的人不该每次进页面都再折一次。
@@ -76,7 +78,9 @@ const projectNameById = computed(() => {
 	return map
 })
 
-const grouped = computed(() => groupCodeDashboardTasks(tasks.value, now.value))
+const projectOptions = computed(() => props.projects.map(project => ({ label: project.name, value: project.id })))
+const projectTasks = computed(() => filterCodeDashboardTasksByProject(tasks.value, selectedProjectId.value))
+const grouped = computed(() => groupCodeDashboardTasks(projectTasks.value, now.value))
 
 const stats = computed(() => [
 	{
@@ -114,11 +118,13 @@ const stats = computed(() => [
 // 状态只体现在行内徽标和上面的筛选器上 —— 筛选是你主动点的，跳变是预期内的。
 const visibleTasks = computed(() => {
 	const filter = activeFilter.value
-	const scoped = filter ? tasks.value.filter(task => matchesCodeDashboardFilter(task, filter, now.value)) : tasks.value
+	const scoped = filter
+		? projectTasks.value.filter(task => matchesCodeDashboardFilter(task, filter, now.value))
+		: projectTasks.value
 	return sortCodeTasksStably(scoped)
 })
 
-const selectedTask = computed(() => tasks.value.find(task => task.id === selectedTaskId.value) || null)
+const selectedTask = computed(() => projectTasks.value.find(task => task.id === selectedTaskId.value) || null)
 
 // 选中的任务被筛掉、归档或删掉时，落到当前可见的第一条，右边不会停在一个看不见的任务上。
 // 只在「没有选中」或「选中的已不可见」时才动，避免每轮轮询把用户的选择顶掉。
@@ -173,12 +179,22 @@ const toggleArchived = async (task: CodeTaskListItem) => {
       顶部只留一行：标题 + 状态数字（既是概览也是筛选器）+ 工具栏插槽。
       大标题和副标题去掉了 —— 面包屑已经写了「开发工作台」，
       在一个天天用的工作页面上再占 80px 讲一遍是纯装饰，那 80px 归终端。
-      不分项目：列表就是「所有在做的任务」。
+      项目筛选紧跟标题，保持低视觉权重；默认仍展示所有项目的任务。
     -->
     <div class="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2">
       <span class="shrink-0 text-base font-semibold tracking-[-0.01em] text-[var(--n-text-color)]">
         {{ t("code.workspace") }}
       </span>
+      <n-select
+        v-model:value="selectedProjectId"
+        :options="projectOptions"
+        size="small"
+        clearable
+        filterable
+        style="width: 168px"
+        :placeholder="t('code.dashboardAllProjects')"
+        :disabled="loading || !projects.length"
+      />
       <div
         v-show="!showArchived"
         class="flex flex-1 flex-wrap items-center gap-2"

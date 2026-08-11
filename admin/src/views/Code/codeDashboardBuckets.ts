@@ -53,6 +53,11 @@ export function groupCodeDashboardTasks(tasks: CodeTaskListItem[], now: Date) {
 	}
 }
 
+export function filterCodeDashboardTasksByProject(tasks: CodeTaskListItem[], projectId: number | null) {
+	if (projectId === null) return tasks
+	return tasks.filter(task => task.projectId === projectId)
+}
+
 /**
  * 列表的显示顺序：按任务 id 倒序，新建的在上面。
  *

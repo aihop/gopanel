@@ -3,6 +3,7 @@ import type { CodeTaskListItem } from "@/api/interface/codeTasks"
 import type { CodeTaskSummary } from "@/api/interface/codeTasks"
 import {
 	codeTaskBucket,
+	filterCodeDashboardTasksByProject,
 	groupCodeDashboardTasks,
 	isDeliveringTask,
 	matchesCodeDashboardFilter,
@@ -99,6 +100,14 @@ describe("groupCodeDashboardTasks", () => {
 		expect(grouped.active.map(item => item.id)).toEqual([2, 3])
 		expect(grouped.doneToday.map(item => item.id)).toEqual([4])
 		expect(grouped.deliveringCount).toBe(1)
+	})
+})
+
+describe("filterCodeDashboardTasksByProject", () => {
+	it("未选择项目时保留全部任务，选择后只保留对应项目", () => {
+		const tasks = [task({ id: 1, projectId: 1 }), task({ id: 2, projectId: 2 })]
+		expect(filterCodeDashboardTasksByProject(tasks, null)).toBe(tasks)
+		expect(filterCodeDashboardTasksByProject(tasks, 2).map(item => item.id)).toEqual([2])
 	})
 })
 
