@@ -101,12 +101,14 @@ export interface CodeGitHistoryCommit {
 	author: string
 	authoredAt: string
 	subject: string
+	merged: boolean
 }
 
 export interface CodeGitHistoryRepository {
 	id: string
 	name: string
 	branch: string
+	targetBranch: string
 	baseCommit: string
 	resultCommit: string
 	commits: CodeGitHistoryCommit[]

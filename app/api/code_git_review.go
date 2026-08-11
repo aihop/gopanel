@@ -51,6 +51,7 @@ type codeGitRepository struct {
 	root            string
 	workspacePrefix string
 	resultLive      bool
+	targetBranch    string
 }
 
 type codeGitStatus struct {

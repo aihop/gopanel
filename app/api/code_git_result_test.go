@@ -124,10 +124,17 @@ func TestLoadCodeGitHistoryStaysInsideTaskRange(t *testing.T) {
 	if err != nil || history.Commits != 2 || len(history.Repositories) != 1 {
 		t.Fatalf("unexpected task history: %#v, %v", history, err)
 	}
+	if history.Repositories[0].Branch != session.WorktreeBranch ||
+		history.Repositories[0].TargetBranch != session.TargetBranch {
+		t.Fatalf("unexpected task branch merge state: %#v", history.Repositories[0])
+	}
 	commits := history.Repositories[0].Commits
 	firstCommit, secondCommit := firstResult.Commit, secondResult.Commit
 	if commits[0].Commit != secondCommit || commits[1].Commit != firstCommit {
 		t.Fatalf("unexpected commit order: %#v", commits)
+	}
+	if commits[0].Merged || commits[1].Merged {
+		t.Fatalf("unmerged commits were incorrectly identified: %#v", commits)
 	}
 	diff, truncated, err := loadCodeGitHistoryDiff(session, nil, "session", firstCommit)
 	if err != nil || truncated || !strings.Contains(diff, "+first") {
@@ -138,5 +145,13 @@ func TestLoadCodeGitHistoryStaysInsideTaskRange(t *testing.T) {
 	}
 	if _, _, err := loadCodeGitHistoryDiff(session, nil, "session", firstCommit[:8]); err == nil {
 		t.Fatal("abbreviated revisions should not be accepted")
+	}
+	if _, err := runCodeGit(session.SourceWorkDir, "merge", "--ff-only", firstCommit); err != nil {
+		t.Fatal(err)
+	}
+	partiallyMergedHistory, err := loadCodeGitHistory(session, nil)
+	if err != nil || partiallyMergedHistory.Repositories[0].Commits[0].Merged ||
+		!partiallyMergedHistory.Repositories[0].Commits[1].Merged {
+		t.Fatalf("per-commit merge state was not identified: %#v, %v", partiallyMergedHistory, err)
 	}
 }

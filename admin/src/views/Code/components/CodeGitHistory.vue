@@ -110,7 +110,22 @@ watch(
 						"
 						@click="selectCommit(repository, commit)"
 					>
-						<div class="truncate text-xs font-medium" :title="commit.subject">{{ commit.subject }}</div>
+						<div class="flex items-center gap-2">
+							<div class="min-w-0 flex-1 truncate text-xs font-medium" :title="commit.subject">
+								{{ commit.subject }}
+							</div>
+							<span
+								v-if="repository.targetBranch"
+								class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium"
+								:class="commit.merged ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'"
+							>
+								{{
+									t(commit.merged ? "code.gitHistoryMerged" : "code.gitHistoryUnmerged", {
+										branch: repository.targetBranch
+									})
+								}}
+							</span>
+						</div>
 						<div class="mt-1 flex items-center justify-between gap-2 text-[11px] text-slate-400">
 							<span class="truncate">{{ commit.author }}</span>
 							<span class="shrink-0 font-mono">{{ commit.shortCommit }}</span>

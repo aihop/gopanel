@@ -27,7 +27,7 @@ func discoverCodeGitResultRepositories(session *model.AIDevSession, excludedRepo
 		for _, row := range rows {
 			repository, ok := inspectCodeGitResultRepository(
 				codeSessionRepositoryID(row.ID), row.LinkName, row.WorktreeDir, row.SourceDir, row.LinkName,
-				row.BaseCommit, row.WorktreeCommit, row.Status,
+				row.BaseCommit, row.WorktreeCommit, row.Status, row.Branch, row.TargetBranch,
 			)
 			if ok {
 				result = append(result, repository)
@@ -41,7 +41,8 @@ func discoverCodeGitResultRepositories(session *model.AIDevSession, excludedRepo
 		if deliveryErr == nil {
 			repository, ok := inspectCodeGitResultRepository(
 				"session", filepath.Base(delivery.SourceWorkDir), delivery.WorkDir, delivery.SourceWorkDir, "",
-				delivery.BaseCommit, delivery.WorktreeCommit, delivery.Status,
+				delivery.BaseCommit, delivery.WorktreeCommit, delivery.Status, delivery.WorktreeBranch,
+				delivery.TargetBranch,
 			)
 			if ok {
 				return []codeGitRepository{repository}
@@ -55,7 +56,7 @@ func discoverCodeGitResultRepositories(session *model.AIDevSession, excludedRepo
 	}
 	repository, ok := inspectCodeGitResultRepository(
 		"session", filepath.Base(session.SourceWorkDir), session.WorkDir, session.SourceWorkDir, "",
-		session.BaseCommit, "", session.Status,
+		session.BaseCommit, "", session.Status, session.WorktreeBranch, session.TargetBranch,
 	)
 	if !ok {
 		return nil
@@ -64,7 +65,7 @@ func discoverCodeGitResultRepositories(session *model.AIDevSession, excludedRepo
 }
 
 func inspectCodeGitResultRepository(
-	id, name, worktreeDir, sourceDir, workspacePrefix, baseCommit, storedCommit, deliveryStatus string,
+	id, name, worktreeDir, sourceDir, workspacePrefix, baseCommit, storedCommit, deliveryStatus, branch, targetBranch string,
 ) (codeGitRepository, bool) {
 	root, live := worktreeDir, true
 	repository, ok := inspectCodeGitRepository(id, name, root, workspacePrefix)
@@ -95,6 +96,10 @@ func inspectCodeGitResultRepository(
 	repository.HeadCommit = shortCodeGitCommit(resultCommit)
 	repository.DeliveryStatus = deliveryStatus
 	repository.resultLive = live
+	if branch = strings.TrimSpace(branch); branch != "" {
+		repository.Branch = branch
+	}
+	repository.targetBranch = strings.TrimSpace(targetBranch)
 	repository.ReviewState = "saved"
 	if live {
 		repository.ReviewState = "live"

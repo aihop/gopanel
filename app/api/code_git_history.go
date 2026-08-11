@@ -15,12 +15,14 @@ type codeGitHistoryCommit struct {
 	Author      string    `json:"author"`
 	AuthoredAt  time.Time `json:"authoredAt"`
 	Subject     string    `json:"subject"`
+	Merged      bool      `json:"merged"`
 }
 
 type codeGitHistoryRepository struct {
 	ID           string                 `json:"id"`
 	Name         string                 `json:"name"`
 	Branch       string                 `json:"branch"`
+	TargetBranch string                 `json:"targetBranch"`
 	BaseCommit   string                 `json:"baseCommit"`
 	ResultCommit string                 `json:"resultCommit"`
 	Commits      []codeGitHistoryCommit `json:"commits"`
@@ -51,13 +53,28 @@ func loadCodeGitHistory(session *model.AIDevSession, excludedRepositories []stri
 			return codeGitHistory{}, errors.New("Git 提交历史过大，无法完整展示")
 		}
 		commits := parseCodeGitHistoryCommits(output)
+		for index := range commits {
+			commits[index].Merged = codeGitCommitMerged(repository, commits[index].Commit)
+		}
 		result.Commits += len(commits)
 		result.Repositories = append(result.Repositories, codeGitHistoryRepository{
 			ID: repository.ID, Name: repository.Name, Branch: repository.Branch,
-			BaseCommit: repository.BaseCommit, ResultCommit: repository.ResultCommit, Commits: commits,
+			TargetBranch: repository.targetBranch,
+			BaseCommit:   repository.BaseCommit, ResultCommit: repository.ResultCommit, Commits: commits,
 		})
 	}
 	return result, nil
+}
+
+func codeGitCommitMerged(repository codeGitRepository, commit string) bool {
+	if repository.targetBranch == "" || commit == "" {
+		return false
+	}
+	_, err := runCodeGit(
+		repository.root, "merge-base", "--is-ancestor", commit,
+		"refs/heads/"+repository.targetBranch,
+	)
+	return err == nil
 }
 
 func parseCodeGitHistoryCommits(output string) []codeGitHistoryCommit {
