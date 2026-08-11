@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/global"
@@ -10,8 +11,8 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-func enqueueCodeDeliveryJob(session *model.AIDevSession, userID uint, requestIP string) (*model.AICodeDeliveryJob, error) {
-	job, err := persistCodeDeliveryJob(session, userID, requestIP)
+func enqueueCodeDeliveryJob(session *model.AIDevSession, userID uint, requestIP string, reviewRevision ...string) (*model.AICodeDeliveryJob, error) {
+	job, err := persistCodeDeliveryJob(session, userID, requestIP, reviewRevision...)
 	if err != nil {
 		return nil, err
 	}
@@ -19,7 +20,7 @@ func enqueueCodeDeliveryJob(session *model.AIDevSession, userID uint, requestIP 
 	return job, nil
 }
 
-func persistCodeDeliveryJob(session *model.AIDevSession, userID uint, requestIP string) (*model.AICodeDeliveryJob, error) {
+func persistCodeDeliveryJob(session *model.AIDevSession, userID uint, requestIP string, reviewRevision ...string) (*model.AICodeDeliveryJob, error) {
 	unlockLifecycle := codeSessionLifecycles.lock(session.ID)
 	defer unlockLifecycle()
 	var job model.AICodeDeliveryJob
@@ -46,6 +47,11 @@ func persistCodeDeliveryJob(session *model.AIDevSession, userID uint, requestIP 
 	}
 	if err := captureCodeDeliverySnapshot(&current, userID); err != nil {
 		return nil, err
+	}
+	if len(reviewRevision) > 0 && strings.TrimSpace(reviewRevision[0]) != "" {
+		if err := validateCodeGitReviewRevision(&current, reviewRevision[0]); err != nil {
+			return nil, err
+		}
 	}
 	keys, targetBranch, err := codeDeliveryRepositoryKeys(&current)
 	if err != nil {

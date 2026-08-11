@@ -3,10 +3,13 @@ import { computed, ref, watch } from "vue"
 import { useIntervalFn } from "@vueuse/core"
 import { useI18n } from "vue-i18n"
 import { useMessage } from "naive-ui"
-import Icon from "@/components/common/Icon.vue"
 import CodeConflictManualMerge from "./CodeConflictManualMerge.vue"
 import CodeDeliveryPush from "./CodeDeliveryPush.vue"
 import CodeDeliveryFacts from "./CodeDeliveryFacts.vue"
+import CodeGitDiffViewer from "./CodeGitDiffViewer.vue"
+import CodeGitHistory from "./CodeGitHistory.vue"
+import CodeGitReviewHeader from "./CodeGitReviewHeader.vue"
+import CodeGitRepositoryChanges from "./CodeGitRepositoryChanges.vue"
 import CodeLocalSyncPending from "./CodeLocalSyncPending.vue"
 import CodeSessionRepositorySync from "./CodeSessionRepositorySync.vue"
 import {
@@ -21,7 +24,9 @@ import type {
 	CodeDeliveryJob,
 	CodeGitDiffKind,
 	CodeGitFile,
+	CodeGitHistorySelection,
 	CodeGitRepository,
+	CodeGitScope,
 	CodeGitStatus
 } from "@/api/interface/codeGit"
 import { codeGitReviewMessages } from "../codeGitReviewMessages"
@@ -30,7 +35,10 @@ const props = defineProps<{ sessionId: number | null; active: boolean }>()
 const emit = defineEmits<{ (event: "open-file", file: { path: string; extension: string }): void }>()
 const { t } = useI18n({ messages: codeGitReviewMessages })
 const message = useMessage()
+const scope = ref<CodeGitScope | "history">("result")
 const status = ref<CodeGitStatus | null>(null)
+const historySelection = ref<CodeGitHistorySelection | null>(null)
+const historyRefreshKey = ref(0)
 const loading = ref(false)
 const refreshing = ref(false)
 const loadError = ref("")
@@ -48,18 +56,20 @@ const deliveryPushKey = ref(0)
 const deliveryJob = ref<CodeDeliveryJob | null>(null)
 let statusPending = false
 let diffSequence = 0
-
 interface GitReviewEntry {
 	repository: CodeGitRepository
 	file: CodeGitFile
 	kind: CodeGitDiffKind
 	key: string
 }
-
 const entries = computed<GitReviewEntry[]>(() => {
 	const result: GitReviewEntry[] = []
 	for (const repository of status.value?.repositories || []) {
 		for (const file of repository.files) {
+			if (scope.value === "result") {
+				result.push({ repository, file, kind: "result", key: `${repository.id}:result:${file.path}` })
+				continue
+			}
 			if (file.staged) {
 				result.push({ repository, file, kind: "staged", key: `${repository.id}:staged:${file.path}` })
 			}
@@ -72,8 +82,16 @@ const entries = computed<GitReviewEntry[]>(() => {
 })
 const selectedEntry = computed(() => entries.value.find(entry => entry.key === selectedKey.value) || null)
 const hasChanges = computed(() => entries.value.length > 0)
-const totalAdditions = computed(() => (status.value?.additions || 0) + (status.value?.stagedAdditions || 0))
-const totalDeletions = computed(() => (status.value?.deletions || 0) + (status.value?.stagedDeletions || 0))
+const totalAdditions = computed(() =>
+	scope.value === "result"
+		? status.value?.additions || 0
+		: (status.value?.additions || 0) + (status.value?.stagedAdditions || 0)
+)
+const totalDeletions = computed(() =>
+	scope.value === "result"
+		? status.value?.deletions || 0
+		: (status.value?.deletions || 0) + (status.value?.stagedDeletions || 0)
+)
 const isolatedRepositories = computed(() =>
 	(status.value?.repositories || []).filter(repository => repository.isolated)
 )
@@ -89,7 +107,9 @@ const conflictRepositories = computed(() => {
 	if (deliveryJob.value?.status !== "conflict") return []
 	return (deliveryJob.value.repositories || []).filter(repository => repository.status === "conflict")
 })
-const canSave = computed(() => Boolean(hasIsolation.value && !deliveryActive.value && hasChanges.value))
+const canSave = computed(() =>
+	Boolean(scope.value === "workspace" && hasIsolation.value && !deliveryActive.value && hasChanges.value)
+)
 const deliveryStatusLabel = computed(() => {
 	if (!deliveryJob.value) return ""
 	if (deliveryJob.value.status === "completed" && deliveryJob.value.hasUncommittedChanges) {
@@ -109,23 +129,6 @@ const deliveryLabel = computed(() => {
 	}
 	return t("code.gitWorktreeBranch", { branch: worktreeBranch.value })
 })
-const diffLines = computed(() => diffContent.value.split("\n"))
-const diffLineClass = (line: string) => {
-	if (line.startsWith("+++") || line.startsWith("---")) return "text-slate-400"
-	if (line.startsWith("+")) return "bg-emerald-500/10 text-emerald-300"
-	if (line.startsWith("-")) return "bg-rose-500/10 text-rose-300"
-	if (line.startsWith("@@")) return "text-sky-300"
-	return "text-slate-300"
-}
-
-const entriesFor = (repositoryId: string, kind: CodeGitDiffKind | "untracked") =>
-	entries.value.filter(entry => {
-		if (entry.repository.id !== repositoryId) return false
-		if (kind === "untracked") return entry.kind === "working" && entry.file.untracked
-		if (kind === "working") return entry.kind === "working" && entry.file.changed
-		return entry.kind === "staged"
-	})
-
 const loadDiff = async (entry: GitReviewEntry, preserveContent = false) => {
 	const sequence = ++diffSequence
 	selectedKey.value = entry.key
@@ -139,7 +142,8 @@ const loadDiff = async (entry: GitReviewEntry, preserveContent = false) => {
 			props.sessionId as number,
 			entry.repository.id,
 			entry.file.path,
-			entry.kind
+			entry.kind,
+			scope.value as CodeGitScope
 		)
 		if (sequence !== diffSequence || selectedKey.value !== entry.key) return
 		diffContent.value = response.data.content || ""
@@ -162,16 +166,18 @@ const reconcileSelection = async () => {
 }
 
 const loadStatus = async (silent = false) => {
-	if (!props.sessionId || statusPending) return
+	if (!props.sessionId || statusPending || scope.value === "history") return
+	const requestedScope = scope.value
 	statusPending = true
 	if (!silent) loading.value = true
 	else refreshing.value = true
 	try {
 		const [response, sessionResponse, deliveryResponse] = await Promise.all([
-			getCodeGitStatus(props.sessionId),
+			getCodeGitStatus(props.sessionId, requestedScope),
 			getCodeSession(props.sessionId),
 			getCodeDeliveryJob(props.sessionId)
 		])
+		if (requestedScope !== scope.value) return
 		status.value = response.data
 		deliveryJob.value = deliveryResponse.data
 		worktreeBranch.value = sessionResponse.data.session.worktreeBranch || ""
@@ -184,6 +190,7 @@ const loadStatus = async (silent = false) => {
 		statusPending = false
 		loading.value = false
 		refreshing.value = false
+		if (requestedScope !== scope.value && props.active) void loadStatus()
 	}
 }
 
@@ -227,6 +234,27 @@ const openSelectedFile = () => {
 	emit("open-file", { path: entry.file.workspacePath, extension })
 }
 
+watch(scope, () => {
+	status.value = null
+	historySelection.value = null
+	selectedKey.value = ""
+	diffContent.value = ""
+	loadError.value = ""
+	if (props.active) void loadStatus()
+})
+const refreshReview = () => {
+	if (scope.value === "history") {
+		historyRefreshKey.value++
+		return
+	}
+	void loadStatus()
+}
+const selectHistoryCommit = (selection: CodeGitHistorySelection | null) => {
+	historySelection.value = selection
+	diffContent.value = selection?.content || ""
+	diffTruncated.value = selection?.truncated || false
+}
+
 watch(
 	() => props.sessionId,
 	() => {
@@ -255,77 +283,53 @@ useIntervalFn(() => {
 
 <template>
 	<div class="flex h-full min-h-0 bg-white">
-		<section class="flex min-w-0 flex-1 flex-col bg-[#0f172a] text-slate-100">
-			<div
-				v-if="selectedEntry"
-				class="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-slate-700 px-4"
-			>
-				<div class="min-w-0">
-					<div class="truncate text-sm font-semibold">{{ selectedEntry.file.path }}</div>
-					<div class="text-[11px] text-slate-400">
-						{{ t(selectedEntry.kind === "staged" ? "code.gitStagedDiff" : "code.gitWorkingDiff") }}
-					</div>
-				</div>
-				<n-button
-					v-if="selectedEntry.file.indexStatus !== 'D' && selectedEntry.file.worktreeStatus !== 'D'"
-					size="small"
-					secondary
-					@click="openSelectedFile"
-				>
-					{{ t("code.gitOpenFile") }}
-				</n-button>
-			</div>
-			<n-spin :show="diffLoading" class="min-h-0 flex-1">
-				<div v-if="!selectedEntry" class="flex h-full items-center justify-center">
-					<n-empty :description="t('code.gitSelectFile')" />
-				</div>
-				<div v-else-if="!diffLoading && !diffContent" class="flex h-full items-center justify-center">
-					<n-empty :description="t('code.gitDiffEmpty')" />
-				</div>
-				<div v-else class="flex h-full min-h-0 flex-col">
-					<n-alert v-if="diffTruncated" type="warning" :show-icon="false" class="m-3 mb-0">
-						{{ t("code.gitDiffTruncated") }}
-					</n-alert>
-					<pre class="min-h-0 flex-1 overflow-auto p-4 font-mono text-xs leading-5"><span
-						v-for="(line, index) in diffLines"
-						:key="index"
-						class="block min-w-max px-1"
-						:class="diffLineClass(line)"
-					>{{ line || " " }}</span></pre>
-				</div>
-			</n-spin>
-		</section>
+		<CodeGitDiffViewer
+			:title="historySelection?.title || selectedEntry?.file.path || ''"
+			:subtitle="
+				historySelection?.subtitle ||
+				t(
+					selectedEntry?.kind === 'result'
+						? 'code.gitResultDiff'
+						: selectedEntry?.kind === 'staged'
+							? 'code.gitStagedDiff'
+							: 'code.gitWorkingDiff'
+				)
+			"
+			:content="diffContent"
+			:truncated="diffTruncated"
+			:loading="diffLoading"
+			:empty-description="t(scope === 'history' ? 'code.gitHistorySelect' : 'code.gitSelectFile')"
+			:diff-empty-description="t('code.gitDiffEmpty')"
+			:truncated-description="t('code.gitDiffTruncated')"
+			:open-file-label="t('code.gitOpenFile')"
+			:can-open-file="
+				Boolean(
+					selectedEntry &&
+						selectedEntry.repository.reviewState !== 'delivered' &&
+						selectedEntry.file.resultStatus !== 'D' &&
+						selectedEntry.file.indexStatus !== 'D' &&
+						selectedEntry.file.worktreeStatus !== 'D'
+				)
+			"
+			@open-file="openSelectedFile"
+		/>
 
 		<aside class="flex w-80 shrink-0 flex-col border-l border-slate-200 bg-slate-50/70">
-			<div class="border-b border-slate-200 p-3">
-				<div class="flex items-center justify-between gap-3">
-					<div>
-						<div class="text-sm font-semibold text-slate-800">{{ t("code.gitReview") }}</div>
-						<div v-if="status?.available" class="mt-1 flex items-center gap-2 text-xs text-slate-500">
-							<span>{{ t("code.gitSummary", { files: status.files }) }}</span>
-							<span class="text-emerald-600">+{{ totalAdditions }}</span>
-							<span class="text-rose-500">-{{ totalDeletions }}</span>
-						</div>
-					</div>
-					<n-button
-						circle
-						quaternary
-						size="small"
-						:loading="refreshing"
-						:title="t('code.gitRefresh')"
-						@click="loadStatus()"
-					>
-						<template #icon><Icon name="mdi:refresh" :size="17" /></template>
-					</n-button>
-				</div>
-			</div>
+			<CodeGitReviewHeader
+				v-model="scope"
+				:status="status"
+				:additions="totalAdditions"
+				:deletions="totalDeletions"
+				:refreshing="refreshing"
+				@refresh="refreshReview"
+			/>
 			<CodeSessionRepositorySync
-				v-if="hasIsolation && sessionId"
+				v-if="scope === 'workspace' && hasIsolation && sessionId"
 				:session-id="sessionId"
 				:disabled="deliveryActive"
 				@synced="loadStatus(true)"
 			/>
-			<div v-if="hasIsolation" class="space-y-2 border-b border-slate-200 p-3">
+			<div v-if="scope === 'workspace' && hasIsolation" class="space-y-2 border-b border-slate-200 p-3">
 				<div class="truncate text-xs text-slate-500" :title="deliveryLabel">{{ deliveryLabel }}</div>
 				<n-alert
 					v-if="deliveryJob"
@@ -355,7 +359,7 @@ useIntervalFn(() => {
 						{{ deliveryJob.errorMessage }}
 					</div>
 					<CodeConflictManualMerge :repositories="conflictRepositories" />
-					<CodeDeliveryFacts :facts="deliveryJob.facts" />
+					<CodeDeliveryFacts :facts="deliveryJob.facts" :job-status="deliveryJob.status" />
 				</n-alert>
 				<CodeLocalSyncPending
 					v-if="deliveryJob?.repositories?.length"
@@ -386,20 +390,30 @@ useIntervalFn(() => {
 				</n-button>
 			</div>
 			<CodeDeliveryPush
-				v-if="!hasIsolation && sessionId"
+				v-if="scope === 'workspace' && !hasIsolation && sessionId"
 				:session-id="sessionId"
 				:refresh-key="deliveryPushKey"
 			/>
-			<n-spin :show="loading" class="min-h-0 flex-1">
+			<CodeGitHistory
+				v-if="scope === 'history'"
+				:session-id="sessionId"
+				:active="active"
+				:refresh-key="historyRefreshKey"
+				@selected="selectHistoryCommit"
+			/>
+			<n-spin v-else :show="loading" class="min-h-0 flex-1">
 				<div v-if="loadError" class="p-4">
 					<n-alert type="error" :title="t('code.gitLoadFailed')">{{ loadError }}</n-alert>
 				</div>
 				<n-empty
 					v-else-if="status && !status.available"
-					:description="t('code.gitNoRepository')"
+					:description="t(scope === 'result' ? 'code.gitResultUnavailable' : 'code.gitNoRepository')"
 					class="mt-16"
 				/>
-				<div v-else-if="status && !hasChanges && savedCommitCount" class="space-y-3 p-4">
+				<div
+					v-else-if="scope === 'workspace' && status && !hasChanges && savedCommitCount"
+					class="space-y-3 p-4"
+				>
 					<n-alert type="success" :title="t('code.gitSavedTitle')">
 						{{ t("code.gitSavedDescription", { count: savedCommitCount }) }}
 					</n-alert>
@@ -414,87 +428,23 @@ useIntervalFn(() => {
 						</div>
 					</div>
 				</div>
-				<n-empty v-else-if="status && !hasChanges" :description="t('code.gitNoChanges')" class="mt-16" />
-				<n-scrollbar v-else class="h-full">
-					<div class="space-y-4 p-2.5">
-						<section v-for="repository in status?.repositories || []" :key="repository.id">
-							<div class="mb-2 flex items-center gap-2 px-2">
-								<Icon name="mdi:source-repository" :size="16" />
-								<span class="min-w-0 flex-1 truncate text-xs font-semibold text-slate-700">
-									{{ repository.name }}
-								</span>
-								<span class="truncate text-[11px] text-slate-400">
-									{{ repository.branch || t("code.gitBranchDetached") }}
-								</span>
-							</div>
-							<template
-								v-for="group in [
-									{ kind: 'staged', label: t('code.gitStaged') },
-									{ kind: 'working', label: t('code.gitChanged') },
-									{ kind: 'untracked', label: t('code.gitUntracked') }
-								]"
-								:key="group.kind"
-							>
-								<div
-									v-if="entriesFor(repository.id, group.kind as CodeGitDiffKind | 'untracked').length"
-									class="mb-2"
-								>
-									<div
-										class="px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400"
-									>
-										{{ group.label }}
-									</div>
-									<button
-										v-for="entry in entriesFor(
-											repository.id,
-											group.kind as CodeGitDiffKind | 'untracked'
-										)"
-										:key="entry.key"
-										type="button"
-										class="group flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-slate-200/70"
-										:class="
-											selectedKey === entry.key ? 'bg-blue-50 text-blue-700' : 'text-slate-600'
-										"
-										@click="loadDiff(entry)"
-									>
-										<span class="w-4 shrink-0 text-center text-xs font-semibold">
-											{{
-												entry.file.untracked
-													? "U"
-													: entry.kind === "staged"
-														? entry.file.indexStatus
-														: entry.file.worktreeStatus
-											}}
-										</span>
-										<span class="min-w-0 flex-1 truncate text-xs" :title="entry.file.path">
-											{{ entry.file.path }}
-										</span>
-										<n-button
-											v-if="showAdvancedOperations"
-											text
-											size="tiny"
-											:loading="stagingKey === entry.key"
-											@click.stop="updateStage(entry, entry.kind !== 'staged')"
-										>
-											{{ t(entry.kind === "staged" ? "code.gitUnstage" : "code.gitStage") }}
-										</n-button>
-									</button>
-								</div>
-							</template>
-							<n-alert v-if="repository.truncated" type="warning" :show-icon="false" class="mx-2 mt-2">
-								{{ t("code.gitFilesTruncated") }}
-							</n-alert>
-						</section>
-					</div>
-				</n-scrollbar>
+				<n-empty
+					v-else-if="status && !hasChanges"
+					:description="t(scope === 'result' ? 'code.gitResultEmpty' : 'code.gitNoChanges')"
+					class="mt-16"
+				/>
+				<CodeGitRepositoryChanges
+					v-else
+					:repositories="status?.repositories || []"
+					:entries="entries"
+					:scope="scope as CodeGitScope"
+					:selected-key="selectedKey"
+					:staging-key="stagingKey"
+					:show-advanced-operations="showAdvancedOperations"
+					@select="loadDiff"
+					@update-stage="({ entry, staged }) => updateStage(entry, staged)"
+				/>
 			</n-spin>
 		</aside>
 	</div>
 </template>
-
-<style scoped>
-:deep(.n-spin-container),
-:deep(.n-spin-content) {
-	height: 100%;
-}
-</style>

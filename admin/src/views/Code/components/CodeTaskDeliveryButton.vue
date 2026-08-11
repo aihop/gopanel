@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue"
 import { useDialog, useMessage } from "naive-ui"
 import { useI18n } from "vue-i18n"
-import { getCodeDeliveryJob, mergeCodeSessionWorktree } from "@/api/modules/codeGit"
+import { getCodeDeliveryJob, getCodeGitStatus, mergeCodeSessionWorktree } from "@/api/modules/codeGit"
 import { getCodeSession } from "@/api/modules/code"
 import type { CodeDeliveryJob } from "@/api/interface/codeGit"
 import Icon from "@/components/common/Icon.vue"
@@ -22,11 +22,20 @@ const message = useMessage()
 const job = ref<CodeDeliveryJob | null>(null)
 const available = ref(false)
 const sessionStatus = ref("")
+const reviewReady = ref(false)
+const reviewRevision = ref("")
 const loading = ref(false)
 let pollTimer: ReturnType<typeof setTimeout> | null = null
 
 // 交付状态判定与移动端共用，这里只负责把 phase 映射成桌面文案。
-const { phase, busy: active, completed, canDeliver, progress, pendingLocalSync } = useCodeDelivery({
+const {
+	phase,
+	busy: active,
+	completed,
+	canDeliver,
+	progress,
+	pendingLocalSync
+} = useCodeDelivery({
 	job,
 	available,
 	pendingRequiresCompleted: true
@@ -43,6 +52,7 @@ const labelKeys: Record<CodeDeliveryPhase, string> = {
 	idle: "code.deliverToMain"
 }
 const label = computed(() => {
+	if (!reviewReady.value && canDeliver.value) return t("code.reviewTaskChangesBeforeDelivery")
 	if (phase.value === "running") return t("code.deliveringToMain", { progress: progress.value })
 	// 已交付态要区分主仓是否真的同步了，判定在 useCodeDelivery 里，两端一致。
 	if (phase.value === "delivered") {
@@ -65,11 +75,19 @@ async function loadDelivery(silent = false) {
 		available.value = Boolean(session.worktreeBranch || session.isolationMode === "multi_worktree")
 		if (!available.value) {
 			job.value = null
+			reviewReady.value = false
+			reviewRevision.value = ""
 			return
 		}
-		job.value = (await getCodeDeliveryJob(props.sessionId)).data
+		const [deliveryResponse, reviewResponse] = await Promise.all([
+			getCodeDeliveryJob(props.sessionId),
+			getCodeGitStatus(props.sessionId, "result")
+		])
+		job.value = deliveryResponse.data
+		reviewReady.value = reviewResponse.data.reviewReady
+		reviewRevision.value = reviewResponse.data.reviewRevision || ""
 	} catch (error) {
-		void 0
+		if (!silent) message.error(t("code.deliveryLoadFailed"))
 	}
 	if (active.value) pollTimer = setTimeout(() => void loadDelivery(true), 2000)
 	else if (completed.value && sessionStatus.value === "active")
@@ -77,7 +95,7 @@ async function loadDelivery(silent = false) {
 }
 
 function deliver() {
-	if (loading.value || active.value || !canDeliver.value) return
+	if (loading.value || active.value || !canDeliver.value || !reviewReady.value || !reviewRevision.value) return
 	dialog.warning({
 		title: t("code.deliverToMain"),
 		content: t("code.deliverToMainConfirm"),
@@ -86,12 +104,13 @@ function deliver() {
 		onPositiveClick: async () => {
 			loading.value = true
 			try {
-				job.value = (await mergeCodeSessionWorktree(props.sessionId)).data
+				job.value = (await mergeCodeSessionWorktree(props.sessionId, reviewRevision.value)).data
 				message.success(t("code.deliveryQueuedSuccess"))
 				emit("queued")
 				void loadDelivery(true)
 			} catch (error) {
-				void 0
+				message.error(t("code.deliveryReviewChanged"))
+				void loadDelivery(true)
 			} finally {
 				loading.value = false
 			}
@@ -113,7 +132,7 @@ onBeforeUnmount(clearPoll)
 		size="small"
 		secondary
 		:loading="loading"
-		:disabled="active || !canDeliver"
+		:disabled="active || !canDeliver || !reviewReady || !reviewRevision"
 		:type="codeDeliveryPhaseType(phase)"
 		class="!rounded-xl"
 		@click="deliver"

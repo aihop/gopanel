@@ -244,7 +244,8 @@ func CommitCodeGitChanges(c fiber.Ctx) error {
 func MergeCodeSessionWorktree(c fiber.Ctx) error {
 	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
 	var req struct {
-		Confirm bool `json:"confirm"`
+		Confirm        bool   `json:"confirm"`
+		ReviewRevision string `json:"reviewRevision"`
 	}
 	if err := c.Bind().JSON(&req); err != nil {
 		return c.JSON(e.Fail(err))
@@ -256,7 +257,7 @@ func MergeCodeSessionWorktree(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	job, err := enqueueCodeDeliveryJob(session, claims.UserId, c.IP())
+	job, err := enqueueCodeDeliveryJob(session, claims.UserId, c.IP(), req.ReviewRevision)
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}

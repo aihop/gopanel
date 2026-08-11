@@ -1,9 +1,11 @@
-export type CodeGitDiffKind = "working" | "staged"
+export type CodeGitScope = "workspace" | "result"
+export type CodeGitDiffKind = "working" | "staged" | "result"
 
 export interface CodeGitFile {
 	path: string
 	oldPath?: string
 	workspacePath: string
+	resultStatus?: string
 	indexStatus: string
 	worktreeStatus: string
 	staged: boolean
@@ -28,6 +30,9 @@ export interface CodeGitRepository {
 	deliveryStatus?: string
 	savedCommits?: number
 	headCommit?: string
+	baseCommit?: string
+	resultCommit?: string
+	reviewState?: "live" | "saved" | "delivered"
 }
 
 export interface CodeGitStatus {
@@ -42,6 +47,9 @@ export interface CodeGitStatus {
 	deletions: number
 	stagedAdditions: number
 	stagedDeletions: number
+	scope: CodeGitScope
+	reviewReady: boolean
+	reviewRevision?: string
 }
 
 export type CodeSessionGitSyncRepositoryStatus =
@@ -85,6 +93,41 @@ export interface CodeGitDiff {
 	kind: CodeGitDiffKind
 	content: string
 	truncated: boolean
+}
+
+export interface CodeGitHistoryCommit {
+	commit: string
+	shortCommit: string
+	author: string
+	authoredAt: string
+	subject: string
+}
+
+export interface CodeGitHistoryRepository {
+	id: string
+	name: string
+	branch: string
+	baseCommit: string
+	resultCommit: string
+	commits: CodeGitHistoryCommit[]
+}
+
+export interface CodeGitHistory {
+	available: boolean
+	repositories: CodeGitHistoryRepository[]
+	commits: number
+}
+
+export interface CodeGitHistoryDiff {
+	repositoryId: string
+	commit: string
+	content: string
+	truncated: boolean
+}
+
+export interface CodeGitHistorySelection extends CodeGitHistoryDiff {
+	title: string
+	subtitle: string
 }
 
 export interface CodeGitDeliveryResult {

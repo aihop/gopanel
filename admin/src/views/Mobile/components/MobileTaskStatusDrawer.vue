@@ -123,7 +123,7 @@ watch(
 							<n-alert v-if="state.delivery.errorMessage" class="mt-3" type="error" :show-icon="false">
 								{{ state.delivery.errorMessage }}
 							</n-alert>
-							<CodeDeliveryFacts :facts="state.delivery.facts" />
+							<CodeDeliveryFacts :facts="state.delivery.facts" :job-status="state.delivery.status" />
 						</template>
 						<div class="mt-3 flex justify-end">
 							<MobileTaskDeliveryButton

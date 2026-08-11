@@ -5,7 +5,7 @@ import type { CodeDeliveryFact } from "@/api/interface/codeGit"
 import Icon from "@/components/common/Icon.vue"
 import { codeGitReviewMessages } from "../codeGitReviewMessages"
 
-const props = defineProps<{ facts?: CodeDeliveryFact[] }>()
+const props = defineProps<{ facts?: CodeDeliveryFact[]; jobStatus?: string }>()
 const { t } = useI18n({ messages: codeGitReviewMessages })
 // 后端 fact 的数量会随交付语义演进，这里只依赖「有没有」，
 // 写死具体条数会让新增 fact 时整个区块静默消失。
@@ -23,6 +23,9 @@ const color = (status: CodeDeliveryFact["status"]) => {
 	return "text-slate-400"
 }
 const detail = (fact: CodeDeliveryFact) => {
+	if (props.jobStatus === "conflict" && fact.status === "pending" && fact.key !== "snapshot") {
+		return t("code.gitDeliveryFactStatus_blockedByConflict")
+	}
 	if (fact.total && fact.total > 1) {
 		return t("code.gitDeliveryFactCount", { count: fact.count || 0, total: fact.total })
 	}

@@ -224,9 +224,9 @@ func refreshCodeRepositoryTarget(sourceDir, targetBranch, remoteName string) (st
 }
 
 func refreshCodeRepositoryTargetWithCredential(sourceDir, targetBranch, remoteName string, credentialID uint) (string, error) {
-	status, err := runCodeGit(sourceDir, "status", "--porcelain")
+	status, err := runCodeGit(sourceDir, "status", "--porcelain", "--untracked-files=no")
 	if err != nil || strings.TrimSpace(status) != "" {
-		return "", fmt.Errorf("源仓库 %s 存在未提交变更，无法安全合并", filepath.Base(sourceDir))
+		return "", fmt.Errorf("源仓库 %s 存在未提交的 tracked 变更，无法安全合并", filepath.Base(sourceDir))
 	}
 	currentBranch, err := runCodeGit(sourceDir, "branch", "--show-current")
 	if err != nil || currentBranch != targetBranch {

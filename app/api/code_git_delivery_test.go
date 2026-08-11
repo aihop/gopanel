@@ -90,3 +90,18 @@ func TestCommitCodeSessionWorktreeRequiresStagedChanges(t *testing.T) {
 		t.Fatal("commit without staged changes should fail")
 	}
 }
+
+func TestRefreshCodeRepositoryTargetPreservesUntrackedFiles(t *testing.T) {
+	session, sourceDir := createDeliveryWorktree(t, 934)
+	if err := os.WriteFile(filepath.Join(sourceDir, "local-notes.txt"), []byte("keep\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	commit, err := refreshCodeRepositoryTarget(sourceDir, session.TargetBranch, "")
+	if err != nil || strings.TrimSpace(commit) == "" {
+		t.Fatalf("untracked source file should not block refresh: %q, %v", commit, err)
+	}
+	content, err := os.ReadFile(filepath.Join(sourceDir, "local-notes.txt"))
+	if err != nil || string(content) != "keep\n" {
+		t.Fatalf("untracked source file was not preserved: %q, %v", content, err)
+	}
+}
