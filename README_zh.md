@@ -110,3 +110,7 @@ cd gopanel
 go run main.go
 
 ```
+
+## 许可证
+
+本项目采用 [GNU General Public License v3.0](./LICENSE) 许可协议。

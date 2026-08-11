@@ -110,3 +110,7 @@ cd gopanel
 
 go run main.go
 ```
+
+## License
+
+Licensed under the [GNU General Public License v3.0](./LICENSE).
