@@ -38,6 +38,7 @@ func getAppFromRepo(downloadPath string) error {
 	}()
 	return nil
 }
+
 func (a AppService) SyncAppList() error {
 	global.LOG.Infof("[AppStore] Start syncing remote apps...")
 	list, err := getAppList()
@@ -56,9 +57,12 @@ func (a AppService) SyncAppList() error {
 		if err := global.DB.Where("key = ?", app.Key).First(&existApp).Error; err == nil && existApp.ID > 0 {
 			app.ID = existApp.ID
 		}
-		global.DB.Save(&app)
-		for _, v := range // Check if exists
-		appDef.Versions {
+		if err := global.DB.Save(&app).Error; err != nil {
+			global.LOG.Errorf("[AppStore] Failed to save app %s: %v", app.Key, err)
+			return err
+		}
+		// Check if exists
+		for _, v := range appDef.Versions {
 			detail := model.AppDetail{AppId: app.ID, Version: v.Name, DownloadUrl: v.DownloadUrl, DownloadCallBackUrl: v.DownloadCallBackUrl}
 			formBytes, _ := json.Marshal(v.AppForm)
 			detail.Params = string(formBytes)
@@ -70,7 +74,10 @@ func (a AppService) SyncAppList() error {
 			if err := global.DB.Where("app_id = ? AND version = ?", app.ID, v.Name).First(&existDetail).Error; err == nil && existDetail.ID > 0 {
 				detail.ID = existDetail.ID
 			}
-			global.DB.Save(&detail)
+			if err := global.DB.Save(&detail).Error; err != nil {
+				global.LOG.Errorf("[AppStore] Failed to save app detail %s@%s: %v", app.Key, v.Name, err)
+				return err
+			}
 		}
 	}
 	global.LOG.Infof("[AppStore] App sync completed.")
