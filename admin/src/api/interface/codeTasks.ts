@@ -21,7 +21,7 @@ export interface CodeTaskSummary {
 	unsavedDeletions: number
 	unsavedFiles: number
 	hasUnsavedChanges: boolean
-	deliveryStatus?: "queued" | "running" | "completed" | "conflict" | "failed"
+	deliveryStatus?: "queued" | "running" | "completed" | "partial" | "conflict" | "failed"
 	deliveryStage?: string
 	deliveryProgress: number
 	deliveryQueuePosition: number

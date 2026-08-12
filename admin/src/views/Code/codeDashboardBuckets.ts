@@ -5,7 +5,7 @@ export type CodeDashboardBucket = "attention" | "active" | "doneToday"
 const ACTIVE_TASK_STATUSES = ["running", "queued", "delivering"]
 const ACTIVE_DELIVERY_STATUSES = ["queued", "running"]
 const FINISHED_TASK_STATUSES = ["completed", "failed", "cancelled"]
-const BROKEN_DELIVERY_STATUSES = ["failed", "conflict"]
+const BROKEN_DELIVERY_STATUSES = ["failed", "partial", "conflict"]
 
 /** 任务用 updatedAt 排序；老数据没有这个字段时退回 createdAt。 */
 export function codeTaskTimestamp(task: CodeTaskListItem) {
