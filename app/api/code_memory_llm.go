@@ -31,30 +31,58 @@ type codeMemoryChatMessage struct {
 	Content string `json:"content"`
 }
 
+// codeMemoryLLMOptions 是一次请求的可选参数。
+//
+// 全部做成可选是因为各家支持面差别很大：OpenAI 的 o 系列直接拒绝
+// temperature，部分服务不认 json_schema，reasoning_effort 更是只有少数几家有。
+// 发一个不支持的参数换来的是 400，而不是被忽略。
+type codeMemoryLLMOptions struct {
+	Temperature     *float64
+	Schema          map[string]any
+	ReasoningEffort string
+	MaxTokens       int
+}
+
 // callCodeMemoryLLM 走 OpenAI 兼容的 chat/completions。
 //
-// GoPanel 本身不直接调模型，只给各家 CLI 配置 provider；抽取是第一个需要
-// 自己发请求的场景。复用会话已经配好的 provider，不引入新的配置项——
-// 多一处要填的密钥就多一处会填错的地方。
+// 温度压到 0（当模型支持时）：同一段记录反复抽取应当得到一致结果，
+// 记忆库不该因为采样抖动而长出两条同义条目。
 func callCodeMemoryLLM(ctx context.Context, config codeMemoryLLMConfig, messages []codeMemoryChatMessage, schema map[string]any) (string, error) {
+	return callCodeMemoryLLMWithOptions(ctx, config, messages, codeMemoryLLMOptions{
+		Temperature: floatPointer(0), Schema: schema,
+	})
+}
+
+func callCodeMemoryLLMWithOptions(
+	ctx context.Context,
+	config codeMemoryLLMConfig,
+	messages []codeMemoryChatMessage,
+	options codeMemoryLLMOptions,
+) (string, error) {
 	baseURL := strings.TrimRight(strings.TrimSpace(config.BaseURL), "/")
 	if baseURL == "" || strings.TrimSpace(config.Model) == "" {
-		return "", errors.New("会话未配置可用的模型服务，无法抽取记忆")
+		return "", errors.New("未配置可用的模型服务")
 	}
 	payload := map[string]any{
 		"model":    config.Model,
 		"messages": messages,
-		// 温度压到 0：同一段记录反复抽取应当得到一致结果，
-		// 记忆库不该因为采样抖动而长出两条同义条目。
-		"temperature": 0,
 	}
-	if schema != nil {
+	if options.Temperature != nil {
+		payload["temperature"] = *options.Temperature
+	}
+	if effort := normalizeCodeReasoningEffort(options.ReasoningEffort); effort != codeReasoningEffortNone {
+		payload["reasoning_effort"] = effort
+	}
+	if options.MaxTokens > 0 {
+		payload["max_tokens"] = options.MaxTokens
+	}
+	if options.Schema != nil {
 		payload["response_format"] = map[string]any{
 			"type": "json_schema",
 			"json_schema": map[string]any{
 				"name":   "gopanel_memory_extraction",
 				"strict": false,
-				"schema": schema,
+				"schema": options.Schema,
 			},
 		}
 	}

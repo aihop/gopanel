@@ -48,6 +48,12 @@
       <cloud-account />
     </n-tab-pane>
     <n-tab-pane
+      name="aiAccount"
+      tab="AI 账号"
+    >
+      <ai-account />
+    </n-tab-pane>
+    <n-tab-pane
       v-if="!isSubAdmin"
       name="notify"
       tab="邮件通知"
@@ -68,6 +74,7 @@ import { NTabs, NTabPane, NButton, NSpace, useDialog, useMessage } from "naive-u
 import Update from "./components/Update.vue"
 import Conf from "./components/Conf.vue"
 import CloudAccount from "./components/CloudAccount.vue"
+import AIAccount from "./components/AIAccount.vue"
 import SubAdmin from "./components/SubAdmin.vue"
 import Notify from "./components/Notify.vue"
 import { useAuthStore } from "@/store/auth"

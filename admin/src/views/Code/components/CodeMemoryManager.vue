@@ -2,8 +2,9 @@
 import { ref } from "vue"
 import { useMessage } from "naive-ui"
 import { useI18n } from "vue-i18n"
-import { createCodeMemory, deleteCodeMemory, getCodeMemories, getCodeMemorySetting, saveCodeMemorySetting } from "@/api/modules/code"
+import { createCodeMemory, deleteCodeMemory, getAIProviderAccounts, getCodeMemories, getCodeMemorySetting, saveCodeMemorySetting } from "@/api/modules/code"
 import type { CodeMemoryEntry, CodeMemorySetting } from "@/api/interface/codeMemories"
+import type { AIProviderAccount } from "@/api/interface/aiAccounts"
 import Icon from "@/components/common/Icon.vue"
 import { codeMemoryMessages } from "../codeMemoryMessages"
 import CodeMemoryDrawer from "./CodeMemoryDrawer.vue"
@@ -19,6 +20,7 @@ const removingId = ref(0)
 const showDrawer = ref(false)
 const setting = ref<CodeMemorySetting | null>(null)
 const savingSetting = ref(false)
+const accounts = ref<AIProviderAccount[]>([])
 
 // 不做轮询：记忆只在执行结束后变化，点开时拉一次就够。
 async function load() {
@@ -45,6 +47,12 @@ async function loadSetting() {
 	} catch {
 		void 0
 	}
+	try {
+		const response = await getAIProviderAccounts()
+		if (response.code === 0) accounts.value = (response.data || []).filter(account => account.useForMemoryExtraction)
+	} catch {
+		void 0
+	}
 }
 
 function openDrawer() {
@@ -53,7 +61,7 @@ function openDrawer() {
 	void loadSetting()
 }
 
-async function persistSetting(value: { enabled: boolean; baseUrl: string; apiKey: string; model: string; growthThreshold: number }) {
+async function persistSetting(value: { enabled: boolean; accountId: number; growthThreshold: number }) {
 	savingSetting.value = true
 	try {
 		const response = await saveCodeMemorySetting(value)
@@ -108,6 +116,7 @@ async function remove(id: number) {
 		v-model:show="showDrawer"
 		:entries="entries"
 		:setting="setting"
+		:accounts="accounts"
 		:loading="loading"
 		:load-failed="loadFailed"
 		:saving="saving"

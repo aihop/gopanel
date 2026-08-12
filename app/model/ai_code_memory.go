@@ -50,24 +50,18 @@ type AICodeMemorySummary struct {
 
 func (AICodeMemorySummary) TableName() string { return "ai_code_memory_summaries" }
 
-// AICodeMemorySetting 是抽取用的模型配置。
+// AICodeMemorySetting 是记忆抽取的开关与调度参数。
 //
-// 独立于会话的 provider：执行器（codex / claude CLI）各自持有登录态，
-// 面板从来不掌握它们的模型凭据，靠会话字段永远取不到可用的模型。
-// 而且抽取是一次几百 token 的压缩作业，本该用便宜的小模型，
-// 和写代码那个贵模型不是一回事。
-//
-// 按用户存：记忆本身就是按用户隔离的，模型跟着走才不会出现
-// 「谁的密钥被谁用了」的问题。
+// 凭据不在这里——它引用 AIProviderAccount。同一份凭据以后还要给别的功能用，
+// 每处存一份的话，改一次密钥要改好几个地方，迟早漏掉一处。
 type AICodeMemorySetting struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 	UserID    uint      `gorm:"column:user_id;not null;uniqueIndex" json:"userId"`
 	Enabled   bool      `gorm:"column:enabled;not null;default:false" json:"enabled"`
-	BaseURL   string    `gorm:"column:base_url;type:varchar(1024)" json:"baseUrl"`
-	APIKey    string    `gorm:"column:api_key;type:text" json:"-"`
-	Model     string    `gorm:"column:model;type:varchar(255)" json:"model"`
+	// AccountID 为 0 表示「自动」：按 启用 + 已授权抽取 + 优先级 挑一个。
+	AccountID uint `gorm:"column:account_id;not null;default:0" json:"accountId"`
 	// GrowthThreshold 是「距上次抽取新增多少条消息才再抽一次」。
 	// 0 表示每次执行都抽（回到没有闸门的行为）。
 	GrowthThreshold int `gorm:"column:growth_threshold;not null;default:8" json:"growthThreshold"`

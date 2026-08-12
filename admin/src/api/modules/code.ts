@@ -28,6 +28,7 @@ import type {
 	CodeTokenUsageResponse,
 } from "../interface/code"
 import type { CodeProjectBranches } from "../interface/codeBranches"
+import type { AIProviderAccount, AIProviderAccountInput } from "../interface/aiAccounts"
 import type { CodeMemoryEntry, CodeMemoryList, CodeMemorySetting } from "../interface/codeMemories"
 import type { CodeResidueCleanupOutcome, CodeWorktreeResidueSummary } from "../interface/codeResidues"
 import type { CodeTaskListItem } from "../interface/codeTasks"
@@ -83,11 +84,26 @@ export function deleteCodeProjectBranch(projectId: number, repositoryPath: strin
 	return http.delete(`/code/projects/${projectId}/git/branches`, { repositoryPath, branch, force })
 }
 
+// 保存时后端会实连探测，比普通请求慢，给足超时。
+export function getAIProviderAccounts() {
+	return http.get<AIProviderAccount[]>("/code/ai-accounts")
+}
+
+export function saveAIProviderAccount(data: AIProviderAccountInput, id?: number) {
+	return id
+		? http.put<AIProviderAccount>(`/code/ai-accounts/${id}`, data)
+		: http.post<AIProviderAccount>("/code/ai-accounts", data, 60000)
+}
+
+export function deleteAIProviderAccount(id: number) {
+	return http.delete(`/code/ai-accounts/${id}`)
+}
+
 export function getCodeMemorySetting() {
 	return http.get<CodeMemorySetting>("/code/memory/setting")
 }
 
-export function saveCodeMemorySetting(data: { enabled: boolean; baseUrl: string; apiKey: string; model: string; growthThreshold: number }) {
+export function saveCodeMemorySetting(data: { enabled: boolean; accountId: number; growthThreshold: number }) {
 	return http.put<CodeMemorySetting>("/code/memory/setting", data)
 }
 

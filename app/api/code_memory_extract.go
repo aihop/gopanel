@@ -41,7 +41,7 @@ func runCodeMemoryExtraction(ctx context.Context, sessionID uint) error {
 	if err := global.DB.First(&session, sessionID).Error; err != nil {
 		return err
 	}
-	config, threshold, err := resolveCodeMemoryLLMConfig(session.UserID)
+	account, config, threshold, err := resolveCodeMemoryExtraction(session.UserID)
 	if err != nil {
 		return err
 	}
@@ -66,10 +66,12 @@ func runCodeMemoryExtraction(ctx context.Context, sessionID uint) error {
 		ProjectMemories: projectEntries,
 		OutputLanguage:  "Chinese",
 	})
-	raw, err := callCodeMemoryLLM(ctx, config, []codeMemoryChatMessage{
+	// 参数按账号保存时探测出的能力发：用户给账号定了推理强度但模型不支持时，
+	// 正确的行为是不发，而不是发出去被 400——后台抽取失败只记日志。
+	raw, err := callCodeMemoryLLMWithOptions(ctx, config, []codeMemoryChatMessage{
 		{Role: "system", Content: codeMemoryExtractionSystemPrompt},
 		{Role: "user", Content: prompt},
-	}, codeMemoryExtractionSchema())
+	}, codeMemoryOptionsForAccount(account, codeMemoryExtractionSchema()))
 	if err != nil {
 		return err
 	}

@@ -64,6 +64,7 @@ func Init() error {
 		&model.AICodeMemoryEntry{},
 		&model.AICodeMemorySummary{},
 		&model.AICodeMemorySetting{},
+		&model.AIProviderAccount{},
 		&model.AICodeMemoryExtractionState{},
 		&model.AICodeAuditEvent{},
 		&model.AIInstruction{},

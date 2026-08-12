@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, watch } from "vue"
+import { computed, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 import type { CodeMemoryEntry, CodeMemorySetting } from "@/api/interface/codeMemories"
+import type { AIProviderAccount } from "@/api/interface/aiAccounts"
 import Icon from "@/components/common/Icon.vue"
 import { codeMemoryMessages } from "../codeMemoryMessages"
 
@@ -9,6 +10,7 @@ const props = defineProps<{
 	show: boolean
 	entries: CodeMemoryEntry[]
 	setting: CodeMemorySetting | null
+	accounts: AIProviderAccount[]
 	loading: boolean
 	loadFailed: boolean
 	saving: boolean
@@ -20,7 +22,7 @@ const emit = defineEmits<{
 	refresh: []
 	add: [content: string, allProjects: boolean]
 	remove: [id: number]
-	saveSetting: [value: { enabled: boolean; baseUrl: string; apiKey: string; model: string; growthThreshold: number }]
+	saveSetting: [value: { enabled: boolean; accountId: number; growthThreshold: number }]
 }>()
 const { t } = useI18n({ messages: codeMemoryMessages })
 
@@ -51,21 +53,25 @@ function submit() {
 // 抽取设置默认收起。它是一次性配置，日常打开这个抽屉是为了看记忆，
 // 不该每次都被一堆输入框挡在前面。
 const showSetting = ref(false)
-const settingDraft = ref({ baseUrl: "", apiKey: "", model: "", growthThreshold: 8 })
+const settingDraft = ref({ accountId: 0, growthThreshold: 8 })
 
 watch(
 	() => props.setting,
 	value => {
 		if (!value) return
 		settingDraft.value = {
-			baseUrl: value.baseUrl || "",
-			apiKey: "",
-			model: value.model || "",
+			accountId: value.accountId ?? 0,
 			growthThreshold: value.growthThreshold ?? 8,
 		}
 	},
 	{ immediate: true },
 )
+
+// 账号在系统设置里统一管理，这里只选用哪个。0 表示自动（按优先级挑）。
+const accountOptions = computed(() => [
+	{ label: t("code.memoryAccountAuto"), value: 0 },
+	...props.accounts.map(account => ({ label: `${account.name} · ${account.model}`, value: account.id })),
+])
 
 function saveSetting(enabled: boolean) {
 	emit("saveSetting", { enabled, ...settingDraft.value })
@@ -92,22 +98,15 @@ function saveSetting(enabled: boolean) {
 
 			<!-- 没启用时把提示顶到最前：这时候列表必然是空的，
 			     不说清原因用户只会以为功能坏了 -->
-			<n-alert v-if="setting && !setting.enabled && !showSetting" type="warning" :show-icon="false" class="mb-3">
+			<n-alert v-if="setting && !setting.ready && !showSetting" type="warning" :show-icon="false" class="mb-3">
 				<div class="text-xs font-medium">{{ t("code.memoryDisabledTitle") }}</div>
-				<p class="mt-1 text-[11px] leading-relaxed opacity-80">{{ t("code.memoryDisabledHint") }}</p>
+				<p class="mt-1 text-[11px] leading-relaxed opacity-80">{{ setting.readyReason || t("code.memoryDisabledHint") }}</p>
 				<n-button size="tiny" class="mt-2" @click="showSetting = true">{{ t("code.memorySetting") }}</n-button>
 			</n-alert>
 
 			<div v-if="showSetting" class="mb-3 flex flex-col gap-2 rounded-xl border border-slate-200/80 p-3">
-				<n-input v-model:value="settingDraft.baseUrl" size="small" :placeholder="t('code.memoryBaseUrl')" />
-				<n-input v-model:value="settingDraft.model" size="small" :placeholder="t('code.memoryModel')" />
-				<n-input
-					v-model:value="settingDraft.apiKey"
-					size="small"
-					type="password"
-					show-password-on="click"
-					:placeholder="setting?.hasApiKey ? t('code.memoryApiKeyKeep') : t('code.memoryApiKey')"
-				/>
+				<n-select v-model:value="settingDraft.accountId" size="small" :options="accountOptions" />
+				<p class="text-[11px] text-slate-400">{{ t("code.memoryAccountHint") }}</p>
 				<div class="flex items-center gap-2">
 					<span class="shrink-0 text-[11px] text-slate-500">{{ t("code.memoryThreshold") }}</span>
 					<n-input-number v-model:value="settingDraft.growthThreshold" size="small" :min="0" :max="100" class="w-24" />

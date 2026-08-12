@@ -2,13 +2,11 @@ package api
 
 import (
 	"errors"
-	"strings"
 
 	"github.com/aihop/gopanel/app/e"
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
-	"github.com/aihop/gopanel/utils/encrypt"
 	"github.com/aihop/gopanel/utils/token"
 	"github.com/gofiber/fiber/v3"
 )
@@ -17,20 +15,33 @@ const codeMemoryDefaultGrowthThreshold = 8
 
 type codeMemorySettingView struct {
 	Enabled         bool   `json:"enabled"`
-	BaseURL         string `json:"baseUrl"`
-	Model           string `json:"model"`
-	HasAPIKey       bool   `json:"hasApiKey"`
+	AccountID       uint   `json:"accountId"`
+	AccountName     string `json:"accountName,omitempty"`
 	GrowthThreshold int    `json:"growthThreshold"`
+	// Ready 表示现在真的能抽。开了开关但没有可用账号时它是 false——
+	// 界面据此提示「去添加 AI 账号」，而不是让用户对着空列表猜。
+	Ready       bool   `json:"ready"`
+	ReadyReason string `json:"readyReason,omitempty"`
 }
 
-func codeMemorySettingViewOf(setting *model.AICodeMemorySetting) codeMemorySettingView {
-	if setting == nil {
-		return codeMemorySettingView{GrowthThreshold: codeMemoryDefaultGrowthThreshold}
+func buildCodeMemorySettingView(userID uint, setting *model.AICodeMemorySetting) codeMemorySettingView {
+	view := codeMemorySettingView{GrowthThreshold: codeMemoryDefaultGrowthThreshold}
+	if setting != nil {
+		view.Enabled = setting.Enabled
+		view.AccountID = setting.AccountID
+		view.GrowthThreshold = setting.GrowthThreshold
 	}
-	return codeMemorySettingView{
-		Enabled: setting.Enabled, BaseURL: setting.BaseURL, Model: setting.Model,
-		HasAPIKey: strings.TrimSpace(setting.APIKey) != "", GrowthThreshold: setting.GrowthThreshold,
+	if !view.Enabled {
+		view.ReadyReason = "尚未启用记忆抽取"
+		return view
 	}
+	account, err := selectAIProviderAccountForMemory(userID, view.AccountID)
+	if err != nil {
+		view.ReadyReason = err.Error()
+		return view
+	}
+	view.Ready, view.AccountName = true, account.Name
+	return view
 }
 
 func GetCodeMemorySetting(c fiber.Ctx) error {
@@ -39,21 +50,19 @@ func GetCodeMemorySetting(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	return c.JSON(e.Succ(codeMemorySettingViewOf(setting)))
+	return c.JSON(e.Succ(buildCodeMemorySettingView(claims.UserId, setting)))
 }
 
-// SaveCodeMemorySetting 保存抽取模型配置。
+// SaveCodeMemorySetting 保存记忆抽取的开关与调度参数。
 //
-// 开启时必须给全 baseURL / model / 密钥：配了一半就开启，只会让抽取每次
-// 静默失败——而抽取跑在后台，用户根本不会知道它一直在失败。
+// 启用时必须当场解析出一个可用账号：开了开关却没有可用账号，
+// 抽取会在后台一直静默失败，而用户以为自己已经打开了。
 func SaveCodeMemorySetting(c fiber.Ctx) error {
 	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
 	var req struct {
-		Enabled         bool   `json:"enabled"`
-		BaseURL         string `json:"baseUrl"`
-		APIKey          string `json:"apiKey"`
-		Model           string `json:"model"`
-		GrowthThreshold int    `json:"growthThreshold"`
+		Enabled         bool `json:"enabled"`
+		AccountID       uint `json:"accountId"`
+		GrowthThreshold int  `json:"growthThreshold"`
 	}
 	if err := c.Bind().JSON(&req); err != nil {
 		return c.JSON(e.Fail(err))
@@ -65,35 +74,23 @@ func SaveCodeMemorySetting(c fiber.Ctx) error {
 	if setting == nil {
 		setting = &model.AICodeMemorySetting{UserID: claims.UserId}
 	}
-	setting.BaseURL = strings.TrimRight(strings.TrimSpace(req.BaseURL), "/")
-	setting.Model = strings.TrimSpace(req.Model)
 	setting.Enabled = req.Enabled
+	setting.AccountID = req.AccountID
 	setting.GrowthThreshold = normalizeCodeMemoryGrowthThreshold(req.GrowthThreshold)
-	// 留空表示沿用已保存的密钥，和 Git 凭据的做法一致。
-	if strings.TrimSpace(req.APIKey) != "" {
-		ciphertext, err := encrypt.StringEncrypt(req.APIKey)
-		if err != nil {
-			return c.JSON(e.Fail(errors.New("抽取模型密钥加密失败")))
-		}
-		setting.APIKey = ciphertext
-	}
 	if setting.Enabled {
-		if setting.BaseURL == "" || setting.Model == "" {
-			return c.JSON(e.Fail(errors.New("启用记忆抽取需要填写模型服务地址和模型名称")))
-		}
-		if strings.TrimSpace(setting.APIKey) == "" {
-			return c.JSON(e.Fail(errors.New("启用记忆抽取需要填写模型密钥")))
+		if _, err := selectAIProviderAccountForMemory(claims.UserId, setting.AccountID); err != nil {
+			return c.JSON(e.Fail(err))
 		}
 	}
 	if err := global.DB.Save(setting).Error; err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	return c.JSON(e.Succ(codeMemorySettingViewOf(setting)))
+	return c.JSON(e.Succ(buildCodeMemorySettingView(claims.UserId, setting)))
 }
 
 // normalizeCodeMemoryGrowthThreshold 收敛阈值。
 // 上限压在 100：再大就等于关掉自动抽取，那该用 enabled 开关表达，
-// 而不是把阈值调到一个"实际上永远达不到"的值。
+// 而不是把阈值调到一个「实际上永远达不到」的值。
 func normalizeCodeMemoryGrowthThreshold(value int) int {
 	if value < 0 {
 		return codeMemoryDefaultGrowthThreshold
@@ -115,25 +112,22 @@ func loadCodeMemorySetting(userID uint) (*model.AICodeMemorySetting, error) {
 	return &setting, nil
 }
 
-// resolveCodeMemoryLLMConfig 解出可用的抽取模型配置。
-// 没配或没启用时返回明确的原因，让日志能说清楚为什么没抽。
-func resolveCodeMemoryLLMConfig(userID uint) (codeMemoryLLMConfig, int, error) {
+// resolveCodeMemoryExtraction 解出这次抽取要用的账号和调度参数。
+func resolveCodeMemoryExtraction(userID uint) (*model.AIProviderAccount, codeMemoryLLMConfig, int, error) {
 	setting, err := loadCodeMemorySetting(userID)
 	if err != nil {
-		return codeMemoryLLMConfig{}, 0, err
+		return nil, codeMemoryLLMConfig{}, 0, err
 	}
 	if setting == nil || !setting.Enabled {
-		return codeMemoryLLMConfig{}, 0, errors.New("尚未启用记忆抽取")
+		return nil, codeMemoryLLMConfig{}, 0, errors.New("尚未启用记忆抽取")
 	}
-	apiKey := ""
-	if strings.TrimSpace(setting.APIKey) != "" {
-		decrypted, decryptErr := encrypt.StringDecrypt(setting.APIKey)
-		if decryptErr != nil {
-			return codeMemoryLLMConfig{}, 0, errors.New("抽取模型密钥无法解密，请重新保存")
-		}
-		apiKey = decrypted
+	account, err := selectAIProviderAccountForMemory(userID, setting.AccountID)
+	if err != nil {
+		return nil, codeMemoryLLMConfig{}, 0, err
 	}
-	return codeMemoryLLMConfig{
-		BaseURL: setting.BaseURL, APIKey: apiKey, Model: setting.Model,
-	}, setting.GrowthThreshold, nil
+	config, err := aiProviderAccountLLMConfig(account)
+	if err != nil {
+		return nil, codeMemoryLLMConfig{}, 0, err
+	}
+	return account, config, setting.GrowthThreshold, nil
 }

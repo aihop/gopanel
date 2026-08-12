@@ -18,9 +18,12 @@ export interface CodeMemoryList {
 
 export interface CodeMemorySetting {
 	enabled: boolean
-	baseUrl: string
-	model: string
-	hasApiKey: boolean
+	/** 0 表示「自动」：按 启用 + 已授权抽取 + 优先级 挑一个账号。 */
+	accountId: number
+	accountName?: string
 	// 距上次抽取新增多少条消息才再抽一次；0 表示每次执行都抽。
 	growthThreshold: number
+	/** 开了开关但没有可用账号时为 false，reason 说明缺什么。 */
+	ready: boolean
+	readyReason?: string
 }
