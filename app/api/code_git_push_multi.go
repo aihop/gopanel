@@ -33,7 +33,7 @@ func loadCodeMultiRepositoryPushStatus(session *model.AIDevSession) (codePushRes
 			Branch: remoteBranch,
 			Commit: repository.MergeCommit, ErrorMessage: repository.PushError,
 			LocalSynced: repository.SourceAppliedAt != nil, LocalSyncError: repository.LocalSyncError,
-			LocalSyncCommand: codeDeliveryLocalSyncCommand(repository.SourceDir, repository.MergeCommit),
+			LocalSyncCommand: codeDeliveryLocalSyncCommand(repository.SourceDir, repository.TargetBranch, repository.MergeCommit),
 			Ready:            repository.Status == codeDeliveryCompleted && strings.TrimSpace(repository.MergeCommit) != "",
 		})
 	}

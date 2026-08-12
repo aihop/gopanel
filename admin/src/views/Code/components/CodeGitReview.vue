@@ -339,7 +339,9 @@ useIntervalFn(() => {
 				</n-alert>
 				<CodeLocalSyncPending
 					v-if="deliveryJob?.repositories?.length"
+					:session-id="sessionId"
 					:repositories="deliveryJob.repositories"
+					@synced="loadStatus(true)"
 				/>
 				<n-input
 					v-model:value="commitMessage"

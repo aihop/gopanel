@@ -4,6 +4,7 @@ import type {
 	CodeDeliveryConflictResolution,
 	CodeDeliveryConflicts,
 	CodeDeliveryJob,
+	CodeDeliveryLocalSyncResult,
 	CodeDeliveryPushResult,
 	CodeGitDeliveryResult,
 	CodeGitDiff,
@@ -87,6 +88,14 @@ export function completeCodeDeliveryConflicts(sessionId: number) {
 
 export function confirmManualCodeDeliveryConflict(sessionId: number) {
 	return http.post<CodeDeliveryJob>(`/code/sessions/${sessionId}/delivery/conflicts/manual-confirm`, {}, 70000)
+}
+
+export function syncCodeSessionDeliveryLocal(sessionId: number) {
+	return http.post<CodeDeliveryLocalSyncResult>(
+		`/code/sessions/${sessionId}/delivery/local-sync`,
+		{ confirm: true },
+		70000
+	)
 }
 
 export function getCodeDeliveryPushStatus(sessionId: number) {

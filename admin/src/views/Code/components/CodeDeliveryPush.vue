@@ -86,7 +86,7 @@ onMounted(() => void loadStatus())
 					</n-button>
 				</div>
 
-				<CodeLocalSyncPending :repositories="repositories" />
+				<CodeLocalSyncPending :session-id="sessionId" :repositories="repositories" @synced="loadStatus" />
 			</template>
 		</n-spin>
 	</div>

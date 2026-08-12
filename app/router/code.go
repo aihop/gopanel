@@ -75,6 +75,7 @@ func CodeRouter(r fiber.Router) {
 		group.Put("/sessions/:id/delivery/conflicts/file", api.SaveCodeDeliveryConflictFile)
 		group.Post("/sessions/:id/delivery/conflicts/complete", api.CompleteCodeDeliveryConflicts)
 		group.Post("/sessions/:id/delivery/conflicts/manual-confirm", api.ConfirmManualCodeDeliveryConflict)
+		group.Post("/sessions/:id/delivery/local-sync", api.SyncCodeSessionDeliveryLocal)
 		group.Get("/sessions/:id/delivery/push", api.GetCodeDeliveryPushStatus)
 		group.Post("/sessions/:id/delivery/push", api.PushCodeSessionDelivery)
 		group.Post("/sessions/:id/database-query", api.ExecuteCodeDatabaseQuery)

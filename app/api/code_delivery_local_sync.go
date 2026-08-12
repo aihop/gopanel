@@ -49,12 +49,31 @@ func codeDeliveryLocalSyncReason(reason string) string {
 }
 
 // codeDeliveryLocalSyncCommand 给出可直接执行的手动同步命令。
-func codeDeliveryLocalSyncCommand(sourceDir, mergeCommit string) string {
-	sourceDir, mergeCommit = strings.TrimSpace(sourceDir), strings.TrimSpace(mergeCommit)
-	if sourceDir == "" || mergeCommit == "" {
+func codeShellQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
+}
+
+func codeDeliveryLocalSyncCommand(sourceDir, targetBranch, mergeCommit string) string {
+	sourceDir, targetBranch, mergeCommit = strings.TrimSpace(sourceDir), strings.TrimSpace(targetBranch), strings.TrimSpace(mergeCommit)
+	if sourceDir == "" || targetBranch == "" || mergeCommit == "" {
 		return ""
 	}
-	return fmt.Sprintf("git -C %s merge --ff-only %s", sourceDir, mergeCommit)
+	root := codeShellQuote(sourceDir)
+	return fmt.Sprintf("git -C %s switch %s && git -C %s merge %s", root, codeShellQuote(targetBranch), root, codeShellQuote(mergeCommit))
+}
+
+type codeDeliveryLocalSyncRepository struct {
+	RepositoryID     string `json:"repositoryId"`
+	RepositoryName   string `json:"repositoryName"`
+	Commit           string `json:"commit,omitempty"`
+	LocalSynced      bool   `json:"localSynced"`
+	LocalSyncError   string `json:"localSyncError,omitempty"`
+	LocalSyncCommand string `json:"localSyncCommand,omitempty"`
+}
+
+type codeDeliveryLocalSyncResult struct {
+	Status       string                            `json:"status"`
+	Repositories []codeDeliveryLocalSyncRepository `json:"repositories"`
 }
 
 func applyCodeDeliveryLocalSync(delivery *model.AICodeDelivery) error {

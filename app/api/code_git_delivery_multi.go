@@ -208,7 +208,7 @@ func codeStoredRepositoryDeliveryResult(repository *model.AIDevSessionRepository
 		SourceAppliedAt:  repository.SourceAppliedAt,
 		LocalSynced:      repository.SourceAppliedAt != nil,
 		LocalSyncError:   repository.LocalSyncError,
-		LocalSyncCommand: codeDeliveryLocalSyncCommand(repository.SourceDir, repository.MergeCommit),
+		LocalSyncCommand: codeDeliveryLocalSyncCommand(repository.SourceDir, repository.TargetBranch, repository.MergeCommit),
 		ErrorMessage:     repository.PushError,
 	}
 }

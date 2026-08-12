@@ -248,6 +248,20 @@ export interface CodeDeliveryPushResult {
 	repositories: CodeDeliveryPushRepository[]
 }
 
+export interface CodeDeliveryLocalSyncRepository {
+	repositoryId: string
+	repositoryName: string
+	commit?: string
+	localSynced: boolean
+	localSyncError?: string
+	localSyncCommand?: string
+}
+
+export interface CodeDeliveryLocalSyncResult {
+	status: "completed" | "partial" | "blocked"
+	repositories: CodeDeliveryLocalSyncRepository[]
+}
+
 export interface CodeRepositoryDeliveryResult {
 	repositoryId: string
 	repositoryName: string

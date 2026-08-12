@@ -115,7 +115,7 @@ func loadCodeDeliveryPushStatus(session *model.AIDevSession) (codePushResult, er
 		),
 		Commit: delivery.PushedCommit, ErrorMessage: delivery.PushError,
 		LocalSynced: delivery.SourceAppliedAt != nil, LocalSyncError: delivery.LocalSyncError,
-		LocalSyncCommand: codeDeliveryLocalSyncCommand(delivery.SourceWorkDir, delivery.MergeCommit),
+		LocalSyncCommand: codeDeliveryLocalSyncCommand(delivery.SourceWorkDir, delivery.TargetBranch, delivery.MergeCommit),
 		Ready:            strings.TrimSpace(delivery.MergeCommit) != "",
 	}
 	return summarizeCodePushResults([]codeRepositoryPushResult{result}), nil
