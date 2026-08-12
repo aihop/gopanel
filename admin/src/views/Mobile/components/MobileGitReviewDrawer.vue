@@ -3,7 +3,7 @@ import { computed, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 import { useMessage } from "naive-ui"
 import type { CodeSession } from "@/api/interface/code"
-import type { CodeDeliveryJob, CodeGitHistorySelection, CodeGitStatus } from "@/api/interface/codeGit"
+import type { CodeDeliveryJob, CodeGitHistorySelection, CodeGitScope } from "@/api/interface/codeGit"
 import {
 	completeMobileDeliveryConflicts,
 	getMobileDeliveryConflictFile,
@@ -25,6 +25,7 @@ import { codeGitReviewMessages } from "@/views/Code/codeGitReviewMessages"
 import type { CodeGitReviewView } from "@/views/Code/codeGitReviewView"
 import MobileGitCommitActions from "./MobileGitCommitActions.vue"
 import MobileGitDiffDrawer from "./MobileGitDiffDrawer.vue"
+import { useMobileGitReviewStatuses } from "./useMobileGitReviewStatuses"
 
 const props = defineProps<{
 	show: boolean
@@ -38,10 +39,7 @@ const emit = defineEmits<{
 const { t } = useI18n({ messages: codeGitReviewMessages })
 const message = useMessage()
 const view = ref<CodeGitReviewView>("changes")
-const status = ref<CodeGitStatus | null>(null)
-const loading = ref(false)
-const refreshing = ref(false)
-const loadError = ref("")
+const statusState = useMobileGitReviewStatuses(getMobileGitStatus, () => t("code.gitLoadFailed"))
 const selectedKey = ref("")
 const diffTitle = ref("")
 const diffSubtitle = ref("")
@@ -56,33 +54,19 @@ const showAdvancedOperations = ref(false)
 const conflictResolverVisible = ref(false)
 const revision = ref(0)
 const historyRefreshKey = ref(0)
-let statusPending = false
 let diffSequence = 0
 
+const reviewScope = computed<CodeGitScope>(() => (view.value === "changes" ? "result" : "workspace"))
+const status = computed(() => (view.value === "history" ? null : statusState.statuses.value[reviewScope.value]))
+const loading = computed(() => view.value !== "history" && statusState.loading.value[reviewScope.value])
+const refreshing = computed(() => view.value !== "history" && statusState.refreshing.value[reviewScope.value])
+const loadError = computed(() => (view.value === "history" ? "" : statusState.errors.value[reviewScope.value]))
 const entries = computed(() => codeGitReviewEntries(status.value))
 const totals = computed(() => codeGitReviewTotals(status.value))
-const reviewScope = computed(() => (view.value === "changes" ? "result" : "workspace"))
 
 const loadStatus = async (silent = false) => {
-	if (!props.session.id || statusPending || view.value === "history") return
-	const requestedView = view.value
-	const requestedSessionId = props.session.id
-	statusPending = true
-	if (silent) refreshing.value = true
-	else loading.value = true
-	try {
-		const response = await getMobileGitStatus(requestedSessionId, reviewScope.value)
-		if (requestedView !== view.value || requestedSessionId !== props.session.id) return
-		status.value = response
-		loadError.value = ""
-	} catch (error) {
-		loadError.value = error instanceof Error ? error.message : t("code.gitLoadFailed")
-	} finally {
-		statusPending = false
-		loading.value = false
-		refreshing.value = false
-		if ((requestedView !== view.value || requestedSessionId !== props.session.id) && props.show) void loadStatus()
-	}
+	if (!props.session.id || view.value === "history") return
+	await statusState.load(props.session.id, reviewScope.value, silent)
 }
 
 const loadDiff = async (entry: CodeGitReviewEntry) => {
@@ -135,7 +119,8 @@ const loadHistoryDiff = (sessionId: number, repositoryId: string, commit: string
 const updateStage = async (entry: CodeGitReviewEntry, staged: boolean) => {
 	stagingKey.value = entry.key
 	try {
-		status.value = await updateMobileGitStage(props.session.id, entry.repository.id, [entry.file.path], staged)
+		const updated = await updateMobileGitStage(props.session.id, entry.repository.id, [entry.file.path], staged)
+		statusState.replace("workspace", updated)
 		message.success(t("code.gitStageSuccess"))
 	} catch (error) {
 		message.error(error instanceof Error ? error.message : t("code.gitStageFailed"))
@@ -150,6 +135,8 @@ const saveChanges = async () => {
 	try {
 		await saveMobileGitChanges(props.session.id, commitMessage.value.trim())
 		commitMessage.value = ""
+		statusState.invalidate("result")
+		statusState.invalidate("workspace")
 		message.success(t("code.gitSaveSuccess"))
 		revision.value++
 		await loadStatus(true)
@@ -167,6 +154,8 @@ const refresh = () => {
 }
 
 const conflictResolutionCompleted = async () => {
+	statusState.invalidate("result")
+	statusState.invalidate("workspace")
 	revision.value++
 	await loadStatus(true)
 	emit("updated")
@@ -174,7 +163,6 @@ const conflictResolutionCompleted = async () => {
 
 watch(view, () => {
 	selectedKey.value = ""
-	loadError.value = ""
 	if (props.show && view.value !== "history") void loadStatus()
 })
 watch(
@@ -182,7 +170,7 @@ watch(
 	([show]) => {
 		if (!show) return
 		view.value = "changes"
-		status.value = null
+		statusState.reset()
 		selectedKey.value = ""
 		diffVisible.value = false
 		void loadStatus()
