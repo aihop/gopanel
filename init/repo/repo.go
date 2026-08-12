@@ -61,6 +61,8 @@ func Init() error {
 		&model.AICodeDeliveryJob{},
 		&model.AICodeDeliveryLease{},
 		&model.AICodeDeliveryAttempt{},
+		&model.AICodeMemoryEntry{},
+		&model.AICodeMemorySummary{},
 		&model.AICodeAuditEvent{},
 		&model.AIInstruction{},
 		&model.AIPreview{},

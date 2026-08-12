@@ -72,7 +72,7 @@ func executeCodeAgentRun(
 	if err := ensureCodeManagedPushGuards(session); err != nil {
 		return failCodeExecutionRun(sessionRepo, run, startedAt, err)
 	}
-	executionPrompt := codeManagedDeliveryPrompt(session, prompt)
+	executionPrompt := codeMemoryPrompt(session, codeManagedDeliveryPrompt(session, prompt))
 	command, preparedSessionID, buildErr := buildCodeExecutorCommand(ctx, executorID, workDir, executionPrompt, nativeSessionID, executorSessionKey, session)
 	if preparedSessionID != "" {
 		run.NativeSessionID = preparedSessionID
@@ -139,6 +139,11 @@ func executeCodeAgentRun(
 	})
 	if persistErr != nil {
 		return run, run.Output, errors.Join(execErr, persistErr)
+	}
+	// 一次执行结束就顺手沉淀一次。放在这里而不是交付时：多数会话最终并不
+	// 走到交付（实测 58 个会话只有 1 个到达终态），等交付再抽就几乎什么都留不下。
+	if execErr == nil {
+		enqueueCodeMemoryExtraction(sessionID)
 	}
 	return run, run.Output, execErr
 }
