@@ -16,7 +16,6 @@ import {
 	type CodeDashboardBucket,
 } from "../codeDashboardBuckets"
 import { useCodeTaskPolling } from "../useCodeTaskPolling"
-import CodeDashboardSkeleton from "./CodeDashboardSkeleton.vue"
 import CodeDashboardTaskRow from "./CodeDashboardTaskRow.vue"
 import SessionHistoryDrawer from "./SessionHistoryDrawer.vue"
 import CodeTaskDetailPane from "./CodeTaskDetailPane.vue"
@@ -200,12 +199,17 @@ const toggleArchived = async (task: CodeTaskListItem) => {
     class="relative flex min-h-0 flex-1 flex-col"
     :aria-busy="initialLoading"
   >
-    <Transition name="dashboard-skeleton">
-      <CodeDashboardSkeleton
-        v-if="initialLoading"
-        :list-collapsed="listCollapsed"
+    <div
+      v-if="initialLoading"
+      class="flex min-h-0 flex-1 items-center justify-center"
+      aria-hidden="true"
+    >
+      <n-spin
+        size="small"
+        :delay="150"
       />
-    </Transition>
+    </div>
+    <template v-else>
     <!--
       顶部只留一行：标题 + 状态数字（既是概览也是筛选器）+ 工具栏插槽。
       大标题和副标题去掉了 —— 面包屑已经写了「开发工作台」，
@@ -444,6 +448,7 @@ const toggleArchived = async (task: CodeTaskListItem) => {
       :session-id="selectedTask?.sessionId || null"
       :task-id="selectedTask?.id || null"
     />
+    </template>
   </div>
 </template>
 
@@ -453,13 +458,6 @@ const toggleArchived = async (task: CodeTaskListItem) => {
 	border: 1px solid color-mix(in srgb, var(--n-border-color) 92%, transparent);
 	box-shadow: 0 8px 24px rgb(15 23 42 / 4.5%);
 }
-.dashboard-skeleton-leave-active {
-	transition: opacity 0.24s ease;
-}
-.dashboard-skeleton-leave-to {
-	opacity: 0;
-}
-
 .dashboard-stat {
 	--stat-accent: #94a3b8;
 	background: color-mix(in srgb, var(--n-color) 97%, transparent);
