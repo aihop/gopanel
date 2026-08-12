@@ -16,6 +16,7 @@ import {
 	type CodeDashboardBucket,
 } from "../codeDashboardBuckets"
 import { useCodeTaskPolling } from "../useCodeTaskPolling"
+import CodeDashboardSkeleton from "./CodeDashboardSkeleton.vue"
 import CodeDashboardTaskRow from "./CodeDashboardTaskRow.vue"
 import SessionHistoryDrawer from "./SessionHistoryDrawer.vue"
 import CodeTaskDetailPane from "./CodeTaskDetailPane.vue"
@@ -31,6 +32,7 @@ const message = useMessage()
 
 const tasks = ref<CodeTaskListItem[]>([])
 const taskTotal = ref(0)
+const tasksInitialLoading = ref(true)
 const tasksLoadError = ref(false)
 const activeFilter = ref<CodeDashboardBucket | "delivering" | null>(null)
 const selectedProjectId = ref<number | null>(null)
@@ -72,7 +74,12 @@ const refreshTasks = async (silent = true) => {
 // 「今天」是按本地日历判断的，时间戳得自己往前走，否则跨零点会一直停在昨天。
 useIntervalFn(() => (now.value = new Date()), 30000)
 
-onMounted(() => void refreshTasks(false))
+onMounted(async () => {
+	await refreshTasks(false)
+	tasksInitialLoading.value = false
+})
+
+const initialLoading = computed(() => props.loading || tasksInitialLoading.value)
 
 const projectNameById = computed(() => {
 	const map = new Map<number, string>()
@@ -189,7 +196,16 @@ const toggleArchived = async (task: CodeTaskListItem) => {
 </script>
 
 <template>
-  <div class="flex min-h-0 flex-1 flex-col">
+  <div
+    class="relative flex min-h-0 flex-1 flex-col"
+    :aria-busy="initialLoading"
+  >
+    <Transition name="dashboard-skeleton">
+      <CodeDashboardSkeleton
+        v-if="initialLoading"
+        :list-collapsed="listCollapsed"
+      />
+    </Transition>
     <!--
       顶部只留一行：标题 + 状态数字（既是概览也是筛选器）+ 工具栏插槽。
       大标题和副标题去掉了 —— 面包屑已经写了「开发工作台」，
@@ -437,6 +453,14 @@ const toggleArchived = async (task: CodeTaskListItem) => {
 	background: color-mix(in srgb, var(--n-color) 97%, transparent);
 	border: 1px solid color-mix(in srgb, var(--n-border-color) 92%, transparent);
 	box-shadow: 0 8px 24px rgb(15 23 42 / 4.5%);
+}
+
+.dashboard-skeleton-leave-active {
+	transition: opacity 0.24s ease;
+}
+
+.dashboard-skeleton-leave-to {
+	opacity: 0;
 }
 
 .dashboard-stat {
