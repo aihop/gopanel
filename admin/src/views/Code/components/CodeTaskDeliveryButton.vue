@@ -2,7 +2,12 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue"
 import { useDialog, useMessage } from "naive-ui"
 import { useI18n } from "vue-i18n"
-import { getCodeDeliveryJob, getCodeGitStatus, mergeCodeSessionWorktree } from "@/api/modules/codeGit"
+import {
+	getCodeDeliveryJob,
+	getCodeGitStatus,
+	mergeCodeSessionWorktree,
+	syncCodeSessionDeliveryLocal
+} from "@/api/modules/codeGit"
 import { getCodeSession } from "@/api/modules/code"
 import type { CodeDeliveryJob } from "@/api/interface/codeGit"
 import Icon from "@/components/common/Icon.vue"
@@ -14,8 +19,8 @@ import {
 } from "@/composables/useCodeDelivery"
 import { codeWorkspaceMessages } from "../codeWorkspaceMessages"
 
-const props = defineProps<{ sessionId: number }>()
-const emit = defineEmits<{ queued: [] }>()
+const props = withDefaults(defineProps<{ sessionId: number; compact?: boolean }>(), { compact: false })
+const emit = defineEmits<{ queued: []; settled: [] }>()
 const { t } = useI18n({ messages: codeWorkspaceMessages })
 const dialog = useDialog()
 const message = useMessage()
@@ -25,6 +30,7 @@ const sessionStatus = ref("")
 const reviewReady = ref(false)
 const reviewRevision = ref("")
 const loading = ref(false)
+const waitingForSettlement = ref(false)
 let pollTimer: ReturnType<typeof setTimeout> | null = null
 
 // 交付状态判定与移动端共用，这里只负责把 phase 映射成桌面文案。
@@ -52,7 +58,9 @@ const labelKeys: Record<CodeDeliveryPhase, string> = {
 	retry: "code.retryDeliveryToMain",
 	idle: "code.deliverToMain"
 }
+const mergeLocalOnly = computed(() => pendingLocalSync.value || (props.compact && completed.value && !canDeliver.value))
 const label = computed(() => {
+	if (props.compact && !active.value) return t("code.mergeTaskResult")
 	if (!reviewReady.value && canDeliver.value) return t("code.reviewTaskChangesBeforeDelivery")
 	if (phase.value === "running") return t("code.deliveringToMain", { progress: progress.value })
 	// 已交付态要区分主仓是否真的同步了，判定在 useCodeDelivery 里，两端一致。
@@ -73,20 +81,27 @@ async function loadDelivery(silent = false) {
 		const sessionResponse = await getCodeSession(props.sessionId)
 		const session = sessionResponse.data.session
 		sessionStatus.value = session.status
-		available.value = Boolean(session.worktreeBranch || session.isolationMode === "multi_worktree")
-		if (!available.value) {
-			job.value = null
-			reviewReady.value = false
-			reviewRevision.value = ""
-			return
-		}
 		const [deliveryResponse, reviewResponse] = await Promise.all([
 			getCodeDeliveryJob(props.sessionId),
 			getCodeGitStatus(props.sessionId, "result")
 		])
 		job.value = deliveryResponse.data
+		const localFact = deliveryResponse.data?.facts?.find(fact => fact.key === "local")
+		const hasPendingLocalSync = Boolean(
+			deliveryResponse.data?.status === "completed" && localFact && localFact.status !== "completed"
+		)
+		available.value = Boolean(
+			session.worktreeBranch ||
+				session.isolationMode === "multi_worktree" ||
+				hasPendingLocalSync ||
+				(props.compact && deliveryResponse.data?.status === "completed" && reviewResponse.data.available)
+		)
 		reviewReady.value = reviewResponse.data.reviewReady
 		reviewRevision.value = reviewResponse.data.reviewRevision || ""
+		if (waitingForSettlement.value && !active.value) {
+			waitingForSettlement.value = false
+			emit("settled")
+		}
 	} catch (error) {
 		if (!silent) message.error(t("code.deliveryLoadFailed"))
 	}
@@ -96,7 +111,34 @@ async function loadDelivery(silent = false) {
 }
 
 function deliver() {
-	if (loading.value || active.value || !canDeliver.value || !reviewReady.value || !reviewRevision.value) return
+	if (loading.value || active.value) return
+	if (mergeLocalOnly.value) {
+		dialog.warning({
+			title: t("code.mergeIntoLocalMain"),
+			content: t("code.mergeIntoLocalMainConfirm"),
+			positiveText: t("code.mergeTaskResult"),
+			negativeText: t("code.cancel"),
+			onPositiveClick: async () => {
+				loading.value = true
+				try {
+					const response = await syncCodeSessionDeliveryLocal(props.sessionId)
+					if (response.data.status === "completed") {
+						message.success(t("code.localMainMergeSuccess"))
+						emit("settled")
+					} else {
+						message.warning(t("code.localMainMergeBlocked"))
+					}
+					void loadDelivery(true)
+				} catch (error) {
+					message.error(t("code.localMainMergeFailed"))
+				} finally {
+					loading.value = false
+				}
+			}
+		})
+		return
+	}
+	if (!canDeliver.value || !reviewReady.value || !reviewRevision.value) return
 	dialog.warning({
 		title: t("code.deliverToMain"),
 		content: t("code.deliverToMainConfirm"),
@@ -106,6 +148,7 @@ function deliver() {
 			loading.value = true
 			try {
 				job.value = (await mergeCodeSessionWorktree(props.sessionId, reviewRevision.value)).data
+				waitingForSettlement.value = true
 				message.success(t("code.deliveryQueuedSuccess"))
 				emit("queued")
 				void loadDelivery(true)
@@ -130,10 +173,10 @@ onBeforeUnmount(clearPoll)
 <template>
 	<n-button
 		v-if="available"
-		size="small"
+		:size="compact ? 'tiny' : 'small'"
 		secondary
 		:loading="loading"
-		:disabled="active || !canDeliver || !reviewReady || !reviewRevision"
+		:disabled="active || (!mergeLocalOnly && (!canDeliver || !reviewReady || !reviewRevision))"
 		:type="codeDeliveryPhaseType(phase)"
 		class="!rounded-xl"
 		@click="deliver"

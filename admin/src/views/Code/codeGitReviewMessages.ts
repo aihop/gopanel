@@ -10,6 +10,7 @@ export const codeGitReviewMessages = {
 			gitHistorySelect: "选择右侧提交查看完整差异",
 			gitHistoryMerged: "已合并至 {branch}",
 			gitHistoryUnmerged: "未合并至 {branch}",
+			gitHistoryMergeHint: "存在尚未合入目标分支的提交，可统一合并本任务的最新结果。",
 			gitRefresh: "刷新变更",
 			gitLoading: "正在读取 Git 变更",
 			gitLoadFailed: "Git 变更加载失败",
@@ -170,6 +171,8 @@ export const codeGitReviewMessages = {
 			gitHistorySelect: "Select a commit to review its complete diff",
 			gitHistoryMerged: "Merged into {branch}",
 			gitHistoryUnmerged: "Not merged into {branch}",
+			gitHistoryMergeHint:
+				"Some commits are not in their target branches. Merge the task's latest result together.",
 			gitRefresh: "Refresh changes",
 			gitLoading: "Loading Git changes",
 			gitLoadFailed: "Failed to load Git changes",
