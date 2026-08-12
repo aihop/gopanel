@@ -7,6 +7,7 @@ import type { CodeProjectBranch, CodeProjectBranchRepository, CodeProjectBranche
 import Icon from "@/components/common/Icon.vue"
 import { projectBranchMessages } from "../projectBranchMessages"
 import ProjectBranchManagementDrawer from "./ProjectBranchManagementDrawer.vue"
+import CodeResidueManager from "./CodeResidueManager.vue"
 
 const props = defineProps<{ projectId: number }>()
 const { t } = useI18n({ messages: projectBranchMessages })
@@ -93,6 +94,7 @@ watch(
 				</div>
 			</div>
 			<div class="flex shrink-0 items-center gap-1">
+				<CodeResidueManager />
 				<n-button text size="tiny" :disabled="branchState.repositories.length === 0" @click="showBranchManager = true">
 					<template #icon><Icon name="mdi:source-branch" :size="14" /></template>
 					{{ t("code.manageBranches") }}

@@ -28,6 +28,7 @@ import type {
 	CodeTokenUsageResponse,
 } from "../interface/code"
 import type { CodeProjectBranches } from "../interface/codeBranches"
+import type { CodeResidueCleanupOutcome, CodeWorktreeResidueSummary } from "../interface/codeResidues"
 import type { CodeTaskListItem } from "../interface/codeTasks"
 import type { HostTerminalSession } from "../interface/hostTerminal"
 import { waitForCodeSessionInitialization } from "./codeSessionInitialization"
@@ -74,6 +75,15 @@ export function getCodeProjectBranches(projectId: number) {
 
 export function deleteCodeProjectBranch(projectId: number, repositoryPath: string, branch: string, force: boolean) {
 	return http.delete(`/code/projects/${projectId}/git/branches`, { repositoryPath, branch, force })
+}
+
+// 扫描要逐个 worktree 跑 git status 和 merge-base，仓库多时会慢，给足超时。
+export function getCodeWorktreeResidues() {
+	return http.get<CodeWorktreeResidueSummary>("/code/worktree-residues", undefined, { timeout: 30000 })
+}
+
+export function cleanupCodeWorktreeResidues(sessionIds: number[]) {
+	return http.post<CodeResidueCleanupOutcome[]>("/code/worktree-residues/cleanup", { sessionIds }, 60000)
 }
 
 export function getCodeExecutors() {
