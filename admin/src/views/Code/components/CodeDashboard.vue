@@ -16,7 +16,6 @@ import {
 	type CodeDashboardBucket,
 } from "../codeDashboardBuckets"
 import { useCodeTaskPolling } from "../useCodeTaskPolling"
-import CodeDashboardSkeleton from "./CodeDashboardSkeleton.vue"
 import CodeDashboardTaskRow from "./CodeDashboardTaskRow.vue"
 import SessionHistoryDrawer from "./SessionHistoryDrawer.vue"
 import CodeTaskDetailPane from "./CodeTaskDetailPane.vue"
@@ -200,10 +199,16 @@ const toggleArchived = async (task: CodeTaskListItem) => {
     class="relative flex min-h-0 flex-1 flex-col"
     :aria-busy="initialLoading"
   >
-    <CodeDashboardSkeleton
+    <div
       v-if="initialLoading"
-      :list-collapsed="listCollapsed"
-    />
+      class="flex min-h-0 flex-1 items-center justify-center"
+      aria-hidden="true"
+    >
+      <n-spin
+        size="small"
+        :delay="150"
+      />
+    </div>
     <template v-else>
     <!--
       顶部只留一行：标题 + 状态数字（既是概览也是筛选器）+ 工具栏插槽。
