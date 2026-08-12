@@ -29,12 +29,15 @@ type codeDeliveryJobView struct {
 	HasUncommittedChanges bool                           `json:"hasUncommittedChanges"`
 	Repositories          []codeRepositoryDeliveryResult `json:"repositories,omitempty"`
 	Facts                 []codeDeliveryFact             `json:"facts,omitempty"`
-	ErrorMessage          string                         `json:"errorMessage,omitempty"`
-	ConflictFiles         []string                       `json:"conflictFiles"`
-	CreatedAt             time.Time                      `json:"createdAt"`
-	UpdatedAt             time.Time                      `json:"updatedAt"`
-	StartedAt             *time.Time                     `json:"startedAt,omitempty"`
-	CompletedAt           *time.Time                     `json:"completedAt,omitempty"`
+	// 本会话此前的交付尝试。作业记录本身会被下一次交付覆盖，
+	// 失败历史只能从这里看到。
+	Attempts      []model.AICodeDeliveryAttempt `json:"attempts,omitempty"`
+	ErrorMessage  string                        `json:"errorMessage,omitempty"`
+	ConflictFiles []string                      `json:"conflictFiles"`
+	CreatedAt     time.Time                     `json:"createdAt"`
+	UpdatedAt     time.Time                     `json:"updatedAt"`
+	StartedAt     *time.Time                    `json:"startedAt,omitempty"`
+	CompletedAt   *time.Time                    `json:"completedAt,omitempty"`
 }
 
 func loadCodeDeliveryJobView(sessionID uint) (*codeDeliveryJobView, error) {
@@ -62,6 +65,11 @@ func loadCodeDeliveryJobView(sessionID uint) (*codeDeliveryJobView, error) {
 	if job.Status == codeDeliveryJobCompleted {
 		pending = inspectCodeSessionPostSnapshotStatus(global.DB, sessionID)
 	}
+	// 留档读不出来不该让整个交付视图挂掉：它是诊断信息，不是交付本身。
+	attempts, attemptsErr := loadCodeDeliveryAttempts(sessionID, 20)
+	if attemptsErr != nil {
+		warnCodeDelivery("Load Code delivery attempts for session %d failed: %v", sessionID, attemptsErr)
+	}
 	return &codeDeliveryJobView{
 		ID: job.ID, SessionID: job.SessionID, TaskID: job.TaskID, Status: job.Status, Stage: job.Stage, Progress: job.Progress,
 		Attempt: job.Attempt, QueuePosition: position, TargetBranch: job.TargetBranch, ResultCommit: job.ResultCommit,
@@ -70,6 +78,7 @@ func loadCodeDeliveryJobView(sessionID uint) (*codeDeliveryJobView, error) {
 		HasUncommittedChanges: pending.HasUncommittedChanges,
 		Repositories:          repositories,
 		Facts:                 loadCodeDeliveryFacts(sessionID, repositories),
+		Attempts:              attempts,
 		ErrorMessage:          job.ErrorMessage, ConflictFiles: conflicts, CreatedAt: job.CreatedAt, UpdatedAt: job.UpdatedAt,
 		StartedAt: job.StartedAt, CompletedAt: job.CompletedAt,
 	}, nil

@@ -35,12 +35,6 @@ const (
 	codeDeliveryLeaseDuration = 45 * time.Second
 )
 
-// errCodeDeliveryWorkspaceBusy 表示交付等不到会话工作区的独占权，
-// 通常是同一会话里还有正在运行的 AI 执行或交互终端。
-var errCodeDeliveryWorkspaceBusy = errors.New(
-	"会话仍有正在运行的 AI 执行或终端，交付无法独占工作区；请先停止会话中的执行再重试交付",
-)
-
 type codeDeliveryProgressReporter func(stage string, progress int)
 
 type codeDeliveryRunner struct {
@@ -289,6 +283,7 @@ func (runner *codeDeliveryRunner) finish(job *model.AICodeDeliveryJob, result co
 	if job.StartedAt != nil {
 		duration = time.Since(*job.StartedAt)
 	}
+	recordCodeDeliveryAttempt(job, status, stage, failureCode, result, runErr, duration)
 	recordCodeAudit(job.UserID, job.ProjectID, job.SessionID, "worktree_merge", auditStatus, "delivery", detail, job.RequestIP, time.Now().Add(-duration), codeAuditMeta{"commit": result.Commit, "conflictFiles": result.ConflictFiles})
 }
 
@@ -327,8 +322,16 @@ func cleanupFinalizedCodeSessionWorktrees(sessionID uint) {
 }
 
 func codeDeliveryFailureCode(stage string, err error) string {
+	// 三种阻塞源对应三个失败码：界面据此给出不同的下一步动作，
+	// 混成一个的话「停掉自己的执行」这条建议会出现在它根本无效的场景里。
 	if errors.Is(err, errCodeDeliveryWorkspaceBusy) {
 		return "workspace_busy"
+	}
+	if errors.Is(err, errCodeDeliveryRepositoryBusy) {
+		return "repository_busy"
+	}
+	if errors.Is(err, errCodeDeliveryCapacityBusy) {
+		return "capacity_busy"
 	}
 	if errors.Is(err, errCodeGitAuthentication) {
 		return "authentication_failed"
@@ -421,7 +424,7 @@ func (runner *codeDeliveryRunner) run(jobID uint) {
 	cancelAcquire()
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			err = errCodeDeliveryWorkspaceBusy
+			err = codeExecutions.deliveryBlockReason(&session)
 		}
 		runner.finish(job, codeGitDeliveryResult{}, err)
 		return

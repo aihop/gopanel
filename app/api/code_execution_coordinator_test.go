@@ -11,7 +11,7 @@ import (
 )
 
 func TestCodeExecutionCoordinatorSerializesSharedWorkspace(t *testing.T) {
-	coordinator := newCodeExecutionCoordinator(2)
+	coordinator := newCodeExecutionCoordinator(2, 2)
 	first, err := coordinator.acquire(context.Background(), []string{"/workspace/shared"}, codeExecutionInstruction, true, false)
 	if err != nil {
 		t.Fatal(err)
@@ -28,7 +28,7 @@ func TestCodeExecutionCoordinatorSerializesSharedWorkspace(t *testing.T) {
 }
 
 func TestCodeExecutionCoordinatorWaitsWithoutPreemptingInteractiveLease(t *testing.T) {
-	coordinator := newCodeExecutionCoordinator(1)
+	coordinator := newCodeExecutionCoordinator(1, 1)
 	interactive, err := coordinator.acquire(context.Background(), []string{"/workspace/shared"}, codeExecutionInteractive, true, false)
 	if err != nil {
 		t.Fatal(err)
@@ -62,7 +62,7 @@ func TestCodeExecutionCoordinatorWaitsWithoutPreemptingInteractiveLease(t *testi
 }
 
 func TestCodeExecutionCoordinatorDeliveryDoesNotWaitForInteractiveWorktree(t *testing.T) {
-	coordinator := newCodeExecutionCoordinator(2)
+	coordinator := newCodeExecutionCoordinator(2, 2)
 	session := &model.AIDevSession{ID: 31, WorkDir: "/workspace/session", SourceWorkDir: "/workspace/source"}
 	interactive, err := coordinator.acquireSession(context.Background(), session, codeExecutionInteractive, false)
 	if err != nil {
@@ -82,7 +82,7 @@ func TestCodeExecutionCoordinatorDeliveryDoesNotWaitForInteractiveWorktree(t *te
 }
 
 func TestCodeExecutionCoordinatorNewSessionDoesNotInterruptSharedWorkspace(t *testing.T) {
-	coordinator := newCodeExecutionCoordinator(2)
+	coordinator := newCodeExecutionCoordinator(2, 2)
 	firstSession := &model.AIDevSession{ID: 21, WorkDir: "/workspace/shared"}
 	first, err := coordinator.acquireSession(context.Background(), firstSession, codeExecutionInteractive, false)
 	if err != nil {
@@ -102,7 +102,7 @@ func TestCodeExecutionCoordinatorNewSessionDoesNotInterruptSharedWorkspace(t *te
 }
 
 func TestCodeExecutionCoordinatorEnforcesCapacity(t *testing.T) {
-	coordinator := newCodeExecutionCoordinator(1)
+	coordinator := newCodeExecutionCoordinator(1, 1)
 	first, err := coordinator.acquire(context.Background(), []string{"/workspace/one"}, codeExecutionInstruction, true, false)
 	if err != nil {
 		t.Fatal(err)
@@ -114,7 +114,7 @@ func TestCodeExecutionCoordinatorEnforcesCapacity(t *testing.T) {
 }
 
 func TestCodeExecutionCoordinatorDeliversCancellationSetBeforeHandler(t *testing.T) {
-	coordinator := newCodeExecutionCoordinator(1)
+	coordinator := newCodeExecutionCoordinator(1, 1)
 	lease, err := coordinator.acquireSession(context.Background(), &model.AIDevSession{ID: 7, WorkDir: "/workspace/shared"}, codeExecutionInstruction, true)
 	if err != nil {
 		t.Fatal(err)
@@ -141,7 +141,7 @@ func TestCodeExecutionCoordinatorDeliversCancellationSetBeforeHandler(t *testing
 }
 
 func TestCodeExecutionCoordinatorCancelsOnlyTargetSession(t *testing.T) {
-	coordinator := newCodeExecutionCoordinator(2)
+	coordinator := newCodeExecutionCoordinator(2, 2)
 	first, err := coordinator.acquireSession(context.Background(), &model.AIDevSession{ID: 11, WorkDir: "/workspace/one"}, codeExecutionInstruction, true)
 	if err != nil {
 		t.Fatal(err)
@@ -176,7 +176,7 @@ func TestCodeExecutionCoordinatorCancelsOnlyTargetSession(t *testing.T) {
 }
 
 func TestCodeExecutionCoordinatorCancelsOnlyRequestedSessionKind(t *testing.T) {
-	coordinator := newCodeExecutionCoordinator(2)
+	coordinator := newCodeExecutionCoordinator(2, 2)
 	interactive, err := coordinator.acquireOwned(context.Background(), 21, []string{"/workspace/interactive"}, codeExecutionInteractive, false)
 	if err != nil {
 		t.Fatal(err)

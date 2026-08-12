@@ -26,7 +26,7 @@ func TestCodeSessionGitMutationAllowsInteractiveTerminal(t *testing.T) {
 		t.Fatal(err)
 	}
 	previousCoordinator := codeExecutions
-	codeExecutions = newCodeExecutionCoordinator(2)
+	codeExecutions = newCodeExecutionCoordinator(2, 2)
 	t.Cleanup(func() { codeExecutions = previousCoordinator })
 	lease, err := codeExecutions.acquireSession(context.Background(), session, codeExecutionInteractive, false)
 	if err != nil {

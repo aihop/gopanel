@@ -34,7 +34,7 @@ func TestMultiRepositoryDeliveryDoesNotRunQualityChecks(t *testing.T) {
 	}
 	commitCodeTestFile(t, repository.SourceDir, "source-only.txt", "source\n")
 	previousCoordinator := codeExecutions
-	codeExecutions = newCodeExecutionCoordinator(2)
+	codeExecutions = newCodeExecutionCoordinator(2, 2)
 	t.Cleanup(func() { codeExecutions = previousCoordinator })
 	runner := &codeDeliveryRunner{
 		queued: make(map[uint]struct{}), cancelled: make(map[uint]struct{}), owner: newCodeRepositoryLeaseOwner("multi-final-quality"),

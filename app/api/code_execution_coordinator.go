@@ -29,16 +29,17 @@ var (
 )
 
 type codeExecutionLease struct {
-	coordinator  *codeExecutionCoordinator
-	id           uint64
-	sessionID    uint
-	kind         string
-	keys         []string
-	done         chan struct{}
-	releaseOnce  sync.Once
-	cancel       context.CancelFunc
-	cancelled    bool
-	slotAcquired bool
+	coordinator *codeExecutionCoordinator
+	id          uint64
+	sessionID   uint
+	kind        string
+	keys        []string
+	done        chan struct{}
+	releaseOnce sync.Once
+	cancel      context.CancelFunc
+	cancelled   bool
+	// 记住槽位取自哪个池子，归还时才不会还错——交付和执行现在是两个池。
+	slotPool chan struct{}
 }
 
 type codeExecutionCoordinator struct {
@@ -46,17 +47,33 @@ type codeExecutionCoordinator struct {
 	nextID   uint64
 	active   map[string]*codeExecutionLease
 	capacity chan struct{}
-	stopping bool
-	stop     chan struct{}
-	stopOnce sync.Once
+	// 交付单独一个池子。之前交付和所有会话的 AI 执行共抢同一批槽位，
+	// 会话一多，槽位长期被执行占满，交付只能排队到超时——实测这是
+	// 交付失败的最大单一原因。交付本身已被仓库租约按仓库串行化，
+	// 再挤同一个池子只剩饿死这一个效果。
+	deliveryCapacity chan struct{}
+	stopping         bool
+	stop             chan struct{}
+	stopOnce         sync.Once
 }
 
-var codeExecutions = newCodeExecutionCoordinator(codeExecutionConcurrency())
+var codeExecutions = newCodeExecutionCoordinator(codeExecutionConcurrency(), codeDeliveryConcurrency())
 
 func codeExecutionConcurrency() int {
-	value, err := strconv.Atoi(strings.TrimSpace(os.Getenv("GOPANEL_CODE_MAX_CONCURRENCY")))
+	return codeConcurrencyFromEnv("GOPANEL_CODE_MAX_CONCURRENCY", 4)
+}
+
+// codeDeliveryConcurrency 是同时进行的交付上限。
+// 默认给 2 而不是跟随执行并发：交付期间要跑质量检查，同样吃 CPU，
+// 放开太多只会把机器压垮，而按仓库串行化之后 2 个已经够并行不同项目。
+func codeDeliveryConcurrency() int {
+	return codeConcurrencyFromEnv("GOPANEL_CODE_MAX_DELIVERY_CONCURRENCY", 2)
+}
+
+func codeConcurrencyFromEnv(name string, fallback int) int {
+	value, err := strconv.Atoi(strings.TrimSpace(os.Getenv(name)))
 	if err != nil || value < 1 {
-		return 4
+		return fallback
 	}
 	if value > 32 {
 		return 32
@@ -64,15 +81,27 @@ func codeExecutionConcurrency() int {
 	return value
 }
 
-func newCodeExecutionCoordinator(capacity int) *codeExecutionCoordinator {
+func newCodeExecutionCoordinator(capacity, deliveryCapacity int) *codeExecutionCoordinator {
 	if capacity < 1 {
 		capacity = 1
 	}
-	return &codeExecutionCoordinator{
-		active:   make(map[string]*codeExecutionLease),
-		capacity: make(chan struct{}, capacity),
-		stop:     make(chan struct{}),
+	if deliveryCapacity < 1 {
+		deliveryCapacity = 1
 	}
+	return &codeExecutionCoordinator{
+		active:           make(map[string]*codeExecutionLease),
+		capacity:         make(chan struct{}, capacity),
+		deliveryCapacity: make(chan struct{}, deliveryCapacity),
+		stop:             make(chan struct{}),
+	}
+}
+
+// slotPoolFor 选出该类执行要占的配额池。
+func (coordinator *codeExecutionCoordinator) slotPoolFor(kind string) chan struct{} {
+	if kind == codeExecutionDelivery {
+		return coordinator.deliveryCapacity
+	}
+	return coordinator.capacity
 }
 
 func codeExecutionWorkspaceKeys(session *model.AIDevSession) []string {
@@ -227,11 +256,12 @@ func (coordinator *codeExecutionCoordinator) acquireOwned(
 				}
 				return lease, nil
 			}
+			pool := coordinator.slotPoolFor(kind)
 			if wait {
 				select {
-				case coordinator.capacity <- struct{}{}:
+				case pool <- struct{}{}:
 					coordinator.mu.Lock()
-					lease.slotAcquired = true
+					lease.slotPool = pool
 					coordinator.mu.Unlock()
 					if err := ctx.Err(); err != nil {
 						lease.Release()
@@ -247,9 +277,9 @@ func (coordinator *codeExecutionCoordinator) acquireOwned(
 				}
 			}
 			select {
-			case coordinator.capacity <- struct{}{}:
+			case pool <- struct{}{}:
 				coordinator.mu.Lock()
-				lease.slotAcquired = true
+				lease.slotPool = pool
 				coordinator.mu.Unlock()
 				if err := ctx.Err(); err != nil {
 					lease.Release()
@@ -372,12 +402,12 @@ func (lease *codeExecutionLease) Release() {
 				delete(coordinator.active, key)
 			}
 		}
-		slotAcquired := lease.slotAcquired
+		slotPool := lease.slotPool
 		close(lease.done)
 		coordinator.mu.Unlock()
-		if slotAcquired {
+		if slotPool != nil {
 			select {
-			case <-coordinator.capacity:
+			case <-slotPool:
 			default:
 			}
 		}

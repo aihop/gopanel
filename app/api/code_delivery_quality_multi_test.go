@@ -38,7 +38,7 @@ func TestMultiRepositoryDeliveryRunnerUsesCapturedQualitySnapshot(t *testing.T) 
 	laterCommit := commitCodeTestFile(t, repositories[0].WorktreeDir, "later.txt", "later\n")
 
 	previousCoordinator := codeExecutions
-	codeExecutions = newCodeExecutionCoordinator(2)
+	codeExecutions = newCodeExecutionCoordinator(2, 2)
 	t.Cleanup(func() { codeExecutions = previousCoordinator })
 	runner := &codeDeliveryRunner{
 		queued: make(map[uint]struct{}), cancelled: make(map[uint]struct{}),

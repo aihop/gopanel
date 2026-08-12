@@ -86,7 +86,7 @@ func TestCodeDeliverySnapshotsWithInteractiveTerminalWithoutCancellingIt(t *test
 		t.Fatal(err)
 	}
 	previousCoordinator := codeExecutions
-	codeExecutions = newCodeExecutionCoordinator(2)
+	codeExecutions = newCodeExecutionCoordinator(2, 2)
 	t.Cleanup(func() { codeExecutions = previousCoordinator })
 	lease, err := codeExecutions.acquireSession(context.Background(), session, codeExecutionInteractive, false)
 	if err != nil {
@@ -413,7 +413,7 @@ func TestCodeDeliveryFailsWhenWorkspaceStaysBusy(t *testing.T) {
 	t.Cleanup(func() { codeDeliveryQueueTimeout = previousTimeout })
 
 	previousCoordinator := codeExecutions
-	codeExecutions = newCodeExecutionCoordinator(2)
+	codeExecutions = newCodeExecutionCoordinator(2, 2)
 	t.Cleanup(func() { codeExecutions = previousCoordinator })
 
 	workDir := t.TempDir()
@@ -446,7 +446,9 @@ func TestCodeDeliveryFailsWhenWorkspaceStaysBusy(t *testing.T) {
 	if stored.FailureCode != "workspace_busy" {
 		t.Fatalf("failure code = %q, want workspace_busy", stored.FailureCode)
 	}
-	if !strings.Contains(stored.ErrorMessage, "停止会话中的执行") {
+	// 提示必须点明是「本会话」占着：这里的阻塞源是用户自己能停掉的执行，
+	// 而槽位耗尽、其他会话占用这两种情况停自己的会话毫无用处。
+	if !strings.Contains(stored.ErrorMessage, "本会话") || !strings.Contains(stored.ErrorMessage, "停止") {
 		t.Fatalf("error message should tell the user what to do: %q", stored.ErrorMessage)
 	}
 }

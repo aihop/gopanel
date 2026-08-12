@@ -21,7 +21,7 @@ func TestCodeDeliveryPreservesActiveTerminalWorktree(t *testing.T) {
 	}
 	commitCodeTestFile(t, session.WorkDir, "terminal.txt", "terminal\n")
 	previousCoordinator := codeExecutions
-	codeExecutions = newCodeExecutionCoordinator(2)
+	codeExecutions = newCodeExecutionCoordinator(2, 2)
 	t.Cleanup(func() { codeExecutions = previousCoordinator })
 	lease, err := codeExecutions.acquireSession(context.Background(), session, codeExecutionInteractive, false)
 	if err != nil {
