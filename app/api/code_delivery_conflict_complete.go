@@ -12,6 +12,9 @@ import (
 )
 
 func completeCodeDeliveryConflict(job *model.AICodeDeliveryJob, contexts []codeDeliveryConflictContext) error {
+	if isCodeDeliveryLocalSyncConflict(job) {
+		return completeCodeDeliveryLocalSyncConflict(job, contexts)
+	}
 	if len(contexts) == 0 {
 		return errors.New("当前没有可完成的冲突仓库")
 	}

@@ -8,6 +8,7 @@ import { codeGitReviewMessages } from "../codeGitReviewMessages"
 import CodeLocalSyncPending from "./CodeLocalSyncPending.vue"
 
 const props = defineProps<{ sessionId: number; refreshKey: number }>()
+const emit = defineEmits<{ conflict: [] }>()
 const { t } = useI18n({ messages: codeGitReviewMessages })
 const dialog = useDialog()
 const message = useMessage()
@@ -48,8 +49,10 @@ const pushDelivery = () => {
 	})
 }
 
-
-watch(() => [props.sessionId, props.refreshKey], () => void loadStatus())
+watch(
+	() => [props.sessionId, props.refreshKey],
+	() => void loadStatus()
+)
 onMounted(() => void loadStatus())
 </script>
 
@@ -68,7 +71,11 @@ onMounted(() => void loadStatus())
 				</div>
 				<div v-else-if="result" class="space-y-2">
 					<p class="text-xs text-slate-500">
-						{{ result.available ? t("code.gitPushReady", { count: pendingCount }) : t("code.gitPushUnavailable") }}
+						{{
+							result.available
+								? t("code.gitPushReady", { count: pendingCount })
+								: t("code.gitPushUnavailable")
+						}}
 					</p>
 					<p v-if="result.available" class="truncate text-[11px] text-slate-400" :title="destinations">
 						{{ destinations }}
@@ -86,7 +93,12 @@ onMounted(() => void loadStatus())
 					</n-button>
 				</div>
 
-				<CodeLocalSyncPending :session-id="sessionId" :repositories="repositories" @synced="loadStatus" />
+				<CodeLocalSyncPending
+					:session-id="sessionId"
+					:repositories="repositories"
+					@synced="loadStatus"
+					@conflict="emit('conflict')"
+				/>
 			</template>
 		</n-spin>
 	</div>

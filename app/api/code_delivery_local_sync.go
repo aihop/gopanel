@@ -63,12 +63,13 @@ func codeDeliveryLocalSyncCommand(sourceDir, targetBranch, mergeCommit string) s
 }
 
 type codeDeliveryLocalSyncRepository struct {
-	RepositoryID     string `json:"repositoryId"`
-	RepositoryName   string `json:"repositoryName"`
-	Commit           string `json:"commit,omitempty"`
-	LocalSynced      bool   `json:"localSynced"`
-	LocalSyncError   string `json:"localSyncError,omitempty"`
-	LocalSyncCommand string `json:"localSyncCommand,omitempty"`
+	RepositoryID     string   `json:"repositoryId"`
+	RepositoryName   string   `json:"repositoryName"`
+	Commit           string   `json:"commit,omitempty"`
+	LocalSynced      bool     `json:"localSynced"`
+	LocalSyncError   string   `json:"localSyncError,omitempty"`
+	LocalSyncCommand string   `json:"localSyncCommand,omitempty"`
+	ConflictFiles    []string `json:"conflictFiles,omitempty"`
 }
 
 type codeDeliveryLocalSyncResult struct {

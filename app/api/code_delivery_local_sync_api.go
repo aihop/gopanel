@@ -122,6 +122,14 @@ func syncCodeSingleRepositoryDeliveryLocal(session *model.AIDevSession) (codeDel
 	if delivery.SourceAppliedAt == nil && strings.TrimSpace(delivery.MergeCommit) != "" {
 		syncErr := syncCodeDeliveryTargetOnDemand(delivery.SourceWorkDir, delivery.TargetBranch, delivery.MergeCommit)
 		if syncErr != nil {
+			if conflicts := codeDeliveryLocalSyncConflictFiles(syncErr); len(conflicts) > 0 {
+				if err := prepareCodeDeliveryLocalSyncConflict(session, &delivery, nil, conflicts); err != nil {
+					return codeDeliveryLocalSyncResult{}, err
+				}
+				view := codeDeliveryLocalSyncDeliveryView(&delivery)
+				view.ConflictFiles = conflicts
+				return codeDeliveryLocalSyncResult{Status: "conflict", Repositories: []codeDeliveryLocalSyncRepository{view}}, nil
+			}
 			if err := persistCodeDeliveryLocalSync(&delivery, nil, codeDeliveryLocalSyncReason(syncErr.Error())); err != nil {
 				return codeDeliveryLocalSyncResult{}, err
 			}
@@ -180,6 +188,18 @@ func syncCodeMultiRepositoryDeliveryLocal(session *model.AIDevSession) (codeDeli
 		}
 		syncErr := syncCodeDeliveryTargetOnDemand(repository.SourceDir, repository.TargetBranch, repository.MergeCommit)
 		if syncErr != nil {
+			if conflicts := codeDeliveryLocalSyncConflictFiles(syncErr); len(conflicts) > 0 {
+				if err := prepareCodeDeliveryLocalSyncConflict(session, nil, repository, conflicts); err != nil {
+					return codeDeliveryLocalSyncResult{}, err
+				}
+				views := codeDeliveryLocalSyncRepositoryViews(repositories)
+				for viewIndex := range views {
+					if views[viewIndex].RepositoryID == codeSessionRepositoryID(repository.ID) {
+						views[viewIndex].ConflictFiles = conflicts
+					}
+				}
+				return codeDeliveryLocalSyncResult{Status: "conflict", Repositories: views}, nil
+			}
 			if err := persistCodeRepositoryLocalSync(repository, nil, codeDeliveryLocalSyncReason(syncErr.Error())); err != nil {
 				return codeDeliveryLocalSyncResult{}, err
 			}

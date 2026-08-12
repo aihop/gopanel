@@ -20,7 +20,7 @@ import {
 import { codeWorkspaceMessages } from "../codeWorkspaceMessages"
 
 const props = withDefaults(defineProps<{ sessionId: number; compact?: boolean }>(), { compact: false })
-const emit = defineEmits<{ queued: []; settled: [] }>()
+const emit = defineEmits<{ queued: []; settled: []; conflict: [] }>()
 const { t } = useI18n({ messages: codeWorkspaceMessages })
 const dialog = useDialog()
 const message = useMessage()
@@ -122,7 +122,10 @@ function deliver() {
 				loading.value = true
 				try {
 					const response = await syncCodeSessionDeliveryLocal(props.sessionId)
-					if (response.data.status === "completed") {
+					if (response.data.status === "conflict") {
+						message.warning(t("code.localMainMergeConflict"))
+						emit("conflict")
+					} else if (response.data.status === "completed") {
 						message.success(t("code.localMainMergeSuccess"))
 						emit("settled")
 					} else {

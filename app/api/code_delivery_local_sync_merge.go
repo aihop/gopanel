@@ -8,6 +8,22 @@ import (
 	"strings"
 )
 
+type codeDeliveryLocalSyncConflict struct {
+	files []string
+}
+
+func (conflict *codeDeliveryLocalSyncConflict) Error() string {
+	return "本地主仓与交付提交存在冲突：" + strings.Join(conflict.files, ", ")
+}
+
+func codeDeliveryLocalSyncConflictFiles(err error) []string {
+	var conflict *codeDeliveryLocalSyncConflict
+	if errors.As(err, &conflict) {
+		return append([]string(nil), conflict.files...)
+	}
+	return nil
+}
+
 func syncCodeDeliveryTargetOnDemand(sourceDir, targetBranch, deliveryCommit string) error {
 	sourceDir, targetBranch, deliveryCommit = strings.TrimSpace(sourceDir), strings.TrimSpace(targetBranch), strings.TrimSpace(deliveryCommit)
 	if sourceDir == "" || targetBranch == "" || deliveryCommit == "" {
@@ -97,7 +113,7 @@ func createCodeDeliveryLocalMergeCommit(sourceDir, targetCommit, deliveryCommit,
 	); err != nil {
 		conflicts := codeGitConflictFiles(workDir)
 		if len(conflicts) > 0 {
-			return "", fmt.Errorf("目标分支 %s 与交付提交存在冲突：%s", targetBranch, strings.Join(conflicts, ", "))
+			return "", &codeDeliveryLocalSyncConflict{files: normalizedCodeConflictFiles(conflicts)}
 		}
 		return "", err
 	}

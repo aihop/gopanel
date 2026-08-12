@@ -15,7 +15,7 @@ interface LocalSyncRepository {
 }
 
 const props = defineProps<{ sessionId: number; repositories: LocalSyncRepository[] }>()
-const emit = defineEmits<{ synced: [] }>()
+const emit = defineEmits<{ synced: []; conflict: [] }>()
 const { t } = useI18n({ messages: codeGitReviewMessages })
 const dialog = useDialog()
 const message = useMessage()
@@ -47,6 +47,12 @@ async function syncLocal() {
 	try {
 		const response = await syncCodeSessionDeliveryLocal(props.sessionId)
 		resultRepositories.value = response.data.repositories
+		if (response.data.status === "conflict") {
+			fallbackVisible.value = false
+			message.warning(t("code.gitLocalSyncConflict"))
+			emit("conflict")
+			return
+		}
 		if (response.data.status === "completed") {
 			fallbackVisible.value = false
 			message.success(t("code.gitLocalSyncSuccess"))

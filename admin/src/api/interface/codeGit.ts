@@ -256,10 +256,11 @@ export interface CodeDeliveryLocalSyncRepository {
 	localSynced: boolean
 	localSyncError?: string
 	localSyncCommand?: string
+	conflictFiles?: string[]
 }
 
 export interface CodeDeliveryLocalSyncResult {
-	status: "completed" | "partial" | "blocked"
+	status: "completed" | "partial" | "blocked" | "conflict"
 	repositories: CodeDeliveryLocalSyncRepository[]
 }
 
