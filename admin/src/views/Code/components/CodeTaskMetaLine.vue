@@ -11,10 +11,10 @@ const {
   formatTaskTokens,
   taskTokenStatus,
   taskGitMeta,
+  taskDeliveryMeta,
   taskTooltip,
   taskError,
   taskStage,
-  taskDeliveryProgress,
 } = useCodeTaskMeta()
 
 const taskHasGitDetails = (task: CodeTaskListItem) =>
@@ -33,20 +33,27 @@ const taskHasGitDetails = (task: CodeTaskListItem) =>
     :title="taskTooltip(task)"
   >
     <slot name="lead" />
-    <!--
-      出错和阶段排在最前面：这一行是 overflow-hidden 的，
-      排在后面的内容窄屏会被截掉 —— 而「挂了」正是最不能被截掉的那条。
-    -->
+    <template v-if="taskDeliveryMeta(task)">
+      <span class="text-slate-300">·</span>
+      <span
+        class="flex shrink-0 items-center gap-1 font-medium"
+        :class="taskDeliveryMeta(task)!.color"
+      >
+        <Icon
+          :name="taskDeliveryMeta(task)!.icon"
+          :size="13"
+          class="shrink-0"
+        />
+        {{ taskDeliveryMeta(task)!.label }}
+      </span>
+    </template>
+    <!-- 交付状态、错误和阶段优先展示，不能在窄屏下被后面的统计信息截掉。 -->
     <template v-if="taskError(task)">
       <span class="text-slate-300">·</span>
       <span
         class="min-w-0 truncate font-medium text-red-500"
         :title="taskError(task)"
       >{{ taskError(task) }}</span>
-    </template>
-    <template v-else-if="taskDeliveryProgress(task)">
-      <span class="text-slate-300">·</span>
-      <span class="whitespace-nowrap text-blue-500">{{ taskDeliveryProgress(task) }}</span>
     </template>
     <template v-else-if="taskStage(task)">
       <span class="text-slate-300">·</span>

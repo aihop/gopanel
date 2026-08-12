@@ -41,22 +41,34 @@ export function useCodeTaskMeta() {
 	}
 
 	const taskGitMeta = (task: CodeTaskListItem) =>
-		task.summary.deliveryStatus === "queued"
-			? { icon: "mdi:clock-outline", color: "text-amber-500" }
-			: task.summary.deliveryStatus === "running"
-				? { icon: "mdi:cloud-sync-outline", color: "text-blue-500" }
-				: task.summary.deliveryStatus === "failed"
-					? { icon: "mdi:cloud-alert-outline", color: "text-red-500" }
-					: task.summary.deliveryStatus === "conflict"
-						? { icon: "mdi:source-branch-alert", color: "text-red-500" }
-						: ({
-								working: { icon: "mdi:source-branch", color: "text-slate-400" },
-								committed: { icon: "mdi:source-commit", color: "text-blue-500" },
-								merged: { icon: "mdi:source-merge", color: "text-emerald-600" },
-								pushed: { icon: "mdi:cloud-check-outline", color: "text-emerald-600" },
-								push_failed: { icon: "mdi:cloud-alert-outline", color: "text-red-500" },
-								conflict: { icon: "mdi:source-branch-alert", color: "text-red-500" },
-							})[task.summary.gitStatus || ""]
+		({
+			working: { icon: "mdi:source-branch", color: "text-slate-400" },
+			committed: { icon: "mdi:source-commit", color: "text-blue-500" },
+			merged: { icon: "mdi:source-merge", color: "text-emerald-600" },
+			pushed: { icon: "mdi:cloud-check-outline", color: "text-emerald-600" },
+			push_failed: { icon: "mdi:cloud-alert-outline", color: "text-red-500" },
+			conflict: { icon: "mdi:source-branch-alert", color: "text-red-500" },
+		})[task.summary.gitStatus || ""]
+
+	const taskDeliveryMeta = (task: CodeTaskListItem) => {
+		const status = task.summary.deliveryStatus
+		if (!status) return null
+		const appearances = {
+			queued: { icon: "mdi:clock-outline", color: "text-amber-600" },
+			running: { icon: "mdi:cloud-sync-outline", color: "text-blue-500" },
+			completed: { icon: "mdi:cloud-check-outline", color: "text-emerald-600" },
+			partial: { icon: "mdi:alert-circle-outline", color: "text-amber-600" },
+			conflict: { icon: "mdi:source-branch-alert", color: "text-red-500" },
+			failed: { icon: "mdi:cloud-alert-outline", color: "text-red-500" },
+		}
+		return {
+			...appearances[status],
+			label: t(`code.deliveryStatus_${status}`, {
+				position: task.summary.deliveryQueuePosition,
+				progress: task.summary.deliveryProgress,
+			}),
+		}
+	}
 
 	// 出错信息以前只在 title 里。让人 hover 才发现任务挂了是设计事故，所以提到行内。
 	const taskError = (task: CodeTaskListItem) => task.summary.deliveryError || task.summary.gitError || ""
@@ -67,16 +79,6 @@ export function useCodeTaskMeta() {
 	const taskStage = (task: CodeTaskListItem) => {
 		const stage = task.summary.stage || ""
 		return meaningfulStages.includes(stage) ? t(`code.taskStage_${stage}`) : ""
-	}
-
-	// 交付中时给出「排第几 / 百分之多少」，光一个图标看不出进度。
-	const taskDeliveryProgress = (task: CodeTaskListItem) => {
-		const status = task.summary.deliveryStatus
-		if (status !== "queued" && status !== "running") return ""
-		return t(`code.deliveryStatus_${status}`, {
-			position: task.summary.deliveryQueuePosition,
-			progress: task.summary.deliveryProgress,
-		})
 	}
 
 	const taskTooltip = (task: CodeTaskListItem) =>
@@ -107,9 +109,9 @@ export function useCodeTaskMeta() {
 		formatTaskTokens,
 		taskTokenStatus,
 		taskGitMeta,
+		taskDeliveryMeta,
 		taskTooltip,
 		taskError,
 		taskStage,
-		taskDeliveryProgress,
 	}
 }

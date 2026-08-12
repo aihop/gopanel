@@ -62,6 +62,12 @@ describe("codeTaskBucket", () => {
 		)
 	})
 
+	it("部分交付需要人工检查失败仓库", () => {
+		expect(codeTaskBucket(task({ status: "completed", summary: summary({ deliveryStatus: "partial" }) }), now)).toBe(
+			"attention",
+		)
+	})
+
 	it("运行中和排队中都算活跃", () => {
 		expect(codeTaskBucket(task({ status: "running" }), now)).toBe("active")
 		expect(codeTaskBucket(task({ status: "queued" }), now)).toBe("active")

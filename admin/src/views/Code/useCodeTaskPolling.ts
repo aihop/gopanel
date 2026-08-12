@@ -106,12 +106,6 @@ function pickCodeTaskGitSummary(task: CodeTaskListItem) {
 	return {
 		gitStatus: task.summary.gitStatus,
 		gitError: task.summary.gitError,
-		deliveryStatus: task.summary.deliveryStatus,
-		deliveryStage: task.summary.deliveryStage,
-		deliveryProgress: task.summary.deliveryProgress,
-		deliveryQueuePosition: task.summary.deliveryQueuePosition,
-		deliveryAttempt: task.summary.deliveryAttempt,
-		deliveryError: task.summary.deliveryError,
 		branch: task.summary.branch,
 		repositories: task.summary.repositories,
 		additions: task.summary.additions,
