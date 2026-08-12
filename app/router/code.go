@@ -80,6 +80,7 @@ func CodeRouter(r fiber.Router) {
 		group.Post("/sessions/:id/delivery/local-sync", api.SyncCodeSessionDeliveryLocal)
 		group.Get("/sessions/:id/delivery/push", api.GetCodeDeliveryPushStatus)
 		group.Post("/sessions/:id/delivery/push", api.PushCodeSessionDelivery)
+		group.Post("/sessions/:id/delivery/revert", api.RevertCodeSessionDelivery)
 		group.Post("/sessions/:id/database-query", api.ExecuteCodeDatabaseQuery)
 		group.Get("/sessions/:id/quality-checks", api.GetCodeQualityChecks)
 		group.Post("/sessions/:id/quality-checks/run", api.RunCodeQualityCheck)
