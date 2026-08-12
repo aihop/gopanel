@@ -134,7 +134,7 @@ func fastForwardCodeDeliverySource(delivery *model.AICodeDelivery) error {
 		}
 	}
 	if branch != delivery.TargetBranch {
-		return fmt.Errorf("本地主仓当前分支不是交付目标 %s，已保留交付 Worktree", delivery.TargetBranch)
+		return fmt.Errorf("本地主仓当前分支不是交付目标 %s，交付提交和任务分支已保留", delivery.TargetBranch)
 	}
 	localCommit, err := runCodeGit(delivery.SourceWorkDir, "rev-parse", "refs/heads/"+delivery.TargetBranch)
 	if err != nil {
@@ -145,7 +145,7 @@ func fastForwardCodeDeliverySource(delivery *model.AICodeDelivery) error {
 	}
 	status, err := runCodeGit(delivery.SourceWorkDir, "status", "--porcelain", "--untracked-files=no")
 	if err != nil || strings.TrimSpace(status) != "" {
-		return errors.New("本地主仓在交付期间出现未提交变更，已保留交付 Worktree")
+		return errors.New("本地主仓在交付期间出现未提交变更，交付提交和任务分支已保留")
 	}
 	sourceCommit := strings.TrimSpace(delivery.SourceCommit)
 	if sourceCommit == "" {

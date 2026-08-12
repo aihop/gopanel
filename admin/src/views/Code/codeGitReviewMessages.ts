@@ -144,7 +144,14 @@ export const codeGitReviewMessages = {
 			gitPushCompleted: "{count} 个仓库均已推送到远端",
 			gitLocalSyncPending: "{count} 个仓库未自动合入本地主仓",
 			gitLocalSyncHint:
-				"本地主仓被其它进程占用（有未提交改动、已切换分支或已推进）。交付提交已安全保留，推送远端不受影响；需要本地同步时执行下面的命令。",
+				"网页合并未能完成。交付提交和任务分支已安全保留，推送远端不受影响；请处理下面的问题后重试，或执行同步命令。",
+			gitLocalSyncAction: "合入本地主仓",
+			gitLocalSyncActionHint: "交付提交尚未进入本地主仓，可直接在网页中安全合并。",
+			gitLocalSyncConfirmTitle: "合入本地主仓",
+			gitLocalSyncConfirm:
+				"确认将 {count} 个仓库的交付提交合入本地目标分支？系统会保留本地提交，并在需要时创建合并提交。",
+			gitLocalSyncSuccess: "交付提交已合入本地主仓",
+			gitLocalSyncBlocked: "网页合并未全部完成，请按提示处理后重试",
 			gitLocalSyncCopy: "复制同步命令",
 			gitLocalSyncCopied: "同步命令已复制",
 			gitLocalSyncUnknownReason: "未同步到本地主仓",
@@ -305,7 +312,15 @@ export const codeGitReviewMessages = {
 			gitPushCompleted: "All {count} repositories were pushed remotely",
 			gitLocalSyncPending: "{count} repositories were not merged into the local main repository",
 			gitLocalSyncHint:
-				"The local main repository is in use by another process (uncommitted changes, a switched branch, or new commits). The delivery commit is kept safely and pushing is unaffected; run the command below when you want the local copy in sync.",
+				"Browser merge could not finish. Delivery commits and task branches remain safe, and remote push is unaffected. Resolve the issues below and retry, or run the sync commands.",
+			gitLocalSyncAction: "Merge into local main",
+			gitLocalSyncActionHint:
+				"Delivery commits are not yet in the local main repository. Merge them safely from the browser.",
+			gitLocalSyncConfirmTitle: "Merge into local main",
+			gitLocalSyncConfirm:
+				"Merge delivery commits for {count} repositories into their local target branches? Existing local commits are preserved and merge commits are created when needed.",
+			gitLocalSyncSuccess: "Delivery commits merged into the local main repository",
+			gitLocalSyncBlocked: "Browser merge did not finish for every repository. Resolve the issues and retry.",
 			gitLocalSyncCopy: "Copy sync commands",
 			gitLocalSyncCopied: "Sync commands copied",
 			gitLocalSyncUnknownReason: "Not synced into the local main repository",

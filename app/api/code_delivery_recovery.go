@@ -268,7 +268,7 @@ func codeSingleRepositoryDeliveryResult(delivery *model.AICodeDelivery, result c
 		SourceAppliedAt:  delivery.SourceAppliedAt,
 		LocalSynced:      delivery.SourceAppliedAt != nil,
 		LocalSyncError:   delivery.LocalSyncError,
-		LocalSyncCommand: codeDeliveryLocalSyncCommand(delivery.SourceWorkDir, delivery.MergeCommit),
+		LocalSyncCommand: codeDeliveryLocalSyncCommand(delivery.SourceWorkDir, delivery.TargetBranch, delivery.MergeCommit),
 		PushStatus:       pushStatus, PushedCommit: delivery.PushedCommit, ErrorMessage: delivery.PushError,
 		ConflictFiles: result.ConflictFiles,
 	}
