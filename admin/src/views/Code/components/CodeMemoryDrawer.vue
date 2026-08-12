@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import { ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
-import type { CodeMemoryEntry } from "@/api/interface/codeMemories"
+import type { CodeMemoryEntry, CodeMemorySetting } from "@/api/interface/codeMemories"
 import Icon from "@/components/common/Icon.vue"
 import { codeMemoryMessages } from "../codeMemoryMessages"
 
 const props = defineProps<{
 	show: boolean
 	entries: CodeMemoryEntry[]
+	setting: CodeMemorySetting | null
 	loading: boolean
 	loadFailed: boolean
 	saving: boolean
+	savingSetting: boolean
 	removingId: number
 }>()
 const emit = defineEmits<{
@@ -18,6 +20,7 @@ const emit = defineEmits<{
 	refresh: []
 	add: [content: string, allProjects: boolean]
 	remove: [id: number]
+	saveSetting: [value: { enabled: boolean; baseUrl: string; apiKey: string; model: string; growthThreshold: number }]
 }>()
 const { t } = useI18n({ messages: codeMemoryMessages })
 
@@ -44,6 +47,29 @@ function submit() {
 	allProjects.value = false
 	composing.value = false
 }
+
+// 抽取设置默认收起。它是一次性配置，日常打开这个抽屉是为了看记忆，
+// 不该每次都被一堆输入框挡在前面。
+const showSetting = ref(false)
+const settingDraft = ref({ baseUrl: "", apiKey: "", model: "", growthThreshold: 8 })
+
+watch(
+	() => props.setting,
+	value => {
+		if (!value) return
+		settingDraft.value = {
+			baseUrl: value.baseUrl || "",
+			apiKey: "",
+			model: value.model || "",
+			growthThreshold: value.growthThreshold ?? 8,
+		}
+	},
+	{ immediate: true },
+)
+
+function saveSetting(enabled: boolean) {
+	emit("saveSetting", { enabled, ...settingDraft.value })
+}
 </script>
 
 <template>
@@ -52,11 +78,48 @@ function submit() {
 			<div class="mb-3 flex items-center justify-between gap-3">
 				<p class="text-xs text-slate-400">{{ t("code.memoryHint") }}</p>
 				<div class="flex shrink-0 items-center gap-1">
+					<n-button quaternary circle size="small" :aria-label="t('code.memorySetting')" @click="showSetting = !showSetting">
+						<template #icon><Icon name="mdi:cog-outline" :size="16" /></template>
+					</n-button>
 					<n-button quaternary circle size="small" :loading="loading" :aria-label="t('code.memoryRefresh')" @click="emit('refresh')">
 						<template #icon><Icon name="mdi:refresh" :size="16" /></template>
 					</n-button>
 					<n-button quaternary circle size="small" :aria-label="t('code.memoryAdd')" @click="composing = true">
 						<template #icon><Icon name="mdi:plus" :size="18" /></template>
+					</n-button>
+				</div>
+			</div>
+
+			<!-- 没启用时把提示顶到最前：这时候列表必然是空的，
+			     不说清原因用户只会以为功能坏了 -->
+			<n-alert v-if="setting && !setting.enabled && !showSetting" type="warning" :show-icon="false" class="mb-3">
+				<div class="text-xs font-medium">{{ t("code.memoryDisabledTitle") }}</div>
+				<p class="mt-1 text-[11px] leading-relaxed opacity-80">{{ t("code.memoryDisabledHint") }}</p>
+				<n-button size="tiny" class="mt-2" @click="showSetting = true">{{ t("code.memorySetting") }}</n-button>
+			</n-alert>
+
+			<div v-if="showSetting" class="mb-3 flex flex-col gap-2 rounded-xl border border-slate-200/80 p-3">
+				<n-input v-model:value="settingDraft.baseUrl" size="small" :placeholder="t('code.memoryBaseUrl')" />
+				<n-input v-model:value="settingDraft.model" size="small" :placeholder="t('code.memoryModel')" />
+				<n-input
+					v-model:value="settingDraft.apiKey"
+					size="small"
+					type="password"
+					show-password-on="click"
+					:placeholder="setting?.hasApiKey ? t('code.memoryApiKeyKeep') : t('code.memoryApiKey')"
+				/>
+				<div class="flex items-center gap-2">
+					<span class="shrink-0 text-[11px] text-slate-500">{{ t("code.memoryThreshold") }}</span>
+					<n-input-number v-model:value="settingDraft.growthThreshold" size="small" :min="0" :max="100" class="w-24" />
+				</div>
+				<p class="text-[11px] text-slate-400">{{ t("code.memoryThresholdHint") }}</p>
+				<div class="flex justify-end gap-2">
+					<n-button size="tiny" quaternary :disabled="savingSetting" @click="showSetting = false">{{ t("code.cancel") }}</n-button>
+					<n-button v-if="setting?.enabled" size="tiny" :loading="savingSetting" @click="saveSetting(false)">
+						{{ t("code.disable") }}
+					</n-button>
+					<n-button size="tiny" type="primary" :loading="savingSetting" @click="saveSetting(true)">
+						{{ setting?.enabled ? t("code.save") : t("code.memoryEnable") }}
 					</n-button>
 				</div>
 			</div>

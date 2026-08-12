@@ -49,3 +49,44 @@ type AICodeMemorySummary struct {
 }
 
 func (AICodeMemorySummary) TableName() string { return "ai_code_memory_summaries" }
+
+// AICodeMemorySetting 是抽取用的模型配置。
+//
+// 独立于会话的 provider：执行器（codex / claude CLI）各自持有登录态，
+// 面板从来不掌握它们的模型凭据，靠会话字段永远取不到可用的模型。
+// 而且抽取是一次几百 token 的压缩作业，本该用便宜的小模型，
+// 和写代码那个贵模型不是一回事。
+//
+// 按用户存：记忆本身就是按用户隔离的，模型跟着走才不会出现
+// 「谁的密钥被谁用了」的问题。
+type AICodeMemorySetting struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+	UserID    uint      `gorm:"column:user_id;not null;uniqueIndex" json:"userId"`
+	Enabled   bool      `gorm:"column:enabled;not null;default:false" json:"enabled"`
+	BaseURL   string    `gorm:"column:base_url;type:varchar(1024)" json:"baseUrl"`
+	APIKey    string    `gorm:"column:api_key;type:text" json:"-"`
+	Model     string    `gorm:"column:model;type:varchar(255)" json:"model"`
+	// GrowthThreshold 是「距上次抽取新增多少条消息才再抽一次」。
+	// 0 表示每次执行都抽（回到没有闸门的行为）。
+	GrowthThreshold int `gorm:"column:growth_threshold;not null;default:8" json:"growthThreshold"`
+}
+
+func (AICodeMemorySetting) TableName() string { return "ai_code_memory_settings" }
+
+// AICodeMemoryExtractionState 记录每个会话抽到哪儿了。
+//
+// 没有它，每次执行都要重读最近 60 条消息——一个 8 轮的会话里，
+// 后几次抽取有八九成内容是重复消化的，全靠模型判重兜底。
+// 消息行是自增且只追加的，记住最后一条 id 就能精确算出增量，
+// 不需要像按文件抽取那样去比对行数和前缀哈希。
+type AICodeMemoryExtractionState struct {
+	ID            uint      `gorm:"primaryKey" json:"id"`
+	CreatedAt     time.Time `json:"createdAt"`
+	UpdatedAt     time.Time `json:"updatedAt"`
+	SessionID     uint      `gorm:"column:session_id;not null;uniqueIndex" json:"sessionId"`
+	LastMessageID uint      `gorm:"column:last_message_id;not null;default:0" json:"lastMessageId"`
+}
+
+func (AICodeMemoryExtractionState) TableName() string { return "ai_code_memory_extraction_states" }

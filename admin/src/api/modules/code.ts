@@ -28,7 +28,7 @@ import type {
 	CodeTokenUsageResponse,
 } from "../interface/code"
 import type { CodeProjectBranches } from "../interface/codeBranches"
-import type { CodeMemoryEntry, CodeMemoryList } from "../interface/codeMemories"
+import type { CodeMemoryEntry, CodeMemoryList, CodeMemorySetting } from "../interface/codeMemories"
 import type { CodeResidueCleanupOutcome, CodeWorktreeResidueSummary } from "../interface/codeResidues"
 import type { CodeTaskListItem } from "../interface/codeTasks"
 import type { HostTerminalSession } from "../interface/hostTerminal"
@@ -81,6 +81,14 @@ export function getCodeProjectBranches(projectId: number) {
 
 export function deleteCodeProjectBranch(projectId: number, repositoryPath: string, branch: string, force: boolean) {
 	return http.delete(`/code/projects/${projectId}/git/branches`, { repositoryPath, branch, force })
+}
+
+export function getCodeMemorySetting() {
+	return http.get<CodeMemorySetting>("/code/memory/setting")
+}
+
+export function saveCodeMemorySetting(data: { enabled: boolean; baseUrl: string; apiKey: string; model: string; growthThreshold: number }) {
+	return http.put<CodeMemorySetting>("/code/memory/setting", data)
 }
 
 export function getCodeMemories(projectId?: number) {

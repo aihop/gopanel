@@ -2,8 +2,8 @@
 import { ref } from "vue"
 import { useMessage } from "naive-ui"
 import { useI18n } from "vue-i18n"
-import { createCodeMemory, deleteCodeMemory, getCodeMemories } from "@/api/modules/code"
-import type { CodeMemoryEntry } from "@/api/interface/codeMemories"
+import { createCodeMemory, deleteCodeMemory, getCodeMemories, getCodeMemorySetting, saveCodeMemorySetting } from "@/api/modules/code"
+import type { CodeMemoryEntry, CodeMemorySetting } from "@/api/interface/codeMemories"
 import Icon from "@/components/common/Icon.vue"
 import { codeMemoryMessages } from "../codeMemoryMessages"
 import CodeMemoryDrawer from "./CodeMemoryDrawer.vue"
@@ -17,6 +17,8 @@ const loadFailed = ref(false)
 const saving = ref(false)
 const removingId = ref(0)
 const showDrawer = ref(false)
+const setting = ref<CodeMemorySetting | null>(null)
+const savingSetting = ref(false)
 
 // 不做轮询：记忆只在执行结束后变化，点开时拉一次就够。
 async function load() {
@@ -34,9 +36,35 @@ async function load() {
 	}
 }
 
+// 设置和列表一起拉：未配置时列表必然是空的，得同时知道「是没配」
+// 还是「配了但还没攒出记忆」，否则提示会给错。
+async function loadSetting() {
+	try {
+		const response = await getCodeMemorySetting()
+		if (response.code === 0) setting.value = response.data
+	} catch {
+		void 0
+	}
+}
+
 function openDrawer() {
 	showDrawer.value = true
 	void load()
+	void loadSetting()
+}
+
+async function persistSetting(value: { enabled: boolean; baseUrl: string; apiKey: string; model: string; growthThreshold: number }) {
+	savingSetting.value = true
+	try {
+		const response = await saveCodeMemorySetting(value)
+		if (response.code !== 0) throw new Error(response.message)
+		setting.value = response.data
+		message.success(t("code.memorySettingSaved"))
+	} catch {
+		message.error(t("code.memorySettingSaveFailed"))
+	} finally {
+		savingSetting.value = false
+	}
 }
 
 async function add(content: string, allProjects: boolean) {
@@ -79,12 +107,15 @@ async function remove(id: number) {
 	<CodeMemoryDrawer
 		v-model:show="showDrawer"
 		:entries="entries"
+		:setting="setting"
 		:loading="loading"
 		:load-failed="loadFailed"
 		:saving="saving"
+		:saving-setting="savingSetting"
 		:removing-id="removingId"
 		@refresh="load"
 		@add="add"
 		@remove="remove"
+		@save-setting="persistSetting"
 	/>
 </template>

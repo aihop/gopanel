@@ -15,3 +15,12 @@ export interface CodeMemoryList {
 	summary: string
 	total: number
 }
+
+export interface CodeMemorySetting {
+	enabled: boolean
+	baseUrl: string
+	model: string
+	hasApiKey: boolean
+	// 距上次抽取新增多少条消息才再抽一次；0 表示每次执行都抽。
+	growthThreshold: number
+}

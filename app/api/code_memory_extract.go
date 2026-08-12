@@ -8,7 +8,6 @@ import (
 
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/global"
-	"github.com/aihop/gopanel/utils/encrypt"
 )
 
 // 抽取要读整段会话记录、发一次模型请求，代价不小，因此按会话去重：
@@ -42,16 +41,21 @@ func runCodeMemoryExtraction(ctx context.Context, sessionID uint) error {
 	if err := global.DB.First(&session, sessionID).Error; err != nil {
 		return err
 	}
-	config, err := codeMemoryLLMConfigForSession(&session)
+	config, threshold, err := resolveCodeMemoryLLMConfig(session.UserID)
 	if err != nil {
 		return err
 	}
-	transcript, err := loadCodeMemoryTranscript(sessionID)
+	transcript, lastMessageID, newMessages, err := loadCodeMemoryTranscript(sessionID)
 	if err != nil {
 		return err
 	}
 	if strings.TrimSpace(transcript) == "" {
 		return errors.New("会话没有可抽取的内容")
+	}
+	// 闸门在模型调用之前：挡掉的这些本来就抽不出东西，
+	// 花一次调用去确认它没东西可抽是纯粹的浪费。
+	if gate := evaluateCodeMemoryGate(sessionID, transcript, threshold, newMessages); gate != codeMemoryGateAllow {
+		return errors.New("未达抽取条件：" + gate)
 	}
 	userEntries, projectEntries, summary := loadCodeMemoryForPrompt(session.UserID, session.ProjectID)
 	prompt := buildCodeMemoryExtractionPrompt(codeMemoryPromptInput{
@@ -73,29 +77,15 @@ func runCodeMemoryExtraction(ctx context.Context, sessionID uint) error {
 	if err != nil {
 		return err
 	}
-	_, err = applyCodeMemoryExtraction(response, codeMemoryApplyContext{
+	if _, err := applyCodeMemoryExtraction(response, codeMemoryApplyContext{
 		UserID: session.UserID, ProjectID: session.ProjectID, SessionID: sessionID,
-	})
-	return err
-}
-
-// codeMemoryLLMConfigForSession 复用会话自己配的 provider。
-// 会话没配就不抽取——与其偷偷用别处的密钥，不如什么都不做。
-func codeMemoryLLMConfigForSession(session *model.AIDevSession) (codeMemoryLLMConfig, error) {
-	if session == nil || strings.TrimSpace(session.ProviderBaseURL) == "" {
-		return codeMemoryLLMConfig{}, errors.New("会话未配置模型服务")
+	}); err != nil {
+		return err
 	}
-	apiKey := ""
-	if strings.TrimSpace(session.ProviderAPIKey) != "" {
-		decrypted, err := encrypt.StringDecrypt(session.ProviderAPIKey)
-		if err != nil {
-			return codeMemoryLLMConfig{}, errors.New("会话模型密钥无法解密")
-		}
-		apiKey = decrypted
-	}
-	return codeMemoryLLMConfig{
-		BaseURL: session.ProviderBaseURL, APIKey: apiKey, Model: session.ProviderModel,
-	}, nil
+	// 落库成功才推进游标：中途失败时下一次应当重读同一批消息，
+	// 而不是把它们当成已经消化过。
+	saveCodeMemoryExtractionState(sessionID, lastMessageID)
+	return nil
 }
 
 func codeMemoryProjectName(projectID uint) string {
@@ -107,12 +97,31 @@ func codeMemoryProjectName(projectID uint) string {
 	return name
 }
 
-func loadCodeMemoryTranscript(sessionID uint) (string, error) {
+// loadCodeMemoryTranscript 取会话记录，并算出距上次抽取新增了多少条。
+//
+// 返回的 newMessages 为 -1 表示这个会话还没抽过，调用方据此跳过增量判断。
+// 仍然取最近 60 条而不是只取新增：只喂新增的话，模型会丢掉「这段对话在讨论什么」
+// 的上下文，抽出来的记忆会变成没有主语的碎片。
+func loadCodeMemoryTranscript(sessionID uint) (string, uint, int, error) {
 	var messages []model.AIMessage
 	if err := global.DB.Where("session_id = ?", sessionID).
-		Order("created_at DESC").Limit(codeMemoryTranscriptMaxMessages).
+		Order("id DESC").Limit(codeMemoryTranscriptMaxMessages).
 		Find(&messages).Error; err != nil {
-		return "", err
+		return "", 0, 0, err
+	}
+	if len(messages) == 0 {
+		return "", 0, 0, nil
+	}
+	// 按 id 倒序取的，第一条就是最新的那条。
+	lastMessageID := messages[0].ID
+	newMessages := -1
+	if lastExtracted := loadCodeMemoryExtractionState(sessionID); lastExtracted >= 0 {
+		newMessages = 0
+		for _, message := range messages {
+			if int64(message.ID) > lastExtracted {
+				newMessages++
+			}
+		}
 	}
 	transcript := make([]codeMemoryTranscriptMessage, 0, len(messages))
 	// 查出来是倒序的，翻回时间顺序再拼。
@@ -121,7 +130,7 @@ func loadCodeMemoryTranscript(sessionID uint) (string, error) {
 			Role: messages[index].Role, Content: messages[index].Content,
 		})
 	}
-	return buildCodeMemoryTranscript(transcript), nil
+	return buildCodeMemoryTranscript(transcript), lastMessageID, newMessages, nil
 }
 
 // loadCodeMemoryForPrompt 取已有记忆喂给抽取，让模型能判重。
