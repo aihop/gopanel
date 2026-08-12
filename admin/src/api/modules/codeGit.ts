@@ -39,7 +39,7 @@ export function saveCodeGitChanges(sessionId: number, message: string) {
 	return http.post<CodeGitDeliveryResult>(`/code/sessions/${sessionId}/git/save`, { message })
 }
 
-export function mergeCodeSessionWorktree(sessionId: number, reviewRevision?: string) {
+export function mergeCodeSessionWorktree(sessionId: number, reviewRevision: string) {
 	return http.post<CodeDeliveryJob>(`/code/sessions/${sessionId}/worktree/merge`, {
 		confirm: true,
 		reviewRevision

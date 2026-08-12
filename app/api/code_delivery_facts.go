@@ -15,8 +15,11 @@ type codeDeliveryFact struct {
 }
 
 func loadCodeDeliveryFacts(sessionID uint, repositories []codeRepositoryDeliveryResult) []codeDeliveryFact {
-	if stored, err := loadCodeSessionRepositories(sessionID); err == nil && len(stored) > 0 {
-		return codeMultiRepositoryDeliveryFacts(codeStoredRepositoryDeliveryResults(stored))
+	var session model.AIDevSession
+	if err := global.DB.First(&session, sessionID).Error; err == nil {
+		if stored, loadErr := loadCodeDeliverySessionRepositories(&session); loadErr == nil && len(stored) > 0 {
+			return codeMultiRepositoryDeliveryFacts(codeStoredRepositoryDeliveryResults(stored))
+		}
 	}
 	if len(repositories) > 0 {
 		return codeMultiRepositoryDeliveryFacts(repositories)

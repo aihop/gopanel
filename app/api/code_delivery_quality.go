@@ -170,7 +170,7 @@ func persistCodeDeliveryQualityResult(
 
 func codeDeliveryQualityRoots(session *model.AIDevSession) ([]codeDeliveryQualityRoot, error) {
 	if session.IsolationMode == codeIsolationMultiWorktree || hasCodeMultiRepositoryDelivery(session.ID) {
-		repositories, err := loadCodeSessionRepositories(session.ID)
+		repositories, err := loadCodeDeliverySessionRepositories(session)
 		if err != nil || len(repositories) == 0 {
 			return nil, errors.New("会话多仓库交付快照不可用")
 		}

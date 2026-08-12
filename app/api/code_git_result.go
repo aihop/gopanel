@@ -18,6 +18,7 @@ func discoverCodeGitResultRepositories(session *model.AIDevSession, excludedRepo
 	if session == nil {
 		return nil
 	}
+	excludedRepositories = normalizeCodeExcludedRepositories(excludedRepositories)
 	if session.IsolationMode == codeIsolationMultiWorktree || (global.DB != nil && hasCodeMultiRepositoryDelivery(session.ID)) {
 		rows, err := loadCodeSessionRepositories(session.ID)
 		if err != nil {
@@ -25,6 +26,9 @@ func discoverCodeGitResultRepositories(session *model.AIDevSession, excludedRepo
 		}
 		result := make([]codeGitRepository, 0, len(rows))
 		for _, row := range rows {
+			if isCodeRepositoryExcluded(row.SourceDir, excludedRepositories) {
+				continue
+			}
 			repository, ok := inspectCodeGitResultRepository(
 				codeSessionRepositoryID(row.ID), row.LinkName, row.WorktreeDir, row.SourceDir, row.LinkName,
 				row.BaseCommit, row.WorktreeCommit, row.Status, row.Branch, row.TargetBranch,
@@ -39,6 +43,9 @@ func discoverCodeGitResultRepositories(session *model.AIDevSession, excludedRepo
 		var delivery model.AICodeDelivery
 		deliveryErr := global.DB.Where("session_id = ?", session.ID).First(&delivery).Error
 		if deliveryErr == nil {
+			if isCodeRepositoryExcluded(delivery.SourceWorkDir, excludedRepositories) {
+				return nil
+			}
 			repository, ok := inspectCodeGitResultRepository(
 				"session", filepath.Base(delivery.SourceWorkDir), delivery.WorkDir, delivery.SourceWorkDir, "",
 				delivery.BaseCommit, delivery.WorktreeCommit, delivery.Status, delivery.WorktreeBranch,
@@ -52,6 +59,9 @@ func discoverCodeGitResultRepositories(session *model.AIDevSession, excludedRepo
 		}
 	}
 	if strings.TrimSpace(session.BaseCommit) == "" || strings.TrimSpace(session.WorktreeBranch) == "" {
+		return nil
+	}
+	if isCodeRepositoryExcluded(session.SourceWorkDir, excludedRepositories) {
 		return nil
 	}
 	repository, ok := inspectCodeGitResultRepository(
@@ -218,7 +228,11 @@ func codeGitReviewRevision(repositories []codeGitRepository) string {
 }
 
 func validateCodeGitReviewRevision(session *model.AIDevSession, expected string) error {
-	status, err := loadCodeGitResultStatus(session, nil)
+	excludedRepositories, err := codeGitReviewExcludedRepositories(session)
+	if err != nil {
+		return err
+	}
+	status, err := loadCodeGitResultStatus(session, excludedRepositories)
 	if err != nil {
 		return err
 	}
@@ -226,6 +240,17 @@ func validateCodeGitReviewRevision(session *model.AIDevSession, expected string)
 		return errors.New("任务变更已发生变化，请重新评审后再交付")
 	}
 	return nil
+}
+
+func codeGitReviewExcludedRepositories(session *model.AIDevSession) ([]string, error) {
+	if session == nil || session.ProjectID == 0 || global.DB == nil {
+		return nil, nil
+	}
+	var project model.AIProject
+	if err := global.DB.Select("excluded_repositories").First(&project, session.ProjectID).Error; err != nil {
+		return nil, err
+	}
+	return project.ExcludedRepositories, nil
 }
 
 func loadCodeGitResultFileDiff(

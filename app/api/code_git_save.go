@@ -71,7 +71,7 @@ func saveCodeSessionRepositories(session *model.AIDevSession, message string) (c
 	if err != nil {
 		return codeGitDeliveryResult{}, err
 	}
-	repositories, err := loadCodeSessionRepositories(session.ID)
+	repositories, err := loadCodeDeliverySessionRepositories(session)
 	if err != nil || len(repositories) == 0 {
 		return codeGitDeliveryResult{}, errors.New("会话多仓库 Worktree 元数据不可用")
 	}

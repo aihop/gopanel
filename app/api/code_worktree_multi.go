@@ -50,6 +50,31 @@ func loadCodeSessionRepositories(sessionID uint) ([]model.AIDevSessionRepository
 	return repositories, err
 }
 
+func loadCodeDeliverySessionRepositories(session *model.AIDevSession) ([]model.AIDevSessionRepository, error) {
+	if session == nil {
+		return nil, errors.New("会话多仓库交付记录不可用")
+	}
+	repositories, err := loadCodeSessionRepositories(session.ID)
+	if err != nil || session.ProjectID == 0 {
+		return repositories, err
+	}
+	var project model.AIProject
+	if err := global.DB.Select("excluded_repositories").First(&project, session.ProjectID).Error; err != nil {
+		return nil, err
+	}
+	excluded := normalizeCodeExcludedRepositories(project.ExcludedRepositories)
+	if len(excluded) == 0 {
+		return repositories, nil
+	}
+	participating := make([]model.AIDevSessionRepository, 0, len(repositories))
+	for _, repository := range repositories {
+		if !isCodeRepositoryExcluded(repository.SourceDir, excluded) {
+			participating = append(participating, repository)
+		}
+	}
+	return participating, nil
+}
+
 func sessionRepositoryLinkNames(sourceDirs []string) []aiProjectWorkspaceSource {
 	return buildAIProjectWorkspaceSources(sourceDirs, aiProjectWorkspaceManifest{}, nil)
 }

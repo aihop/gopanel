@@ -253,6 +253,9 @@ func MergeCodeSessionWorktree(c fiber.Ctx) error {
 	if !req.Confirm {
 		return c.JSON(e.Fail(errors.New("合并操作需要明确确认")))
 	}
+	if strings.TrimSpace(req.ReviewRevision) == "" {
+		return c.JSON(e.Fail(errors.New("交付前必须完成任务结果评审")))
+	}
 	session, err := getCodeDeliverySessionContext(c)
 	if err != nil {
 		return c.JSON(e.Fail(err))

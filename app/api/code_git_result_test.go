@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/aihop/gopanel/app/model"
 )
 
 func TestLoadCodeGitResultStatusIncludesSavedChanges(t *testing.T) {
@@ -100,6 +102,50 @@ func TestValidateCodeGitReviewRevisionRejectsChangedCommit(t *testing.T) {
 	}
 	if err := validateCodeGitReviewRevision(session, status.ReviewRevision); err == nil {
 		t.Fatal("stale review revision should be rejected")
+	}
+}
+
+func TestDiscoverCodeGitResultRepositoriesExcludesConfiguredRepository(t *testing.T) {
+	database := withCodeGovernanceDB(t)
+	includedDir := createCodeGitRepository(t)
+	excludedDir := createCodeGitRepository(t)
+	includedBase, _ := runCodeGit(includedDir, "rev-parse", "HEAD")
+	excludedBase, _ := runCodeGit(excludedDir, "rev-parse", "HEAD")
+	includedHead := commitCodeSummaryFiles(t, includedDir, map[string]string{"included.txt": "included\n"})
+	excludedHead := commitCodeSummaryFiles(t, excludedDir, map[string]string{"excluded.txt": "excluded\n"})
+	if err := os.WriteFile(filepath.Join(excludedDir, "stale-dirty.txt"), []byte("dirty\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	session := &model.AIDevSession{
+		UserID: 1, ProjectID: 1, Title: "result", WorkDir: t.TempDir(), IsolationMode: codeIsolationMultiWorktree,
+	}
+	project := &model.AIProject{
+		ID: 1, Name: "project", CreatorID: 1, ExcludedRepositories: []string{excludedDir},
+	}
+	if err := database.Create(project).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := database.Create(session).Error; err != nil {
+		t.Fatal(err)
+	}
+	rows := []model.AIDevSessionRepository{
+		{SessionID: session.ID, ProjectID: 1, SourceDir: includedDir, WorktreeDir: includedDir, LinkName: "included", Branch: "task-included", BaseCommit: strings.TrimSpace(includedBase), WorktreeCommit: includedHead, Status: "working"},
+		{SessionID: session.ID, ProjectID: 1, SourceDir: excludedDir, WorktreeDir: excludedDir, LinkName: "excluded", Branch: "task-excluded", BaseCommit: strings.TrimSpace(excludedBase), WorktreeCommit: excludedHead, Status: "working"},
+	}
+	if err := database.Create(&rows).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	repositories := discoverCodeGitResultRepositories(session, []string{excludedDir})
+	if len(repositories) != 1 || repositories[0].Name != "included" {
+		t.Fatalf("excluded repository leaked into task result: %#v", repositories)
+	}
+	status, err := loadCodeGitResultStatus(session, []string{excludedDir})
+	if err != nil || len(status.Repositories) != 1 || status.Repositories[0].Name != "included" || status.ReviewRevision == "" {
+		t.Fatalf("unexpected filtered result review: %#v, %v", status, err)
+	}
+	if err := validateCodeGitReviewRevision(session, status.ReviewRevision); err != nil {
+		t.Fatalf("filtered review revision was rejected during delivery: %v", err)
 	}
 }
 

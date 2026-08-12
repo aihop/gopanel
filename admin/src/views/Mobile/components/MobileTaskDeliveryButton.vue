@@ -28,8 +28,10 @@ const message = useMessage()
 const loading = ref(false)
 const queued = ref(false)
 const gitStatus = ref<CodeGitStatus | null>(null)
+const reviewStatus = ref<CodeGitStatus | null>(null)
 const statusLoading = ref(false)
 const statusError = ref(false)
+const reviewReady = computed(() => Boolean(reviewStatus.value?.reviewReady && reviewStatus.value.reviewRevision))
 
 // 交付状态判定与桌面端共用，这里只负责把 phase 映射成移动端文案。
 const {
@@ -64,6 +66,7 @@ const labelKeys: Record<CodeDeliveryPhase, string> = {
 const label = computed(() => {
 	if (statusError.value) return t("mobile.retryGitStatus")
 	if (statusLoading.value) return t("mobile.checkingChanges")
+	if (!hasChanges.value && !reviewReady.value) return t("mobile.reviewTaskChangesBeforeDelivery")
 	// 已交付态要区分主仓是否真的同步了，判定和桌面端共用 useCodeDelivery。
 	if (phase.value === "delivered" && pendingLocalSync.value) return t("mobile.deliveredPendingSync")
 	return t(labelKeys[phase.value])
@@ -73,7 +76,12 @@ async function loadGitStatus(silent = false) {
 	if (!available.value || statusLoading.value) return
 	statusLoading.value = true
 	try {
-		gitStatus.value = await getMobileGitStatus(props.session.id)
+		const [workspaceStatus, resultStatus] = await Promise.all([
+			getMobileGitStatus(props.session.id, "workspace"),
+			getMobileGitStatus(props.session.id, "result")
+		])
+		gitStatus.value = workspaceStatus
+		reviewStatus.value = resultStatus
 		statusError.value = false
 	} catch (error) {
 		statusError.value = true
@@ -112,6 +120,10 @@ function deliver() {
 		void saveChanges()
 		return
 	}
+	if (!reviewReady.value) {
+		void loadGitStatus()
+		return
+	}
 	dialog.warning({
 		title: t("mobile.deliverToMain"),
 		content: t("mobile.deliverToMainConfirm"),
@@ -120,12 +132,13 @@ function deliver() {
 		onPositiveClick: async () => {
 			loading.value = true
 			try {
-				await deliverMobileSession(props.session.id)
+				await deliverMobileSession(props.session.id, reviewStatus.value?.reviewRevision || "")
 				queued.value = true
 				message.success(t("mobile.deliveryQueuedSuccess"))
 				emit("updated")
 			} catch (error) {
-				void 0
+				message.error(t("mobile.deliveryReviewChanged"))
+				void loadGitStatus(true)
 			} finally {
 				loading.value = false
 			}
@@ -138,6 +151,7 @@ watch(
 	([, active]) => {
 		queued.value = false
 		gitStatus.value = null
+		reviewStatus.value = null
 		statusError.value = false
 		if (active) void loadGitStatus()
 	},
@@ -163,7 +177,11 @@ watch(
 		size="tiny"
 		secondary
 		:loading="loading || statusLoading"
-		:disabled="delivering || (!statusError && delivered && !hasChanges && !canDeliverPending)"
+		:disabled="
+			delivering ||
+			(!statusError && !hasChanges && !reviewReady) ||
+			(!statusError && delivered && !hasChanges && !canDeliverPending)
+		"
 		:block="block"
 		:type="codeDeliveryPhaseType(phase)"
 		class="!h-10 !rounded-xl"
