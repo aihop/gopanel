@@ -5,17 +5,19 @@
     flex 链就没有可分配的高度，终端只能被最小高度撑着，怎么调间距都不管用。
   -->
   <div
-    class="page page-wrapped page-mobile-full page-without-footer bg-base-accent border-base-accent relative flex w-full flex-col rounded-[28px]"
+    class="page page-wrapped page-mobile-full page-without-footer bg-base-accent border-base-accent relative flex w-full flex-col overflow-hidden"
   >
     <!-- 整页不滚：右侧是终端，页面滚起来终端会跟着跑。滚动交给左右两栏各自处理。 -->
     <!-- 横向可以给足，纵向省着用：只有纵向内边距会从终端高度里扣 -->
-    <div class="project-lobby flex min-h-0 flex-1 flex-col overflow-hidden px-5 py-4 md:px-7 md:py-5">
+    <div class="project-lobby flex min-h-0 flex-1 flex-col overflow-hidden pt-4 md:pt-5">
       <CodeDashboard
         :projects="projects"
         :loading="projectsLoading"
         :load-error="projectsLoadError"
         @retry="fetchProjects()"
         @create-project="openCreateProjectModal"
+        @create-task="openNewProjectTask"
+        @project-action="handleProjectAction"
         @open-task="openTask"
       >
         <!--
@@ -393,8 +395,10 @@ const openTask = (task: CodeTaskListItem) => {
   router.push({ path: `/code/project/${task.projectId}`, query: { taskId: String(task.id) } })
 }
 
-// 每个项目一个子菜单：进入 / 快捷面板 / 编辑。key 编码成 "动作:项目号"，
-// 省掉再维护一张 key → 项目的映射表。
+const openNewProjectTask = (projectId: number) => {
+  router.push({ path: `/code/project/${projectId}`, query: { newTask: '1' } })
+}
+
 const projectMenuOptions = computed(() =>
   projects.value.map(project => ({
     label: () => h(CodeProjectIdentity, { projectId: project.id, name: project.name }),
@@ -409,7 +413,11 @@ const projectMenuOptions = computed(() =>
 
 const handleProjectMenuSelect = (key: string) => {
   const [action, rawId] = String(key).split(':')
-  const project = projects.value.find(item => item.id === Number(rawId))
+  handleProjectAction(action, Number(rawId))
+}
+
+const handleProjectAction = (action: string, projectId: number) => {
+  const project = projects.value.find(item => item.id === projectId)
   if (!project) return
   if (action === 'enter') enterProject(project.id)
   else if (action === 'panel') openQuickPanel(project)

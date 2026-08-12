@@ -265,8 +265,8 @@ import ProjectTaskSidebar from "./components/ProjectTaskSidebar.vue"
 import ProjectOverviewPanel from "./components/ProjectOverviewPanel.vue"
 import CodeGitReview from "./components/CodeGitReview.vue"
 import { useCodeWorkspace } from "./useCodeWorkspace"
-import { watch } from "vue"
-import { useRoute } from "vue-router"
+import { nextTick, watch } from "vue"
+import { useRoute, useRouter } from "vue-router"
 
 const props = withDefaults(defineProps<{ projectId?: number; embedded?: boolean }>(), { embedded: false })
 const emit = defineEmits<{ close: [] }>()
@@ -328,6 +328,7 @@ const {
 // 只认第一批任务：之后用户在侧栏切走了，不该被地址栏里的旧参数拽回来。
 // 快捷面板和主页面共用这个路由，所以内嵌模式不参与。
 const route = useRoute()
+const router = useRouter()
 let pendingTaskId = props.embedded ? 0 : Number(route.query.taskId) || 0
 watch(
 	aiTasks,
@@ -336,6 +337,19 @@ watch(
 		const target = list.find(task => task.id === pendingTaskId)
 		pendingTaskId = 0
 		if (target) selectTask(target)
+	},
+	{ immediate: true },
+)
+
+watch(
+	[currentProjectId, () => route.query.newTask],
+	async ([projectId, newTask]) => {
+		if (props.embedded || !projectId || newTask !== "1") return
+		await nextTick()
+		createNewTask()
+		const query = { ...route.query }
+		delete query.newTask
+		await router.replace({ path: route.path, query })
 	},
 	{ immediate: true },
 )

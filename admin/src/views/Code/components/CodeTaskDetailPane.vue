@@ -36,7 +36,7 @@ const terminalIdentity = computed(() =>
 		全屏按钮浮在右上角，不占垂直空间。
 	-->
   <section
-    class="detail-pane flex min-h-0 flex-col overflow-hidden rounded-[24px]"
+    class="detail-pane flex min-h-0 flex-col overflow-hidden"
     :class="isWorkspaceFullscreen ? 'detail-pane--fullscreen' : ''"
   >
     <div
@@ -128,11 +128,8 @@ const terminalIdentity = computed(() =>
 </template>
 
 <style scoped>
-/* 和左列同一套：97% 底色 + 92% 边框 + 柔和投影，两栏才像一对 */
 .detail-pane {
 	background: color-mix(in srgb, var(--n-color) 97%, transparent);
-	border: 1px solid color-mix(in srgb, var(--n-border-color) 92%, transparent);
-	box-shadow: 0 8px 24px rgb(15 23 42 / 4.5%);
 }
 
 .detail-pane__header {

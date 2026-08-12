@@ -14,6 +14,7 @@ import TaskApprovalAction from "./TaskApprovalAction.vue"
 const props = defineProps<{
 	task: CodeTaskListItem
 	projectName: string
+	showProject?: boolean
 	selected?: boolean
 	archived?: boolean
 	archiving?: boolean
@@ -53,6 +54,7 @@ const executorLabel = computed(() =>
           class="shrink-0 text-slate-500"
         />
         <CodeProjectIdentity
+          v-if="showProject !== false"
           class="max-w-[140px] shrink-0 text-[11px] text-[var(--n-text-color-3)]"
           :project-id="task.projectId"
           :name="projectName || t('code.projectFallback')"

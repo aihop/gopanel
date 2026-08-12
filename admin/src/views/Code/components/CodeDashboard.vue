@@ -16,7 +16,7 @@ import {
 	type CodeDashboardBucket,
 } from "../codeDashboardBuckets"
 import { useCodeTaskPolling } from "../useCodeTaskPolling"
-import CodeDashboardTaskRow from "./CodeDashboardTaskRow.vue"
+import CodeDashboardProjectList from "./CodeDashboardProjectList.vue"
 import SessionHistoryDrawer from "./SessionHistoryDrawer.vue"
 import CodeTaskDetailPane from "./CodeTaskDetailPane.vue"
 
@@ -24,6 +24,8 @@ const props = defineProps<{ projects: AIProject[]; loading: boolean; loadError: 
 const emit = defineEmits<{
 	retry: []
 	createProject: []
+	createTask: [projectId: number]
+	projectAction: [action: string, projectId: number]
 	openTask: [task: CodeTaskListItem]
 }>()
 const { t } = useI18n({ messages: codeProjectMessages })
@@ -86,20 +88,20 @@ const projectNameById = computed(() => {
 	return map
 })
 
-// 「全部项目」放在最前面用来清除筛选；下拉的 key 用字符串，0 代表不筛。
 const projectOptions = computed(() => [
 	{ label: t("code.dashboardAllProjects"), key: "0" },
 	...props.projects.map(project => ({ label: project.name, key: String(project.id) })),
 ])
-
 const selectedProjectName = computed(
 	() => props.projects.find(project => project.id === selectedProjectId.value)?.name || "",
 )
-
 const handleProjectFilterSelect = (key: string) => {
 	const id = Number(key)
 	selectedProjectId.value = id > 0 ? id : null
 }
+const visibleProjects = computed(() =>
+	selectedProjectId.value ? props.projects.filter(project => project.id === selectedProjectId.value) : props.projects,
+)
 const projectTasks = computed(() => filterCodeDashboardTasksByProject(tasks.value, selectedProjectId.value))
 const grouped = computed(() => groupCodeDashboardTasks(projectTasks.value, now.value))
 
@@ -134,9 +136,8 @@ const stats = computed(() => [
 	},
 ])
 
-// 一条平铺的列表，位置由 id 定死，不按状态分组也不按状态排序。
-// 分组本身就是重排：任务跑完会从「运行中」跳到「今日完成」，正在点的那行就跑了。
-// 状态只体现在行内徽标和上面的筛选器上 —— 筛选是你主动点的，跳变是预期内的。
+// 项目内仍按稳定规则排序，不按状态拆成多个区块。
+// 任务状态变化时只更新行内徽标，不会在“运行中/今日完成”之间跳来跳去。
 const visibleTasks = computed(() => {
 	const filter = activeFilter.value
 	const scoped = filter
@@ -145,7 +146,7 @@ const visibleTasks = computed(() => {
 	return sortCodeTasksStably(scoped)
 })
 
-const selectedTask = computed(() => projectTasks.value.find(task => task.id === selectedTaskId.value) || null)
+const selectedTask = computed(() => visibleTasks.value.find(task => task.id === selectedTaskId.value) || null)
 
 // 选中的任务被筛掉、归档或删掉时，落到当前可见的第一条，右边不会停在一个看不见的任务上。
 // 只在「没有选中」或「选中的已不可见」时才动，避免每轮轮询把用户的选择顶掉。
@@ -216,15 +217,10 @@ const toggleArchived = async (task: CodeTaskListItem) => {
       在一个天天用的工作页面上再占 80px 讲一遍是纯装饰，那 80px 归终端。
       项目筛选紧跟标题，保持低视觉权重；默认仍展示所有项目的任务。
     -->
-    <div class="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+    <div class="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 px-5 md:px-7">
       <span class="shrink-0 text-base font-semibold tracking-[-0.01em] text-[var(--n-text-color)]">
         {{ t("code.workspace") }}
       </span>
-      <!--
-        项目筛选做成文字按钮而不是带边框的 select：
-        首页列的是「所有在做的任务」，筛选只是偶尔用一下的能力，
-        不该在顶栏里抢一块和标题同等重量的位置。
-      -->
       <n-dropdown
         v-if="projects.length"
         trigger="click"
@@ -340,7 +336,7 @@ const toggleArchived = async (task: CodeTaskListItem) => {
       v-if="loadError"
       type="error"
       :show-icon="false"
-      class="mb-3"
+      class="mx-5 mb-3 md:mx-7"
     >
       <div class="flex items-center justify-between gap-3">
         <span>{{ t("code.projectLoadFailed") }}</span>
@@ -357,7 +353,7 @@ const toggleArchived = async (task: CodeTaskListItem) => {
       v-else-if="tasksLoadError"
       type="error"
       :show-icon="false"
-      class="mb-3"
+      class="mx-5 mb-3 md:mx-7"
     >
       <div class="flex items-center justify-between gap-3">
         <span>{{ t("code.dashboardTaskLoadFailed") }}</span>
@@ -373,7 +369,7 @@ const toggleArchived = async (task: CodeTaskListItem) => {
 
     <!-- 主从：左边所有任务，右边选中任务的终端。切任务不跳页，只换右边。 -->
     <div
-      class="grid min-h-0 flex-1 gap-5"
+      class="dashboard-workbench grid min-h-0 flex-1 overflow-hidden border-t border-[var(--n-border-color)]"
       :class="
         listCollapsed
           ? 'grid-cols-1 grid-rows-1'
@@ -382,13 +378,13 @@ const toggleArchived = async (task: CodeTaskListItem) => {
     >
       <section
         v-if="!listCollapsed"
-        class="dashboard-panel flex min-h-0 flex-col overflow-hidden rounded-[24px]"
+        class="dashboard-panel flex min-h-0 flex-col overflow-hidden"
       >
         <n-scrollbar class="min-h-0 flex-1">
           <!-- 左列独立滚动，所以这里的密度不吃终端高度，可以给足 -->
-          <div class="p-3">
+          <div class="py-2">
             <div
-              v-if="!visibleTasks.length"
+              v-if="!visibleTasks.length && (showArchived || !projects.length)"
               class="flex min-h-[200px] items-center justify-center"
             >
               <n-empty
@@ -409,22 +405,20 @@ const toggleArchived = async (task: CodeTaskListItem) => {
                 </template>
               </n-empty>
             </div>
-            <!-- 平铺，无分组标题：位置固定，任务状态变了行也不会挪窝 -->
-            <div v-else>
-              <CodeDashboardTaskRow
-                v-for="task in visibleTasks"
-                :key="task.id"
-                :task="task"
-                :project-name="projectNameById.get(task.projectId) || ''"
-                :selected="task.id === selectedTaskId"
-                :archived="showArchived"
-                :archiving="archiving === task.id"
-                @open="selectedTaskId = $event.id"
-                @archive="toggleArchived"
-                @open-workspace="emit('openTask', $event)"
-                @refresh="refreshTasks(true)"
-              />
-            </div>
+            <CodeDashboardProjectList
+              v-else
+              :projects="visibleProjects"
+              :tasks="visibleTasks"
+              :selected-task-id="selectedTaskId"
+              :archived="showArchived"
+              :archiving-task-id="archiving"
+              @open="selectedTaskId = $event.id"
+              @archive="toggleArchived"
+              @open-workspace="emit('openTask', $event)"
+              @create-task="emit('createTask', $event)"
+              @project-action="(action, projectId) => emit('projectAction', action, projectId)"
+              @refresh="refreshTasks(true)"
+            />
           </div>
         </n-scrollbar>
       </section>
@@ -455,8 +449,13 @@ const toggleArchived = async (task: CodeTaskListItem) => {
 <style scoped>
 .dashboard-panel {
 	background: color-mix(in srgb, var(--n-color) 97%, transparent);
-	border: 1px solid color-mix(in srgb, var(--n-border-color) 92%, transparent);
-	box-shadow: 0 8px 24px rgb(15 23 42 / 4.5%);
+	border-bottom: 1px solid var(--n-border-color);
+}
+@media (min-width: 1280px) {
+	.dashboard-panel {
+		border-right: 1px solid var(--n-border-color);
+		border-bottom: 0;
+	}
 }
 .dashboard-stat {
 	--stat-accent: #94a3b8;
