@@ -57,6 +57,8 @@ export interface CodeGitCredentialInput {
 	name: string
 	username: string
 	secret: string
+	// 可选：填了就在保存前实连一次这个仓库，连不上则拒绝保存。
+	verifyRemote?: string
 }
 
 export interface AIProjectExecutionSummary {

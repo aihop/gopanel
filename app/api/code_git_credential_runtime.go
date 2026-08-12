@@ -36,6 +36,14 @@ func codeGitCredentialEnvironment(credentialID uint, base []string) ([]string, f
 	if err != nil {
 		return nil, nil, errors.New("项目绑定的 Git 凭据无法解密，请重新保存凭据")
 	}
+	return codeGitCredentialEnvironmentFor(credential.Username, secret, base)
+}
+
+// codeGitCredentialEnvironmentFor 用给定的用户名和明文密钥搭出 Git 凭据环境。
+//
+// 与按 ID 取库的版本分开，是为了能校验「还没入库的凭据」——
+// 保存时要验的是用户刚填的这一份，不是库里那份旧的。
+func codeGitCredentialEnvironmentFor(username, secret string, base []string) ([]string, func(), error) {
 	tempDir, err := os.MkdirTemp("", "gopanel-git-credential-")
 	if err != nil {
 		return nil, nil, fmt.Errorf("准备 Git 凭据失败：%w", err)
@@ -43,7 +51,7 @@ func codeGitCredentialEnvironment(credentialID uint, base []string) ([]string, f
 	cleanup := func() { _ = os.RemoveAll(tempDir) }
 	usernameFile := filepath.Join(tempDir, "username")
 	secretFile := filepath.Join(tempDir, "secret")
-	if err := os.WriteFile(usernameFile, []byte(credential.Username), 0600); err != nil {
+	if err := os.WriteFile(usernameFile, []byte(username), 0600); err != nil {
 		cleanup()
 		return nil, nil, err
 	}

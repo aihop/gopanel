@@ -65,6 +65,11 @@ export function saveCodeGitCredential(data: CodeGitCredentialInput, id?: number)
 		: http.post<CodeGitCredential>("/code/git/credentials", data)
 }
 
+// 实连一次远端，超时给足：这是网络往返，不是本地校验。
+export function verifyCodeGitCredential(data: { credentialId?: number; username: string; secret: string; remote: string }) {
+	return http.post("/code/git/credentials/verify", data, 30000)
+}
+
 export function deleteCodeGitCredential(id: number) {
 	return http.delete(`/code/git/credentials/${id}`)
 }

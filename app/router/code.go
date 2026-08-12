@@ -20,6 +20,7 @@ func CodeRouter(r fiber.Router) {
 		group.Get("/git/credentials", api.GetCodeGitCredentials)
 		group.Post("/git/credentials", api.SaveCodeGitCredential)
 		group.Put("/git/credentials/:id", api.SaveCodeGitCredential)
+		group.Post("/git/credentials/verify", api.VerifyCodeGitCredential)
 		group.Delete("/git/credentials/:id", api.DeleteCodeGitCredential)
 
 		// Projects APIs

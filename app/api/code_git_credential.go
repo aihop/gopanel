@@ -51,6 +51,10 @@ func SaveCodeGitCredential(c fiber.Ctx) error {
 		Name     string `json:"name"`
 		Username string `json:"username"`
 		Secret   string `json:"secret"`
+		// 可选的校验仓库地址。填了就在保存前实连一次——一套连不上的凭据
+		// 存进去不会当场报错，而是等到建会话或交付时才炸，
+		// 实测这是全局最大的单一失败源。
+		VerifyRemote string `json:"verifyRemote"`
 	}
 	if err := c.Bind().JSON(&req); err != nil {
 		return c.JSON(e.Fail(err))
@@ -75,10 +79,62 @@ func SaveCodeGitCredential(c fiber.Ctx) error {
 		return c.JSON(e.Fail(errors.New("请输入访问令牌或密码")))
 	}
 	credential.Name, credential.Username = req.Name, req.Username
+	// 校验要用即将保存的这一份：编辑时没重填令牌就沿用库里的旧值。
+	if strings.TrimSpace(req.VerifyRemote) != "" {
+		secret := req.Secret
+		if strings.TrimSpace(secret) == "" {
+			if secret, err = encrypt.StringDecrypt(credential.Secret); err != nil {
+				return c.JSON(e.Fail(errors.New("已保存的凭据无法解密，请重新填写访问令牌")))
+			}
+		}
+		if err := probeCodeGitCredentialRemote(credential.Username, secret, req.VerifyRemote); err != nil {
+			return c.JSON(e.Fail(err))
+		}
+	}
 	if err := global.DB.Save(&credential).Error; err != nil {
 		return c.JSON(e.Fail(err))
 	}
 	return c.JSON(e.Succ(codeGitCredentialViews([]model.AIGitCredential{credential})[0]))
+}
+
+// VerifyCodeGitCredential 显式测试一套凭据能否访问指定仓库。
+//
+// 和保存时的校验分开，是为了让用户在填表过程中就能试，
+// 而不是只能靠「保存被拒」来发现填错了。
+func VerifyCodeGitCredential(c fiber.Ctx) error {
+	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
+	var req struct {
+		CredentialID uint   `json:"credentialId"`
+		Username     string `json:"username"`
+		Secret       string `json:"secret"`
+		Remote       string `json:"remote"`
+	}
+	if err := c.Bind().JSON(&req); err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	username, secret := strings.TrimSpace(req.Username), req.Secret
+	// 编辑已有凭据时前端通常不回传令牌，这时用库里那一份。
+	if req.CredentialID > 0 && strings.TrimSpace(secret) == "" {
+		if err := validateCodeGitCredentialAccess(req.CredentialID, claims.UserId); err != nil {
+			return c.JSON(e.Fail(err))
+		}
+		var credential model.AIGitCredential
+		if err := global.DB.First(&credential, req.CredentialID).Error; err != nil {
+			return c.JSON(e.Fail(errors.New("Git 凭据不存在")))
+		}
+		stored, err := encrypt.StringDecrypt(credential.Secret)
+		if err != nil {
+			return c.JSON(e.Fail(errors.New("已保存的凭据无法解密，请重新填写访问令牌")))
+		}
+		secret = stored
+		if username == "" {
+			username = credential.Username
+		}
+	}
+	if err := probeCodeGitCredentialRemote(username, secret, req.Remote); err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	return c.JSON(e.Succ(nil))
 }
 
 func DeleteCodeGitCredential(c fiber.Ctx) error {

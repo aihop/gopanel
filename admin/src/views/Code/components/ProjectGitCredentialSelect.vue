@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from "vue"
 import { useMessage } from "naive-ui"
 import { useI18n } from "vue-i18n"
 import type { CodeGitCredential } from "@/api/interface/code"
-import { getCodeGitCredentials, saveCodeGitCredential } from "@/api/modules/code"
+import { getCodeGitCredentials, saveCodeGitCredential, verifyCodeGitCredential } from "@/api/modules/code"
 import { codeProjectMessages } from "@/i18n/locales/codeProject"
 
 const props = defineProps<{ modelValue: number }>()
@@ -16,7 +16,10 @@ const loadError = ref(false)
 const showEditor = ref(false)
 const saving = ref(false)
 const editingId = ref<number>()
-const form = ref({ name: "", username: "", secret: "" })
+const verifying = ref(false)
+// verifyRemote 是可选的：填了就在保存前实连一次。一套连不上的凭据存进去
+// 不会当场报错，而是等到建会话或交付时才炸——那是实测里最大的单一失败源。
+const form = ref({ name: "", username: "", secret: "", verifyRemote: "" })
 
 const options = computed(() => [
 	{ label: t("code.gitCredentialSystem"), value: 0 },
@@ -39,8 +42,29 @@ async function load(notify = false) {
 function openEditor() {
 	const selected = credentials.value.find(item => item.id === props.modelValue)
 	editingId.value = selected?.id
-	form.value = { name: selected?.name || "", username: selected?.username || "", secret: "" }
+	form.value = { name: selected?.name || "", username: selected?.username || "", secret: "", verifyRemote: "" }
 	showEditor.value = true
+}
+
+async function verify() {
+	if (!form.value.verifyRemote.trim()) {
+		message.warning(t("code.gitCredentialVerifyRemoteRequired"))
+		return
+	}
+	verifying.value = true
+	try {
+		await verifyCodeGitCredential({
+			credentialId: editingId.value,
+			username: form.value.username.trim(),
+			secret: form.value.secret,
+			remote: form.value.verifyRemote.trim(),
+		})
+		message.success(t("code.gitCredentialVerifyPassed"))
+	} catch (error) {
+		void 0
+	} finally {
+		verifying.value = false
+	}
 }
 
 async function save() {
@@ -52,6 +76,7 @@ async function save() {
 	try {
 		const response = await saveCodeGitCredential({
 			name: form.value.name.trim(), username: form.value.username.trim(), secret: form.value.secret,
+			verifyRemote: form.value.verifyRemote.trim(),
 		}, editingId.value)
 		await load()
 		emit("update:modelValue", response.data.id)
@@ -98,12 +123,15 @@ onMounted(() => void load())
 					show-password-on="click"
 					:placeholder="editingId ? t('code.gitCredentialSecretKeep') : t('code.gitCredentialSecret')"
 				/>
+				<n-input v-model:value="form.verifyRemote" :placeholder="t('code.gitCredentialVerifyRemote')" />
+				<div class="text-xs text-[var(--n-text-color-3)]">{{ t("code.gitCredentialVerifyHint") }}</div>
 				<n-alert type="info" :show-icon="false">{{ t("code.gitCredentialSecurity") }}</n-alert>
 			</div>
 			<template #footer>
 				<div class="flex justify-end gap-2">
+					<n-button :loading="verifying" :disabled="saving" @click="verify">{{ t("code.gitCredentialVerify") }}</n-button>
 					<n-button @click="showEditor = false">{{ t("code.gitCredentialCancel") }}</n-button>
-					<n-button type="primary" :loading="saving" @click="save">{{ t("code.gitCredentialSave") }}</n-button>
+					<n-button type="primary" :loading="saving" :disabled="verifying" @click="save">{{ t("code.gitCredentialSave") }}</n-button>
 				</div>
 			</template>
 		</n-modal>
