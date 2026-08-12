@@ -91,8 +91,9 @@ func createCodeDeliveryLocalMergeCommit(sourceDir, targetCommit, deliveryCommit,
 		_, _ = runCodeGit(sourceDir, "worktree", "remove", "--force", workDir)
 	}()
 	if _, err := runCodeGit(
-		workDir, "-c", "user.name=GoPanel Code", "-c", "user.email=code@gopanel.cn",
-		"-c", "commit.gpgsign=false", "merge", "--no-edit", deliveryCommit,
+		workDir, codeGitAuthoredArgs(
+			"-c", "commit.gpgsign=false", "merge", "--no-edit", deliveryCommit,
+		)...,
 	); err != nil {
 		conflicts := codeGitConflictFiles(workDir)
 		if len(conflicts) > 0 {

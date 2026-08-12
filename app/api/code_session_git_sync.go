@@ -244,8 +244,9 @@ func syncCodeSessionGitTarget(target codeSessionGitSyncTarget, state codeSession
 	case "diverged":
 		_, err = runCodeGit(
 			target.WorktreeDir,
-			"-c", "user.name=GoPanel Code", "-c", "user.email=code@gopanel.cn",
-			"-c", "commit.gpgsign=false", "merge", "--no-edit", remoteRef,
+			codeGitAuthoredArgs(
+				"-c", "commit.gpgsign=false", "merge", "--no-edit", remoteRef,
+			)...,
 		)
 	case "integrated":
 	default:

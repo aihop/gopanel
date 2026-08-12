@@ -136,8 +136,10 @@ func codeLocalDeliveryTarget(sourceDir, targetBranch string) (string, error) {
 func mergeCodeDeliveryCommit(delivery *model.AICodeDelivery, commit, branch string) (*codeGitDeliveryResult, error) {
 	if _, err := runCodeGit(
 		delivery.DeliveryWorkDir,
-		"-c", "user.name=GoPanel Code", "-c", "user.email=code@gopanel.cn",
-		"-c", "commit.gpgsign=false", "merge", "--no-ff", "--no-edit", commit,
+		codeGitAuthoredArgs(
+			"-c", "commit.gpgsign=false", "merge", "--no-ff",
+			"-m", codeDeliveryMergeMessage(codeDeliverySessionForMessage(delivery.SessionID), ""), commit,
+		)...,
 	); err != nil {
 		conflicts := codeGitConflictFiles(delivery.DeliveryWorkDir)
 		if len(conflicts) > 0 {

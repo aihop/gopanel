@@ -349,8 +349,9 @@ func commitCodeRepositoryGitlinkUpdates(repository *model.AIDevSessionRepository
 	}
 	if _, err := runCodeGit(
 		repository.WorktreeDir,
-		"-c", "user.name=GoPanel Code", "-c", "user.email=code@gopanel.cn",
-		"-c", "commit.gpgsign=false", "commit", "-m", "chore: update nested repository pointers",
+		codeGitAuthoredArgs(
+			"-c", "commit.gpgsign=false", "commit", "-m", "chore: update nested repository pointers",
+		)...,
 	); err != nil {
 		return err
 	}

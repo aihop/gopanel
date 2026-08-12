@@ -72,7 +72,9 @@ func commitCodeSessionWorktree(session *model.AIDevSession, message string) (cod
 	if err := validateCodeGitStagedChanges(session.WorkDir); err != nil {
 		return codeGitDeliveryResult{}, err
 	}
-	if _, err := runCodeGit(session.WorkDir, "-c", "user.name=GoPanel Code", "-c", "user.email=code@gopanel.cn", "commit", "-m", message); err != nil {
+	if _, err := runCodeGit(session.WorkDir, codeGitAuthoredArgs(
+		"commit", "-m", codeCommitMessageWithTrailers(message, session),
+	)...); err != nil {
 		return codeGitDeliveryResult{}, err
 	}
 	commit, err := runCodeGit(session.WorkDir, "rev-parse", "HEAD")
@@ -102,7 +104,9 @@ func mergeCodeSessionWorktree(session *model.AIDevSession) (codeGitDeliveryResul
 	if err := syncCodeWorktreeWithTarget(session.WorkDir, targetBranch); err != nil {
 		return codeGitDeliveryResult{}, err
 	}
-	if _, err := runCodeGit(session.SourceWorkDir, "merge", "--no-ff", "--no-edit", session.WorktreeBranch); err != nil {
+	if _, err := runCodeGit(session.SourceWorkDir, codeGitAuthoredArgs(
+		"merge", "--no-ff", "-m", codeDeliveryMergeMessage(session, ""), session.WorktreeBranch,
+	)...); err != nil {
 		conflicts := codeGitConflictFiles(session.SourceWorkDir)
 		_, _ = runCodeGit(session.SourceWorkDir, "merge", "--abort")
 		if len(conflicts) > 0 {

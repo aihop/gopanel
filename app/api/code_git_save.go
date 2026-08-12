@@ -39,8 +39,9 @@ func saveCodeGitRepository(workDir, message string) (string, bool, error) {
 	}
 	if _, err := runCodeGit(
 		workDir,
-		"-c", "user.name=GoPanel Code", "-c", "user.email=code@gopanel.cn",
-		"-c", "commit.gpgsign=false", "commit", "-m", message,
+		codeGitAuthoredArgs(
+			"-c", "commit.gpgsign=false", "commit", "-m", message,
+		)...,
 	); err != nil {
 		return "", false, err
 	}
