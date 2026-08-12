@@ -46,7 +46,13 @@ case "${MODE}" in
     fi
     changed="$(git diff --name-only --diff-filter=ACMR "${BASE_REF}..HEAD")"
     ;;
-  *) changed="$(git diff --name-only --diff-filter=ACMR HEAD)" ;;
+  *)
+    # 新建但还没 git add 的文件不在 `git diff HEAD` 里，而它们恰恰是最可能没格式化的。
+    changed="$(
+      git diff --name-only --diff-filter=ACMR HEAD
+      git ls-files --others --exclude-standard
+    )"
+    ;;
 esac
 
 # 链接工作区（.codux/、其他 worktree）住在仓库目录下但不属于本次改动，

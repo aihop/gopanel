@@ -34,6 +34,8 @@ func CodeRouter(r fiber.Router) {
 		group.Get("/projects/:id/git/sync", api.GetCodeProjectSync)
 		group.Post("/projects/:id/git/sync", api.SyncCodeProject)
 		group.Get("/projects/:id/worktree-capability", api.GetCodeWorktreeCapability)
+		group.Get("/worktree-residues", api.GetCodeWorktreeResidues)
+		group.Post("/worktree-residues/cleanup", api.CleanupCodeWorktreeResidues)
 		group.Post("/projects/:id/terminal", api.OpenCodeProjectTerminal)
 		group.Get("/project-terminal/:id/ws", middleware.HostTerminalSameOrigin, websocket.New(api.HostTerminalWebSocket))
 		group.Get("/projects/:id/database-accesses", api.GetCodeDatabaseAccesses)
