@@ -218,6 +218,15 @@ const selectHistoryCommit = (selection: CodeGitHistorySelection | null) => {
 	diffContent.value = selection?.content || ""
 	diffTruncated.value = selection?.truncated || false
 }
+const openConflictResolver = () => {
+	conflictResolverVisible.value = true
+}
+const completeConflictResolution = () => {
+	conflictResolverVisible.value = false
+	deliveryPushKey.value++
+	if (view.value === "history") historyRefreshKey.value++
+	else void loadStatus(true)
+}
 
 watch(
 	() => props.sessionId,
@@ -342,6 +351,7 @@ useIntervalFn(() => {
 					:session-id="sessionId"
 					:repositories="deliveryJob.repositories"
 					@synced="loadStatus(true)"
+					@conflict="openConflictResolver"
 				/>
 				<n-input
 					v-model:value="commitMessage"
@@ -371,6 +381,7 @@ useIntervalFn(() => {
 				v-if="view === 'commit' && !hasIsolation && sessionId"
 				:session-id="sessionId"
 				:refresh-key="deliveryPushKey"
+				@conflict="openConflictResolver"
 			/>
 			<CodeGitHistory
 				v-if="view === 'history'"
@@ -378,6 +389,7 @@ useIntervalFn(() => {
 				:active="active"
 				:refresh-key="historyRefreshKey"
 				@selected="selectHistoryCommit"
+				@conflict="openConflictResolver"
 			/>
 			<n-spin
 				v-else
@@ -393,11 +405,7 @@ useIntervalFn(() => {
 					:description="t('code.gitNoRepository')"
 					class="mt-16"
 				/>
-				<n-empty
-					v-else-if="status && !hasChanges"
-					:description="t('code.gitNoChanges')"
-					class="mt-16"
-				/>
+				<n-empty v-else-if="status && !hasChanges" :description="t('code.gitNoChanges')" class="mt-16" />
 				<CodeGitRepositoryChanges
 					v-else
 					class="min-h-0 flex-1"
@@ -417,6 +425,6 @@ useIntervalFn(() => {
 		v-if="sessionId"
 		v-model:show="conflictResolverVisible"
 		:session-id="sessionId"
-		@completed="loadStatus(true)"
+		@completed="completeConflictResolution"
 	/>
 </template>

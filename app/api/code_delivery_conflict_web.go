@@ -132,6 +132,20 @@ func loadCodeDeliveryConflictContexts(sessionID uint) (*model.AICodeDeliveryJob,
 		return nil, nil, errors.New("交付冲突现场不可用，请重新发起交付")
 	}
 	for index := range contexts {
+		if isCodeDeliveryLocalSyncConflict(&job) {
+			targetCommit, targetErr := runCodeGit(
+				contexts[index].SourceDir, "rev-parse", "refs/heads/"+contexts[index].TargetBranch,
+			)
+			if targetErr != nil {
+				return nil, nil, errors.New("本地主仓目标分支不可用")
+			}
+			contexts[index].SourceCommit = strings.TrimSpace(targetCommit)
+			if contexts[index].Delivery != nil {
+				contexts[index].TaskCommit = contexts[index].Delivery.MergeCommit
+			} else if contexts[index].Repository != nil {
+				contexts[index].TaskCommit = contexts[index].Repository.MergeCommit
+			}
+		}
 		if err := validateCodeDeliveryConflictWorktree(sessionID, job.UserID, &contexts[index]); err != nil {
 			return nil, nil, err
 		}

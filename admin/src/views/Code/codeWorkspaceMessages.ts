@@ -29,6 +29,7 @@ export const codeWorkspaceMessages = {
 			localMainMergeSuccess: "最新交付结果已合入本地主仓",
 			localMainMergeBlocked: "部分仓库无法网页合入，请在交付详情查看原因和同步命令",
 			localMainMergeFailed: "本地主仓合入失败，请稍后重试",
+			localMainMergeConflict: "检测到合并冲突，已打开网页冲突解决器",
 			deliverToMainConfirm:
 				"将刚刚评审的任务累计变更进入交付队列。系统会再次校验结果版本，只安全合并到本地目标分支，不执行远端推送。",
 			confirmDeliveryToMain: "确认交付",
@@ -193,6 +194,7 @@ export const codeWorkspaceMessages = {
 			localMainMergeBlocked:
 				"Some repositories could not be merged in the browser. Check delivery details for reasons and sync commands.",
 			localMainMergeFailed: "Failed to merge into the local main repository. Try again later.",
+			localMainMergeConflict: "Merge conflicts detected. The browser conflict resolver is now open.",
 			deliverToMainConfirm:
 				"Queue the task result you just reviewed. GoPanel verifies the result revision again and safely merges only into local target branches without pushing remotes.",
 			confirmDeliveryToMain: "Deliver",

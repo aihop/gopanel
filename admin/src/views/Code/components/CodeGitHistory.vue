@@ -24,7 +24,7 @@ const props = withDefaults(
 	}>(),
 	{ autoSelect: true }
 )
-const emit = defineEmits<{ selected: [selection: CodeGitHistorySelection | null] }>()
+const emit = defineEmits<{ selected: [selection: CodeGitHistorySelection | null]; conflict: [] }>()
 const { t } = useI18n({ messages: codeGitReviewMessages })
 const history = ref<CodeGitHistory | null>(null)
 const loading = ref(false)
@@ -104,6 +104,7 @@ watch(
 						compact
 						@queued="loadHistory"
 						@settled="loadHistory"
+						@conflict="emit('conflict')"
 					/>
 				</div>
 				<section v-for="repository in history?.repositories || []" :key="repository.id">

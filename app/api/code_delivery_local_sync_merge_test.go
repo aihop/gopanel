@@ -161,6 +161,156 @@ func TestSyncCodeSessionDeliveryLocalCompletesSingleRepository(t *testing.T) {
 	}
 }
 
+func TestSyncCodeSessionDeliveryLocalConflictCanBeResolvedInBrowser(t *testing.T) {
+	database := withCodeGovernanceDB(t)
+	withAIProjectBaseDir(t)
+	repository := createCodeGitRepository(t)
+	branch, _ := runCodeGit(repository, "branch", "--show-current")
+	branch = strings.TrimSpace(branch)
+	baseCommit, _ := runCodeGit(repository, "rev-parse", "HEAD")
+	deliveryCommit := createCodeDeliverySyncCommit(t, repository, baseCommit, "README.md", "delivery\n")
+	mainCommit := commitCodeTestFile(t, repository, "README.md", "main\n")
+	session := &model.AIDevSession{ID: 1205, UserID: 7, ProjectID: 15}
+	if err := database.Create(session).Error; err != nil {
+		t.Fatal(err)
+	}
+	job := &model.AICodeDeliveryJob{
+		SessionID: session.ID, ProjectID: session.ProjectID, UserID: session.UserID,
+		Status: codeDeliveryJobCompleted, Stage: codeDeliveryStageCompleted,
+	}
+	if err := database.Create(job).Error; err != nil {
+		t.Fatal(err)
+	}
+	delivery := &model.AICodeDelivery{
+		SessionID: session.ID, ProjectID: session.ProjectID, UserID: session.UserID,
+		Status: codeDeliveryCompleted, SourceWorkDir: repository, TargetBranch: branch,
+		WorktreeBranch: "task", WorktreeCommit: deliveryCommit, MergeCommit: deliveryCommit,
+	}
+	if err := database.Create(delivery).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := syncCodeSessionDeliveryLocal(session)
+	if err != nil || result.Status != "conflict" || len(result.Repositories) != 1 ||
+		len(result.Repositories[0].ConflictFiles) != 1 || result.Repositories[0].ConflictFiles[0] != "README.md" {
+		t.Fatalf("unexpected conflict result: %#v, %v", result, err)
+	}
+	if err := database.First(job, job.ID).Error; err != nil || !isCodeDeliveryLocalSyncConflict(job) {
+		t.Fatalf("local conflict job was not persisted: %#v, %v", job, err)
+	}
+	loadedJob, contexts, err := loadCodeDeliveryConflictContexts(session.ID)
+	if err != nil || len(contexts) != 1 {
+		t.Fatalf("browser conflict context unavailable: %#v, %v", contexts, err)
+	}
+	file, err := readCodeDeliveryConflictFile(&contexts[0], "README.md")
+	if err != nil || file.MainContent != "main\n" || file.TaskContent != "delivery\n" {
+		t.Fatalf("unexpected browser conflict file: %#v, %v", file, err)
+	}
+	if _, err := saveCodeDeliveryConflictFile(&contexts[0], file.Path, "content", "resolved\n", file.Version); err != nil {
+		t.Fatal(err)
+	}
+	if err := completeCodeDeliveryConflict(loadedJob, contexts); err != nil {
+		t.Fatal(err)
+	}
+
+	head, _ := runCodeGit(repository, "rev-parse", "refs/heads/"+branch)
+	for _, commit := range []string{mainCommit, deliveryCommit} {
+		if _, err := runCodeGit(repository, "merge-base", "--is-ancestor", commit, strings.TrimSpace(head)); err != nil {
+			t.Fatalf("resolved main does not contain %s: %v", commit, err)
+		}
+	}
+	content, readErr := os.ReadFile(filepath.Join(repository, "README.md"))
+	if readErr != nil || string(content) != "resolved\n" {
+		t.Fatalf("resolved main content = %q, %v", content, readErr)
+	}
+	if err := database.First(delivery, delivery.ID).Error; err != nil || delivery.SourceAppliedAt == nil ||
+		delivery.LocalSyncError != "" || delivery.DeliveryWorkDir != "" {
+		t.Fatalf("resolved delivery state is incomplete: %#v, %v", delivery, err)
+	}
+	if _, err := os.Stat(contexts[0].WorkDir); !os.IsNotExist(err) {
+		t.Fatalf("conflict worktree was not cleaned: %v", err)
+	}
+	view, err := loadCodeDeliveryJobView(session.ID)
+	if err != nil || view.Status != codeDeliveryJobCompleted || view.FailureCode != "" ||
+		len(view.ConflictFiles) != 0 || len(view.Repositories) != 1 || !view.Repositories[0].LocalSynced {
+		t.Fatalf("resolved delivery view is incomplete: %#v, %v", view, err)
+	}
+}
+
+func TestSyncCodeMultiRepositoryLocalConflictPreservesCompletedResults(t *testing.T) {
+	database := withCodeGovernanceDB(t)
+	withAIProjectBaseDir(t)
+	session := &model.AIDevSession{ID: 1206, UserID: 7, ProjectID: 16}
+	if err := database.Create(&model.AIProject{ID: session.ProjectID, Name: "multi", CreatorID: session.UserID}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := database.Create(session).Error; err != nil {
+		t.Fatal(err)
+	}
+	job := &model.AICodeDeliveryJob{
+		SessionID: session.ID, ProjectID: session.ProjectID, UserID: session.UserID,
+		Status: codeDeliveryJobCompleted, Stage: codeDeliveryStageCompleted,
+	}
+	if err := database.Create(job).Error; err != nil {
+		t.Fatal(err)
+	}
+	for index := 0; index < 2; index++ {
+		repository := createCodeGitRepository(t)
+		branch, _ := runCodeGit(repository, "branch", "--show-current")
+		baseCommit, _ := runCodeGit(repository, "rev-parse", "HEAD")
+		file, content := "delivery.txt", "delivery\n"
+		if index == 1 {
+			file, content = "README.md", "delivery-conflict\n"
+		}
+		deliveryCommit := createCodeDeliverySyncCommit(t, repository, baseCommit, file, content)
+		if index == 1 {
+			commitCodeTestFile(t, repository, "README.md", "main-conflict\n")
+		}
+		row := &model.AIDevSessionRepository{
+			SessionID: session.ID, ProjectID: session.ProjectID, SourceDir: repository,
+			WorktreeDir: filepath.Join(t.TempDir(), "removed"), LinkName: string(rune('a' + index)), Branch: "task",
+			TargetBranch: strings.TrimSpace(branch), BaseCommit: strings.TrimSpace(baseCommit),
+			WorktreeCommit: deliveryCommit, MergeCommit: deliveryCommit, Status: codeDeliveryCompleted,
+		}
+		if err := database.Create(row).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	result, err := syncCodeSessionDeliveryLocal(session)
+	if err != nil || result.Status != "conflict" || len(result.Repositories) != 2 ||
+		!result.Repositories[0].LocalSynced || len(result.Repositories[1].ConflictFiles) != 1 {
+		t.Fatalf("unexpected multi repository conflict: %#v, %v", result, err)
+	}
+	loadedJob, contexts, err := loadCodeDeliveryConflictContexts(session.ID)
+	if err != nil || len(contexts) != 1 || contexts[0].RepositoryID != result.Repositories[1].RepositoryID {
+		t.Fatalf("unexpected multi repository conflict context: %#v, %v", contexts, err)
+	}
+	file, err := readCodeDeliveryConflictFile(&contexts[0], "README.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := saveCodeDeliveryConflictFile(&contexts[0], file.Path, "content", "resolved-multi\n", file.Version); err != nil {
+		t.Fatal(err)
+	}
+	if err := completeCodeDeliveryConflict(loadedJob, contexts); err != nil {
+		t.Fatal(err)
+	}
+
+	var repositories []model.AIDevSessionRepository
+	if err := database.Where("session_id = ?", session.ID).Order("id asc").Find(&repositories).Error; err != nil {
+		t.Fatal(err)
+	}
+	if len(repositories) != 2 || repositories[0].SourceAppliedAt == nil || repositories[1].SourceAppliedAt == nil {
+		t.Fatalf("multi repository local sync state was lost: %#v", repositories)
+	}
+	view, err := loadCodeDeliveryJobView(session.ID)
+	if err != nil || view.Status != codeDeliveryJobCompleted || len(view.Repositories) != 2 ||
+		!view.Repositories[0].LocalSynced || !view.Repositories[1].LocalSynced {
+		t.Fatalf("multi repository results were not preserved: %#v, %v", view, err)
+	}
+}
+
 func TestSyncCodeSessionDeliveryLocalRejectsIncompleteJob(t *testing.T) {
 	database := withCodeGovernanceDB(t)
 	session := &model.AIDevSession{ID: 1202, UserID: 7}

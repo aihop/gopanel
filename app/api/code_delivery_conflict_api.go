@@ -3,18 +3,22 @@ package api
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/aihop/gopanel/app/e"
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/constant"
+	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/utils/token"
 	"github.com/gofiber/fiber/v3"
+	"gorm.io/gorm"
 )
 
 func GetCodeDeliveryConflicts(c fiber.Ctx) error {
-	session, err := getCodeDeliverySessionContext(c)
+	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
+	session, err := getCodeDeliveryConflictSessionContext(c, claims)
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
@@ -26,7 +30,8 @@ func GetCodeDeliveryConflicts(c fiber.Ctx) error {
 }
 
 func GetCodeDeliveryConflictFile(c fiber.Ctx) error {
-	session, err := getCodeDeliverySessionContext(c)
+	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
+	session, err := getCodeDeliveryConflictSessionContext(c, claims)
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
@@ -58,7 +63,7 @@ func SaveCodeDeliveryConflictFile(c fiber.Ctx) error {
 	if err := c.Bind().JSON(&request); err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	session, err := getCodeDeliverySessionContext(c)
+	session, err := getCodeDeliveryConflictSessionContext(c, claims)
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
@@ -84,7 +89,7 @@ func SaveCodeDeliveryConflictFile(c fiber.Ctx) error {
 func CompleteCodeDeliveryConflicts(c fiber.Ctx) error {
 	startedAt := time.Now()
 	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
-	session, err := getCodeDeliverySessionContext(c)
+	session, err := getCodeDeliveryConflictSessionContext(c, claims)
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
@@ -108,7 +113,7 @@ func CompleteCodeDeliveryConflicts(c fiber.Ctx) error {
 func ConfirmManualCodeDeliveryConflict(c fiber.Ctx) error {
 	startedAt := time.Now()
 	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
-	session, err := getCodeDeliverySessionContext(c)
+	session, err := getCodeDeliveryConflictSessionContext(c, claims)
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
@@ -127,6 +132,22 @@ func ConfirmManualCodeDeliveryConflict(c fiber.Ctx) error {
 		return c.JSON(e.Fail(err))
 	}
 	return c.JSON(e.Succ(view))
+}
+
+func getCodeDeliveryConflictSessionContext(c fiber.Ctx, claims *token.CustomClaims) (*model.AIDevSession, error) {
+	sessionID, err := strconv.ParseUint(c.Params("id"), 10, 64)
+	if err != nil || sessionID == 0 {
+		return nil, errors.New("会话 ID 无效")
+	}
+	var job model.AICodeDeliveryJob
+	err = global.DB.Select("failure_code").Where("session_id = ?", uint(sessionID)).First(&job).Error
+	if err == nil && job.FailureCode == codeDeliveryFailureLocalSyncConflict {
+		return getCodeDeliveryLocalSyncSession(uint(sessionID), claims)
+	}
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+	return getCodeDeliverySessionContext(c)
 }
 
 func runCodeDeliveryConflictMutation(session *model.AIDevSession, operation func(*model.AICodeDeliveryJob, []codeDeliveryConflictContext) error) error {
