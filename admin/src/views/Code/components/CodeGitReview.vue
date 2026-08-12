@@ -55,18 +55,7 @@ let diffSequence = 0
 const entries = computed(() => codeGitReviewEntries(status.value))
 const selectedEntry = computed(() => entries.value.find(entry => entry.key === selectedKey.value) || null)
 const hasChanges = computed(() => entries.value.length > 0)
-const noChangesDescription = computed(() => {
-	const repo = status.value?.repositories.find(r => r.headCommit)
-	if (!repo) return t("code.gitNoChanges")
-	const commitMessage = repo.headCommitMessage?.trim()
-	const message = commitMessage ? `：${commitMessage}` : ""
-	return t("code.gitNoChangesWithCommit", {
-		commit: repo.headCommit,
-		message,
-		repository: repo.name,
-		branch: repo.branch
-	})
-})
+const lastCommitRepo = computed(() => status.value?.repositories.find(r => r.headCommit) || null)
 const totals = computed(() => codeGitReviewTotals(status.value))
 const isolatedRepositories = computed(() =>
 	(status.value?.repositories || []).filter(repository => repository.isolated)
@@ -407,9 +396,35 @@ useIntervalFn(() => {
 				/>
 				<n-empty
 					v-else-if="status && !hasChanges"
-					:description="noChangesDescription"
+					:description="t('code.gitNoChanges')"
 					class="mt-16"
-				/>
+				>
+					<template #extra>
+						<div
+							v-if="lastCommitRepo"
+							class="mt-3 max-w-[280px] space-y-1 text-center text-xs text-slate-500"
+						>
+							<div class="font-medium text-slate-700">
+								{{ t("code.gitLatestCommit") }}
+							</div>
+							<div
+								class="truncate"
+								:title="`${lastCommitRepo.name} / ${lastCommitRepo.branch}`"
+							>
+								{{ lastCommitRepo.name }} / {{ lastCommitRepo.branch }}
+							</div>
+							<div class="font-mono text-slate-600">
+								{{ lastCommitRepo.headCommit }}
+							</div>
+							<div
+								v-if="lastCommitRepo.headCommitMessage"
+								class="line-clamp-2 break-words text-slate-400"
+							>
+								{{ lastCommitRepo.headCommitMessage }}
+							</div>
+						</div>
+					</template>
+				</n-empty>
 				<CodeGitRepositoryChanges
 					v-else
 					class="min-h-0 flex-1"
