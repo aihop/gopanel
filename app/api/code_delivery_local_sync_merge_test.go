@@ -327,6 +327,104 @@ func TestSyncCodeSessionDeliveryLocalRejectsIncompleteJob(t *testing.T) {
 	}
 }
 
+func TestSyncCodeSessionDeliveryLocalRecoversFrozenGitlinkDelivery(t *testing.T) {
+	session, parentSource, childSource := createCodeGitlinkDeliverySession(t, 1207, false)
+	database := global.DB
+	prepared := prepareCodeMultiRepositoryRecoveryFixture(t, session)
+	parent := codeTestRepositoryBySource(t, prepared, parentSource)
+	child := codeTestRepositoryBySource(t, prepared, childSource)
+	if err := os.WriteFile(filepath.Join(child.SourceDir, "README.md"), []byte("unrelated local edit\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	job := &model.AICodeDeliveryJob{
+		SessionID: session.ID, ProjectID: session.ProjectID, UserID: session.UserID,
+		Status: codeDeliveryJobFailed, Stage: codeDeliveryStageCleaning, Progress: 70,
+		FailureCode: "delivery_failed", ErrorMessage: "源仓库存在未提交变更",
+	}
+	if err := database.Create(job).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := syncCodeSessionDeliveryLocal(session)
+	if err != nil || result.Status != "completed" || len(result.Repositories) != 2 {
+		t.Fatalf("frozen gitlink delivery was not recovered: %#v, %v", result, err)
+	}
+	for _, repository := range []*model.AIDevSessionRepository{child, parent} {
+		head, headErr := runCodeGit(repository.SourceDir, "rev-parse", "refs/heads/"+repository.TargetBranch)
+		if headErr != nil || strings.TrimSpace(head) != repository.MergeCommit {
+			t.Fatalf("repository %s target=%q want=%q err=%v", repository.LinkName, head, repository.MergeCommit, headErr)
+		}
+	}
+	if content, readErr := os.ReadFile(filepath.Join(child.SourceDir, "README.md")); readErr != nil || string(content) != "unrelated local edit\n" {
+		t.Fatalf("unrelated local file was not preserved: %q, %v", content, readErr)
+	}
+	if err := database.First(job, job.ID).Error; err != nil || job.Status != codeDeliveryJobCompleted ||
+		job.Stage != codeDeliveryStageCompleted || job.Progress != 100 || job.FailureCode != "" || job.ErrorMessage != "" {
+		t.Fatalf("recovered job was not completed: %#v, %v", job, err)
+	}
+	var stored []model.AIDevSessionRepository
+	if err := database.Where("session_id = ?", session.ID).Find(&stored).Error; err != nil {
+		t.Fatal(err)
+	}
+	for index := range stored {
+		if strings.TrimSpace(stored[index].MergeCommit) != "" &&
+			(stored[index].Status != codeDeliveryCompleted || stored[index].SourceAppliedAt == nil) {
+			t.Fatalf("repository recovery state is incomplete: %#v", stored[index])
+		}
+	}
+}
+
+func TestSyncCodeSessionDeliveryLocalRejectsFailedJobBeforeMergeCommit(t *testing.T) {
+	database := withCodeGovernanceDB(t)
+	session := &model.AIDevSession{ID: 1208, UserID: 7}
+	if err := database.Create(session).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := database.Create(&model.AICodeDeliveryJob{
+		SessionID: session.ID, UserID: session.UserID, Status: codeDeliveryJobFailed, Stage: codeDeliveryStageSyncing,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := database.Create(&model.AIDevSessionRepository{
+		SessionID: session.ID, SourceDir: t.TempDir(), WorktreeDir: t.TempDir(), LinkName: "incomplete",
+		Branch: "task", TargetBranch: "main", BaseCommit: "base", Status: codeDeliveryPrepared,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := syncCodeSessionDeliveryLocal(session); err == nil || !strings.Contains(err.Error(), "尚未完成") {
+		t.Fatalf("failed delivery without merge commit should be rejected: %v", err)
+	}
+}
+
+func TestCodeDeliveryLocalSyncReadyRejectsQualityFailure(t *testing.T) {
+	database := withCodeGovernanceDB(t)
+	session := &model.AIDevSession{ID: 1209, UserID: 7}
+	if err := database.Create(session).Error; err != nil {
+		t.Fatal(err)
+	}
+	for index := 0; index < 2; index++ {
+		if err := database.Create(&model.AIDevSessionRepository{
+			SessionID: session.ID, SourceDir: filepath.Join(t.TempDir(), "source"), WorktreeDir: t.TempDir(),
+			LinkName: string(rune('a' + index)), Branch: "task", TargetBranch: "main", BaseCommit: "base",
+			SourceCommit: "source", MergeCommit: "merge", Status: codeDeliveryMerged,
+		}).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	job := &model.AICodeDeliveryJob{
+		SessionID: session.ID, UserID: session.UserID, Status: codeDeliveryJobFailed, Stage: codeDeliveryStageQualityCheck,
+	}
+	if err := database.Create(job).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	ready, err := codeDeliveryLocalSyncReady(session, job)
+	if err != nil || ready {
+		t.Fatalf("quality failure must not be recoverable through local sync: ready=%v err=%v", ready, err)
+	}
+}
+
 func TestSyncCodeSessionDeliveryLocalReturnsPartialAndPersistsBlocker(t *testing.T) {
 	database := withCodeGovernanceDB(t)
 	session := &model.AIDevSession{ID: 1203, UserID: 7}

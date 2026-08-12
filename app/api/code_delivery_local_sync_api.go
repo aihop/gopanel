@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"strconv"
@@ -14,6 +15,7 @@ import (
 	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/utils/token"
 	"github.com/gofiber/fiber/v3"
+	"gorm.io/gorm"
 )
 
 func SyncCodeSessionDeliveryLocal(c fiber.Ctx) error {
@@ -98,13 +100,78 @@ func syncCodeSessionDeliveryLocal(session *model.AIDevSession) (codeDeliveryLoca
 	if err := global.DB.Where("session_id = ?", session.ID).First(&job).Error; err != nil {
 		return codeDeliveryLocalSyncResult{}, err
 	}
-	if job.Status != codeDeliveryJobCompleted {
+	ready, err := codeDeliveryLocalSyncReady(session, &job)
+	if err != nil {
+		return codeDeliveryLocalSyncResult{}, err
+	}
+	if !ready {
 		return codeDeliveryLocalSyncResult{}, errors.New("当前交付尚未完成，不能合入本地主仓")
 	}
+	var result codeDeliveryLocalSyncResult
 	if hasCodeMultiRepositoryDelivery(session.ID) {
-		return syncCodeMultiRepositoryDeliveryLocal(session)
+		result, err = syncCodeMultiRepositoryDeliveryLocal(session)
+	} else {
+		result, err = syncCodeSingleRepositoryDeliveryLocal(session)
 	}
-	return syncCodeSingleRepositoryDeliveryLocal(session)
+	if err != nil || result.Status != "completed" || job.Status == codeDeliveryJobCompleted {
+		return result, err
+	}
+	if err := completeRecoveredCodeDeliveryLocalSync(session, &job); err != nil {
+		return codeDeliveryLocalSyncResult{}, err
+	}
+	return result, nil
+}
+
+func codeDeliveryLocalSyncReady(session *model.AIDevSession, job *model.AICodeDeliveryJob) (bool, error) {
+	if job != nil && job.Status == codeDeliveryJobCompleted {
+		return true, nil
+	}
+	if session == nil || job == nil || !hasCodeMultiRepositoryDelivery(session.ID) ||
+		(job.Status != codeDeliveryJobFailed && job.Status != codeDeliveryJobPartial) ||
+		job.Stage != codeDeliveryStageCleaning {
+		return false, nil
+	}
+	repositories, err := loadCodeDeliverySessionRepositories(session)
+	if err != nil {
+		return false, err
+	}
+	return codeMultiRepositoryDeliveryFrozen(repositories), nil
+}
+
+func completeRecoveredCodeDeliveryLocalSync(session *model.AIDevSession, job *model.AICodeDeliveryJob) error {
+	repositories, err := loadCodeDeliverySessionRepositories(session)
+	if err != nil {
+		return err
+	}
+	repositoryResults, err := json.Marshal(codeStoredRepositoryDeliveryResults(repositories))
+	if err != nil {
+		return err
+	}
+	completedAt := time.Now()
+	continueDevelopment := shouldContinueCodeSessionAfterDelivery(global.DB, session.ID)
+	if err := global.DB.Transaction(func(tx *gorm.DB) error {
+		updated := tx.Model(&model.AICodeDeliveryJob{}).Where(
+			"id = ? AND status IN ?", job.ID, []string{codeDeliveryJobFailed, codeDeliveryJobPartial},
+		).Updates(map[string]any{
+			"status": codeDeliveryJobCompleted, "stage": codeDeliveryStageCompleted, "progress": 100,
+			"result_type":  codeMultiRepositoryResultType(codeStoredRepositoryDeliveryResults(repositories)),
+			"failure_code": "", "error_message": "", "conflict_files": "",
+			"repository_results": string(repositoryResults), "completed_at": completedAt,
+		})
+		if updated.Error != nil {
+			return updated.Error
+		}
+		if updated.RowsAffected != 1 {
+			return errors.New("交付状态已变化，请刷新后重试")
+		}
+		return applyCodeSessionLifecycleFinalization(tx, session.ID, completedAt, continueDevelopment)
+	}); err != nil {
+		return err
+	}
+	if !continueDevelopment {
+		cleanupFinalizedCodeSessionWorktrees(session.ID)
+	}
+	return nil
 }
 
 func syncCodeSingleRepositoryDeliveryLocal(session *model.AIDevSession) (codeDeliveryLocalSyncResult, error) {
@@ -172,14 +239,25 @@ func syncCodeMultiRepositoryDeliveryLocal(session *model.AIDevSession) (codeDeli
 	defer release()
 	if hasCodeDeliveryNestedRepositories(repositories) {
 		for index := range repositories {
-			if repositories[index].SourceAppliedAt == nil && strings.TrimSpace(repositories[index].MergeCommit) != "" {
-				repositories[index].LocalSyncError = "嵌套仓库需要协调 Gitlink，请使用同步命令手工合并"
-				if err := persistCodeRepositoryLocalSync(&repositories[index], nil, repositories[index].LocalSyncError); err != nil {
-					return codeDeliveryLocalSyncResult{}, err
-				}
+			repository := &repositories[index]
+			if repository.SourceAppliedAt != nil || strings.TrimSpace(repository.MergeCommit) == "" {
+				continue
+			}
+			if err := applyCodeRepositoryLocalSync(repository, repositories); err != nil {
+				return summarizeCodeDeliveryLocalSync(codeDeliveryLocalSyncRepositoryViews(repositories)), nil
 			}
 		}
-		return summarizeCodeDeliveryLocalSync(codeDeliveryLocalSyncRepositoryViews(repositories)), nil
+		result := summarizeCodeDeliveryLocalSync(codeDeliveryLocalSyncRepositoryViews(repositories))
+		if result.Status != "completed" {
+			return result, nil
+		}
+		if err := completeCodeMultiRepositorySources(repositories); err != nil {
+			return codeDeliveryLocalSyncResult{}, err
+		}
+		if err := cleanupCodeMultiRepositoryIntegrationWorktrees(session, repositories); err != nil {
+			return codeDeliveryLocalSyncResult{}, err
+		}
+		return result, nil
 	}
 	for index := range repositories {
 		repository := &repositories[index]
@@ -210,7 +288,17 @@ func syncCodeMultiRepositoryDeliveryLocal(session *model.AIDevSession) (codeDeli
 			return codeDeliveryLocalSyncResult{}, err
 		}
 	}
-	return summarizeCodeDeliveryLocalSync(codeDeliveryLocalSyncRepositoryViews(repositories)), nil
+	result := summarizeCodeDeliveryLocalSync(codeDeliveryLocalSyncRepositoryViews(repositories))
+	if result.Status != "completed" {
+		return result, nil
+	}
+	if err := completeCodeMultiRepositorySources(repositories); err != nil {
+		return codeDeliveryLocalSyncResult{}, err
+	}
+	if err := cleanupCodeMultiRepositoryIntegrationWorktrees(session, repositories); err != nil {
+		return codeDeliveryLocalSyncResult{}, err
+	}
+	return result, nil
 }
 
 func hasCodeDeliveryNestedRepositories(repositories []model.AIDevSessionRepository) bool {
