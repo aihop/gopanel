@@ -20,6 +20,27 @@ jobs:
           FILE_SIZE_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: bash scripts/check-file-size.sh --base-ref "${FILE_SIZE_BASE_REF}"
 
+      # 提交信息会被 publish.sh 拼进用户可见的版本日志，格式跑偏在那里才被发现就晚了。
+      - name: Enforce commit-message convention
+        env:
+          COMMIT_MESSAGE_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: bash scripts/check-commit-message.sh --base-ref "${COMMIT_MESSAGE_BASE_REF}"
+
+  gofmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.1"
+          cache-dependency-path: go.sum
+      - name: Check formatting of changed files
+        env:
+          GOFMT_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: bash scripts/check-gofmt.sh --base-ref "${GOFMT_BASE_REF}"
+
   go-test:
     runs-on: ubuntu-latest
     strategy:

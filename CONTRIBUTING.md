@@ -57,12 +57,20 @@ npm run lint
 # Mobile client (only if you changed it)
 cd client && flutter pub get && flutter test
 
-# File-size gate (see below)
+# Gates (see below)
 bash scripts/check-file-size.sh
+bash scripts/check-gofmt.sh          # only the Go files you changed
+bash scripts/check-commit-message.sh # first line of HEAD
 ```
 
 If the file-size gate reports a baseline ordering error, run it under
 `LC_ALL=C` — the baseline is sorted with byte collation.
+
+Install the hooks once and the first two run on every commit:
+
+```bash
+bash scripts/install-git-hooks.sh
+```
 
 ## House rules
 
@@ -166,11 +174,19 @@ npm run lint
 # 移动端（改了才需要）
 cd client && flutter pub get && flutter test
 
-# 文件大小门禁
+# 各项门禁（见下）
 bash scripts/check-file-size.sh
+bash scripts/check-gofmt.sh          # 只查你改动的 Go 文件
+bash scripts/check-commit-message.sh # 校验 HEAD 的首行
 ```
 
 如果门禁报 baseline 排序错误，加 `LC_ALL=C` 再跑一次——baseline 是按字节序排的。
+
+装一次钩子，前两项每次提交自动跑：
+
+```bash
+bash scripts/install-git-hooks.sh
+```
 
 ## 项目约定
 

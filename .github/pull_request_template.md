@@ -17,6 +17,7 @@ A regression test that fails without the fix is the strongest evidence.
 - [ ] `go test ./... -count=1`
 - [ ] `npm run test:unit && npm run type-check && npm run lint` (in `admin/`)
 - [ ] `bash scripts/check-file-size.sh`
+- [ ] `bash scripts/check-gofmt.sh` and `bash scripts/check-commit-message.sh`
 - [ ] Manually exercised in a running panel / 在运行中的面板里实际操作过
 
 ## Notes for reviewers / 给评审的说明
