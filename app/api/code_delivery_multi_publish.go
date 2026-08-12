@@ -148,12 +148,16 @@ func validateCodeMultiRepositorySourceStatus(
 			return fmt.Errorf("源仓库 %s 在交付期间出现未提交变更", repository.LinkName)
 		}
 		path := filepath.ToSlash(string(entry[3:]))
-		if _, allowed := managed[path]; !allowed {
-			return fmt.Errorf("源仓库 %s 在交付期间出现未提交变更", repository.LinkName)
+		if _, allowed := managed[path]; allowed {
+			if err := validateCodeMultiRepositoryGitlinkTransition(repository, repositories, path); err != nil {
+				return err
+			}
+			continue
 		}
-		if err := validateCodeMultiRepositoryGitlinkTransition(repository, repositories, path); err != nil {
-			return err
+		if !codeRepositoryPathOverlaps(path, changedPaths) {
+			continue
 		}
+		return fmt.Errorf("源仓库 %s 在交付期间出现未提交变更", repository.LinkName)
 	}
 	return nil
 }
