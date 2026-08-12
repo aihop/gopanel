@@ -23,6 +23,12 @@ export const codeWorkspaceMessages = {
 			aiTools: "AI 工具",
 			deliveryAndQuality: "交付与质量",
 			deliverToMain: "交付到主仓",
+			mergeTaskResult: "合并",
+			mergeIntoLocalMain: "合入本地主仓",
+			mergeIntoLocalMainConfirm: "交付提交已经生成，确认将最新交付结果安全合入本地目标分支？",
+			localMainMergeSuccess: "最新交付结果已合入本地主仓",
+			localMainMergeBlocked: "部分仓库无法网页合入，请在交付详情查看原因和同步命令",
+			localMainMergeFailed: "本地主仓合入失败，请稍后重试",
 			deliverToMainConfirm:
 				"将刚刚评审的任务累计变更进入交付队列。系统会再次校验结果版本，只安全合并到本地目标分支，不执行远端推送。",
 			confirmDeliveryToMain: "确认交付",
@@ -179,6 +185,14 @@ export const codeWorkspaceMessages = {
 			aiTools: "AI tools",
 			deliveryAndQuality: "Delivery and quality",
 			deliverToMain: "Deliver to main",
+			mergeTaskResult: "Merge",
+			mergeIntoLocalMain: "Merge into local main",
+			mergeIntoLocalMainConfirm:
+				"Delivery commits are ready. Merge the latest delivery safely into local target branches?",
+			localMainMergeSuccess: "Latest delivery merged into the local main repository",
+			localMainMergeBlocked:
+				"Some repositories could not be merged in the browser. Check delivery details for reasons and sync commands.",
+			localMainMergeFailed: "Failed to merge into the local main repository. Try again later.",
 			deliverToMainConfirm:
 				"Queue the task result you just reviewed. GoPanel verifies the result revision again and safely merges only into local target branches without pushing remotes.",
 			confirmDeliveryToMain: "Deliver",

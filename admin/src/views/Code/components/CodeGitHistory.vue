@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from "vue"
+import { computed, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 import { getCodeGitHistory, getCodeGitHistoryDiff } from "@/api/modules/codeGit"
 import type {
@@ -10,6 +10,7 @@ import type {
 	CodeGitHistorySelection
 } from "@/api/interface/codeGit"
 import Icon from "@/components/common/Icon.vue"
+import CodeTaskDeliveryButton from "./CodeTaskDeliveryButton.vue"
 import { codeGitReviewMessages } from "../codeGitReviewMessages"
 
 const props = withDefaults(
@@ -29,6 +30,13 @@ const history = ref<CodeGitHistory | null>(null)
 const loading = ref(false)
 const loadError = ref("")
 const selectedKey = ref("")
+const hasUnmergedCommits = computed(() =>
+	Boolean(
+		history.value?.repositories.some(repository =>
+			repository.targetBranch ? repository.commits.some(commit => !commit.merged) : false
+		)
+	)
+)
 
 const requestHistory = async (sessionId: number) =>
 	props.loadHistory ? props.loadHistory(sessionId) : (await getCodeGitHistory(sessionId)).data
@@ -86,6 +94,18 @@ watch(
 		<n-empty v-else-if="history && !history.commits" :description="t('code.gitHistoryEmpty')" class="mt-16" />
 		<n-scrollbar v-else class="h-full">
 			<div class="space-y-4 p-2.5">
+				<div
+					v-if="hasUnmergedCommits && sessionId"
+					class="flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2"
+				>
+					<span class="text-[11px] leading-4 text-amber-700">{{ t("code.gitHistoryMergeHint") }}</span>
+					<CodeTaskDeliveryButton
+						:session-id="sessionId"
+						compact
+						@queued="loadHistory"
+						@settled="loadHistory"
+					/>
+				</div>
 				<section v-for="repository in history?.repositories || []" :key="repository.id">
 					<div class="mb-2 flex items-start gap-2 px-2 text-slate-700">
 						<Icon name="mdi:source-repository" :size="16" />
