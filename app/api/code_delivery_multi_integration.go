@@ -343,10 +343,7 @@ func prepareCodeRepositoryIntegration(
 			return result, nil
 		}
 		if _, err := runCodeGit(
-			repository.IntegrationWorkDir,
-			codeGitAuthoredArgs(
-				"-c", "commit.gpgsign=false", "commit", "--no-edit",
-			)...,
+			repository.IntegrationWorkDir, codeResolvedMergeCommitArgs()...,
 		); err != nil {
 			return result, fmt.Errorf("提交仓库 %s 的受管子仓库合并结果失败：%w", repository.LinkName, err)
 		}

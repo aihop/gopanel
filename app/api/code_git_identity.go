@@ -35,6 +35,15 @@ func codeGitAuthoredArgs(args ...string) []string {
 	return append(codeGitAuthorArgs(), args...)
 }
 
+// codeResolvedMergeCommitArgs 是冲突解决后收尾提交用的参数。
+//
+// --cleanup=strip 不能省：冲突后复用的 MERGE_MSG 里带着 Git 追加的
+// 「# Conflicts:」注释块，而 --no-edit 不走编辑器时默认 cleanup 是 whitespace，
+// 注释会原样留在提交正文里。
+func codeResolvedMergeCommitArgs() []string {
+	return codeGitAuthoredArgs("-c", "commit.gpgsign=false", "commit", "--no-edit", "--cleanup=strip")
+}
+
 // codeDeliveryMergeMessage 生成交付合并提交的信息。
 //
 // Git 默认的 `merge --no-edit` 在这里产出的是 "Merge commit 'sha' into HEAD"，

@@ -182,11 +182,7 @@ func cleanupExposedCodeRepositoryConflict(repository *model.AIDevSessionReposito
 
 func finalizeCodeDeliveryConflictCommit(context *codeDeliveryConflictContext) (string, error) {
 	if _, err := runCodeGit(context.WorkDir, "rev-parse", "-q", "--verify", "MERGE_HEAD"); err == nil {
-		if _, err := runCodeGit(
-			context.WorkDir, codeGitAuthoredArgs(
-				"-c", "commit.gpgsign=false", "commit", "--no-edit",
-			)...,
-		); err != nil {
+		if _, err := runCodeGit(context.WorkDir, codeResolvedMergeCommitArgs()...); err != nil {
 			return "", err
 		}
 	}

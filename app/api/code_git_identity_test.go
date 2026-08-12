@@ -47,6 +47,64 @@ func TestDeliveryMergeCommitCarriesSessionContext(t *testing.T) {
 	}
 }
 
+// 冲突解决后复用的 MERGE_MSG 里带着 Git 追加的「# Conflicts:」注释块。
+// 去掉 --cleanup=strip 后这些注释会原样留在提交正文里，本用例会失败。
+func TestConflictResolvedCommitDropsGitCommentBlock(t *testing.T) {
+	repositoryDir := createCodeGitRepository(t)
+	conflictFile := filepath.Join(repositoryDir, "README.md")
+	if _, err := runCodeGit(repositoryDir, "checkout", "-b", "feature"); err != nil {
+		t.Fatal(err)
+	}
+	commitAs := func(content, message string) {
+		t.Helper()
+		if err := os.WriteFile(conflictFile, []byte(content), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := runCodeGit(repositoryDir, "add", "README.md"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := runCodeGit(repositoryDir, codeGitAuthoredArgs("commit", "-m", message)...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	commitAs("feature\n", "feat: feature side")
+	if _, err := runCodeGit(repositoryDir, "checkout", "-"); err != nil {
+		t.Fatal(err)
+	}
+	commitAs("target\n", "feat: target side")
+
+	session := &model.AIDevSession{ID: 51, CurrentTaskTitle: "冲突后收口"}
+	mergeMessage := codeDeliveryMergeMessage(session, "")
+	if _, err := runCodeGit(repositoryDir, codeGitAuthoredArgs(
+		"merge", "--no-ff", "-m", mergeMessage, "feature",
+	)...); err == nil {
+		t.Fatal("expected the merge to conflict")
+	}
+	// 模拟网页冲突解决器：写回解决结果并暂存，然后走交付的收尾提交。
+	if err := os.WriteFile(conflictFile, []byte("resolved\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(repositoryDir, "add", "README.md"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCodeGit(repositoryDir, codeResolvedMergeCommitArgs()...); err != nil {
+		t.Fatal(err)
+	}
+
+	message, err := runCodeGit(repositoryDir, "log", "-1", "--format=%B", "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(message, "# Conflicts:") || strings.Contains(message, "#\t") {
+		t.Fatalf("git comment block leaked into the commit body:\n%s", message)
+	}
+	for _, expected := range []string{"merge: 冲突后收口 (session #51)", "Session-Id: 51"} {
+		if !strings.Contains(message, expected) {
+			t.Fatalf("resolved merge lost %q:\n%s", expected, message)
+		}
+	}
+}
+
 // 会话提交要带上可追溯 trailer，但不能动用户写的提交说明本身。
 func TestSessionCommitAppendsTrailersWithoutRewritingSubject(t *testing.T) {
 	session, _ := createDeliveryWorktree(t, 42)
