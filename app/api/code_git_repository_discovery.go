@@ -93,6 +93,9 @@ func appendCodeRepositoryWithGitlinks(root string, repositories *[]string, seen 
 	if _, exists := seen[root]; exists {
 		return nil
 	}
+	if err := ensureCodeGitLocalExcludes(root); err != nil {
+		return fmt.Errorf("配置仓库 %s 的 Code 默认忽略规则失败：%w", filepath.Base(root), err)
+	}
 	seen[root] = struct{}{}
 	*repositories = append(*repositories, root)
 	if len(*repositories) > maxCodeDiscoveredRepositories {
