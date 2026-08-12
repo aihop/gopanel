@@ -30,6 +30,7 @@ export interface CodeGitRepository {
 	deliveryStatus?: string
 	savedCommits?: number
 	headCommit?: string
+	headCommitMessage?: string
 	baseCommit?: string
 	resultCommit?: string
 	reviewState?: "live" | "saved" | "delivered"

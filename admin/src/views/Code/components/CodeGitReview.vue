@@ -55,6 +55,18 @@ let diffSequence = 0
 const entries = computed(() => codeGitReviewEntries(status.value))
 const selectedEntry = computed(() => entries.value.find(entry => entry.key === selectedKey.value) || null)
 const hasChanges = computed(() => entries.value.length > 0)
+const noChangesDescription = computed(() => {
+	const repo = status.value?.repositories.find(r => r.headCommit)
+	if (!repo) return t("code.gitNoChanges")
+	const commitMessage = repo.headCommitMessage?.trim()
+	const message = commitMessage ? `：${commitMessage}` : ""
+	return t("code.gitNoChangesWithCommit", {
+		commit: repo.headCommit,
+		message,
+		repository: repo.name,
+		branch: repo.branch
+	})
+})
 const totals = computed(() => codeGitReviewTotals(status.value))
 const isolatedRepositories = computed(() =>
 	(status.value?.repositories || []).filter(repository => repository.isolated)
@@ -395,7 +407,7 @@ useIntervalFn(() => {
 				/>
 				<n-empty
 					v-else-if="status && !hasChanges"
-					:description="t('code.gitNoChanges')"
+					:description="noChangesDescription"
 					class="mt-16"
 				/>
 				<CodeGitRepositoryChanges

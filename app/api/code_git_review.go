@@ -29,29 +29,30 @@ type codeGitFile struct {
 }
 
 type codeGitRepository struct {
-	ID              string        `json:"id"`
-	Name            string        `json:"name"`
-	Branch          string        `json:"branch"`
-	Files           []codeGitFile `json:"files"`
-	StagedCount     int           `json:"stagedCount"`
-	ChangedCount    int           `json:"changedCount"`
-	UntrackedCount  int           `json:"untrackedCount"`
-	Additions       int           `json:"additions"`
-	Deletions       int           `json:"deletions"`
-	StagedAdditions int           `json:"stagedAdditions"`
-	StagedDeletions int           `json:"stagedDeletions"`
-	Truncated       bool          `json:"truncated"`
-	Isolated        bool          `json:"isolated"`
-	DeliveryStatus  string        `json:"deliveryStatus,omitempty"`
-	SavedCommits    int           `json:"savedCommits,omitempty"`
-	HeadCommit      string        `json:"headCommit,omitempty"`
-	BaseCommit      string        `json:"baseCommit,omitempty"`
-	ResultCommit    string        `json:"resultCommit,omitempty"`
-	ReviewState     string        `json:"reviewState,omitempty"`
-	root            string
-	workspacePrefix string
-	resultLive      bool
-	targetBranch    string
+	ID                string        `json:"id"`
+	Name              string        `json:"name"`
+	Branch            string        `json:"branch"`
+	Files             []codeGitFile `json:"files"`
+	StagedCount       int           `json:"stagedCount"`
+	ChangedCount      int           `json:"changedCount"`
+	UntrackedCount    int           `json:"untrackedCount"`
+	Additions         int           `json:"additions"`
+	Deletions         int           `json:"deletions"`
+	StagedAdditions   int           `json:"stagedAdditions"`
+	StagedDeletions   int           `json:"stagedDeletions"`
+	Truncated         bool          `json:"truncated"`
+	Isolated          bool          `json:"isolated"`
+	DeliveryStatus    string        `json:"deliveryStatus,omitempty"`
+	SavedCommits      int           `json:"savedCommits,omitempty"`
+	HeadCommit        string        `json:"headCommit,omitempty"`
+	HeadCommitMessage string        `json:"headCommitMessage,omitempty"`
+	BaseCommit        string        `json:"baseCommit,omitempty"`
+	ResultCommit      string        `json:"resultCommit,omitempty"`
+	ReviewState       string        `json:"reviewState,omitempty"`
+	root              string
+	workspacePrefix   string
+	resultLive        bool
+	targetBranch      string
 }
 
 type codeGitStatus struct {
@@ -118,6 +119,7 @@ func loadCodeGitSavedState(repository *codeGitRepository, baseCommit string) {
 		return
 	}
 	repository.HeadCommit, _ = runCodeGit(repository.root, "rev-parse", "--short=8", "HEAD")
+	repository.HeadCommitMessage, _ = runCodeGit(repository.root, "log", "-1", "--pretty=format:%s", "HEAD")
 }
 
 func discoverCodeGitRepositories(
