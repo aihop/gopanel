@@ -104,8 +104,21 @@ const runStatusLabel = (status: string) => t(`code.runStatus_${status}`)
 
 <template>
 	<n-drawer :show="show" :width="720" placement="right" @update:show="emit('update:show', $event)">
-		<n-drawer-content :title="t('code.conversationHistory')" closable body-content-style="padding: 16px;">
+		<n-drawer-content closable body-content-style="padding: 16px;">
+			<template #header>
+				<div class="flex w-full items-center justify-between">
+					<span class="font-semibold">{{ t("code.conversationHistory") }}</span>
+					<div class="flex items-center gap-2">
+						<span class="text-sm text-slate-500">{{ t("code.hideExecutorMessages") }}</span>
+						<n-switch v-model:value="hideExecutorMessages" size="small" />
+					</div>
+				</div>
+			</template>
 			<n-spin :show="loading">
+				<div class="mb-4 flex items-center justify-end gap-2 border-b border-slate-100 pb-3">
+					<span class="text-sm text-slate-500">{{ t("code.hideExecutorMessages") }}</span>
+					<n-switch v-model:value="hideExecutorMessages" size="small" />
+				</div>
 				<n-empty
 					v-if="!loading && visibleMessages.length === 0"
 					:description="hideExecutorMessages ? t('code.noUserInstructions') : t('code.noConversationHistory')"
