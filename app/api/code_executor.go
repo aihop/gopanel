@@ -55,7 +55,6 @@ var codeExecutorDefinitions = []codeExecutorDefinition{
 	{ID: "claude", Name: "Claude Code", Description: "使用 Claude Code 执行开发任务", Command: "claude", VersionArgs: []string{"--version"}, ConfigPaths: []string{".claude", ".claude.json"}, Capabilities: []string{"code", "automation", "interactive", "resume"}, ApprovalPolicies: allCodeApprovalPolicies(), NativeTerminal: true, AutomationSupported: true, Factory: claudeExecutorFactory{}},
 	{ID: "opencode", Name: "OpenCode", Description: "使用 OpenCode 执行开发任务", Command: "opencode", VersionArgs: []string{"--version"}, ConfigPaths: []string{".config/opencode", ".local/share/opencode"}, Capabilities: []string{"code", "automation", "interactive", "resume"}, ApprovalPolicies: []string{codeApprovalPolicyFullAuto}, NativeTerminal: true, AutomationSupported: true, Factory: openCodeExecutorFactory{}},
 	{ID: "aider", Name: "Aider", Description: "使用 Aider 执行开发任务", Command: "aider", VersionArgs: []string{"--version"}, ConfigPaths: []string{".aider.conf.yml", ".aider"}, Capabilities: []string{"code", "automation", "interactive", "resume"}, ApprovalPolicies: []string{codeApprovalPolicyFullAuto}, NativeTerminal: true, AutomationSupported: true, Factory: aiderExecutorFactory{}},
-	{ID: "trae", Name: "Trae", Description: "当前 Trae CLI 仅用于启动编辑器", Command: "trae", VersionArgs: []string{"--version"}, ConfigPaths: []string{".trae"}, Capabilities: []string{"editor"}, AutomationSupported: false},
 }
 
 func getCodeExecutorFactory(executorID string) (codeExecutorFactory, error) {

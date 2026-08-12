@@ -47,7 +47,7 @@ const now = ref(new Date())
 
 // 面板是常驻页面，比工作台松：5 秒一轮，每 6 轮（30 秒）才带一次 git 汇总。
 // git 汇总要按会话读工作区算 diff，跨项目每轮都拉会把低配机器压垮。
-const { fetchTasks } = useCodeTaskPolling(
+const { fetchTasks, fetchTasksFast } = useCodeTaskPolling(
 	computed(() => 0),
 	tasks,
 	taskTotal,
@@ -76,7 +76,8 @@ const refreshTasks = async (silent = true) => {
 useIntervalFn(() => (now.value = new Date()), 30000)
 
 onMounted(async () => {
-	await refreshTasks(false)
+	tasksLoadError.value = false
+	await fetchTasksFast(false)
 	tasksInitialLoading.value = false
 })
 
@@ -88,10 +89,6 @@ const projectNameById = computed(() => {
 	return map
 })
 
-const projectOptions = computed(() => [
-	{ label: t("code.dashboardAllProjects"), key: "0" },
-	...props.projects.map(project => ({ label: project.name, key: String(project.id) })),
-])
 const selectedProjectName = computed(
 	() => props.projects.find(project => project.id === selectedProjectId.value)?.name || "",
 )
@@ -221,27 +218,6 @@ const toggleArchived = async (task: CodeTaskListItem) => {
       <span class="shrink-0 text-base font-semibold tracking-[-0.01em] text-[var(--n-text-color)]">
         {{ t("code.workspace") }}
       </span>
-      <n-dropdown
-        v-if="projects.length"
-        trigger="click"
-        :options="projectOptions"
-        @select="handleProjectFilterSelect"
-      >
-        <n-button
-          text
-          size="small"
-          :type="selectedProjectId ? 'primary' : 'default'"
-          class="shrink-0"
-        >
-          {{ selectedProjectName || t("code.dashboardAllProjects") }}
-          <template #icon>
-            <Icon
-              name="mdi:chevron-down"
-              :size="15"
-            />
-          </template>
-        </n-button>
-      </n-dropdown>
       <div
         v-show="!showArchived"
         class="flex flex-1 flex-wrap items-center gap-2"

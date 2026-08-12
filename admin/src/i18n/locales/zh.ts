@@ -639,7 +639,6 @@ export default {
 		executorDesc_claude: "使用 Claude Code 执行开发任务",
 		executorDesc_opencode: "使用 OpenCode 执行开发任务",
 		executorDesc_aider: "使用 Aider 执行开发任务",
-		executorDesc_trae: "当前 Trae CLI 仅用于启动编辑器",
 		conversationHistory: "完整对话",
 		noConversationHistory: "暂无对话历史",
 		historyLoadFailed: "对话历史加载失败",

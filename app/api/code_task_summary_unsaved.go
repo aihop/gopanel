@@ -6,7 +6,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+
+	"golang.org/x/sync/singleflight"
 )
+
+const codeTaskUnsavedStatsWorkers = 4
+
+var codeTaskUnsavedStatsGroup singleflight.Group
 
 func applyCodeTaskUnsavedStats(summary *codeTaskSummary, stats codeTaskDiffStats) {
 	if stats.Files == 0 {
@@ -39,6 +46,61 @@ func loadCodeTaskUnsavedStats(root string) codeTaskDiffStats {
 		stats.Additions += countCodeTaskUntrackedLines(filepath.Join(root, filePath))
 	}
 	return stats
+}
+
+func loadSharedCodeTaskUnsavedStats(root string) codeTaskDiffStats {
+	root = filepath.Clean(strings.TrimSpace(root))
+	if root == "." {
+		return codeTaskDiffStats{}
+	}
+	value, _, _ := codeTaskUnsavedStatsGroup.Do(root, func() (any, error) {
+		return loadCodeTaskUnsavedStats(root), nil
+	})
+	return value.(codeTaskDiffStats)
+}
+
+func loadCodeTaskUnsavedStatsConcurrently(roots []string) map[string]codeTaskDiffStats {
+	uniqueRoots := make(map[string]struct{}, len(roots))
+	for _, root := range roots {
+		root = filepath.Clean(strings.TrimSpace(root))
+		if root != "." {
+			uniqueRoots[root] = struct{}{}
+		}
+	}
+	if len(uniqueRoots) == 0 {
+		return nil
+	}
+	statsByRoot := make(map[string]codeTaskDiffStats, len(uniqueRoots))
+	var statsMu sync.Mutex
+	jobs := make(chan string)
+	var workers sync.WaitGroup
+	workerCount := min(codeTaskUnsavedStatsWorkers, len(uniqueRoots))
+	workers.Add(workerCount)
+	for range workerCount {
+		go func() {
+			defer workers.Done()
+			for root := range jobs {
+				stats := loadSharedCodeTaskUnsavedStats(root)
+				statsMu.Lock()
+				statsByRoot[root] = stats
+				statsMu.Unlock()
+			}
+		}()
+	}
+	for root := range uniqueRoots {
+		jobs <- root
+	}
+	close(jobs)
+	workers.Wait()
+	return statsByRoot
+}
+
+func codeTaskUnsavedStatsForRoot(root string, statsByRoot map[string]codeTaskDiffStats) codeTaskDiffStats {
+	root = filepath.Clean(strings.TrimSpace(root))
+	if stats, ok := statsByRoot[root]; ok {
+		return stats
+	}
+	return loadSharedCodeTaskUnsavedStats(root)
 }
 
 func codeTaskUnsavedFiles(status []codeGitFile) (map[string]struct{}, []string) {

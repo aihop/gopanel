@@ -49,15 +49,29 @@ func loadCodeTaskGitSummaries(tasks []*model.AITask, sessionIDs []uint, summarie
 	for _, repository := range repositories {
 		repositoriesBySession[repository.SessionID] = append(repositoriesBySession[repository.SessionID], repository)
 	}
+	unsavedRoots := make([]string, 0, len(tasks))
+	for _, task := range tasks {
+		sessionRepositories := repositoriesBySession[task.SessionID]
+		if len(sessionRepositories) > 0 {
+			for _, repository := range sessionRepositories {
+				unsavedRoots = append(unsavedRoots, repository.WorktreeDir)
+			}
+		} else if delivery, exists := deliveriesBySession[task.SessionID]; exists {
+			unsavedRoots = append(unsavedRoots, delivery.WorkDir)
+		} else if session := sessionsByID[task.SessionID]; session.WorktreeBranch != "" {
+			unsavedRoots = append(unsavedRoots, session.WorkDir)
+		}
+	}
+	unsavedStats := loadCodeTaskUnsavedStatsConcurrently(unsavedRoots)
 	for _, task := range tasks {
 		summary := summaries[task.ID]
 		session := sessionsByID[task.SessionID]
 		if len(repositoriesBySession[task.SessionID]) > 0 {
 			resetCodeTaskGitSummary(&summary)
-			applyCodeTaskRepositorySummaries(&summary, repositoriesBySession[task.SessionID], diffStatsCache)
+			applyCodeTaskRepositorySummaries(&summary, repositoriesBySession[task.SessionID], diffStatsCache, unsavedStats)
 		} else if delivery, exists := deliveriesBySession[task.SessionID]; exists {
 			resetCodeTaskGitSummary(&summary)
-			applyCodeTaskDeliverySummary(&summary, delivery, diffStatsCache)
+			applyCodeTaskDeliverySummary(&summary, delivery, diffStatsCache, unsavedStats)
 		} else if session.WorktreeBranch != "" {
 			resetCodeTaskGitSummary(&summary)
 			summary.Branch = session.WorktreeBranch
@@ -66,7 +80,7 @@ func loadCodeTaskGitSummaries(tasks []*model.AITask, sessionIDs []uint, summarie
 			summary.GitStatus = worktreeSummary.GitStatus
 			stats := codeTaskSummaryStats(worktreeSummary)
 			applyCodeTaskDiffStats(&summary, stats)
-			applyCodeTaskUnsavedStats(&summary, loadCodeTaskUnsavedStats(session.WorkDir))
+			applyCodeTaskUnsavedStats(&summary, codeTaskUnsavedStatsForRoot(session.WorkDir, unsavedStats))
 			summary.Repositories = append(summary.Repositories, codeTaskRepositorySummaryFromStats(
 				filepath.Base(session.SourceWorkDir), session.SourceWorkDir, summary.Branch, session.TargetBranch, stats,
 			))
@@ -118,7 +132,12 @@ func applyCodeTaskStoredRepositorySummaries(summary *codeTaskSummary, repositori
 	}
 }
 
-func applyCodeTaskDeliverySummary(summary *codeTaskSummary, delivery model.AICodeDelivery, diffStatsCache map[string]codeTaskDiffStats) {
+func applyCodeTaskDeliverySummary(
+	summary *codeTaskSummary,
+	delivery model.AICodeDelivery,
+	diffStatsCache map[string]codeTaskDiffStats,
+	unsavedStats map[string]codeTaskDiffStats,
+) {
 	summary.Branch = delivery.WorktreeBranch
 	summary.GitStatus = codeTaskDeliveryStatus(delivery.Status, delivery.PushStatus)
 	if summary.GitStatus == "push_failed" {
@@ -134,13 +153,18 @@ func applyCodeTaskDeliverySummary(summary *codeTaskSummary, delivery model.AICod
 		stats, _ = loadCodeTaskDiffStats(delivery.SourceWorkDir, delivery.BaseCommit, delivery.WorktreeCommit, diffStatsCache)
 	}
 	applyCodeTaskDiffStats(summary, stats)
-	applyCodeTaskUnsavedStats(summary, loadCodeTaskUnsavedStats(delivery.WorkDir))
+	applyCodeTaskUnsavedStats(summary, codeTaskUnsavedStatsForRoot(delivery.WorkDir, unsavedStats))
 	summary.Repositories = append(summary.Repositories, codeTaskRepositorySummaryFromStats(
 		filepath.Base(delivery.SourceWorkDir), delivery.SourceWorkDir, delivery.WorktreeBranch, delivery.TargetBranch, stats,
 	))
 }
 
-func applyCodeTaskRepositorySummaries(summary *codeTaskSummary, repositories []model.AIDevSessionRepository, diffStatsCache map[string]codeTaskDiffStats) {
+func applyCodeTaskRepositorySummaries(
+	summary *codeTaskSummary,
+	repositories []model.AIDevSessionRepository,
+	diffStatsCache map[string]codeTaskDiffStats,
+	unsavedStats map[string]codeTaskDiffStats,
+) {
 	if len(repositories) == 0 {
 		return
 	}
@@ -171,7 +195,7 @@ func applyCodeTaskRepositorySummaries(summary *codeTaskSummary, repositories []m
 			stats, _ = loadCodeTaskDiffStats(repository.SourceDir, repository.BaseCommit, repository.WorktreeCommit, diffStatsCache)
 		}
 		applyCodeTaskDiffStats(summary, stats)
-		applyCodeTaskUnsavedStats(summary, loadCodeTaskUnsavedStats(repository.WorktreeDir))
+		applyCodeTaskUnsavedStats(summary, codeTaskUnsavedStatsForRoot(repository.WorktreeDir, unsavedStats))
 		summary.Repositories = append(summary.Repositories, codeTaskRepositorySummaryFromStats(
 			repository.LinkName, repository.SourceDir, repository.Branch, repository.TargetBranch, stats,
 		))

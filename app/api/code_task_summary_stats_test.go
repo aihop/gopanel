@@ -129,6 +129,43 @@ func TestLoadCodeTaskUnsavedStatsHandlesRenameAndCleanWorktree(t *testing.T) {
 	}
 }
 
+func TestLoadCodeTaskUnsavedStatsConcurrentlyPopulatesEachWorktree(t *testing.T) {
+	first := createCodeGitRepository(t)
+	second := createCodeGitRepository(t)
+	for _, repositoryDir := range []string{first, second} {
+		if err := os.WriteFile(filepath.Join(repositoryDir, "draft.txt"), []byte("draft\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	statsByRoot := loadCodeTaskUnsavedStatsConcurrently([]string{first, second, first, ""})
+	if len(statsByRoot) != 2 {
+		t.Fatalf("duplicate worktrees were not collapsed: %#v", statsByRoot)
+	}
+	for _, repositoryDir := range []string{first, second} {
+		stats, ok := statsByRoot[repositoryDir]
+		if !ok || stats.Files != 1 || stats.Additions != 1 {
+			t.Fatalf("worktree was not preloaded: root=%s stats=%#v ok=%v", repositoryDir, stats, ok)
+		}
+	}
+}
+
+func TestLoadCodeTaskUnsavedStatsConcurrentlyRefreshesEachRequest(t *testing.T) {
+	repositoryDir := createCodeGitRepository(t)
+	draftPath := filepath.Join(repositoryDir, "draft.txt")
+	if err := os.WriteFile(draftPath, []byte("draft\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if stats := loadCodeTaskUnsavedStatsConcurrently([]string{repositoryDir})[repositoryDir]; stats.Files != 1 {
+		t.Fatalf("unexpected first request stats: %#v", stats)
+	}
+	if err := os.Remove(draftPath); err != nil {
+		t.Fatal(err)
+	}
+	if stats := loadCodeTaskUnsavedStatsConcurrently([]string{repositoryDir})[repositoryDir]; stats != (codeTaskDiffStats{}) {
+		t.Fatalf("second request reused stale stats: %#v", stats)
+	}
+}
+
 func TestApplyCodeTaskWorktreeSummaryKeepsCommittedAndUnsavedStatsSeparate(t *testing.T) {
 	repositoryDir := createCodeGitRepository(t)
 	base, err := runCodeGit(repositoryDir, "rev-parse", "HEAD")
@@ -164,7 +201,7 @@ func TestApplyCodeTaskRepositorySummariesAggregatesUnsavedChanges(t *testing.T) 
 	}
 
 	summary := codeTaskSummary{}
-	applyCodeTaskRepositorySummaries(&summary, repositories, map[string]codeTaskDiffStats{})
+	applyCodeTaskRepositorySummaries(&summary, repositories, map[string]codeTaskDiffStats{}, nil)
 	if !summary.HasUnsavedChanges || summary.UnsavedFiles != 2 || summary.UnsavedAdditions != 3 {
 		t.Fatalf("multi-repository unsaved stats were not aggregated: %#v", summary)
 	}

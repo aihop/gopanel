@@ -4,7 +4,6 @@ export const projectBranchMessages = {
 	zh: {
 		code: {
 			...codeWorkspaceMessages.zh.code,
-			repositoryStatus: "仓库状态",
 			manageBranches: "分支管理",
 			refreshRepositories: "刷新仓库状态",
 			repositoryLoadFailed: "仓库状态加载失败",
@@ -23,7 +22,6 @@ export const projectBranchMessages = {
 	en: {
 		code: {
 			...codeWorkspaceMessages.en.code,
-			repositoryStatus: "Repository status",
 			manageBranches: "Manage branches",
 			refreshRepositories: "Refresh repository status",
 			repositoryLoadFailed: "Failed to load repository status",

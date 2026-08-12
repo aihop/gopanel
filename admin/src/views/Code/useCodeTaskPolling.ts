@@ -75,6 +75,10 @@ export function useCodeTaskPolling(
 			}
 		}
 	}
+	const fetchTasksFast = async (silent = false) => {
+		await fetchTasks(silent, false)
+		setTimeout(() => void fetchTasks(true, true), 0)
+	}
 	// 自适应节奏，替代「不管有没有事都按秒刷」：
 	//   1. 页面不可见（切标签页/最小化）→ 完全不发请求，回来时立刻补一次；
 	//   2. 没有任何活跃任务 → 降到 idleIntervalMs。
@@ -99,7 +103,7 @@ export function useCodeTaskPolling(
 		if (value === "visible") void fetchTasks(true, true)
 	})
 
-	return { fetchTasks }
+	return { fetchTasks, fetchTasksFast }
 }
 
 function pickCodeTaskGitSummary(task: CodeTaskListItem) {

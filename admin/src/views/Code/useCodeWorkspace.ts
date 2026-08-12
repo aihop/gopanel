@@ -91,7 +91,7 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 		}
 	}
 
-	const { fetchTasks } = useCodeTaskPolling(
+	const { fetchTasks, fetchTasksFast } = useCodeTaskPolling(
 		currentProjectId,
 		tasks,
 		taskTotal,
@@ -335,13 +335,13 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 
 	onMounted(() => {
 		void fetchProjectInfo()
-		void fetchTasks()
+		void fetchTasksFast()
 	})
 	watch(currentProjectId, newId => {
 		if (!newId) return
 		resetWorkspace()
 		void fetchProjectInfo()
-		void fetchTasks()
+		void fetchTasksFast()
 	})
 
 	return {

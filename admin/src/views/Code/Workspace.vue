@@ -60,33 +60,6 @@
                     {{ t("code.taskHome") }}
                   </n-tooltip>
                 </div>
-                <div
-                  class="grid gap-2"
-                  :class="projectTerminalAvailable ? 'grid-cols-2' : 'grid-cols-1'"
-                >
-                  <n-button
-                    v-if="projectTerminalAvailable"
-                    type="primary"
-                    class="!h-10 !rounded-[14px] shadow-[0_12px_28px_rgba(37,99,235,0.18)]"
-                    @click="createNewTask"
-                  >
-                    <template #icon>
-                      <Icon name="mdi:robot-outline" />
-                    </template>
-                    {{ t("code.aiTaskShort") }}
-                  </n-button>
-                  <n-button
-                    secondary
-                    class="!h-10 !rounded-[14px]"
-                    :loading="projectTerminalOpening"
-                    @click="openProjectTerminal"
-                  >
-                    <template #icon>
-                      <Icon name="mdi:console-line" />
-                    </template>
-                    {{ t("code.terminalShort") }}
-                  </n-button>
-                </div>
               </div>
             </div>
           </div>
@@ -100,6 +73,7 @@
             @select-task="selectTask"
             @task-action="handleTaskAction"
             @refresh-tasks="fetchTasks()"
+            @create-task="createNewTask"
           />
         </div>
       </n-layout-sider>
@@ -119,6 +93,7 @@
             :embedded="embedded"
             :fullscreen-label="fullscreenLabel"
             :is-fullscreen="isWorkspaceFullscreen"
+            :project-id="currentProjectId"
             @show-structure="showProjectStructure = true"
             @take-terminal="takeOverTerminal"
             @open-history="showHistoryDrawer = true"

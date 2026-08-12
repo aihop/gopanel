@@ -18,7 +18,7 @@ import {
 	getCodeGitDiff,
 	getCodeGitStatus,
 	saveCodeGitChanges,
-	updateCodeGitStage
+	updateCodeGitStage,
 } from "@/api/modules/codeGit"
 import { getCodeSession } from "@/api/modules/code"
 import type { CodeDeliveryJob, CodeGitHistorySelection, CodeGitStatus } from "@/api/interface/codeGit"
@@ -58,7 +58,7 @@ const hasChanges = computed(() => entries.value.length > 0)
 const lastCommitRepo = computed(() => status.value?.repositories.find(r => r.headCommit) || null)
 const totals = computed(() => codeGitReviewTotals(status.value))
 const isolatedRepositories = computed(() =>
-	(status.value?.repositories || []).filter(repository => repository.isolated)
+	(status.value?.repositories || []).filter(repository => repository.isolated),
 )
 const hasIsolation = computed(() => Boolean(worktreeBranch.value || isolationMode.value === "multi_worktree"))
 const directWorkspace = computed(() => isolationMode.value === "direct")
@@ -73,8 +73,8 @@ const canSave = computed(() =>
 			(hasIsolation.value || directWorkspace.value) &&
 			!deliveryActive.value &&
 			deliveryJob.value?.status !== "conflict" &&
-			hasChanges.value
-	)
+			hasChanges.value,
+	),
 )
 const deliveryStatusLabel = computed(() => {
 	if (!deliveryJob.value) return ""
@@ -86,7 +86,7 @@ const deliveryStatusLabel = computed(() => {
 	}
 	return t(`code.gitDeliveryStatus_${deliveryJob.value.status}`, {
 		position: deliveryJob.value.queuePosition,
-		progress: deliveryJob.value.progress
+		progress: deliveryJob.value.progress,
 	})
 })
 const deliveryLabel = computed(() => {
@@ -109,7 +109,7 @@ const loadDiff = async (entry: CodeGitReviewEntry, preserveContent = false) => {
 			entry.repository.id,
 			entry.file.path,
 			entry.kind,
-			entry.kind === "result" ? "result" : "workspace"
+			entry.kind === "result" ? "result" : "workspace",
 		)
 		if (sequence !== diffSequence || selectedKey.value !== entry.key) return
 		diffContent.value = response.data.content || ""
@@ -141,7 +141,7 @@ const loadStatus = async (silent = false) => {
 		const [response, sessionResponse, deliveryResponse] = await Promise.all([
 			getCodeGitStatus(props.sessionId, "workspace"),
 			getCodeSession(props.sessionId),
-			getCodeDeliveryJob(props.sessionId)
+			getCodeDeliveryJob(props.sessionId),
 		])
 		if (requestedView !== view.value) return
 		status.value = response.data
@@ -235,13 +235,13 @@ watch(
 		commitMessage.value = ""
 		showAdvancedOperations.value = false
 		if (props.active) void loadStatus()
-	}
+	},
 )
 watch(
 	() => props.active,
 	active => {
 		if (active) void loadStatus(Boolean(status.value))
-	}
+	},
 )
 useIntervalFn(() => {
 	if (props.active) void loadStatus(true)
@@ -249,213 +249,239 @@ useIntervalFn(() => {
 </script>
 
 <template>
-	<div class="flex h-full min-h-0 bg-white">
-		<CodeGitDiffViewer
-			:title="historySelection?.title || selectedEntry?.file.path || ''"
-			:subtitle="
-				historySelection?.subtitle ||
-				t(
-					selectedEntry?.kind === 'result'
-						? 'code.gitResultDiff'
-						: selectedEntry?.kind === 'staged'
-							? 'code.gitStagedDiff'
-							: 'code.gitWorkingDiff'
-				)
-			"
-			:content="diffContent"
-			:truncated="diffTruncated"
-			:loading="diffLoading"
-			:empty-description="t(view === 'history' ? 'code.gitHistorySelect' : 'code.gitSelectFile')"
-			:diff-empty-description="t('code.gitDiffEmpty')"
-			:truncated-description="t('code.gitDiffTruncated')"
-			:open-file-label="t('code.gitOpenFile')"
-			:can-open-file="
-				Boolean(
-					selectedEntry &&
-						selectedEntry.repository.reviewState !== 'delivered' &&
-						selectedEntry.file.resultStatus !== 'D' &&
-						selectedEntry.file.indexStatus !== 'D' &&
-						selectedEntry.file.worktreeStatus !== 'D'
-				)
-			"
-			@open-file="openSelectedFile"
-		/>
+  <div class="flex h-full min-h-0 bg-white">
+    <CodeGitDiffViewer
+      :title="historySelection?.title || selectedEntry?.file.path || ''"
+      :subtitle="
+        historySelection?.subtitle ||
+          t(
+            selectedEntry?.kind === 'result'
+              ? 'code.gitResultDiff'
+              : selectedEntry?.kind === 'staged'
+                ? 'code.gitStagedDiff'
+                : 'code.gitWorkingDiff'
+          )
+      "
+      :content="diffContent"
+      :truncated="diffTruncated"
+      :loading="diffLoading"
+      :empty-description="t(view === 'history' ? 'code.gitHistorySelect' : 'code.gitSelectFile')"
+      :diff-empty-description="t('code.gitDiffEmpty')"
+      :truncated-description="t('code.gitDiffTruncated')"
+      :open-file-label="t('code.gitOpenFile')"
+      :can-open-file="
+        Boolean(
+          selectedEntry &&
+            selectedEntry.repository.reviewState !== 'delivered' &&
+            selectedEntry.file.resultStatus !== 'D' &&
+            selectedEntry.file.indexStatus !== 'D' &&
+            selectedEntry.file.worktreeStatus !== 'D'
+        )
+      "
+      @open-file="openSelectedFile"
+    />
 
-		<aside class="flex min-h-0 w-80 shrink-0 flex-col overflow-hidden border-l border-slate-200 bg-slate-50/70">
-			<CodeGitReviewHeader
-				v-model="view"
-				:status="status"
-				:additions="totals.additions"
-				:deletions="totals.deletions"
-				:refreshing="refreshing"
-				@refresh="refreshReview"
-			/>
-			<CodeSessionRepositorySync
-				v-if="view === 'commit' && hasIsolation && sessionId"
-				:session-id="sessionId"
-				:disabled="deliveryActive"
-				@synced="loadStatus(true)"
-			/>
-			<div
-				v-if="view === 'commit' && (hasIsolation || directWorkspace)"
-				class="max-h-[46%] shrink-0 space-y-2 overflow-y-auto border-b border-slate-200 p-3"
-			>
-				<div v-if="hasIsolation" class="truncate text-xs text-slate-500" :title="deliveryLabel">{{ deliveryLabel }}</div>
-				<div v-else class="text-xs leading-5 text-slate-500">{{ t("code.gitDirectWorkspace") }}</div>
-				<n-alert
-					v-if="hasIsolation && deliveryJob"
-					:type="
-						deliveryJob.status === 'failed' ||
-						deliveryJob.status === 'conflict' ||
-						deliveryJob.status === 'partial'
-							? 'error'
-							: deliveryJob.status === 'completed'
-								? 'success'
-								: 'info'
-					"
-					:show-icon="false"
-				>
-					<div class="flex items-center justify-between gap-2 text-xs">
-						<span>{{ deliveryStatusLabel }}</span>
-						<span v-if="deliveryActive">{{ t(`code.gitDeliveryStage_${deliveryJob.stage}`) }}</span>
-					</div>
-					<n-progress
-						v-if="deliveryActive"
-						class="mt-2"
-						type="line"
-						:percentage="deliveryJob.progress"
-						:show-indicator="false"
-					/>
-					<div
-						v-if="deliveryJob.errorMessage && !conflictRepositories.length"
-						class="mt-2 break-words text-xs"
-					>
-						{{ deliveryJob.errorMessage }}
-					</div>
-					<CodeConflictManualMerge
-						:repositories="conflictRepositories"
-						:session-id="sessionId"
-						@resolve="conflictResolverVisible = true"
-						@completed="loadStatus(true)"
-					/>
-					<CodeDeliveryFacts :facts="deliveryJob.facts" :job-status="deliveryJob.status" />
-				</n-alert>
-				<CodeLocalSyncPending
-					v-if="hasIsolation && deliveryJob?.repositories?.length"
-					:session-id="sessionId"
-					:repositories="deliveryJob.repositories"
-					@synced="loadStatus(true)"
-				/>
-				<n-input
-					v-model:value="commitMessage"
-					size="small"
-					:placeholder="t('code.gitSavePlaceholder')"
-					:disabled="deliveryLoading"
-					@keyup.enter="saveChanges"
-				/>
-				<n-button
-					block
-					size="small"
-					type="primary"
-					:disabled="!canSave"
-					:loading="deliveryLoading"
-					@click="saveChanges"
-				>
-					{{ t("code.gitSave") }}
-				</n-button>
-				<p class="text-[11px] leading-4 text-slate-400">
-					{{
-						t(
-							hasChanges
-								? directWorkspace
-									? "code.gitDirectSaveHint"
-									: "code.gitSaveHint"
-								: directWorkspace
-									? "code.gitDirectClean"
-									: "code.gitMergeReady"
-							)
-					}}
-				</p>
-				<n-button text size="tiny" @click="showAdvancedOperations = !showAdvancedOperations">
-					{{ t(showAdvancedOperations ? "code.gitAdvancedHide" : "code.gitAdvancedShow") }}
-				</n-button>
-			</div>
-			<CodeDeliveryPush
-				v-if="view === 'commit' && !hasIsolation && !directWorkspace && sessionId"
-				:session-id="sessionId"
-				:refresh-key="deliveryPushKey"
-			/>
-			<CodeGitHistory
-				v-if="view === 'history'"
-				:session-id="sessionId"
-				:active="active"
-				:refresh-key="historyRefreshKey"
-				@selected="selectHistoryCommit"
-			/>
-			<n-spin
-				v-else
-				:show="loading"
-				class="min-h-0 flex-1 overflow-hidden"
-				content-class="flex h-full min-h-0 flex-col"
-			>
-				<div v-if="loadError" class="p-4">
-					<n-alert type="error" :title="t('code.gitLoadFailed')">{{ loadError }}</n-alert>
-				</div>
-				<n-empty
-					v-else-if="status && !status.available"
-					:description="t('code.gitNoRepository')"
-					class="mt-16"
-				/>
-				<n-empty
-					v-else-if="status && !hasChanges"
-					:description="t('code.gitNoChanges')"
-					class="mt-16"
-				>
-					<template #extra>
-						<div
-							v-if="lastCommitRepo"
-							class="mt-3 max-w-[280px] space-y-1 text-center text-xs text-slate-500"
-						>
-							<div class="font-medium text-slate-700">
-								{{ t("code.gitLatestCommit") }}
-							</div>
-							<div
-								class="truncate"
-								:title="`${lastCommitRepo.name} / ${lastCommitRepo.branch}`"
-							>
-								{{ lastCommitRepo.name }} / {{ lastCommitRepo.branch }}
-							</div>
-							<div class="font-mono text-slate-600">
-								{{ lastCommitRepo.headCommit }}
-							</div>
-							<div
-								v-if="lastCommitRepo.headCommitMessage"
-								class="line-clamp-2 break-words text-slate-400"
-							>
-								{{ lastCommitRepo.headCommitMessage }}
-							</div>
-						</div>
-					</template>
-				</n-empty>
-				<CodeGitRepositoryChanges
-					v-else
-					class="min-h-0 flex-1"
-					:repositories="status?.repositories || []"
-					:entries="entries"
-					:scope="'workspace'"
-					:selected-key="selectedKey"
-					:staging-key="stagingKey"
-					:show-advanced-operations="view === 'commit' && showAdvancedOperations"
-					@select="loadDiff"
-					@update-stage="({ entry, staged }) => updateStage(entry, staged)"
-				/>
-			</n-spin>
-		</aside>
-	</div>
-	<CodeConflictResolverDrawer
-		v-if="sessionId"
-		v-model:show="conflictResolverVisible"
-		:session-id="sessionId"
-		@completed="loadStatus(true)"
-	/>
+    <aside class="flex min-h-0 w-80 shrink-0 flex-col overflow-hidden border-l border-slate-200 bg-slate-50/70">
+      <CodeGitReviewHeader
+        v-model="view"
+        :status="status"
+        :additions="totals.additions"
+        :deletions="totals.deletions"
+        :refreshing="refreshing"
+        @refresh="refreshReview"
+      />
+      <CodeSessionRepositorySync
+        v-if="view === 'commit' && hasIsolation && sessionId"
+        :session-id="sessionId"
+        :disabled="deliveryActive"
+        @synced="loadStatus(true)"
+      />
+      <div
+        v-if="view === 'commit' && (hasIsolation || directWorkspace)"
+        class="max-h-[46%] shrink-0 space-y-2 overflow-y-auto border-b border-slate-200 p-3"
+      >
+        <div
+          v-if="hasIsolation"
+          class="truncate text-xs text-slate-500"
+          :title="deliveryLabel"
+        >
+          {{ deliveryLabel }}
+        </div>
+        <div
+          v-else
+          class="text-xs leading-5 text-slate-500"
+        >
+          {{ t("code.gitDirectWorkspace") }}
+        </div>
+        <n-alert
+          v-if="hasIsolation && deliveryJob"
+          :type="
+            deliveryJob.status === 'failed' ||
+              deliveryJob.status === 'conflict' ||
+              deliveryJob.status === 'partial'
+              ? 'error'
+              : deliveryJob.status === 'completed'
+                ? 'success'
+                : 'info'
+          "
+          :show-icon="false"
+        >
+          <div class="flex items-center justify-between gap-2 text-xs">
+            <span>{{ deliveryStatusLabel }}</span>
+            <span v-if="deliveryActive">{{ t(`code.gitDeliveryStage_${deliveryJob.stage}`) }}</span>
+          </div>
+          <n-progress
+            v-if="deliveryActive"
+            class="mt-2"
+            type="line"
+            :percentage="deliveryJob.progress"
+            :show-indicator="false"
+          />
+          <div
+            v-if="deliveryJob.errorMessage && !conflictRepositories.length"
+            class="mt-2 break-words text-xs"
+          >
+            {{ deliveryJob.errorMessage }}
+          </div>
+          <CodeConflictManualMerge
+            :repositories="conflictRepositories"
+            :session-id="sessionId"
+            @resolve="conflictResolverVisible = true"
+            @completed="loadStatus(true)"
+          />
+          <CodeDeliveryFacts
+            :facts="deliveryJob.facts"
+            :job-status="deliveryJob.status"
+          />
+        </n-alert>
+        <CodeLocalSyncPending
+          v-if="hasIsolation && deliveryJob?.repositories?.length"
+          :session-id="sessionId"
+          :repositories="deliveryJob.repositories"
+          @synced="loadStatus(true)"
+        />
+        <n-input
+          v-model:value="commitMessage"
+          size="small"
+          :placeholder="t('code.gitSavePlaceholder')"
+          :disabled="deliveryLoading"
+          @keyup.enter="saveChanges"
+        />
+        <n-button
+          block
+          size="small"
+          type="primary"
+          :disabled="!canSave"
+          :loading="deliveryLoading"
+          @click="saveChanges"
+        >
+          {{ t("code.gitSave") }}
+        </n-button>
+        <p class="text-[11px] leading-4 text-slate-400">
+          {{
+            t(
+              hasChanges
+                ? directWorkspace
+                  ? "code.gitDirectSaveHint"
+                  : "code.gitSaveHint"
+                : directWorkspace
+                  ? "code.gitDirectClean"
+                  : "code.gitMergeReady"
+            )
+          }}
+        </p>
+        <n-button
+          text
+          size="tiny"
+          @click="showAdvancedOperations = !showAdvancedOperations"
+        >
+          {{ t(showAdvancedOperations ? "code.gitAdvancedHide" : "code.gitAdvancedShow") }}
+        </n-button>
+      </div>
+      <CodeDeliveryPush
+        v-if="view === 'commit' && !hasIsolation && !directWorkspace && sessionId"
+        :session-id="sessionId"
+        :refresh-key="deliveryPushKey"
+      />
+      <CodeGitHistory
+        v-if="view === 'history'"
+        :session-id="sessionId"
+        :active="active"
+        :refresh-key="historyRefreshKey"
+        @selected="selectHistoryCommit"
+      />
+      <n-spin
+        v-else
+        :show="loading"
+        class="min-h-0 flex-1 overflow-hidden"
+        content-class="flex h-full min-h-0 flex-col"
+      >
+        <div
+          v-if="loadError"
+          class="p-4"
+        >
+          <n-alert
+            type="error"
+            :title="t('code.gitLoadFailed')"
+          >
+            {{ loadError }}
+          </n-alert>
+        </div>
+        <n-empty
+          v-else-if="status && !status.available"
+          :description="t('code.gitNoRepository')"
+          class="mt-16"
+        />
+        <n-empty
+          v-else-if="status && !hasChanges"
+          :description="t('code.gitNoChanges')"
+          class="mt-16"
+        >
+          <template #extra>
+            <div
+              v-if="lastCommitRepo"
+              class="mt-3 max-w-[280px] space-y-1 text-center text-xs text-slate-500"
+            >
+              <div class="font-medium text-slate-700">
+                {{ t("code.gitLatestCommit") }}
+              </div>
+              <div
+                class="truncate"
+                :title="`${lastCommitRepo.name} / ${lastCommitRepo.branch}`"
+              >
+                {{ lastCommitRepo.name }} / {{ lastCommitRepo.branch }}
+              </div>
+              <div class="font-mono text-slate-600">
+                {{ lastCommitRepo.headCommit }}
+              </div>
+              <div
+                v-if="lastCommitRepo.headCommitMessage"
+                class="line-clamp-2 break-words text-slate-400"
+              >
+                {{ lastCommitRepo.headCommitMessage }}
+              </div>
+            </div>
+          </template>
+        </n-empty>
+        <CodeGitRepositoryChanges
+          v-else
+          class="min-h-0 flex-1"
+          :repositories="status?.repositories || []"
+          :entries="entries"
+          :scope="'workspace'"
+          :selected-key="selectedKey"
+          :staging-key="stagingKey"
+          :show-advanced-operations="view === 'commit' && showAdvancedOperations"
+          @select="loadDiff"
+          @update-stage="({ entry, staged }) => updateStage(entry, staged)"
+        />
+      </n-spin>
+    </aside>
+  </div>
+  <CodeConflictResolverDrawer
+    v-if="sessionId"
+    v-model:show="conflictResolverVisible"
+    :session-id="sessionId"
+    @completed="loadStatus(true)"
+  />
 </template>

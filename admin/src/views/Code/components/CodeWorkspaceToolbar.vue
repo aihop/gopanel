@@ -6,6 +6,7 @@ import CodeApprovalCenter from "./CodeApprovalCenter.vue"
 import CodeDeliveryPanel from "./CodeDeliveryPanel.vue"
 import CodeTaskDeliveryButton from "./CodeTaskDeliveryButton.vue"
 import SessionApprovalPolicy from "./SessionApprovalPolicy.vue"
+import CodeMemoryManager from "./CodeMemoryManager.vue"
 import WorkspaceModeSwitch, { type CodeWorkspaceMode } from "./WorkspaceModeSwitch.vue"
 import { codeWorkspaceMessages } from "../codeWorkspaceMessages"
 
@@ -19,6 +20,7 @@ const props = defineProps<{
 	embedded: boolean
 	fullscreenLabel: string
 	isFullscreen: boolean
+	projectId: number
 }>()
 
 const emit = defineEmits<{
@@ -122,6 +124,7 @@ const sessionIcon = computed(() => (props.isTerminalSession ? "mdi:console-line"
         </div>
       </n-popover>
 
+      <CodeMemoryManager :project-id="projectId" />
       <div
         class="flex items-center rounded-xl border border-slate-200 bg-white p-0.5 dark:border-[var(--border-color)] dark:bg-white/5"
       >

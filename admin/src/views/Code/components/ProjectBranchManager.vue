@@ -8,7 +8,6 @@ import Icon from "@/components/common/Icon.vue"
 import { projectBranchMessages } from "../projectBranchMessages"
 import ProjectBranchManagementDrawer from "./ProjectBranchManagementDrawer.vue"
 import CodeResidueManager from "./CodeResidueManager.vue"
-import CodeMemoryManager from "./CodeMemoryManager.vue"
 
 const props = defineProps<{ projectId: number }>()
 const { t } = useI18n({ messages: projectBranchMessages })
@@ -89,13 +88,11 @@ watch(
 	<section class="ai-workspace-repositories flex max-h-[32%] min-h-[132px] shrink-0 flex-col border-t border-slate-200/80 bg-white/65">
 		<div class="flex shrink-0 items-center justify-between gap-2 px-4 py-2.5">
 			<div class="min-w-0">
-				<div class="text-xs font-semibold text-slate-600">{{ t("code.repositoryStatus") }}</div>
 				<div class="mt-0.5 text-[10px] text-slate-400">
 					{{ t("code.repositoryCount", { count: activeRepositories.length }) }}
 				</div>
 			</div>
 			<div class="flex shrink-0 items-center gap-1">
-				<CodeMemoryManager :project-id="projectId" />
 				<CodeResidueManager />
 				<n-button text size="tiny" :disabled="branchState.repositories.length === 0" @click="showBranchManager = true">
 					<template #icon><Icon name="mdi:source-branch" :size="14" /></template>

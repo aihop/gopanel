@@ -101,7 +101,7 @@ func TestApplyCodeTaskDeliverySummaryIncludesPushError(t *testing.T) {
 	summary := codeTaskSummary{}
 	applyCodeTaskDeliverySummary(&summary, model.AICodeDelivery{
 		Status: codeDeliveryCompleted, PushStatus: codePushFailed, PushError: "remote rejected",
-	}, make(map[string]codeTaskDiffStats))
+	}, make(map[string]codeTaskDiffStats), nil)
 	if summary.GitStatus != "push_failed" || summary.GitError != "remote rejected" {
 		t.Fatalf("unexpected push failure summary: %#v", summary)
 	}
@@ -165,7 +165,7 @@ func TestApplyCodeTaskRepositorySummariesAggregatesMixedRepositories(t *testing.
 		{Branch: "task-a", Status: codeDeliveryCompleted},
 		{Branch: "task-b", Status: codeDeliveryPrepared},
 	}
-	applyCodeTaskRepositorySummaries(&summary, repositories, make(map[string]codeTaskDiffStats))
+	applyCodeTaskRepositorySummaries(&summary, repositories, make(map[string]codeTaskDiffStats), nil)
 	if summary.GitStatus != "committed" || summary.Branch != "task-a" || len(summary.Repositories) != 2 ||
 		summary.Repositories[0].Branch != "task-a" || summary.Repositories[1].Branch != "task-b" {
 		t.Fatalf("unexpected repository summary: %#v", summary)
@@ -197,7 +197,7 @@ func TestApplyCodeTaskRepositorySummariesHidesLowerPriorityPushError(t *testing.
 		{Branch: "task-a", Status: codeDeliveryCompleted, PushStatus: codePushFailed, PushError: "remote rejected"},
 		{Branch: "task-b", Status: "conflict"},
 	}
-	applyCodeTaskRepositorySummaries(&summary, repositories, make(map[string]codeTaskDiffStats))
+	applyCodeTaskRepositorySummaries(&summary, repositories, make(map[string]codeTaskDiffStats), nil)
 	if summary.GitStatus != "conflict" || summary.GitError != "" {
 		t.Fatalf("unexpected repository summary: %#v", summary)
 	}

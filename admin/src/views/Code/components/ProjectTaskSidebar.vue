@@ -20,6 +20,7 @@ const emit = defineEmits<{
 	selectTask: [task: CodeTaskListItem]
 	taskAction: [key: string, task: CodeTaskListItem]
 	refreshTasks: []
+	createTask: []
 }>()
 const { t } = useI18n({ messages: codeWorkspaceMessages })
 </script>
@@ -31,8 +32,24 @@ const { t } = useI18n({ messages: codeWorkspaceMessages })
         <div class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
           {{ t("code.taskHistory") }}
         </div>
-        <div class="text-xs text-slate-400">
-          {{ t("code.taskCount", { count: taskTotal }) }}
+        <div class="flex items-center gap-2">
+          <n-button
+            size="small"
+            type="primary"
+            class="!rounded-lg"
+            @click="emit('createTask')"
+          >
+            <template #icon>
+              <Icon
+                name="mdi:robot-outline"
+                :size="14"
+              />
+            </template>
+            {{ t("code.aiTaskShort") }}
+          </n-button>
+          <div class="text-xs text-slate-400">
+            {{ t("code.taskCount", { count: taskTotal }) }}
+          </div>
         </div>
       </div>
       <n-scrollbar
