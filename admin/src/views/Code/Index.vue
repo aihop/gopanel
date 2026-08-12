@@ -9,7 +9,7 @@
   >
     <!-- 整页不滚：右侧是终端，页面滚起来终端会跟着跑。滚动交给左右两栏各自处理。 -->
     <!-- 横向可以给足，纵向省着用：只有纵向内边距会从终端高度里扣 -->
-    <div class="project-lobby flex min-h-0 flex-1 flex-col overflow-hidden pt-4 md:pt-5">
+    <div class="project-lobby flex min-h-0 flex-1 flex-col overflow-hidden pt-4 md:pt-5  rounded-[24px]">
       <CodeDashboard
         :projects="projects"
         :loading="projectsLoading"

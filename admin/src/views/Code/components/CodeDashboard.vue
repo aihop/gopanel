@@ -369,7 +369,7 @@ const toggleArchived = async (task: CodeTaskListItem) => {
 
     <!-- 主从：左边所有任务，右边选中任务的终端。切任务不跳页，只换右边。 -->
     <div
-      class="dashboard-workbench grid min-h-0 flex-1 overflow-hidden border-t border-[var(--n-border-color)]"
+      class="dashboard-workbench grid min-h-0 flex-1 overflow-hidden border-t "
       :class="
         listCollapsed
           ? 'grid-cols-1 grid-rows-1'
