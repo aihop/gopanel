@@ -28,6 +28,7 @@ import type {
 	CodeTokenUsageResponse,
 } from "../interface/code"
 import type { CodeProjectBranches } from "../interface/codeBranches"
+import type { CodeMemoryEntry, CodeMemoryList } from "../interface/codeMemories"
 import type { CodeResidueCleanupOutcome, CodeWorktreeResidueSummary } from "../interface/codeResidues"
 import type { CodeTaskListItem } from "../interface/codeTasks"
 import type { HostTerminalSession } from "../interface/hostTerminal"
@@ -80,6 +81,18 @@ export function getCodeProjectBranches(projectId: number) {
 
 export function deleteCodeProjectBranch(projectId: number, repositoryPath: string, branch: string, force: boolean) {
 	return http.delete(`/code/projects/${projectId}/git/branches`, { repositoryPath, branch, force })
+}
+
+export function getCodeMemories(projectId?: number) {
+	return http.get<CodeMemoryList>("/code/memories", projectId ? { projectId } : undefined)
+}
+
+export function createCodeMemory(data: { content: string; projectId: number; allProjects: boolean }) {
+	return http.post<CodeMemoryEntry>("/code/memories", data)
+}
+
+export function deleteCodeMemory(id: number) {
+	return http.delete(`/code/memories/${id}`)
 }
 
 // 扫描要逐个 worktree 跑 git status 和 merge-base，仓库多时会慢，给足超时。

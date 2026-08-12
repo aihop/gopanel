@@ -46,12 +46,53 @@ func GetCodeMemories(c fiber.Ctx) error {
 		Order("updated_at DESC").Limit(200).Find(&entries).Error; err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	view := codeMemoryListView{Entries: entries, Total: total}
+	// 按注入顺序返回，让界面无需自己排序就能与 AI 读到的保持一致。
+	view := codeMemoryListView{Entries: flattenCodeMemoryInInjectionOrder(entries), Total: total}
 	var summary model.AICodeMemorySummary
 	if err := global.DB.Where("user_id = ?", claims.UserId).First(&summary).Error; err == nil {
 		view.Summary = summary.Content
 	}
 	return c.JSON(e.Succ(view))
+}
+
+// CreateCodeMemory 手动添加一条记忆。
+//
+// 刻意不让用户填 kind / module / tier：人手写的记忆几乎总是「以后就这么办」，
+// 也就是 decision。把这三个字段做成表单，界面立刻就不简约了，而用户在
+// 这三项上的选择对结果几乎没有影响。唯一值得暴露的是作用范围——
+// 它决定这条规矩只管当前项目还是所有项目。
+func CreateCodeMemory(c fiber.Ctx) error {
+	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
+	var req struct {
+		Content     string `json:"content"`
+		ProjectID   uint   `json:"projectId"`
+		AllProjects bool   `json:"allProjects"`
+	}
+	if err := c.Bind().JSON(&req); err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	// 手写的内容同样要脱敏：用户很可能直接粘一段配置进来。
+	content := truncateCodeMemoryText(scrubCodeMemoryText(req.Content), codeMemoryContentMaxRunes)
+	if content == "" {
+		return c.JSON(e.Fail(errors.New("记忆内容不能为空")))
+	}
+	scope := codeMemoryScopeProject
+	if req.AllProjects {
+		scope = codeMemoryScopeUser
+	}
+	if scope == codeMemoryScopeProject && req.ProjectID == 0 {
+		return c.JSON(e.Fail(errors.New("请先选择项目，或改为对所有项目生效")))
+	}
+	entry := model.AICodeMemoryEntry{
+		UserID: claims.UserId, ProjectID: codeMemoryProjectIDForScope(scope, req.ProjectID),
+		Scope: scope, Kind: codeMemoryKindDecision, Tier: codeMemoryTierForKind(codeMemoryKindDecision),
+		ModuleKey: normalizeCodeMemoryModuleKey("general", scope),
+		Content:   content, Status: codeMemoryStatusActive,
+	}
+	if err := global.DB.Create(&entry).Error; err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	return c.JSON(e.Succ(entry))
 }
 
 // DeleteCodeMemory 归档一条记忆。

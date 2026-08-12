@@ -36,6 +36,7 @@ func CodeRouter(r fiber.Router) {
 		group.Post("/projects/:id/git/sync", api.SyncCodeProject)
 		group.Get("/projects/:id/worktree-capability", api.GetCodeWorktreeCapability)
 		group.Get("/memories", api.GetCodeMemories)
+		group.Post("/memories", api.CreateCodeMemory)
 		group.Delete("/memories/:id", api.DeleteCodeMemory)
 		group.Post("/sessions/:id/memory/extract", api.ExtractCodeSessionMemory)
 		group.Get("/worktree-residues", api.GetCodeWorktreeResidues)

@@ -73,6 +73,19 @@ func renderCodeMemoryContext(entries []model.AICodeMemoryEntry, summary string) 
 	return rendered
 }
 
+// flattenCodeMemoryInInjectionOrder 按注入时的真实顺序摊平记忆。
+//
+// 界面照这个顺序展示，「你看到的就是 AI 看到的」才成立。界面自己另排一套
+// 顺序的话，用户就没法从列表推理 AI 为什么这么干——而那正是他打开这个
+// 列表的唯一原因。
+func flattenCodeMemoryInInjectionOrder(entries []model.AICodeMemoryEntry) []model.AICodeMemoryEntry {
+	ordered := make([]model.AICodeMemoryEntry, 0, len(entries))
+	for _, group := range groupCodeMemoryByModule(entries) {
+		ordered = append(ordered, group.entries...)
+	}
+	return ordered
+}
+
 type codeMemoryModuleGroup struct {
 	module  string
 	entries []model.AICodeMemoryEntry
