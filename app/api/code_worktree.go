@@ -174,7 +174,7 @@ func createCodeSessionWorktreeFromCandidates(session *model.AIDevSession, projec
 	session.RemoteBranch = repository.RemoteBranch
 	session.RemoteCommit = repository.RemoteCommit
 	session.RepositorySync = repository.SyncStatus
-	session.IsolationMode = "single_worktree"
+	session.IsolationMode = codeIsolationSingleWorktree
 	return nil
 }
 

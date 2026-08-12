@@ -155,17 +155,25 @@ func discoverCodeGitRepositories(
 		}
 		return repositories
 	}
-	if repository, ok := inspectCodeGitRepository("session", filepath.Base(session.WorkDir), session.WorkDir, ""); ok {
-		repository.Isolated = session.WorktreeBranch != ""
-		if repository.Isolated {
-			loadCodeGitSavedState(&repository, session.BaseCommit)
+	if session.IsolationMode != codeIsolationDirect {
+		if repository, ok := inspectCodeGitRepository("session", filepath.Base(session.WorkDir), session.WorkDir, ""); ok {
+			repository.Isolated = session.WorktreeBranch != ""
+			if repository.Isolated {
+				loadCodeGitSavedState(&repository, session.BaseCommit)
+			}
+			return []codeGitRepository{repository}
 		}
-		return []codeGitRepository{repository}
 	}
 	prefixes := codeGitWorkspacePrefixes(session)
-	repositories := make([]codeGitRepository, 0, len(sourceDirs))
+	repositoryRoots := sourceDirs
+	if session.IsolationMode == codeIsolationDirect {
+		if discovered, err := discoverCodeRepositoryRoots(sourceDirs); err == nil {
+			repositoryRoots = discovered
+		}
+	}
+	repositories := make([]codeGitRepository, 0, len(repositoryRoots))
 	seen := make(map[string]struct{})
-	for index, sourceDir := range sourceDirs {
+	for index, sourceDir := range repositoryRoots {
 		cleanSource := filepath.Clean(sourceDir)
 		if isCodeRepositoryExcluded(cleanSource, excludedRepositories) {
 			continue
@@ -173,8 +181,9 @@ func discoverCodeGitRepositories(
 		if _, exists := seen[cleanSource]; exists {
 			continue
 		}
+		workspacePrefix := codeGitRepositoryWorkspacePrefix(cleanSource, sourceDirs, prefixes)
 		repository, ok := inspectCodeGitRepository(
-			fmt.Sprintf("source-%d", index), filepath.Base(cleanSource), cleanSource, prefixes[cleanSource],
+			fmt.Sprintf("source-%d", index), filepath.Base(cleanSource), cleanSource, workspacePrefix,
 		)
 		if !ok {
 			continue
@@ -183,6 +192,22 @@ func discoverCodeGitRepositories(
 		repositories = append(repositories, repository)
 	}
 	return repositories
+}
+
+func codeGitRepositoryWorkspacePrefix(repositoryRoot string, sourceDirs []string, prefixes map[string]string) string {
+	for _, sourceDir := range sourceDirs {
+		cleanSource := filepath.Clean(sourceDir)
+		prefix := prefixes[cleanSource]
+		if prefix == "" || (repositoryRoot != cleanSource && !isPathInside(repositoryRoot, cleanSource)) {
+			continue
+		}
+		relative, err := filepath.Rel(cleanSource, repositoryRoot)
+		if err != nil || relative == "." {
+			return prefix
+		}
+		return filepath.ToSlash(filepath.Join(prefix, relative))
+	}
+	return ""
 }
 
 func loadCodeGitRepositoryStatus(repository codeGitRepository) (codeGitRepository, error) {

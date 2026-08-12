@@ -82,6 +82,28 @@ func TestCodeProjectTerminalWorkDirUsesMultiRepositorySessionWorkspace(t *testin
 	}
 }
 
+func TestCodeProjectTerminalWorkDirUsesDirectSessionWorkspace(t *testing.T) {
+	database := withCodeGovernanceDB(t)
+	sourceDir := createCodeGitRepository(t)
+	project := &model.AIProject{ID: 926, Name: "direct", CreatorID: 7, SourceDirs: []string{sourceDir}}
+	session := &model.AIDevSession{
+		ID: 926, UserID: project.CreatorID, ProjectID: project.ID, WorkDir: sourceDir,
+		IsolationMode: codeIsolationDirect, Status: codeSessionStatusActive,
+	}
+	if err := database.Create(project).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := database.Create(session).Error; err != nil {
+		t.Fatal(err)
+	}
+	workDir, err := codeProjectTerminalWorkDir(
+		project, session.ID, &token.CustomClaims{UserId: session.UserID, Role: constant.UserRoleAdmin},
+	)
+	if err != nil || workDir != sourceDir {
+		t.Fatalf("workDir = %q, want direct source %q: %v", workDir, sourceDir, err)
+	}
+}
+
 func TestCodeProjectTerminalWorkDirDoesNotFallbackForInvalidSession(t *testing.T) {
 	database := withCodeGovernanceDB(t)
 	projectDir := t.TempDir()

@@ -146,7 +146,7 @@ export interface CodeSession {
 	remoteBranch?: string
 	remoteCommit?: string
 	repositorySync?: "local" | "local_only" | "synced" | "fast_forwarded"
-	isolationMode?: "single_worktree" | "multi_worktree"
+	isolationMode?: "direct" | "single_worktree" | "multi_worktree"
 	includeUncommitted?: boolean
 	status: string
 	initializationError?: string

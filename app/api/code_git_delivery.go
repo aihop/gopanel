@@ -133,17 +133,17 @@ func codeGitConflictFiles(workDir string) []string {
 	return files
 }
 
-func runCodeGitDelivery(c fiber.Ctx, action string, operation func(*model.AIDevSession) (codeGitDeliveryResult, error)) error {
+func runCodeGitDelivery(c fiber.Ctx, action string, operation func(*model.AIDevSession, *model.AIProject) (codeGitDeliveryResult, error)) error {
 	startedAt := time.Now()
 	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
-	session, _, err := getCodeGitSessionContext(c)
+	session, project, err := getCodeGitSessionContext(c)
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
 	var result codeGitDeliveryResult
 	err = runCodeSessionGitMutation(session, func(current *model.AIDevSession) error {
 		var operationErr error
-		result, operationErr = operation(current)
+		result, operationErr = operation(current, project)
 		return operationErr
 	})
 	if err != nil {
@@ -237,7 +237,7 @@ func CommitCodeGitChanges(c fiber.Ctx) error {
 	if err := c.Bind().JSON(&req); err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	return runCodeGitDelivery(c, "git_commit", func(session *model.AIDevSession) (codeGitDeliveryResult, error) {
+	return runCodeGitDelivery(c, "git_commit", func(session *model.AIDevSession, _ *model.AIProject) (codeGitDeliveryResult, error) {
 		if session.IsolationMode == codeIsolationMultiWorktree {
 			return commitCodeSessionRepository(session, req.RepositoryID, req.Message)
 		}
@@ -263,6 +263,9 @@ func MergeCodeSessionWorktree(c fiber.Ctx) error {
 	session, err := getCodeDeliverySessionContext(c)
 	if err != nil {
 		return c.JSON(e.Fail(err))
+	}
+	if session.IsolationMode == codeIsolationDirect {
+		return c.JSON(e.Fail(errors.New("直连项目目录的会话已直接修改当前分支，无需交付到主仓")))
 	}
 	job, err := enqueueCodeDeliveryJob(session, claims.UserId, c.IP(), req.ReviewRevision)
 	if err != nil {

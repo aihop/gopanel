@@ -66,6 +66,12 @@ func codeProjectTerminalWorkDir(project *model.AIProject, sessionID uint, claims
 		if session.ProjectID != project.ID {
 			return "", errors.New("开发会话不属于当前项目")
 		}
+		if session.IsolationMode == codeIsolationDirect {
+			if _, err := codexWritableDirsForSessionWithRepair(session); err != nil {
+				return "", fmt.Errorf("当前任务项目目录不可用：%w", err)
+			}
+			return session.WorkDir, nil
+		}
 		if session.IsolationMode != codeIsolationMultiWorktree &&
 			(strings.TrimSpace(session.SourceWorkDir) == "" || strings.TrimSpace(session.WorktreeBranch) == "") {
 			return "", errors.New("当前任务没有可用的 Git Worktree")

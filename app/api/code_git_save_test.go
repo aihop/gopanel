@@ -142,6 +142,62 @@ func TestSaveCodeSessionRepositoriesCommitsChangedRepositories(t *testing.T) {
 	}
 }
 
+func TestSaveCodeDirectRepositoriesCommitsSingleProjectRepository(t *testing.T) {
+	repositoryDir := createCodeGitRepository(t)
+	project := &model.AIProject{ID: 201, SourceDirs: []string{repositoryDir}}
+	session := &model.AIDevSession{
+		ID: 201, ProjectID: project.ID, WorkDir: repositoryDir, IsolationMode: codeIsolationDirect,
+	}
+	if err := os.WriteFile(filepath.Join(repositoryDir, "direct.txt"), []byte("direct\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	result, err := saveCodeDirectRepositories(session, project, "feat: direct save")
+	if err != nil || result.Status != "committed" || result.Commit == "" || result.Branch == "" {
+		t.Fatalf("unexpected direct save result: %#v, %v", result, err)
+	}
+	status, err := runCodeGit(repositoryDir, "status", "--porcelain")
+	if err != nil || strings.TrimSpace(status) != "" {
+		t.Fatalf("direct repository is dirty: %q, %v", status, err)
+	}
+}
+
+func TestSaveCodeDirectRepositoriesCommitsLinkedProjectSources(t *testing.T) {
+	withAIProjectBaseDir(t)
+	first := createCodeGitRepository(t)
+	second := createCodeGitRepository(t)
+	project := &model.AIProject{ID: 202, CreatorID: 7, SourceDirs: []string{first, second}}
+	workspaceDir, err := syncAIProjectWorkspace(project, project.SourceDirs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest, err := readAIProjectWorkspaceManifest(workspaceDir)
+	if err != nil || len(manifest.Sources) != 2 {
+		t.Fatalf("workspace manifest = %#v, %v", manifest, err)
+	}
+	for _, source := range manifest.Sources {
+		if err := os.WriteFile(filepath.Join(workspaceDir, source.LinkName, "direct.txt"), []byte(source.LinkName+"\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	session := &model.AIDevSession{
+		ID: 202, ProjectID: project.ID, WorkDir: workspaceDir, IsolationMode: codeIsolationDirect,
+	}
+	result, err := saveCodeDirectRepositories(session, project, "feat: direct multi save")
+	if err != nil || len(result.Repositories) != 2 {
+		t.Fatalf("unexpected multi direct save result: %#v, %v", result, err)
+	}
+	for _, sourceDir := range project.SourceDirs {
+		status, statusErr := runCodeGit(sourceDir, "status", "--porcelain")
+		if statusErr != nil || strings.TrimSpace(status) != "" {
+			t.Fatalf("direct source %s is dirty: %q, %v", sourceDir, status, statusErr)
+		}
+		content, readErr := os.ReadFile(filepath.Join(sourceDir, "direct.txt"))
+		if readErr != nil || len(content) == 0 {
+			t.Fatalf("direct source write missing: %q, %v", content, readErr)
+		}
+	}
+}
+
 func TestSaveCodeSessionRepositoriesCommitsGitlinkPointer(t *testing.T) {
 	database := withCodeGovernanceDB(t)
 	withAIProjectBaseDir(t)

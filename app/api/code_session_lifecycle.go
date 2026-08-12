@@ -131,6 +131,13 @@ func runCodeSessionGitMutation(session *model.AIDevSession, operation func(*mode
 	}
 	unlockLifecycle := codeSessionLifecycles.lock(session.ID)
 	defer unlockLifecycle()
+	if session.IsolationMode == codeIsolationDirect {
+		lease, err := codeExecutions.acquireSession(context.Background(), session, codeExecutionMutation, false)
+		if err != nil {
+			return codeSessionWorkspaceMutationError(err)
+		}
+		defer lease.Release()
+	}
 	return global.DB.Transaction(func(tx *gorm.DB) error {
 		current, err := lockCodeSessionForDevelopment(tx, session.ID)
 		if err != nil {

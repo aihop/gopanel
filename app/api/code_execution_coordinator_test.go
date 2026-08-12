@@ -3,6 +3,8 @@ package api
 import (
 	"context"
 	"errors"
+	"path/filepath"
+	"slices"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -98,6 +100,29 @@ func TestCodeExecutionCoordinatorNewSessionDoesNotInterruptSharedWorkspace(t *te
 	}
 	if interrupted.Load() {
 		t.Fatal("existing session was interrupted by a new session")
+	}
+}
+
+func TestCodeExecutionWorkspaceKeysIncludeDirectProjectSources(t *testing.T) {
+	database := withCodeGovernanceDB(t)
+	first, second := t.TempDir(), t.TempDir()
+	project := &model.AIProject{ID: 23, CreatorID: 1, SourceDirs: []string{first, second}}
+	if err := database.Create(project).Error; err != nil {
+		t.Fatal(err)
+	}
+	session := &model.AIDevSession{
+		ID: 23, UserID: project.CreatorID, ProjectID: project.ID,
+		WorkDir: t.TempDir(), IsolationMode: codeIsolationDirect,
+	}
+	keys := codeExecutionWorkspaceKeys(session)
+	if len(keys) != 3 {
+		t.Fatalf("direct workspace keys = %#v, want workspace plus two sources", keys)
+	}
+	for _, sourceDir := range project.SourceDirs {
+		resolved, err := filepath.EvalSymlinks(sourceDir)
+		if err != nil || !slices.Contains(keys, filepath.Clean(resolved)) {
+			t.Fatalf("direct source %q missing from keys %#v: %v", sourceDir, keys, err)
+		}
 	}
 }
 

@@ -49,6 +49,7 @@ const showProviderConfig = computed(() => providerFields.value.length > 0)
 const providerFieldLabel = (key: keyof CodeExecutorConfig) => t(`code.providerField_${key}`)
 const providerFieldPlaceholder = (key: keyof CodeExecutorConfig) => t(`code.providerPlaceholder_${key}`)
 const dirtyRepositories = computed(() => worktreeCapability.value?.dirtyRepositories || [])
+const isolationAvailable = computed(() => Boolean(worktreeCapability.value?.available))
 
 const loadExecutors = async () => {
 	loading.value = true
@@ -308,23 +309,30 @@ const submit = async () => {
 										<div class="mt-1 text-xs leading-5 text-slate-500">
 											{{
 												worktreeCapability?.available
-													? t("code.worktreeIsolationDesc")
+												? t(isolated ? "code.worktreeIsolationDesc" : "code.directWorkspaceDesc")
 													: t(
 															`code.worktreeReason_${worktreeCapability?.reason || "loading"}`
 														)
 											}}
 										</div>
 									</div>
-									<n-switch :value="isolated" disabled />
+									<n-switch v-model:value="isolated" :disabled="!isolationAvailable" />
 								</div>
-								<n-alert v-if="dirtyRepositories.length" type="warning" :show-icon="false">
+								<n-alert v-if="isolated && dirtyRepositories.length" type="warning" :show-icon="false">
 									<div class="text-xs leading-5">
 										{{ t("code.worktreeDirtyRepositories", { repositories: dirtyRepositories.join(", ") }) }}
 									</div>
 								</n-alert>
+								<n-alert v-if="!isolated && dirtyRepositories.length" type="warning" :show-icon="false">
+									<div class="text-xs leading-5">
+										{{ t("code.directWorkspaceDirtyWarning", { repositories: dirtyRepositories.join(", ") }) }}
+									</div>
+								</n-alert>
 							</div>
 						</n-form-item>
-						<n-alert type="info" :show-icon="false">{{ t("code.sessionUsesProjectDirectory") }}</n-alert>
+						<n-alert type="info" :show-icon="false">
+							{{ t(isolated ? "code.sessionUsesIsolatedDirectory" : "code.sessionUsesDirectDirectory") }}
+						</n-alert>
 					</n-form>
 				</template>
 			</div>

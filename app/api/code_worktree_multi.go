@@ -14,8 +14,10 @@ import (
 )
 
 const (
-	codeIsolationMultiWorktree = "multi_worktree"
-	codeSessionManifestName    = ".gopanel-session.json"
+	codeIsolationDirect         = "direct"
+	codeIsolationSingleWorktree = "single_worktree"
+	codeIsolationMultiWorktree  = "multi_worktree"
+	codeSessionManifestName     = ".gopanel-session.json"
 )
 
 type codeSessionRepositoryManifest struct {

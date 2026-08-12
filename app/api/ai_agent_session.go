@@ -170,11 +170,16 @@ func CreateAISession(c fiber.Ctx) error {
 		if project.CreatorID != claims.UserId && claims.Role != constant.UserRoleSuper {
 			return c.JSON(e.Fail(errors.New("无权访问该项目")))
 		}
-		if strings.TrimSpace(project.WorkDir) != "" || len(project.SourceDirs) == 1 {
+		if len(project.SourceDirs) > 1 {
+			workDir, err = syncAIProjectWorkspace(project, project.SourceDirs)
+		} else {
 			workDir, err = aiProjectSessionWorkDir(project, claims)
-			if err != nil {
-				return c.JSON(e.Fail(err))
-			}
+		}
+		if err != nil {
+			return c.JSON(e.Fail(err))
+		}
+		if workDir, err = normalizeAIProjectWorkDir(workDir, claims); err != nil {
+			return c.JSON(e.Fail(err))
 		}
 	}
 	if workDir == "" {
@@ -215,7 +220,7 @@ func CreateAISession(c fiber.Ctx) error {
 	if title == "" {
 		title = buildDefaultSessionTitle(workDir, "")
 	}
-	useWorktree := req.Isolated || project != nil
+	useWorktree := req.Isolated
 	status, stage := codeSessionStatusActive, "idle"
 	if useWorktree {
 		if project == nil {
@@ -234,6 +239,9 @@ func CreateAISession(c fiber.Ctx) error {
 		UserID: claims.UserId, ProjectID: req.ProjectID, Title: title, AgentName: executorID,
 		WorkDir: workDir, Status: status, CurrentStage: stage, ApprovalPolicy: approvalPolicy,
 		IncludeUncommitted: req.IncludeUncommitted,
+	}
+	if project != nil && !useWorktree {
+		session.IsolationMode = codeIsolationDirect
 	}
 	if err := setCodeProviderOnSession(session, provider); err != nil {
 		return c.JSON(e.Fail(err))

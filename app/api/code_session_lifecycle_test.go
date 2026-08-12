@@ -66,3 +66,30 @@ func TestCodeSessionGitMutationRejectsActiveInstruction(t *testing.T) {
 		t.Fatalf("active instruction did not block Git mutation: called=%v err=%v", called, err)
 	}
 }
+
+func TestCodeSessionGitMutationRejectsBusyDirectWorkspace(t *testing.T) {
+	database := withCodeGovernanceDB(t)
+	session := &model.AIDevSession{
+		ID: 923, UserID: 1, Status: codeSessionStatusActive,
+		WorkDir: t.TempDir(), IsolationMode: codeIsolationDirect,
+	}
+	if err := database.Create(session).Error; err != nil {
+		t.Fatal(err)
+	}
+	previousCoordinator := codeExecutions
+	codeExecutions = newCodeExecutionCoordinator(2, 2)
+	t.Cleanup(func() { codeExecutions = previousCoordinator })
+	lease, err := codeExecutions.acquireSession(context.Background(), session, codeExecutionInstruction, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lease.Release()
+	called := false
+	err = runCodeSessionGitMutation(session, func(*model.AIDevSession) error {
+		called = true
+		return nil
+	})
+	if err == nil || called {
+		t.Fatalf("busy direct workspace allowed Git mutation: called=%v err=%v", called, err)
+	}
+}

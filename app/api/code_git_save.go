@@ -2,6 +2,9 @@ package api
 
 import (
 	"errors"
+	"fmt"
+	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/aihop/gopanel/app/e"
@@ -119,6 +122,52 @@ func saveCodeSessionRepositories(session *model.AIDevSession, message string) (c
 	return codeGitDeliveryResult{Status: "committed", Repositories: results}, nil
 }
 
+func saveCodeDirectRepositories(
+	session *model.AIDevSession, project *model.AIProject, message string,
+) (codeGitDeliveryResult, error) {
+	if session == nil || project == nil || session.IsolationMode != codeIsolationDirect {
+		return codeGitDeliveryResult{}, errors.New("当前会话不是直连项目目录模式")
+	}
+	message, err := codeGitSaveMessage(message)
+	if err != nil {
+		return codeGitDeliveryResult{}, err
+	}
+	repositories := discoverCodeGitRepositories(session, project.SourceDirs, project.ExcludedRepositories)
+	if len(project.SourceDirs) == 0 && strings.TrimSpace(project.WorkDir) != "" {
+		repositories = discoverCodeGitRepositories(session, []string{project.WorkDir}, project.ExcludedRepositories)
+	}
+	if len(repositories) == 0 {
+		return codeGitDeliveryResult{}, errors.New("项目目录内未发现可提交的 Git 仓库")
+	}
+	sort.SliceStable(repositories, func(i, j int) bool {
+		return len(filepath.Clean(repositories[i].root)) > len(filepath.Clean(repositories[j].root))
+	})
+	changedCount := 0
+	results := make([]codeRepositoryDeliveryResult, 0, len(repositories))
+	for _, repository := range repositories {
+		commit, changed, saveErr := saveCodeGitRepository(repository.root, message)
+		if saveErr != nil {
+			return codeGitDeliveryResult{}, fmt.Errorf("保存仓库 %s 失败：%w", repository.Name, saveErr)
+		}
+		if changed {
+			changedCount++
+		}
+		results = append(results, codeRepositoryDeliveryResult{
+			RepositoryID: repository.ID, RepositoryName: repository.Name,
+			Status: "committed", Branch: repository.Branch, Commit: commit,
+		})
+	}
+	if changedCount == 0 {
+		return codeGitDeliveryResult{}, errors.New("当前没有需要保存的修改")
+	}
+	result := codeGitDeliveryResult{Status: "committed", Repositories: results}
+	if len(results) == 1 {
+		result.RepositoryID, result.RepositoryName = results[0].RepositoryID, results[0].RepositoryName
+		result.Commit, result.Branch = results[0].Commit, results[0].Branch
+	}
+	return result, nil
+}
+
 func syncSavedCodeRepositoryGitlinks(parent *model.AIDevSessionRepository, repositories []model.AIDevSessionRepository) error {
 	for index := range repositories {
 		child := &repositories[index]
@@ -143,12 +192,15 @@ func SaveCodeGitChanges(c fiber.Ctx) error {
 	if err := c.Bind().JSON(&req); err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	return runCodeGitDelivery(c, "git_save_all", func(session *model.AIDevSession) (codeGitDeliveryResult, error) {
+	return runCodeGitDelivery(c, "git_save_all", func(session *model.AIDevSession, project *model.AIProject) (codeGitDeliveryResult, error) {
 		if err := validateCodeSessionDeliveryConflictIdle(session.ID); err != nil {
 			return codeGitDeliveryResult{}, err
 		}
 		if session.IsolationMode == codeIsolationMultiWorktree {
 			return saveCodeSessionRepositories(session, req.Message)
+		}
+		if session.IsolationMode == codeIsolationDirect {
+			return saveCodeDirectRepositories(session, project, req.Message)
 		}
 		return saveCodeSessionWorktree(session, req.Message)
 	})

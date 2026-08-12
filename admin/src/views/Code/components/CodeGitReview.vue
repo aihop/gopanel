@@ -61,6 +61,7 @@ const isolatedRepositories = computed(() =>
 	(status.value?.repositories || []).filter(repository => repository.isolated)
 )
 const hasIsolation = computed(() => Boolean(worktreeBranch.value || isolationMode.value === "multi_worktree"))
+const directWorkspace = computed(() => isolationMode.value === "direct")
 const deliveryActive = computed(() => ["queued", "running"].includes(deliveryJob.value?.status || ""))
 const conflictRepositories = computed(() => {
 	if (deliveryJob.value?.status !== "conflict") return []
@@ -69,7 +70,7 @@ const conflictRepositories = computed(() => {
 const canSave = computed(() =>
 	Boolean(
 		view.value === "commit" &&
-			hasIsolation.value &&
+			(hasIsolation.value || directWorkspace.value) &&
 			!deliveryActive.value &&
 			deliveryJob.value?.status !== "conflict" &&
 			hasChanges.value
@@ -296,12 +297,13 @@ useIntervalFn(() => {
 				@synced="loadStatus(true)"
 			/>
 			<div
-				v-if="view === 'commit' && hasIsolation"
+				v-if="view === 'commit' && (hasIsolation || directWorkspace)"
 				class="max-h-[46%] shrink-0 space-y-2 overflow-y-auto border-b border-slate-200 p-3"
 			>
-				<div class="truncate text-xs text-slate-500" :title="deliveryLabel">{{ deliveryLabel }}</div>
+				<div v-if="hasIsolation" class="truncate text-xs text-slate-500" :title="deliveryLabel">{{ deliveryLabel }}</div>
+				<div v-else class="text-xs leading-5 text-slate-500">{{ t("code.gitDirectWorkspace") }}</div>
 				<n-alert
-					v-if="deliveryJob"
+					v-if="hasIsolation && deliveryJob"
 					:type="
 						deliveryJob.status === 'failed' ||
 						deliveryJob.status === 'conflict' ||
@@ -339,7 +341,7 @@ useIntervalFn(() => {
 					<CodeDeliveryFacts :facts="deliveryJob.facts" :job-status="deliveryJob.status" />
 				</n-alert>
 				<CodeLocalSyncPending
-					v-if="deliveryJob?.repositories?.length"
+					v-if="hasIsolation && deliveryJob?.repositories?.length"
 					:session-id="sessionId"
 					:repositories="deliveryJob.repositories"
 					@synced="loadStatus(true)"
@@ -362,14 +364,24 @@ useIntervalFn(() => {
 					{{ t("code.gitSave") }}
 				</n-button>
 				<p class="text-[11px] leading-4 text-slate-400">
-					{{ t(hasChanges ? "code.gitSaveHint" : "code.gitMergeReady") }}
+					{{
+						t(
+							hasChanges
+								? directWorkspace
+									? "code.gitDirectSaveHint"
+									: "code.gitSaveHint"
+								: directWorkspace
+									? "code.gitDirectClean"
+									: "code.gitMergeReady"
+							)
+					}}
 				</p>
 				<n-button text size="tiny" @click="showAdvancedOperations = !showAdvancedOperations">
 					{{ t(showAdvancedOperations ? "code.gitAdvancedHide" : "code.gitAdvancedShow") }}
 				</n-button>
 			</div>
 			<CodeDeliveryPush
-				v-if="view === 'commit' && !hasIsolation && sessionId"
+				v-if="view === 'commit' && !hasIsolation && !directWorkspace && sessionId"
 				:session-id="sessionId"
 				:refresh-key="deliveryPushKey"
 			/>
