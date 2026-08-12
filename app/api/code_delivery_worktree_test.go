@@ -64,7 +64,7 @@ func TestCodeDeliveryConflictCanResumeFromIntegrationWorktree(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := runCodeGit(
-		delivery.DeliveryWorkDir, "-c", "user.name=GoPanel Code", "-c", "user.email=code@gopanel.local",
+		delivery.DeliveryWorkDir, "-c", "user.name=GoPanel Code", "-c", "user.email=code@gopanel.cn",
 		"-c", "commit.gpgsign=false", "commit", "-m", "fix: resolve delivery conflict",
 	); err != nil {
 		t.Fatal(err)

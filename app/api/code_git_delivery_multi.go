@@ -114,7 +114,7 @@ func commitCodeSessionRepository(session *model.AIDevSession, repositoryID, mess
 	if err := validateCodeGitStagedChanges(repository.WorktreeDir); err != nil {
 		return codeGitDeliveryResult{}, err
 	}
-	if _, err := runCodeGit(repository.WorktreeDir, "-c", "user.name=GoPanel Code", "-c", "user.email=code@gopanel.local", "commit", "-m", message); err != nil {
+	if _, err := runCodeGit(repository.WorktreeDir, "-c", "user.name=GoPanel Code", "-c", "user.email=code@gopanel.cn", "commit", "-m", message); err != nil {
 		return codeGitDeliveryResult{}, err
 	}
 	commit, err := runCodeGit(repository.WorktreeDir, "rev-parse", "HEAD")

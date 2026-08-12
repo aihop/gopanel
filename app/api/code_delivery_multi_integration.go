@@ -320,7 +320,7 @@ func prepareCodeRepositoryIntegration(
 	}
 	if _, err := runCodeGit(
 		repository.IntegrationWorkDir,
-		"-c", "user.name=GoPanel Code", "-c", "user.email=code@gopanel.local",
+		"-c", "user.name=GoPanel Code", "-c", "user.email=code@gopanel.cn",
 		"-c", "commit.gpgsign=false", "-c", "core.commitGraph=false",
 		"merge", "--no-ff", "--no-edit", repository.WorktreeCommit,
 	); err != nil {
@@ -342,7 +342,7 @@ func prepareCodeRepositoryIntegration(
 		}
 		if _, err := runCodeGit(
 			repository.IntegrationWorkDir,
-			"-c", "user.name=GoPanel Code", "-c", "user.email=code@gopanel.local",
+			"-c", "user.name=GoPanel Code", "-c", "user.email=code@gopanel.cn",
 			"-c", "commit.gpgsign=false", "commit", "--no-edit",
 		); err != nil {
 			return result, fmt.Errorf("提交仓库 %s 的受管子仓库合并结果失败：%w", repository.LinkName, err)
@@ -429,7 +429,7 @@ func commitCodeIntegrationGitlinkUpdates(
 	}
 	_, err = runCodeGit(
 		repository.IntegrationWorkDir,
-		"-c", "user.name=GoPanel Code", "-c", "user.email=code@gopanel.local",
+		"-c", "user.name=GoPanel Code", "-c", "user.email=code@gopanel.cn",
 		"-c", "commit.gpgsign=false", "commit", "-m", "chore: update nested repository pointers",
 	)
 	return err

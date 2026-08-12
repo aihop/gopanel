@@ -260,7 +260,7 @@ func syncCodeWorktreeWithTarget(worktreeDir, targetBranch string) error {
 	}
 	if _, err := runCodeGit(
 		worktreeDir,
-		"-c", "user.name=GoPanel Code", "-c", "user.email=code@gopanel.local",
+		"-c", "user.name=GoPanel Code", "-c", "user.email=code@gopanel.cn",
 		"-c", "commit.gpgsign=false", "merge", "--no-edit", targetBranch,
 	); err != nil {
 		conflicts := codeGitConflictFiles(worktreeDir)

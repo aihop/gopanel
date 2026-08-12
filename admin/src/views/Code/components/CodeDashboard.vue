@@ -448,17 +448,14 @@ const toggleArchived = async (task: CodeTaskListItem) => {
 </template>
 
 <style scoped>
-/* 和面板里其它卡片同一套：97% 底色 + 92% 边框 + 柔和投影 */
 .dashboard-panel {
 	background: color-mix(in srgb, var(--n-color) 97%, transparent);
 	border: 1px solid color-mix(in srgb, var(--n-border-color) 92%, transparent);
 	box-shadow: 0 8px 24px rgb(15 23 42 / 4.5%);
 }
-
 .dashboard-skeleton-leave-active {
 	transition: opacity 0.24s ease;
 }
-
 .dashboard-skeleton-leave-to {
 	opacity: 0;
 }
@@ -473,33 +470,26 @@ const toggleArchived = async (task: CodeTaskListItem) => {
 		box-shadow 0.18s ease,
 		background-color 0.18s ease;
 }
-
 .dashboard-stat:hover {
 	border-color: color-mix(in srgb, var(--stat-accent) 42%, var(--n-border-color));
 	box-shadow: 0 8px 20px rgb(15 23 42 / 7%);
 }
-
 .dashboard-stat--selected {
 	border-color: var(--stat-accent);
 	background: color-mix(in srgb, var(--stat-accent) 10%, var(--n-color));
 }
-
 .dashboard-stat--running {
 	--stat-accent: #10b981;
 }
-
 .dashboard-stat--attention {
 	--stat-accent: #f59e0b;
 }
-
 .dashboard-stat--delivering {
 	--stat-accent: #3b82f6;
 }
-
 .dashboard-stat--done {
 	--stat-accent: #64748b;
 }
-
 .dashboard-stat__icon,
 .dashboard-stat__count {
 	color: var(--stat-accent);
