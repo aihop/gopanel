@@ -3,6 +3,8 @@ import type { Pipeline } from "@/api/interface/pipeline"
 export interface PipelineFormModel {
   name: string
   description: string
+  sourceType: "git" | "code"
+  codeProjectId: number | null
   repoUrl: string
   branch: string
   version: string
@@ -106,6 +108,8 @@ export const runnerPresetDefaults: Record<string, RunnerPresetConfig> = {
 export const createDefaultPipelineFormModel = (): PipelineFormModel => ({
   name: "",
   description: "",
+  sourceType: "git",
+  codeProjectId: null,
   repoUrl: "",
   branch: "main",
   version: "1.0.0",
@@ -314,6 +318,8 @@ export const createPipelineFormFromEdit = (editData: Pipeline.ResPipeline) => {
     form: {
       name: editData.name || "",
       description: editData.description || "",
+      sourceType: editData.sourceType === "code" ? "code" : "git",
+      codeProjectId: editData.codeProjectId || null,
       repoUrl: editData.repoUrl || "",
       branch: editData.branch || "main",
       version: editData.version || "1.0.0",

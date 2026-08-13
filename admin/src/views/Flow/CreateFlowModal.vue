@@ -34,7 +34,9 @@ const form = reactive({
 })
 
 const projectOptions = computed(() => projects.value.map(item => ({ label: item.name, value: item.id })))
-const pipelineOptions = computed(() => pipelines.value.map(item => ({ label: item.name, value: item.id })))
+const pipelineOptions = computed(() => pipelines.value
+	.filter(item => item.sourceType !== "code" || !form.projectId || item.codeProjectId === form.projectId)
+	.map(item => ({ label: item.name, value: item.id })))
 const websiteOptions = computed(() => websites.value.map(item => ({
 	label: item.alias || item.primaryDomain,
 	value: item.id
@@ -117,6 +119,11 @@ watch(() => props.show, value => {
 	if (!value) return
 	resetForm()
 	void loadOptions()
+})
+
+watch(() => form.projectId, () => {
+	if (!form.pipelineId || pipelineOptions.value.some(item => item.value === form.pipelineId)) return
+	form.pipelineId = null
 })
 </script>
 

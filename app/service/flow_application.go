@@ -134,8 +134,12 @@ func (s *FlowApplicationService) Create(input FlowCreateInput, userID uint, incl
 	if !includeAll && project.CreatorID != userID {
 		return nil, buserr.New(constant.ErrFlowProjectForbidden)
 	}
-	if err := s.db.First(&model.Pipeline{}, input.PipelineID).Error; err != nil {
+	var pipeline model.Pipeline
+	if err := s.db.First(&pipeline, input.PipelineID).Error; err != nil {
 		return nil, buserr.New(constant.ErrFlowPipelineNotFound)
+	}
+	if pipelineSourceType(&pipeline) == "code" && pipeline.CodeProjectID != input.ProjectID {
+		return nil, buserr.New(constant.ErrFlowPipelineProjectMismatch)
 	}
 	var count int64
 	if err := s.db.Model(&model.Flow{}).Where("project_id = ?", input.ProjectID).Count(&count).Error; err != nil {

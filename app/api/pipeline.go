@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/aihop/gopanel/app/dto/request"
@@ -13,6 +14,7 @@ import (
 	"github.com/aihop/gopanel/app/middleware"
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/service"
+	"github.com/aihop/gopanel/buserr"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
 	"github.com/gofiber/fiber/v3"
@@ -70,6 +72,9 @@ func PipelineCreate(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
+	if err := validatePipelineCodeProjectAccess(c, req.SourceType, req.CodeProjectID); err != nil {
+		return c.JSON(e.Fail(err))
+	}
 
 	appSvc := service.NewPipelineApplication(global.DB)
 	if err := appSvc.Create(*req); err != nil {
@@ -84,6 +89,9 @@ func PipelineUpdate(c fiber.Ctx) error {
 	}
 	req, err := e.BodyToStruct[request.PipelineUpdate](c.Body())
 	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	if err := validatePipelineCodeProjectAccess(c, req.SourceType, req.CodeProjectID); err != nil {
 		return c.JSON(e.Fail(err))
 	}
 
@@ -102,11 +110,32 @@ func PipelineDetectRunnerPreset(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
+	if err := validatePipelineCodeProjectAccess(c, req.SourceType, req.CodeProjectID); err != nil {
+		return c.JSON(e.Fail(err))
+	}
 	result, err := service.NewPipelineService(global.DB).DetectRunnerPreset(c.Context(), *req)
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
 	return c.JSON(e.Succ(result))
+}
+
+func validatePipelineCodeProjectAccess(c fiber.Ctx, sourceType string, projectID uint) error {
+	if !strings.EqualFold(strings.TrimSpace(sourceType), "code") {
+		return nil
+	}
+	claims, err := middleware.JwtClaims(c)
+	if err != nil {
+		return err
+	}
+	var project model.AIProject
+	if err := global.DB.First(&project, projectID).Error; err != nil {
+		return buserr.New(constant.ErrPipelineCodeProjectNotFound)
+	}
+	if claims.Role != constant.UserRoleSuper && project.CreatorID != claims.UserId {
+		return errors.New("permission denied")
+	}
+	return nil
 }
 
 func PipelineDelete(c fiber.Ctx) error {

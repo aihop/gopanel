@@ -75,8 +75,11 @@ func (s *FlowRunApplicationService) Create(input FlowRunCreateInput, userID uint
 	if err != nil {
 		return nil, buserr.New(constant.ErrFlowPipelineNotFound)
 	}
-	if strings.TrimSpace(pipeline.RepoUrl) == "" {
+	if strings.TrimSpace(pipeline.RepoUrl) == "" && pipelineSourceType(pipeline) != "code" {
 		return nil, buserr.New(constant.ErrPipelineExpectedCommitRepo)
+	}
+	if pipelineSourceType(pipeline) == "code" && pipeline.CodeProjectID != flow.ProjectID {
+		return nil, buserr.New(constant.ErrFlowPipelineProjectMismatch)
 	}
 	version := strings.TrimSpace(input.Version)
 	if version != "" && !flowVersionPattern.MatchString(version) {
@@ -100,9 +103,13 @@ func (s *FlowRunApplicationService) Create(input FlowRunCreateInput, userID uint
 			continue
 		}
 		now := time.Now()
+		sourceRepository := pipeline.RepoUrl
+		if pipelineSourceType(pipeline) == "code" {
+			sourceRepository = fmt.Sprintf("code-project:%d", pipeline.CodeProjectID)
+		}
 		item := &model.FlowRun{
 			FlowID: flow.ID, ProjectID: flow.ProjectID, PipelineID: flow.PipelineID,
-			Version: version, SourceRepository: pipeline.RepoUrl, SourceBranch: pipeline.Branch,
+			Version: version, SourceRepository: sourceRepository, SourceBranch: pipeline.Branch,
 			SourceCommit: commit, SessionID: input.SessionID, TaskID: input.TaskID,
 			CurrentStage: "created", Status: flowRunQueued, RequestedBy: userID,
 		}

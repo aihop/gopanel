@@ -45,7 +45,7 @@ func (s *PipelineService) RunPipelineForSource(pipelineID uint, version, expecte
 	if err != nil {
 		return 0, err
 	}
-	if expectedCommit != "" && strings.TrimSpace(pipeline.RepoUrl) == "" {
+	if expectedCommit != "" && strings.TrimSpace(pipeline.RepoUrl) == "" && pipelineSourceType(pipeline) != "code" {
 		return 0, buserr.New(constant.ErrPipelineExpectedCommitRepo)
 	}
 	record := &model.PipelineRecord{
@@ -65,6 +65,10 @@ func (s *PipelineService) RunPipelineForSource(pipelineID uint, version, expecte
 }
 
 func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.PipelineRecord) {
+	executionLock := pipelineExecutionLock(p.ID)
+	executionLock.Lock()
+	defer executionLock.Unlock()
+
 	recordID := record.ID
 	logger := GetPipelineLogger(recordID)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -83,7 +87,19 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 	releaseDir := pipelineReleaseDir(p)
 	logger.Info("工作区目录: %s", workspaceDir)
 	logger.Info("发布目录: %s", releaseDir)
-	if p.RepoUrl != "" {
+	if pipelineSourceType(p) == "code" {
+		s.recordRepo.UpdateStatus(recordID, "cloning", "")
+		commitHash, sourceDigest, err := s.prepareCodeProjectSnapshot(ctx, logger, p, workspaceDir, record.ExpectedCommit)
+		if err != nil {
+			s.recordRepo.UpdateStatus(recordID, "failed", fmt.Sprintf("Code snapshot failed: %v", err))
+			logger.Error("Code 项目快照失败: %v", err)
+			return
+		}
+		_ = s.recordRepo.UpdateCodeSource(recordID, p.CodeProjectID, commitHash, sourceDigest)
+		record.CodeProjectID = p.CodeProjectID
+		record.CommitHash = commitHash
+		record.SourceDigest = sourceDigest
+	} else if p.RepoUrl != "" {
 		if err := ensurePipelineClonePrerequisites(p.RepoUrl); err != nil {
 			s.recordRepo.UpdateStatus(recordID, "failed", err.Error())
 			logger.Error("%v", err)
@@ -117,10 +133,12 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 		logger.Info("未配置 RepoUrl，采用纯脚本模式，跳过自动拉取...")
 		_ = os.MkdirAll(workspaceDir, 0755)
 	}
-	if err := verifyPipelineExpectedCommit(ctx, workspaceDir, record.ExpectedCommit); err != nil {
-		s.recordRepo.UpdateStatus(recordID, "failed", err.Error())
-		logger.Error("构建提交校验失败: %v", err)
-		return
+	if pipelineSourceType(p) != "code" {
+		if err := verifyPipelineExpectedCommit(ctx, workspaceDir, record.ExpectedCommit); err != nil {
+			s.recordRepo.UpdateStatus(recordID, "failed", err.Error())
+			logger.Error("构建提交校验失败: %v", err)
+			return
+		}
 	}
 	if p.BuildImage == "host" || p.BuildImage == "" {
 		files, _ := os.ReadDir(workspaceDir)
@@ -150,10 +168,12 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 		}
 		return
 	}
-	if err := verifyPipelineExpectedCommit(ctx, workspaceDir, record.ExpectedCommit); err != nil {
-		s.recordRepo.UpdateStatus(recordID, "failed", err.Error())
-		logger.Error("构建后提交校验失败: %v", err)
-		return
+	if pipelineSourceType(p) != "code" {
+		if err := verifyPipelineExpectedCommit(ctx, workspaceDir, record.ExpectedCommit); err != nil {
+			s.recordRepo.UpdateStatus(recordID, "failed", err.Error())
+			logger.Error("构建后提交校验失败: %v", err)
+			return
+		}
 	}
 	archivePath, err := s.stepArchive(ctx, logger, p, releaseDir, recordID)
 	if err != nil {

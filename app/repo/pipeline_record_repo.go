@@ -35,6 +35,11 @@ func (r *PipelineRecordRepo) UpdateImageArtifact(id uint, imageTag, imageID, ima
 func (r *PipelineRecordRepo) UpdateCommitHash(id uint, commitHash string) error {
 	return r.db.Model(&model.PipelineRecord{}).Where("id = ?", id).Update("commit_hash", commitHash).Error
 }
+func (r *PipelineRecordRepo) UpdateCodeSource(id, codeProjectID uint, commitHash, sourceDigest string) error {
+	return r.db.Model(&model.PipelineRecord{}).Where("id = ?", id).Updates(map[string]interface{}{
+		"code_project_id": codeProjectID, "commit_hash": commitHash, "source_digest": sourceDigest,
+	}).Error
+}
 func (r *PipelineRecordRepo) UpdateChangelog(id uint, changelog string) error {
 	return r.db.Model(&model.PipelineRecord{}).Where("id = ?", id).Update("changelog", changelog).Error
 }

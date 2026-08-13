@@ -5,7 +5,10 @@ import (
 	"context"
 	"fmt"
 	"github.com/aihop/gopanel/app/dto/request"
+	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
+	"github.com/aihop/gopanel/buserr"
+	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
 	"gorm.io/gorm"
 	"io"
@@ -18,9 +21,15 @@ import (
 )
 
 var (
-	pipelineCancels    sync.Map
-	pipelineMutationMu sync.Mutex
+	pipelineCancels        sync.Map
+	pipelineExecutionLocks sync.Map
+	pipelineMutationMu     sync.Mutex
 )
+
+func pipelineExecutionLock(pipelineID uint) *sync.Mutex {
+	lock, _ := pipelineExecutionLocks.LoadOrStore(pipelineID, &sync.Mutex{})
+	return lock.(*sync.Mutex)
+}
 
 func StopPipeline(recordID uint) {
 	if cancel, ok := pipelineCancels.Load(recordID); ok {
@@ -32,6 +41,7 @@ func StopPipeline(recordID uint) {
 }
 
 type PipelineService struct {
+	db         *gorm.DB
 	repo       *repo.PipelineRepo
 	recordRepo *repo.PipelineRecordRepo
 }
@@ -45,9 +55,33 @@ type pipelinePackageJSON struct {
 }
 
 func NewPipelineService(db *gorm.DB) *PipelineService {
-	return &PipelineService{repo: repo.NewPipeline(db), recordRepo: repo.NewPipelineRecord(db)}
+	return &PipelineService{db: db, repo: repo.NewPipeline(db), recordRepo: repo.NewPipelineRecord(db)}
 }
 func (s *PipelineService) DetectRunnerPreset(ctx context.Context, req request.PipelineDetect) (*RunnerPresetDetectResult, error) {
+	if strings.EqualFold(strings.TrimSpace(req.SourceType), "code") {
+		if req.CodeProjectID == 0 {
+			return nil, buserr.New(constant.ErrPipelineCodeProjectRequired)
+		}
+		var project model.AIProject
+		if err := s.db.First(&project, req.CodeProjectID).Error; err != nil {
+			return nil, buserr.New(constant.ErrPipelineCodeProjectNotFound)
+		}
+		detectDir := strings.TrimSpace(project.PrimaryRepository)
+		if detectDir == "" && len(project.SourceDirs) > 0 {
+			detectDir = strings.TrimSpace(project.SourceDirs[0])
+		}
+		if detectDir == "" {
+			return nil, fmt.Errorf("Code 项目没有可探测的源目录")
+		}
+		result := detectRunnerPresetFromDir(detectDir)
+		if result.Preset == "" {
+			result.Preset = "custom"
+		}
+		if result.Hits == nil {
+			result.Hits = []string{}
+		}
+		return &result, nil
+	}
 	repoURL := strings.TrimSpace(req.RepoUrl)
 	branch := strings.TrimSpace(req.Branch)
 	if repoURL == "" {

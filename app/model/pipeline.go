@@ -3,13 +3,15 @@ package model
 import "time"
 
 type Pipeline struct {
-	ID          uint      `gorm:"primaryKey" json:"id"`
-	CreatedAt   time.Time `json:"createdAt"`
-	UpdatedAt   time.Time `json:"updatedAt"`
-	Name        string    `gorm:"column:name;type:varchar(100);not null" json:"name"`
-	Description string    `gorm:"column:description;type:varchar(255)" json:"description"`
-	RepoUrl     string    `gorm:"column:repo_url;type:varchar(255)" json:"repoUrl"` // 设为非必填，为空则代表纯脚本模式
-	Branch      string    `gorm:"column:branch;type:varchar(100);not null;default:'main'" json:"branch"`
+	ID            uint      `gorm:"primaryKey" json:"id"`
+	CreatedAt     time.Time `json:"createdAt"`
+	UpdatedAt     time.Time `json:"updatedAt"`
+	Name          string    `gorm:"column:name;type:varchar(100);not null" json:"name"`
+	Description   string    `gorm:"column:description;type:varchar(255)" json:"description"`
+	SourceType    string    `gorm:"column:source_type;type:varchar(20);not null;default:'git'" json:"sourceType"`
+	CodeProjectID uint      `gorm:"column:code_project_id;type:integer;not null;default:0;index" json:"codeProjectId"`
+	RepoUrl       string    `gorm:"column:repo_url;type:varchar(255)" json:"repoUrl"` // 设为非必填，为空则代表纯脚本模式
+	Branch        string    `gorm:"column:branch;type:varchar(100);not null;default:'main'" json:"branch"`
 
 	Version string `gorm:"column:version;type:varchar(50);not null;default:'1.0.0'" json:"version"` // 当前版本号
 
@@ -48,6 +50,8 @@ type PipelineRecord struct {
 	SourceID       uint      `gorm:"column:source_id;index" json:"sourceId"`
 	IdempotencyKey string    `gorm:"column:idempotency_key;type:varchar(128);index" json:"idempotencyKey"`
 	CommitHash     string    `gorm:"column:commit_hash;type:varchar(64)" json:"commitHash"`
+	CodeProjectID  uint      `gorm:"column:code_project_id;type:integer;not null;default:0;index" json:"codeProjectId"`
+	SourceDigest   string    `gorm:"column:source_digest;type:varchar(80)" json:"sourceDigest"`
 	// Changelog 本次构建包含的提交标题，一行一条，来自「上次成功构建的 commit..HEAD」。
 	// 只存纯文本，展示端不要按 HTML 渲染——内容来自仓库提交信息，属于外部输入。
 	Changelog    string `gorm:"column:changelog;type:text" json:"changelog"`

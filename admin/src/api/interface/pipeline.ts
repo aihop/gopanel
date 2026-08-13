@@ -2,6 +2,8 @@ export namespace Pipeline {
   export interface ReqCreate {
     name: string;
     description?: string;
+    sourceType?: "git" | "code";
+    codeProjectId?: number;
     repoUrl?: string; // 选填
     branch: string;
     version: string; // 新增版本号
@@ -27,6 +29,8 @@ export namespace Pipeline {
     updatedAt: string;
     name: string;
     description: string;
+    sourceType?: "git" | "code";
+    codeProjectId?: number;
     repoUrl: string;
     branch: string;
     version: string; // 新增版本号
@@ -55,6 +59,8 @@ export namespace Pipeline {
     version: string; // 新增版本号
     expectedCommit?: string;
     commitHash?: string;
+    codeProjectId?: number;
+    sourceDigest?: string;
     changelog?: string; // 本次构建包含的提交标题，一行一条
     errorMessage: string;
     archiveFile: string;
@@ -101,8 +107,10 @@ export namespace Pipeline {
   }
 
   export interface ReqDetectRunnerPreset {
-    repoUrl: string;
-    branch: string;
+    sourceType?: "git" | "code";
+    codeProjectId?: number;
+    repoUrl?: string;
+    branch?: string;
     authType?: string;
     authData?: string;
   }

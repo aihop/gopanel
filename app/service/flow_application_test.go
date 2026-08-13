@@ -92,6 +92,29 @@ func TestFlowCreateRejectsForeignAndDuplicateProjects(t *testing.T) {
 	}
 }
 
+func TestFlowCreateRejectsCodePipelineFromAnotherProject(t *testing.T) {
+	database := flowTestDatabase(t)
+	project := model.AIProject{Name: "Selected", CreatorID: 7}
+	otherProject := model.AIProject{Name: "Other", CreatorID: 7}
+	website := model.Website{Alias: "preview", PrimaryDomain: "preview.example.com", Type: "proxy", Status: "Running", Protocol: "HTTP"}
+	for _, item := range []interface{}{&project, &otherProject, &website} {
+		if err := database.Create(item).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	pipeline := model.Pipeline{Name: "Other Build", SourceType: "code", CodeProjectID: otherProject.ID, BuildImage: "host"}
+	if err := database.Create(&pipeline).Error; err != nil {
+		t.Fatal(err)
+	}
+	_, err := NewFlowApplication(database).Create(FlowCreateInput{
+		Name: "Delivery", ProjectID: project.ID, PipelineID: pipeline.ID,
+		Environments: []FlowEnvironmentInput{{Name: "preview", WebsiteID: website.ID}},
+	}, 7, false)
+	if err == nil {
+		t.Fatal("Code pipeline bound to another project should be rejected")
+	}
+}
+
 func TestFlowRunLocksVersionCommitAndRelease(t *testing.T) {
 	database := flowTestDatabase(t)
 	project := model.AIProject{Name: "Shoply", CreatorID: 7}

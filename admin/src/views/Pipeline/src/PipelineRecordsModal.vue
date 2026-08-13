@@ -8,10 +8,13 @@ import { useAuthStore } from "@/store/auth"
 import dayjs from "dayjs"
 import { getRuntimeKindLabel, getRuntimeModeLabel, getRunUserLabel } from "@/utils/runtime"
 import { renderChangelogCell } from "@/utils/changelog"
+import { useI18n } from "vue-i18n"
+import { pipelineSourceMessages } from "./pipelineSourceMessages"
 const props = defineProps<{ show: boolean; pipelineId: number }>()
 const emit = defineEmits(["update:show"])
 
 const message = useMessage()
+const { t: sourceT } = useI18n({ messages: pipelineSourceMessages })
 const authStore = useAuthStore()
 const loading = ref(false)
 const data = ref<Pipeline.ResRecord[]>([])
@@ -146,6 +149,21 @@ const columns: DataTableColumns<Pipeline.ResRecord> = [
   { title: "ID", key: "id", width: 60 },
   { title: "创建时间", key: "createdAt", width: 150, ellipsis: { tooltip: true }, render: (row: Pipeline.ResRecord) => row.createdAt ? dayjs(row.createdAt).format("YYYY-MM-DD HH:mm") : "-" },
   { title: "版本", key: "version", width: 100, render: (row: Pipeline.ResRecord) => h(NTag, { type: "success", size: "small" }, { default: () => `v${row.version || '-'}` }) },
+  {
+    title: sourceT("pipelineSource.recordSource"),
+    key: "source",
+    width: 150,
+    ellipsis: { tooltip: true },
+    render(row: Pipeline.ResRecord) {
+      if (!row.codeProjectId) {
+        return h(NTag, { size: "tiny", type: "default" }, { default: () => sourceT("pipelineSource.recordSourceGit") })
+      }
+      return h("div", { class: "flex flex-col gap-1" }, [
+        h(NTag, { size: "tiny", type: "info" }, { default: () => sourceT("pipelineSource.recordSourceCode", { id: row.codeProjectId }) }),
+        h("span", { class: "font-mono text-[10px] text-slate-400", title: row.sourceDigest || "" }, row.sourceDigest ? row.sourceDigest.slice(0, 18) : "-")
+      ])
+    }
+  },
   {
     title: "Commit",
     key: "commitHash",
