@@ -8,8 +8,11 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/aihop/gopanel/app/model"
+	"github.com/aihop/gopanel/utils/docker"
+	"github.com/docker/docker/api/types/container"
 )
 
 func (s *PipelineService) stepRunner(ctx context.Context, logger *PipelineLogger, p *model.Pipeline, workspaceDir string) (int, string, string, error) {
@@ -52,6 +55,41 @@ func (s *PipelineService) stepRunner(ctx context.Context, logger *PipelineLogger
 		return 0, "", "", err
 	}
 	return hostPort, containerID, codeRoot, nil
+}
+
+func (s *PipelineService) cleanupUnpublishedRunner(ctx context.Context, logger *PipelineLogger, pipelineID uint, containerID string) {
+	containerID = strings.TrimSpace(containerID)
+	if containerID == "" {
+		return
+	}
+	previousContainerID, _ := s.recordRepo.LatestRunnerContainerID(pipelineID)
+	previousContainerID = strings.TrimSpace(previousContainerID)
+	if cleanupErr := cleanupPreviousContainer(containerID); cleanupErr != nil {
+		logger.Error("清理未发布 Runner 容器失败: %v", cleanupErr)
+		return
+	}
+	if previousContainerID == "" || previousContainerID == containerID {
+		return
+	}
+	restoreCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	cli, err := docker.NewDockerClient()
+	if err != nil || cli == nil {
+		if err != nil {
+			logger.Error("恢复旧 Runner 容器失败: %v", err)
+		}
+		return
+	}
+	defer cli.Close()
+	inspect, err := cli.ContainerInspect(restoreCtx, previousContainerID)
+	if err != nil || (inspect.State != nil && inspect.State.Running) {
+		return
+	}
+	if err := cli.ContainerStart(restoreCtx, previousContainerID, container.StartOptions{}); err != nil {
+		logger.Error("恢复旧 Runner 容器失败: %v", err)
+		return
+	}
+	logger.Info("未发布 Runner 已清理，旧 Runner 容器已恢复")
 }
 func resolveRunnerCodeRoot(logger *PipelineLogger, p *model.Pipeline, workspaceDir string) (string, error) {
 	sourceDir := strings.TrimSpace(workspaceDir)

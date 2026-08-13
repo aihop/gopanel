@@ -200,21 +200,26 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 			return
 		}
 	}
-	archivePath, err := s.stepArchive(ctx, logger, p, releaseDir, recordID)
-	if err != nil {
-		if ctx.Err() != nil {
-			s.recordRepo.UpdateStatus(recordID, "failed", "用户手动终止")
-			logger.Error("流水线已手动取消")
-			return
+	artifactDir := releaseDir
+	archivePath := ""
+	runnerEnabled := strings.EqualFold(strings.TrimSpace(p.RunnerMode), "runner")
+	if !runnerEnabled {
+		archivePath, err = s.stepArchive(ctx, logger, p, artifactDir, recordID)
+		if err != nil {
+			if ctx.Err() != nil {
+				s.recordRepo.UpdateStatus(recordID, "failed", "用户手动终止")
+				logger.Error("流水线已手动取消")
+				return
+			}
+			logger.Error("归档失败，但不影响发布: %v", err)
+		} else {
+			s.recordRepo.UpdateArchive(recordID, archivePath)
+			record.ArchiveFile = archivePath
 		}
-		logger.Error("归档失败，但不影响发布: %v", err)
-	} else {
-		s.recordRepo.UpdateArchive(recordID, archivePath)
-		record.ArchiveFile = archivePath
 	}
 	s.recordRepo.UpdateStatus(recordID, "deploying", "准备执行 Runner 步骤...")
-	if strings.EqualFold(strings.TrimSpace(p.RunnerMode), "runner") {
-		runnerHostPort, runnerContainerID, runnerReleaseDir, err := s.stepRunner(ctx, logger, p, releaseDir)
+	if runnerEnabled {
+		runnerHostPort, runnerContainerID, _, err := s.stepRunner(ctx, logger, p, releaseDir)
 		if err != nil {
 			if ctx.Err() != nil {
 				s.recordRepo.UpdateStatus(recordID, "failed", "用户手动终止")
@@ -226,40 +231,84 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 			return
 		}
 		if runnerContainerID != "" {
-			_ = s.recordRepo.UpdateRunnerResult(recordID, runnerReleaseDir, runnerContainerID, runnerHostPort)
+			runnerReleaseDir, snapshotErr := snapshotPipelineRunnerArtifact(ctx, logger, p, recordID, runnerContainerID)
+			if snapshotErr != nil {
+				s.recordRepo.UpdateStatus(recordID, "failed", fmt.Sprintf("Runner artifact failed: %v", snapshotErr))
+				logger.Error("Runner 构建结果固化失败: %v", snapshotErr)
+				s.cleanupUnpublishedRunner(ctx, logger, p.ID, runnerContainerID)
+				return
+			}
+			artifactDir = runnerReleaseDir
 			record.RunnerReleaseDir = runnerReleaseDir
 			record.RunnerContainerID = runnerContainerID
 			record.RunnerHostPort = runnerHostPort
 			logger.Info("Runner 容器已启动：containerId=%s, hostPort=%d", runnerContainerID, runnerHostPort)
+			archivePath, err = s.stepArchive(ctx, logger, p, artifactDir, recordID)
+			if err != nil {
+				s.recordRepo.UpdateStatus(recordID, "failed", fmt.Sprintf("Runner archive failed: %v", err))
+				logger.Error("Runner 正式构建结果归档失败: %v", err)
+				s.cleanupUnpublishedRunner(ctx, logger, p.ID, runnerContainerID)
+				return
+			}
+			if archivePath != "" {
+				if updateErr := s.recordRepo.UpdateArchive(recordID, archivePath); updateErr != nil {
+					s.recordRepo.UpdateStatus(recordID, "failed", fmt.Sprintf("Save Runner archive failed: %v", updateErr))
+					logger.Error("保存 Runner 正式制品路径失败: %v", updateErr)
+					s.cleanupUnpublishedRunner(ctx, logger, p.ID, runnerContainerID)
+					return
+				}
+				record.ArchiveFile = archivePath
+			}
 		}
 	} else {
 		logger.Info("未启用 Runner 步骤，跳过...")
 	}
 	switch strings.TrimSpace(p.ActionType) {
 	case "build_image", "build":
-		imageArtifact, err := s.stepBuildImage(ctx, logger, p, releaseDir, recordID)
+		imageArtifact, err := s.stepBuildImage(ctx, logger, p, artifactDir, recordID)
 		if err != nil {
 			s.recordRepo.UpdateStatus(recordID, "failed", fmt.Sprintf("镜像构建失败: %v", err))
 			logger.Error("镜像构建失败: %v", err)
+			s.cleanupUnpublishedRunner(ctx, logger, p.ID, record.RunnerContainerID)
 			return
 		}
 		if err := s.recordRepo.UpdateImageArtifact(recordID, imageArtifact.Tag, imageArtifact.ID, imageArtifact.Digest, imageArtifact.ImmutableRef); err != nil {
 			s.recordRepo.UpdateStatus(recordID, "failed", fmt.Sprintf("保存镜像制品身份失败: %v", err))
 			logger.Error("保存镜像制品身份失败: %v", err)
+			s.cleanupUnpublishedRunner(ctx, logger, p.ID, record.RunnerContainerID)
 			return
 		}
 		record.ImageTag = imageArtifact.Tag
 		record.ImageID = imageArtifact.ID
 		record.ImageDigest = imageArtifact.Digest
 		record.ImageRef = imageArtifact.ImmutableRef
+		if !s.persistRunnerResult(ctx, logger, p, record) {
+			return
+		}
 		s.recordRepo.UpdateStatus(recordID, "success", fmt.Sprintf("镜像构建成功: %s", imageArtifact.ImmutableRef))
 		logger.Info("镜像构建成功: %s", imageArtifact.ImmutableRef)
 
 	default:
+		if !s.persistRunnerResult(ctx, logger, p, record) {
+			return
+		}
 		s.recordRepo.UpdateStatus(recordID, "success", "构建成功（未配置后续操作）")
 		logger.Info("流水线构建成功，网站发布请从容器列表选择端口绑定")
 	}
 	logger.Info("====== Pipeline #%d 执行成功！======", recordID)
+}
+
+func (s *PipelineService) persistRunnerResult(ctx context.Context, logger *PipelineLogger, pipeline *model.Pipeline, record *model.PipelineRecord) bool {
+	if record == nil || strings.TrimSpace(record.RunnerContainerID) == "" {
+		return true
+	}
+	if err := s.recordRepo.UpdateRunnerResult(record.ID, record.RunnerReleaseDir, record.RunnerContainerID, record.RunnerHostPort); err != nil {
+		s.recordRepo.UpdateStatus(record.ID, "failed", fmt.Sprintf("Save Runner result failed: %v", err))
+		logger.Error("保存 Runner 运行结果失败: %v", err)
+		s.cleanupUnpublishedRunner(ctx, logger, pipeline.ID, record.RunnerContainerID)
+		return false
+	}
+	return true
 }
 
 func pipelineShouldPrepareReleaseBeforeBuild(pipeline *model.Pipeline) bool {

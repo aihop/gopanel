@@ -153,6 +153,13 @@ func (r *FlowRepo) ClaimRun(id uint, owner string, now, expiresAt time.Time) (bo
 	return result.RowsAffected == 1, result.Error
 }
 
+func (r *FlowRepo) RenewRunLease(id uint, owner string, expiresAt time.Time) (bool, error) {
+	result := r.db.Model(&model.FlowRun{}).
+		Where("id = ? AND status IN ? AND lease_owner = ?", id, []string{"queued", "running"}, owner).
+		Update("lease_expires_at", expiresAt)
+	return result.RowsAffected == 1, result.Error
+}
+
 func (r *FlowRepo) ActiveRunIDs() ([]uint, error) {
 	var ids []uint
 	err := r.db.Model(&model.FlowRun{}).Where("status IN ?", []string{"queued", "running"}).Pluck("id", &ids).Error

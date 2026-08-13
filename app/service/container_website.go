@@ -21,12 +21,13 @@ import (
 var applyContainerWebsiteCaddy = ApplyCaddyFromDB
 
 type containerWebsiteTarget struct {
-	ContainerID string
-	RuntimeHost string
-	WebsiteID   uint
-	HostPort    int
-	Scheme      string
-	Address     string
+	ContainerID          string
+	RuntimeHost          string
+	WebsiteID            uint
+	HostPort             int
+	Scheme               string
+	Address              string
+	DeploymentSourceType string
 }
 
 func (u *ContainerService) BindWebsite(ctx context.Context, req *dto.ContainerWebsiteBind) error {
@@ -125,7 +126,11 @@ func checkContainerWebsiteEndpoint(ctx context.Context, scheme, address string) 
 	if err != nil {
 		return fmt.Errorf("容器上游 %s://%s 当前不可访问: %w", scheme, address, err)
 	}
-	return response.Body.Close()
+	closeErr := response.Body.Close()
+	if response.StatusCode >= http.StatusInternalServerError {
+		return fmt.Errorf("容器上游 %s://%s 返回异常状态码: %d", scheme, address, response.StatusCode)
+	}
+	return closeErr
 }
 
 func bindContainerTargetToWebsite(ctx context.Context, target containerWebsiteTarget, version string) error {
@@ -166,10 +171,14 @@ func bindContainerTargetToWebsite(ctx context.Context, target containerWebsiteTa
 	if err := repo.NewWebsiteUpstream().ReplaceByWebsiteID(txCtx, website.ID, []model.WebsiteUpstream{upstream}); err != nil {
 		return err
 	}
+	sourceType := strings.TrimSpace(target.DeploymentSourceType)
+	if sourceType == "" {
+		sourceType = "container_bind"
+	}
 	deploy := &model.AppDeploy{
 		WebsiteID:   website.ID,
 		Version:     flowContainerDeploymentVersion(version),
-		SourceType:  "container_bind",
+		SourceType:  sourceType,
 		SourceUrl:   website.Proxy,
 		Status:      constant.WebRunning,
 		LogText:     fmt.Sprintf("绑定容器 %s 的宿主端口 %d 到网站反向代理\n", target.ContainerID, target.HostPort),

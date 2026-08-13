@@ -238,9 +238,11 @@ func (s *FlowRunApplicationService) deployFlowRelease(run *model.FlowRun, record
 		IdempotencyKey: fmt.Sprintf("flow:%d:deploy:%d", run.ID, attempt), ResourceType: "release", ResourceID: run.ReleaseID,
 		Summary: "automatic website deployment started", StartedAt: &startedAt,
 	})
+	deployCtx, stopLease := s.keepFlowDeploymentLease(run)
+	defer stopLease()
 	for _, environment := range automatic {
 		logger.Info("正在自动部署 Flow 环境: %s -> website #%d, port=%d", environment.Name, environment.WebsiteID, record.RunnerHostPort)
-		if err := s.deployRunner(context.Background(), environment, record, run.Version); err != nil {
+		if err := s.deployRunner(withFlowDeploymentLogger(deployCtx, logger), environment, record, run.Version); err != nil {
 			s.failStage(run, "deploying", "website_deploy_failed", fmt.Sprintf("%s: %v", environment.Name, err))
 			return
 		}
@@ -260,6 +262,30 @@ func (s *FlowRunApplicationService) deployFlowRelease(run *model.FlowRun, record
 	finishFlowRunLogger(record.ID)
 }
 
+func (s *FlowRunApplicationService) keepFlowDeploymentLease(run *model.FlowRun) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(context.Background())
+	if run == nil || run.ID == 0 || strings.TrimSpace(run.LeaseOwner) == "" {
+		return ctx, cancel
+	}
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				renewed, err := s.repo.RenewRunLease(run.ID, run.LeaseOwner, time.Now().Add(30*time.Second))
+				if err != nil || !renewed {
+					cancel()
+					return
+				}
+			}
+		}
+	}()
+	return ctx, cancel
+}
+
 func deployFlowRunnerEnvironment(ctx context.Context, environment model.FlowEnvironment, record *model.PipelineRecord, version string) error {
 	if record == nil {
 		return fmt.Errorf("pipeline record is nil")
@@ -267,21 +293,52 @@ func deployFlowRunnerEnvironment(ctx context.Context, environment model.FlowEnvi
 	target := containerWebsiteTarget{
 		ContainerID: strings.TrimSpace(record.RunnerContainerID), WebsiteID: environment.WebsiteID,
 		HostPort: record.RunnerHostPort, Scheme: "http", Address: fmt.Sprintf("127.0.0.1:%d", record.RunnerHostPort),
+		DeploymentSourceType: flowDeploymentSourceType,
 	}
-	checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	if err := checkContainerWebsiteEndpoint(checkCtx, target.Scheme, target.Address); err != nil {
+	snapshot, err := captureFlowWebsiteDeploymentSnapshot(environment.WebsiteID)
+	if err != nil {
 		return err
 	}
-	var website model.Website
-	if err := global.DB.Select("container_id").First(&website, environment.WebsiteID).Error; err != nil {
+	if err := flowPrepareTargetContainer(ctx, snapshot.website.ContainerID, target.ContainerID); err != nil {
 		return err
 	}
-	previousContainerID := strings.TrimSpace(website.ContainerID)
+	if err := waitForFlowWebsiteReady(ctx, environment, target); err != nil {
+		_, rollbackErr := flowPreparePreviousContainer(ctx, snapshot.website.ContainerID, target.ContainerID)
+		if rollbackErr != nil {
+			return fmt.Errorf("%w；恢复旧容器失败: %v", err, rollbackErr)
+		}
+		return err
+	}
 	if err := bindContainerTargetToWebsite(ctx, target, strings.TrimSpace(version)); err != nil {
+		_, rollbackErr := flowPreparePreviousContainer(ctx, snapshot.website.ContainerID, target.ContainerID)
+		if rollbackErr != nil {
+			return fmt.Errorf("%w；恢复旧容器失败: %v", err, rollbackErr)
+		}
 		return err
 	}
-	cleanupPreviousWebsiteContainer(previousContainerID, target.ContainerID)
+	if err := monitorFlowWebsiteStabilization(ctx, flowDeploymentLogger(ctx), environment, target); err != nil {
+		if environment.AutoRollbackDuringStabilization {
+			_, prepareErr := flowPreparePreviousContainer(ctx, snapshot.website.ContainerID, target.ContainerID)
+			if prepareErr != nil {
+				return fmt.Errorf("%w；自动回滚准备失败: %v", err, prepareErr)
+			}
+			if rollbackErr := restoreFlowWebsiteDeployment(ctx, snapshot); rollbackErr != nil {
+				return fmt.Errorf("%w；自动回滚失败: %v", err, rollbackErr)
+			}
+			return fmt.Errorf("%w；已自动恢复旧网站", err)
+		}
+		return err
+	}
+	retention := flowRetentionDuration(environment.RetainPreviousMinutes)
+	if environment.RuntimeMonitorEnabled {
+		stabilization := flowStabilizationDuration(environment.StabilizationMinutes)
+		if retention > stabilization {
+			retention -= stabilization
+		} else {
+			retention = 0
+		}
+	}
+	retainPreviousFlowContainer(environment.WebsiteID, snapshot.website.ContainerID, target.ContainerID, retention)
 	return nil
 }
 

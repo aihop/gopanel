@@ -151,16 +151,31 @@ func startRuntimeContainer(ctx context.Context, cli *dockerclient.Client, imageI
 	}
 
 	logEngineProgress(progress, "正在启动容器...")
+	previousContainerStopped := false
+	restorePreviousContainer := func(startErr error) error {
+		_ = cli.ContainerRemove(context.Background(), resp.ID, container.RemoveOptions{Force: true})
+		if !previousContainerStopped {
+			return startErr
+		}
+		if restoreErr := cli.ContainerStart(context.Background(), spec.PreviousContainerID, container.StartOptions{}); restoreErr != nil {
+			return fmt.Errorf("%w；恢复旧容器失败: %v", startErr, restoreErr)
+		}
+		logEngineProgress(progress, "新容器启动失败，已恢复旧容器")
+		return startErr
+	}
 	if err := cli.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
 		if spec.PreviousContainerID != "" && strings.Contains(err.Error(), "port is already allocated") {
 			logEngineProgress(progress, "检测到固定端口冲突，正在停止旧容器以释放端口...")
-			_ = cli.ContainerStop(ctx, spec.PreviousContainerID, container.StopOptions{})
+			if stopErr := cli.ContainerStop(ctx, spec.PreviousContainerID, container.StopOptions{}); stopErr != nil {
+				return runtimeContainerResult{}, restorePreviousContainer(fmt.Errorf("停止旧容器释放固定端口失败: %w", stopErr))
+			}
+			previousContainerStopped = true
 			if retryErr := cli.ContainerStart(ctx, resp.ID, container.StartOptions{}); retryErr != nil {
-				return runtimeContainerResult{}, fmt.Errorf("停止旧容器后启动新容器仍失败: %w", retryErr)
+				return runtimeContainerResult{}, restorePreviousContainer(fmt.Errorf("停止旧容器后启动新容器仍失败: %w", retryErr))
 			}
 			logEngineProgress(progress, "已成功抢占固定端口并启动新容器")
 		} else {
-			return runtimeContainerResult{}, fmt.Errorf("failed to start engine container: %w", err)
+			return runtimeContainerResult{}, restorePreviousContainer(fmt.Errorf("failed to start engine container: %w", err))
 		}
 	}
 
@@ -169,14 +184,14 @@ func startRuntimeContainer(ctx context.Context, cli *dockerclient.Client, imageI
 	logEngineProgress(progress, "正在等待容器端口绑定: %s/tcp", containerPort)
 	bindings, err := waitForEnginePortBinding(ctx, cli, resp.ID, containerPort)
 	if err != nil {
-		return runtimeContainerResult{}, err
+		return runtimeContainerResult{}, restorePreviousContainer(err)
 	}
 	var hostPort int
 	_, _ = fmt.Sscanf(bindings[0].HostPort, "%d", &hostPort)
 	if spec.WaitForReady {
 		logEngineProgress(progress, "端口已绑定，正在等待 Runner 构建完成并开始监听: 127.0.0.1:%d", hostPort)
 		if err := waitForRuntimeContainerReady(ctx, cli, resp.ID, hostPort); err != nil {
-			return runtimeContainerResult{}, err
+			return runtimeContainerResult{}, restorePreviousContainer(err)
 		}
 		logEngineProgress(progress, "Runner 服务已就绪: 127.0.0.1:%d", hostPort)
 	}

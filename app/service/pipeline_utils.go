@@ -2,7 +2,7 @@ package service
 
 import "strings"
 
-var archiveExcludedNames = map[string]struct{}{".git": {}, ".gopanel_artifact": {}, "node_modules": {}, "__MACOSX": {}, ".data": {}}
+var archiveExcludedNames = map[string]struct{}{".git": {}, ".gopanel_artifact": {}, ".gopanel_shims": {}, "node_modules": {}, "__MACOSX": {}, ".data": {}}
 var releaseExcludedNames = map[string]struct{}{".git": {}, ".gopanel_artifact": {}, ".gopanel_shims": {}, "__MACOSX": {}, ".data": {}}
 
 type logWriter struct {
