@@ -85,7 +85,7 @@ watch(() => props.selectedTaskId, () => {
       <div class="group/project flex h-10 items-center gap-1 px-1">
         <button
           type="button"
-          class="flex min-w-0 flex-1 items-center gap-2 rounded-xl px-2 py-1.5 text-left text-sm text-[var(--n-text-color-2)] transition-colors hover:bg-[var(--n-color-embedded)] hover:text-[var(--n-text-color)]"
+          class="flex min-w-0 flex-1 items-center gap-2 rounded-xl pr-2 py-1.5 text-left text-sm text-[var(--n-text-color-2)] transition-colors hover:bg-[var(--n-color-embedded)] hover:text-[var(--n-text-color)]"
           :aria-expanded="!isCollapsed(group.id)"
           @click="toggleProject(group.id)"
         >
@@ -98,7 +98,6 @@ watch(() => props.selectedTaskId, () => {
             class="min-w-0 flex-1 truncate font-medium"
             :title="group.name"
           >{{ group.name }}</span>
-          <span class="shrink-0 text-xs text-[var(--n-text-color-3)]">{{ group.tasks.length }}</span>
         </button>
         <n-tooltip v-if="group.available && !archived">
           <template #trigger>

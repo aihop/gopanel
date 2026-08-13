@@ -40,36 +40,75 @@ const executorLabel = computed(() =>
 
 <template>
   <div
-    class="dashboard-task-row group/row relative mb-1 flex cursor-pointer items-stretch gap-3 rounded-2xl py-3 pl-2.5 pr-3.5 transition-colors"
+    class="dashboard-task-row group/row relative mb-1 flex cursor-pointer items-stretch gap-3 rounded-lg py-3 ml-5 pr-3.5 transition-colors"
     :class="selected ? 'dashboard-task-row--selected' : ''"
     @click="emit('open', task)"
   >
     <CodeTaskFocusMarker :active="selected" />
     <div class="min-w-0 flex-1">
-      <div class="flex min-w-0 items-center gap-2">
-        <Icon
-          v-if="task.agentName === 'terminal'"
-          name="mdi:console-line"
-          :size="14"
-          class="shrink-0 text-slate-500"
-        />
-        <CodeProjectIdentity
-          v-if="showProject !== false"
-          class="max-w-[140px] shrink-0 text-[11px] text-[var(--n-text-color-3)]"
-          :project-id="task.projectId"
-          :name="projectName || t('code.projectFallback')"
-        />
-        <span
-          class="min-w-0 truncate text-sm font-semibold text-[var(--n-text-color)]"
-          :title="task.title"
-        >
-          {{ task.title }}
-        </span>
-        <TaskApprovalAction
-          class="shrink-0"
-          :task="task"
-          @approved="emit('refresh')"
-        />
+      <div class="flex min-w-0 items-center justify-between gap-2">
+        <div class="flex min-w-0 flex-1 items-center gap-2">
+          <Icon
+            v-if="task.agentName === 'terminal'"
+            name="mdi:console-line"
+            :size="14"
+            class="shrink-0 text-slate-500"
+          />
+          <CodeProjectIdentity
+            v-if="showProject !== false"
+            class="max-w-[140px] shrink-0 text-[11px] text-[var(--n-text-color-3)]"
+            :project-id="task.projectId"
+            :name="projectName || t('code.projectFallback')"
+          />
+          <span
+            class="min-w-0 truncate text-sm font-semibold text-[var(--n-text-color)]"
+            :title="task.title"
+          >
+            {{ task.title }}
+          </span>
+          <TaskApprovalAction
+            class="shrink-0"
+            :task="task"
+            @approved="emit('refresh')"
+          />
+        </div>
+        <!-- self-start：行是 items-stretch（竖线要通高），这一簇仍然跟标题对齐 -->
+        <div class="flex shrink-0 self-start items-center gap-1 pt-0.5 text-[11px] text-[var(--n-text-color-3)]">
+          <!-- 操作只在悬停时出现：每行都常驻两个按钮会把列表搞得很吵 -->
+          <n-button
+            quaternary
+            circle
+            size="tiny"
+            :title="t('code.detailOpenWorkspace')"
+            class="opacity-0 transition-opacity group-hover/row:opacity-100"
+            @click.stop="emit('openWorkspace', task)"
+          >
+            <template #icon>
+              <Icon
+                name="mdi:open-in-new"
+                :size="13"
+              />
+            </template>
+          </n-button>
+          <n-button
+            quaternary
+            circle
+            size="tiny"
+            :loading="archiving"
+            :title="archived ? t('code.taskUnarchive') : t('code.taskArchive')"
+            class="opacity-0 transition-opacity group-hover/row:opacity-100"
+            :class="archiving ? '!opacity-100' : ''"
+            @click.stop="emit('archive', task)"
+          >
+            <template #icon>
+              <Icon
+                :name="archived ? 'mdi:archive-arrow-up-outline' : 'mdi:archive-arrow-down-outline'"
+                :size="14"
+              />
+            </template>
+          </n-button>
+          <span>{{ timeLabel }}</span>
+        </div>
       </div>
       <CodeTaskMetaLine
         :task="task"
@@ -109,43 +148,6 @@ const executorLabel = computed(() =>
         v-if="selected"
         :task="task"
       />
-    </div>
-    <!-- self-start：行是 items-stretch（竖线要通高），这一簇仍然跟标题对齐 -->
-    <div class="flex shrink-0 self-start items-center gap-1 pt-0.5 text-[11px] text-[var(--n-text-color-3)]">
-      <span>{{ timeLabel }}</span>
-      <!-- 操作只在悬停时出现：每行都常驻两个按钮会把列表搞得很吵 -->
-      <n-button
-        quaternary
-        circle
-        size="tiny"
-        :title="t('code.detailOpenWorkspace')"
-        class="opacity-0 transition-opacity group-hover/row:opacity-100"
-        @click.stop="emit('openWorkspace', task)"
-      >
-        <template #icon>
-          <Icon
-            name="mdi:open-in-new"
-            :size="13"
-          />
-        </template>
-      </n-button>
-      <n-button
-        quaternary
-        circle
-        size="tiny"
-        :loading="archiving"
-        :title="archived ? t('code.taskUnarchive') : t('code.taskArchive')"
-        class="opacity-0 transition-opacity group-hover/row:opacity-100"
-        :class="archiving ? '!opacity-100' : ''"
-        @click.stop="emit('archive', task)"
-      >
-        <template #icon>
-          <Icon
-            :name="archived ? 'mdi:archive-arrow-up-outline' : 'mdi:archive-arrow-down-outline'"
-            :size="14"
-          />
-        </template>
-      </n-button>
     </div>
   </div>
 </template>

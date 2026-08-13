@@ -114,7 +114,7 @@
           <div
             v-if="currentSessionId !== null && !isProjectTerminalActive"
             v-show="workspaceMode === 'changes'"
-            class="ai-workspace-editor-shell min-h-0 flex-1 overflow-hidden rounded-[20px] border border-slate-200/80 bg-white shadow-[0_24px_50px_rgba(15,23,42,0.14)]"
+            class="ai-workspace-editor-shell min-h-0 flex-1 overflow-hidden rounded  border border-slate-200/80 bg-white shadow-[0_24px_50px_rgba(15,23,42,0.14)]"
           >
             <CodeGitReview
               :session-id="currentSessionId"

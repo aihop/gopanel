@@ -42,8 +42,9 @@ const taskTime = (task: CodeTaskListItem) =>
         </div>
         <div class="flex items-center gap-2">
           <n-button
-            size="small"
+            size="tiny"
             type="primary"
+            ghost
             class="!rounded-lg"
             @click="emit('createTask')"
           >

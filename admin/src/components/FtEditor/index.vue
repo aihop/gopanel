@@ -1,6 +1,6 @@
 <template>
 	<div
-		class="box-border flex w-full flex-col overflow-hidden rounded-lg border transition-colors duration-300"
+		class="box-border flex w-full flex-col overflow-hidden border transition-colors duration-300"
 		:style="{ height: height }"
 	>
 		<div

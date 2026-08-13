@@ -350,7 +350,7 @@ const toggleArchived = async (task: CodeTaskListItem) => {
       :class="
         listCollapsed
           ? 'grid-cols-1 grid-rows-1'
-          : 'grid-cols-1 grid-rows-[minmax(220px,2fr)_minmax(260px,3fr)] xl:grid-cols-[400px_minmax(0,1fr)] xl:grid-rows-1'
+          : 'grid-cols-1 grid-rows-[minmax(220px,2fr)_minmax(260px,3fr)] xl:grid-cols-[330px_minmax(0,1fr)] xl:grid-rows-1'
       "
     >
       <section

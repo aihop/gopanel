@@ -149,22 +149,6 @@ async function openMemory() {
       <div
         class="flex items-center rounded-xl border border-slate-200 bg-white p-0.5 dark:border-[var(--border-color)] dark:bg-white/5"
       >
-        <n-tooltip v-if="sessionId !== null && workspaceMode === 'editor'">
-          <template #trigger>
-            <n-button
-              quaternary
-              circle
-              size="small"
-              class="xl:hidden"
-              @click="emit('showStructure')"
-            >
-              <template #icon>
-                <Icon name="mdi:file-tree-outline" />
-              </template>
-            </n-button>
-          </template>
-          {{ t("code.projectStructure") }}
-        </n-tooltip>
         <n-tooltip v-if="hasContext && !isTerminalSession">
           <template #trigger>
             <n-button
