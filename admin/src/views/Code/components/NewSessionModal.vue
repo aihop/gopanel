@@ -70,11 +70,12 @@ const providerAccountOptions = computed(() =>
 const providerFieldLabel = (key: keyof CodeExecutorConfig) => t(`code.providerField_${key}`)
 const providerFieldPlaceholder = (key: keyof CodeExecutorConfig) => t(`code.providerPlaceholder_${key}`)
 const dirtyRepositories = computed(() => worktreeCapability.value?.dirtyRepositories || [])
-// 默认选「先提交」而不是「复制进隔离区」：后者会把人写的改动和 AI 的产出
-// 混进同一个提交，还让源仓库一直脏到交付被拒。方便不该是默认值。
 const dirtyStrategy = ref<"commit" | "snapshot">("commit")
 const commitMessage = ref("")
 const committing = ref(false)
+const dirtyRepositoriesBlocked = computed(
+	() => isolated.value && dirtyRepositories.value.length > 0 && dirtyStrategy.value === "commit"
+)
 
 async function commitDirtyRepositories() {
 	if (!props.projectId || !commitMessage.value.trim()) return
@@ -85,6 +86,7 @@ async function commitDirtyRepositories() {
 		const failed = response.data.filter(item => item.status === "failed")
 		if (failed.length) {
 			message.error(failed[0].errorMessage || t("code.dirtyCommitFailed"))
+			await loadWorktreeCapability()
 			return
 		}
 		const committed = response.data.filter(item => item.status === "committed").length
@@ -156,6 +158,8 @@ watch(
 			providerSource.value = "account"
 			selectedProviderAccountId.value = null
 			providerConfig.value = { baseUrl: "", apiKey: "", model: "" }
+			dirtyStrategy.value = "commit"
+			commitMessage.value = ""
 			void Promise.all([loadExecutors(), loadWorktreeCapability(), loadProviderAccounts()])
 		}
 	}
@@ -176,6 +180,10 @@ const close = () => emit("update:show", false)
 const submit = async () => {
 	if (!selectedExecutorId.value) {
 		message.warning(t("code.selectExecutorRequired"))
+		return
+	}
+	if (dirtyRepositoriesBlocked.value) {
+		message.warning(t("code.dirtyCommitRequired"))
 		return
 	}
 	if (showProviderConfig.value && providerMode.value === "custom") {
@@ -480,7 +488,7 @@ const submit = async () => {
 				<n-button
 					type="primary"
 					:loading="submitting"
-					:disabled="loading || !!loadError || !selectedExecutorId"
+					:disabled="loading || committing || !!loadError || !selectedExecutorId || dirtyRepositoriesBlocked"
 					@click="submit"
 				>
 					{{ t("code.createAndOpen") }}

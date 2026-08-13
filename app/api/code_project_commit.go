@@ -1,7 +1,11 @@
 package api
 
 import (
+	"context"
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -63,6 +67,13 @@ func CommitCodeProjectChanges(c fiber.Ctx) error {
 	if project.CreatorID != claims.UserId && claims.Role != constant.UserRoleSuper {
 		return c.JSON(e.Fail(errors.New("无权操作该项目")))
 	}
+	if err := beginCodeRepositoryOperation(project); err != nil {
+		if errors.Is(err, errCodeProjectActiveTerminal) {
+			return c.JSON(e.Fail(errors.New("项目主仓仍有活动终端，请关闭后再提交")))
+		}
+		return c.JSON(e.Fail(err))
+	}
+	defer endCodeRepositoryOperation(project)
 	candidates, err := discoverCodeProjectRepositoryCandidates(project, codeProjectSourceDirs(project))
 	if err != nil {
 		return c.JSON(e.Fail(err))
@@ -70,6 +81,26 @@ func CommitCodeProjectChanges(c fiber.Ctx) error {
 	if len(candidates) == 0 {
 		return c.JSON(e.Fail(errors.New("项目目录中未发现 Git 仓库")))
 	}
+	specs, err := codeProjectRepositorySpecsWithCandidates(project, codeProjectSourceDirs(project), candidates)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	leaseKeys := make([]string, 0, len(specs))
+	for _, spec := range specs {
+		leaseKeys = append(leaseKeys, spec.LeaseKey)
+	}
+	leaseOwner := newCodeRepositoryLeaseOwner("project-commit")
+	acquired, err := acquireCodeRepositoryLeases(leaseOwner, 0, leaseKeys)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	if !acquired {
+		return c.JSON(e.Fail(errors.New("项目主仓正在同步或交付，请稍后重试")))
+	}
+	defer func() { _ = releaseCodeRepositoryLeases(leaseOwner, leaseKeys) }()
+	leaseContext, cancelHeartbeat := context.WithCancel(context.Background())
+	defer cancelHeartbeat()
+	go heartbeatCodeRepositoryLeases(leaseContext, leaseOwner, leaseKeys)
 	results := make([]codeProjectCommitResult, 0, len(candidates))
 	for _, candidate := range candidates {
 		results = append(results, commitCodeProjectRepository(candidate.SourceDir, message))
@@ -88,8 +119,8 @@ func summarizeCodeProjectCommit(results []codeProjectCommitResult) string {
 	return "success"
 }
 
-func commitCodeProjectRepository(sourceDir, message string) codeProjectCommitResult {
-	result := codeProjectCommitResult{RepositoryName: codeRepositoryDisplayName(sourceDir)}
+func commitCodeProjectRepository(sourceDir, message string) (result codeProjectCommitResult) {
+	result.RepositoryName = codeRepositoryDisplayName(sourceDir)
 	status, err := runCodeGit(sourceDir, "status", "--porcelain")
 	if err != nil {
 		result.Status, result.ErrorMessage = codeProjectCommitStatusFailed, err.Error()
@@ -99,6 +130,23 @@ func commitCodeProjectRepository(sourceDir, message string) codeProjectCommitRes
 		result.Status = codeProjectCommitStatusClean
 		return result
 	}
+	if err := validateCodeGitSaveFiles(sourceDir); err != nil {
+		result.Status, result.ErrorMessage = codeProjectCommitStatusFailed, err.Error()
+		return result
+	}
+	indexSnapshot, err := snapshotCodeGitIndex(sourceDir)
+	if err != nil {
+		result.Status, result.ErrorMessage = codeProjectCommitStatusFailed, err.Error()
+		return result
+	}
+	restoreIndex := true
+	defer func() {
+		if restoreIndex {
+			if restoreErr := indexSnapshot.restore(); restoreErr != nil {
+				result.ErrorMessage = strings.TrimSpace(result.ErrorMessage + "；恢复原暂存区失败：" + restoreErr.Error())
+			}
+		}
+	}()
 	// 用 add -A 而不是只提交已暂存的：用户点「先提交」的意图是
 	// 「把工作区清干净再开会话」，留下未暂存的改动等于没解决问题。
 	// .gitignore 之外的垃圾文件本就该被 ignore，不该靠这里兜底。
@@ -127,6 +175,7 @@ func commitCodeProjectRepository(sourceDir, message string) codeProjectCommitRes
 		result.Status, result.ErrorMessage = codeProjectCommitStatusFailed, err.Error()
 		return result
 	}
+	restoreIndex = false
 	commit, err := runCodeGit(sourceDir, "rev-parse", "HEAD")
 	if err != nil {
 		result.Status, result.ErrorMessage = codeProjectCommitStatusFailed, err.Error()
@@ -134,6 +183,62 @@ func commitCodeProjectRepository(sourceDir, message string) codeProjectCommitRes
 	}
 	result.Status, result.Commit = codeProjectCommitStatusCommitted, strings.TrimSpace(commit)
 	return result
+}
+
+type codeGitIndexSnapshot struct {
+	path   string
+	data   []byte
+	mode   os.FileMode
+	exists bool
+}
+
+func snapshotCodeGitIndex(sourceDir string) (codeGitIndexSnapshot, error) {
+	indexPath, err := runCodeGit(sourceDir, "rev-parse", "--git-path", "index")
+	if err != nil {
+		return codeGitIndexSnapshot{}, err
+	}
+	if !filepath.IsAbs(indexPath) {
+		indexPath = filepath.Join(sourceDir, indexPath)
+	}
+	snapshot := codeGitIndexSnapshot{path: filepath.Clean(indexPath)}
+	info, err := os.Stat(snapshot.path)
+	if errors.Is(err, os.ErrNotExist) {
+		return snapshot, nil
+	}
+	if err != nil {
+		return codeGitIndexSnapshot{}, fmt.Errorf("读取 Git 暂存区失败：%w", err)
+	}
+	snapshot.data, err = os.ReadFile(snapshot.path)
+	if err != nil {
+		return codeGitIndexSnapshot{}, fmt.Errorf("读取 Git 暂存区失败：%w", err)
+	}
+	snapshot.exists, snapshot.mode = true, info.Mode().Perm()
+	return snapshot, nil
+}
+
+func (snapshot codeGitIndexSnapshot) restore() error {
+	if !snapshot.exists {
+		if err := os.Remove(snapshot.path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		return nil
+	}
+	temporary, err := os.CreateTemp(filepath.Dir(snapshot.path), ".gopanel-index-*")
+	if err != nil {
+		return err
+	}
+	temporaryPath := temporary.Name()
+	defer os.Remove(temporaryPath)
+	if _, err = temporary.Write(snapshot.data); err == nil {
+		err = temporary.Chmod(snapshot.mode)
+	}
+	if closeErr := temporary.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return err
+	}
+	return os.Rename(temporaryPath, snapshot.path)
 }
 
 func codeRepositoryDisplayName(sourceDir string) string {

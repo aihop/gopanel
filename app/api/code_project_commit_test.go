@@ -78,6 +78,11 @@ func TestCommitCodeProjectRepositorySkipsWhenEverythingIsIgnored(t *testing.T) {
 // 冲突标记留在文件里就提交，等于把半成品固化进历史。
 func TestCommitCodeProjectRepositoryRefusesConflictMarkers(t *testing.T) {
 	repositoryDir := createCodeGitRepository(t)
+	if err := os.WriteFile(filepath.Join(repositoryDir, "kept-staged.txt"), []byte("keep staged\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	mustCodeGit(t, repositoryDir, "add", "kept-staged.txt")
+	indexBefore := mustCodeGit(t, repositoryDir, "diff", "--cached", "--name-only")
 	conflicted := strings.Join([]string{
 		"<<<<<<< HEAD", "ours", "=======", "theirs", ">>>>>>> other", "",
 	}, "\n")
@@ -92,6 +97,29 @@ func TestCommitCodeProjectRepositoryRefusesConflictMarkers(t *testing.T) {
 	}
 	if after := strings.TrimSpace(mustCodeGit(t, repositoryDir, "rev-parse", "HEAD")); before != after {
 		t.Fatalf("被拒时不该产生提交：%s -> %s", before, after)
+	}
+	if indexAfter := mustCodeGit(t, repositoryDir, "diff", "--cached", "--name-only"); indexAfter != indexBefore {
+		t.Fatalf("被拒时应恢复原暂存区：before=%q after=%q", indexBefore, indexAfter)
+	}
+}
+
+func TestCommitCodeProjectRepositoryRefusesSensitiveFilesWithoutChangingIndex(t *testing.T) {
+	repositoryDir := createCodeGitRepository(t)
+	if err := os.WriteFile(filepath.Join(repositoryDir, "kept-staged.txt"), []byte("keep staged\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	mustCodeGit(t, repositoryDir, "add", "kept-staged.txt")
+	indexBefore := mustCodeGit(t, repositoryDir, "diff", "--cached", "--name-only")
+	if err := os.WriteFile(filepath.Join(repositoryDir, ".env"), []byte("SECRET=value\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	result := commitCodeProjectRepository(repositoryDir, "chore: 不应提交凭据")
+	if result.Status != codeProjectCommitStatusFailed || !strings.Contains(result.ErrorMessage, "敏感") {
+		t.Fatalf("敏感文件应被拒：%#v", result)
+	}
+	if indexAfter := mustCodeGit(t, repositoryDir, "diff", "--cached", "--name-only"); indexAfter != indexBefore {
+		t.Fatalf("被拒时不应改变暂存区：before=%q after=%q", indexBefore, indexAfter)
 	}
 }
 
