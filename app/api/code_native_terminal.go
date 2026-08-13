@@ -46,6 +46,7 @@ type nativeCodeTerminal struct {
 
 type nativeCodeTerminalManager struct {
 	mu       sync.Mutex
+	attachMu sync.Mutex
 	sessions map[uint]*nativeCodeTerminal
 }
 
@@ -69,6 +70,8 @@ func (manager *nativeCodeTerminalManager) attach(
 	if session == nil || session.ID == 0 {
 		return nil, false, errors.New("开发会话不可用")
 	}
+	manager.attachMu.Lock()
+	defer manager.attachMu.Unlock()
 	unlockLifecycle := codeSessionLifecycles.lock(session.ID)
 	defer unlockLifecycle()
 	current, err := repo.NewAIDevSessionRepo().GetSessionByID(session.ID)
@@ -80,14 +83,17 @@ func (manager *nativeCodeTerminalManager) attach(
 		return nil, false, err
 	}
 	manager.mu.Lock()
-	defer manager.mu.Unlock()
 	if terminal := manager.sessions[session.ID]; terminal != nil {
+		manager.mu.Unlock()
 		return terminal, false, nil
 	}
+	manager.mu.Unlock()
 	if err := validateCodeTokenBudget(session); err != nil {
 		return nil, false, err
 	}
-	lease, err := codeExecutions.acquireSession(context.Background(), session, codeExecutionInteractive, false)
+	acquireContext, cancelAcquire := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelAcquire()
+	lease, err := codeExecutions.acquireInteractiveSession(acquireContext, session)
 	if err != nil {
 		return nil, false, err
 	}
@@ -136,7 +142,9 @@ func (manager *nativeCodeTerminalManager) attach(
 		lease.Release()
 		return nil, false, err
 	}
+	manager.mu.Lock()
 	manager.sessions[session.ID] = terminal
+	manager.mu.Unlock()
 	go terminal.readOutput()
 	go terminal.wait(manager)
 	if session.AgentName == "codex" {

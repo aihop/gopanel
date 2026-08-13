@@ -103,6 +103,71 @@ func TestCodeExecutionCoordinatorNewSessionDoesNotInterruptSharedWorkspace(t *te
 	}
 }
 
+func TestCodeExecutionCoordinatorHandsDirectWorkspaceToNewInteractiveSession(t *testing.T) {
+	coordinator := newCodeExecutionCoordinator(2, 2)
+	firstSession := &model.AIDevSession{ID: 21, WorkDir: "/workspace/shared", IsolationMode: codeIsolationDirect}
+	first, err := coordinator.acquireInteractiveSession(context.Background(), firstSession)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var interrupted atomic.Bool
+	first.SetCancel(func() {
+		interrupted.Store(true)
+		first.Release()
+	})
+
+	secondSession := &model.AIDevSession{ID: 22, WorkDir: "/workspace/shared", IsolationMode: codeIsolationDirect}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	second, err := coordinator.acquireInteractiveSession(ctx, secondSession)
+	if err != nil {
+		t.Fatalf("direct workspace handover failed: %v", err)
+	}
+	defer second.Release()
+	if !interrupted.Load() {
+		t.Fatal("previous direct interactive session was not stopped")
+	}
+}
+
+func TestCodeExecutionCoordinatorDoesNotHandoverBusyDirectInstruction(t *testing.T) {
+	coordinator := newCodeExecutionCoordinator(2, 2)
+	first, err := coordinator.acquireOwned(
+		context.Background(), 21, []string{"/workspace/shared"}, codeExecutionInstruction, false,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first.Release()
+	secondSession := &model.AIDevSession{ID: 22, WorkDir: "/workspace/shared", IsolationMode: codeIsolationDirect}
+	if _, err := coordinator.acquireInteractiveSession(context.Background(), secondSession); !errors.Is(err, errCodeExecutionBusy) {
+		t.Fatalf("active instruction must not be interrupted, got %v", err)
+	}
+}
+
+func TestCodeExecutionCoordinatorHandsOverLegacyDirectSession(t *testing.T) {
+	database := withCodeGovernanceDB(t)
+	project := &model.AIProject{ID: 7, CreatorID: 1, SourceDirs: []string{"/workspace/shared"}}
+	if err := database.Create(project).Error; err != nil {
+		t.Fatal(err)
+	}
+	coordinator := newCodeExecutionCoordinator(2, 2)
+	first, err := coordinator.acquireOwned(
+		context.Background(), 21, []string{"/workspace/shared"}, codeExecutionInteractive, false,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first.SetCancel(func() { first.Release() })
+	legacyDirect := &model.AIDevSession{ID: 22, ProjectID: project.ID, WorkDir: "/workspace/shared"}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	second, err := coordinator.acquireInteractiveSession(ctx, legacyDirect)
+	if err != nil {
+		t.Fatalf("legacy direct workspace handover failed: %v", err)
+	}
+	second.Release()
+}
+
 func TestCodeExecutionWorkspaceKeysIncludeDirectProjectSources(t *testing.T) {
 	database := withCodeGovernanceDB(t)
 	first, second := t.TempDir(), t.TempDir()

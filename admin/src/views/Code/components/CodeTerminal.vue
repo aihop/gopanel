@@ -221,6 +221,7 @@ const connectWebSocket = () => {
 			} else if (msg.type === "closed") {
 				intentionalClose = true
 				hasTerminalControl.value = false
+				lastSequence = 0
 			} else if (msg.type === "cmd") {
 				writeTerminalData(msg.data)
 			} else if (msg.type === "meta" && msg.task_id) {
@@ -339,6 +340,14 @@ onActivated(() => {
 	if (!activatedOnce) {
 		activatedOnce = true
 		return
+	}
+	if (intentionalClose && !sessionDelivered.value) {
+		intentionalClose = false
+		serverErrorShown = false
+		receivedServerMessage = false
+		connectionFailed.value = false
+		reconnecting.value = true
+		connectWebSocket()
 	}
 	void nextTick(() => {
 		handleResize()
