@@ -30,6 +30,10 @@ export function resumeFlowRun(id: number) {
 	return http.post<Flow.Run>(`/flow/runs/${id}/resume`)
 }
 
+export function rebuildFlowRun(id: number) {
+	return http.post<Flow.Run>(`/flow/runs/${id}/rebuild`)
+}
+
 export function createFlowRun(input: Flow.RunCreateInput) {
 	return http.post<Flow.Run>("/flow/runs", input)
 }

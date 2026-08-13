@@ -51,7 +51,7 @@ func TestBindContainerTargetToWebsite(t *testing.T) {
 		HostPort:    13000,
 		Scheme:      "http",
 		Address:     "127.0.0.1:13000",
-	}); err != nil {
+	}, ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -92,7 +92,7 @@ func TestBindContainerTargetRollsBackWhenCaddyFails(t *testing.T) {
 		HostPort:    13000,
 		Scheme:      "http",
 		Address:     "127.0.0.1:13000",
-	})
+	}, "")
 	if err == nil {
 		t.Fatal("expected Caddy failure")
 	}
@@ -118,7 +118,7 @@ func TestBindContainerTargetRejectsNonProxyWebsite(t *testing.T) {
 	if err := database.Create(&website).Error; err != nil {
 		t.Fatal(err)
 	}
-	err := bindContainerTargetToWebsite(context.Background(), containerWebsiteTarget{WebsiteID: website.ID})
+	err := bindContainerTargetToWebsite(context.Background(), containerWebsiteTarget{WebsiteID: website.ID}, "")
 	if err == nil {
 		t.Fatal("expected non-proxy website rejection")
 	}

@@ -48,8 +48,8 @@ export namespace Flow {
 		environments: CreateEnvironment[]
 	}
 
-	export type RunStatus = "queued" | "running" | "failed" | "waiting_deployment"
-	export type RunStage = "created" | "building" | "publishing" | "release_ready" | "waiting_deployment" | "failed"
+	export type RunStatus = "queued" | "running" | "success" | "failed" | "waiting_deployment"
+	export type RunStage = "created" | "building" | "publishing" | "release_ready" | "deploying" | "deployed" | "waiting_deployment" | "failed"
 
 	export interface StageRun {
 		id: number

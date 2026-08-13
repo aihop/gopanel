@@ -113,6 +113,7 @@ var (
 	ErrFlowVersionExists             = "ErrFlowVersionExists"
 	ErrFlowRunNotFailed              = "ErrFlowRunNotFailed"
 	ErrFlowRunResumeUnsupported      = "ErrFlowRunResumeUnsupported"
+	ErrFlowRunRebuildUnsupported     = "ErrFlowRunRebuildUnsupported"
 	ErrFlowPipelineRecordProtected   = "ErrFlowPipelineRecordProtected"
 )
 

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -23,6 +24,10 @@ func (s *FlowRunApplicationService) Advance(runID uint) {
 		}
 		if run.CurrentStage == "publishing" && run.PipelineRecordID > 0 {
 			s.resumeFlowPublish(run)
+			return
+		}
+		if run.CurrentStage == "deploying" && run.PipelineRecordID > 0 && run.ReleaseID > 0 {
+			s.resumeFlowDeploy(run)
 			return
 		}
 		if run.PipelineRecordID == 0 {
@@ -169,18 +174,115 @@ func (s *FlowRunApplicationService) publishFlowRelease(run *model.FlowRun, recor
 		ResourceType:   "release", ResourceID: release.ID,
 		Summary: "immutable release is ready", StartedAt: &completedAt, CompletedAt: &completedAt,
 	})
+	run.ReleaseID = release.ID
+	if err := s.repo.UpdateRun(run.ID, map[string]any{"release_id": release.ID}); err != nil {
+		s.failStage(run, "publishing", "release_link_failed", err.Error())
+		return
+	}
+	s.deployFlowRelease(run, record)
+}
+
+func (s *FlowRunApplicationService) resumeFlowDeploy(run *model.FlowRun) {
+	record, err := s.recordRepo.Get(run.PipelineRecordID)
+	if err != nil || record.Status != "success" {
+		detail := "pipeline record is not available for deployment"
+		if err != nil {
+			detail = err.Error()
+		}
+		s.failStage(run, "deploying", "pipeline_record_unavailable", detail)
+		return
+	}
+	s.deployFlowRelease(run, record)
+}
+
+func (s *FlowRunApplicationService) deployFlowRelease(run *model.FlowRun, record *model.PipelineRecord) {
+	logger := GetPipelineLogger(record.ID)
+	var flow model.Flow
+	if err := s.db.Preload("Environments", "enabled = ?", true).First(&flow, run.FlowID).Error; err != nil {
+		s.failStage(run, "deploying", "flow_environment_unavailable", err.Error())
+		return
+	}
+	automatic := make([]model.FlowEnvironment, 0, len(flow.Environments))
+	for _, environment := range flow.Environments {
+		if environment.AutoDeploy && !environment.ApprovalRequired {
+			automatic = append(automatic, environment)
+		}
+	}
+	if len(automatic) == 0 {
+		_ = s.repo.UpsertStage(&model.FlowStageRun{
+			FlowRunID: run.ID, Stage: "waiting_deployment", Attempt: 1, Status: "pending",
+			IdempotencyKey: fmt.Sprintf("flow:%d:deployment:1", run.ID), ResourceType: "release", ResourceID: run.ReleaseID,
+			Summary: "waiting for deployment approval or manual orchestration",
+		})
+		_ = s.repo.UpdateRun(run.ID, map[string]any{
+			"release_id": run.ReleaseID, "current_stage": "waiting_deployment", "status": flowRunWaitingDeployment,
+			"lease_owner": "", "lease_expires_at": nil,
+		})
+		logger.Info("Flow #%d 未配置无需审批的自动部署环境，保留 Release 并等待后续部署", run.ID)
+		finishFlowRunLogger(record.ID)
+		return
+	}
+	if record.RunnerHostPort <= 0 || strings.TrimSpace(record.RunnerContainerID) == "" {
+		s.failStage(run, "deploying", "runner_target_unavailable", "pipeline did not produce a ready Runner container target")
+		return
+	}
+	attempt, err := s.repo.StageAttemptForExecution(run.ID, "deploying")
+	if err != nil {
+		s.failStage(run, "deploying", "flow_attempt_unavailable", err.Error())
+		return
+	}
+	startedAt := time.Now()
+	_ = s.repo.UpdateRun(run.ID, map[string]any{"release_id": run.ReleaseID, "current_stage": "deploying", "status": flowRunRunning})
 	_ = s.repo.UpsertStage(&model.FlowStageRun{
-		FlowRunID: run.ID, Stage: "waiting_deployment", Attempt: 1, Status: "pending",
-		IdempotencyKey: fmt.Sprintf("flow:%d:deployment:1", run.ID),
-		ResourceType:   "release", ResourceID: release.ID,
-		Summary: "waiting for deployment orchestration",
+		FlowRunID: run.ID, Stage: "deploying", Attempt: attempt, Status: "running",
+		IdempotencyKey: fmt.Sprintf("flow:%d:deploy:%d", run.ID, attempt), ResourceType: "release", ResourceID: run.ReleaseID,
+		Summary: "automatic website deployment started", StartedAt: &startedAt,
+	})
+	for _, environment := range automatic {
+		logger.Info("正在自动部署 Flow 环境: %s -> website #%d, port=%d", environment.Name, environment.WebsiteID, record.RunnerHostPort)
+		if err := s.deployRunner(context.Background(), environment, record, run.Version); err != nil {
+			s.failStage(run, "deploying", "website_deploy_failed", fmt.Sprintf("%s: %v", environment.Name, err))
+			return
+		}
+		logger.Info("Flow 环境自动部署完成: %s -> website #%d", environment.Name, environment.WebsiteID)
+	}
+	completedAt := time.Now()
+	_ = s.repo.UpsertStage(&model.FlowStageRun{
+		FlowRunID: run.ID, Stage: "deploying", Attempt: attempt, Status: "success",
+		IdempotencyKey: fmt.Sprintf("flow:%d:deploy:%d", run.ID, attempt), ResourceType: "release", ResourceID: run.ReleaseID,
+		Summary: "automatic website deployment completed", CompletedAt: &completedAt,
 	})
 	_ = s.repo.UpdateRun(run.ID, map[string]any{
-		"release_id": release.ID, "current_stage": "waiting_deployment",
-		"status": flowRunWaitingDeployment, "lease_owner": "", "lease_expires_at": nil,
+		"current_stage": "deployed", "status": flowRunSuccess, "completed_at": completedAt,
+		"lease_owner": "", "lease_expires_at": nil,
 	})
-	logger.Info("Flow #%d 已完成构建与发布，等待后续部署", run.ID)
+	logger.Info("Flow #%d 已完成构建、发布与自动部署", run.ID)
 	finishFlowRunLogger(record.ID)
+}
+
+func deployFlowRunnerEnvironment(ctx context.Context, environment model.FlowEnvironment, record *model.PipelineRecord, version string) error {
+	if record == nil {
+		return fmt.Errorf("pipeline record is nil")
+	}
+	target := containerWebsiteTarget{
+		ContainerID: strings.TrimSpace(record.RunnerContainerID), WebsiteID: environment.WebsiteID,
+		HostPort: record.RunnerHostPort, Scheme: "http", Address: fmt.Sprintf("127.0.0.1:%d", record.RunnerHostPort),
+	}
+	checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if err := checkContainerWebsiteEndpoint(checkCtx, target.Scheme, target.Address); err != nil {
+		return err
+	}
+	var website model.Website
+	if err := global.DB.Select("container_id").First(&website, environment.WebsiteID).Error; err != nil {
+		return err
+	}
+	previousContainerID := strings.TrimSpace(website.ContainerID)
+	if err := bindContainerTargetToWebsite(ctx, target, strings.TrimSpace(version)); err != nil {
+		return err
+	}
+	cleanupPreviousWebsiteContainer(previousContainerID, target.ContainerID)
+	return nil
 }
 
 func (s *FlowRunApplicationService) failStage(run *model.FlowRun, stage, code, detail string) {

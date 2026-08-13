@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -185,6 +186,115 @@ func TestFlowRunMarksStalePreparingPipelineInterrupted(t *testing.T) {
 	if updated.Status != "failed" {
 		t.Fatalf("stale pipeline status = %q", updated.Status)
 	}
+}
+
+func TestFlowRunAutoDeploysReadyRunner(t *testing.T) {
+	service, run, pipeline := createFlowResumeFixture(t)
+	if err := service.db.Model(&model.FlowEnvironment{}).Where("flow_id = ?", run.FlowID).Updates(map[string]any{
+		"auto_deploy": true, "approval_required": false,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	service.runPipeline = func(pipelineID uint, version, expectedCommit string, source PipelineRunSource) (uint, error) {
+		record := model.PipelineRecord{
+			PipelineID: pipelineID, Status: "success", Version: version, ExpectedCommit: expectedCommit,
+			CommitHash: expectedCommit, SourceType: source.Type, SourceID: source.ID, IdempotencyKey: source.IdempotencyKey,
+			RunnerContainerID: "runner-ready", RunnerHostPort: 13000,
+		}
+		if err := service.db.Create(&record).Error; err != nil {
+			return 0, err
+		}
+		return record.ID, nil
+	}
+	service.publishRecord = func(recordID uint) (*model.Release, error) {
+		release := model.Release{
+			PipelineID: pipeline.ID, PipelineRecordID: recordID, Version: run.Version, CommitHash: run.SourceCommit,
+			SourceType: "archive", ArtifactDigest: "sha256:auto-deploy", Status: "ready",
+		}
+		if err := service.db.Create(&release).Error; err != nil {
+			return nil, err
+		}
+		return &release, nil
+	}
+	deployed := 0
+	service.deployRunner = func(_ context.Context, environment model.FlowEnvironment, record *model.PipelineRecord, version string) error {
+		deployed++
+		if environment.Name != "preview" || record.RunnerHostPort != 13000 || version != run.Version {
+			t.Fatalf("unexpected deployment: environment=%+v record=%+v version=%s", environment, record, version)
+		}
+		return nil
+	}
+
+	service.Advance(run.ID)
+	stored, err := service.Get(run.ID, 7, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deployed != 1 || stored.Status != flowRunSuccess || stored.CurrentStage != "deployed" || stored.ReleaseID == 0 {
+		t.Fatalf("automatic deployment did not finish: deployed=%d run=%+v", deployed, stored)
+	}
+	assertFlowStageAttempts(t, stored.Stages, "deploying", []string{"success"})
+}
+
+func TestFlowRunRetriesDeploymentWithoutRebuilding(t *testing.T) {
+	service, run, pipeline := createFlowResumeFixture(t)
+	if err := service.db.Model(&model.FlowEnvironment{}).Where("flow_id = ?", run.FlowID).Updates(map[string]any{
+		"auto_deploy": true, "approval_required": false,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	builds := 0
+	service.runPipeline = func(pipelineID uint, version, expectedCommit string, source PipelineRunSource) (uint, error) {
+		builds++
+		record := model.PipelineRecord{
+			PipelineID: pipelineID, Status: "success", Version: version, ExpectedCommit: expectedCommit,
+			CommitHash: expectedCommit, SourceType: source.Type, SourceID: source.ID, IdempotencyKey: source.IdempotencyKey,
+			RunnerContainerID: "runner-retry", RunnerHostPort: 14000,
+		}
+		if err := service.db.Create(&record).Error; err != nil {
+			return 0, err
+		}
+		return record.ID, nil
+	}
+	service.publishRecord = func(recordID uint) (*model.Release, error) {
+		release := model.Release{
+			PipelineID: pipeline.ID, PipelineRecordID: recordID, Version: run.Version, CommitHash: run.SourceCommit,
+			SourceType: "archive", ArtifactDigest: "sha256:deploy-retry", Status: "ready",
+		}
+		if err := service.db.Create(&release).Error; err != nil {
+			return nil, err
+		}
+		return &release, nil
+	}
+	deployments := 0
+	service.deployRunner = func(context.Context, model.FlowEnvironment, *model.PipelineRecord, string) error {
+		deployments++
+		if deployments == 1 {
+			return errors.New("caddy reload failed")
+		}
+		return nil
+	}
+
+	service.Advance(run.ID)
+	failed, err := service.Get(run.ID, 7, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if failed.Status != flowRunFailed || failed.FailureCode != "website_deploy_failed" || failed.ReleaseID == 0 {
+		t.Fatalf("deployment failure was not preserved: %+v", failed)
+	}
+	if _, err := service.Resume(run.ID, 7, false); err != nil {
+		t.Fatal(err)
+	}
+	service.Advance(run.ID)
+	stored, err := service.Get(run.ID, 7, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if builds != 1 || deployments != 2 || stored.Status != flowRunSuccess || stored.CurrentStage != "deployed" {
+		t.Fatalf("deployment retry rebuilt or did not finish: builds=%d deployments=%d run=%+v", builds, deployments, stored)
+	}
+	assertFlowStageAttempts(t, stored.Stages, "deploying", []string{"failed", "success"})
 }
 
 func assertFlowStageAttempts(t *testing.T, stages []model.FlowStageRun, stage string, statuses []string) {

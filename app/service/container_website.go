@@ -37,7 +37,7 @@ func (u *ContainerService) BindWebsite(ctx context.Context, req *dto.ContainerWe
 	if err != nil {
 		return err
 	}
-	return bindContainerTargetToWebsite(ctx, target)
+	return bindContainerTargetToWebsite(ctx, target, "")
 }
 
 func resolveContainerWebsiteTarget(ctx context.Context, req *dto.ContainerWebsiteBind) (containerWebsiteTarget, error) {
@@ -128,7 +128,7 @@ func checkContainerWebsiteEndpoint(ctx context.Context, scheme, address string) 
 	return response.Body.Close()
 }
 
-func bindContainerTargetToWebsite(ctx context.Context, target containerWebsiteTarget) error {
+func bindContainerTargetToWebsite(ctx context.Context, target containerWebsiteTarget, version string) error {
 	websiteRepo := repo.NewWebsite()
 	website, err := websiteRepo.GetFirst(websiteRepo.WithID(target.WebsiteID))
 	if err != nil {
@@ -168,7 +168,7 @@ func bindContainerTargetToWebsite(ctx context.Context, target containerWebsiteTa
 	}
 	deploy := &model.AppDeploy{
 		WebsiteID:   website.ID,
-		Version:     fmt.Sprintf("container-%d", time.Now().Unix()),
+		Version:     flowContainerDeploymentVersion(version),
 		SourceType:  "container_bind",
 		SourceUrl:   website.Proxy,
 		Status:      constant.WebRunning,
@@ -185,4 +185,12 @@ func bindContainerTargetToWebsite(ctx context.Context, target containerWebsiteTa
 		return fmt.Errorf("应用网站反向代理失败: %w", err)
 	}
 	return tx.Commit().Error
+}
+
+func flowContainerDeploymentVersion(version string) string {
+	version = strings.TrimSpace(version)
+	if version != "" {
+		return version
+	}
+	return fmt.Sprintf("container-%d", time.Now().Unix())
 }

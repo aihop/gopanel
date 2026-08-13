@@ -16,6 +16,7 @@ func FlowRouter(r fiber.Router) {
 	group.Get("/runs", api.FlowRunPage)
 	group.Get("/runs/:id", api.FlowRunGet)
 	group.Post("/runs/:id/resume", api.FlowRunResume)
+	group.Post("/runs/:id/rebuild", api.FlowRunRebuild)
 	group.Get("/:id/code-deliveries", api.FlowCodeDeliverySources)
 	group.Get("/:id/code-baseline", api.FlowCodeBaselineSource)
 	group.Post("/runs", api.FlowRunCreate)

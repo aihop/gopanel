@@ -60,6 +60,7 @@ ErrFlowVersionInvalid: "The version format is invalid"
 ErrFlowVersionExists: "This delivery flow already has the same version"
 ErrFlowRunNotFailed: "Only a failed delivery run can be resumed"
 ErrFlowRunResumeUnsupported: "This failed stage cannot be resumed automatically; start a new delivery run"
+ErrFlowRunRebuildUnsupported: "Only a delivered or release-ready run can be rebuilt"
 ErrFlowPipelineRecordProtected: "This pipeline record belongs to a delivery run; view it in Delivery Center"
 
 ErrMinQuickJump: "Set at least one quick jump entry"

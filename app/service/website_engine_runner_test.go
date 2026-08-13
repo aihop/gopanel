@@ -107,6 +107,15 @@ func TestBuildRunnerScriptSkipsSyncWhenSourceEqualsWorkingDir(t *testing.T) {
 	}
 }
 
+func TestBuildRunnerScriptBuildsDefaultNodeProject(t *testing.T) {
+	script := buildRunnerScript(parseRunnerConfig(nil), runnerWorkspaceMountPath)
+	for _, expected := range []string{"package.json detected, rebuilding app", "npm ci", "npm run build"} {
+		if !strings.Contains(script, expected) {
+			t.Fatalf("expected default Runner script to contain %q, script=%s", expected, script)
+		}
+	}
+}
+
 func TestBuildRunnerScriptKeepsPersistentPathsOutOfCleanup(t *testing.T) {
 	rc := parseRunnerConfig(map[string]interface{}{
 		"persistentPaths": []interface{}{".data", "storage"},

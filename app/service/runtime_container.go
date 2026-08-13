@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"strings"
+	"time"
 
 	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/utils/docker"
@@ -31,6 +33,7 @@ type runtimeContainerSpec struct {
 	NetworkMode         container.NetworkMode
 	ExtraNetworks       []string
 	PreviousContainerID string
+	WaitForReady        bool
 }
 
 type runtimeContainerResult struct {
@@ -170,7 +173,49 @@ func startRuntimeContainer(ctx context.Context, cli *dockerclient.Client, imageI
 	}
 	var hostPort int
 	_, _ = fmt.Sscanf(bindings[0].HostPort, "%d", &hostPort)
+	if spec.WaitForReady {
+		logEngineProgress(progress, "端口已绑定，正在等待 Runner 构建完成并开始监听: 127.0.0.1:%d", hostPort)
+		if err := waitForRuntimeContainerReady(ctx, cli, resp.ID, hostPort); err != nil {
+			return runtimeContainerResult{}, err
+		}
+		logEngineProgress(progress, "Runner 服务已就绪: 127.0.0.1:%d", hostPort)
+	}
 	return runtimeContainerResult{HostPort: hostPort, ContainerID: resp.ID}, nil
+}
+
+func waitForRuntimeContainerReady(ctx context.Context, cli *dockerclient.Client, containerID string, hostPort int) error {
+	if hostPort <= 0 {
+		return fmt.Errorf("runner host port is invalid: %d", hostPort)
+	}
+	readyCtx, cancel := context.WithTimeout(ctx, 15*time.Minute)
+	defer cancel()
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	address := fmt.Sprintf("127.0.0.1:%d", hostPort)
+	var lastDialErr error
+	for {
+		inspect, err := cli.ContainerInspect(readyCtx, containerID)
+		if err != nil {
+			return fmt.Errorf("failed to inspect runner container readiness: %w", err)
+		}
+		if inspect.ContainerJSONBase == nil || inspect.ContainerJSONBase.State == nil || !inspect.ContainerJSONBase.State.Running || inspect.ContainerJSONBase.State.Restarting {
+			return buildEngineContainerDiagError(readyCtx, cli, containerID, fmt.Sprintf("%d", hostPort), inspect)
+		}
+		if inspect.RestartCount > 0 {
+			return buildEngineContainerDiagError(readyCtx, cli, containerID, fmt.Sprintf("%d", hostPort), inspect)
+		}
+		connection, dialErr := (&net.Dialer{Timeout: time.Second}).DialContext(readyCtx, "tcp", address)
+		if dialErr == nil {
+			_ = connection.Close()
+			return nil
+		}
+		lastDialErr = dialErr
+		select {
+		case <-readyCtx.Done():
+			return fmt.Errorf("runner service readiness timeout at %s: %w", address, lastDialErr)
+		case <-ticker.C:
+		}
+	}
 }
 
 func cloneRuntimeExposedPorts(imageInspect image.InspectResponse) nat.PortSet {

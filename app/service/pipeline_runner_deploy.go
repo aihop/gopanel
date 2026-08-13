@@ -95,6 +95,7 @@ func buildPipelineRunnerRuntimeSpec(request pipelineRunnerDeployRequest, rc runn
 		Cmd:                 []string{"sh", "-lc", buildRunnerScript(rc, sourceMountDir)},
 		NetworkMode:         container.NetworkMode(runnerNetworkName),
 		PreviousContainerID: strings.TrimSpace(request.PreviousContainerID),
+		WaitForReady:        true,
 	}
 	if rc.HasCustomWorkingDir {
 		spec.Binds = append(spec.Binds, fmt.Sprintf("%s:%s", codeRoot, sourceMountDir))

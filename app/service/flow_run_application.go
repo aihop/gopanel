@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,6 +22,7 @@ const (
 	flowRunQueued            = "queued"
 	flowRunRunning           = "running"
 	flowRunFailed            = "failed"
+	flowRunSuccess           = "success"
 	flowRunWaitingDeployment = "waiting_deployment"
 )
 
@@ -42,6 +44,7 @@ type FlowRunApplicationService struct {
 	recordRepo    *repo.PipelineRecordRepo
 	runPipeline   func(uint, string, string, PipelineRunSource) (uint, error)
 	publishRecord func(uint) (*model.Release, error)
+	deployRunner  func(context.Context, model.FlowEnvironment, *model.PipelineRecord, string) error
 	pollInterval  time.Duration
 	autoStart     bool
 }
@@ -52,6 +55,7 @@ func NewFlowRunApplication(db *gorm.DB) *FlowRunApplicationService {
 	return &FlowRunApplicationService{
 		db: db, repo: repo.NewFlow(db), recordRepo: repo.NewPipelineRecord(db),
 		runPipeline: pipeline.RunPipelineForSource, publishRecord: publisher.PublishRecord,
+		deployRunner: deployFlowRunnerEnvironment,
 		pollInterval: time.Second, autoStart: true,
 	}
 }
@@ -255,7 +259,7 @@ func (s *FlowRunApplicationService) Resume(id, userID uint, includeAll bool) (*m
 	if failedStage == "" && run.FailureCode == "pipeline_record_unavailable" {
 		failedStage = "building"
 	}
-	if failedStage != "building" && failedStage != "publishing" {
+	if failedStage != "building" && failedStage != "publishing" && failedStage != "deploying" {
 		return nil, buserr.New(constant.ErrFlowRunResumeUnsupported)
 	}
 	if failedStage == "publishing" {
@@ -263,6 +267,9 @@ func (s *FlowRunApplicationService) Resume(id, userID uint, includeAll bool) (*m
 		if recordErr != nil || record.Status != "success" {
 			return nil, buserr.New(constant.ErrFlowRunResumeUnsupported)
 		}
+	}
+	if failedStage == "deploying" && (run.ReleaseID == 0 || run.PipelineRecordID == 0) {
+		return nil, buserr.New(constant.ErrFlowRunResumeUnsupported)
 	}
 	attempt, err := s.repo.NextStageAttempt(run.ID, failedStage)
 	if err != nil {
@@ -284,6 +291,10 @@ func (s *FlowRunApplicationService) Resume(id, userID uint, includeAll bool) (*m
 	if failedStage == "publishing" {
 		stage.ResourceType = "pipeline_record"
 		stage.ResourceID = run.PipelineRecordID
+	}
+	if failedStage == "deploying" {
+		stage.ResourceType = "release"
+		stage.ResourceID = run.ReleaseID
 	}
 	resumed, err := s.repo.ResumeFailedRun(run.ID, values, stage)
 	if err != nil {
