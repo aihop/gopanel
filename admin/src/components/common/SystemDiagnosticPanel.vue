@@ -108,7 +108,7 @@ import { getSystemDiagnosticState, streamSystemDiagnostic } from "@/api/modules/
 import type { SystemDiagnosticMessage, SystemDiagnosticState } from "@/api/interface/systemDiagnostic"
 import { systemDiagnosticMessages } from "@/i18n/locales/systemDiagnostic"
 import { useMessage } from "naive-ui"
-import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 
 const emit = defineEmits<{ close: []; "drag-start": [event: PointerEvent] }>()
@@ -174,8 +174,8 @@ async function send() {
 	if (!accountId.value || sending.value) return
 	const createdAt = new Date().toISOString()
 	const temporaryID = -Date.now()
-	const userMessage: SystemDiagnosticMessage = { id: temporaryID, role: "user", content: question, createdAt }
-	const assistantMessage: SystemDiagnosticMessage = { id: temporaryID - 1, role: "agent", content: "", createdAt }
+	const userMessage = reactive<SystemDiagnosticMessage>({ id: temporaryID, role: "user", content: question, createdAt })
+	const assistantMessage = reactive<SystemDiagnosticMessage>({ id: temporaryID - 1, role: "agent", content: "", createdAt })
 	let streamStarted = false
 	messages.value.push(userMessage, assistantMessage)
 	streamingMessage.value = assistantMessage
