@@ -28,6 +28,7 @@ import type {
 	CodeTokenUsageResponse,
 } from "../interface/code"
 import type { CodeProjectBranches } from "../interface/codeBranches"
+import type { CodeProjectCommitResult } from "../interface/codeProjectCommit"
 import type { AIProviderAccount, AIProviderAccountInput } from "../interface/aiAccounts"
 import type { CodeMemoryEntry, CodeMemoryList, CodeMemorySetting } from "../interface/codeMemories"
 import type { CodeResidueCleanupOutcome, CodeWorktreeResidueSummary } from "../interface/codeResidues"
@@ -97,6 +98,11 @@ export function saveAIProviderAccount(data: AIProviderAccountInput, id?: number)
 
 export function deleteAIProviderAccount(id: number) {
 	return http.delete(`/code/ai-accounts/${id}`)
+}
+
+// 直接改用户源仓库，需要显式确认。
+export function commitCodeProjectChanges(projectId: number, message: string) {
+	return http.post<CodeProjectCommitResult[]>(`/code/projects/${projectId}/git/commit`, { message, confirm: true }, 60000)
 }
 
 export function getCodeMemorySetting() {

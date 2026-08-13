@@ -2,7 +2,7 @@
 import { computed, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 import { useMessage } from "naive-ui"
-import { createCodeSession, getCodeExecutors, getCodeWorktreeCapability } from "@/api/modules/code"
+import { commitCodeProjectChanges, createCodeSession, getCodeExecutors, getCodeWorktreeCapability } from "@/api/modules/code"
 import type {
 	CodeApprovalPolicy,
 	CodeExecutor,
@@ -49,6 +49,33 @@ const showProviderConfig = computed(() => providerFields.value.length > 0)
 const providerFieldLabel = (key: keyof CodeExecutorConfig) => t(`code.providerField_${key}`)
 const providerFieldPlaceholder = (key: keyof CodeExecutorConfig) => t(`code.providerPlaceholder_${key}`)
 const dirtyRepositories = computed(() => worktreeCapability.value?.dirtyRepositories || [])
+// 默认选「先提交」而不是「复制进隔离区」：后者会把人写的改动和 AI 的产出
+// 混进同一个提交，还让源仓库一直脏到交付被拒。方便不该是默认值。
+const dirtyStrategy = ref<"commit" | "snapshot">("commit")
+const commitMessage = ref("")
+const committing = ref(false)
+
+async function commitDirtyRepositories() {
+	if (!props.projectId || !commitMessage.value.trim()) return
+	committing.value = true
+	try {
+		const response = await commitCodeProjectChanges(props.projectId, commitMessage.value.trim())
+		if (response.code !== 0) throw new Error(response.message)
+		const failed = response.data.filter(item => item.status === "failed")
+		if (failed.length) {
+			message.error(failed[0].errorMessage || t("code.dirtyCommitFailed"))
+			return
+		}
+		const committed = response.data.filter(item => item.status === "committed").length
+		message.success(t("code.dirtyCommitted", { count: committed }))
+		commitMessage.value = ""
+		await loadWorktreeCapability()
+	} catch (error) {
+		message.error(error instanceof Error && error.message ? error.message : t("code.dirtyCommitFailed"))
+	} finally {
+		committing.value = false
+	}
+}
 const isolationAvailable = computed(() => Boolean(worktreeCapability.value?.available))
 
 const loadExecutors = async () => {
@@ -130,7 +157,7 @@ const submit = async () => {
 			executorId: selectedExecutorId.value,
 			approvalPolicy: approvalPolicy.value,
 			isolated: isolated.value,
-			includeUncommitted: true,
+			includeUncommitted: dirtyStrategy.value === "snapshot",
 			provider:
 				showProviderConfig.value && providerMode.value === "custom"
 					? (Object.fromEntries(
@@ -319,8 +346,38 @@ const submit = async () => {
 									<n-switch v-model:value="isolated" :disabled="!isolationAvailable" />
 								</div>
 								<n-alert v-if="isolated && dirtyRepositories.length" type="warning" :show-icon="false">
-									<div class="text-xs leading-5">
-										{{ t("code.worktreeDirtyRepositories", { repositories: dirtyRepositories.join(", ") }) }}
+									<div class="text-xs font-medium leading-5">
+										{{ t("code.dirtyRepositoriesFound", { repositories: dirtyRepositories.join(", ") }) }}
+									</div>
+									<!-- 把两条路的后果都写出来。原先默认「复制进隔离区」且只说
+									     「会自动安全复制」——「安全」只保证不破坏源目录，
+									     不保证之后不出事，那份安心感是错的。 -->
+									<n-radio-group v-model:value="dirtyStrategy" size="small" class="mt-2 flex flex-col gap-2">
+										<n-radio value="commit">
+											<div class="text-xs font-medium">{{ t("code.dirtyCommitFirst") }}</div>
+											<div class="text-[11px] leading-5 opacity-70">{{ t("code.dirtyCommitFirstHint") }}</div>
+										</n-radio>
+										<n-radio value="snapshot">
+											<div class="text-xs font-medium">{{ t("code.dirtySnapshot") }}</div>
+											<div class="text-[11px] leading-5 opacity-70">{{ t("code.dirtySnapshotHint") }}</div>
+										</n-radio>
+									</n-radio-group>
+									<div v-if="dirtyStrategy === 'commit'" class="mt-2 flex items-center gap-2">
+										<n-input
+											v-model:value="commitMessage"
+											size="small"
+											:placeholder="t('code.dirtyCommitMessage')"
+											:disabled="committing"
+										/>
+										<n-button
+											size="small"
+											type="primary"
+											:loading="committing"
+											:disabled="!commitMessage.trim()"
+											@click="commitDirtyRepositories"
+										>
+											{{ t("code.dirtyCommitAction") }}
+										</n-button>
 									</div>
 								</n-alert>
 								<n-alert v-if="!isolated && dirtyRepositories.length" type="warning" :show-icon="false">

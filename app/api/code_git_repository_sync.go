@@ -152,7 +152,7 @@ func codeRepositoryBaseline(sourceDir, targetBranch, remoteRef string, dirty boo
 			return "", "", "", fmt.Errorf("远端目标分支不可用：%s", remoteRef)
 		}
 		if localCommit != remoteCommit {
-			return "", "", "", fmt.Errorf("源仓库 %s 存在未提交变更且本地分支未与远端同步，请先处理分支差异", filepath.Base(sourceDir))
+			return "", "", "", codeRepositoryDivergenceError(sourceDir, targetBranch, remoteRef)
 		}
 		return localCommit, remoteCommit, "snapshot", nil
 	}
