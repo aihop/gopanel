@@ -94,6 +94,7 @@ func SaveCodeGitCredential(c fiber.Ctx) error {
 	if err := global.DB.Save(&credential).Error; err != nil {
 		return c.JSON(e.Fail(err))
 	}
+	resetCodeSessionRemoteProbeCache()
 	return c.JSON(e.Succ(codeGitCredentialViews([]model.AIGitCredential{credential})[0]))
 }
 
@@ -157,6 +158,7 @@ func DeleteCodeGitCredential(c fiber.Ctx) error {
 	if result.RowsAffected == 0 {
 		return c.JSON(e.Fail(errors.New("Git 凭据不存在")))
 	}
+	resetCodeSessionRemoteProbeCache()
 	return c.JSON(e.Succ(nil))
 }
 

@@ -152,7 +152,7 @@ func createCodeSessionWorktreeFromCandidates(session *model.AIDevSession, projec
 		return fmt.Errorf("创建 Worktree 管理目录失败：%w", err)
 	}
 	branch := codeSessionWorktreeBranch(session.ID, "")
-	if _, err := runCodeGit(repository.SourceDir, "worktree", "add", "-b", branch, worktreeDir, repository.BaseCommit); err != nil {
+	if _, err := runCodeGit(repository.SourceDir, codeSessionWorktreeAddArgs(branch, worktreeDir, repository.BaseCommit)...); err != nil {
 		return err
 	}
 	if err := installCodeManagedPushGuard(worktreeDir); err != nil {
@@ -176,6 +176,10 @@ func createCodeSessionWorktreeFromCandidates(session *model.AIDevSession, projec
 	session.RepositorySync = repository.SyncStatus
 	session.IsolationMode = codeIsolationSingleWorktree
 	return nil
+}
+
+func codeSessionWorktreeAddArgs(branch, worktreeDir, baseCommit string) []string {
+	return []string{"-c", "checkout.workers=0", "worktree", "add", "-b", branch, worktreeDir, baseCommit}
 }
 
 func rollbackCodeSessionWorktree(session *model.AIDevSession) {

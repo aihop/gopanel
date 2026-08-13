@@ -82,7 +82,15 @@ func discoverCodeProjectRepositoryCandidates(
 	project *model.AIProject,
 	sourceDirs []string,
 ) ([]codeRepositoryCandidate, error) {
-	candidates, err := discoverCodeRepositoryCandidates(sourceDirs)
+	return discoverCodeProjectRepositoryCandidatesWithStatus(project, sourceDirs, true)
+}
+
+func discoverCodeProjectRepositoryCandidatesWithStatus(
+	project *model.AIProject,
+	sourceDirs []string,
+	inspectStatus bool,
+) ([]codeRepositoryCandidate, error) {
+	candidates, err := discoverCodeRepositoryCandidatesWithStatus(sourceDirs, inspectStatus)
 	if err != nil {
 		return nil, err
 	}

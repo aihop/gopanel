@@ -3,7 +3,9 @@ package api
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/aihop/gopanel/app/model"
 )
@@ -23,6 +25,49 @@ func TestValidateCodeSessionPrerequisitesRejectsDirtySource(t *testing.T) {
 	// 允许包含未提交内容时，脏工作区不该阻断创建。
 	if err := validateCodeSessionPrerequisites(project, true); err != nil {
 		t.Fatalf("snapshot mode should tolerate a dirty source: %v", err)
+	}
+}
+
+func TestDiscoverCodeRepositoryCandidatesCanSkipStatusScan(t *testing.T) {
+	repositoryDir := createCodeGitRepository(t)
+	if err := os.WriteFile(filepath.Join(repositoryDir, "README.md"), []byte("dirty\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	withoutStatus, err := discoverCodeRepositoryCandidatesWithStatus([]string{repositoryDir}, false)
+	if err != nil || len(withoutStatus) != 1 {
+		t.Fatalf("discover without status = %#v, %v", withoutStatus, err)
+	}
+	if withoutStatus[0].Dirty {
+		t.Fatal("status-free discovery should not inspect dirty files")
+	}
+	withStatus, err := discoverCodeRepositoryCandidatesWithStatus([]string{repositoryDir}, true)
+	if err != nil || len(withStatus) != 1 || !withStatus[0].Dirty {
+		t.Fatalf("discover with status = %#v, %v", withStatus, err)
+	}
+}
+
+func TestCodeSessionRemoteProbeCacheExpires(t *testing.T) {
+	resetCodeSessionRemoteProbeCache()
+	t.Cleanup(resetCodeSessionRemoteProbeCache)
+	cacheKey := strings.Join([]string{"repo", "origin", "remote", "0"}, "\x00")
+	now := time.Now()
+	codeSessionRemoteProbes.Lock()
+	codeSessionRemoteProbes.succeeded[cacheKey] = now.Add(time.Second)
+	codeSessionRemoteProbes.Unlock()
+
+	if !codeSessionRemoteProbeCached(cacheKey, now) {
+		t.Fatal("successful remote probe should be reused before expiry")
+	}
+	if codeSessionRemoteProbeCached(cacheKey, now.Add(2*time.Second)) {
+		t.Fatal("expired remote probe should not be reused")
+	}
+}
+
+func TestCodeSessionWorktreeUsesParallelCheckout(t *testing.T) {
+	args := codeSessionWorktreeAddArgs("code/task", "/tmp/worktree", "base")
+	if got := strings.Join(args, " "); !strings.Contains(got, "-c checkout.workers=0 worktree add") {
+		t.Fatalf("worktree add should enable parallel checkout, got %q", got)
 	}
 }
 

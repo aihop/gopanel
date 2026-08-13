@@ -146,7 +146,7 @@ func createCodeSessionRepositoryWorktrees(session *model.AIDevSession, project *
 		repository := preparedBySource[source.Path]
 		branch := branches[source.Path]
 		worktreeDir := filepath.Join(workspaceDir, source.LinkName)
-		if _, err := runCodeGit(source.Path, "worktree", "add", "-b", branch, worktreeDir, repository.BaseCommit); err != nil {
+		if _, err := runCodeGit(source.Path, codeSessionWorktreeAddArgs(branch, worktreeDir, repository.BaseCommit)...); err != nil {
 			rollback()
 			return err
 		}

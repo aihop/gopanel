@@ -11,14 +11,16 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/aihop/gopanel/app/model"
 )
 
 const (
-	maxCodeSnapshotFileBytes  = 64 << 20
-	maxCodeSnapshotPatchBytes = 128 << 20
-	maxCodeSnapshotTotalBytes = 512 << 20
+	maxCodeSnapshotFileBytes    = 64 << 20
+	maxCodeSnapshotPatchBytes   = 128 << 20
+	maxCodeSnapshotTotalBytes   = 512 << 20
+	codeRepositoryStatusWorkers = 4
 )
 
 type codeRepositoryCandidate struct {
@@ -29,6 +31,10 @@ type codeRepositoryCandidate struct {
 }
 
 func discoverCodeRepositoryCandidates(sourceDirs []string) ([]codeRepositoryCandidate, error) {
+	return discoverCodeRepositoryCandidatesWithStatus(sourceDirs, true)
+}
+
+func discoverCodeRepositoryCandidatesWithStatus(sourceDirs []string, inspectStatus bool) ([]codeRepositoryCandidate, error) {
 	roots, err := discoverCodeRepositoryRoots(sourceDirs)
 	if err != nil {
 		return nil, err
@@ -59,12 +65,35 @@ func discoverCodeRepositoryCandidates(sourceDirs []string) ([]codeRepositoryCand
 			parents[candidate.ParentSourceDir] = true
 		}
 	}
+	if !inspectStatus {
+		return candidates, nil
+	}
+	jobs := make(chan int)
+	errorsByIndex := make([]error, len(candidates))
+	var workers sync.WaitGroup
+	workers.Add(min(codeRepositoryStatusWorkers, len(candidates)))
+	for range min(codeRepositoryStatusWorkers, len(candidates)) {
+		go func() {
+			defer workers.Done()
+			for index := range jobs {
+				status, statusErr := codeRepositoryStatus(candidates[index].SourceDir, parents[candidates[index].SourceDir])
+				if statusErr != nil {
+					errorsByIndex[index] = statusErr
+					continue
+				}
+				candidates[index].Dirty = strings.TrimSpace(status) != ""
+			}
+		}()
+	}
 	for index := range candidates {
-		status, statusErr := codeRepositoryStatus(candidates[index].SourceDir, parents[candidates[index].SourceDir])
+		jobs <- index
+	}
+	close(jobs)
+	workers.Wait()
+	for _, statusErr := range errorsByIndex {
 		if statusErr != nil {
 			return nil, statusErr
 		}
-		candidates[index].Dirty = strings.TrimSpace(status) != ""
 	}
 	return candidates, nil
 }
