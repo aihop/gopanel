@@ -27,12 +27,13 @@ const (
 var flowVersionPattern = regexp.MustCompile(`^[0-9A-Za-z][0-9A-Za-z._+-]{0,49}$`)
 
 type FlowRunCreateInput struct {
-	FlowID            uint   `json:"flowId"`
-	CodeDeliveryJobID uint   `json:"codeDeliveryJobId"`
-	SourceCommit      string `json:"sourceCommit"`
-	Version           string `json:"version"`
-	SessionID         uint   `json:"sessionId"`
-	TaskID            uint   `json:"taskId"`
+	FlowID             uint   `json:"flowId"`
+	CodeDeliveryJobID  uint   `json:"codeDeliveryJobId"`
+	UseProjectBaseline bool   `json:"useProjectBaseline"`
+	SourceCommit       string `json:"sourceCommit"`
+	Version            string `json:"version"`
+	SessionID          uint   `json:"sessionId"`
+	TaskID             uint   `json:"taskId"`
 }
 
 type FlowRunApplicationService struct {
@@ -82,16 +83,32 @@ func (s *FlowRunApplicationService) Create(input FlowRunCreateInput, userID uint
 	sourceType, sourceDigest, sourceManifest := "git", "", ""
 	commit, sessionID, taskID, codeDeliveryJobID := "", input.SessionID, input.TaskID, uint(0)
 	if pipelineSourceType(pipeline) == "code" {
-		manifest, digest, job, resolveErr := s.resolveFlowCodeDelivery(input.CodeDeliveryJobID, flow.ProjectID)
-		if resolveErr != nil {
-			return nil, resolveErr
+		var manifest flowSourceManifest
+		var digest string
+		if input.UseProjectBaseline {
+			var available bool
+			manifest, digest, _, available, err = s.resolveFlowProjectBaseline(flow.ProjectID)
+			if err != nil {
+				return nil, err
+			}
+			if !available {
+				return nil, buserr.New(constant.ErrFlowCodeBaselineUnavailable)
+			}
+			sourceType = "code_baseline"
+		} else {
+			var job *model.AICodeDeliveryJob
+			manifest, digest, job, err = s.resolveFlowCodeDelivery(input.CodeDeliveryJobID, flow.ProjectID)
+			if err != nil {
+				return nil, err
+			}
+			sourceType, sessionID, taskID, codeDeliveryJobID = "code_delivery", job.SessionID, job.TaskID, job.ID
 		}
 		encodedManifest, marshalErr := json.Marshal(manifest)
 		if marshalErr != nil {
 			return nil, marshalErr
 		}
-		sourceType, sourceDigest, sourceManifest = "code_delivery", digest, string(encodedManifest)
-		commit, sessionID, taskID, codeDeliveryJobID = flowManifestPrimaryCommit(manifest), job.SessionID, job.TaskID, job.ID
+		sourceDigest, sourceManifest = digest, string(encodedManifest)
+		commit = flowManifestPrimaryCommit(manifest)
 	} else {
 		commit, err = normalizePipelineExpectedCommit(input.SourceCommit)
 		if err != nil || commit == "" {
@@ -122,7 +139,10 @@ func (s *FlowRunApplicationService) Create(input FlowRunCreateInput, userID uint
 		now := time.Now()
 		sourceRepository := pipeline.RepoUrl
 		if pipelineSourceType(pipeline) == "code" {
-			sourceRepository = fmt.Sprintf("code-delivery:%d", codeDeliveryJobID)
+			sourceRepository = sourceType
+			if sourceType == "code_delivery" {
+				sourceRepository = fmt.Sprintf("code-delivery:%d", codeDeliveryJobID)
+			}
 		}
 		item := &model.FlowRun{
 			FlowID: flow.ID, ProjectID: flow.ProjectID, PipelineID: flow.PipelineID,
@@ -144,15 +164,15 @@ func (s *FlowRunApplicationService) Create(input FlowRunCreateInput, userID uint
 			}
 			return nil, createErr
 		}
-		if sourceType == "code_delivery" {
+		if isFlowCodeSourceType(sourceType) {
 			var manifest flowSourceManifest
 			if json.Unmarshal([]byte(sourceManifest), &manifest) != nil {
 				_ = s.repo.DeleteRun(item.ID)
-				return nil, buserr.New(constant.ErrFlowCodeDeliveryInvalid)
+				return nil, buserr.New(constant.ErrFlowCodeSourceInvalid)
 			}
 			if retainErr := retainFlowSourceCommits(item.ID, manifest); retainErr != nil {
 				_ = s.repo.DeleteRun(item.ID)
-				return nil, buserr.New(constant.ErrFlowCodeDeliveryInvalid)
+				return nil, buserr.New(constant.ErrFlowCodeSourceInvalid)
 			}
 		}
 		if s.autoStart {
@@ -215,7 +235,7 @@ func (s *FlowRunApplicationService) fillRunSummaries(items []model.FlowRun) erro
 		items[index].FlowName = flow.Name
 		items[index].ProjectName = loadFlowRunName(s.db, "ai_projects", items[index].ProjectID)
 		items[index].PipelineName = loadFlowRunName(s.db, "pipelines", items[index].PipelineID)
-		if items[index].SourceType == "code_delivery" && strings.TrimSpace(items[index].SourceManifest) != "" {
+		if isFlowCodeSourceType(items[index].SourceType) && strings.TrimSpace(items[index].SourceManifest) != "" {
 			var manifest flowSourceManifest
 			if json.Unmarshal([]byte(items[index].SourceManifest), &manifest) == nil {
 				items[index].SourceTaskTitle = manifest.TaskTitle
@@ -230,6 +250,10 @@ func (s *FlowRunApplicationService) fillRunSummaries(items []model.FlowRun) erro
 		}
 	}
 	return nil
+}
+
+func isFlowCodeSourceType(sourceType string) bool {
+	return sourceType == "code_delivery" || sourceType == "code_baseline"
 }
 
 func flowManifestPrimaryCommit(manifest flowSourceManifest) string {

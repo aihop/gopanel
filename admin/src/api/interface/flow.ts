@@ -78,7 +78,7 @@ export namespace Flow {
 		pipelineName: string
 		version: string
 		sourceBranch: string
-		sourceType: "git" | "code_delivery"
+		sourceType: "git" | "code_delivery" | "code_baseline"
 		sourceCommit: string
 		sourceDigest: string
 		sourceTaskTitle: string
@@ -99,6 +99,7 @@ export namespace Flow {
 	export interface RunCreateInput {
 		flowId: number
 		codeDeliveryJobId?: number
+		useProjectBaseline?: boolean
 		sourceCommit?: string
 		version?: string
 	}
@@ -117,6 +118,13 @@ export namespace Flow {
 		taskTitle: string
 		completedAt?: string
 		sourceDigest: string
+		repositories: SourceRepository[]
+	}
+
+	export interface CodeBaselineSource {
+		available: boolean
+		sourceDigest?: string
+		hasUncommittedChanges: boolean
 		repositories: SourceRepository[]
 	}
 }

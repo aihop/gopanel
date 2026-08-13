@@ -33,3 +33,7 @@ export function createFlowRun(input: Flow.RunCreateInput) {
 export function getFlowCodeDeliverySources(flowId: number) {
 	return http.get<Flow.CodeDeliverySource[]>(`/flow/${flowId}/code-deliveries`)
 }
+
+export function getFlowCodeBaselineSource(flowId: number) {
+	return http.get<Flow.CodeBaselineSource>(`/flow/${flowId}/code-baseline`)
+}

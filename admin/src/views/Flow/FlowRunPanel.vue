@@ -45,6 +45,7 @@ function runSourceLabel(run: Flow.Run) {
 	if (run.sourceType === "code_delivery") {
 		return run.sourceTaskTitle || t("flow.codeDeliveryJob", { id: run.codeDeliveryJobId })
 	}
+	if (run.sourceType === "code_baseline") return t("flow.projectBaseline")
 	return run.sourceCommit.slice(0, 12)
 }
 
@@ -111,7 +112,7 @@ useIntervalFn(() => {
 						<n-descriptions bordered :column="1" size="small">
 							<n-descriptions-item :label="t('flow.runVersion')">{{ detail.version }}</n-descriptions-item>
 							<n-descriptions-item v-if="detail.sourceType === 'git'" :label="t('flow.sourceCommit')"><span class="break-all font-mono text-xs">{{ detail.sourceCommit }}</span></n-descriptions-item>
-							<n-descriptions-item v-else :label="t('flow.codeDeliverySource')">{{ detail.sourceTaskTitle || t("flow.codeDeliveryJob", { id: detail.codeDeliveryJobId }) }}</n-descriptions-item>
+							<n-descriptions-item v-else :label="t('flow.codeDeliverySource')">{{ detail.sourceType === "code_baseline" ? t("flow.projectBaseline") : (detail.sourceTaskTitle || t("flow.codeDeliveryJob", { id: detail.codeDeliveryJobId })) }}</n-descriptions-item>
 							<n-descriptions-item v-if="detail.sourceDigest" :label="t('flow.sourceDigest')"><span class="break-all font-mono text-xs">{{ detail.sourceDigest }}</span></n-descriptions-item>
 							<n-descriptions-item :label="t('flow.runStatusLabel')"><n-tag size="small" :type="runType(detail.status)">{{ t(`flow.runStatus.${detail.status}`) }}</n-tag></n-descriptions-item>
 							<n-descriptions-item :label="t('flow.pipelineRecord')">{{ detail.pipelineRecordId || "-" }}</n-descriptions-item>

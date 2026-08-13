@@ -55,7 +55,7 @@ func (s *PipelineService) prepareFlowCodeDeliverySource(
 	if err := s.db.First(&run, record.SourceID).Error; err != nil {
 		return "", "", fmt.Errorf("读取 Flow 正式版本失败: %w", err)
 	}
-	if run.PipelineID != pipeline.ID || run.ProjectID != pipeline.CodeProjectID || run.SourceType != "code_delivery" {
+	if run.PipelineID != pipeline.ID || run.ProjectID != pipeline.CodeProjectID || !isFlowCodeSourceType(run.SourceType) {
 		return "", "", errors.New("Flow 正式版本与流水线代码来源不一致")
 	}
 	var manifest flowSourceManifest
@@ -78,7 +78,7 @@ func (s *PipelineService) prepareFlowCodeDeliverySource(
 		return "", "", err
 	}
 	defer os.RemoveAll(tempDir)
-	logger.Info("正在物化 Flow 正式版本: version=%s, delivery=%d", run.Version, run.CodeDeliveryJobID)
+	logger.Info("正在物化 Flow 正式版本: version=%s, source=%s", run.Version, run.SourceType)
 	if err := materializeFlowSourceManifest(ctx, manifest, tempDir); err != nil {
 		return "", "", err
 	}

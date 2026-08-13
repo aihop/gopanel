@@ -33,6 +33,7 @@ type FlowCodeDeliverySource struct {
 
 type flowSourceManifest struct {
 	SchemaVersion int                            `json:"schemaVersion"`
+	SourceType    string                         `json:"sourceType,omitempty"`
 	DeliveryJobID uint                           `json:"deliveryJobId"`
 	SessionID     uint                           `json:"sessionId"`
 	TaskID        uint                           `json:"taskId"`
@@ -129,7 +130,7 @@ func (s *FlowRunApplicationService) resolveFlowCodeDeliveryManifest(project *mod
 		_ = s.db.Select("title").First(&task, job.TaskID).Error
 	}
 	manifest := flowSourceManifest{
-		SchemaVersion: flowSourceManifestSchemaVersion, DeliveryJobID: job.ID,
+		SchemaVersion: flowSourceManifestSchemaVersion, SourceType: "code_delivery", DeliveryJobID: job.ID,
 		SessionID: job.SessionID, TaskID: job.TaskID, TaskTitle: strings.TrimSpace(task.Title),
 		Repositories: make([]flowSourceManifestRepository, 0, len(repositories)),
 	}
@@ -282,12 +283,13 @@ func retainFlowSourceCommits(flowRunID uint, manifest flowSourceManifest) error 
 func flowSourceManifestDigest(manifest flowSourceManifest) (string, error) {
 	identity := struct {
 		SchemaVersion int                          `json:"schemaVersion"`
+		SourceType    string                       `json:"sourceType,omitempty"`
 		DeliveryJobID uint                         `json:"deliveryJobId"`
 		SessionID     uint                         `json:"sessionId"`
 		TaskID        uint                         `json:"taskId"`
 		Repositories  []model.FlowSourceRepository `json:"repositories"`
 	}{
-		SchemaVersion: manifest.SchemaVersion, DeliveryJobID: manifest.DeliveryJobID,
+		SchemaVersion: manifest.SchemaVersion, SourceType: manifest.SourceType, DeliveryJobID: manifest.DeliveryJobID,
 		SessionID: manifest.SessionID, TaskID: manifest.TaskID,
 		Repositories: flowPublicSourceRepositories(manifest),
 	}
