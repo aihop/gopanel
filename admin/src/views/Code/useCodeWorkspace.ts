@@ -99,7 +99,7 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 			message.error(error instanceof Error ? error.message : t("code.taskLoadFailed"))
 		},
 		// 工作台的 3 秒节奏只在真有任务在跑时才需要；全空闲时降到 15 秒。
-		{ idleIntervalMs: 15000 },
+		{ idleIntervalMs: 15000, selectedTaskId: currentTaskId },
 	)
 
 	const resetSelectedFile = () => {

@@ -159,6 +159,48 @@ func TestBuildCodeTaskListItemsCanSkipGitInspection(t *testing.T) {
 	}
 }
 
+func TestBuildCodeTaskListItemsLiveGitScopeScansOnlyLiveOrSelectedTasks(t *testing.T) {
+	database := withCodeGovernanceDB(t)
+	repositoryDir := createCodeGitRepository(t)
+	baseCommit, err := runCodeGit(repositoryDir, "rev-parse", "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	commitCodeSummaryFiles(t, repositoryDir, map[string]string{"live-scope.txt": "change\n"})
+	session := &model.AIDevSession{
+		UserID: 1, ProjectID: 1, Title: "session", WorkDir: repositoryDir,
+		SourceWorkDir: repositoryDir, WorktreeBranch: "live-scope", BaseCommit: baseCommit,
+	}
+	if err := database.Create(session).Error; err != nil {
+		t.Fatal(err)
+	}
+	task := &model.AITask{
+		UserID: 1, SessionID: session.ID, ProjectID: 1, Title: "task", WorkDir: repositoryDir, Status: "completed",
+	}
+	if err := database.Create(task).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	assertGitStatus := func(name string, options codeTaskListOptions, want string) {
+		t.Helper()
+		items, buildErr := buildCodeTaskListItemsWithOptions([]*model.AITask{task}, options)
+		if buildErr != nil {
+			t.Fatalf("%s: %v", name, buildErr)
+		}
+		if got := items[0].Summary.GitStatus; got != want {
+			t.Fatalf("%s: Git status = %q, want %q", name, got, want)
+		}
+	}
+
+	assertGitStatus("full scope", codeTaskListOptions{IncludeGit: true, GitScope: codeTaskGitScopeFull}, "committed")
+	assertGitStatus("completed live task", codeTaskListOptions{IncludeGit: true, GitScope: codeTaskGitScopeLive}, "")
+	assertGitStatus("selected completed task", codeTaskListOptions{
+		IncludeGit: true, GitScope: codeTaskGitScopeLive, SelectedTaskID: task.ID,
+	}, "committed")
+	task.Status = "running"
+	assertGitStatus("running task", codeTaskListOptions{IncludeGit: true, GitScope: codeTaskGitScopeLive}, "committed")
+}
+
 func TestApplyCodeTaskRepositorySummariesAggregatesMixedRepositories(t *testing.T) {
 	summary := codeTaskSummary{}
 	repositories := []model.AIDevSessionRepository{

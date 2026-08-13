@@ -23,6 +23,11 @@ func GetAITasks(c fiber.Ctx) error {
 	page, limit = normalizeCodePage(page, limit, 20)
 	projectID, _ := strconv.Atoi(c.Query("projectId", "0"))
 	includeGit := c.Query("includeGit") != "false"
+	gitScope := codeTaskGitScopeFull
+	if c.Query("gitScope") == string(codeTaskGitScopeLive) {
+		gitScope = codeTaskGitScopeLive
+	}
+	selectedTaskID, _ := strconv.Atoi(c.Query("selectedTaskId", "0"))
 	// 默认只列没归档的：归档就是「别再让我看到它」。
 	// 传 archived=1 才单独看归档列表，用于找回误归档的任务。
 	archived := c.Query("archived") == "1"
@@ -46,7 +51,9 @@ func GetAITasks(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	items, err := buildCodeTaskListItems(tasks, includeGit)
+	items, err := buildCodeTaskListItemsWithOptions(tasks, codeTaskListOptions{
+		IncludeGit: includeGit, GitScope: gitScope, SelectedTaskID: uint(max(selectedTaskID, 0)),
+	})
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}

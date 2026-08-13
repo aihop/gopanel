@@ -4,7 +4,8 @@ import { useDocumentVisibility, useIntervalFn } from "@vueuse/core"
 import { getAITasks } from "@/api/modules/code"
 import type { CodeTaskListItem } from "@/api/interface/codeTasks"
 
-const ACTIVE_TASK_STATUSES = ["running", "queued", "pending_approval", "delivering"]
+const ACTIVE_TASK_STATUSES = ["active", "running", "queued", "pending_approval", "delivering"]
+type CodeTaskGitMode = "none" | "live" | "full"
 
 export interface CodeTaskPollingOptions {
 	/** 轮询间隔。开发面板是常驻页面，用比工作台更松的节奏。 */
@@ -24,6 +25,8 @@ export interface CodeTaskPollingOptions {
 	 * 没有任何东西在跑的时候还按秒级刷新纯属浪费；开了这个就自适应降频。
 	 */
 	idleIntervalMs?: number
+	/** 自动 Git 刷新始终包含当前选中任务，即使任务已完成。 */
+	selectedTaskId?: Ref<number | null>
 }
 
 export function useCodeTaskPolling(
@@ -33,25 +36,32 @@ export function useCodeTaskPolling(
 	onError: (error: unknown) => void,
 	options: CodeTaskPollingOptions = {},
 ) {
-	const { intervalMs = 3000, gitEveryPolls = 10, limit = 50, allProjects = false, archived, idleIntervalMs = 0 } = options
+	const { intervalMs = 3000, gitEveryPolls = 10, limit = 50, allProjects = false, archived, idleIntervalMs = 0, selectedTaskId } = options
 	let requestPending = false
-	let gitRefreshPending = false
+	let activeGitMode: CodeTaskGitMode = "none"
+	let activeSelectedTaskId = 0
+	let pendingGitMode: CodeTaskGitMode = "none"
 	let pollCount = 0
-	const fetchTasks = async (silent = false, includeGit = true) => {
+	const fetchTasks = async (silent = false, gitMode: CodeTaskGitMode = "full") => {
 		if (!allProjects && !projectId.value) return
+		const requestedSelectedTaskId = selectedTaskId?.value || 0
 		if (requestPending) {
-			if (includeGit) gitRefreshPending = true
+			if (gitMode === activeGitMode && (gitMode !== "live" || requestedSelectedTaskId === activeSelectedTaskId)) return
+			pendingGitMode = strongerGitMode(pendingGitMode, gitMode)
 			return
 		}
 		const requestedProjectId = allProjects ? 0 : projectId.value
 		const requestedArchived = archived?.value === true
 		requestPending = true
+		activeGitMode = gitMode
+		activeSelectedTaskId = requestedSelectedTaskId
 		try {
 			const response = await getAITasks({
 				page: 1,
 				limit,
 				projectId: requestedProjectId,
-				includeGit,
+				includeGit: gitMode !== "none",
+				...(gitMode === "live" ? { gitScope: "live" as const, selectedTaskId: requestedSelectedTaskId } : {}),
 				...(requestedArchived ? { archived: 1 as const } : {}),
 			})
 			if (response.code !== 0) throw new Error(response.message)
@@ -60,7 +70,7 @@ export function useCodeTaskPolling(
 			if (requestedArchived !== (archived?.value === true)) return
 			const previousTasks = new Map(tasks.value.map(task => [task.id, task]))
 			tasks.value = (response.data.items || []).map(task => {
-				if (includeGit) return task
+				if (gitMode === "full" || (gitMode === "live" && taskNeedsLiveGitSummary(task, requestedSelectedTaskId))) return task
 				const previous = previousTasks.get(task.id)
 				return previous ? { ...task, summary: { ...task.summary, ...pickCodeTaskGitSummary(previous) } } : task
 			})
@@ -69,15 +79,18 @@ export function useCodeTaskPolling(
 			if (!silent) onError(error)
 		} finally {
 			requestPending = false
-			if (gitRefreshPending) {
-				gitRefreshPending = false
-				void fetchTasks(true, true)
+			activeGitMode = "none"
+			activeSelectedTaskId = 0
+			if (pendingGitMode !== "none") {
+				const nextGitMode = pendingGitMode
+				pendingGitMode = "none"
+				void fetchTasks(true, nextGitMode)
 			}
 		}
 	}
 	const fetchTasksFast = async (silent = false) => {
-		await fetchTasks(silent, false)
-		setTimeout(() => void fetchTasks(true, true), 0)
+		await fetchTasks(silent, "none")
+		setTimeout(() => void fetchTasks(true, "live"), 0)
 	}
 	// 自适应节奏，替代「不管有没有事都按秒刷」：
 	//   1. 页面不可见（切标签页/最小化）→ 完全不发请求，回来时立刻补一次；
@@ -95,15 +108,29 @@ export function useCodeTaskPolling(
 		}
 		idleTicks = 0
 		pollCount++
-		void fetchTasks(true, pollCount % gitEveryPolls === 0)
+		void fetchTasks(true, pollCount % gitEveryPolls === 0 ? "live" : "none")
 	}, intervalMs)
 
 	// 切回页面立刻刷一次，不让用户对着一屏可能已经过时的数据等下一拍。
 	watch(visibility, value => {
-		if (value === "visible") void fetchTasks(true, true)
+		if (value === "visible") void fetchTasks(true, "live")
 	})
+	if (selectedTaskId) {
+		watch(selectedTaskId, (value, previous) => {
+			if (value && value !== previous) void fetchTasks(true, "live")
+		})
+	}
 
 	return { fetchTasks, fetchTasksFast }
+}
+
+function strongerGitMode(current: CodeTaskGitMode, requested: CodeTaskGitMode): CodeTaskGitMode {
+	const priority = { none: 0, live: 1, full: 2 }
+	return priority[requested] > priority[current] ? requested : current
+}
+
+function taskNeedsLiveGitSummary(task: CodeTaskListItem, selectedTaskId: number) {
+	return task.id === selectedTaskId || ACTIVE_TASK_STATUSES.includes(task.status)
 }
 
 function pickCodeTaskGitSummary(task: CodeTaskListItem) {

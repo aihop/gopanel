@@ -62,6 +62,7 @@ const { fetchTasks, fetchTasksFast } = useCodeTaskPolling(
 		allProjects: true,
 		archived: showArchived,
 		idleIntervalMs: 20000,
+		selectedTaskId,
 	},
 )
 
@@ -69,7 +70,7 @@ const refreshTasks = async (silent = true) => {
 	// 失败标记在每次显式刷新前清掉，成功后 onError 不会再置回来，横幅自己就消失了。
 	if (!silent) tasksLoadError.value = false
 	now.value = new Date()
-	await fetchTasks(silent, true)
+	await fetchTasks(silent, "full")
 }
 
 // 「今天」是按本地日历判断的，时间戳得自己往前走，否则跨零点会一直停在昨天。

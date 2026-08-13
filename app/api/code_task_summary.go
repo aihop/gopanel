@@ -97,7 +97,24 @@ type codeTaskDurationSummaryRow struct {
 	PendingRuns     int64
 }
 
+type codeTaskGitScope string
+
+const (
+	codeTaskGitScopeFull codeTaskGitScope = "full"
+	codeTaskGitScopeLive codeTaskGitScope = "live"
+)
+
+type codeTaskListOptions struct {
+	IncludeGit     bool
+	GitScope       codeTaskGitScope
+	SelectedTaskID uint
+}
+
 func buildCodeTaskListItems(tasks []*model.AITask, includeGit bool) ([]codeTaskListItem, error) {
+	return buildCodeTaskListItemsWithOptions(tasks, codeTaskListOptions{IncludeGit: includeGit, GitScope: codeTaskGitScopeFull})
+}
+
+func buildCodeTaskListItemsWithOptions(tasks []*model.AITask, options codeTaskListOptions) ([]codeTaskListItem, error) {
 	items := make([]codeTaskListItem, 0, len(tasks))
 	if len(tasks) == 0 {
 		return items, nil
@@ -120,8 +137,15 @@ func buildCodeTaskListItems(tasks []*model.AITask, includeGit bool) ([]codeTaskL
 	if err := loadCodeTaskActivitySummaries(tasks, sessionIDs, summaries); err != nil {
 		return nil, err
 	}
-	if includeGit {
-		if err := loadCodeTaskGitSummaries(tasks, sessionIDs, summaries, make(map[string]codeTaskDiffStats)); err != nil {
+	if options.IncludeGit {
+		gitTasks := selectCodeTasksForGitSummary(tasks, options.GitScope, options.SelectedTaskID)
+		gitSessionIDs := make([]uint, 0, len(gitTasks))
+		for _, task := range gitTasks {
+			if task.SessionID > 0 {
+				gitSessionIDs = append(gitSessionIDs, task.SessionID)
+			}
+		}
+		if err := loadCodeTaskGitSummaries(gitTasks, gitSessionIDs, summaries, make(map[string]codeTaskDiffStats)); err != nil {
 			return nil, err
 		}
 	}
@@ -129,6 +153,28 @@ func buildCodeTaskListItems(tasks []*model.AITask, includeGit bool) ([]codeTaskL
 		items = append(items, codeTaskListItem{AITask: task, Summary: summaries[task.ID]})
 	}
 	return items, nil
+}
+
+func selectCodeTasksForGitSummary(tasks []*model.AITask, scope codeTaskGitScope, selectedTaskID uint) []*model.AITask {
+	if scope != codeTaskGitScopeLive {
+		return tasks
+	}
+	selected := make([]*model.AITask, 0, len(tasks))
+	for _, task := range tasks {
+		if task.ID == selectedTaskID || codeTaskNeedsLiveGitSummary(task.Status) {
+			selected = append(selected, task)
+		}
+	}
+	return selected
+}
+
+func codeTaskNeedsLiveGitSummary(status string) bool {
+	switch status {
+	case "active", "queued", "running", "pending_approval", "delivering":
+		return true
+	default:
+		return false
+	}
 }
 
 func loadCodeTaskDeliverySummaries(sessionIDs []uint, summaries map[uint]codeTaskSummary, tasks []*model.AITask) error {
