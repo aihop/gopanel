@@ -78,7 +78,7 @@ func GetSecurityMonitoringConfig() (model.SecurityMonitoringConfig, error) {
 	return repo.NewSecurityMonitoring().GetConfig()
 }
 
-func SaveSecurityMonitoringConfig(config *model.SecurityMonitoringConfig) error {
+func SaveSecurityMonitoringConfig(config *model.SecurityMonitoringConfig, userID uint) error {
 	if config == nil {
 		return errors.New("安全监测配置不能为空")
 	}
@@ -93,6 +93,28 @@ func SaveSecurityMonitoringConfig(config *model.SecurityMonitoringConfig) error 
 	}
 	if config.DebounceTimes < 1 || config.DebounceTimes > 10 {
 		return errors.New("风险去抖次数必须在 1 到 10 之间")
+	}
+	if config.RequestPerMinute < 1 || config.NotFoundPerMinute < 1 || config.ServerErrorPerMinute < 1 ||
+		config.LoginFailurePerMinute < 1 || config.SSHFailurePerMinute < 1 {
+		return errors.New("安全规则阈值必须大于 0")
+	}
+	if config.AIDailyTokenBudget < 0 {
+		return errors.New("AI 每日 Token 预算不能小于 0")
+	}
+	if config.AIEnabled {
+		if config.AIProviderAccountID == 0 {
+			return errors.New("启用 AI 研判前请选择安全分析账号")
+		}
+		var account model.AIProviderAccount
+		if err := global.DB.Where(
+			"id = ? AND user_id = ? AND enabled = ? AND use_for_security_analysis = ?",
+			config.AIProviderAccountID, userID, true, true,
+		).First(&account).Error; err != nil {
+			return errors.New("所选 AI 账号不存在、已停用或未授权安全分析")
+		}
+		if account.APIKey == "" {
+			return errors.New("所选 AI 账号未配置密钥")
+		}
 	}
 	if config.ResolveAfterMinutes < 1 || config.ResolveAfterMinutes > 1440 {
 		return errors.New("恢复判定时间必须在 1 到 1440 分钟之间")

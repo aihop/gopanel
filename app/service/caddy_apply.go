@@ -110,7 +110,11 @@ func renderCaddyfile(websites []model.Website, domainByWebsite map[uint][]model.
 				b.WriteString("  log {\n")
 				b.WriteString("    output file ")
 				b.WriteString(accessLogPath)
-				b.WriteString("\n")
+				b.WriteString(" {\n")
+				b.WriteString("      roll_size 100MiB\n")
+				b.WriteString("      roll_keep 10\n")
+				b.WriteString("      roll_keep_for 720h\n")
+				b.WriteString("    }\n")
 				b.WriteString("  }\n\n")
 			}
 		}

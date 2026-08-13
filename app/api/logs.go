@@ -39,7 +39,7 @@ func GetSystemLogs(c fiber.Ctx) error {
 		return c.JSON(e.Result(err))
 	}
 	logService := service.NewLogService()
-	content, err := logService.ReadSystemLog(req.Name)
+	content, err := logService.ReadSystemLog(req.Name, req.MaxBytes)
 	if err != nil {
 		return c.JSON(e.Result(buserr.Err(err)))
 	}

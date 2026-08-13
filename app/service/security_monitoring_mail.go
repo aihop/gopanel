@@ -20,11 +20,15 @@ func notifySecurityEvent(event *model.SecurityEvent, resolved bool) {
 	if err != nil || !cfg.Enabled || !cfg.EnableSecurity {
 		return
 	}
+	if resolved && (!cfg.NotifyResolved || event.LastNotifiedAt == nil) {
+		return
+	}
 	if !resolved && securityLevelRank(event.Level) < securityLevelRank("high") && !cfg.EnableSecurityLowMedium {
 		return
 	}
 	subject, body := buildSecurityEventMail(event, resolved)
 	now := time.Now()
+	event.LastNotifyAttemptAt = &now
 	if err := SendNotifyMail(cfg, subject, body); err != nil {
 		event.NotifyStatus, event.NotifyError = "failed", err.Error()
 		global.LOG.Errorf("[Security] 风险事件 %d 邮件发送失败: %v", event.ID, err)
@@ -36,11 +40,13 @@ func notifySecurityEvent(event *model.SecurityEvent, resolved bool) {
 	}
 }
 
-func notifySecurityAIUpdate(event *model.SecurityEvent, previousLevel, previousConclusion string) {
+func notifySecurityAIUpdate(event *model.SecurityEvent, previousLevel, previousConclusion, previousEvidence string) {
 	if event == nil || event.AnalysisStatus != model.SecurityAnalysisCompleted {
 		return
 	}
-	if securityLevelRank(event.Level) <= securityLevelRank(previousLevel) && strings.TrimSpace(event.AIConclusion) == strings.TrimSpace(previousConclusion) {
+	if securityLevelRank(event.Level) <= securityLevelRank(previousLevel) &&
+		strings.TrimSpace(event.AIConclusion) == strings.TrimSpace(previousConclusion) &&
+		strings.TrimSpace(event.AIEvidence) == strings.TrimSpace(previousEvidence) {
 		return
 	}
 	cfg, err := repo.NewNotify().GetConfig()
@@ -54,11 +60,12 @@ func notifySecurityAIUpdate(event *model.SecurityEvent, previousLevel, previousC
 	_, body := buildSecurityEventMail(event, false)
 	body = "AI 已完成风险研判，结论如下：\n\n" + body
 	now := time.Now()
+	event.LastNotifyAttemptAt = &now
 	if err := SendNotifyMail(cfg, subject, body); err != nil {
-		event.NotifyError = err.Error()
+		event.NotifyStatus, event.NotifyError = "failed", err.Error()
 		global.LOG.Errorf("[Security] 风险事件 %d AI 补充邮件失败: %v", event.ID, err)
 	} else {
-		event.LastAINotifiedAt, event.NotifyError = &now, ""
+		event.LastAINotifiedAt, event.NotifyStatus, event.NotifyError = &now, "sent", ""
 	}
 	_ = repo.NewSecurityMonitoring().SaveEvent(event)
 }
@@ -69,10 +76,14 @@ func RetrySecurityNotifications() {
 		return
 	}
 	silenceHours := cfg.SilenceHours
-	if silenceHours <= 0 {
-		return
+	now := time.Now()
+	var reminderBefore time.Time
+	if silenceHours > 0 {
+		reminderBefore = now.Add(-time.Duration(silenceHours) * time.Hour)
 	}
-	events, err := repo.NewSecurityMonitoring().EventsNeedingNotification(time.Now().Add(-time.Duration(silenceHours)*time.Hour), 20)
+	events, err := repo.NewSecurityMonitoring().EventsNeedingNotification(
+		reminderBefore, now.Add(-5*time.Minute), 20,
+	)
 	if err != nil {
 		global.LOG.Errorf("[Security] 加载待提醒风险失败: %v", err)
 		return

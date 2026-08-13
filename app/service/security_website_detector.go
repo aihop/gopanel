@@ -28,9 +28,11 @@ type securityWebsiteLog struct {
 }
 
 type websiteActorStats struct {
-	Requests int
-	NotFound int
-	Samples  []string
+	Requests      int
+	NotFound      int
+	LoginFailures int
+	MaliciousUA   int
+	Samples       []string
 }
 
 var securityWebsitePatterns = []struct {
@@ -43,6 +45,11 @@ var securityWebsitePatterns = []struct {
 	{"path_traversal", regexp.MustCompile(`(?i)(\.\./|%2e%2e(?:%2f|/)|/etc/passwd|/proc/self/environ)`), "路径穿越探测"},
 	{"sensitive_path", regexp.MustCompile(`(?i)(^|/)(\.env|\.git|\.svn|wp-config\.php|config\.(?:yml|yaml|json)|backup|dump\.sql|phpinfo\.php)(?:$|[/?])`), "敏感文件扫描"},
 }
+
+var (
+	securityLoginPathPattern   = regexp.MustCompile(`(?i)(/login|/signin|/auth|/session|/wp-login\.php)(?:$|[/?])`)
+	securityMaliciousUAPattern = regexp.MustCompile(`(?i)(sqlmap|nikto|dirbuster|gobuster|nmap|masscan|acunetix|nessus|wpscan|zgrab|python-requests|go-http-client)`)
+)
 
 func parseSecurityWebsiteLog(line string) (*securityWebsiteLog, bool) {
 	jsonStart := strings.Index(line, "{")
@@ -118,6 +125,16 @@ func detectWebsiteSecurityWindow(website model.Website, entries []*securityWebsi
 		if entry.Status == 404 {
 			stats.NotFound++
 		}
+		if securityLoginPathPattern.MatchString(entry.Request.URI) && (entry.Status == 401 || entry.Status == 403 || entry.Status == 429) {
+			stats.LoginFailures++
+		}
+		userAgent := strings.Join(entry.Request.Headers["User-Agent"], " ")
+		if userAgent == "" {
+			userAgent = strings.Join(entry.Request.Headers["user-agent"], " ")
+		}
+		if securityMaliciousUAPattern.MatchString(userAgent) {
+			stats.MaliciousUA++
+		}
 		if entry.Status >= 500 {
 			serverErrors++
 			if len(serverErrorSamples) < 5 {
@@ -136,7 +153,10 @@ func detectWebsiteSecurityWindow(website model.Website, entries []*securityWebsi
 	}
 	findings := make([]securityFinding, 0)
 	for _, rule := range securityWebsitePatterns {
+		distinctActors := len(patternActors[rule.EventType])
+		totalMatches := 0
 		for ip, samples := range patternActors[rule.EventType] {
+			totalMatches += len(samples)
 			findings = append(findings, securityFinding{
 				SourceType: "website", SourceID: website.ID, SourceName: website.PrimaryDomain,
 				EventType: rule.EventType, Level: "high", Actor: ip,
@@ -144,6 +164,10 @@ func detectWebsiteSecurityWindow(website model.Website, entries []*securityWebsi
 				Value:   float64(len(samples)), SeenAt: latest,
 				Evidence: []securityEvidence{{Source: "website", Description: rule.Label, Count: len(samples), Samples: boundedSecuritySamples(samples, 5)}},
 			})
+		}
+		if distinctActors >= 5 {
+			findings = append(findings, websiteThresholdFinding(website, "distributed_scan", "high", "distributed",
+				fmt.Sprintf("%s 检测到 %d 个来源协同进行%s", website.PrimaryDomain, distinctActors, rule.Label), totalMatches, nil, latest))
 		}
 	}
 	actorIPs := make([]string, 0, len(actors))
@@ -160,6 +184,14 @@ func detectWebsiteSecurityWindow(website model.Website, entries []*securityWebsi
 		if stats.NotFound >= config.NotFoundPerMinute {
 			findings = append(findings, websiteThresholdFinding(website, "not_found_scan", "medium", ip,
 				fmt.Sprintf("%s 检测到来自 %s 的连续路径扫描（%d 次 404）", website.PrimaryDomain, ip, stats.NotFound), stats.NotFound, stats.Samples, latest))
+		}
+		if stats.LoginFailures >= config.LoginFailurePerMinute {
+			findings = append(findings, websiteThresholdFinding(website, "website_login_brute_force", "high", ip,
+				fmt.Sprintf("%s 检测到来自 %s 的登录接口爆破（%d 次失败）", website.PrimaryDomain, ip, stats.LoginFailures), stats.LoginFailures, stats.Samples, latest))
+		}
+		if stats.MaliciousUA > 0 {
+			findings = append(findings, websiteThresholdFinding(website, "malicious_user_agent", "medium", ip,
+				fmt.Sprintf("%s 检测到来自 %s 的恶意扫描工具 User-Agent", website.PrimaryDomain, ip), stats.MaliciousUA, stats.Samples, latest))
 		}
 	}
 	if serverErrors >= config.ServerErrorPerMinute {

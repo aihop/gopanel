@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue"
+import { computed, onMounted, ref } from "vue"
 import { useI18n } from "vue-i18n"
 import { useMessage } from "naive-ui"
 import type { SecurityMonitoringConfig } from "@/api/interface/securityMonitoring"
+import type { AIProviderAccount } from "@/api/interface/aiAccounts"
+import { getAIProviderAccounts } from "@/api/modules/code"
 import {
 	getSecurityMonitoringConfig,
 	saveSecurityMonitoringConfig
@@ -15,12 +17,14 @@ const message = useMessage()
 const loading = ref(false)
 const saving = ref(false)
 const error = ref("")
+const accounts = ref<AIProviderAccount[]>([])
 const form = ref<SecurityMonitoringConfig>({
 	enabled: true,
 	websiteEnabled: true,
 	sshEnabled: true,
 	panelEnabled: true,
 	aiEnabled: false,
+	aiProviderAccountId: 0,
 	aiIntervalMinutes: 15,
 	aiDailyTokenBudget: 50000,
 	maxBatchBytes: 2097152,
@@ -38,8 +42,11 @@ async function loadConfig() {
 	loading.value = true
 	error.value = ""
 	try {
-		const response = await getSecurityMonitoringConfig()
-		form.value = { ...form.value, ...response.data }
+		const [configResponse, accountResponse] = await Promise.all([
+			getSecurityMonitoringConfig(), getAIProviderAccounts()
+		])
+		form.value = { ...form.value, ...configResponse.data }
+		accounts.value = (accountResponse.data || []).filter(account => account.enabled && account.useForSecurityAnalysis)
 	} catch {
 		error.value = t("securityMonitoring.configLoadFailed")
 		message.error(error.value)
@@ -48,7 +55,17 @@ async function loadConfig() {
 	}
 }
 
+const accountOptions = computed(() => accounts.value.map(account => ({
+	label: `${account.name} · ${account.model}`,
+	value: account.id
+})))
+const selectedAccountAvailable = computed(() => accounts.value.some(account => account.id === form.value.aiProviderAccountId))
+
 async function saveConfig() {
+	if (form.value.aiEnabled && !selectedAccountAvailable.value) {
+		message.error(t("securityMonitoring.aiProviderRequired"))
+		return
+	}
 	saving.value = true
 	try {
 		await saveSecurityMonitoringConfig(form.value)
@@ -113,6 +130,18 @@ onMounted(() => void loadConfig())
 				<n-form-item :label="t('securityMonitoring.aiEnabled')">
 					<n-switch v-model:value="form.aiEnabled" />
 				</n-form-item>
+				<n-form-item :label="t('securityMonitoring.aiProvider')">
+					<n-select
+						v-model:value="form.aiProviderAccountId"
+						:options="accountOptions"
+						:disabled="!form.aiEnabled"
+						:placeholder="t('securityMonitoring.selectAiProvider')"
+					/>
+					<template #feedback>{{ t("securityMonitoring.aiProviderHint") }}</template>
+				</n-form-item>
+				<n-alert v-if="form.aiEnabled && !accounts.length" type="warning" class="mb-4">
+					{{ t("securityMonitoring.noAiProviders") }}
+				</n-alert>
 				<n-alert type="info" class="mb-4">{{ t("securityMonitoring.aiBoundary") }}</n-alert>
 				<div class="grid grid-cols-1 gap-x-5 md:grid-cols-2">
 					<n-form-item :label="t('securityMonitoring.aiInterval')">

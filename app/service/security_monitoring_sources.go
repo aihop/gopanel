@@ -82,6 +82,7 @@ func collectSSHSecurityFindings(ctx context.Context, config model.SecurityMonito
 		windowStart = time.Now().Add(-5 * time.Minute)
 	}
 	failedByIP := make(map[string][]dto.SSHLoginLog)
+	failedByUser := make(map[string][]dto.SSHLoginLog)
 	findings := make([]securityFinding, 0)
 	knownBaseline, _ := repository.HasKnownLoginSource("ssh")
 	latest := cursor.LastEventAt
@@ -95,6 +96,7 @@ func collectSSHSecurityFindings(ctx context.Context, config model.SecurityMonito
 		}
 		if strings.EqualFold(item.Status, "Failed") {
 			failedByIP[item.SourceIP] = append(failedByIP[item.SourceIP], item)
+			failedByUser[item.Username] = append(failedByUser[item.Username], item)
 			continue
 		}
 		if !strings.EqualFold(item.Status, "Success") {
@@ -105,12 +107,16 @@ func collectSSHSecurityFindings(ctx context.Context, config model.SecurityMonito
 			return findings, knownErr
 		}
 		if knownBaseline && !known {
-			findings = append(findings, sshLoginFinding("ssh_new_login_source", "medium", item,
+			findings = append(findings, sshLoginFinding("ssh_new_source", "medium", item,
 				fmt.Sprintf("SSH 账号 %s 从新 IP %s 登录成功", item.Username, item.SourceIP), 1, nil, seenAt))
 		}
 		if strings.EqualFold(item.Username, "root") {
 			findings = append(findings, sshLoginFinding("ssh_root_login", "medium", item,
 				fmt.Sprintf("检测到 root 从 %s 登录 SSH", item.SourceIP), 1, nil, seenAt))
+		}
+		if seenAt.Hour() < 6 {
+			findings = append(findings, sshLoginFinding("ssh_unusual_hour_login", "medium", item,
+				fmt.Sprintf("SSH 账号 %s 在异常时段从 %s 登录", item.Username, item.SourceIP), 1, nil, seenAt))
 		}
 		if failed := failedByIP[item.SourceIP]; len(failed) > 0 {
 			samples := make([]string, 0, len(failed)+1)
@@ -134,8 +140,32 @@ func collectSSHSecurityFindings(ctx context.Context, config model.SecurityMonito
 			samples = append(samples, item.Raw)
 		}
 		last := failures[len(failures)-1]
-		findings = append(findings, sshLoginFinding("ssh_bruteforce", "high", last,
+		findings = append(findings, sshLoginFinding("ssh_brute_force", "high", last,
 			fmt.Sprintf("检测到来自 %s 的 SSH 暴力破解（%d 次失败）", ip, len(failures)), len(failures), samples, parseSecurityTime(last.CreatedAt)))
+	}
+	for username, failures := range failedByUser {
+		ips := make(map[string]struct{})
+		for _, failure := range failures {
+			ips[failure.SourceIP] = struct{}{}
+		}
+		if len(ips) < 5 || len(failures) < config.SSHFailurePerMinute {
+			continue
+		}
+		last := failures[len(failures)-1]
+		findings = append(findings, sshLoginFinding("ssh_distributed_brute_force", "high", last,
+			fmt.Sprintf("SSH 账号 %s 遭到来自 %d 个 IP 的分布式爆破", username, len(ips)), len(failures), sshFailureSamples(failures), parseSecurityTime(last.CreatedAt)))
+	}
+	for ip, failures := range failedByIP {
+		users := make(map[string]struct{})
+		for _, failure := range failures {
+			users[failure.Username] = struct{}{}
+		}
+		if len(users) < 3 {
+			continue
+		}
+		last := failures[len(failures)-1]
+		findings = append(findings, sshLoginFinding("ssh_account_enumeration", "high", last,
+			fmt.Sprintf("检测到 %s 枚举 %d 个 SSH 账号", ip, len(users)), len(failures), sshFailureSamples(failures), parseSecurityTime(last.CreatedAt)))
 	}
 	cursor.LastEventAt, cursor.LastScannedAt = latest, time.Now()
 	cursor.Processed += int64(len(items))
@@ -143,6 +173,14 @@ func collectSSHSecurityFindings(ctx context.Context, config model.SecurityMonito
 		return findings, err
 	}
 	return findings, nil
+}
+
+func sshFailureSamples(items []dto.SSHLoginLog) []string {
+	samples := make([]string, 0, len(items))
+	for _, item := range items {
+		samples = append(samples, item.Raw)
+	}
+	return samples
 }
 
 func sshLoginFinding(eventType, level string, item dto.SSHLoginLog, summary string, count int, samples []string, seenAt time.Time) securityFinding {
@@ -171,6 +209,7 @@ func collectPanelSecurityFindings(config model.SecurityMonitoringConfig) ([]secu
 		return nil, err
 	}
 	failedByIP := make(map[string][]model.LoginLog)
+	failedOperationsByIP := make(map[string][]model.OperationLog)
 	latest := cursor.LastEventAt
 	for _, item := range logs {
 		if item.CreatedAt.After(latest) {
@@ -178,6 +217,16 @@ func collectPanelSecurityFindings(config model.SecurityMonitoringConfig) ([]secu
 		}
 		if strings.EqualFold(item.Status, "Failed") || strings.EqualFold(item.Status, "failed") {
 			failedByIP[item.IP] = append(failedByIP[item.IP], item)
+		}
+	}
+	var operations []model.OperationLog
+	if err := global.DB.Where("created_at > ? AND status = ?", windowStart, "Failed").Order("created_at asc").Limit(config.MaxBatchLines).Find(&operations).Error; err != nil {
+		return nil, err
+	}
+	for _, item := range operations {
+		failedOperationsByIP[item.IP] = append(failedOperationsByIP[item.IP], item)
+		if item.CreatedAt.After(latest) {
+			latest = item.CreatedAt
 		}
 	}
 	findings := make([]securityFinding, 0)
@@ -190,13 +239,27 @@ func collectPanelSecurityFindings(config model.SecurityMonitoringConfig) ([]secu
 			samples = append(samples, fmt.Sprintf("%s panel login failed from %s: %s", item.CreatedAt.Format(time.RFC3339), item.IP, item.Message))
 		}
 		findings = append(findings, securityFinding{
-			SourceType: "panel", SourceName: "GoPanel", EventType: "panel_login_bruteforce", Level: "high", Actor: ip,
+			SourceType: "panel", SourceName: "GoPanel", EventType: "panel_brute_force", Level: "high", Actor: ip,
 			Summary: fmt.Sprintf("检测到来自 %s 的面板登录爆破（%d 次失败）", ip, len(failures)), Value: float64(len(failures)), SeenAt: failures[len(failures)-1].CreatedAt,
 			Evidence: []securityEvidence{{Source: "panel", Description: "面板登录失败", Count: len(failures), Samples: boundedSecuritySamples(samples, 5)}},
 		})
 	}
+	for ip, operations := range failedOperationsByIP {
+		if len(operations) < config.LoginFailurePerMinute {
+			continue
+		}
+		samples := make([]string, 0, len(operations))
+		for _, item := range operations {
+			samples = append(samples, fmt.Sprintf("%s %s %s", item.Method, item.Path, item.Message))
+		}
+		findings = append(findings, securityFinding{
+			SourceType: "panel", SourceName: "GoPanel", EventType: "panel_admin_operation_anomaly", Level: "high", Actor: ip,
+			Summary: fmt.Sprintf("检测到来自 %s 的异常管理员操作（%d 次失败）", ip, len(operations)), Value: float64(len(operations)), SeenAt: operations[len(operations)-1].CreatedAt,
+			Evidence: []securityEvidence{{Source: "panel", Description: "失败管理员操作", Count: len(operations), Samples: boundedSecuritySamples(samples, 5)}},
+		})
+	}
 	cursor.LastEventAt, cursor.LastScannedAt = latest, time.Now()
-	cursor.Processed += int64(len(logs))
+	cursor.Processed += int64(len(logs) + len(operations))
 	if err := repository.SaveCursor(cursor); err != nil {
 		return findings, err
 	}

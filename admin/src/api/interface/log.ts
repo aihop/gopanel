@@ -68,4 +68,11 @@ export namespace Log {
 	export interface CleanLog {
 		logType: string
 	}
+	export interface SystemLogContent {
+		content: string
+		fileName: string
+		size: number
+		returnedBytes: number
+		truncated: boolean
+	}
 }

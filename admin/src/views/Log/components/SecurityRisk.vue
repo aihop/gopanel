@@ -67,6 +67,7 @@ function parseArray<T>(value: string): T[] {
 }
 
 const evidence = computed(() => parseArray<SecurityEvidence>(detail.value?.evidence || ""))
+const aiEvidence = computed(() => parseArray<SecurityEvidence & { sample?: string }>(detail.value?.aiEvidence || ""))
 const actions = computed(() => parseArray<SecurityRecommendedAction>(detail.value?.suggestedActions || ""))
 
 async function loadEvents() {
@@ -215,6 +216,9 @@ onMounted(() => void loadEvents())
 					<div v-else class="space-y-2">
 						<p>{{ detail.aiConclusion }}</p>
 						<n-tag type="info" :bordered="false">{{ t("securityMonitoring.confidence", { value: detail.confidence }) }}</n-tag>
+						<div v-for="(item, index) in aiEvidence" :key="index" class="rounded bg-slate-50 p-2 text-sm">
+							{{ item.description }} · {{ item.count }}<div v-if="item.sample" class="mt-1 break-all font-mono text-xs">{{ item.sample }}</div>
+						</div>
 					</div>
 					<n-divider>{{ t("securityMonitoring.recommendedActions") }}</n-divider>
 					<n-empty v-if="!actions.length" :description="t('securityMonitoring.noActions')" />

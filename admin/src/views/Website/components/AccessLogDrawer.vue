@@ -21,6 +21,18 @@
       </template>
 
       <div class="space-y-5">
+		<n-card size="small" :title="t('securityMonitoring.websiteRiskSummary')">
+		  <n-spin :show="riskLoading">
+			<n-alert v-if="riskError" type="error">{{ riskError }}</n-alert>
+			<n-empty v-else-if="!websiteRisks.length" :description="t('securityMonitoring.websiteRiskEmpty')" />
+			<div v-else class="space-y-2">
+			  <n-alert v-for="risk in websiteRisks" :key="risk.id" :type="risk.level === 'critical' || risk.level === 'high' ? 'error' : 'warning'">
+				<div class="font-semibold">{{ t(`securityMonitoring.level.${risk.level}`) }} · {{ risk.summary }}</div>
+				<div v-if="risk.aiConclusion" class="mt-1 text-xs">{{ risk.aiConclusion }}</div>
+			  </n-alert>
+			</div>
+		  </n-spin>
+		</n-card>
         <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
           <div class="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -131,10 +143,13 @@
 <script setup lang="ts">
 import type { Website } from "@/api/interface/website"
 import { WebsiteLogAPI, WebsiteTodayIPStatsAPI } from "@/api/modules/website"
+import { getSecurityEvents } from "@/api/modules/securityMonitoring"
+import type { SecurityEvent } from "@/api/interface/securityMonitoring"
 import { hasWebsiteRuntimeMeta } from "@/utils/websiteRuntime"
 import { copyText } from "@/utils/util"
 import { NButton, NDrawer, NDrawerContent, NTag, useMessage } from "naive-ui"
 import { computed, ref, watch } from "vue"
+import { useI18n } from "vue-i18n"
 import WebsiteLogDetailModal from "./WebsiteLogDetailModal.vue"
 import WebsiteLogPanel from "./WebsiteLogPanel.vue"
 import WebsiteTodayIPStatsModal from "./WebsiteTodayIPStatsModal.vue"
@@ -169,8 +184,12 @@ const logContent = ref("")
 const logLines = ref<string[]>([])
 const logPath = ref("")
 const todayStats = ref<Website.WebSiteTodayIPStats | null>(null)
+const websiteRisks = ref<SecurityEvent[]>([])
+const riskLoading = ref(false)
+const riskError = ref("")
 
 const message = useMessage()
+const { t } = useI18n()
 const { bindingRuntimeText, loadBindingMeta } = useWebsiteLogBindingMeta(website)
 
 const drawerTitle = computed(() => (logType.value === "error" ? "网站错误日志" : "网站访问记录"))
@@ -228,6 +247,23 @@ async function loadLogs(latest = false) {
   }
 }
 
+async function loadWebsiteRisks() {
+  if (!website.value) return
+  riskLoading.value = true
+  riskError.value = ""
+  try {
+    const response = await getSecurityEvents({
+      page: 1, limit: 3, status: "firing", sourceType: "website", sourceId: website.value.id
+    })
+    websiteRisks.value = response.data.items || []
+  } catch {
+    riskError.value = t("securityMonitoring.websiteRiskLoadFailed")
+    message.error(riskError.value)
+  } finally {
+    riskLoading.value = false
+  }
+}
+
 function getDefaultLogPath() {
   if (!website.value) return ""
   return logType.value === "error" ? website.value.errorLogPath : website.value.accessLogPath
@@ -275,11 +311,13 @@ function open(row: Website.WebsiteDTO, type: WebsiteLogType = "access") {
   end.value = true
   logContent.value = ""
   logLines.value = []
+	websiteRisks.value = []
   logPath.value = type === "error" ? "" : row.accessLogPath || ""
   if (!hasWebsiteRuntimeMeta(row)) {
     loadBindingMeta()
   }
   loadLogs(true)
+	loadWebsiteRisks()
 }
 
 function changePage(nextPage: number) {

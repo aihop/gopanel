@@ -21,6 +21,7 @@ type SecurityMonitoringConfig struct {
 	SSHEnabled            bool `json:"sshEnabled"`
 	PanelEnabled          bool `json:"panelEnabled"`
 	AIEnabled             bool `json:"aiEnabled"`
+	AIProviderAccountID   uint `json:"aiProviderAccountId"`
 	AIIntervalMinutes     int  `json:"aiIntervalMinutes"`
 	AIDailyTokenBudget    int  `json:"aiDailyTokenBudget"`
 	MaxBatchBytes         int  `json:"maxBatchBytes"`
@@ -71,6 +72,7 @@ type SecurityEvent struct {
 
 	AnalysisStatus   string     `gorm:"type:varchar(16);not null;index" json:"analysisStatus"`
 	AIConclusion     string     `gorm:"type:text" json:"aiConclusion"`
+	AIEvidence       string     `gorm:"type:text" json:"aiEvidence"`
 	SuggestedActions string     `gorm:"type:text" json:"suggestedActions"`
 	Confidence       int        `json:"confidence"`
 	AIModel          string     `gorm:"type:varchar(255)" json:"aiModel"`
@@ -78,10 +80,11 @@ type SecurityEvent struct {
 	AnalyzedAt       *time.Time `json:"analyzedAt,omitempty"`
 	AnalysisError    string     `gorm:"type:text" json:"analysisError"`
 
-	LastNotifiedAt   *time.Time `json:"lastNotifiedAt,omitempty"`
-	LastAINotifiedAt *time.Time `json:"lastAiNotifiedAt,omitempty"`
-	NotifyStatus     string     `gorm:"type:varchar(16)" json:"notifyStatus"`
-	NotifyError      string     `gorm:"type:text" json:"notifyError"`
+	LastNotifiedAt      *time.Time `json:"lastNotifiedAt,omitempty"`
+	LastAINotifiedAt    *time.Time `json:"lastAiNotifiedAt,omitempty"`
+	LastNotifyAttemptAt *time.Time `json:"lastNotifyAttemptAt,omitempty"`
+	NotifyStatus        string     `gorm:"type:varchar(16)" json:"notifyStatus"`
+	NotifyError         string     `gorm:"type:text" json:"notifyError"`
 }
 
 func (SecurityEvent) TableName() string { return "security_events" }

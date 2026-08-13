@@ -27,11 +27,18 @@ type securityAIResult struct {
 	Confidence               int                         `json:"confidence"`
 	Category                 string                      `json:"category"`
 	Summary                  string                      `json:"summary"`
-	Evidence                 []securityEvidence          `json:"evidence"`
+	Evidence                 []securityAIEvidence        `json:"evidence"`
 	AffectedTargets          []string                    `json:"affectedTargets"`
 	PossibleCauses           []string                    `json:"possibleCauses"`
 	FalsePositivePossibility string                      `json:"falsePositivePossibility"`
 	RecommendedActions       []securityRecommendedAction `json:"recommendedActions"`
+}
+
+type securityAIEvidence struct {
+	Source      string `json:"source"`
+	Description string `json:"description"`
+	Count       int    `json:"count"`
+	Sample      string `json:"sample"`
 }
 
 type securityRecommendedAction struct {
@@ -50,6 +57,15 @@ func AnalyzePendingSecurityEvents() {
 	if err != nil || !config.Enabled || !config.AIEnabled {
 		return
 	}
+	schedule, err := repository.GetCursor("ai_schedule", 0)
+	if err != nil {
+		global.LOG.Errorf("[Security] 加载 AI 巡检游标失败: %v", err)
+		return
+	}
+	interval := time.Duration(config.AIIntervalMinutes) * time.Minute
+	if !schedule.LastScannedAt.IsZero() && time.Since(schedule.LastScannedAt) < interval {
+		return
+	}
 	used, err := repository.TokensUsedSince(securityLocalDayStart(time.Now()))
 	if err != nil || (config.AIDailyTokenBudget > 0 && used >= int64(config.AIDailyTokenBudget)) {
 		return
@@ -63,11 +79,15 @@ func AnalyzePendingSecurityEvents() {
 		if config.AIDailyTokenBudget > 0 && used >= int64(config.AIDailyTokenBudget) {
 			break
 		}
-		if err := analyzeSecurityEvent(&events[index]); err != nil {
+		if err := analyzeSecurityEvent(&events[index], config.AIProviderAccountID); err != nil {
 			global.LOG.Errorf("[Security] 风险事件 %d AI 分析失败: %v", events[index].ID, err)
 			continue
 		}
 		used += events[index].AITokens
+	}
+	schedule.LastScannedAt = time.Now()
+	if err := repository.SaveCursor(schedule); err != nil {
+		global.LOG.Errorf("[Security] 保存 AI 巡检游标失败: %v", err)
 	}
 }
 
@@ -86,11 +106,18 @@ func AnalyzeSecurityEvent(id uint) error {
 	if err := repo.NewSecurityMonitoring().SaveEvent(event); err != nil {
 		return err
 	}
-	return analyzeSecurityEvent(event)
+	config, err := repo.NewSecurityMonitoring().GetConfig()
+	if err != nil {
+		return err
+	}
+	if config.AIProviderAccountID == 0 {
+		return errors.New("请先在安全监测配置中选择 AI 研判账号")
+	}
+	return analyzeSecurityEvent(event, config.AIProviderAccountID)
 }
 
-func analyzeSecurityEvent(event *model.SecurityEvent) error {
-	account, err := selectSecurityAIAccount()
+func analyzeSecurityEvent(event *model.SecurityEvent, providerID uint) error {
+	account, err := selectSecurityAIAccount(providerID)
 	if err != nil {
 		return err
 	}
@@ -128,11 +155,13 @@ func analyzeSecurityEvent(event *model.SecurityEvent) error {
 		_ = repository.SaveEvent(event)
 		return err
 	}
-	previousLevel, previousConclusion := event.Level, event.AIConclusion
+	previousLevel, previousConclusion, previousEvidence := event.Level, event.AIConclusion, event.AIEvidence
 	run.Status, run.Output = model.SecurityAnalysisCompleted, output
 	run.InputTokens, run.OutputTokens, run.TotalTokens = usage.InputTokens, usage.OutputTokens, usage.TotalTokens
 	event.AnalysisStatus, event.AnalysisError = model.SecurityAnalysisCompleted, ""
 	event.AIConclusion, event.Confidence, event.AIModel, event.AITokens, event.AnalyzedAt = result.Summary, result.Confidence, account.Model, usage.TotalTokens, &now
+	aiEvidence, _ := json.Marshal(result.Evidence)
+	event.AIEvidence = string(aiEvidence)
 	if securityLevelRank(result.RiskLevel) > securityLevelRank(event.Level) {
 		event.Level = result.RiskLevel
 	}
@@ -144,16 +173,19 @@ func analyzeSecurityEvent(event *model.SecurityEvent) error {
 	if err := repository.SaveEvent(event); err != nil {
 		return err
 	}
-	notifySecurityAIUpdate(event, previousLevel, previousConclusion)
+	notifySecurityAIUpdate(event, previousLevel, previousConclusion, previousEvidence)
 	return nil
 }
 
-func selectSecurityAIAccount() (*model.AIProviderAccount, error) {
+func selectSecurityAIAccount(providerID uint) (*model.AIProviderAccount, error) {
+	if providerID == 0 {
+		return nil, errors.New("未选择安全分析 AI 账号")
+	}
 	var account model.AIProviderAccount
-	err := global.DB.Where("enabled = ? AND use_for_security_analysis = ?", true, true).
-		Order("priority asc, id asc").First(&account).Error
+	err := global.DB.Where("id = ? AND enabled = ? AND use_for_security_analysis = ?", providerID, true, true).
+		First(&account).Error
 	if err != nil {
-		return nil, errors.New("没有已启用并授权用于安全分析的 AI 账号")
+		return nil, errors.New("所选 AI 账号不存在、已停用或未授权安全分析")
 	}
 	return &account, nil
 }
@@ -243,13 +275,25 @@ func parseSecurityAIResult(output string) (*securityAIResult, error) {
 	if err := json.Unmarshal([]byte(strings.TrimSpace(trimmed)), &result); err != nil {
 		return nil, errors.New("AI 安全研判结果不是有效 JSON")
 	}
-	if !validSecurityLevel(result.RiskLevel) || result.Confidence < 0 || result.Confidence > 100 || strings.TrimSpace(result.Summary) == "" {
+	if !validSecurityLevel(result.RiskLevel) || result.Confidence < 0 || result.Confidence > 100 || strings.TrimSpace(result.Summary) == "" ||
+		!validFalsePositivePossibility(result.FalsePositivePossibility) {
 		return nil, errors.New("AI 安全研判结果字段无效")
 	}
 	for index := range result.RecommendedActions {
+		if strings.TrimSpace(result.RecommendedActions[index].Action) == "" || !validActionRisk(result.RecommendedActions[index].Risk) {
+			return nil, errors.New("AI 安全研判建议动作无效")
+		}
 		result.RecommendedActions[index].RequiresApproval = true
 	}
 	return &result, nil
+}
+
+func validFalsePositivePossibility(value string) bool {
+	return value == "low" || value == "medium" || value == "high"
+}
+
+func validActionRisk(value string) bool {
+	return value == "low" || value == "medium" || value == "high"
 }
 
 func securityLocalDayStart(now time.Time) time.Time {

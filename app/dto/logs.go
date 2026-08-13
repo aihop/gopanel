@@ -84,5 +84,14 @@ type CleanLog struct {
 }
 
 type SearchSystemLog struct {
-	Name string `json:"name" validate:"required"`
+	Name     string `json:"name" validate:"required"`
+	MaxBytes int64  `json:"maxBytes"`
+}
+
+type SystemLogContent struct {
+	Content       string `json:"content"`
+	FileName      string `json:"fileName"`
+	Size          int64  `json:"size"`
+	ReturnedBytes int    `json:"returnedBytes"`
+	Truncated     bool   `json:"truncated"`
 }

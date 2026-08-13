@@ -30,6 +30,7 @@ export interface SecurityEvent {
   resolvedAt?: string
   analysisStatus: string
   aiConclusion: string
+	aiEvidence: string
   suggestedActions: string
   confidence: number
   aiModel: string
@@ -46,6 +47,7 @@ export interface SecurityMonitoringConfig {
   sshEnabled: boolean
   panelEnabled: boolean
   aiEnabled: boolean
+	aiProviderAccountId: number
   aiIntervalMinutes: number
   aiDailyTokenBudget: number
   maxBatchBytes: number

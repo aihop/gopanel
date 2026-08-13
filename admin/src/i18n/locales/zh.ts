@@ -27,6 +27,11 @@ export default {
 		resolveMinutes: "恢复判定分钟数",
 		aiInspection: "AI 定时巡检",
 		aiEnabled: "启用 AI 研判",
+		aiProvider: "研判 AI 账号",
+		selectAiProvider: "选择已授权的 AI 账号",
+		aiProviderHint: "这里只显示已启用并明确授权“安全分析”的账号。定时与手动研判都使用此账号。",
+		aiProviderRequired: "请选择已启用并授权安全分析的 AI 账号",
+		noAiProviders: "暂无可用账号，请先在 AI 账号设置中启用账号并授权“安全分析”。",
 		aiInterval: "巡检间隔（分钟）",
 		aiBudget: "每日 Token 预算",
 		aiBoundary: "AI 只接收限量脱敏证据并生成研判建议，不具备终端、防火墙或网站配置权限。",
@@ -57,6 +62,16 @@ export default {
 		recommendedActions: "建议动作",
 		noActions: "暂无建议动作",
 		requiresApproval: "需要审批",
+		systemLogFile: "日志文件",
+		selectSystemLog: "选择日志文件",
+		readingLog: "正在读取日志...",
+		emptyLog: "暂无日志内容",
+		logTailNotice: "仅展示日志末尾 {returned} 字节，完整文件大小 {size} 字节",
+		logFilesLoadFailed: "系统日志文件列表加载失败",
+		logLoadFailed: "系统日志读取失败",
+		websiteRiskSummary: "当前网站安全风险",
+		websiteRiskEmpty: "当前网站暂无活动风险",
+		websiteRiskLoadFailed: "网站风险摘要加载失败",
 		level: { info: "提示", low: "低", medium: "中", high: "高", critical: "严重" },
 		status: { pending: "观察中", firing: "风险中", resolved: "已恢复" },
 		analysis: { pending: "待研判", running: "研判中", completed: "已完成", failed: "失败", skipped: "已跳过" },
@@ -64,8 +79,10 @@ export default {
 		eventType: {
 			sqli: "SQL 注入", xss: "XSS 攻击", path_traversal: "路径穿越", sensitive_path: "敏感路径扫描",
 			request_flood: "高频请求", not_found_scan: "404 扫描", server_error_spike: "5xx 异常",
+			website_login_brute_force: "网站登录爆破", malicious_user_agent: "恶意 User-Agent", distributed_scan: "分布式扫描",
 			ssh_brute_force: "SSH 暴力破解", ssh_failure_then_success: "SSH 失败后成功", ssh_root_login: "SSH root 登录",
-			ssh_new_source: "SSH 新来源登录", panel_brute_force: "面板暴力破解"
+			ssh_new_source: "SSH 新来源登录", ssh_unusual_hour_login: "SSH 异常时段登录", ssh_distributed_brute_force: "分布式 SSH 爆破",
+			ssh_account_enumeration: "SSH 账号枚举", panel_brute_force: "面板暴力破解", panel_admin_operation_anomaly: "异常管理员操作"
 		}
 	},
 	password: {

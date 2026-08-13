@@ -42,6 +42,10 @@ func readSecurityLogBatch(path string, cursor *model.SecurityLogCursor, maxBytes
 		cursor.Offset = 0
 	}
 	cursor.Path, cursor.FileIdentity = path, identity
+	if cursor.Offset == 0 && cursor.Processed == 0 && cursor.Malformed == 0 && info.Size() > int64(maxBytes) {
+		cursor.Offset = info.Size() - int64(maxBytes)
+		cursor.Dropped++
+	}
 	if info.Size() == cursor.Offset {
 		return []string{}, nil
 	}
@@ -55,6 +59,13 @@ func readSecurityLogBatch(path string, cursor *model.SecurityLogCursor, maxBytes
 		return nil, readErr
 	}
 	buffer = buffer[:count]
+	if cursor.Dropped > 0 && cursor.Processed == 0 && cursor.Malformed == 0 && cursor.Offset > 0 {
+		if firstNewline := strings.IndexByte(string(buffer), '\n'); firstNewline >= 0 {
+			cursor.Offset += int64(firstNewline + 1)
+			buffer = buffer[firstNewline+1:]
+			count = len(buffer)
+		}
+	}
 	consume := len(buffer)
 	if int64(count)+cursor.Offset < info.Size() {
 		lastNewline := strings.LastIndexByte(string(buffer[:min(len(buffer), maxBytes)]), '\n')

@@ -27,6 +27,11 @@ export default {
 		resolveMinutes: "Recovery window (minutes)",
 		aiInspection: "Scheduled AI Inspection",
 		aiEnabled: "Enable AI analysis",
+		aiProvider: "Analysis AI Account",
+		selectAiProvider: "Select an authorized AI account",
+		aiProviderHint: "Only enabled accounts explicitly authorized for security analysis appear here. Scheduled and manual analysis both use this account.",
+		aiProviderRequired: "Select an enabled AI account authorized for security analysis",
+		noAiProviders: "No eligible AI account is available. Enable and authorize one for security analysis in AI Account settings first.",
 		aiInterval: "Inspection interval (minutes)",
 		aiBudget: "Daily token budget",
 		aiBoundary: "AI receives only bounded, redacted evidence and can only provide analysis. It has no terminal, firewall, or website configuration access.",
@@ -57,6 +62,16 @@ export default {
 		recommendedActions: "Recommended Actions",
 		noActions: "No recommended actions",
 		requiresApproval: "Approval required",
+		systemLogFile: "Log File",
+		selectSystemLog: "Select a log file",
+		readingLog: "Reading log...",
+		emptyLog: "No log content",
+		logTailNotice: "Showing the last {returned} bytes of a {size}-byte file",
+		logFilesLoadFailed: "Failed to load system log files",
+		logLoadFailed: "Failed to read the system log",
+		websiteRiskSummary: "Website Security Risks",
+		websiteRiskEmpty: "No active risks for this website",
+		websiteRiskLoadFailed: "Failed to load the website risk summary",
 		level: { info: "Info", low: "Low", medium: "Medium", high: "High", critical: "Critical" },
 		status: { pending: "Observing", firing: "Active", resolved: "Resolved" },
 		analysis: { pending: "Pending", running: "Running", completed: "Completed", failed: "Failed", skipped: "Skipped" },
@@ -64,8 +79,10 @@ export default {
 		eventType: {
 			sqli: "SQL Injection", xss: "XSS Attack", path_traversal: "Path Traversal", sensitive_path: "Sensitive Path Scan",
 			request_flood: "Request Flood", not_found_scan: "404 Scan", server_error_spike: "5xx Spike",
+			website_login_brute_force: "Website Login Brute Force", malicious_user_agent: "Malicious User-Agent", distributed_scan: "Distributed Scan",
 			ssh_brute_force: "SSH Brute Force", ssh_failure_then_success: "SSH Failure Then Success", ssh_root_login: "SSH Root Login",
-			ssh_new_source: "New SSH Source", panel_brute_force: "Panel Brute Force"
+			ssh_new_source: "New SSH Source", ssh_unusual_hour_login: "Unusual-hour SSH Login", ssh_distributed_brute_force: "Distributed SSH Brute Force",
+			ssh_account_enumeration: "SSH Account Enumeration", panel_brute_force: "Panel Brute Force", panel_admin_operation_anomaly: "Abnormal Admin Operations"
 		}
 	},
 	password: {

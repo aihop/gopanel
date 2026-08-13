@@ -7,6 +7,8 @@ import (
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
 	"github.com/aihop/gopanel/app/service"
+	"github.com/aihop/gopanel/constant"
+	"github.com/aihop/gopanel/utils/token"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -19,11 +21,12 @@ func SecurityMonitoringConfigGet(c fiber.Ctx) error {
 }
 
 func SecurityMonitoringConfigSave(c fiber.Ctx) error {
+	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
 	config, err := e.BodyToStruct[model.SecurityMonitoringConfig](c.Body())
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	if err := service.SaveSecurityMonitoringConfig(config); err != nil {
+	if err := service.SaveSecurityMonitoringConfig(config, claims.UserId); err != nil {
 		return c.JSON(e.Fail(err))
 	}
 	return c.JSON(e.Succ(config))
@@ -32,8 +35,9 @@ func SecurityMonitoringConfigSave(c fiber.Ctx) error {
 func SecurityEventPage(c fiber.Ctx) error {
 	page, _ := strconv.Atoi(c.Query("page", "1"))
 	limit, _ := strconv.Atoi(c.Query("limit", "20"))
+	sourceID, _ := strconv.ParseUint(c.Query("sourceId"), 10, 64)
 	total, events, err := repo.NewSecurityMonitoring().PageEvents(
-		page, limit, c.Query("status"), c.Query("level"), c.Query("sourceType"),
+		page, limit, c.Query("status"), c.Query("level"), c.Query("sourceType"), uint(sourceID),
 	)
 	if err != nil {
 		return c.JSON(e.Fail(err))

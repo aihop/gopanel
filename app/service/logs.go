@@ -1,11 +1,8 @@
 package service
 
 import (
-	"compress/gzip"
 	"context"
 	"encoding/json"
-	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -92,19 +89,27 @@ func (u *LogService) PageOperationLog(req dto.SearchOpLogWithPage) (int64, inter
 func (u *LogService) ListSystemLogFile() ([]string, error) {
 	logDir := global.CONF.System.LogPath
 	var files []string
+	seen := make(map[string]struct{})
 	if err := filepath.Walk(logDir, func(pathItem string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 		if !info.IsDir() && strings.HasPrefix(info.Name(), "gopanel") {
 			if info.Name() == "gopanel.log" {
-				files = append(files, time.Now().Format("2006-01-02"))
+				name := time.Now().Format("2006-01-02")
+				if _, exists := seen[name]; !exists {
+					files = append(files, name)
+					seen[name] = struct{}{}
+				}
 				return nil
 			}
 			itemFileName := strings.TrimPrefix(info.Name(), "gopanel-")
 			itemFileName = strings.TrimSuffix(itemFileName, ".gz")
 			itemFileName = strings.TrimSuffix(itemFileName, ".log")
-			files = append(files, itemFileName)
+			if _, exists := seen[itemFileName]; !exists {
+				files = append(files, itemFileName)
+				seen[itemFileName] = struct{}{}
+			}
 			return nil
 		}
 		return nil
@@ -122,42 +127,8 @@ func (u *LogService) ListSystemLogFile() ([]string, error) {
 	return files, nil
 }
 
-func (u *LogService) ReadSystemLog(name string) (string, error) {
-	logDir := global.CONF.System.LogPath
-	fileName := ""
-	if name == time.Now().Format("2006-01-02") {
-		fileName = "gopanel.log"
-	} else {
-		fileName = fmt.Sprintf("gopanel-%s.log", name)
-	}
-
-	fullPath := filepath.Join(logDir, fileName)
-
-	if strings.HasSuffix(fileName, ".gz") {
-		f, err := os.Open(fullPath)
-		if err != nil {
-			return "", err
-		}
-		defer f.Close()
-
-		gr, err := gzip.NewReader(f)
-		if err != nil {
-			return "", err
-		}
-		defer gr.Close()
-
-		data, err := io.ReadAll(gr)
-		if err != nil {
-			return "", err
-		}
-		return string(data), nil
-	}
-
-	data, err := os.ReadFile(fullPath)
-	if err != nil {
-		return "", err
-	}
-	return string(data), nil
+func (u *LogService) ReadSystemLog(name string, maxBytes int64) (*dto.SystemLogContent, error) {
+	return readSystemLogTail(global.CONF.System.LogPath, name, maxBytes)
 }
 
 func (u *LogService) PageSSHLoginLog(req dto.SearchSSHLogWithPage) (*dto.SSHLoginLogResult, error) {

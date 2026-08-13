@@ -84,8 +84,16 @@ func (r *SecurityMonitoringRepo) UpsertEvent(candidate *model.SecurityEvent, deb
 		event.HitCount = 0
 		event.ResolvedAt = nil
 		event.AnalysisStatus = model.SecurityAnalysisPending
+		event.AIConclusion, event.AIEvidence, event.SuggestedActions, event.AIModel, event.AnalysisError = "", "", "", "", ""
+		event.Confidence, event.AITokens, event.AnalyzedAt = 0, 0, nil
+		event.LastNotifiedAt, event.LastAINotifiedAt, event.LastNotifyAttemptAt = nil, nil, nil
+		event.NotifyStatus, event.NotifyError = "", ""
+		event.Level = candidate.Level
 	}
-	event.SourceName, event.Level = candidate.SourceName, candidate.Level
+	event.SourceName = candidate.SourceName
+	if securityRepoLevelRank(candidate.Level) > securityRepoLevelRank(event.Level) {
+		event.Level = candidate.Level
+	}
 	event.Summary, event.Evidence, event.Value = candidate.Summary, candidate.Evidence, candidate.Value
 	event.LastSeenAt = candidate.LastSeenAt
 	event.HitCount++
@@ -124,7 +132,7 @@ func (r *SecurityMonitoringRepo) ResolveStale(before time.Time) ([]model.Securit
 	return resolved, nil
 }
 
-func (r *SecurityMonitoringRepo) PageEvents(page, limit int, status, level, sourceType string) (int64, []model.SecurityEvent, error) {
+func (r *SecurityMonitoringRepo) PageEvents(page, limit int, status, level, sourceType string, sourceID uint) (int64, []model.SecurityEvent, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -143,6 +151,9 @@ func (r *SecurityMonitoringRepo) PageEvents(page, limit int, status, level, sour
 	}
 	if sourceType != "" {
 		db = db.Where("source_type = ?", sourceType)
+	}
+	if sourceID > 0 {
+		db = db.Where("source_id = ?", sourceID)
 	}
 	var total int64
 	if err := db.Count(&total).Error; err != nil {
@@ -198,13 +209,35 @@ func (r *SecurityMonitoringRepo) GetEvent(id uint) (*model.SecurityEvent, error)
 	return &event, nil
 }
 
-func (r *SecurityMonitoringRepo) EventsNeedingNotification(before time.Time, limit int) ([]model.SecurityEvent, error) {
+func (r *SecurityMonitoringRepo) EventsNeedingNotification(before, retryBefore time.Time, limit int) ([]model.SecurityEvent, error) {
 	var events []model.SecurityEvent
-	err := r.db.Where(
-		"status = ? AND (notify_status = ? OR last_notified_at IS NULL OR last_notified_at < ?)",
-		model.SecurityEventFiring, "failed", before,
-	).Order("last_seen_at asc").Limit(limit).Find(&events).Error
+	db := r.db.Where("status = ?", model.SecurityEventFiring).
+		Where("notify_status = ? AND (last_notify_attempt_at IS NULL OR last_notify_attempt_at < ?)", "failed", retryBefore)
+	if !before.IsZero() {
+		db = r.db.Where("status = ?", model.SecurityEventFiring).Where(
+			"(notify_status = ? AND (last_notify_attempt_at IS NULL OR last_notify_attempt_at < ?)) OR (notify_status = ? AND last_notified_at < ?)",
+			"failed", retryBefore, "sent", before,
+		)
+	}
+	err := db.Order("last_seen_at asc").Limit(limit).Find(&events).Error
 	return events, err
+}
+
+func securityRepoLevelRank(level string) int {
+	switch level {
+	case "critical":
+		return 5
+	case "high":
+		return 4
+	case "medium":
+		return 3
+	case "low":
+		return 2
+	case "info":
+		return 1
+	default:
+		return 0
+	}
 }
 
 func (r *SecurityMonitoringRepo) CreateAnalysisRun(run *model.SecurityAnalysisRun) error {

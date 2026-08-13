@@ -18,7 +18,7 @@ export const getSystemFiles = () => {
 	return http.get<Array<string>>(`/logs/system/files`)
 }
 export const getSystemLogs = (name: string) => {
-	return http.post<string>(`/logs/system`, { name: name })
+	return http.post<Log.SystemLogContent>(`/logs/system`, { name: name })
 }
 
 export const cleanLogs = (param: Log.CleanLog) => {
