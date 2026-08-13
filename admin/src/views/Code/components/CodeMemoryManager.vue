@@ -2,15 +2,20 @@
 import { ref } from "vue"
 import { useMessage } from "naive-ui"
 import { useI18n } from "vue-i18n"
-import { createCodeMemory, deleteCodeMemory, getAIProviderAccounts, getCodeMemories, getCodeMemorySetting, saveCodeMemorySetting } from "@/api/modules/code"
+import {
+	createCodeMemory,
+	deleteCodeMemory,
+	getAIProviderAccounts,
+	getCodeMemories,
+	getCodeMemorySetting,
+	saveCodeMemorySetting
+} from "@/api/modules/code"
 import type { CodeMemoryEntry, CodeMemorySetting } from "@/api/interface/codeMemories"
 import type { AIProviderAccount } from "@/api/interface/aiAccounts"
-import Icon from "@/components/common/Icon.vue"
 import { codeMemoryMessages } from "../codeMemoryMessages"
 import CodeMemoryDrawer from "./CodeMemoryDrawer.vue"
 
 const props = defineProps<{ projectId: number }>()
-const emit = defineEmits<{ open: [] }>()
 const { t } = useI18n({ messages: codeMemoryMessages })
 const message = useMessage()
 const entries = ref<CodeMemoryEntry[]>([])
@@ -50,7 +55,8 @@ async function loadSetting() {
 	}
 	try {
 		const response = await getAIProviderAccounts()
-		if (response.code === 0) accounts.value = (response.data || []).filter(account => account.useForMemoryExtraction)
+		if (response.code === 0)
+			accounts.value = (response.data || []).filter(account => account.useForMemoryExtraction)
 	} catch {
 		void 0
 	}
@@ -58,10 +64,11 @@ async function loadSetting() {
 
 function openDrawer() {
 	showDrawer.value = true
-	emit("open")
 	void load()
 	void loadSetting()
 }
+
+defineExpose({ open: openDrawer })
 
 async function persistSetting(value: { enabled: boolean; accountId: number; growthThreshold: number }) {
 	savingSetting.value = true
@@ -109,18 +116,6 @@ async function remove(id: number) {
 </script>
 
 <template>
-	<n-button
-		secondary
-		style="width: 100%; height: auto; justify-content: flex-start; padding: 10px 12px"
-		@click="openDrawer"
-	>
-		<template #icon><Icon name="mdi:brain" :size="18" /></template>
-		<div class="min-w-0 text-left">
-			<div class="text-sm font-medium">{{ t("code.memoryEntry") }}</div>
-			<div class="mt-0.5 truncate text-xs text-[var(--n-text-color-3)]">{{ t("code.memoryHint") }}</div>
-		</div>
-	</n-button>
-
 	<CodeMemoryDrawer
 		v-model:show="showDrawer"
 		:entries="entries"
