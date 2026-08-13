@@ -1,29 +1,22 @@
 package api
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
-	"net/http"
 	"strings"
-	"time"
-)
 
-// 抽取是后台作业，不占用户时间，超时可以给得宽松些；
-// 但不能没有上限——卡住的请求会一直占着抽取队列的位置。
-const codeMemoryLLMTimeout = 120 * time.Second
+	"github.com/aihop/gopanel/utils/aiprovider"
+)
 
 // 单次发给模型的记录上限。整段会话可能上百 KB，全发过去既贵又会稀释重点，
 // 而且多数 provider 有上下文上限，超了直接报错。
 const codeMemoryTranscriptMaxRunes = 24000
 
 type codeMemoryLLMConfig struct {
-	BaseURL string
-	APIKey  string
-	Model   string
+	Protocol string
+	BaseURL  string
+	APIKey   string
+	Model    string
 }
 
 type codeMemoryChatMessage struct {
@@ -43,7 +36,7 @@ type codeMemoryLLMOptions struct {
 	MaxTokens       int
 }
 
-// callCodeMemoryLLM 走 OpenAI 兼容的 chat/completions。
+// callCodeMemoryLLM 使用账号声明的接口协议。
 //
 // 温度压到 0（当模型支持时）：同一段记录反复抽取应当得到一致结果，
 // 记忆库不该因为采样抖动而长出两条同义条目。
@@ -59,78 +52,27 @@ func callCodeMemoryLLMWithOptions(
 	messages []codeMemoryChatMessage,
 	options codeMemoryLLMOptions,
 ) (string, error) {
-	baseURL := strings.TrimRight(strings.TrimSpace(config.BaseURL), "/")
-	if baseURL == "" || strings.TrimSpace(config.Model) == "" {
-		return "", errors.New("未配置可用的模型服务")
+	providerMessages := make([]aiprovider.Message, 0, len(messages))
+	for _, message := range messages {
+		providerMessages = append(providerMessages, aiprovider.Message{Role: message.Role, Content: message.Content})
 	}
-	payload := map[string]any{
-		"model":    config.Model,
-		"messages": messages,
-	}
-	if options.Temperature != nil {
-		payload["temperature"] = *options.Temperature
-	}
-	if effort := normalizeCodeReasoningEffort(options.ReasoningEffort); effort != codeReasoningEffortNone {
-		payload["reasoning_effort"] = effort
-	}
-	if options.MaxTokens > 0 {
-		payload["max_tokens"] = options.MaxTokens
-	}
-	if options.Schema != nil {
-		payload["response_format"] = map[string]any{
-			"type": "json_schema",
-			"json_schema": map[string]any{
-				"name":   "gopanel_memory_extraction",
-				"strict": false,
-				"schema": options.Schema,
-			},
-		}
-	}
-	body, err := json.Marshal(payload)
+	response, err := aiprovider.Call(ctx, aiprovider.Config{
+		Protocol: config.Protocol,
+		BaseURL:  config.BaseURL,
+		APIKey:   config.APIKey,
+		Model:    config.Model,
+	}, aiprovider.Request{
+		Messages:        providerMessages,
+		Temperature:     options.Temperature,
+		Schema:          options.Schema,
+		SchemaName:      "gopanel_memory_extraction",
+		ReasoningEffort: normalizeCodeReasoningEffort(options.ReasoningEffort),
+		MaxTokens:       options.MaxTokens,
+	})
 	if err != nil {
 		return "", err
 	}
-	requestCtx, cancel := context.WithTimeout(ctx, codeMemoryLLMTimeout)
-	defer cancel()
-	request, err := http.NewRequestWithContext(requestCtx, http.MethodPost, baseURL+"/chat/completions", bytes.NewReader(body))
-	if err != nil {
-		return "", err
-	}
-	request.Header.Set("Content-Type", "application/json")
-	if key := strings.TrimSpace(config.APIKey); key != "" {
-		request.Header.Set("Authorization", "Bearer "+key)
-	}
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		return "", fmt.Errorf("调用模型服务失败：%w", err)
-	}
-	defer response.Body.Close()
-	// 限制读取量：模型服务异常时可能返回极大的响应体。
-	raw, err := io.ReadAll(io.LimitReader(response.Body, 4<<20))
-	if err != nil {
-		return "", err
-	}
-	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return "", fmt.Errorf("模型服务返回 %d：%s", response.StatusCode, truncateCodeMemoryText(string(raw), 200))
-	}
-	return firstCodeMemoryChoiceContent(raw)
-}
-
-func firstCodeMemoryChoiceContent(raw []byte) (string, error) {
-	var decoded struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
-	}
-	if err := json.Unmarshal(raw, &decoded); err != nil {
-		return "", errors.New("模型服务响应无法解析")
-	}
-	if len(decoded.Choices) == 0 {
-		return "", errors.New("模型服务没有返回结果")
-	}
-	content := strings.TrimSpace(decoded.Choices[0].Message.Content)
+	content := strings.TrimSpace(response.Message.Content)
 	if content == "" {
 		return "", errors.New("模型服务返回了空结果")
 	}

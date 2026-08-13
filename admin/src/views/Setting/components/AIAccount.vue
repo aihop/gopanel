@@ -1,14 +1,15 @@
 <script setup lang="ts">
-import { computed, h, onMounted, ref } from "vue"
+import { computed, h, onMounted, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 import { NButton, NSpace, NSwitch, NTag, useDialog, useMessage } from "naive-ui"
 import type { DataTableColumns } from "naive-ui"
 import { deleteAIProviderAccount, getAIProviderAccounts, saveAIProviderAccount } from "@/api/modules/code"
-import type { AIProviderAccount, AIReasoningEffort } from "@/api/interface/aiAccounts"
+import type { AIProviderAccount, AIProviderProtocol, AIReasoningEffort } from "@/api/interface/aiAccounts"
+import { aiAccountMessages } from "./aiAccountMessages"
 
 const message = useMessage()
 const dialog = useDialog()
-const { t } = useI18n()
+const { t } = useI18n({ messages: aiAccountMessages })
 const accounts = ref<AIProviderAccount[]>([])
 const loading = ref(false)
 const saving = ref(false)
@@ -17,6 +18,7 @@ const editingId = ref<number>()
 
 const emptyForm = () => ({
 	name: "",
+	protocol: "openai_chat_completions" as AIProviderProtocol,
 	baseUrl: "",
 	apiKey: "",
 	model: "",
@@ -28,14 +30,29 @@ const emptyForm = () => ({
 })
 const form = ref(emptyForm())
 
-const reasoningOptions = [
-	{ label: "不设置（由服务端默认）", value: "" },
-	{ label: "低", value: "low" },
-	{ label: "中", value: "medium" },
-	{ label: "高", value: "high" },
-]
+const protocolOptions = computed(() => [
+	{ label: t("aiAccount.protocolChat"), value: "openai_chat_completions" },
+	{ label: t("aiAccount.protocolResponses"), value: "openai_responses" },
+	{ label: t("aiAccount.protocolAnthropic"), value: "anthropic_messages" }
+])
+const reasoningOptions = computed(() => [
+	{ label: t("aiAccount.reasoningNone"), value: "" },
+	{ label: t("aiAccount.reasoningLow"), value: "low" },
+	{ label: t("aiAccount.reasoningMedium"), value: "medium" },
+	{ label: t("aiAccount.reasoningHigh"), value: "high" }
+])
+const isAnthropic = computed(() => form.value.protocol === "anthropic_messages")
+const baseUrlPlaceholder = computed(() =>
+	t(isAnthropic.value ? "aiAccount.baseUrlPlaceholderAnthropic" : "aiAccount.baseUrlPlaceholderOpenAI")
+)
+const modelPlaceholder = computed(() =>
+	t(isAnthropic.value ? "aiAccount.modelPlaceholderAnthropic" : "aiAccount.modelPlaceholderOpenAI")
+)
+watch(isAnthropic, value => {
+	if (value) form.value.defaultReasoningEffort = ""
+})
 
-const modalTitle = computed(() => (editingId.value ? "编辑 AI 账号" : "新增 AI 账号"))
+const modalTitle = computed(() => t(editingId.value ? "aiAccount.editTitle" : "aiAccount.createTitle"))
 
 async function fetchData() {
 	loading.value = true
@@ -43,7 +60,7 @@ async function fetchData() {
 		const response = await getAIProviderAccounts()
 		if (response.code === 0) accounts.value = response.data || []
 	} catch {
-		message.error("AI 账号加载失败")
+		message.error(t("aiAccount.loadFailed"))
 	} finally {
 		loading.value = false
 	}
@@ -59,6 +76,7 @@ function openEditModal(account: AIProviderAccount) {
 	editingId.value = account.id
 	form.value = {
 		name: account.name,
+		protocol: account.protocol || "openai_chat_completions",
 		baseUrl: account.baseUrl,
 		apiKey: "",
 		model: account.model,
@@ -75,18 +93,18 @@ function openEditModal(account: AIProviderAccount) {
 // 填错的话它会一直静默失败，保存时是唯一能让用户当场知道的时机。
 async function submit() {
 	if (!form.value.name.trim() || !form.value.baseUrl.trim() || !form.value.model.trim()) {
-		message.warning("请填写账号名称、服务地址和模型名称")
+		message.warning(t("aiAccount.required"))
 		return
 	}
 	saving.value = true
 	try {
 		const response = await saveAIProviderAccount(form.value, editingId.value)
 		if (response.code !== 0) throw new Error(response.message)
-		message.success("已保存，连接测试通过")
+		message.success(t("aiAccount.saveSuccess"))
 		modalVisible.value = false
 		await fetchData()
 	} catch (error) {
-		message.error(error instanceof Error && error.message ? error.message : "保存失败")
+		message.error(error instanceof Error && error.message ? error.message : t("aiAccount.saveFailed"))
 	} finally {
 		saving.value = false
 	}
@@ -94,17 +112,17 @@ async function submit() {
 
 function confirmDelete(account: AIProviderAccount) {
 	dialog.warning({
-		title: "删除 AI 账号",
-		content: `删除「${account.name}」后，正在使用它的功能将无法调用模型。`,
-		positiveText: "删除",
-		negativeText: "取消",
+		title: t("aiAccount.deleteTitle"),
+		content: t("aiAccount.deleteConfirm", { name: account.name }),
+		positiveText: t("aiAccount.delete"),
+		negativeText: t("aiAccount.cancel"),
 		onPositiveClick: async () => {
 			try {
 				await deleteAIProviderAccount(account.id)
-				message.success("已删除")
+				message.success(t("aiAccount.deleted"))
 				await fetchData()
 			} catch {
-				message.error("删除失败")
+				message.error(t("aiAccount.deleteFailed"))
 			}
 		},
 	})
@@ -118,25 +136,26 @@ function capabilityTags(account: AIProviderAccount) {
 		{ label: "json_schema", ok: account.supportsJsonSchema },
 	]
 	if (account.defaultReasoningEffort) {
-		items.push({ label: "推理强度", ok: account.supportsReasoningEffort })
+		items.push({ label: t("aiAccount.reasoning"), ok: account.supportsReasoningEffort })
 	}
 	return items
 }
 
 const columns: DataTableColumns<AIProviderAccount> = [
-	{ title: "名称", key: "name", width: 150 },
-	{ title: "模型", key: "model", width: 160 },
-	{ title: "服务地址", key: "baseUrl", ellipsis: { tooltip: true } },
-	{ title: "优先级", key: "priority", width: 80 },
+	{ title: () => t("aiAccount.name"), key: "name", width: 150 },
+	{ title: () => t("aiAccount.protocol"), key: "protocol", width: 190, render: account => h(NTag, { size: "small", bordered: false }, { default: () => t(`aiAccount.${account.protocol === "openai_responses" ? "protocolResponses" : account.protocol === "anthropic_messages" ? "protocolAnthropic" : "protocolChat"}`) }) },
+	{ title: () => t("aiAccount.model"), key: "model", width: 160 },
+	{ title: () => t("aiAccount.baseUrl"), key: "baseUrl", ellipsis: { tooltip: true } },
+	{ title: () => t("aiAccount.priority"), key: "priority", width: 80 },
 	{
-		title: "记忆抽取",
+		title: () => t("aiAccount.memory"),
 		key: "useForMemoryExtraction",
 		width: 100,
 		render: account =>
 			h(
 				NTag,
 				{ size: "small", type: account.useForMemoryExtraction ? "success" : "default", bordered: false },
-				{ default: () => (account.useForMemoryExtraction ? "已授权" : "未授权") },
+				{ default: () => t(account.useForMemoryExtraction ? "aiAccount.authorized" : "aiAccount.unauthorized") },
 			),
 	},
 	{
@@ -151,7 +170,7 @@ const columns: DataTableColumns<AIProviderAccount> = [
 			),
 	},
 	{
-		title: "模型能力",
+		title: () => t("aiAccount.capabilities"),
 		key: "capabilities",
 		width: 220,
 		render: account =>
@@ -171,20 +190,20 @@ const columns: DataTableColumns<AIProviderAccount> = [
 			),
 	},
 	{
-		title: "启用",
+		title: () => t("aiAccount.enabled"),
 		key: "enabled",
 		width: 80,
 		render: account => h(NSwitch, { value: account.enabled, disabled: true, size: "small" }),
 	},
 	{
-		title: "操作",
+		title: () => t("aiAccount.actions"),
 		key: "actions",
 		width: 130,
 		render: account =>
 			h(NSpace, { size: 4 }, {
 				default: () => [
-					h(NButton, { size: "tiny", quaternary: true, onClick: () => openEditModal(account) }, { default: () => "编辑" }),
-					h(NButton, { size: "tiny", quaternary: true, type: "error", onClick: () => confirmDelete(account) }, { default: () => "删除" }),
+					h(NButton, { size: "tiny", quaternary: true, onClick: () => openEditModal(account) }, { default: () => t("aiAccount.edit") }),
+					h(NButton, { size: "tiny", quaternary: true, type: "error", onClick: () => confirmDelete(account) }, { default: () => t("aiAccount.delete") }),
 				],
 			}),
 	},
@@ -199,22 +218,21 @@ onMounted(() => void fetchData())
       <div class="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
         <div class="max-w-3xl space-y-3">
           <div class="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">
-            AI Accounts
+			{{ t("aiAccount.eyebrow") }}
           </div>
           <div class="text-2xl font-semibold text-slate-900">
-            AI 账号
+			{{ t("aiAccount.title") }}
           </div>
           <div class="text-sm leading-7 text-slate-500">
-            配一次，面板内需要调用模型的功能都能复用。目前用于开发工作台的长期记忆抽取。
-            保存时会实连测试一次，并探测该模型支持哪些参数。
+			{{ t("aiAccount.description") }}
           </div>
         </div>
         <n-space>
           <n-button type="primary" @click="openCreateModal">
-            新增账号
+			{{ t("aiAccount.add") }}
           </n-button>
           <n-button ghost @click="fetchData">
-            刷新
+			{{ t("aiAccount.refresh") }}
           </n-button>
         </n-space>
       </div>
@@ -238,42 +256,46 @@ onMounted(() => void fetchData())
       @update:show="val => (modalVisible = val)"
     >
       <n-form label-placement="top">
-        <n-form-item label="账号名称">
-          <n-input v-model:value="form.name" placeholder="例如：OpenAI 主账号" />
+		<n-form-item :label="t('aiAccount.accountName')">
+		  <n-input v-model:value="form.name" :placeholder="t('aiAccount.accountNamePlaceholder')" />
         </n-form-item>
-        <n-form-item label="服务地址">
-          <n-input v-model:value="form.baseUrl" placeholder="https://api.openai.com/v1" />
+		<n-form-item :label="t('aiAccount.protocol')">
+		  <n-select v-model:value="form.protocol" :options="protocolOptions" />
+		  <template #feedback>{{ t("aiAccount.protocolHint") }}</template>
         </n-form-item>
-        <n-form-item label="模型">
-          <n-input v-model:value="form.model" placeholder="gpt-4o-mini" />
+		<n-form-item :label="t('aiAccount.baseUrl')">
+		  <n-input v-model:value="form.baseUrl" :placeholder="baseUrlPlaceholder" />
         </n-form-item>
-        <n-form-item label="密钥">
+		<n-form-item :label="t('aiAccount.model')">
+		  <n-input v-model:value="form.model" :placeholder="modelPlaceholder" />
+		</n-form-item>
+		<n-form-item :label="t('aiAccount.apiKey')">
           <n-input
             v-model:value="form.apiKey"
             type="password"
             show-password-on="click"
-            :placeholder="editingId ? '留空保留当前密钥' : 'sk-...'"
+			:placeholder="editingId ? t('aiAccount.keepKey') : t('aiAccount.apiKeyPlaceholder')"
           />
         </n-form-item>
-        <n-form-item label="默认推理强度">
-          <n-select v-model:value="form.defaultReasoningEffort" :options="reasoningOptions" />
+		<n-form-item :label="t('aiAccount.reasoning')">
+		  <n-select v-model:value="form.defaultReasoningEffort" :options="reasoningOptions" :disabled="isAnthropic" />
           <template #feedback>
-            仅在保存时探测确认该模型支持时才会生效
+			{{ t(isAnthropic ? "aiAccount.reasoningUnavailable" : "aiAccount.reasoningHint") }}
           </template>
         </n-form-item>
-        <n-form-item label="优先级">
+		<n-form-item :label="t('aiAccount.priority')">
           <n-input-number v-model:value="form.priority" :min="0" :max="999" class="w-32" />
           <template #feedback>
-            数字越小越优先。功能设为「自动」时按这个顺序挑账号
+			{{ t("aiAccount.priorityHint") }}
           </template>
         </n-form-item>
-        <n-form-item label="启用">
+		<n-form-item :label="t('aiAccount.enabled')">
           <n-switch v-model:value="form.enabled" />
         </n-form-item>
-        <n-form-item label="允许用于记忆抽取">
+		<n-form-item :label="t('aiAccount.memoryAuthorization')">
           <n-switch v-model:value="form.useForMemoryExtraction" />
           <template #feedback>
-            抽取会把整段会话记录发给该服务，需要单独授权
+			{{ t("aiAccount.memoryAuthorizationHint") }}
           </template>
         </n-form-item>
 		<n-form-item :label="t('securityMonitoring.aiAuthorization')">
@@ -286,10 +308,10 @@ onMounted(() => void fetchData())
       <template #footer>
         <div class="flex justify-end gap-2">
           <n-button :disabled="saving" @click="modalVisible = false">
-            取消
+			{{ t("aiAccount.cancel") }}
           </n-button>
           <n-button type="primary" :loading="saving" @click="submit">
-            保存并测试连接
+			{{ t("aiAccount.saveAndProbe") }}
           </n-button>
         </div>
       </template>

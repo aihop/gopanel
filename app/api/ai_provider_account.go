@@ -12,6 +12,7 @@ import (
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
 	appI18n "github.com/aihop/gopanel/i18n"
+	"github.com/aihop/gopanel/utils/aiprovider"
 	"github.com/aihop/gopanel/utils/encrypt"
 	"github.com/aihop/gopanel/utils/token"
 	"github.com/gofiber/fiber/v3"
@@ -25,6 +26,7 @@ type aiProviderAccountView struct {
 func aiProviderAccountViews(accounts []model.AIProviderAccount) []aiProviderAccountView {
 	views := make([]aiProviderAccountView, 0, len(accounts))
 	for _, account := range accounts {
+		account.Protocol = aiprovider.NormalizeProtocol(account.Protocol)
 		views = append(views, aiProviderAccountView{
 			AIProviderAccount: account,
 			HasAPIKey:         strings.TrimSpace(account.APIKey) != "",
@@ -56,6 +58,7 @@ func SaveAIProviderAccount(c fiber.Ctx) error {
 	}
 	var req struct {
 		Name                   string `json:"name"`
+		Protocol               string `json:"protocol"`
 		BaseURL                string `json:"baseUrl"`
 		APIKey                 string `json:"apiKey"`
 		Model                  string `json:"model"`
@@ -76,6 +79,7 @@ func SaveAIProviderAccount(c fiber.Ctx) error {
 		}
 	}
 	account.Name = strings.TrimSpace(req.Name)
+	account.Protocol = aiprovider.NormalizeProtocol(req.Protocol)
 	account.BaseURL = strings.TrimRight(strings.TrimSpace(req.BaseURL), "/")
 	account.Model = strings.TrimSpace(req.Model)
 	account.Enabled = req.Enabled
@@ -83,6 +87,9 @@ func SaveAIProviderAccount(c fiber.Ctx) error {
 	account.UseForSecurityAnalysis = req.UseForSecurityAnalysis
 	account.Priority = normalizeAIProviderPriority(req.Priority)
 	account.DefaultReasoningEffort = normalizeCodeReasoningEffort(req.DefaultReasoningEffort)
+	if account.Protocol == "" {
+		return c.JSON(e.Fail(appI18n.GetErrMsg("ErrAIProviderProtocolUnsupported")))
+	}
 	if account.Name == "" || account.BaseURL == "" || account.Model == "" {
 		return c.JSON(e.Fail(errors.New("请填写账号名称、服务地址和模型名称")))
 	}
@@ -102,7 +109,7 @@ func SaveAIProviderAccount(c fiber.Ctx) error {
 		return c.JSON(e.Fail(errors.New("已保存的密钥无法解密，请重新填写")))
 	}
 	probe, probeErr := probeAIProviderAccount(context.Background(), codeMemoryLLMConfig{
-		BaseURL: account.BaseURL, APIKey: apiKey, Model: account.Model,
+		Protocol: account.Protocol, BaseURL: account.BaseURL, APIKey: apiKey, Model: account.Model,
 	}, account.DefaultReasoningEffort)
 	if probeErr != nil {
 		return c.JSON(e.Fail(probeErr))
@@ -190,10 +197,13 @@ func aiProviderAccountLLMConfig(account *model.AIProviderAccount) (codeMemoryLLM
 		}
 		apiKey = decrypted
 	}
-	return codeMemoryLLMConfig{BaseURL: account.BaseURL, APIKey: apiKey, Model: account.Model}, nil
+	return codeMemoryLLMConfig{
+		Protocol: aiprovider.NormalizeProtocol(account.Protocol),
+		BaseURL:  account.BaseURL, APIKey: apiKey, Model: account.Model,
+	}, nil
 }
 
-func codeProviderRequestForAccount(userID, accountID uint) (*codeProviderRequest, error) {
+func codeProviderRequestForAccount(userID, accountID uint, executorID string) (*codeProviderRequest, error) {
 	if global.DB == nil || userID == 0 || accountID == 0 {
 		return nil, appI18n.GetErrMsg("ErrCodeProviderAccountUnavailable")
 	}
@@ -209,5 +219,21 @@ func codeProviderRequestForAccount(userID, accountID uint) (*codeProviderRequest
 	if strings.TrimSpace(config.APIKey) == "" {
 		return nil, appI18n.GetErrMsg("ErrCodeProviderAccountKeyMissing")
 	}
+	if !codeExecutorSupportsProviderProtocol(executorID, config.Protocol) {
+		return nil, appI18n.GetErrMsg("ErrCodeProviderProtocolMismatch")
+	}
 	return &codeProviderRequest{BaseURL: config.BaseURL, APIKey: config.APIKey, Model: config.Model}, nil
+}
+
+func codeExecutorSupportsProviderProtocol(executorID, protocol string) bool {
+	switch executorID {
+	case "codex":
+		return protocol == aiprovider.ProtocolOpenAIResponses
+	case "claude":
+		return protocol == aiprovider.ProtocolAnthropic
+	case "opencode", "aider":
+		return protocol == aiprovider.ProtocolOpenAIChat
+	default:
+		return false
+	}
 }

@@ -18,6 +18,7 @@ import type {
 } from "@/api/interface/code"
 import type { AIProviderAccount } from "@/api/interface/aiAccounts"
 import { newCodeSessionMessages } from "../newCodeSessionMessages"
+import { filterProviderAccountsForExecutor } from "../providerProtocol"
 
 const props = defineProps<{
 	show: boolean
@@ -58,9 +59,7 @@ const approvalPolicies = computed<CodeApprovalPolicy[]>(() =>
 )
 const providerFields = computed(() => selectedExecutor.value?.configSchema?.fields || [])
 const showProviderConfig = computed(() => providerFields.value.length > 0)
-const availableProviderAccounts = computed(() =>
-	providerAccounts.value.filter(account => account.enabled && account.hasApiKey)
-)
+const availableProviderAccounts = computed(() => filterProviderAccountsForExecutor(providerAccounts.value, selectedExecutorId.value))
 const providerAccountOptions = computed(() =>
 	availableProviderAccounts.value.map(account => ({
 		label: `${account.name} · ${account.model}`,
@@ -173,6 +172,8 @@ watch(selectedExecutorId, value => {
 			? "safe_auto"
 			: approvalPolicies.value[0] || "full_auto"
 	}
+	if (!availableProviderAccounts.value.some(account => account.id === selectedProviderAccountId.value))
+		selectedProviderAccountId.value = availableProviderAccounts.value[0]?.id || null
 })
 
 const close = () => emit("update:show", false)

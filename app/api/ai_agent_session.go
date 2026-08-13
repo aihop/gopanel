@@ -208,7 +208,7 @@ func CreateAISession(c fiber.Ctx) error {
 		if providerRequest != nil {
 			return c.JSON(e.Fail(appI18n.GetErrMsg("ErrCodeProviderAccountConflict")))
 		}
-		providerRequest, err = codeProviderRequestForAccount(claims.UserId, req.ProviderAccountID)
+		providerRequest, err = codeProviderRequestForAccount(claims.UserId, req.ProviderAccountID, executorID)
 		if err != nil {
 			return c.JSON(e.Fail(err))
 		}

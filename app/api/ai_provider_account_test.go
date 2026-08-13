@@ -6,6 +6,7 @@ import (
 
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/global"
+	"github.com/aihop/gopanel/utils/aiprovider"
 	"github.com/aihop/gopanel/utils/encrypt"
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
@@ -28,7 +29,8 @@ func withAIProviderDB(t *testing.T) {
 func newProviderAccount(userID uint, name string, priority int, enabled, forMemory bool) *model.AIProviderAccount {
 	return &model.AIProviderAccount{
 		UserID: userID, Name: name, BaseURL: "https://example.com/v1", APIKey: "cipher",
-		Model: "gpt-4o-mini", Enabled: enabled, UseForMemoryExtraction: forMemory, Priority: priority,
+		Protocol: aiprovider.ProtocolOpenAIChat, Model: "gpt-4o-mini",
+		Enabled: enabled, UseForMemoryExtraction: forMemory, Priority: priority,
 	}
 }
 
@@ -113,19 +115,65 @@ func TestCodeProviderRequestForAccountUsesOwnedEnabledAccount(t *testing.T) {
 	if err := global.DB.Create(account).Error; err != nil {
 		t.Fatal(err)
 	}
-	provider, err := codeProviderRequestForAccount(3, account.ID)
+	provider, err := codeProviderRequestForAccount(3, account.ID, "opencode")
 	if err != nil || provider.APIKey != "session-secret" || provider.Model != account.Model {
 		t.Fatalf("应解析当前用户启用的账号：%#v, %v", provider, err)
 	}
-	if _, err := codeProviderRequestForAccount(99, account.ID); err == nil {
+	if _, err := codeProviderRequestForAccount(99, account.ID, "opencode"); err == nil {
 		t.Fatal("不应允许其他用户使用该账号")
 	}
 	account.Enabled = false
 	if err := global.DB.Save(account).Error; err != nil {
 		t.Fatal(err)
 	}
-	if _, err := codeProviderRequestForAccount(3, account.ID); err == nil {
+	if _, err := codeProviderRequestForAccount(3, account.ID, "opencode"); err == nil {
 		t.Fatal("不应允许会话使用已停用账号")
+	}
+}
+
+func TestCodeProviderRequestForAccountRejectsProtocolMismatch(t *testing.T) {
+	withAIProviderDB(t)
+	oldKey := global.CONF.System.EncryptKey
+	global.CONF.System.EncryptKey = "0123456789abcdef0123456789abcdef"
+	t.Cleanup(func() { global.CONF.System.EncryptKey = oldKey })
+	ciphertext, err := encrypt.StringEncrypt("session-secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	account := newProviderAccount(3, "Chat 账号", 1, true, false)
+	account.APIKey = ciphertext
+	if err := global.DB.Create(account).Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := codeProviderRequestForAccount(3, account.ID, "codex"); err == nil {
+		t.Fatal("Codex 不应接受 Chat Completions 账号")
+	}
+}
+
+func TestCodeExecutorSupportsProviderProtocol(t *testing.T) {
+	tests := []struct {
+		executor string
+		protocol string
+	}{
+		{executor: "codex", protocol: aiprovider.ProtocolOpenAIResponses},
+		{executor: "claude", protocol: aiprovider.ProtocolAnthropic},
+		{executor: "opencode", protocol: aiprovider.ProtocolOpenAIChat},
+		{executor: "aider", protocol: aiprovider.ProtocolOpenAIChat},
+	}
+	for _, test := range tests {
+		if !codeExecutorSupportsProviderProtocol(test.executor, test.protocol) {
+			t.Fatalf("%s 应支持 %s", test.executor, test.protocol)
+		}
+	}
+	if codeExecutorSupportsProviderProtocol("codex", aiprovider.ProtocolOpenAIChat) {
+		t.Fatal("Codex 不应接受 Chat Completions")
+	}
+}
+
+func TestAIProviderAccountViewsDefaultsLegacyProtocol(t *testing.T) {
+	views := aiProviderAccountViews([]model.AIProviderAccount{{Name: "legacy"}})
+	if len(views) != 1 || views[0].Protocol != aiprovider.ProtocolOpenAIChat {
+		t.Fatalf("旧账号应默认使用 Chat Completions：%#v", views)
 	}
 }
 

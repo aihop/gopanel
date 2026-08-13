@@ -9,6 +9,7 @@ import (
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
+	"github.com/aihop/gopanel/utils/aiprovider"
 	"github.com/aihop/gopanel/utils/encrypt"
 	"github.com/aihop/gopanel/utils/token"
 	"github.com/gofiber/fiber/v3"
@@ -70,7 +71,7 @@ func TestCreateAISessionUsesSavedProviderAccount(t *testing.T) {
 	}
 	account := &model.AIProviderAccount{
 		UserID: 7, Name: "开发账号", BaseURL: "https://gateway.example.com/v1",
-		APIKey: ciphertext, Model: "gpt-5", Enabled: true,
+		APIKey: ciphertext, Model: "gpt-5", Protocol: aiprovider.ProtocolOpenAIResponses, Enabled: true,
 	}
 	if err := database.Create(account).Error; err != nil {
 		t.Fatal(err)

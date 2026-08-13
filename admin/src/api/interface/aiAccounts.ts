@@ -1,8 +1,10 @@
 export type AIReasoningEffort = "" | "low" | "medium" | "high"
+export type AIProviderProtocol = "openai_chat_completions" | "openai_responses" | "anthropic_messages"
 
 export interface AIProviderAccount {
 	id: number
 	name: string
+	protocol: AIProviderProtocol
 	baseUrl: string
 	model: string
 	enabled: boolean
@@ -23,6 +25,7 @@ export interface AIProviderAccount {
 
 export interface AIProviderAccountInput {
 	name: string
+	protocol: AIProviderProtocol
 	baseUrl: string
 	apiKey: string
 	model: string

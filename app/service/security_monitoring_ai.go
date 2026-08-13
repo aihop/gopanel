@@ -1,15 +1,12 @@
 package service
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -17,6 +14,7 @@ import (
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
 	"github.com/aihop/gopanel/global"
+	"github.com/aihop/gopanel/utils/aiprovider"
 	"github.com/aihop/gopanel/utils/encrypt"
 )
 
@@ -211,59 +209,33 @@ func buildSecurityAnalysisPrompt(event *model.SecurityEvent) string {
 type securityAIUsage struct{ InputTokens, OutputTokens, TotalTokens int64 }
 
 func callSecurityAI(ctx context.Context, account *model.AIProviderAccount, apiKey, prompt string) (string, securityAIUsage, error) {
-	payload := map[string]any{
-		"model":      account.Model,
-		"messages":   []map[string]string{{"role": "system", "content": "You analyze untrusted security evidence and return JSON only."}, {"role": "user", "content": prompt}},
-		"max_tokens": 1200,
+	request := aiprovider.Request{
+		Messages: []aiprovider.Message{
+			{Role: "system", Content: "You analyze untrusted security evidence and return JSON only."},
+			{Role: "user", Content: prompt},
+		},
+		MaxTokens: 1200,
 	}
 	if account.SupportsTemperature {
-		payload["temperature"] = 0
+		temperature := 0.0
+		request.Temperature = &temperature
 	}
 	if account.SupportsJSONSchema {
-		payload["response_format"] = map[string]any{
-			"type": "json_schema",
-			"json_schema": map[string]any{
-				"name": "gopanel_security_analysis", "strict": false, "schema": securityAnalysisJSONSchema(),
-			},
-		}
+		request.Schema = securityAnalysisJSONSchema()
+		request.SchemaName = "gopanel_security_analysis"
 	}
-	body, _ := json.Marshal(payload)
-	requestCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
-	defer cancel()
-	request, err := http.NewRequestWithContext(requestCtx, http.MethodPost, strings.TrimRight(account.BaseURL, "/")+"/chat/completions", bytes.NewReader(body))
-	if err != nil {
-		return "", securityAIUsage{}, err
+	if account.SupportsReasoningEffort {
+		request.ReasoningEffort = account.DefaultReasoningEffort
 	}
-	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("Authorization", "Bearer "+apiKey)
-	response, err := http.DefaultClient.Do(request)
+	response, err := aiprovider.Call(ctx, aiprovider.Config{
+		Protocol: account.Protocol, BaseURL: account.BaseURL, APIKey: apiKey, Model: account.Model,
+	}, request)
 	if err != nil {
 		return "", securityAIUsage{}, fmt.Errorf("调用安全分析模型失败: %w", err)
 	}
-	defer response.Body.Close()
-	raw, err := io.ReadAll(io.LimitReader(response.Body, 2<<20))
-	if err != nil {
-		return "", securityAIUsage{}, err
-	}
-	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return "", securityAIUsage{}, fmt.Errorf("安全分析模型返回 %d", response.StatusCode)
-	}
-	var decoded struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
-		Usage struct {
-			PromptTokens     int64 `json:"prompt_tokens"`
-			CompletionTokens int64 `json:"completion_tokens"`
-			TotalTokens      int64 `json:"total_tokens"`
-		} `json:"usage"`
-	}
-	if err := json.Unmarshal(raw, &decoded); err != nil || len(decoded.Choices) == 0 {
-		return "", securityAIUsage{}, errors.New("安全分析模型响应无法解析")
-	}
-	return decoded.Choices[0].Message.Content, securityAIUsage{decoded.Usage.PromptTokens, decoded.Usage.CompletionTokens, decoded.Usage.TotalTokens}, nil
+	return response.Message.Content, securityAIUsage{
+		response.Usage.InputTokens, response.Usage.OutputTokens, response.Usage.TotalTokens,
+	}, nil
 }
 
 func parseSecurityAIResult(output string) (*securityAIResult, error) {

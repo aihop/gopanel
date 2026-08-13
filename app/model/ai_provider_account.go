@@ -14,6 +14,7 @@ type AIProviderAccount struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 	UserID    uint      `gorm:"column:user_id;not null;index" json:"userId"`
 	Name      string    `gorm:"column:name;type:varchar(128);not null" json:"name"`
+	Protocol  string    `gorm:"column:protocol;type:varchar(32);not null;default:'openai_chat_completions'" json:"protocol"`
 	BaseURL   string    `gorm:"column:base_url;type:varchar(1024);not null" json:"baseUrl"`
 	APIKey    string    `gorm:"column:api_key;type:text" json:"-"`
 	Model     string    `gorm:"column:model;type:varchar(255);not null" json:"model"`
