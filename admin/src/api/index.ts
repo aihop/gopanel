@@ -160,7 +160,6 @@ class RequestHttp {
 							return Promise.reject(error)
 					}
 				}
-				if (!window.navigator.onLine) router?.replace({ path: "/500" })
 				return Promise.reject(error)
 			}
 		)
