@@ -14,6 +14,7 @@ import (
 	"github.com/aihop/gopanel/app/service"
 	"github.com/aihop/gopanel/buserr"
 	"github.com/aihop/gopanel/constant"
+	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/init/geo"
 	"github.com/aihop/gopanel/utils/cryptx"
 	"github.com/aihop/gopanel/utils/token"
@@ -50,7 +51,14 @@ func IssueMobilePairing(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	return c.JSON(e.Succ(fiber.Map{"code": code, "expiresAt": expiresAt, "deviceTtlDays": req.DeviceTTLDays}))
+	entrancePath := ""
+	entrance := strings.Trim(strings.TrimSpace(global.CONF.System.Entrance), "/")
+	if entrance != "" && !strings.EqualFold(strings.TrimSpace(global.CONF.System.Mode), "dev") {
+		entrancePath = "/" + entrance
+	}
+	return c.JSON(e.Succ(fiber.Map{
+		"code": code, "expiresAt": expiresAt, "deviceTtlDays": req.DeviceTTLDays, "entrancePath": entrancePath,
+	}))
 }
 
 func ExchangeMobilePairing(c fiber.Ctx) error {

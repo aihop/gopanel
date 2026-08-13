@@ -155,7 +155,7 @@ func Entrance(c fiber.Ctx) error {
 	}
 	if authorizeEntrance(c, entrance) {
 		if isSecurityEntrancePath(c.Path(), entrance) && isMobileUserAgent(c.UserAgent()) {
-			return c.Redirect().Status(fiber.StatusFound).To("/mobile")
+			return c.Redirect().Status(fiber.StatusFound).To(mobileEntranceRedirect(c))
 		}
 		return c.Next()
 	}
@@ -217,6 +217,15 @@ func isMobileUserAgent(userAgent string) bool {
 		}
 	}
 	return false
+}
+
+func mobileEntranceRedirect(c fiber.Ctx) string {
+	pairingCode := strings.TrimSpace(c.Query("mobilePairing"))
+	decoded, err := base64.RawURLEncoding.DecodeString(pairingCode)
+	if err == nil && len(decoded) == 32 {
+		return "/mobile/auth?code=" + pairingCode
+	}
+	return "/mobile"
 }
 
 func matchesEntranceValue(raw string, expected string) bool {

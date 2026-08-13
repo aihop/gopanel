@@ -1,7 +1,9 @@
 package middleware
 
 import (
+	"encoding/base64"
 	"io"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -54,6 +56,32 @@ func TestMobilePageRequiresSecurityEntrance(t *testing.T) {
 	}
 }
 
+func TestMobileLoginRequiresSecurityEntranceCookie(t *testing.T) {
+	server := newEntranceTestServer(t)
+	request := httptest.NewRequest("POST", "/api/mobile/login", strings.NewReader(`{}`))
+	request.Header.Set("Content-Type", "application/json")
+	response, err := server.Test(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != fiber.StatusForbidden {
+		t.Fatalf("status = %d, want %d", response.StatusCode, fiber.StatusForbidden)
+	}
+
+	authorizedRequest := httptest.NewRequest("POST", "/api/mobile/login", strings.NewReader(`{}`))
+	authorizedRequest.Header.Set("Content-Type", "application/json")
+	authorizedRequest.AddCookie(&http.Cookie{
+		Name: constant.Entrance, Value: base64.StdEncoding.EncodeToString([]byte("secure-entry")),
+	})
+	authorizedResponse, err := server.Test(authorizedRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if authorizedResponse.StatusCode != fiber.StatusOK {
+		t.Fatalf("authorized status = %d, want %d", authorizedResponse.StatusCode, fiber.StatusOK)
+	}
+}
+
 func TestMobileSecurityEntranceRedirectsToMobile(t *testing.T) {
 	server := newEntranceTestServer(t)
 	request := httptest.NewRequest("GET", "/secure-entry", nil)
@@ -86,6 +114,33 @@ func TestMobileSecurityEntranceRedirectsToMobile(t *testing.T) {
 	}
 }
 
+func TestMobileSecurityEntrancePreservesValidPairingCode(t *testing.T) {
+	server := newEntranceTestServer(t)
+	pairingCode := "MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI"
+	request := httptest.NewRequest("GET", "/secure-entry?mobilePairing="+pairingCode, nil)
+	request.Header.Set("User-Agent", "Mozilla/5.0 (Linux; Android 15; Mobile)")
+	response, err := server.Test(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if location := response.Header.Get("Location"); location != "/mobile/auth?code="+pairingCode {
+		t.Fatalf("location = %q, want pairing authorization route", location)
+	}
+}
+
+func TestMobileSecurityEntranceRejectsInvalidPairingCode(t *testing.T) {
+	server := newEntranceTestServer(t)
+	request := httptest.NewRequest("GET", "/secure-entry?mobilePairing=not-a-pairing-code", nil)
+	request.Header.Set("User-Agent", "Mozilla/5.0 (Linux; Android 15; Mobile)")
+	response, err := server.Test(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if location := response.Header.Get("Location"); location != "/mobile" {
+		t.Fatalf("location = %q, want /mobile", location)
+	}
+}
+
 func TestDesktopSecurityEntranceDoesNotRedirect(t *testing.T) {
 	server := newEntranceTestServer(t)
 	request := httptest.NewRequest("GET", "/secure-entry", nil)
@@ -108,7 +163,7 @@ func newEntranceTestServer(t *testing.T) *fiber.App {
 
 	server := fiber.New()
 	server.Use(Entrance)
-	server.Get("/*", func(c fiber.Ctx) error {
+	server.All("/*", func(c fiber.Ctx) error {
 		return c.SendString("panel")
 	})
 	return server

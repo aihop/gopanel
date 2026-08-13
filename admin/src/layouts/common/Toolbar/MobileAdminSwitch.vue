@@ -13,6 +13,7 @@ const message = useMessage()
 const showModal = ref(false)
 const loading = ref(false)
 const pairingCode = ref("")
+const entrancePath = ref("")
 const desktopMobileUrl = (window as Window & { __GOPANEL_DESKTOP_MOBILE_URL__?: string }).__GOPANEL_DESKTOP_MOBILE_URL__
 const publicUrl = ref(desktopMobileUrl || new URL("/mobile", window.location.origin).toString())
 const deviceTtlDays = ref(30)
@@ -27,8 +28,9 @@ const durationOptions = computed(() => [1, 7, 30, 90, 365].map(days => ({
 const qrCodeUrl = computed(() => {
 	if (!pairingCode.value) return ""
 	try {
-		const url = new URL("/mobile/auth", normalizedPublicUrl())
-		url.searchParams.set("code", pairingCode.value)
+		const securePath = entrancePath.value || "/mobile/auth"
+		const url = new URL(securePath, normalizedPublicUrl())
+		url.searchParams.set(entrancePath.value ? "mobilePairing" : "code", pairingCode.value)
 		return url.toString()
 	} catch {
 		return ""
@@ -81,6 +83,7 @@ async function generatePairing() {
 		const result = await issueMobilePairing(requestedTTLDays)
 		if (requestId !== pairingRequestId) return
 		pairingCode.value = result.code
+		entrancePath.value = result.entrancePath || ""
 	} catch (error) {
 		if (requestId !== pairingRequestId) return
 		message.error(error instanceof Error ? error.message : t("mobile.pairFailed"))
