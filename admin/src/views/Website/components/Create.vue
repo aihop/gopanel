@@ -104,7 +104,7 @@
 						<div class="w-full space-y-3">
 							<div
 								v-for="(item, index) in form.upstreams"
-								:key="`${index}-${item.address}`"
+								:key="item.formKey"
 								class="rounded-2xl border border-slate-200 bg-slate-50 p-3"
 							>
 								<div class="flex items-center justify-between gap-3">
@@ -308,6 +308,7 @@ type ImageOption = { label: string; value: string }
 type WebsiteDomainValue = string | { domain?: string }
 type SecurityPreset = "off" | "recommended" | "strict"
 type WebsiteFormUpstream = {
+	formKey: number
 	address: string
 	scheme: string
 	enabled: boolean
@@ -357,12 +358,9 @@ type WebsiteFormRecord = Website.WebsiteDTO & {
 	hstsEnabled?: boolean
 }
 
-function createDefaultUpstream(): WebsiteFormUpstream {
-	return {
-		address: "",
-		scheme: "http",
-		enabled: true
-	}
+let upstreamFormKey = 0
+function createDefaultUpstream(values: Partial<Omit<WebsiteFormUpstream, "formKey">> = {}): WebsiteFormUpstream {
+	return { formKey: ++upstreamFormKey, address: values.address || "", scheme: values.scheme || "http", enabled: values.enabled !== false }
 }
 
 function buildProxyFromUpstream(item?: { address?: string; scheme?: string } | null): string {
@@ -374,7 +372,7 @@ function buildProxyFromUpstream(item?: { address?: string; scheme?: string } | n
 
 function normalizeUpstreamForm(record?: Website.WebsiteUpstream[] | null, proxy?: string): WebsiteFormUpstream[] {
 	if (record && record.length > 0) {
-		return record.map(item => ({
+		return record.map(item => createDefaultUpstream({
 			address: item.address || "",
 			scheme: item.scheme || "http",
 			enabled: item.enabled !== false
@@ -385,12 +383,12 @@ function normalizeUpstreamForm(record?: Website.WebsiteUpstream[] | null, proxy?
 		return [createDefaultUpstream()]
 	}
 	if (fallback.startsWith("https://")) {
-		return [{ address: fallback.replace(/^https:\/\//, ""), scheme: "https", enabled: true }]
+		return [createDefaultUpstream({ address: fallback.replace(/^https:\/\//, ""), scheme: "https" })]
 	}
 	if (fallback.startsWith("http://")) {
-		return [{ address: fallback.replace(/^http:\/\//, ""), scheme: "http", enabled: true }]
+		return [createDefaultUpstream({ address: fallback.replace(/^http:\/\//, ""), scheme: "http" })]
 	}
-	return [{ address: fallback, scheme: "http", enabled: true }]
+	return [createDefaultUpstream({ address: fallback })]
 }
 
 function pickUpstreamHealth(record?: Website.WebsiteUpstream[] | null) {
