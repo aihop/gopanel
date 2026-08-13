@@ -97,18 +97,17 @@ func OperationLog() fiber.Handler {
 		err := c.Next()
 		fillOperationIdentity(c, record)
 
-		datas := c.Response().Body()
-		if string(c.Response().Header.Peek("Content-Encoding")) == "gzip" {
-			reader, err := gzip.NewReader(bytes.NewReader(datas))
-			if err == nil {
-				defer reader.Close()
-				datas, _ = io.ReadAll(reader)
-			}
-		}
-
 		var res response
 		isJSONResponse := strings.Contains(string(c.Response().Header.Peek("Content-Type")), "application/json")
-		if isJSONResponse {
+		if isJSONResponse && !c.Response().IsBodyStream() {
+			datas := c.Response().Body()
+			if string(c.Response().Header.Peek("Content-Encoding")) == "gzip" {
+				reader, gzipErr := gzip.NewReader(bytes.NewReader(datas))
+				if gzipErr == nil {
+					defer reader.Close()
+					datas, _ = io.ReadAll(reader)
+				}
+			}
 			_ = json.Unmarshal(datas, &res)
 			if res.Code == 200 || res.Code == 0 {
 				record.Status = constant.StatusSuccess

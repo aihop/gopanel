@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"bufio"
 	"bytes"
 	"net/http/httptest"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"github.com/aihop/gopanel/utils/token"
 	"github.com/glebarez/sqlite"
 	"github.com/gofiber/fiber/v3"
+	"github.com/valyala/fasthttp"
 	"gorm.io/gorm"
 )
 
@@ -62,6 +64,38 @@ func TestOperationLogKeepsMappedDetailAndSkipsReads(t *testing.T) {
 	}
 	if len(records) != 1 || records[0].DetailZH != "清理容器 [demo] 日志" {
 		t.Fatalf("mapped detail or read filtering failed: %#v", records)
+	}
+}
+
+func TestOperationLogPreservesStreamingResponse(t *testing.T) {
+	database := setupOperationLogDatabase(t)
+	app := fiber.New()
+	app.Use(OperationLog())
+	app.Post("/api/stream", func(c fiber.Ctx) error {
+		c.Set(fiber.HeaderContentType, "text/event-stream")
+		c.RequestCtx().SetBodyStreamWriter(func(writer *bufio.Writer) {
+			_, _ = writer.WriteString("event: delta\ndata: first\n\n")
+			_ = writer.Flush()
+		})
+		return nil
+	})
+
+	requestCtx := &fasthttp.RequestCtx{}
+	requestCtx.Request.Header.SetMethod(fiber.MethodPost)
+	requestCtx.Request.SetRequestURI("/api/stream")
+	app.Handler()(requestCtx)
+	if !requestCtx.Response.IsBodyStream() {
+		t.Fatal("operation log middleware consumed the streaming response")
+	}
+	if body := string(requestCtx.Response.Body()); body != "event: delta\ndata: first\n\n" {
+		t.Fatalf("unexpected streaming body: %q", body)
+	}
+	var record model.OperationLog
+	if err := database.First(&record).Error; err != nil {
+		t.Fatal(err)
+	}
+	if record.Status != constant.StatusSuccess || record.Path != "/api/stream" {
+		t.Fatalf("unexpected streaming operation log: %#v", record)
 	}
 }
 
