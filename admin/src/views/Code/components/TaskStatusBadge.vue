@@ -6,17 +6,26 @@ import { codeWorkspaceMessages } from "../codeWorkspaceMessages"
 
 const props = defineProps<{ status: string }>()
 const { t } = useI18n({ messages: codeWorkspaceMessages })
-const knownStatuses = ["active", "queued", "pending_approval", "running", "completed", "failed", "cancelled"]
+const knownStatuses = [
+	"active",
+	"queued",
+	"pending_approval",
+	"running",
+	"delivering",
+	"completed",
+	"failed",
+	"cancelled"
+]
 const normalizedStatus = computed(() => (knownStatuses.includes(props.status) ? props.status : "unknown"))
 const tagType = computed<TagProps["type"]>(() => {
 	if (normalizedStatus.value === "completed") return "success"
 	if (normalizedStatus.value === "failed") return "error"
 	if (["pending_approval", "cancelled"].includes(normalizedStatus.value)) return "warning"
-	if (["queued", "running"].includes(normalizedStatus.value)) return "info"
+	if (["queued", "running", "delivering"].includes(normalizedStatus.value)) return "info"
 	return "default"
 })
-const isActive = computed(() => ["queued", "running"].includes(normalizedStatus.value))
-const isRunning = computed(() => normalizedStatus.value === "running")
+const isActive = computed(() => ["queued", "running", "delivering"].includes(normalizedStatus.value))
+const isRunning = computed(() => ["running", "delivering"].includes(normalizedStatus.value))
 </script>
 
 <template>

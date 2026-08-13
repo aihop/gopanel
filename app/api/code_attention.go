@@ -30,6 +30,7 @@ type codeAttentionItem struct {
 	Severity   string                `json:"severity"`
 	Title      string                `json:"title"`
 	Summary    string                `json:"summary"`
+	ProjectID  uint                  `json:"projectId"`
 	SessionID  uint                  `json:"sessionId"`
 	TaskID     uint                  `json:"taskId,omitempty"`
 	ApprovalID uint                  `json:"approvalId,omitempty"`
@@ -186,7 +187,7 @@ func loadCodeAttentionSources(userID uint, sessionIDs []uint) (map[uint]*model.A
 }
 
 func buildCodeAttentionItem(session model.AIDevSession, approval *model.AIApproval, delivery *model.AICodeDeliveryJob, run *model.AIExecutionRun) *codeAttentionItem {
-	item := &codeAttentionItem{SessionID: session.ID, TaskID: session.LastTaskID, UpdatedAt: session.UpdatedAt}
+	item := &codeAttentionItem{ProjectID: session.ProjectID, SessionID: session.ID, TaskID: session.LastTaskID, UpdatedAt: session.UpdatedAt}
 	switch {
 	case approval != nil:
 		item.ID, item.Type, item.Severity = fmt.Sprintf("approval:%d", approval.ID), "approval", "warning"

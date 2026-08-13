@@ -26,6 +26,7 @@ import type {
 	CodeStructureResult,
 	CodexRuntimeState,
 	CodeTokenUsageResponse,
+	CodeAttentionItem,
 } from "../interface/code"
 import type { CodeProjectBranches } from "../interface/codeBranches"
 import type { CodeProjectCommitResult } from "../interface/codeProjectCommit"
@@ -278,6 +279,10 @@ export function approveCodeInstruction(approvalId: number) {
 
 export function getCodeApprovals(status = "pending") {
 	return http.get<{ items: CodeApproval[]; total: number }>("/code/approvals", { status, limit: 50 })
+}
+
+export function getCodeAttention(limit = 8) {
+	return http.get<{ items: CodeAttentionItem[]; total: number }>("/code/attention", { limit })
 }
 
 export function rejectCodeInstruction(approvalId: number) {

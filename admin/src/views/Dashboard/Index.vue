@@ -1,207 +1,17 @@
 <template>
-  <div class="dashboard-root grid grid-cols-1 gap-8 2xl:grid-cols-[minmax(0,1fr)_300px]">
-    <div class="min-w-0 space-y-8">
-      <StatusCard ref="statusRef"></StatusCard>
-
-      <n-card
-        :title="$t('menu.monitor')"
-        :bordered="false"
-        class="shadow"
-      >
-        <!-- header 右侧插槽 -->
-        <template #header-extra>
-          <n-space>
-            <!-- 单选按钮组 -->
-            <n-radio-group
-              v-model:value="chartOption"
-              style="float: right; margin-left: 5px"
-              @update:value="changeOption"
-            >
-              <n-radio-button value="network">{{ $t("home.network") }}</n-radio-button>
-              <n-radio-button value="io">{{ $t("home.io") }}</n-radio-button>
-            </n-radio-group>
-
-            <!-- 网卡下拉框 -->
-            <n-select
-              v-if="chartOption === 'network'"
-              v-model:value="searchInfo.netOption"
-              :options="netSelectOptions"
-              placeholder=""
-              style="width: 200px; float: right"
-              @update:value="onLoadBaseInfo(false, 'network')"
-            >
-              <!-- <template #prefix>{{ $t("home.networkCard") }}:</template> -->
-            </n-select>
-
-            <!-- 磁盘下拉框 -->
-            <n-select
-              v-if="chartOption === 'io'"
-              v-model:value="searchInfo.ioOption"
-              :options="ioSelectOptions"
-              placeholder=""
-              style="width: 200px; float: right"
-              @update:value="onLoadBaseInfo(false, 'io')"
-            >
-              <!-- <template #prefix>{{ $t("home.disk") }}:</template> -->
-            </n-select>
-          </n-space>
-        </template>
-
-        <template #default>
-          <!-- Network 标签 -->
-          <n-space
-            v-if="chartOption === 'network'"
-            class="monitor-tags"
-          >
-            <n-tag type="info">
-              {{ $t("monitor.up") }}: {{ computeSizeFromKBs(currentChartInfo.netBytesSent) }}
-            </n-tag>
-            <n-tag type="info">
-              {{ $t("monitor.down") }}: {{ computeSizeFromKBs(currentChartInfo.netBytesRecv) }}
-            </n-tag>
-            <n-tag type="info">
-              {{ $t("home.totalSend") }}: {{ computeSize(currentInfo.netBytesSent) }}
-            </n-tag>
-            <n-tag type="info">
-              {{ $t("home.totalRecv") }}: {{ computeSize(currentInfo.netBytesRecv) }}
-            </n-tag>
-          </n-space>
-
-          <!-- IO 标签 -->
-          <n-space
-            v-if="chartOption === 'io'"
-            class="monitor-tags"
-          >
-            <n-tag type="info">{{ $t("monitor.read") }}: {{ currentChartInfo.ioReadBytes }} MB</n-tag>
-            <n-tag type="info">{{ $t("monitor.write") }}: {{ currentChartInfo.ioWriteBytes }} MB</n-tag>
-            <n-tag type="info">
-              {{ $t("home.rwPerSecond") }}: {{ currentChartInfo.ioCount }}
-              {{ $t("commons.units.time") }}/s
-            </n-tag>
-            <n-tag type="info">{{ $t("home.ioDelay") }}: {{ currentChartInfo.ioTime }} ms</n-tag>
-          </n-space>
-
-          <!-- IO 图表 -->
-          <div
-            v-if="chartOption === 'io'"
-            style="margin-top: 40px"
-            class="mobile-monitor-chart"
-          >
-            <TrendSvg
-              :title="$t('home.io')"
-              :metric="`${currentChartInfo.ioReadBytes} MB / ${currentChartInfo.ioWriteBytes} MB`"
-              :points="ioReadBytes"
-              :secondary-points="ioWriteBytes"
-              :labels="timeIODatas"
-              :primary-label="$t('monitor.read')"
-              :secondary-label="$t('monitor.write')"
-              :badge="`${$t('home.ioDelay')}: ${currentChartInfo.ioTime} ms`"
-            />
-          </div>
-
-          <!-- Network 图表 -->
-          <div
-            v-if="chartOption === 'network'"
-            style="margin-top: 40px"
-            class="mobile-monitor-chart"
-          >
-            <TrendSvg
-              :title="$t('home.network')"
-              :metric="`${computeSizeFromKBs(currentChartInfo.netBytesSent)} / ${computeSizeFromKBs(currentChartInfo.netBytesRecv)}`"
-              :points="netBytesSents"
-              :secondary-points="netBytesRecvs"
-              :labels="timeNetDatas"
-              :primary-label="$t('monitor.up')"
-              :secondary-label="$t('monitor.down')"
-              :badge="searchInfo.netOption"
-            />
-          </div>
-        </template>
-      </n-card>
-    </div>
-    <div class="space-y-8 self-start 2xl:sticky 2xl:top-6">
-      <div class="rounded-2xl bg-base-accent border-base-accent p-5 shadow-sm">
-        <div class="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600">GoPanel Guide</div>
-        <div class="mt-3 text-lg font-semibold fg-base-100">{{ $t("home.homeHelper") }}</div>
-        <div class="mt-2 text-sm leading-6 text-slate-500">
-          {{ $t("home.homeHelperDesc") }}
-        </div>
-      </div>
-      <div class="rounded-2xl border border-slate-200 bg-base-100 p-5 shadow-sm">
-        <div class="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600">Popular Apps</div>
-        <div class="mt-3 text-lg font-semibold fg-base-100">{{ $t("home.popularApps") }}</div>
-        <div class="mt-2 text-sm leading-6 text-slate-500">
-          {{ $t("home.popularAppsDesc") }}
-        </div>
-        <div class="mt-5">
-          <n-spin :show="popularAppsLoading">
-            <div
-              v-if="popularApps.length"
-              class="space-y-3"
-            >
-              <div
-                v-for="item in popularApps"
-                :key="item.id"
-                class="rounded-xl border border-slate-200 bg-slate-50/80 p-4"
-              >
-                <div class="flex items-start gap-3">
-                  <div class="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white">
-                    <img
-                      v-if="item.icon"
-                      :src="item.icon"
-                      :alt="item.name"
-                      class="h-8 w-8 object-contain"
-                    />
-                    <span
-                      v-else
-                      class="text-sm font-semibold text-slate-400"
-                    >
-                      {{ item.name.slice(0, 1).toUpperCase() }}
-                    </span>
-                  </div>
-                  <div class="min-w-0 flex-1">
-                    <div class="flex items-start justify-between gap-3">
-                      <div class="min-w-0">
-                        <div class="truncate text-sm font-semibold fg-base-100">{{ item.name }}</div>
-                        <div class="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">
-                          {{ item.shortDescZh || item.description || "暂无应用说明" }}
-                        </div>
-                      </div>
-                      <n-tag
-                        size="small"
-                        type="info"
-                        :bordered="false"
-                      >
-                        {{ item.type || "App" }}
-                      </n-tag>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div
-              v-else
-              class="rounded-xl border border-dashed border-slate-200 bg-slate-50/60 px-4 py-6 text-center text-sm text-slate-400"
-            >
-              暂无热门应用
-            </div>
-          </n-spin>
-        </div>
-      </div>
-    </div>
-  </div>
+	<div class="dashboard-root grid grid-cols-1 gap-8 2xl:grid-cols-[minmax(0,1fr)_300px]">
+		<StatusCard ref="statusRef">
+			<DashboardMonitorCard @reload="onLoadBaseInfo(false, $event)" />
+		</StatusCard>
+	</div>
 </template>
 
 <script setup lang="ts">
-import type { App } from "@/api/interface/apps"
-import { appsListAPI } from "@/api/modules/apps"
 import { loadBaseInfo, loadCurrentInfo } from "@/api/modules/dashboard"
-import { getIOOptions, getNetworkOptions } from "@/api/modules/host"
-import { computeSize, computeSizeFromKBs, dateFormatForSecond } from "@/utils/util"
-import { computed, onMounted, ref, onUnmounted } from "vue"
-import { useI18n } from "vue-i18n"
+import { dateFormatForSecond } from "@/utils/util"
+import { onMounted, ref, onUnmounted } from "vue"
 import StatusCard from "./components/StatusCard.vue"
-import TrendSvg from "./components/TrendSvg.vue"
+import DashboardMonitorCard from "./components/DashboardMonitorCard.vue"
 import emitter from "@/utils/emitter"
 import {
 	baseInfo,
@@ -216,13 +26,7 @@ import {
 	timeNetDatas
 } from "./Index"
 
-const { t } = useI18n()
-
 const statusRef = ref()
-
-const chartOption = ref("network")
-const popularApps = ref<App.AppDTO[]>([])
-const popularAppsLoading = ref(false)
 
 let timer: ReturnType<typeof setInterval> | null = null
 let isInit = ref<boolean>(true)
@@ -237,20 +41,6 @@ const handleLowPowerMode = (value: unknown) => {
 function syncStatusCard() {
 	statusRef.value?.acceptParams(currentInfo.value, baseInfo.value)
 }
-
-const netSelectOptions = computed(() =>
-	(netOptions.value || []).map((value: string) => ({
-		label: value === "all" ? t("commons.table.all") : value,
-		value
-	}))
-)
-
-const ioSelectOptions = computed(() =>
-	(ioOptions.value || []).map((value: string) => ({
-		label: value === "all" ? t("commons.table.all") : value,
-		value
-	}))
-)
 
 async function onLoadBaseInfo(isInit: boolean, range: string) {
 	if (range === "all" || range === "io") {
@@ -416,47 +206,7 @@ async function onLoadCurrentInfo(scope: string) {
 	}
 }
 
-async function changeOption() {
-	isInit.value = true
-}
-
-const ioOptions = ref()
-const netOptions = ref()
-
-async function onLoadNetworkOptions() {
-	const res = await getNetworkOptions()
-	netOptions.value = res.data
-	searchInfo.netOption = netOptions.value && netOptions.value[0]
-}
-
-async function onLoadIOOptions() {
-	const res = await getIOOptions()
-	ioOptions.value = res.data
-	searchInfo.ioOption = ioOptions.value && ioOptions.value[0]
-}
-
-async function loadPopularApps() {
-	popularAppsLoading.value = true
-	try {
-		const res = await appsListAPI({
-			page: 1,
-			limit: 10,
-			recommend: true
-		})
-		
-		popularApps.value = (res.data as { items?: any[] })?.items || []
-	} catch {
-		popularApps.value = []
-	} finally {
-		popularAppsLoading.value = false
-	}
-}
-
 onMounted(async () => {
-	onLoadNetworkOptions()
-	onLoadIOOptions()
-
-	loadPopularApps()
 	emitter.on("gopanel:lowPowerMode", handleLowPowerMode)
 	onLoadBaseInfo(true, "all")
 })
@@ -474,40 +224,40 @@ onUnmounted(() => {
 /* Dark mode overrides for Dashboard page */
 .theme-dark .dashboard-root .text-slate-900,
 .theme-dark .dashboard-root .text-slate-800 {
-  color: var(--fg-default-color) !important;
+	color: var(--fg-default-color) !important;
 }
 .theme-dark .dashboard-root .text-slate-700 {
-  color: var(--fg-secondary-color) !important;
+	color: var(--fg-secondary-color) !important;
 }
 .theme-dark .dashboard-root .text-slate-500,
 .theme-dark .dashboard-root .text-slate-400 {
-  color: var(--fg-secondary-color) !important;
+	color: var(--fg-secondary-color) !important;
 }
 .theme-dark .dashboard-root .border-slate-200 {
-  border-color: color-mix(in srgb, var(--border-color) 80%, transparent) !important;
+	border-color: color-mix(in srgb, var(--border-color) 80%, transparent) !important;
 }
 .theme-dark .dashboard-root .bg-slate-50,
 .theme-dark .dashboard-root .bg-slate-50\/80,
 .theme-dark .dashboard-root .bg-slate-50\/60,
 .theme-dark .dashboard-root .bg-slate-50\/90 {
-  background-color: color-mix(in srgb, var(--bg-default-color) 95%, transparent) !important;
+	background-color: color-mix(in srgb, var(--bg-default-color) 95%, transparent) !important;
 }
 .theme-dark .dashboard-root .bg-white,
 .theme-dark .dashboard-root .bg-white\/90,
 .theme-dark .dashboard-root .bg-white\/85,
 .theme-dark .dashboard-root .bg-white\/80 {
-  background-color: var(--bg-default-color) !important;
+	background-color: var(--bg-default-color) !important;
 }
 .theme-dark .dashboard-root .hover\:bg-white:hover {
-  background-color: var(--bg-default-color) !important;
+	background-color: var(--bg-default-color) !important;
 }
 .theme-dark .dashboard-root .hover\:border-blue-300:hover {
-  border-color: color-mix(in srgb, var(--primary-color) 50%, transparent) !important;
+	border-color: color-mix(in srgb, var(--primary-color) 50%, transparent) !important;
 }
 .theme-dark .dashboard-root [class*="border-\[rgba\(147\,197\,253"] {
-  border-color: color-mix(in srgb, var(--border-color) 80%, transparent) !important;
+	border-color: color-mix(in srgb, var(--border-color) 80%, transparent) !important;
 }
 .theme-dark .dashboard-root [class*="bg-white\/"] {
-  background-color: var(--bg-default-color) !important;
+	background-color: var(--bg-default-color) !important;
 }
 </style>

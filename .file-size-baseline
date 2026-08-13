@@ -5,7 +5,6 @@ admin/src/components/common/SearchDialog.vue	611
 admin/src/global/form-rules.ts	845
 admin/src/utils/util.ts	728
 admin/src/views/Container/repo/index.vue	560
-admin/src/views/Dashboard/Index.vue	513
 admin/src/views/Database/src/components/DatabaseTablesView.vue	740
 admin/src/views/Database/src/components/OperationsView.vue	501
 admin/src/views/Database/src/components/useStructureView.ts	981

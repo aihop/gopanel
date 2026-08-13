@@ -1,41 +1,45 @@
 <template>
-  <div class="space-y-8">
-    <DashboardInfoStrip
-      class="bg-base-accent border-base-accent"
-      :base-info="baseInfo"
-      :current-info="currentInfo"
-      :low-power-mode="lowPowerMode"
-      :memory-cleaning="memoryCleaning"
-      :cpu-relieving="cpuRelieving"
-      @set-low-power-mode="setLowPowerMode"
-      @memory-clean="handleMemoryClean"
-      @cpu-relieve="handleCpuRelieve"
-    />
+	<div class="contents">
+		<DashboardInfoStrip
+			class="bg-base-accent border-base-accent 2xl:col-span-2"
+			:base-info="baseInfo"
+			:current-info="currentInfo"
+			:low-power-mode="lowPowerMode"
+			:memory-cleaning="memoryCleaning"
+			:cpu-relieving="cpuRelieving"
+			@set-low-power-mode="setLowPowerMode"
+			@memory-clean="handleMemoryClean"
+			@cpu-relieve="handleCpuRelieve"
+		/>
 
-    <DashboardResourceCards
-      class="bg-base-100 border-base-accent"
-      :base-info="baseInfo"
-      :current-info="currentInfo"
-      :cpu-show-all="cpuShowAll"
-      :memory-cleaning="memoryCleaning"
-      @toggle-cpu-show-all="cpuShowAll = $event"
-      @memory-clean="handleMemoryClean"
-    />
+		<DashboardAIControl>
+			<DashboardResourceCards
+				class="bg-base-100 border-base-accent"
+				:base-info="baseInfo"
+				:current-info="currentInfo"
+				:cpu-show-all="cpuShowAll"
+				:memory-cleaning="memoryCleaning"
+				@toggle-cpu-show-all="cpuShowAll = $event"
+				@memory-clean="handleMemoryClean"
+			/>
 
-    <DashboardStoragePanels
-      :current-info="currentInfo"
-      :visible-disk-data="visibleDiskData"
-      :has-more-disks="hasMoreDisks"
-      :disk-expanded="diskExpanded"
-      :accelerator-list="acceleratorList"
-      :visible-accelerators="visibleAccelerators"
-      :has-more-accelerators="hasMoreAccelerators"
-      :accelerator-expanded="acceleratorExpanded"
-      @toggle-disk-expanded="toggleDiskExpanded"
-      @toggle-accelerator-expanded="toggleAcceleratorExpanded"
-      @go-gpu="goGPU"
-    />
-  </div>
+			<DashboardStoragePanels
+				:current-info="currentInfo"
+				:visible-disk-data="visibleDiskData"
+				:has-more-disks="hasMoreDisks"
+				:disk-expanded="diskExpanded"
+				:accelerator-list="acceleratorList"
+				:visible-accelerators="visibleAccelerators"
+				:has-more-accelerators="hasMoreAccelerators"
+				:accelerator-expanded="acceleratorExpanded"
+				@toggle-disk-expanded="toggleDiskExpanded"
+				@toggle-accelerator-expanded="toggleAcceleratorExpanded"
+				@go-gpu="goGPU"
+			/>
+
+			<slot />
+		</DashboardAIControl>
+	</div>
 </template>
 
 <script setup lang="ts">
@@ -44,6 +48,7 @@ import { useRouter } from "vue-router"
 import { computed, onMounted, onUnmounted, ref } from "vue"
 import { useMessage } from "naive-ui"
 import DashboardInfoStrip from "./DashboardInfoStrip.vue"
+import DashboardAIControl from "./DashboardAIControl.vue"
 import DashboardResourceCards from "./DashboardResourceCards.vue"
 import DashboardStoragePanels from "./DashboardStoragePanels.vue"
 import emitter from "@/utils/emitter"

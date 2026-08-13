@@ -72,6 +72,19 @@ export interface AIProjectExecutionSummary {
 	updatedAt?: string
 }
 
+export interface CodeAttentionItem {
+	id: string
+	type: "approval" | "initialization_failed" | "delivery_failed" | "execution_failed"
+	severity: "warning" | "error"
+	title: string
+	summary: string
+	projectId: number
+	sessionId: number
+	taskId?: number
+	approvalId?: number
+	updatedAt: string
+}
+
 export interface AITask {
 	id: number
 	createdAt: string

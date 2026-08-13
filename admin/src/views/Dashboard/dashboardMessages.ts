@@ -1,0 +1,60 @@
+export const dashboardMessages = {
+	zh: {
+		dashboardControl: {
+			panelGuide: "面板介绍",
+			monitorOptionsLoadFailed: "网络和磁盘选项加载失败",
+			aiDevelopment: "AI 开发",
+			aiDevelopmentHint: "集中查看正在执行、等待处理和今日完成的开发任务",
+			enterWorkspace: "进入开发工作台",
+			startDevelopment: "开始 AI 开发",
+			recentTasks: "最近开发任务",
+			taskLoadFailed: "开发任务加载失败",
+			retry: "重试",
+			noTasks: "当前没有需要关注的开发任务",
+			noTasksHint: "进入开发工作台创建项目和任务",
+			running: "运行中",
+			needsAttention: "待处理",
+			delivering: "交付中",
+			doneToday: "今日完成",
+			attentionTitle: "需要你处理",
+			attentionHint: "审批、执行失败和交付异常会集中显示在这里",
+			attentionLoadFailed: "待处理事项加载失败",
+			attentionEmpty: "当前没有待处理事项",
+			openItem: "查看处理",
+			projectFallback: "项目 #{id}",
+			attentionType_approval: "等待你确认",
+			attentionType_initialization_failed: "会话初始化失败",
+			attentionType_delivery_failed: "代码交付异常",
+			attentionType_execution_failed: "开发任务执行失败"
+		}
+	},
+	en: {
+		dashboardControl: {
+			panelGuide: "Panel Guide",
+			monitorOptionsLoadFailed: "Failed to load network and disk options",
+			aiDevelopment: "AI Development",
+			aiDevelopmentHint: "Track active, blocked, and completed development tasks in one place",
+			enterWorkspace: "Open Code Workspace",
+			startDevelopment: "Start AI Development",
+			recentTasks: "Recent Development Tasks",
+			taskLoadFailed: "Failed to load development tasks",
+			retry: "Retry",
+			noTasks: "No development tasks need attention",
+			noTasksHint: "Open the Code workspace to create a project and task",
+			running: "Running",
+			needsAttention: "Needs You",
+			delivering: "Delivering",
+			doneToday: "Done Today",
+			attentionTitle: "Needs Your Attention",
+			attentionHint: "Approvals, execution failures, and delivery issues appear here",
+			attentionLoadFailed: "Failed to load attention items",
+			attentionEmpty: "Nothing needs your attention",
+			openItem: "Review",
+			projectFallback: "Project #{id}",
+			attentionType_approval: "Waiting for Approval",
+			attentionType_initialization_failed: "Session Initialization Failed",
+			attentionType_delivery_failed: "Code Delivery Issue",
+			attentionType_execution_failed: "Development Task Failed"
+		}
+	}
+}
