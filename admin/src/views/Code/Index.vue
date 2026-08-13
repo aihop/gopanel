@@ -5,7 +5,7 @@
     flex 链就没有可分配的高度，终端只能被最小高度撑着，怎么调间距都不管用。
   -->
   <div
-    class="page page-wrapped page-mobile-full page-without-footer bg-base-accent border-base-accent relative flex w-full flex-col overflow-hidden"
+    class="page page-wrapped page-mobile-full page-without-footer bg-base-accent border-base-accent relative flex w-full flex-col overflow-hidden rounded-[24px]"
   >
     <!-- 整页不滚：右侧是终端，页面滚起来终端会跟着跑。滚动交给左右两栏各自处理。 -->
     <!-- 横向可以给足，纵向省着用：只有纵向内边距会从终端高度里扣 -->

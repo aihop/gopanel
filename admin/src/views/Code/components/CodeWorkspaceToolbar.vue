@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue"
+import { computed, ref } from "vue"
 import { useI18n } from "vue-i18n"
 import Icon from "@/components/common/Icon.vue"
 import CodeApprovalCenter from "./CodeApprovalCenter.vue"
@@ -34,6 +34,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n({ messages: codeWorkspaceMessages })
 const sessionIcon = computed(() => (props.isTerminalSession ? "mdi:console-line" : "mdi:robot-outline"))
+const showAITools = ref(false)
 </script>
 
 <template>
@@ -92,9 +93,11 @@ const sessionIcon = computed(() => (props.isTerminalSession ? "mdi:console-line"
 
       <n-popover
         v-if="sessionId !== null && !isTerminalSession"
+        :show="showAITools"
         trigger="click"
         placement="bottom-end"
         style="width: 300px"
+        @update:show="showAITools = $event"
       >
         <template #trigger>
           <n-button
@@ -121,10 +124,18 @@ const sessionIcon = computed(() => (props.isTerminalSession ? "mdi:console-line"
           <div class="border-t border-slate-200 pt-4 dark:border-[var(--border-color)]">
             <SessionApprovalPolicy :session-id="sessionId" />
           </div>
+          <div class="border-t border-slate-200 pt-4 dark:border-[var(--border-color)]">
+            <div class="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--n-text-color-3)]">
+              {{ t("code.context") }}
+            </div>
+            <CodeMemoryManager
+              :project-id="projectId"
+              @open="showAITools = false"
+            />
+          </div>
         </div>
       </n-popover>
 
-      <CodeMemoryManager :project-id="projectId" />
       <div
         class="flex items-center rounded-xl border border-slate-200 bg-white p-0.5 dark:border-[var(--border-color)] dark:bg-white/5"
       >

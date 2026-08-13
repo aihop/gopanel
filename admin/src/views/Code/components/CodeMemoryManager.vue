@@ -10,6 +10,7 @@ import { codeMemoryMessages } from "../codeMemoryMessages"
 import CodeMemoryDrawer from "./CodeMemoryDrawer.vue"
 
 const props = defineProps<{ projectId: number }>()
+const emit = defineEmits<{ open: [] }>()
 const { t } = useI18n({ messages: codeMemoryMessages })
 const message = useMessage()
 const entries = ref<CodeMemoryEntry[]>([])
@@ -57,6 +58,7 @@ async function loadSetting() {
 
 function openDrawer() {
 	showDrawer.value = true
+	emit("open")
 	void load()
 	void loadSetting()
 }
@@ -107,9 +109,16 @@ async function remove(id: number) {
 </script>
 
 <template>
-	<n-button text size="tiny" @click="openDrawer">
-		<template #icon><Icon name="mdi:brain" :size="14" /></template>
-		{{ t("code.memoryEntry") }}
+	<n-button
+		secondary
+		style="width: 100%; height: auto; justify-content: flex-start; padding: 10px 12px"
+		@click="openDrawer"
+	>
+		<template #icon><Icon name="mdi:brain" :size="18" /></template>
+		<div class="min-w-0 text-left">
+			<div class="text-sm font-medium">{{ t("code.memoryEntry") }}</div>
+			<div class="mt-0.5 truncate text-xs text-[var(--n-text-color-3)]">{{ t("code.memoryHint") }}</div>
+		</div>
 	</n-button>
 
 	<CodeMemoryDrawer

@@ -39,6 +39,7 @@ const loadPending = async (notify = false) => {
 		loadError.value = false
 	} catch (error) {
 		loadError.value = true
+		if (notify) message.error(t("code.approvalLoadFailed"))
 	} finally {
 		loading.value = false
 	}
@@ -52,7 +53,7 @@ const decide = async (approval: CodeApproval, approved: boolean) => {
 		message.success(t(approved ? "code.approvalApproved" : "code.approvalRejected"))
 		await loadPending()
 	} catch (error) {
-		void 0
+		message.error(t("code.approvalDecisionFailed"))
 	} finally {
 		decidingId.value = null
 	}
@@ -61,6 +62,11 @@ const decide = async (approval: CodeApproval, approved: boolean) => {
 const takeTerminal = () => {
 	show.value = false
 	emit("take-terminal")
+}
+
+const updateShow = (value: boolean) => {
+	show.value = value
+	if (value) void loadPending()
 }
 
 watch(() => props.sessionId, () => void loadPending())
@@ -74,46 +80,63 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-	<n-badge :value="pendingCount" :max="99" :show="pendingCount > 0">
-		<n-button size="small" :type="pendingCount > 0 ? 'warning' : 'default'" @click="show = true">
-			{{ t("code.approvalCenter") }}
-		</n-button>
-	</n-badge>
-	<n-drawer v-model:show="show" placement="right" style="width: min(440px, 100vw)">
-		<n-drawer-content :title="t('code.approvalCenter')" closable>
+	<n-popover
+		:show="show"
+		trigger="click"
+		placement="bottom-end"
+		:show-arrow="false"
+		style="width: min(380px, calc(100vw - 24px))"
+		@update:show="updateShow"
+	>
+		<template #trigger>
+			<n-badge :value="pendingCount" :max="99" :show="pendingCount > 0">
+				<n-button size="small" :type="pendingCount > 0 ? 'warning' : 'default'">
+					{{ t("code.approvalCenter") }}
+				</n-button>
+			</n-badge>
+		</template>
+		<div class="p-1">
+			<div class="mb-3 flex items-center justify-between gap-3">
+				<div class="text-sm font-semibold text-[var(--n-text-color)]">{{ t("code.approvalCenter") }}</div>
+				<n-tag v-if="pendingCount > 0" type="warning" size="small" :bordered="false">
+					{{ pendingCount }}
+				</n-tag>
+			</div>
 			<n-spin :show="loading">
-				<n-alert v-if="loadError" type="error" :title="t('code.approvalLoadFailed')" class="mb-4">
-					<n-button size="small" @click="loadPending(true)">{{ t("code.retry") }}</n-button>
+				<n-alert v-if="loadError" type="error" :title="t('code.approvalLoadFailed')" class="mb-3">
+					<n-button size="tiny" @click="loadPending(true)">{{ t("code.retry") }}</n-button>
 				</n-alert>
-				<div class="space-y-4">
-					<div v-if="nativeNeedsInput" class="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-						<n-tag type="warning" size="small" :bordered="false">{{ t("code.nativeApproval") }}</n-tag>
-						<div class="mt-3 text-sm font-semibold text-slate-800">{{ t("code.codexApprovalHint") }}</div>
-						<p v-if="runtime?.lastAssistantPreview" class="mt-2 text-xs leading-5 text-slate-600">
-							{{ runtime.lastAssistantPreview }}
-						</p>
-						<n-button type="warning" block class="mt-4" @click="takeTerminal">
-							{{ t("code.takeTerminalControl") }}
-						</n-button>
-					</div>
-					<div v-for="approval in approvals" :key="approval.id" class="rounded-2xl border border-slate-200 bg-white p-4">
-						<div class="flex items-center justify-between gap-3">
-							<div class="text-sm font-semibold text-slate-800">{{ approval.title }}</div>
-							<n-tag type="error" size="small" :bordered="false">{{ approval.riskLevel }}</n-tag>
-						</div>
-						<p class="mt-3 whitespace-pre-wrap break-words text-xs leading-5 text-slate-600">{{ approval.content }}</p>
-						<div class="mt-4 grid grid-cols-2 gap-3">
-							<n-button :disabled="decidingId === approval.id" @click="decide(approval, false)">
-								{{ t("code.rejectApproval") }}
-							</n-button>
-							<n-button type="primary" :loading="decidingId === approval.id" @click="decide(approval, true)">
-								{{ t("code.approveApproval") }}
+				<n-scrollbar style="max-height: min(520px, calc(100vh - 160px))">
+					<div class="space-y-3 pr-1">
+						<div v-if="nativeNeedsInput" class="rounded-xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-500/30 dark:bg-amber-500/10">
+							<n-tag type="warning" size="small" :bordered="false">{{ t("code.nativeApproval") }}</n-tag>
+							<div class="mt-2 text-sm font-semibold text-[var(--n-text-color)]">{{ t("code.codexApprovalHint") }}</div>
+							<p v-if="runtime?.lastAssistantPreview" class="mt-2 text-xs leading-5 text-[var(--n-text-color-3)]">
+								{{ runtime.lastAssistantPreview }}
+							</p>
+							<n-button type="warning" block size="small" class="mt-3" @click="takeTerminal">
+								{{ t("code.takeTerminalControl") }}
 							</n-button>
 						</div>
+						<div v-for="approval in approvals" :key="approval.id" class="rounded-xl border border-slate-200 bg-white p-3 dark:border-[var(--border-color)] dark:bg-white/5">
+							<div class="flex items-center justify-between gap-3">
+								<div class="text-sm font-semibold text-[var(--n-text-color)]">{{ approval.title }}</div>
+								<n-tag type="error" size="small" :bordered="false">{{ approval.riskLevel }}</n-tag>
+							</div>
+							<p class="mt-2 whitespace-pre-wrap break-words text-xs leading-5 text-[var(--n-text-color-3)]">{{ approval.content }}</p>
+							<div class="mt-3 flex justify-end gap-2">
+								<n-button size="small" :disabled="decidingId === approval.id" @click="decide(approval, false)">
+									{{ t("code.rejectApproval") }}
+								</n-button>
+								<n-button size="small" type="primary" :loading="decidingId === approval.id" @click="decide(approval, true)">
+									{{ t("code.approveApproval") }}
+								</n-button>
+							</div>
+						</div>
+						<n-empty v-if="!loading && !loadError && pendingCount === 0" :description="t('code.noPendingApprovals')" />
 					</div>
-					<n-empty v-if="!loading && !loadError && pendingCount === 0" :description="t('code.noPendingApprovals')" />
-				</div>
+				</n-scrollbar>
 			</n-spin>
-		</n-drawer-content>
-	</n-drawer>
+		</div>
+	</n-popover>
 </template>
