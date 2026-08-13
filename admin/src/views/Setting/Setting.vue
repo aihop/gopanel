@@ -51,7 +51,7 @@
       name="aiAccount"
       tab="AI 账号"
     >
-      <ai-account />
+      <AIAccount />
     </n-tab-pane>
     <n-tab-pane
       v-if="!isSubAdmin"
