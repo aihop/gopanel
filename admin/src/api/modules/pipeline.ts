@@ -18,7 +18,7 @@ export const deletePipeline = (params: { id: number }) => {
   return http.delete(`/pipeline`, params);
 };
 
-export const runPipeline = (params: { id: number; version: string }) => {
+export const runPipeline = (params: { id: number; version: string; expectedCommit?: string }) => {
   return http.post<{ recordId: number }>(`/pipeline/run`, params);
 };
 

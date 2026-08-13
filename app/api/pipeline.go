@@ -132,7 +132,7 @@ func PipelineRun(c fiber.Ctx) error {
 	}
 
 	appSvc := service.NewPipelineApplication(global.DB)
-	recordID, err := appSvc.Run(req.ID, req.Version)
+	recordID, err := appSvc.Run(req.ID, req.Version, req.ExpectedCommit)
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}

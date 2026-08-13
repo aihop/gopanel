@@ -37,13 +37,14 @@ func (Pipeline) TableName() string {
 }
 
 type PipelineRecord struct {
-	ID         uint      `gorm:"primaryKey" json:"id"`
-	CreatedAt  time.Time `json:"createdAt"`
-	UpdatedAt  time.Time `json:"updatedAt"`
-	PipelineID uint      `gorm:"column:pipeline_id;type:integer;not null" json:"pipelineId"`
-	Status     string    `gorm:"column:status;type:varchar(20);not null;default:'pending'" json:"status"` // pending, cloning, building, deploying, success, failed
-	Version    string    `gorm:"column:version;type:varchar(50)" json:"version"`                          // 记录本次执行的版本号
-	CommitHash string    `gorm:"column:commit_hash;type:varchar(64)" json:"commitHash"`
+	ID             uint      `gorm:"primaryKey" json:"id"`
+	CreatedAt      time.Time `json:"createdAt"`
+	UpdatedAt      time.Time `json:"updatedAt"`
+	PipelineID     uint      `gorm:"column:pipeline_id;type:integer;not null" json:"pipelineId"`
+	Status         string    `gorm:"column:status;type:varchar(20);not null;default:'pending'" json:"status"` // pending, cloning, building, deploying, success, failed
+	Version        string    `gorm:"column:version;type:varchar(50)" json:"version"`                          // 记录本次执行的版本号
+	ExpectedCommit string    `gorm:"column:expected_commit;type:varchar(64);index" json:"expectedCommit"`
+	CommitHash     string    `gorm:"column:commit_hash;type:varchar(64)" json:"commitHash"`
 	// Changelog 本次构建包含的提交标题，一行一条，来自「上次成功构建的 commit..HEAD」。
 	// 只存纯文本，展示端不要按 HTML 渲染——内容来自仓库提交信息，属于外部输入。
 	Changelog    string `gorm:"column:changelog;type:text" json:"changelog"`

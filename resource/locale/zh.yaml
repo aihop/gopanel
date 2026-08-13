@@ -23,6 +23,8 @@ ErrCodeProviderAccountConflict: "AI 账号和手动模型连接不能同时使�
 ErrCodeProviderAccountUnavailable: "AI 账号不可用"
 ErrCodeProviderAccountDisabled: "指定的 AI 账号不存在或已停用"
 ErrCodeProviderAccountKeyMissing: "指定的 AI 账号没有可用密钥"
+ErrPipelineExpectedCommitInvalid: "expectedCommit 必须是完整的 40 或 64 位 Commit SHA"
+ErrPipelineExpectedCommitRepo: "锁定 Commit 构建需要先为流水线配置代码仓库"
 
 ErrMinQuickJump: "至少设置 1 个快速跳转入口"
 ErrMaxQuickJump: "最多设置 4 个快速跳转入口"

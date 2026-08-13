@@ -9,14 +9,23 @@ import (
 	"strings"
 
 	"github.com/aihop/gopanel/app/model"
+	"github.com/aihop/gopanel/buserr"
+	"github.com/aihop/gopanel/constant"
 )
 
-func (s *PipelineService) RunPipeline(pipelineID uint, version string) (uint, error) {
+func (s *PipelineService) RunPipeline(pipelineID uint, version, expectedCommit string) (uint, error) {
 	pipeline, err := s.repo.Get(pipelineID)
 	if err != nil {
 		return 0, err
 	}
-	record := &model.PipelineRecord{PipelineID: pipeline.ID, Status: "pending", Version: version}
+	expectedCommit, err = normalizePipelineExpectedCommit(expectedCommit)
+	if err != nil {
+		return 0, err
+	}
+	if expectedCommit != "" && strings.TrimSpace(pipeline.RepoUrl) == "" {
+		return 0, buserr.New(constant.ErrPipelineExpectedCommitRepo)
+	}
+	record := &model.PipelineRecord{PipelineID: pipeline.ID, Status: "pending", Version: version, ExpectedCommit: expectedCommit}
 	err = s.recordRepo.Create(record)
 	if err != nil {
 		return 0, err
@@ -41,6 +50,9 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 	}()
 	logger.Info("====== Pipeline #%d 执行开始 ======", recordID)
 	logger.Info("应用: %s | 分支: %s", p.Name, p.Branch)
+	if record.ExpectedCommit != "" {
+		logger.Info("锁定构建提交: %s", record.ExpectedCommit)
+	}
 	workspaceDir := pipelineWorkspaceDir(p)
 	releaseDir := pipelineReleaseDir(p)
 	logger.Info("工作区目录: %s", workspaceDir)
@@ -57,7 +69,7 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 		if last, err := s.recordRepo.LatestSuccessCommitHash(p.ID, recordID); err == nil {
 			sinceCommit = last
 		}
-		commitHash, changelog, err := s.stepClone(ctx, logger, p, workspaceDir, sinceCommit)
+		commitHash, changelog, err := s.stepClone(ctx, logger, p, workspaceDir, sinceCommit, record.ExpectedCommit)
 		if err != nil {
 			if ctx.Err() != nil {
 				s.recordRepo.UpdateStatus(recordID, "failed", "用户手动终止")
@@ -78,6 +90,11 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 	} else {
 		logger.Info("未配置 RepoUrl，采用纯脚本模式，跳过自动拉取...")
 		_ = os.MkdirAll(workspaceDir, 0755)
+	}
+	if err := verifyPipelineExpectedCommit(ctx, workspaceDir, record.ExpectedCommit); err != nil {
+		s.recordRepo.UpdateStatus(recordID, "failed", err.Error())
+		logger.Error("构建提交校验失败: %v", err)
+		return
 	}
 	if p.BuildImage == "host" || p.BuildImage == "" {
 		files, _ := os.ReadDir(workspaceDir)
@@ -105,6 +122,11 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 		} else {
 			s.recordRepo.UpdateStatus(recordID, "failed", fmt.Sprintf("Build failed: %v", err))
 		}
+		return
+	}
+	if err := verifyPipelineExpectedCommit(ctx, workspaceDir, record.ExpectedCommit); err != nil {
+		s.recordRepo.UpdateStatus(recordID, "failed", err.Error())
+		logger.Error("构建后提交校验失败: %v", err)
 		return
 	}
 	archivePath, err := s.stepArchive(ctx, logger, p, releaseDir, recordID)

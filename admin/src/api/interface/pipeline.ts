@@ -53,6 +53,7 @@ export namespace Pipeline {
     pipelineId: number;
     status: string;
     version: string; // 新增版本号
+    expectedCommit?: string;
     commitHash?: string;
     changelog?: string; // 本次构建包含的提交标题，一行一条
     errorMessage: string;

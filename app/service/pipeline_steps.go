@@ -19,66 +19,6 @@ import (
 	udocker "github.com/aihop/gopanel/utils/docker"
 )
 
-// stepClone 拉取代码，返回 HEAD commit 与本次相对 sinceCommit 的提交标题列表
-func (s *PipelineService) stepClone(ctx context.Context, logger *PipelineLogger, p *model.Pipeline, workspace string, sinceCommit string) (string, string, error) {
-	logger.Info("准备代码拉取目录...")
-	_ = os.MkdirAll(workspace, 0755)
-	repoUrl := buildPipelineRepoURL(p.RepoUrl, p.AuthType, p.AuthData)
-	runGitCommand := func(cmd *exec.Cmd, action string) error {
-		cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=accept-new")
-		var outBuf, errBuf bytes.Buffer
-		cmd.Stdout = io.MultiWriter(&outBuf, newLogWriter(logger, false))
-		cmd.Stderr = io.MultiWriter(&errBuf, newLogWriter(logger, true))
-		if err := cmd.Run(); err != nil {
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-			logger.Error("%s 失败: %v", action, err)
-			return err
-		}
-		return nil
-	}
-	gitDir := filepath.Join(workspace, ".git")
-	if _, err := os.Stat(gitDir); !os.IsNotExist(err) {
-		logger.Info("检测到本地缓存，正在执行 git pull (分支: %s)...", p.Branch)
-		remoteCmd := exec.CommandContext(ctx, "git", "remote", "set-url", "origin", repoUrl)
-		remoteCmd.Dir = workspace
-		_ = runGitCommand(remoteCmd, "Git remote")
-		checkoutCmd := exec.CommandContext(ctx, "git", "checkout", p.Branch)
-		checkoutCmd.Dir = workspace
-		if err := runGitCommand(checkoutCmd, "Git checkout"); err != nil {
-			return "", "", err
-		}
-		pullCmd := exec.CommandContext(ctx, "git", "pull", "origin", p.Branch)
-		pullCmd.Dir = workspace
-		if err := runGitCommand(pullCmd, "Git pull"); err != nil {
-			return "", "", err
-		}
-	} else {
-		logger.Info("首次执行或缓存丢失，正在执行 git clone (分支: %s)...", p.Branch)
-		cloneCmd := exec.CommandContext(ctx, "git", "clone", "-b", p.Branch, "--single-branch", "--depth", "1", repoUrl, workspace)
-		if err := runGitCommand(cloneCmd, "Git clone"); err != nil {
-			return "", "", err
-		}
-	}
-	hashCmd := exec.CommandContext(ctx, "git", "rev-parse", "HEAD")
-	hashCmd.Dir = workspace
-	if hashBytes, err := hashCmd.Output(); err == nil {
-		commitHash := strings.TrimSpace(string(hashBytes))
-		logger.Info("代码拉取成功, Commit Hash: %s", commitHash)
-		changelog := collectPipelineChangelog(ctx, logger, workspace, sinceCommit)
-		return commitHash, changelog, nil
-	} else {
-		safeUrl := repoUrl
-		if idx := strings.Index(safeUrl, "@"); idx > 0 {
-			if protocolIdx := strings.Index(safeUrl, "://"); protocolIdx > 0 {
-				safeUrl = safeUrl[:protocolIdx+3] + "***@" + safeUrl[idx+1:]
-			}
-		}
-		logger.Error("注意: 拉取可能失败，当前使用的远端地址: %s", safeUrl)
-	}
-	return "", "", nil
-}
 func (s *PipelineService) stepBuild(ctx context.Context, logger *PipelineLogger, p *model.Pipeline, workspace string, releaseDir string, version string) (exposePortInt int, err error) {
 	if p.RunnerMode == constant.PipelineRunnerModeRunner {
 		return 0, nil

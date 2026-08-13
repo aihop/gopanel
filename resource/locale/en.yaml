@@ -23,6 +23,8 @@ ErrCodeProviderAccountConflict: "An AI account and a manual model connection can
 ErrCodeProviderAccountUnavailable: "The AI account is unavailable"
 ErrCodeProviderAccountDisabled: "The selected AI account does not exist or is disabled"
 ErrCodeProviderAccountKeyMissing: "The selected AI account does not have a usable API key"
+ErrPipelineExpectedCommitInvalid: "expectedCommit must be a full 40 or 64 character commit SHA"
+ErrPipelineExpectedCommitRepo: "A source repository is required to build a locked commit"
 
 ErrMinQuickJump: "Set at least one quick jump entry"
 ErrMaxQuickJump: "At most 4 quick jump entries"

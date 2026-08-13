@@ -63,21 +63,23 @@ var (
 
 // app
 var (
-	ErrPortInUsed           = "ErrPortInUsed"
-	ErrAppLimit             = "ErrAppLimit"
-	ErrNotInstall           = "ErrNotInstall"
-	ErrPortInOtherApp       = "ErrPortInOtherApp"
-	ErrDbUserNotValid       = "ErrDbUserNotValid"
-	ErrUpdateBuWebsite      = "ErrUpdateBuWebsite"
-	ErrGoPanelNetworkFailed = "ErrGoPanelNetworkFailed"
-	ErrCmdTimeout           = "ErrCmdTimeout"
-	ErrFileParse            = "ErrFileParse"
-	ErrInstallDirNotFound   = "ErrInstallDirNotFound"
-	ErrContainerName        = "ErrContainerName"
-	ErrAppNameExist         = "ErrAppNameExist"
-	ErrFileNotFound         = "ErrFileNotFound"
-	ErrFileParseApp         = "ErrFileParseApp"
-	ErrAppParamKey          = "ErrAppParamKey"
+	ErrPortInUsed                    = "ErrPortInUsed"
+	ErrAppLimit                      = "ErrAppLimit"
+	ErrNotInstall                    = "ErrNotInstall"
+	ErrPortInOtherApp                = "ErrPortInOtherApp"
+	ErrDbUserNotValid                = "ErrDbUserNotValid"
+	ErrUpdateBuWebsite               = "ErrUpdateBuWebsite"
+	ErrGoPanelNetworkFailed          = "ErrGoPanelNetworkFailed"
+	ErrCmdTimeout                    = "ErrCmdTimeout"
+	ErrFileParse                     = "ErrFileParse"
+	ErrInstallDirNotFound            = "ErrInstallDirNotFound"
+	ErrContainerName                 = "ErrContainerName"
+	ErrAppNameExist                  = "ErrAppNameExist"
+	ErrFileNotFound                  = "ErrFileNotFound"
+	ErrFileParseApp                  = "ErrFileParseApp"
+	ErrAppParamKey                   = "ErrAppParamKey"
+	ErrPipelineExpectedCommitInvalid = "ErrPipelineExpectedCommitInvalid"
+	ErrPipelineExpectedCommitRepo    = "ErrPipelineExpectedCommitRepo"
 )
 
 // website

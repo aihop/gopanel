@@ -11,8 +11,8 @@ import (
 	"gorm.io/gorm"
 )
 
-func (s *PipelineApplicationService) Run(pipelineID uint, version string) (uint, error) {
-	return s.executor.RunPipeline(pipelineID, version)
+func (s *PipelineApplicationService) Run(pipelineID uint, version, expectedCommit string) (uint, error) {
+	return s.executor.RunPipeline(pipelineID, version, expectedCommit)
 }
 func (s *PipelineApplicationService) Stop(recordID uint) {
 	StopPipeline(recordID)

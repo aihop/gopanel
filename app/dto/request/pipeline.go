@@ -38,8 +38,9 @@ type PipelineUpdate struct {
 }
 
 type PipelineRun struct {
-	ID      uint   `json:"id" validate:"required"`
-	Version string `json:"version" validate:"required"` // 触发时必须指定本次执行的版本号
+	ID             uint   `json:"id" validate:"required"`
+	Version        string `json:"version" validate:"required"` // 触发时必须指定本次执行的版本号
+	ExpectedCommit string `json:"expectedCommit"`
 }
 
 type PipelineDetect struct {
