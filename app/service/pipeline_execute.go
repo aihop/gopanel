@@ -22,6 +22,7 @@ type PipelineRunSource struct {
 	Type           string
 	ID             uint
 	IdempotencyKey string
+	LogSummary     string
 }
 
 func (s *PipelineService) RunPipelineForSource(pipelineID uint, version, expectedCommit string, source PipelineRunSource) (uint, error) {
@@ -60,6 +61,15 @@ func (s *PipelineService) RunPipelineForSource(pipelineID uint, version, expecte
 		pipeline.Version = version
 		_ = s.repo.Update(pipeline)
 	}
+	logger := GetPipelineLogger(record.ID)
+	if source.Type == "flow_run" {
+		logger.Info("====== Flow #%d 正式交付开始 ======", source.ID)
+		logger.Info("正式版本: %s", version)
+		if strings.TrimSpace(source.LogSummary) != "" {
+			logger.Info("%s", strings.TrimSpace(source.LogSummary))
+		}
+		logger.Info("流水线执行记录已创建: #%d", record.ID)
+	}
 	go s.executePipeline(pipeline, record)
 	return record.ID, nil
 }
@@ -75,8 +85,10 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 	pipelineCancels.Store(recordID, cancel)
 	defer func() {
 		pipelineCancels.Delete(recordID)
-		logger.Info("EOF")
-		RemovePipelineLogger(recordID)
+		if record.SourceType != "flow_run" {
+			logger.Info("EOF")
+			RemovePipelineLogger(recordID)
+		}
 	}()
 	logger.Info("====== Pipeline #%d 执行开始 ======", recordID)
 	logger.Info("应用: %s | 分支: %s", p.Name, p.Branch)

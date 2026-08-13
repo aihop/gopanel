@@ -7,6 +7,7 @@ import Icon from "@/components/common/Icon.vue"
 import type { Flow } from "@/api/interface/flow"
 import { getFlowRun, getFlowRunPage } from "@/api/modules/flow"
 import { flowMessages } from "./flowMessages"
+import FlowRunTerminal from "./FlowRunTerminal.vue"
 
 const { t } = useI18n({ messages: flowMessages })
 const message = useMessage()
@@ -77,14 +78,25 @@ async function openDetail(run: Flow.Run) {
 	}
 }
 
+async function refreshDetail() {
+	if (!detailVisible.value || !detail.value) return
+	try {
+		const response = await getFlowRun(detail.value.id)
+		detail.value = response.data
+	} catch {
+		return
+	}
+}
+
 function refresh() {
 	void loadRuns()
 }
 
-defineExpose({ refresh })
+defineExpose({ refresh, openRun: openDetail })
 onMounted(() => loadRuns())
 useIntervalFn(() => {
 	if (runs.value.some(item => item.status === "queued" || item.status === "running")) void loadRuns(true)
+	if (detail.value?.status === "queued" || detail.value?.status === "running") void refreshDetail()
 }, 5000)
 </script>
 
@@ -128,6 +140,7 @@ useIntervalFn(() => {
 								</div>
 							</div>
 						</div>
+						<FlowRunTerminal v-if="detailVisible" :record-id="detail.pipelineRecordId" :run-status="detail.status" />
 						<n-alert v-if="detail.errorSummary" type="error" :title="detail.failureCode">{{ detail.errorSummary }}</n-alert>
 						<div><h3 class="mb-3 font-semibold fg-base-100">{{ t("flow.stageRecords") }}</h3><div class="space-y-3"><div v-for="stage in detail.stages || []" :key="stage.id" class="rounded-2xl border border-slate-200 p-4"><div class="flex items-center justify-between gap-3"><span class="font-medium fg-base-100">{{ t(`flow.runStage.${stage.stage}`) }}</span><n-tag size="small" :type="stageType(stage.status)">{{ t(`flow.stageStatus.${stage.status}`) }}</n-tag></div><div v-if="stage.errorDetail" class="mt-2 text-xs text-red-500">{{ stage.errorDetail }}</div><div v-if="stage.resourceId" class="mt-2 text-xs text-slate-400">{{ resourceLabel(stage.resourceType) }} #{{ stage.resourceId }}</div></div></div></div>
 					</div>

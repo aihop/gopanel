@@ -1,19 +1,16 @@
 <script setup lang="ts">
 import { ref, watch, nextTick, computed } from "vue"
 import { NModal, NButton, NPopconfirm, useMessage, NAlert, NSpace } from "naive-ui"
-import { useAuthStore } from "@/store/auth"
 import { getPipelineRecords, stopPipeline } from "@/api/modules/pipeline"
 import { appsRepairPodmanSubuidAPI } from "@/api/modules/apps"
 import type { Pipeline } from "@/api/interface/pipeline"
+import { usePipelineLogStream } from "@/composables/usePipelineLogStream"
 import { buildRuntimeDetailText } from "@/utils/runtime"
 
 const props = defineProps<{ show: boolean; recordId: number; pipelineId?: number | null }>()
 const emit = defineEmits(["update:show", "finished", "retry"])
 
-const logs = ref<string[]>([])
 const terminalRef = ref<HTMLElement | null>(null)
-let eventSource: EventSource | null = null
-const authStore = useAuthStore()
 const message = useMessage()
 
 const isRunning = ref(false)
@@ -36,6 +33,39 @@ const scrollToBottom = () => {
     }
   })
 }
+
+const { logs, connect: connectLogStream, close: closeLogStream } = usePipelineLogStream({
+  canReconnect: () => false,
+  onDisconnected: () => {
+    isRunning.value = false
+    logs.value.push("连接已断开或发生错误")
+    emit("finished")
+    scrollToBottom()
+  },
+  onFinished: () => {
+    isRunning.value = false
+    logs.value.push("====== 流水线执行结束 ======")
+    emit("finished")
+    scrollToBottom()
+  },
+  onLog: (line) => {
+    const runnerMatch = line.match(/Runner 容器已启动：containerId=([^,\s]+), hostPort=(\d+)/)
+    if (runnerMatch) {
+      runnerResult.value = {
+        containerId: runnerMatch[1],
+        hostPort: Number(runnerMatch[2])
+      }
+    }
+    if (line.includes("insufficient UIDs or GIDs")) {
+      repairTipVisible.value = true
+      repairTipTitle.value = "检测到 UID/GID 映射不足"
+      repairTipMessage.value = "当前用户缺乏足够的子 UID/GID 映射，导致无法创建容器命名空间。可以点击一键修复，系统将自动配置并重置命名空间。"
+      repairTipAction.value = "subuid"
+    }
+    scrollToBottom()
+  },
+  truncatedMessage: "... 之前的日志已折叠，请在后台查看完整日志文件 ..."
+})
 
 const handleRepair = async () => {
   if (repairing.value) return
@@ -105,10 +135,6 @@ const fetchCurrentRecord = async () => {
 }
 
 const startLogs = () => {
-  if (eventSource) {
-    eventSource.close()
-  }
-  logs.value = []
   isRunning.value = true
   isStopping.value = false
   runnerResult.value = null
@@ -120,64 +146,12 @@ const startLogs = () => {
   repairTipMessage.value = ""
   repairTipAction.value = ""
   repairTipOutput.value = ""
-  
-  const apiUrl = (window as any).__VITE_API_URL__ || "/api"
-  const safeToken = encodeURIComponent(authStore.auth)
-  eventSource = new EventSource(`${apiUrl}/pipeline/logs?recordId=${props.recordId}&token=${safeToken}`)
-  
-  eventSource.onmessage = (event) => {
-    if (event.data === "ping" || event.data === ":") return
-    if (event.data === "connection closed" || event.data === "EOF" || event.data === '["EOF"]') {
-      eventSource?.close()
-      eventSource = null
-      isRunning.value = false
-      logs.value.push("====== 流水线执行结束 ======")
-      emit("finished")
-      scrollToBottom()
-      return
-    }
-    if (event.data) {
-      // 限制最大日志行数，防止内存溢出和页面卡顿
-      if (logs.value.length > 3000) {
-        logs.value.splice(0, logs.value.length - 2000) // 截断保留最新的 2000 行
-        logs.value.unshift("... 之前的日志已折叠，请在后台查看完整日志文件 ...")
-      }
-      logs.value.push(event.data)
 
-      const runnerMatch = event.data.match(/Runner 容器已启动：containerId=([^,\s]+), hostPort=(\d+)/)
-      if (runnerMatch) {
-        runnerResult.value = {
-          containerId: runnerMatch[1],
-          hostPort: Number(runnerMatch[2])
-        }
-      }
-
-      if (event.data.includes("insufficient UIDs or GIDs")) {
-        repairTipVisible.value = true
-        repairTipTitle.value = "检测到 UID/GID 映射不足"
-        repairTipMessage.value = "当前用户缺乏足够的子 UID/GID 映射，导致无法创建容器命名空间。可以点击一键修复，系统将自动配置并重置命名空间。"
-        repairTipAction.value = "subuid"
-      }
-
-      scrollToBottom()
-    }
-  }
-
-  eventSource.onerror = (err) => {
-    console.error("SSE Error:", err)
-    isRunning.value = false
-    logs.value.push("连接已断开或发生错误")
-    eventSource?.close()
-    eventSource = null
-    emit("finished")
-  }
+  connectLogStream(props.recordId)
 }
 
 const stopLogs = () => {
-  if (eventSource) {
-    eventSource.close()
-    eventSource = null
-  }
+  closeLogStream()
   isRunning.value = false
 }
 

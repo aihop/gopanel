@@ -289,42 +289,32 @@ func PipelineLogs(c fiber.Ctx) error {
 	c.Status(200)
 	ctxRaw := c.RequestCtx()
 	ctxRaw.SetBodyStreamWriter(func(w *bufio.Writer) {
-		// 如果记录对应的 Logger 已经结束/清理了，说明任务已经执行完了
-		// 直接从文件读取历史日志并返回
-		if !service.IsPipelineLoggerActive(uint(recordId)) {
+		logger, logs, ch, active := service.SubscribePipelineLogger(uint(recordId))
+		if !active {
 			logs, err := service.ReadPipelineLogFromFile(uint(recordId))
 			if err == nil {
 				// 对于历史日志，如果行数超过 3000 行，截取最后 2000 行，防止前端瞬间卡死
 				if len(logs) > 3000 {
-					fmt.Fprintf(w, "data: ... 之前的日志已折叠，总计 %d 行，这里只显示最新 2000 行 ...\n\n", len(logs))
+					_ = writePipelineSSEData(w, fmt.Sprintf("... 之前的日志已折叠，总计 %d 行，这里只显示最新 2000 行 ...", len(logs)))
 					logs = logs[len(logs)-2000:]
 				}
 				for _, log := range logs {
-					fmt.Fprintf(w, "data: %s\n\n", log)
+					_ = writePipelineSSEData(w, log)
 				}
 			}
-			fmt.Fprintf(w, "data: EOF\n\n")
+			_ = writePipelineSSEData(w, "EOF")
 			w.Flush()
 			return
 		}
-
-		// 如果任务还在执行，从内存获取当前的并在通道监听增量日志
-		logger := service.GetPipelineLogger(uint(recordId))
-
-		// 先发送已有日志，如果内存里累积了太多，也截断
-		logs := logger.GetLogs()
+		defer logger.Unsubscribe(ch)
 		if len(logs) > 3000 {
-			fmt.Fprintf(w, "data: ... 之前的实时日志已折叠，总计 %d 行，这里只显示最新 2000 行 ...\n\n", len(logs))
+			_ = writePipelineSSEData(w, fmt.Sprintf("... 之前的实时日志已折叠，总计 %d 行，这里只显示最新 2000 行 ...", len(logs)))
 			logs = logs[len(logs)-2000:]
 		}
 		for _, log := range logs {
-			fmt.Fprintf(w, "data: %s\n\n", log)
+			_ = writePipelineSSEData(w, log)
 		}
 		w.Flush()
-
-		// 订阅实时日志
-		ch := logger.Subscribe()
-		defer logger.Unsubscribe(ch)
 
 		// 由于 fiber/v3 的 StreamWriter 没有直接暴露 client close 的 channel，
 		// 我们可以通过定期 ping 或者检测 Write error 来判断客户端是否断开
@@ -335,11 +325,11 @@ func PipelineLogs(c fiber.Ctx) error {
 			select {
 			case logLine, ok := <-ch:
 				if !ok || logLine == "EOF" || logLine == "[\"EOF\"]" {
-					fmt.Fprintf(w, "data: EOF\n\n")
+					_ = writePipelineSSEData(w, "EOF")
 					_ = w.Flush()
 					return
 				}
-				if _, err := fmt.Fprintf(w, "data: %s\n\n", logLine); err != nil {
+				if err := writePipelineSSEData(w, logLine); err != nil {
 					return
 				}
 				w.Flush()
@@ -354,4 +344,15 @@ func PipelineLogs(c fiber.Ctx) error {
 	})
 
 	return nil
+}
+
+func writePipelineSSEData(w *bufio.Writer, value string) error {
+	value = strings.ReplaceAll(value, "\r\n", "\n")
+	for _, line := range strings.Split(value, "\n") {
+		if _, err := fmt.Fprintf(w, "data: %s\n", line); err != nil {
+			return err
+		}
+	}
+	_, err := fmt.Fprintln(w)
+	return err
 }

@@ -17,7 +17,11 @@ var (
 )
 
 func getLogFilePath(id uint) string {
-	logDir := filepath.Join(global.CONF.System.BaseDir, "pipelines", "logs")
+	baseDir := strings.TrimSpace(global.CONF.System.BaseDir)
+	if baseDir == "" || !filepath.IsAbs(baseDir) {
+		baseDir = filepath.Join(os.TempDir(), "gopanel")
+	}
+	logDir := filepath.Join(baseDir, "pipelines", "logs")
 	os.MkdirAll(logDir, 0755)
 	return filepath.Join(logDir, fmt.Sprintf("task_%d.log", id))
 }
@@ -43,14 +47,34 @@ func GetPipelineLogger(id uint) *PipelineLogger {
 		global.LOG.Errorf("failed to open pipeline log file: %v", err)
 	}
 
+	logs, _ := ReadPipelineLogFromFile(id)
+	if len(logs) > 3000 {
+		logs = logs[len(logs)-3000:]
+	}
 	logger := &PipelineLogger{
 		ID:        id,
-		logs:      []string{},
+		logs:      logs,
 		Listeners: make([]chan string, 0),
 		file:      f,
 	}
 	pipelineLoggers[id] = logger
 	return logger
+}
+
+func SubscribePipelineLogger(id uint) (*PipelineLogger, []string, chan string, bool) {
+	pipelineLoggersMu.RLock()
+	defer pipelineLoggersMu.RUnlock()
+	logger, exists := pipelineLoggers[id]
+	if !exists {
+		return nil, nil, nil, false
+	}
+	logger.mu.Lock()
+	defer logger.mu.Unlock()
+	logs := make([]string, len(logger.logs))
+	copy(logs, logger.logs)
+	ch := make(chan string, 100)
+	logger.Listeners = append(logger.Listeners, ch)
+	return logger, logs, ch, true
 }
 
 func IsPipelineLoggerActive(id uint) bool {

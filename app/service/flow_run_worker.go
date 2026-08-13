@@ -32,6 +32,10 @@ func (s *FlowRunApplicationService) Advance(runID uint) {
 			s.failRun(run, "pipeline_record_unavailable", err.Error())
 			return
 		}
+		if (record.Status == "success" || record.Status == "failed") && IsPipelineExecutionActive(record.ID) {
+			time.Sleep(s.pollInterval)
+			continue
+		}
 		switch record.Status {
 		case "success":
 			s.finishFlowBuild(run, record)
@@ -65,11 +69,13 @@ func (s *FlowRunApplicationService) startFlowBuild(run *model.FlowRun) bool {
 	_ = s.repo.UpsertStage(stage)
 	recordID, err := s.runPipeline(run.PipelineID, run.Version, run.SourceCommit, PipelineRunSource{
 		Type: "flow_run", ID: run.ID, IdempotencyKey: stage.IdempotencyKey,
+		LogSummary: fmt.Sprintf("来源类型: %s | 来源摘要: %s", run.SourceType, run.SourceDigest),
 	})
 	if err != nil {
 		s.failStage(run, "building", "pipeline_start_failed", err.Error())
 		return false
 	}
+	run.PipelineRecordID = recordID
 	stage.ResourceID = recordID
 	_ = s.repo.UpsertStage(stage)
 	if err := s.repo.UpdateRun(run.ID, map[string]any{"pipeline_record_id": recordID}); err != nil {
@@ -80,6 +86,8 @@ func (s *FlowRunApplicationService) startFlowBuild(run *model.FlowRun) bool {
 }
 
 func (s *FlowRunApplicationService) finishFlowBuild(run *model.FlowRun, record *model.PipelineRecord) {
+	logger := GetPipelineLogger(record.ID)
+	logger.Info("Pipeline 构建完成，正在校验 Flow 正式版本身份...")
 	if record.Version != run.Version || !pipelineCommitEqual(record.ExpectedCommit, run.SourceCommit) {
 		s.failStage(run, "building", "pipeline_identity_mismatch", "pipeline record does not match the locked flow version and commit")
 		return
@@ -88,6 +96,7 @@ func (s *FlowRunApplicationService) finishFlowBuild(run *model.FlowRun, record *
 		s.failStage(run, "building", "pipeline_source_mismatch", "pipeline record does not match the locked Code delivery source")
 		return
 	}
+	logger.Info("Flow 正式版本身份校验通过")
 	now := time.Now()
 	_ = s.repo.UpsertStage(&model.FlowStageRun{
 		FlowRunID: run.ID, Stage: "building", Attempt: 1, Status: "success",
@@ -96,6 +105,7 @@ func (s *FlowRunApplicationService) finishFlowBuild(run *model.FlowRun, record *
 		Summary: "pipeline build completed", CompletedAt: &now,
 	})
 	_ = s.repo.UpdateRun(run.ID, map[string]any{"current_stage": "publishing"})
+	logger.Info("正在发布不可变 Release...")
 	_ = s.repo.UpsertStage(&model.FlowStageRun{
 		FlowRunID: run.ID, Stage: "publishing", Attempt: 1, Status: "running",
 		IdempotencyKey: fmt.Sprintf("flow:%d:publish:1", run.ID),
@@ -107,6 +117,7 @@ func (s *FlowRunApplicationService) finishFlowBuild(run *model.FlowRun, record *
 		s.failStage(run, "publishing", "release_publish_failed", err.Error())
 		return
 	}
+	logger.Info("Release #%d 发布完成，制品摘要: %s", release.ID, release.ArtifactDigest)
 	completedAt := time.Now()
 	_ = s.repo.UpsertStage(&model.FlowStageRun{
 		FlowRunID: run.ID, Stage: "publishing", Attempt: 1, Status: "success",
@@ -130,6 +141,8 @@ func (s *FlowRunApplicationService) finishFlowBuild(run *model.FlowRun, record *
 		"release_id": release.ID, "current_stage": "waiting_deployment",
 		"status": flowRunWaitingDeployment, "lease_owner": "", "lease_expires_at": nil,
 	})
+	logger.Info("Flow #%d 已完成构建与发布，等待后续部署", run.ID)
+	finishFlowRunLogger(record.ID)
 }
 
 func (s *FlowRunApplicationService) failStage(run *model.FlowRun, stage, code, detail string) {
@@ -150,6 +163,20 @@ func (s *FlowRunApplicationService) failRun(run *model.FlowRun, code, detail str
 		"error_summary": strings.TrimSpace(detail), "completed_at": now,
 		"lease_owner": "", "lease_expires_at": nil,
 	})
+	if run.PipelineRecordID > 0 {
+		logger := GetPipelineLogger(run.PipelineRecordID)
+		logger.Error("Flow #%d 执行失败 [%s]: %s", run.ID, code, strings.TrimSpace(detail))
+		finishFlowRunLogger(run.PipelineRecordID)
+	}
+}
+
+func finishFlowRunLogger(recordID uint) {
+	if recordID == 0 {
+		return
+	}
+	logger := GetPipelineLogger(recordID)
+	logger.Info("====== Flow 执行结束 ======")
+	RemovePipelineLogger(recordID)
 }
 
 func ReconcileFlowRuns() {

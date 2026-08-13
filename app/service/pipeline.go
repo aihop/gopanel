@@ -40,6 +40,11 @@ func StopPipeline(recordID uint) {
 	repo.NewPipelineRecord(global.DB).UpdateStatus(recordID, "failed", "用户手动强制终止")
 }
 
+func IsPipelineExecutionActive(recordID uint) bool {
+	_, active := pipelineCancels.Load(recordID)
+	return active
+}
+
 type PipelineService struct {
 	db         *gorm.DB
 	repo       *repo.PipelineRepo

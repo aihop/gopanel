@@ -94,8 +94,9 @@ function startRun(flow: Flow.Item) {
 	runVisible.value = true
 }
 
-function runCreated() {
+function runCreated(run: Flow.Run) {
 	runPanel.value?.refresh()
+	void runPanel.value?.openRun(run)
 }
 
 onMounted(loadFlows)
