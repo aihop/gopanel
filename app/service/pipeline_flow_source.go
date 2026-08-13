@@ -21,6 +21,8 @@ const flowBuildFactFileName = "gopanel_flow.json"
 
 const codeSourceMaterializeTimeout = 15 * time.Minute
 
+const codeSourceRepositoryTimeout = 5 * time.Minute
+
 type flowBuildFact struct {
 	SchemaVersion int                          `json:"schemaVersion"`
 	FlowRunID     uint                         `json:"flowRunId"`
@@ -83,19 +85,19 @@ func (s *PipelineService) prepareLockedCodeSource(
 	if err != nil {
 		return "", "", err
 	}
-	baseDir := filepath.Dir(workspace)
-	if err := os.MkdirAll(baseDir, 0755); err != nil {
-		return "", "", err
-	}
-	tempDir, err := os.MkdirTemp(baseDir, ".code-source-")
-	if err != nil {
-		return "", "", err
-	}
-	defer os.RemoveAll(tempDir)
 	materializeCtx, cancel := context.WithTimeout(ctx, codeSourceMaterializeTimeout)
 	defer cancel()
 	logger.Info("Pipeline 正在从 Code 准备锁定源码: version=%s, source=%s", run.Version, run.SourceType)
-	if err := materializeCodeSourceManifest(materializeCtx, logger, resolvedManifest, tempDir); err != nil {
+	if err := resetCodePipelineWorkspace(workspace); err != nil {
+		return "", "", err
+	}
+	workspaceReady := false
+	defer func() {
+		if !workspaceReady {
+			_ = os.RemoveAll(workspace)
+		}
+	}()
+	if err := materializeCodeSourceManifest(materializeCtx, logger, resolvedManifest, workspace); err != nil {
 		if errors.Is(materializeCtx.Err(), context.DeadlineExceeded) {
 			return "", "", fmt.Errorf("准备 Code 锁定源码超时: %w", materializeCtx.Err())
 		}
@@ -107,14 +109,26 @@ func (s *PipelineService) prepareLockedCodeSource(
 		SessionID: run.SessionID, TaskID: run.TaskID, TaskTitle: manifest.TaskTitle,
 		Repositories: flowPublicSourceRepositories(manifest),
 	}
-	if err := writeFlowBuildFact(tempDir, fact); err != nil {
+	if err := writeFlowBuildFact(workspace, fact); err != nil {
 		return "", "", err
 	}
-	if err := replacePipelineWorkspace(workspace, tempDir); err != nil {
-		return "", "", err
-	}
+	workspaceReady = true
 	logger.Info("Code 锁定源码已就绪: repositories=%d, digest=%s", len(manifest.Repositories), digest)
 	return flowManifestPrimaryCommit(manifest), digest, nil
+}
+
+func resetCodePipelineWorkspace(workspace string) error {
+	workspace = filepath.Clean(strings.TrimSpace(workspace))
+	if workspace == "." || workspace == string(filepath.Separator) || filepath.Base(workspace) != "workspace" {
+		return errors.New("Code 流水线工作区路径非法")
+	}
+	if err := os.RemoveAll(workspace); err != nil {
+		return fmt.Errorf("重置 Code 流水线工作区失败: %w", err)
+	}
+	if err := os.MkdirAll(workspace, 0755); err != nil {
+		return fmt.Errorf("创建 Code 流水线工作区失败: %w", err)
+	}
+	return nil
 }
 
 func resolvePipelineCodeSourceManifest(project *model.AIProject, manifest flowSourceManifest) (flowSourceManifest, error) {
@@ -176,7 +190,13 @@ func materializeCodeSourceManifest(ctx context.Context, logger *PipelineLogger, 
 		if err := os.MkdirAll(target, 0755); err != nil {
 			return err
 		}
-		if err := extractFlowGitArchive(ctx, repository.SourceDir, repository.Commit, target); err != nil {
+		repositoryCtx, cancel := context.WithTimeout(ctx, codeSourceRepositoryTimeout)
+		err = extractFlowGitArchive(repositoryCtx, logger, repository.Name, repository.SourceDir, repository.Commit, target)
+		cancel()
+		if err != nil {
+			if errors.Is(repositoryCtx.Err(), context.DeadlineExceeded) {
+				return fmt.Errorf("准备 Code 仓库 %s 超时", repository.Name)
+			}
 			return fmt.Errorf("准备 Code 仓库 %s 失败: %w", repository.Name, err)
 		}
 		if logger != nil {
@@ -209,39 +229,43 @@ func safeFlowWorkspaceTarget(root, relative string) (string, error) {
 	return target, nil
 }
 
-func extractFlowGitArchive(ctx context.Context, repository, commit, destination string) error {
-	command := exec.CommandContext(ctx, "git", "archive", "--format=tar", commit)
-	command.Dir = repository
-	command.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
-	stdout, err := command.StdoutPipe()
+func extractFlowGitArchive(ctx context.Context, logger *PipelineLogger, repositoryName, repository, commit, destination string) error {
+	archiveFile, err := os.CreateTemp("", "gopanel-code-archive-*.tar")
 	if err != nil {
 		return err
 	}
-	var stderr strings.Builder
-	command.Stderr = &stderr
-	if err := command.Start(); err != nil {
+	archivePath := archiveFile.Name()
+	if err := archiveFile.Close(); err != nil {
+		_ = os.Remove(archivePath)
 		return err
 	}
-	extractErr := extractFlowTar(stdout, destination)
-	if extractErr != nil {
-		_ = stdout.Close()
-		if command.Process != nil {
-			_ = command.Process.Kill()
-		}
-	}
-	waitErr := command.Wait()
-	if extractErr != nil {
-		return extractErr
-	}
-	if waitErr != nil {
+	defer os.Remove(archivePath)
+
+	command := exec.CommandContext(ctx, "git", "archive", "--format=tar", "--output="+archivePath, commit)
+	command.Dir = repository
+	command.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	var stderr strings.Builder
+	command.Stderr = &stderr
+	if err := command.Run(); err != nil {
 		return fmt.Errorf("git archive 失败: %s", strings.TrimSpace(stderr.String()))
 	}
-	return nil
+	if logger != nil {
+		logger.Info("Code 仓库归档已生成，正在解包: %s", repositoryName)
+	}
+	archiveReader, err := os.Open(archivePath)
+	if err != nil {
+		return err
+	}
+	defer archiveReader.Close()
+	return extractFlowTar(ctx, archiveReader, destination)
 }
 
-func extractFlowTar(reader io.Reader, destination string) error {
+func extractFlowTar(ctx context.Context, reader io.Reader, destination string) error {
 	archive := tar.NewReader(reader)
 	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		header, err := archive.Next()
 		if errors.Is(err, io.EOF) {
 			return nil

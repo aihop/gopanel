@@ -99,7 +99,7 @@ func (s *PipelineApplicationService) ForceDelete(id uint, confirmName string) (*
 func (s *PipelineApplicationService) ensurePipelineForceDeleteAllowed(id uint) error {
 	var runningCount int64
 	if err := s.db.Model(&model.PipelineRecord{}).
-		Where("pipeline_id = ? AND status IN ?", id, []string{"pending", "cloning", "building", "deploying"}).
+		Where("pipeline_id = ? AND status IN ?", id, []string{"pending", "preparing", "cloning", "building", "deploying"}).
 		Count(&runningCount).Error; err != nil {
 		return err
 	}

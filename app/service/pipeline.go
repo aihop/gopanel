@@ -45,6 +45,15 @@ func IsPipelineExecutionActive(recordID uint) bool {
 	return active
 }
 
+func pipelineRecordRunning(status string) bool {
+	switch status {
+	case "pending", "preparing", "cloning", "building", "deploying":
+		return true
+	default:
+		return false
+	}
+}
+
 type PipelineService struct {
 	db         *gorm.DB
 	repo       *repo.PipelineRepo

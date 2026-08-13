@@ -70,9 +70,7 @@ func TestPrepareFlowCodeDeliverySourceUsesLockedCommits(t *testing.T) {
 	workspace := pipelineWorkspaceDir(pipeline)
 	logger := GetPipelineLogger(991003)
 	defer RemovePipelineLogger(991003)
-	commit, actualDigest, err := NewPipelineService(database).prepareCodePipelineSource(
-		context.Background(), logger, pipeline, record, workspace,
-	)
+	commit, actualDigest, err := NewPipelineService(database).prepareCodePipelineSource(context.Background(), logger, pipeline, record, workspace)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,6 +85,42 @@ func TestPrepareFlowCodeDeliverySourceUsesLockedCommits(t *testing.T) {
 	factContent, err := os.ReadFile(filepath.Join(workspace, flowBuildFactFileName))
 	if err != nil || json.Unmarshal(factContent, &fact) != nil || fact.Version != "1.2.3" || len(fact.Repositories) != 2 {
 		t.Fatalf("flow build fact = %+v, %v", fact, err)
+	}
+	temporarySources, err := filepath.Glob(filepath.Join(filepath.Dir(workspace), ".code-source-*"))
+	if err != nil || len(temporarySources) != 0 {
+		t.Fatalf("Code source should materialize directly into workspace: %v, %v", temporarySources, err)
+	}
+}
+
+func TestExtractFlowGitArchiveMaterializesCommit(t *testing.T) {
+	repository := flowTestGitRepository(t, "archive-v1")
+	commit := gitInRepo(t, repository, "rev-parse", "HEAD")
+	destination := t.TempDir()
+	logger := GetPipelineLogger(991004)
+	defer RemovePipelineLogger(991004)
+
+	if err := extractFlowGitArchive(context.Background(), logger, "archive", repository, commit, destination); err != nil {
+		t.Fatal(err)
+	}
+	content, err := os.ReadFile(filepath.Join(destination, "source.txt"))
+	if err != nil || string(content) != "archive-v1\n" {
+		t.Fatalf("archived source content = %q, %v", content, err)
+	}
+	if !strings.Contains(strings.Join(logger.GetLogs(), "\n"), "Code 仓库归档已生成，正在解包: archive") {
+		t.Fatal("archive and extraction boundary was not logged")
+	}
+}
+
+func TestPipelineRecordRunningIncludesCodePreparation(t *testing.T) {
+	for _, status := range []string{"pending", "preparing", "cloning", "building", "deploying"} {
+		if !pipelineRecordRunning(status) {
+			t.Fatalf("status %q should be running", status)
+		}
+	}
+	for _, status := range []string{"success", "failed", ""} {
+		if pipelineRecordRunning(status) {
+			t.Fatalf("status %q should not be running", status)
+		}
 	}
 }
 

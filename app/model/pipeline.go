@@ -43,7 +43,7 @@ type PipelineRecord struct {
 	CreatedAt      time.Time `json:"createdAt"`
 	UpdatedAt      time.Time `json:"updatedAt"`
 	PipelineID     uint      `gorm:"column:pipeline_id;type:integer;not null" json:"pipelineId"`
-	Status         string    `gorm:"column:status;type:varchar(20);not null;default:'pending'" json:"status"` // pending, cloning, building, deploying, success, failed
+	Status         string    `gorm:"column:status;type:varchar(20);not null;default:'pending'" json:"status"` // pending, preparing, cloning, building, deploying, success, failed
 	Version        string    `gorm:"column:version;type:varchar(50)" json:"version"`                          // 记录本次执行的版本号
 	ExpectedCommit string    `gorm:"column:expected_commit;type:varchar(64);index" json:"expectedCommit"`
 	SourceType     string    `gorm:"column:source_type;type:varchar(32);index" json:"sourceType"`

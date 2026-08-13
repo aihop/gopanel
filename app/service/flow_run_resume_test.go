@@ -151,6 +151,42 @@ func TestFlowRunResumeRetriesOnlyReleasePublication(t *testing.T) {
 	}
 }
 
+func TestFlowRunMarksStalePreparingPipelineInterrupted(t *testing.T) {
+	service, run, pipeline := createFlowResumeFixture(t)
+	record := model.PipelineRecord{
+		PipelineID: pipeline.ID, Status: "preparing", Version: run.Version, ExpectedCommit: run.SourceCommit,
+		SourceType: "flow_run", SourceID: run.ID, IdempotencyKey: "flow:stale:build:1",
+	}
+	if err := service.db.Create(&record).Error; err != nil {
+		t.Fatal(err)
+	}
+	staleAt := time.Now().Add(-3 * time.Minute)
+	if err := service.db.Model(&record).Updates(map[string]any{"created_at": staleAt, "updated_at": staleAt}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := service.repo.UpdateRun(run.ID, map[string]any{"pipeline_record_id": record.ID}); err != nil {
+		t.Fatal(err)
+	}
+	GetPipelineLogger(record.ID)
+	defer RemovePipelineLogger(record.ID)
+
+	service.Advance(run.ID)
+	stored, err := service.Get(run.ID, 7, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.Status != flowRunFailed || stored.FailureCode != "pipeline_interrupted" {
+		t.Fatalf("stale preparing pipeline was not closed: %+v", stored)
+	}
+	var updated model.PipelineRecord
+	if err := service.db.First(&updated, record.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if updated.Status != "failed" {
+		t.Fatalf("stale pipeline status = %q", updated.Status)
+	}
+}
+
 func assertFlowStageAttempts(t *testing.T, stages []model.FlowStageRun, stage string, statuses []string) {
 	t.Helper()
 	actual := make([]string, 0, len(statuses))

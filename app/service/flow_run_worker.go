@@ -48,7 +48,7 @@ func (s *FlowRunApplicationService) Advance(runID uint) {
 			s.failStage(run, "building", "pipeline_failed", record.ErrorMessage)
 			return
 		default:
-			if !IsPipelineLoggerActive(record.ID) && record.UpdatedAt.Before(time.Now().Add(-2*time.Minute)) {
+			if !IsPipelineExecutionActive(record.ID) && record.UpdatedAt.Before(time.Now().Add(-2*time.Minute)) {
 				message := "pipeline execution was interrupted before completion"
 				_ = s.recordRepo.UpdateStatus(record.ID, "failed", message)
 				s.failStage(run, "building", "pipeline_interrupted", message)

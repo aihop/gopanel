@@ -75,16 +75,20 @@ func (s *PipelineService) RunPipelineForSource(pipelineID uint, version, expecte
 }
 
 func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.PipelineRecord) {
+	recordID := record.ID
+	ctx, cancel := context.WithCancel(context.Background())
+	pipelineCancels.Store(recordID, cancel)
+	defer func() {
+		cancel()
+		pipelineCancels.Delete(recordID)
+	}()
+
 	executionLock := pipelineExecutionLock(p.ID)
 	executionLock.Lock()
 	defer executionLock.Unlock()
 
-	recordID := record.ID
 	logger := GetPipelineLogger(recordID)
-	ctx, cancel := context.WithCancel(context.Background())
-	pipelineCancels.Store(recordID, cancel)
 	defer func() {
-		pipelineCancels.Delete(recordID)
 		if record.SourceType != "flow_run" {
 			logger.Info("EOF")
 			RemovePipelineLogger(recordID)
@@ -100,7 +104,7 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 	logger.Info("工作区目录: %s", workspaceDir)
 	logger.Info("发布目录: %s", releaseDir)
 	if pipelineSourceType(p) == "code" {
-		s.recordRepo.UpdateStatus(recordID, "cloning", "")
+		s.recordRepo.UpdateStatus(recordID, "preparing", "")
 		commitHash, sourceDigest, err := s.prepareCodePipelineSource(ctx, logger, p, record, workspaceDir)
 		if err != nil {
 			s.recordRepo.UpdateStatus(recordID, "failed", fmt.Sprintf("Code snapshot failed: %v", err))

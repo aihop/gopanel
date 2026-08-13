@@ -200,14 +200,16 @@ const columns: DataTableColumns<Pipeline.ResRecord> = [
       let type: "default" | "info" | "success" | "warning" | "error" = "default"
       switch (row.status) {
         case "pending": type = "default"; break
+        case "preparing": type = "info"; break
         case "cloning": type = "info"; break
         case "building": type = "warning"; break
         case "deploying": type = "info"; break
         case "success": type = "success"; break
         case "failed": type = "error"; break
       }
+      const statusLabel = row.status === "preparing" ? sourceT("pipelineSource.statusPreparing") : row.status
       return h("div", { class: "flex flex-col items-center py-0.5" }, [
-        h(NTag, { type, size: "tiny" }, { default: () => row.status }),
+        h(NTag, { type, size: "tiny" }, { default: () => statusLabel }),
         h("span", { class: "text-[11px] leading-4 mt-0.5", style: { color: row.released ? "#22c55e" : "#94a3b8" } }, row.released ? "已发布" : "未发布")
       ])
     }
@@ -268,7 +270,7 @@ const columns: DataTableColumns<Pipeline.ResRecord> = [
     fixed: "right",
     render(row: Pipeline.ResRecord, index: number) {
       const isFirstRow = index === 0 && pagination.value.page === 1;
-      const isRunning = ["pending", "cloning", "building", "deploying"].includes(row.status);
+      const isRunning = ["pending", "preparing", "cloning", "building", "deploying"].includes(row.status);
 
       const btns = [
         h(NButton, {
