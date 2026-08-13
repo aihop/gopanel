@@ -52,6 +52,9 @@ func (s WebsiteService) Delete(ctx context.Context, id uint) error {
 	if err := repo.NewWebsiteUpstream().DeleteByWebsiteID(txCtx, id); err != nil {
 		return err
 	}
+	if err := repo.NewWebsiteDiagnostic(tx).DeleteByWebsiteID(txCtx, id); err != nil {
+		return err
+	}
 	if err := s.repo.DeleteBy(txCtx, commonRepo.WithByID(id)); err != nil {
 		return err
 	}

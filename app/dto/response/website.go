@@ -18,6 +18,15 @@ type WebsiteUpstream struct {
 	Sort           int       `json:"sort"`
 }
 
+type WebsiteDiagnosticSummary struct {
+	Configured    bool `json:"configured"`
+	Enabled       bool `json:"enabled"`
+	SourceCount   int  `json:"sourceCount"`
+	ContentCount  int  `json:"contentCount"`
+	CodeProjectID uint `json:"codeProjectId"`
+	AutoAnalysis  bool `json:"autoAnalysis"`
+}
+
 type WebsiteRes struct {
 	ID            uint      `json:"id"`
 	CreatedAt     time.Time `json:"createdAt"`
@@ -49,18 +58,19 @@ type WebsiteRes struct {
 	RuntimeMode   string    `json:"runtimeMode"`
 	RunUser       string    `json:"runUser"`
 
-	AntiCrawler              bool   `json:"antiCrawler"`
-	AntiLeech                bool   `json:"antiLeech"`
-	RateLimitMode            string `json:"rateLimitMode"`
-	WafEnable                bool   `json:"wafEnable"`
-	BlockSensitive           bool   `json:"blockSensitive"`
-	IPAllowlist              string `json:"ipAllowlist"`
-	IPBlocklist              string `json:"ipBlocklist"`
-	SecurityHeader           bool   `json:"securityHeader"`
-	HstsEnabled              bool   `json:"hstsEnabled"`
-	HttpConfig               string `json:"httpConfig"`
-	RedirectCode             int    `json:"redirectCode"`
-	RedirectDomainsToPrimary bool   `json:"redirectDomainsToPrimary"`
+	AntiCrawler              bool                     `json:"antiCrawler"`
+	AntiLeech                bool                     `json:"antiLeech"`
+	RateLimitMode            string                   `json:"rateLimitMode"`
+	WafEnable                bool                     `json:"wafEnable"`
+	BlockSensitive           bool                     `json:"blockSensitive"`
+	IPAllowlist              string                   `json:"ipAllowlist"`
+	IPBlocklist              string                   `json:"ipBlocklist"`
+	SecurityHeader           bool                     `json:"securityHeader"`
+	HstsEnabled              bool                     `json:"hstsEnabled"`
+	HttpConfig               string                   `json:"httpConfig"`
+	RedirectCode             int                      `json:"redirectCode"`
+	RedirectDomainsToPrimary bool                     `json:"redirectDomainsToPrimary"`
+	Diagnostic               WebsiteDiagnosticSummary `json:"diagnostic"`
 
 	Upstreams []WebsiteUpstream `json:"upstreams"`
 }

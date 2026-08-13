@@ -98,3 +98,26 @@ type WebsiteLogRead struct {
 type WebsiteLogTodayIPStats struct {
 	WebsiteID uint `json:"websiteId" validate:"required"`
 }
+
+type WebsiteDiagnosticSetting struct {
+	CodeProjectID          uint   `json:"codeProjectId"`
+	Enabled                bool   `json:"enabled"`
+	CaddyMonitoring        bool   `json:"caddyMonitoring"`
+	ActiveProbes           bool   `json:"activeProbes"`
+	BackendHook            bool   `json:"backendHook"`
+	BrowserHook            bool   `json:"browserHook"`
+	AutoAnalysis           bool   `json:"autoAnalysis"`
+	MonitorHTTP4xx         bool   `json:"monitorHttp4xx"`
+	MonitorHTTP5xx         bool   `json:"monitorHttp5xx"`
+	MonitorUpstreamErrors  bool   `json:"monitorUpstreamErrors"`
+	MonitorSlowRequests    bool   `json:"monitorSlowRequests"`
+	MonitorBusinessErrors  bool   `json:"monitorBusinessErrors"`
+	MonitorBrowserErrors   bool   `json:"monitorBrowserErrors"`
+	MonitorResourceErrors  bool   `json:"monitorResourceErrors"`
+	SlowRequestThresholdMS int    `json:"slowRequestThresholdMs"`
+	TriggerCount           int    `json:"triggerCount"`
+	TriggerWindowMinutes   int    `json:"triggerWindowMinutes"`
+	RetentionDays          int    `json:"retentionDays"`
+	DefaultExecutorID      string `json:"defaultExecutorId"`
+	ApprovalPolicy         string `json:"approvalPolicy"`
+}

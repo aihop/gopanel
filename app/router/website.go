@@ -13,11 +13,12 @@ func WebsiteRouter(r fiber.Router) {
 	{
 		websiteGroup.Post("/list", api.WebsiteList)
 		websiteGroup.Post("/create", api.WebsiteCreate)
+		websiteGroup.Get("/:id/diagnostics/settings", api.GetWebsiteDiagnosticSetting)
+		websiteGroup.Put("/:id/diagnostics/settings", api.SaveWebsiteDiagnosticSetting)
 		websiteGroup.Put("/:id", api.WebsiteUpdate)
 		websiteGroup.Delete("/:id", api.WebsiteDelete)
 		websiteGroup.Post("/log", api.WebsiteLog)
 		websiteGroup.Post("/log/today-ip", api.WebsiteLogTodayIPStats)
-
 		websiteGroup.Post("/app-deploy/list", api.AppDeployList)
 		websiteGroup.Post("/app-deploy/switch", api.AppDeploySwitch)
 		websiteGroup.Post("/app-deploy/delete", api.AppDeployDelete)

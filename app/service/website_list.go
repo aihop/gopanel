@@ -19,6 +19,14 @@ func (s *WebsiteService) List(ctx *gormx.Contextx) (websiteDTOs []*response.Webs
 	if len(res) == 0 {
 		return []*response.WebsiteRes{}, nil
 	}
+	websiteIDs := make([]uint, 0, len(res))
+	for _, web := range res {
+		websiteIDs = append(websiteIDs, web.ID)
+	}
+	diagnosticSummaries, err := loadWebsiteDiagnosticSummaries(websiteIDs)
+	if err != nil {
+		return nil, err
+	}
 	for _, web := range res {
 		var (
 			appName      string
@@ -94,6 +102,7 @@ func (s *WebsiteService) List(ctx *gormx.Contextx) (websiteDTOs []*response.Webs
 			HttpConfig:               web.HttpConfig,
 			RedirectCode:             web.RedirectCode,
 			RedirectDomainsToPrimary: web.RedirectDomainsToPrimary,
+			Diagnostic:               diagnosticSummaries[web.ID],
 			Upstreams:                responseWebsiteUpstreams(web.Upstreams, web.Proxy),
 		})
 	}

@@ -127,6 +127,8 @@
 
 		<SecurityDrawer ref="securityDrawerRef" @confirm="fetchData" />
 
+		<WebsiteDiagnosticDrawer ref="diagnosticDrawerRef" @confirm="fetchData" />
+
 		<OpDialog ref="opDialogRef" @search="handleEnsureFinished" />
 	</div>
 </template>
@@ -134,35 +136,24 @@
 <script setup lang="ts">
 import type { Website } from "@/api/interface/website"
 import type { App } from "@/api/interface/apps"
-import type { DataTableColumns } from "naive-ui"
 import { httpDefaultReloadAPI, httpDefaultStatusAPI, httpDefaultStopAPI } from "@/api/modules/http"
 import { AgentEnsureAPI, AgentStatusAPI } from "@/api/modules/agent"
 import { websiteDeleteAPI, websiteListAPI } from "@/api/modules/website"
 import { ListAppInstalled } from "@/api/modules/apps"
-import { NButton, NSpace, NTag, useDialog, useMessage, NAlert } from "naive-ui"
-import { h, onMounted, ref, watch } from "vue"
+import { useDialog, useMessage } from "naive-ui"
+import { onMounted, ref, watch } from "vue"
 import HttpConfigFile from "./components/HttpConfigFile.vue"
 import Create from "./components/Create.vue"
 import AppDeployHistory from "./components/AppDeployHistory.vue"
 import AccessLogDrawer from "./components/AccessLogDrawer.vue"
 import SecurityDrawer from "./components/SecurityDrawer.vue"
-import { formatTime } from "@/utils/date"
-import { t } from "@/i18n"
+import WebsiteDiagnosticDrawer from "./components/WebsiteDiagnosticDrawer.vue"
 import { useAuthStore } from "@/store/auth"
 import OpDialog from "@/components/OpDialog.vue"
-import { buildRuntimeDetailText } from "@/utils/runtime"
-import {
-	getWebsiteSourceLabel,
-	isHttpsWebsiteProtocol,
-	needsWebsiteBindingLookup,
-	normalizeWebsiteProtocol,
-	resolveWebsiteBindingMeta
-} from "@/utils/websiteRuntime"
-
-type WebsiteTableRow = Website.WebsiteDTO & {
-	domains?: Array<string | { domain?: string }>
-	status?: string | boolean
-}
+import { needsWebsiteBindingLookup } from "@/utils/websiteRuntime"
+import { createWebsiteTableColumns, resolveWebsiteRowBindingMeta, type WebsiteTableRow } from "./websiteTableColumns"
+import { useI18n } from "vue-i18n"
+import { websiteDiagnosticMessages } from "./websiteDiagnosticMessages"
 
 function getErrorMessage(error: unknown, fallback: string) {
 	if (error && typeof error === "object") {
@@ -180,6 +171,8 @@ const createRef = ref<InstanceType<typeof Create> | null>(null)
 const appDeployHistoryRef = ref<InstanceType<typeof AppDeployHistory> | null>(null)
 const accessLogDrawerRef = ref<InstanceType<typeof AccessLogDrawer> | null>(null)
 const securityDrawerRef = ref<InstanceType<typeof SecurityDrawer> | null>(null)
+const diagnosticDrawerRef = ref<InstanceType<typeof WebsiteDiagnosticDrawer> | null>(null)
+const { t: diagnosticT } = useI18n({ messages: websiteDiagnosticMessages })
 
 const httpServerStatus = ref(false)
 const statusStartErrorText = ref("")
@@ -243,340 +236,22 @@ const appInstallMap = ref<Record<number, App.AppInstalledInfo>>({})
 
 const activeTab = ref("list")
 
-function normalizeDomainList(row: WebsiteTableRow) {
-	if (Array.isArray(row.domains)) {
-		const domains = row.domains as Array<string | { domain?: string }>
-		return domains.map(item => (typeof item === "string" ? item : item?.domain)).filter(Boolean) as string[]
-	}
-	if (typeof row.otherDomains === "string") {
-		return row.otherDomains
-			.split(",")
-			.map((item: string) => item.trim())
-			.filter(Boolean)
-	}
-	return []
-}
-
-function getWebsiteTypeLabel(type: string) {
-	if (type === "proxy") return "反向代理"
-	if (type === "web_app") return "容器化应用"
-	return "静态网站"
-}
-
-function getWebsiteTypeTag(type: string) {
-	if (type === "proxy") return "info"
-	if (type === "web_app") return "warning"
-	return "success"
-}
-
-function formatWebsiteStatus(status: unknown) {
-	if (typeof status === "boolean") {
-		return status ? "运行中" : "已停止"
-	}
-	if (typeof status === "string") {
-		const normalized = status.trim().toLowerCase()
-		if (["running", "enable", "enabled", "online", "success", "active"].includes(normalized)) {
-			return "运行中"
-		}
-		if (["stopped", "stop", "disabled", "disable", "offline", "inactive"].includes(normalized)) {
-			return "已停止"
-		}
-		return status
-	}
-	return httpServerStatus.value ? "已接入" : "待检查"
-}
-
-function getStatusTagType(status: unknown): "success" | "warning" | "default" {
-	const text = formatWebsiteStatus(status)
-	if (text === "运行中" || text === "已接入") {
-		return "success"
-	}
-	if (text === "已停止" || text === "待检查") {
-		return "warning"
-	}
-	return "default"
-}
-
-function getSecuritySummary(row: WebsiteTableRow) {
-	const tags: string[] = []
-	if (row.antiCrawler) tags.push("防爬虫")
-	if (row.antiLeech) tags.push("防盗链")
-	if (row.rateLimitMode === "normal") tags.push("常规限流")
-	if (row.rateLimitMode === "strict") tags.push("严格限流")
-	if (row.wafEnable) tags.push("轻量 WAF")
-	if (row.blockSensitive) tags.push("敏感保护")
-	return tags
-}
-
 function getWebsiteBindingMeta(row: WebsiteTableRow) {
-	return resolveWebsiteBindingMeta(
-		row,
-		{
-			appInstallMap: appInstallMap.value,
-		},
-		{
-			includeSourceInDetail: false,
-			kindFallback: "Runtime",
-			userFallback: "镜像默认",
-			runtimePrefix: "",
-			runUserPrefix: "用户:"
-		}
-	)
+	return resolveWebsiteRowBindingMeta(row, appInstallMap.value, (key, params) => diagnosticT(key, params))
 }
 
-function getBackendSummary(row: WebsiteTableRow) {
-	if (row.type !== "proxy" && row.type !== "web_app") {
-		return ""
-	}
-	const upstreams = Array.isArray(row.upstreams) ? row.upstreams.filter(item => item?.address) : []
-	if (upstreams.length > 0) {
-		const enabledCount = upstreams.filter(item => item.enabled !== false).length
-		const preview = upstreams
-			.slice(0, 2)
-			.map(item => item.address)
-			.join(", ")
-		return `${t("website.backends")}: ${upstreams.length} · ${t("website.backendsEnabled", { count: enabledCount })} · ${preview}`
-	}
-	if (row.proxy) {
-		return `${t("website.backends")}: ${row.proxy}`
-	}
-	return t("website.backendNotConfigured")
-}
-
-const columns: DataTableColumns<WebsiteTableRow> = [
-	{
-		title: t("website.primaryDomain"),
-		key: "primaryDomain",
-		render(row) {
-			const protocol = normalizeWebsiteProtocol(row.protocol) || "HTTP"
-			return h("div", { class: "flex flex-col space-y-1" }, [
-				h(
-					"a",
-					{
-						href: protocol === "HTTP" ? `http://${row.primaryDomain}` : `https://${row.primaryDomain}`,
-						target: "_blank",
-						class: "text-base font-semibold fg-base-100"
-					},
-					row.primaryDomain
-				),
-				h(
-					"div",
-					{ class: "flex flex-wrap gap-2 pt-1" },
-					[
-						h(
-							NTag,
-							{
-								size: "small",
-								round: true,
-								bordered: false,
-								type: isHttpsWebsiteProtocol(row) ? "success" : "default"
-							},
-							{ default: () => protocol }
-						),
-						row.defaultServer
-							? h(
-									NTag,
-									{
-										size: "small",
-										round: true,
-										bordered: false,
-										type: "warning"
-									},
-									{ default: () => "默认站点" }
-								)
-							: null
-					].filter(Boolean)
-				)
-			])
-		}
-	},
-	{
-		title: "子域名",
-		key: "otherDomains",
-		render(row) {
-			const domains = normalizeDomainList(row)
-			return h(
-				"div",
-				{ class: "flex flex-wrap gap-2" },
-				domains.length
-					? domains.map((item: string) =>
-							h(
-								NTag,
-								{
-									size: "small",
-									round: true,
-									bordered: false
-								},
-								{ default: () => item }
-							)
-						)
-					: [h("span", { class: "text-sm text-slate-400" }, "无附加域名")]
-			)
-		}
-	},
-	{
-		title: "类型",
-		key: "type",
-		render(row) {
-			const tags = [
-				h(
-					NTag,
-					{
-						round: true,
-						bordered: false,
-						type: getWebsiteTypeTag(row.type)
-					},
-					{
-						default: () => getWebsiteTypeLabel(row.type)
-					}
-				)
-			]
-
-			if (row.type === "web_app" && row.codeSource) {
-				const sourceText = getWebsiteSourceLabel(row.codeSource)
-				tags.push(
-					h(
-						NTag,
-						{ type: "default", size: "small", bordered: false, style: { marginLeft: "4px" } },
-						{ default: () => sourceText }
-					)
-				)
-			}
-
-			const bindingMeta = getWebsiteBindingMeta(row)
-			return h("div", { class: "flex flex-col gap-2" }, [
-				h("div", { class: "flex items-center flex-wrap gap-1" }, tags),
-				bindingMeta
-					? h("div", { class: "text-xs text-slate-500" }, `${bindingMeta.source} · ${bindingMeta.detail}`)
-					: null,
-				h("div", { class: "text-xs text-slate-500" }, getBackendSummary(row)),
-			])
-		}
-	},
-	{
-		title: "状态",
-		key: "status",
-		render(row) {
-			return h(
-				NTag,
-				{
-					round: true,
-					bordered: false,
-					type: getStatusTagType(row.status)
-				},
-				{
-					default: () => formatWebsiteStatus(row.status)
-				}
-			)
-		}
-	},
-	{
-		title: "安全防护",
-		key: "security",
-		render(row) {
-			const tags = getSecuritySummary(row)
-			return h(
-				"div",
-				{ class: "flex flex-wrap gap-2" },
-				tags.length
-					? tags.slice(0, 3).map((item: string) =>
-							h(
-								NTag,
-								{
-									size: "small",
-									round: true,
-									bordered: false,
-									type: "success"
-								},
-								{ default: () => item }
-							)
-						)
-					: [h("span", { class: "text-sm text-slate-400" }, "未启用")]
-			)
-		}
-	},
-	{
-		title: t("commons.table.createdAt"),
-		key: "updatedAt",
-		render(row) {
-			return h("span", { class: "text-sm text-slate-500" }, formatTime(row.updatedAt))
-		}
-	},
-	{
-		title: t("commons.table.operate"),
-		key: "actions",
-		render(row) {
-			const buttons = [
-				h(
-					NButton,
-					{
-						text: true,
-						type: "info",
-						onClick: () => handleAccessLog(row)
-					},
-					{ default: () => "访问记录" }
-				),
-				h(
-					NButton,
-					{
-						text: true,
-						type: "error",
-						onClick: () => handleErrorLog(row)
-					},
-					{ default: () => "错误日志" }
-				),
-				h(
-					NButton,
-					{
-						text: true,
-						type: "warning",
-						onClick: () => handleSecurity(row)
-					},
-					{ default: () => "安全防护" }
-				),
-				h(
-					NButton,
-					{
-						text: true,
-						type: "primary",
-						onClick: () => handleUpdate(row)
-					},
-					{ default: () => t("commons.button.set") }
-				)
-			]
-
-			if (row.type === "web_app" || row.type === "static") {
-				buttons.splice(
-					1,
-					0,
-					h(
-						NButton,
-						{
-							text: true,
-							type: "success",
-							onClick: () => handleDeploy(row)
-						},
-						{ default: () => "部署管理" }
-					)
-				)
-			}
-
-			buttons.push(
-				h(
-					NButton,
-					{
-						text: true,
-						type: "error",
-						onClick: () => handleDelete(row)
-					},
-					{ default: () => "删除" }
-				)
-			)
-
-			return h(NSpace, { size: 8 }, { default: () => buttons })
-		}
-	}
-]
+const columns = createWebsiteTableColumns({
+	appInstallMap: () => appInstallMap.value,
+	httpServerRunning: () => httpServerStatus.value,
+	diagnosticText: (key, params) => diagnosticT(key, params),
+	onAccessLog: row => handleAccessLog(row),
+	onErrorLog: row => handleErrorLog(row),
+	onSecurity: row => handleSecurity(row),
+	onDiagnostic: row => handleDiagnostic(row),
+	onUpdate: row => handleUpdate(row),
+	onDeploy: row => handleDeploy(row),
+	onDelete: row => handleDelete(row)
+})
 
 async function fetchData() {
 	loading.value = true
@@ -648,6 +323,10 @@ function handleDeploy(row: WebsiteTableRow) {
 
 function handleSecurity(row: Website.WebsiteDTO) {
 	securityDrawerRef.value?.open(row)
+}
+
+function handleDiagnostic(row: Website.WebsiteDTO) {
+	diagnosticDrawerRef.value?.open(row)
 }
 
 function handleAccessLog(row: Website.WebsiteDTO) {

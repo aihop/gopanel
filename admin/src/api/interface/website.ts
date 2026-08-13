@@ -62,8 +62,8 @@ export namespace Website {
 		httpConfig?: string
 		redirectCode?: number
 		redirectDomainsToPrimary?: boolean
+		diagnostic?: import("./websiteDiagnostic").WebsiteDiagnosticSummary
 	}
-
 	export interface WebsiteDTO extends Website {
 		errorLogPath: string
 		accessLogPath: string

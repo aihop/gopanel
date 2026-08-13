@@ -1,6 +1,7 @@
 import http from "@/api"
 import type { Website } from "../interface/website"
 import type { ResPage } from "../interface"
+import type { WebsiteDiagnosticSetting } from "../interface/websiteDiagnostic"
  
 export const websiteListAPI = () => {
 	return http.post<ResPage<Website.WebsiteDTO>>(`/website/list`)
@@ -24,6 +25,17 @@ export const WebsiteLogAPI = (req: Website.WebSiteLogReadReq) => {
 
 export const WebsiteTodayIPStatsAPI = (req: Website.WebSiteTodayIPStatsReq) => {
 	return http.post<Website.WebSiteTodayIPStats>(`/website/log/today-ip`, req)
+}
+
+export const getWebsiteDiagnosticSettingAPI = (websiteId: number) => {
+	return http.get<WebsiteDiagnosticSetting>(`/website/${websiteId}/diagnostics/settings`)
+}
+
+export const saveWebsiteDiagnosticSettingAPI = (
+	websiteId: number,
+	setting: Omit<WebsiteDiagnosticSetting, "websiteId" | "configured" | "trackingDir">
+) => {
+	return http.put<WebsiteDiagnosticSetting>(`/website/${websiteId}/diagnostics/settings`, setting)
 }
 
 
