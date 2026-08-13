@@ -79,6 +79,59 @@ func (r *FlowRepo) UpdateRun(id uint, values map[string]any) error {
 	return r.db.Model(&model.FlowRun{}).Where("id = ?", id).Updates(values).Error
 }
 
+func (r *FlowRepo) ResumeFailedRun(id uint, values map[string]any, stage *model.FlowStageRun) (bool, error) {
+	resumed := false
+	err := r.db.Transaction(func(tx *gorm.DB) error {
+		result := tx.Model(&model.FlowRun{}).Where("id = ? AND status = ?", id, "failed").Updates(values)
+		if result.Error != nil || result.RowsAffected != 1 {
+			return result.Error
+		}
+		if err := tx.Create(stage).Error; err != nil {
+			return err
+		}
+		resumed = true
+		return nil
+	})
+	return resumed, err
+}
+
+func (r *FlowRepo) NextStageAttempt(flowRunID uint, stage string) (int, error) {
+	var maxAttempt int
+	err := r.db.Model(&model.FlowStageRun{}).
+		Where("flow_run_id = ? AND stage = ?", flowRunID, stage).
+		Select("COALESCE(MAX(attempt), 0)").Scan(&maxAttempt).Error
+	return maxAttempt + 1, err
+}
+
+func (r *FlowRepo) CurrentStageAttempt(flowRunID uint, stage string) (int, error) {
+	var latest model.FlowStageRun
+	err := r.db.Where("flow_run_id = ? AND stage = ?", flowRunID, stage).
+		Order("attempt desc").First(&latest).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return 1, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return latest.Attempt, nil
+}
+
+func (r *FlowRepo) StageAttemptForExecution(flowRunID uint, stage string) (int, error) {
+	var latest model.FlowStageRun
+	err := r.db.Where("flow_run_id = ? AND stage = ?", flowRunID, stage).
+		Order("attempt desc").First(&latest).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return 1, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	if latest.Status == "pending" || latest.Status == "running" {
+		return latest.Attempt, nil
+	}
+	return latest.Attempt + 1, nil
+}
+
 func (r *FlowRepo) UpsertStage(stage *model.FlowStageRun) error {
 	var existing model.FlowStageRun
 	err := r.db.Where("flow_run_id = ? AND stage = ? AND attempt = ?", stage.FlowRunID, stage.Stage, stage.Attempt).First(&existing).Error

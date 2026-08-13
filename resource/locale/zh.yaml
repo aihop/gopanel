@@ -58,6 +58,8 @@ ErrFlowCodeBaselineUnavailable: "项目已有有效 Code 交付，请选择交�
 ErrFlowCodeSourceInvalid: "正式版本的 Code 来源不完整或提交不可用"
 ErrFlowVersionInvalid: "版本号格式无效"
 ErrFlowVersionExists: "该交付流程已存在相同版本"
+ErrFlowRunNotFailed: "只有失败的交付执行可以继续"
+ErrFlowRunResumeUnsupported: "当前失败阶段无法自动继续，请重新发起一次交付"
 ErrFlowPipelineRecordProtected: "该流水线记录属于交付执行，请从交付中心查看"
 
 ErrMinQuickJump: "至少设置 1 个快速跳转入口"

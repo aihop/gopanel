@@ -21,6 +21,10 @@ func (s *FlowRunApplicationService) Advance(runID uint) {
 		if err != nil || (run.Status != flowRunQueued && run.Status != flowRunRunning) {
 			return
 		}
+		if run.CurrentStage == "publishing" && run.PipelineRecordID > 0 {
+			s.resumeFlowPublish(run)
+			return
+		}
 		if run.PipelineRecordID == 0 {
 			if !s.startFlowBuild(run) {
 				return
@@ -29,7 +33,7 @@ func (s *FlowRunApplicationService) Advance(runID uint) {
 		}
 		record, err := s.recordRepo.Get(run.PipelineRecordID)
 		if err != nil {
-			s.failRun(run, "pipeline_record_unavailable", err.Error())
+			s.failStage(run, "building", "pipeline_record_unavailable", err.Error())
 			return
 		}
 		if (record.Status == "success" || record.Status == "failed") && IsPipelineExecutionActive(record.ID) {
@@ -56,14 +60,19 @@ func (s *FlowRunApplicationService) Advance(runID uint) {
 }
 
 func (s *FlowRunApplicationService) startFlowBuild(run *model.FlowRun) bool {
+	attempt, err := s.repo.CurrentStageAttempt(run.ID, "building")
+	if err != nil {
+		s.failStage(run, "building", "flow_attempt_unavailable", err.Error())
+		return false
+	}
 	now := time.Now()
 	_ = s.repo.UpdateRun(run.ID, map[string]any{
 		"status": flowRunRunning, "current_stage": "building", "started_at": now,
 		"failure_code": "", "error_summary": "",
 	})
 	stage := &model.FlowStageRun{
-		FlowRunID: run.ID, Stage: "building", Attempt: 1, Status: "running",
-		IdempotencyKey: fmt.Sprintf("flow:%d:build:1", run.ID),
+		FlowRunID: run.ID, Stage: "building", Attempt: attempt, Status: "running",
+		IdempotencyKey: fmt.Sprintf("flow:%d:build:%d", run.ID, attempt),
 		ResourceType:   "pipeline_record", Summary: "pipeline build started", StartedAt: &now,
 	}
 	_ = s.repo.UpsertStage(stage)
@@ -85,6 +94,19 @@ func (s *FlowRunApplicationService) startFlowBuild(run *model.FlowRun) bool {
 	return true
 }
 
+func (s *FlowRunApplicationService) resumeFlowPublish(run *model.FlowRun) {
+	record, err := s.recordRepo.Get(run.PipelineRecordID)
+	if err != nil || record.Status != "success" {
+		detail := "pipeline record is not available for publication"
+		if err != nil {
+			detail = err.Error()
+		}
+		s.failStage(run, "publishing", "pipeline_record_unavailable", detail)
+		return
+	}
+	s.publishFlowRelease(run, record)
+}
+
 func (s *FlowRunApplicationService) finishFlowBuild(run *model.FlowRun, record *model.PipelineRecord) {
 	logger := GetPipelineLogger(record.ID)
 	logger.Info("Pipeline 构建完成，正在校验 Flow 正式版本身份...")
@@ -98,17 +120,33 @@ func (s *FlowRunApplicationService) finishFlowBuild(run *model.FlowRun, record *
 	}
 	logger.Info("Flow 正式版本身份校验通过")
 	now := time.Now()
+	buildAttempt, err := s.repo.CurrentStageAttempt(run.ID, "building")
+	if err != nil {
+		s.failStage(run, "building", "flow_attempt_unavailable", err.Error())
+		return
+	}
 	_ = s.repo.UpsertStage(&model.FlowStageRun{
-		FlowRunID: run.ID, Stage: "building", Attempt: 1, Status: "success",
-		IdempotencyKey: fmt.Sprintf("flow:%d:build:1", run.ID),
+		FlowRunID: run.ID, Stage: "building", Attempt: buildAttempt, Status: "success",
+		IdempotencyKey: fmt.Sprintf("flow:%d:build:%d", run.ID, buildAttempt),
 		ResourceType:   "pipeline_record", ResourceID: record.ID,
 		Summary: "pipeline build completed", CompletedAt: &now,
 	})
+	s.publishFlowRelease(run, record)
+}
+
+func (s *FlowRunApplicationService) publishFlowRelease(run *model.FlowRun, record *model.PipelineRecord) {
+	logger := GetPipelineLogger(record.ID)
+	now := time.Now()
 	_ = s.repo.UpdateRun(run.ID, map[string]any{"current_stage": "publishing"})
 	logger.Info("正在发布不可变 Release...")
+	publishAttempt, err := s.repo.StageAttemptForExecution(run.ID, "publishing")
+	if err != nil {
+		s.failStage(run, "publishing", "flow_attempt_unavailable", err.Error())
+		return
+	}
 	_ = s.repo.UpsertStage(&model.FlowStageRun{
-		FlowRunID: run.ID, Stage: "publishing", Attempt: 1, Status: "running",
-		IdempotencyKey: fmt.Sprintf("flow:%d:publish:1", run.ID),
+		FlowRunID: run.ID, Stage: "publishing", Attempt: publishAttempt, Status: "running",
+		IdempotencyKey: fmt.Sprintf("flow:%d:publish:%d", run.ID, publishAttempt),
 		ResourceType:   "pipeline_record", ResourceID: record.ID,
 		Summary: "release publication started", StartedAt: &now,
 	})
@@ -120,8 +158,8 @@ func (s *FlowRunApplicationService) finishFlowBuild(run *model.FlowRun, record *
 	logger.Info("Release #%d 发布完成，制品摘要: %s", release.ID, release.ArtifactDigest)
 	completedAt := time.Now()
 	_ = s.repo.UpsertStage(&model.FlowStageRun{
-		FlowRunID: run.ID, Stage: "publishing", Attempt: 1, Status: "success",
-		IdempotencyKey: fmt.Sprintf("flow:%d:publish:1", run.ID),
+		FlowRunID: run.ID, Stage: "publishing", Attempt: publishAttempt, Status: "success",
+		IdempotencyKey: fmt.Sprintf("flow:%d:publish:%d", run.ID, publishAttempt),
 		ResourceType:   "release", ResourceID: release.ID,
 		Summary: "release published", CompletedAt: &completedAt,
 	})
@@ -148,9 +186,13 @@ func (s *FlowRunApplicationService) finishFlowBuild(run *model.FlowRun, record *
 func (s *FlowRunApplicationService) failStage(run *model.FlowRun, stage, code, detail string) {
 	now := time.Now()
 	detail = strings.TrimSpace(detail)
+	attempt, err := s.repo.CurrentStageAttempt(run.ID, stage)
+	if err != nil {
+		attempt = 1
+	}
 	_ = s.repo.UpsertStage(&model.FlowStageRun{
-		FlowRunID: run.ID, Stage: stage, Attempt: 1, Status: "failed",
-		IdempotencyKey: fmt.Sprintf("flow:%d:%s:1", run.ID, stage),
+		FlowRunID: run.ID, Stage: stage, Attempt: attempt, Status: "failed",
+		IdempotencyKey: fmt.Sprintf("flow:%d:%s:%d", run.ID, stage, attempt),
 		ErrorCode:      code, ErrorDetail: detail, CompletedAt: &now,
 	})
 	s.failRun(run, code, detail)

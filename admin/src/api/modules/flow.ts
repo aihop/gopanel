@@ -26,6 +26,10 @@ export function getFlowRun(id: number) {
 	return http.get<Flow.Run>(`/flow/runs/${id}`)
 }
 
+export function resumeFlowRun(id: number) {
+	return http.post<Flow.Run>(`/flow/runs/${id}/resume`)
+}
+
 export function createFlowRun(input: Flow.RunCreateInput) {
 	return http.post<Flow.Run>("/flow/runs", input)
 }

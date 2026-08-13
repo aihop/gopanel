@@ -132,6 +132,24 @@ func FlowRunGet(c fiber.Ctx) error {
 	return c.JSON(e.Succ(item))
 }
 
+func FlowRunResume(c fiber.Ctx) error {
+	claims, err := middleware.JwtClaims(c)
+	if err != nil {
+		return c.JSON(e.Auth(err.Error()))
+	}
+	id, err := strconv.Atoi(c.Params("id"))
+	if err != nil || id <= 0 {
+		return c.JSON(e.Fail(buserr.New(constant.ErrParameterError)))
+	}
+	item, err := service.NewFlowRunApplication(global.DB).Resume(
+		uint(id), claims.UserId, claims.Role == constant.UserRoleSuper,
+	)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	return c.JSON(e.Succ(item))
+}
+
 func FlowCodeDeliverySources(c fiber.Ctx) error {
 	claims, err := middleware.JwtClaims(c)
 	if err != nil {

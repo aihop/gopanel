@@ -226,6 +226,90 @@ func (s *FlowRunApplicationService) Get(id, userID uint, includeAll bool) (*mode
 	return &items[0], nil
 }
 
+func (s *FlowRunApplicationService) Resume(id, userID uint, includeAll bool) (*model.FlowRun, error) {
+	identity, err := s.repo.GetRunInternal(id)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, buserr.New(constant.ErrFlowNotFound)
+	}
+	if err != nil {
+		return nil, err
+	}
+	flow, err := s.repo.Get(identity.FlowID)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, buserr.New(constant.ErrFlowNotFound)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if !includeAll && flow.CreatedBy != userID {
+		return nil, buserr.New(constant.ErrFlowForbidden)
+	}
+	if !flow.Enabled {
+		return nil, buserr.New(constant.ErrFlowDisabled)
+	}
+	run, err := s.repo.GetRun(id, userID, includeAll)
+	if err != nil {
+		return nil, err
+	}
+	if run.Status != flowRunFailed {
+		return nil, buserr.New(constant.ErrFlowRunNotFailed)
+	}
+	failedStage := flowFailedStage(run.Stages)
+	if failedStage == "" && run.FailureCode == "pipeline_record_unavailable" {
+		failedStage = "building"
+	}
+	if failedStage != "building" && failedStage != "publishing" {
+		return nil, buserr.New(constant.ErrFlowRunResumeUnsupported)
+	}
+	if failedStage == "publishing" {
+		record, recordErr := s.recordRepo.Get(run.PipelineRecordID)
+		if recordErr != nil || record.Status != "success" {
+			return nil, buserr.New(constant.ErrFlowRunResumeUnsupported)
+		}
+	}
+	attempt, err := s.repo.NextStageAttempt(run.ID, failedStage)
+	if err != nil {
+		return nil, err
+	}
+	values := map[string]any{
+		"status": flowRunQueued, "current_stage": failedStage,
+		"failure_code": "", "error_summary": "", "completed_at": nil,
+		"lease_owner": "", "lease_expires_at": nil,
+	}
+	if failedStage == "building" {
+		values["pipeline_record_id"] = 0
+	}
+	stage := &model.FlowStageRun{
+		FlowRunID: run.ID, Stage: failedStage, Attempt: attempt, Status: "pending",
+		IdempotencyKey: fmt.Sprintf("flow:%d:%s:%d", run.ID, failedStage, attempt),
+		Summary:        fmt.Sprintf("delivery resumed by user #%d", userID),
+	}
+	if failedStage == "publishing" {
+		stage.ResourceType = "pipeline_record"
+		stage.ResourceID = run.PipelineRecordID
+	}
+	resumed, err := s.repo.ResumeFailedRun(run.ID, values, stage)
+	if err != nil {
+		return nil, err
+	}
+	if !resumed {
+		return nil, buserr.New(constant.ErrFlowRunNotFailed)
+	}
+	if s.autoStart {
+		go s.Advance(run.ID)
+	}
+	return s.Get(run.ID, userID, includeAll)
+}
+
+func flowFailedStage(stages []model.FlowStageRun) string {
+	for index := len(stages) - 1; index >= 0; index-- {
+		if stages[index].Status == "failed" {
+			return stages[index].Stage
+		}
+	}
+	return ""
+}
+
 func (s *FlowRunApplicationService) fillRunSummaries(items []model.FlowRun) error {
 	for index := range items {
 		var flow model.Flow
