@@ -63,11 +63,11 @@
 					class="diagnostic-message"
 					:class="messageItem.role === 'user' ? 'is-user' : 'is-agent'"
 				>
-					<div class="diagnostic-message__content">{{ messageItem.content }}</div>
+					<div class="diagnostic-message__content">
+						{{ messageItem.content }}
+						<span v-if="sending && messageItem === streamingMessage" class="diagnostic-message__cursor" />
+					</div>
 				</article>
-				<div v-if="sending" class="diagnostic-message is-agent">
-					<div class="flex items-center gap-2 text-sm opacity-65"><n-spin :size="16" />{{ t("systemDiagnostic.sending") }}</div>
-				</div>
 			</div>
 
 			<footer class="diagnostic-panel__composer">
@@ -94,11 +94,11 @@
 
 <script setup lang="ts">
 import Icon from "@/components/common/Icon.vue"
-import { chatSystemDiagnostic, getSystemDiagnosticState } from "@/api/modules/systemDiagnostic"
+import { getSystemDiagnosticState, streamSystemDiagnostic } from "@/api/modules/systemDiagnostic"
 import type { SystemDiagnosticMessage, SystemDiagnosticState } from "@/api/interface/systemDiagnostic"
 import { systemDiagnosticMessages } from "@/i18n/locales/systemDiagnostic"
 import { useMessage } from "naive-ui"
-import { computed, nextTick, onMounted, ref, watch } from "vue"
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 
 const emit = defineEmits<{ close: []; "drag-start": [event: PointerEvent] }>()
@@ -113,6 +113,8 @@ const sendError = ref(false)
 const content = ref("")
 const accountId = ref<number | null>(null)
 const messageList = ref<HTMLElement | null>(null)
+const streamingMessage = ref<SystemDiagnosticMessage | null>(null)
+let streamController: AbortController | null = null
 const accountStorageKey = "gopanel_system_diagnostic_account"
 
 const accountOptions = computed(() => (state.value?.accounts || []).map(account => ({
@@ -150,17 +152,41 @@ async function send() {
 		return
 	}
 	if (!accountId.value || sending.value) return
+	const createdAt = new Date().toISOString()
+	const temporaryID = -Date.now()
+	const userMessage: SystemDiagnosticMessage = { id: temporaryID, role: "user", content: question, createdAt }
+	const assistantMessage: SystemDiagnosticMessage = { id: temporaryID - 1, role: "agent", content: "", createdAt }
+	let streamStarted = false
+	messages.value.push(userMessage, assistantMessage)
+	streamingMessage.value = assistantMessage
+	content.value = ""
 	sending.value = true
 	sendError.value = false
+	const controller = new AbortController()
+	streamController = controller
+	await scrollToBottom()
 	try {
-		const response = await chatSystemDiagnostic(question, accountId.value)
-		messages.value.push(response.data.userMessage, response.data.assistantMessage)
-		content.value = ""
-		await scrollToBottom()
+		await streamSystemDiagnostic(question, accountId.value, {
+			onStart: value => {
+				streamStarted = true
+				Object.assign(userMessage, value.userMessage)
+			},
+			onDelta: delta => {
+				assistantMessage.content += delta
+				void scrollToBottom()
+			},
+			onDone: value => {
+				Object.assign(userMessage, value.userMessage)
+				Object.assign(assistantMessage, value.assistantMessage)
+			}
+		}, controller.signal)
 	} catch {
-		sendError.value = true
+		if (!streamStarted) messages.value = messages.value.filter(item => item !== userMessage && item !== assistantMessage)
+		if (!controller.signal.aborted) sendError.value = true
 	} finally {
 		sending.value = false
+		streamingMessage.value = null
+		streamController = null
 	}
 }
 
@@ -178,6 +204,7 @@ watch(accountId, value => {
 })
 
 onMounted(loadState)
+onBeforeUnmount(() => streamController?.abort())
 </script>
 
 <style scoped>
@@ -193,5 +220,7 @@ onMounted(loadState)
 .diagnostic-message__content { max-width: 88%; white-space: pre-wrap; overflow-wrap: anywhere; border-radius: 14px; padding: 10px 12px; font-size: 14px; line-height: 1.65; }
 .diagnostic-message.is-user .diagnostic-message__content { border-bottom-right-radius: 4px; background: #2563eb; color: white; }
 .diagnostic-message.is-agent .diagnostic-message__content { border-bottom-left-radius: 4px; background: rgb(148 163 184 / 14%); }
+.diagnostic-message__cursor { display: inline-block; width: 2px; height: 1em; margin-left: 2px; vertical-align: -2px; background: currentColor; animation: diagnostic-cursor 0.9s steps(1) infinite; }
 .diagnostic-panel__composer { display: flex; flex-direction: column; gap: 9px; padding: 12px; border-top: 1px solid var(--border-color); }
+@keyframes diagnostic-cursor { 50% { opacity: 0; } }
 </style>

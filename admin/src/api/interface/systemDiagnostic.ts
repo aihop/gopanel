@@ -40,3 +40,14 @@ export interface SystemDiagnosticChatResult {
 	userMessage: SystemDiagnosticMessage
 	assistantMessage: SystemDiagnosticMessage
 }
+
+export interface SystemDiagnosticStreamStart {
+	session: SystemDiagnosticSession
+	userMessage: SystemDiagnosticMessage
+}
+
+export interface SystemDiagnosticStreamCallbacks {
+	onStart?: (value: SystemDiagnosticStreamStart) => void
+	onDelta?: (content: string) => void
+	onDone?: (value: SystemDiagnosticChatResult) => void
+}

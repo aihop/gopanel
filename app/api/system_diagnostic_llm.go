@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/aihop/gopanel/app/model"
+	"github.com/aihop/gopanel/utils/aiprovider"
 )
 
 const systemDiagnosticMaxToolRounds = 6
@@ -44,12 +46,19 @@ type systemDiagnosticToolAudit struct {
 	Succeeded      bool   `json:"succeeded"`
 }
 
-func runSystemDiagnosticLLM(ctx context.Context, account *model.AIProviderAccount, apiKey string, messages []systemDiagnosticLLMMessage) (string, string, systemDiagnosticUsage, []systemDiagnosticToolAudit, error) {
+func runSystemDiagnosticLLM(ctx context.Context, account *model.AIProviderAccount, apiKey string, messages []systemDiagnosticLLMMessage, onDelta func(string) error) (string, string, systemDiagnosticUsage, []systemDiagnosticToolAudit, error) {
 	var totalUsage systemDiagnosticUsage
 	rawOutputs := make([]string, 0, systemDiagnosticMaxToolRounds)
 	audits := make([]systemDiagnosticToolAudit, 0, systemDiagnosticMaxToolRounds)
+	var streamedAnswer strings.Builder
 	for round := 0; round < systemDiagnosticMaxToolRounds; round++ {
-		assistant, usage, raw, err := callSystemDiagnosticLLM(ctx, account, apiKey, messages)
+		assistant, usage, raw, err := callSystemDiagnosticLLM(ctx, account, apiKey, messages, func(delta string) error {
+			streamedAnswer.WriteString(delta)
+			if onDelta != nil {
+				return onDelta(delta)
+			}
+			return nil
+		})
 		totalUsage.InputTokens += usage.InputTokens
 		totalUsage.OutputTokens += usage.OutputTokens
 		totalUsage.TotalTokens += usage.TotalTokens
@@ -64,7 +73,7 @@ func runSystemDiagnosticLLM(ctx context.Context, account *model.AIProviderAccoun
 			if strings.TrimSpace(assistant.Content) == "" {
 				return "", strings.Join(rawOutputs, "\n"), totalUsage, audits, errors.New("诊断模型返回了空结果")
 			}
-			return assistant.Content, strings.Join(rawOutputs, "\n"), totalUsage, audits, nil
+			return streamedAnswer.String(), strings.Join(rawOutputs, "\n"), totalUsage, audits, nil
 		}
 		for _, toolCall := range assistant.ToolCalls {
 			result, audit := executeSystemDiagnosticTool(toolCall)
@@ -76,10 +85,13 @@ func runSystemDiagnosticLLM(ctx context.Context, account *model.AIProviderAccoun
 	return "", strings.Join(rawOutputs, "\n"), totalUsage, audits, errors.New("诊断模型查询次数过多，请缩小问题范围后重试")
 }
 
-func callSystemDiagnosticLLM(ctx context.Context, account *model.AIProviderAccount, apiKey string, messages []systemDiagnosticLLMMessage) (systemDiagnosticLLMMessage, systemDiagnosticUsage, string, error) {
+func callSystemDiagnosticLLM(ctx context.Context, account *model.AIProviderAccount, apiKey string, messages []systemDiagnosticLLMMessage, onDelta func(string) error) (systemDiagnosticLLMMessage, systemDiagnosticUsage, string, error) {
+	if aiprovider.NormalizeProtocol(account.Protocol) != aiprovider.ProtocolOpenAIChat {
+		return callSystemDiagnosticProvider(ctx, account, apiKey, messages, onDelta)
+	}
 	payload := map[string]any{
 		"model": account.Model, "messages": messages, "tools": systemDiagnosticTools(),
-		"tool_choice": "auto", "max_tokens": 2200,
+		"tool_choice": "auto", "max_tokens": 2200, "stream": true,
 	}
 	if account.SupportsTemperature {
 		payload["temperature"] = 0
@@ -101,27 +113,135 @@ func callSystemDiagnosticLLM(ctx context.Context, account *model.AIProviderAccou
 		return systemDiagnosticLLMMessage{}, systemDiagnosticUsage{}, "", fmt.Errorf("调用诊断模型失败: %w", err)
 	}
 	defer response.Body.Close()
-	raw, err := io.ReadAll(io.LimitReader(response.Body, 3<<20))
-	if err != nil {
-		return systemDiagnosticLLMMessage{}, systemDiagnosticUsage{}, "", err
-	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		raw, _ := io.ReadAll(io.LimitReader(response.Body, 3<<20))
 		return systemDiagnosticLLMMessage{}, systemDiagnosticUsage{}, string(raw), fmt.Errorf("诊断模型返回 %d", response.StatusCode)
 	}
-	var decoded struct {
-		Choices []struct {
-			Message systemDiagnosticLLMMessage `json:"message"`
-		} `json:"choices"`
-		Usage struct {
-			PromptTokens     int64 `json:"prompt_tokens"`
-			CompletionTokens int64 `json:"completion_tokens"`
-			TotalTokens      int64 `json:"total_tokens"`
-		} `json:"usage"`
+	return readSystemDiagnosticLLMStream(response.Body, onDelta)
+}
+
+func callSystemDiagnosticProvider(ctx context.Context, account *model.AIProviderAccount, apiKey string, messages []systemDiagnosticLLMMessage, onDelta func(string) error) (systemDiagnosticLLMMessage, systemDiagnosticUsage, string, error) {
+	providerMessages := make([]aiprovider.Message, 0, len(messages))
+	for _, message := range messages {
+		converted := aiprovider.Message{Role: message.Role, Content: message.Content, ToolCallID: message.ToolCallID}
+		for _, toolCall := range message.ToolCalls {
+			call := aiprovider.ToolCall{ID: toolCall.ID, Type: toolCall.Type}
+			call.Function.Name = toolCall.Function.Name
+			call.Function.Arguments = toolCall.Function.Arguments
+			converted.ToolCalls = append(converted.ToolCalls, call)
+		}
+		providerMessages = append(providerMessages, converted)
 	}
-	if err := json.Unmarshal(raw, &decoded); err != nil || len(decoded.Choices) == 0 {
-		return systemDiagnosticLLMMessage{}, systemDiagnosticUsage{}, string(raw), errors.New("诊断模型响应无法解析")
+	request := aiprovider.Request{
+		Messages: providerMessages, Tools: systemDiagnosticTools(), ToolChoice: "auto", MaxTokens: 2200,
 	}
-	return decoded.Choices[0].Message, systemDiagnosticUsage{decoded.Usage.PromptTokens, decoded.Usage.CompletionTokens, decoded.Usage.TotalTokens}, string(raw), nil
+	if account.SupportsTemperature {
+		temperature := 0.0
+		request.Temperature = &temperature
+	}
+	if account.SupportsReasoningEffort {
+		request.ReasoningEffort = account.DefaultReasoningEffort
+	}
+	response, err := aiprovider.Call(ctx, aiprovider.Config{
+		Protocol: account.Protocol, BaseURL: account.BaseURL, APIKey: apiKey, Model: account.Model,
+	}, request)
+	if err != nil {
+		return systemDiagnosticLLMMessage{}, systemDiagnosticUsage{}, response.Raw, fmt.Errorf("调用诊断模型失败: %w", err)
+	}
+	assistant := systemDiagnosticLLMMessage{Role: "assistant", Content: response.Message.Content}
+	for _, toolCall := range response.Message.ToolCalls {
+		call := systemDiagnosticToolCall{ID: toolCall.ID, Type: toolCall.Type}
+		call.Function.Name = toolCall.Function.Name
+		call.Function.Arguments = toolCall.Function.Arguments
+		assistant.ToolCalls = append(assistant.ToolCalls, call)
+	}
+	if onDelta != nil && assistant.Content != "" {
+		if err := onDelta(assistant.Content); err != nil {
+			return assistant, systemDiagnosticUsage{}, response.Raw, err
+		}
+	}
+	usage := systemDiagnosticUsage{
+		response.Usage.InputTokens, response.Usage.OutputTokens, response.Usage.TotalTokens,
+	}
+	return assistant, usage, response.Raw, nil
+}
+
+func readSystemDiagnosticLLMStream(reader io.Reader, onDelta func(string) error) (systemDiagnosticLLMMessage, systemDiagnosticUsage, string, error) {
+	assistant := systemDiagnosticLLMMessage{Role: "assistant"}
+	var usage systemDiagnosticUsage
+	var raw strings.Builder
+	scanner := bufio.NewScanner(reader)
+	scanner.Buffer(make([]byte, 64*1024), 3<<20)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if data == "" || data == "[DONE]" {
+			continue
+		}
+		if raw.Len() < 3<<20 {
+			raw.WriteString(data)
+			raw.WriteByte('\n')
+		}
+		var chunk struct {
+			Choices []struct {
+				Delta struct {
+					Content   string `json:"content"`
+					ToolCalls []struct {
+						Index    int    `json:"index"`
+						ID       string `json:"id"`
+						Type     string `json:"type"`
+						Function struct {
+							Name      string `json:"name"`
+							Arguments string `json:"arguments"`
+						} `json:"function"`
+					} `json:"tool_calls"`
+				} `json:"delta"`
+			} `json:"choices"`
+			Usage struct {
+				PromptTokens     int64 `json:"prompt_tokens"`
+				CompletionTokens int64 `json:"completion_tokens"`
+				TotalTokens      int64 `json:"total_tokens"`
+			} `json:"usage"`
+		}
+		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+			return assistant, usage, raw.String(), errors.New("诊断模型流式响应无法解析")
+		}
+		if chunk.Usage.PromptTokens > 0 || chunk.Usage.CompletionTokens > 0 || chunk.Usage.TotalTokens > 0 {
+			usage = systemDiagnosticUsage{chunk.Usage.PromptTokens, chunk.Usage.CompletionTokens, chunk.Usage.TotalTokens}
+		}
+		if len(chunk.Choices) == 0 {
+			continue
+		}
+		delta := chunk.Choices[0].Delta
+		if delta.Content != "" {
+			assistant.Content += delta.Content
+			if onDelta != nil {
+				if err := onDelta(delta.Content); err != nil {
+					return assistant, usage, raw.String(), err
+				}
+			}
+		}
+		for _, toolDelta := range delta.ToolCalls {
+			for len(assistant.ToolCalls) <= toolDelta.Index {
+				assistant.ToolCalls = append(assistant.ToolCalls, systemDiagnosticToolCall{})
+			}
+			toolCall := &assistant.ToolCalls[toolDelta.Index]
+			toolCall.ID += toolDelta.ID
+			toolCall.Type += toolDelta.Type
+			toolCall.Function.Name += toolDelta.Function.Name
+			toolCall.Function.Arguments += toolDelta.Function.Arguments
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return assistant, usage, raw.String(), fmt.Errorf("读取诊断模型流失败: %w", err)
+	}
+	if assistant.Content == "" && len(assistant.ToolCalls) == 0 {
+		return assistant, usage, raw.String(), errors.New("诊断模型返回了空结果")
+	}
+	return assistant, usage, raw.String(), nil
 }
 
 func executeSystemDiagnosticTool(call systemDiagnosticToolCall) (any, systemDiagnosticToolAudit) {

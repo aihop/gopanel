@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"strings"
@@ -101,31 +102,65 @@ func ChatSystemDiagnostic(c fiber.Ctx) error {
 	if err := global.DB.Create(&run).Error; err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	answer, _, usage, toolAudits, runErr := runSystemDiagnosticLLM(context.Background(), &account, apiKey, llmMessages)
-	now := time.Now()
-	run.DurationMS, run.CompletedAt = time.Since(startedAt).Milliseconds(), &now
-	run.InputTokens, run.OutputTokens, run.TotalTokens = usage.InputTokens, usage.OutputTokens, usage.TotalTokens
-	if runErr != nil {
-		run.Status, run.ErrorMessage = "failed", runErr.Error()
-		_ = global.DB.Save(&run).Error
-		recordCodeAudit(claims.UserId, 0, session.ID, "system_diagnostic", "failed", "gopanel", runErr.Error(), c.IP(), startedAt, codeAuditMeta{"model": account.Model, "runId": run.ID, "tools": toolAudits})
-		return c.JSON(e.Fail(runErr))
-	}
+	userID, clientIP := claims.UserId, c.IP()
+	c.Set("Content-Type", "text/event-stream")
+	c.Set("Cache-Control", "no-cache")
+	c.Set("Connection", "keep-alive")
+	c.Set("X-Accel-Buffering", "no")
+	c.Status(fiber.StatusOK)
+	c.RequestCtx().SetBodyStreamWriter(func(writer *bufio.Writer) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		if err := writeSystemDiagnosticSSE(writer, "start", fiber.Map{"session": session, "userMessage": userMessage, "run": run}); err != nil {
+			return
+		}
+		answer, rawOutput, usage, toolAudits, runErr := runSystemDiagnosticLLM(ctx, &account, apiKey, llmMessages, func(delta string) error {
+			if err := writeSystemDiagnosticSSE(writer, "delta", fiber.Map{"content": delta}); err != nil {
+				cancel()
+				return err
+			}
+			return nil
+		})
+		now := time.Now()
+		run.DurationMS, run.CompletedAt = time.Since(startedAt).Milliseconds(), &now
+		run.InputTokens, run.OutputTokens, run.TotalTokens = usage.InputTokens, usage.OutputTokens, usage.TotalTokens
+		run.RawOutput = rawOutput
+		if runErr != nil {
+			finishSystemDiagnosticRunFailure(&run, runErr, userID, session.ID, clientIP, startedAt, account.Model, toolAudits)
+			_ = writeSystemDiagnosticSSE(writer, "error", fiber.Map{"message": runErr.Error()})
+			return
+		}
+		assistantMessage, saveErr := finishSystemDiagnosticRunSuccess(&run, session, task, answer, account.Model, now)
+		if saveErr != nil {
+			finishSystemDiagnosticRunFailure(&run, saveErr, userID, session.ID, clientIP, startedAt, account.Model, toolAudits)
+			_ = writeSystemDiagnosticSSE(writer, "error", fiber.Map{"message": saveErr.Error()})
+			return
+		}
+		recordCodeAudit(userID, 0, session.ID, "system_diagnostic", "success", "gopanel", "只读诊断完成", clientIP, startedAt, codeAuditMeta{"model": account.Model, "runId": run.ID, "tools": toolAudits})
+		_ = writeSystemDiagnosticSSE(writer, "done", fiber.Map{"session": session, "userMessage": userMessage, "assistantMessage": assistantMessage, "run": run})
+	})
+	return nil
+}
+
+func finishSystemDiagnosticRunFailure(run *model.AIExecutionRun, runErr error, userID, sessionID uint, clientIP string, startedAt time.Time, modelName string, toolAudits []systemDiagnosticToolAudit) {
+	run.Status, run.ErrorMessage = "failed", runErr.Error()
+	_ = global.DB.Save(run).Error
+	recordCodeAudit(userID, 0, sessionID, "system_diagnostic", "failed", "gopanel", runErr.Error(), clientIP, startedAt, codeAuditMeta{"model": modelName, "runId": run.ID, "tools": toolAudits})
+}
+
+func finishSystemDiagnosticRunSuccess(run *model.AIExecutionRun, session *model.AIDevSession, task *model.AITask, answer, modelName string, completedAt time.Time) (*model.AIMessage, error) {
 	run.Status, run.Output = "completed", answer
-	assistantMessage := model.AIMessage{SessionID: session.ID, TaskID: task.ID, RunID: run.ID, Role: "agent", Content: answer}
-	if err := global.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Save(&run).Error; err != nil {
+	assistantMessage := &model.AIMessage{SessionID: session.ID, TaskID: task.ID, RunID: run.ID, Role: "agent", Content: answer}
+	err := global.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Save(run).Error; err != nil {
 			return err
 		}
-		if err := tx.Create(&assistantMessage).Error; err != nil {
+		if err := tx.Create(assistantMessage).Error; err != nil {
 			return err
 		}
-		return tx.Model(&model.AIDevSession{}).Where("id = ?", session.ID).Updates(map[string]any{"updated_at": now, "provider_model": account.Model}).Error
-	}); err != nil {
-		return c.JSON(e.Fail(err))
-	}
-	recordCodeAudit(claims.UserId, 0, session.ID, "system_diagnostic", "success", "gopanel", "只读诊断完成", c.IP(), startedAt, codeAuditMeta{"model": account.Model, "runId": run.ID, "tools": toolAudits})
-	return c.JSON(e.Succ(fiber.Map{"session": session, "userMessage": userMessage, "assistantMessage": assistantMessage, "run": run}))
+		return tx.Model(&model.AIDevSession{}).Where("id = ?", session.ID).Updates(map[string]any{"updated_at": completedAt, "provider_model": modelName}).Error
+	})
+	return assistantMessage, err
 }
 
 func ensureSystemDiagnosticSession(userID uint, account model.AIProviderAccount) (*model.AIDevSession, *model.AITask, error) {
