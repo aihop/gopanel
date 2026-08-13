@@ -1,6 +1,6 @@
 <template>
 	<section class="floating-note">
-		<header class="floating-note__header">
+		<header class="floating-note__header" @pointerdown="emit('drag-start', $event)">
 			<div class="flex min-w-0 items-center gap-2">
 				<Icon name="mdi:notebook-edit-outline" :size="18" />
 				<span class="truncate font-medium">{{ t("floatingNote.title") }}</span>
@@ -10,7 +10,7 @@
 			</div>
 			<n-tooltip>
 				<template #trigger>
-					<n-button quaternary circle size="small" @click="emit('close')">
+					<n-button quaternary circle size="small" @pointerdown.stop @click="emit('close')">
 						<template #icon><Icon name="mdi:close" :size="17" /></template>
 					</n-button>
 				</template>
@@ -54,7 +54,7 @@ import { useMessage } from "naive-ui"
 import { computed, onMounted, ref } from "vue"
 import { useI18n } from "vue-i18n"
 
-const emit = defineEmits<{ close: [] }>()
+const emit = defineEmits<{ close: []; "drag-start": [event: PointerEvent] }>()
 const message = useMessage()
 const { t } = useI18n({ messages: floatingNoteMessages })
 const loading = ref(false)
@@ -100,7 +100,7 @@ onMounted(loadNote)
 
 <style scoped lang="scss">
 .floating-note { display: flex; width: min(360px, calc(100vw - 32px)); height: min(420px, calc(100svh - 32px)); flex-direction: column; overflow: hidden; pointer-events: auto; border: 1px solid rgb(245 158 11 / 30%); border-radius: 16px; background: var(--n-color, var(--bg-default-color)); box-shadow: 0 20px 48px rgb(15 23 42 / 22%); }
-.floating-note__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 10px 10px 14px; border-bottom: 1px solid rgb(245 158 11 / 22%); background: rgb(254 243 199 / 86%); color: #78350f; }
+.floating-note__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 10px 10px 14px; cursor: ns-resize; user-select: none; touch-action: none; border-bottom: 1px solid rgb(245 158 11 / 22%); background: rgb(254 243 199 / 86%); color: #78350f; }
 .save-state { font-size: 11px; opacity: 0.65; &.is-dirty { color: #b45309; opacity: 1; } }
 .floating-note__body { display: flex; min-height: 0; flex: 1; flex-direction: column; gap: 8px; padding: 12px; }
 .floating-note__input { flex: 1; min-height: 0; :deep(textarea) { height: 100% !important; resize: none; line-height: 1.65; } :deep(.n-input-wrapper), :deep(.n-input__textarea) { height: 100%; } }

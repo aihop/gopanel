@@ -1,9 +1,9 @@
 <template>
 	<div class="tool-dock-layer">
-		<div v-show="activeTool" class="tool-dock-panel" :style="panelStyle">
+		<div ref="panelRef" v-show="activeTool" class="tool-dock-panel" :style="panelStyle">
 			<keep-alive>
-				<SystemDiagnosticPanel v-if="activeTool === 'diagnostic'" @close="activeTool = null" />
-				<FloatingNote v-else-if="activeTool === 'note'" @close="activeTool = null" />
+				<SystemDiagnosticPanel v-if="activeTool === 'diagnostic'" @close="activeTool = null" @drag-start="startDrag" />
+				<FloatingNote v-else-if="activeTool === 'note'" @close="activeTool = null" @drag-start="startDrag" />
 			</keep-alive>
 		</div>
 
@@ -18,7 +18,7 @@
 			</n-tooltip>
 			<n-tooltip v-if="canDiagnose" placement="left">
 				<template #trigger>
-					<button class="tool-dock__button is-diagnostic" :class="{ 'is-active': activeTool === 'diagnostic' }" type="button" @click="toggle('diagnostic')">
+					<button ref="diagnosticButtonRef" class="tool-dock__button is-diagnostic" :class="{ 'is-active': activeTool === 'diagnostic' }" type="button" @click="toggle('diagnostic')">
 						<Icon name="mdi:stethoscope" :size="22" />
 					</button>
 				</template>
@@ -26,7 +26,7 @@
 			</n-tooltip>
 			<n-tooltip placement="left">
 				<template #trigger>
-					<button class="tool-dock__button is-note" :class="{ 'is-active': activeTool === 'note' }" type="button" @click="toggle('note')">
+					<button ref="noteButtonRef" class="tool-dock__button is-note" :class="{ 'is-active': activeTool === 'note' }" type="button" @click="toggle('note')">
 						<Icon name="mdi:notebook-edit-outline" :size="21" />
 					</button>
 				</template>
@@ -43,7 +43,7 @@ import SystemDiagnosticPanel from "@/components/common/SystemDiagnosticPanel.vue
 import { floatingNoteMessages } from "@/i18n/locales/floatingNote"
 import { systemDiagnosticMessages } from "@/i18n/locales/systemDiagnostic"
 import { useAuthStore } from "@/store/auth"
-import { computed, onBeforeUnmount, onMounted, ref } from "vue"
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 
 type DockTool = "diagnostic" | "note"
@@ -55,12 +55,16 @@ const { t } = useI18n({ messages: systemDiagnosticMessages })
 const { t: noteT } = useI18n({ messages: floatingNoteMessages })
 const activeTool = ref<DockTool | null>(null)
 const positionY = ref(120)
+const panelTop = ref(SCREEN_GAP)
+const panelRef = ref<HTMLElement | null>(null)
+const diagnosticButtonRef = ref<HTMLButtonElement | null>(null)
+const noteButtonRef = ref<HTMLButtonElement | null>(null)
 let dragOffsetY = 0
 
 const canDiagnose = computed(() => authStore.role === "ADMIN" || authStore.role === "SUPER")
 const storageKey = computed(() => `gopanel_floating_tool_dock_${authStore.user?.id || "default"}`)
 const dockStyle = computed(() => ({ transform: `translate3d(0, ${positionY.value}px, 0)` }))
-const panelStyle = computed(() => ({ top: `${panelTop()}px` }))
+const panelStyle = computed(() => ({ top: `${panelTop.value}px` }))
 
 function clampY(value: number) {
 	const fallback = 120
@@ -68,9 +72,20 @@ function clampY(value: number) {
 	return Math.min(Math.max(SCREEN_GAP, safeValue), Math.max(SCREEN_GAP, window.innerHeight - DOCK_HEIGHT - SCREEN_GAP))
 }
 
-function panelTop() {
-	const estimatedHeight = activeTool.value === "diagnostic" ? 720 : 420
-	return Math.min(positionY.value, Math.max(SCREEN_GAP, window.innerHeight - estimatedHeight - SCREEN_GAP))
+function updatePanelPosition() {
+	if (!activeTool.value || !panelRef.value) return
+	if (window.matchMedia("(max-width: 640px)").matches) {
+		panelTop.value = SCREEN_GAP
+		return
+	}
+	const button = activeTool.value === "diagnostic" ? diagnosticButtonRef.value : noteButtonRef.value
+	if (!button) return
+	const anchorY = positionY.value + button.offsetTop + button.offsetHeight / 2
+	const centeredTop = anchorY - panelRef.value.offsetHeight / 2
+	panelTop.value = Math.min(
+		Math.max(SCREEN_GAP, centeredTop),
+		Math.max(SCREEN_GAP, window.innerHeight - panelRef.value.offsetHeight - SCREEN_GAP)
+	)
 }
 
 function persistPosition() {
@@ -88,24 +103,35 @@ function toggle(tool: DockTool) {
 
 function startDrag(event: PointerEvent) {
 	if (event.button !== 0 || window.matchMedia("(max-width: 640px)").matches) return
+	event.preventDefault()
 	dragOffsetY = event.clientY - positionY.value
 	window.addEventListener("pointermove", drag)
-	window.addEventListener("pointerup", stopDrag, { once: true })
+	window.addEventListener("pointerup", stopDrag)
+	window.addEventListener("pointercancel", stopDrag)
 }
 
 function drag(event: PointerEvent) {
 	positionY.value = clampY(event.clientY - dragOffsetY)
+	updatePanelPosition()
 }
 
 function stopDrag() {
 	window.removeEventListener("pointermove", drag)
+	window.removeEventListener("pointerup", stopDrag)
+	window.removeEventListener("pointercancel", stopDrag)
 	persistPosition()
 }
 
 function handleResize() {
 	positionY.value = clampY(positionY.value)
+	updatePanelPosition()
 	persistPosition()
 }
+
+watch(activeTool, async () => {
+	await nextTick()
+	updatePanelPosition()
+})
 
 onMounted(() => {
 	restorePosition()
@@ -114,7 +140,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
 	window.removeEventListener("resize", handleResize)
-	window.removeEventListener("pointermove", drag)
+	stopDrag()
 })
 </script>
 

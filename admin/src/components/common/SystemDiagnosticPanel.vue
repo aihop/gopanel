@@ -1,6 +1,6 @@
 <template>
 	<section class="diagnostic-panel">
-		<header class="diagnostic-panel__header">
+		<header class="diagnostic-panel__header" @pointerdown="emit('drag-start', $event)">
 			<div class="flex min-w-0 items-center gap-2">
 				<span class="diagnostic-panel__icon"><Icon name="mdi:stethoscope" :size="20" /></span>
 				<div class="min-w-0">
@@ -15,7 +15,7 @@
 			</div>
 			<n-tooltip>
 				<template #trigger>
-					<n-button quaternary circle size="small" @click="emit('close')">
+					<n-button quaternary circle size="small" @pointerdown.stop @click="emit('close')">
 						<template #icon><Icon name="mdi:close" :size="18" /></template>
 					</n-button>
 				</template>
@@ -101,7 +101,7 @@ import { useMessage } from "naive-ui"
 import { computed, nextTick, onMounted, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 
-const emit = defineEmits<{ close: [] }>()
+const emit = defineEmits<{ close: []; "drag-start": [event: PointerEvent] }>()
 const { t } = useI18n({ messages: systemDiagnosticMessages })
 const message = useMessage()
 const state = ref<SystemDiagnosticState | null>(null)
@@ -182,7 +182,7 @@ onMounted(loadState)
 
 <style scoped>
 .diagnostic-panel { display: flex; height: min(720px, calc(100svh - 32px)); width: min(440px, calc(100vw - 32px)); flex-direction: column; overflow: hidden; border: 1px solid rgb(59 130 246 / 24%); border-radius: 18px; background: var(--n-color, var(--bg-default-color)); box-shadow: 0 24px 60px rgb(15 23 42 / 25%); pointer-events: auto; }
-.diagnostic-panel__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 12px 12px 14px; border-bottom: 1px solid rgb(59 130 246 / 18%); background: linear-gradient(135deg, rgb(219 234 254 / 92%), rgb(238 242 255 / 92%)); color: #1e3a8a; }
+.diagnostic-panel__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 12px 12px 14px; cursor: ns-resize; user-select: none; touch-action: none; border-bottom: 1px solid rgb(59 130 246 / 18%); background: linear-gradient(135deg, rgb(219 234 254 / 92%), rgb(238 242 255 / 92%)); color: #1e3a8a; }
 .diagnostic-panel__icon { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 10px; background: rgb(37 99 235 / 12%); }
 .diagnostic-panel__account { padding: 12px 12px 0; }
 .diagnostic-panel__center { display: flex; min-height: 280px; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px; }
