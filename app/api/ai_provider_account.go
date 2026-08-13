@@ -11,6 +11,7 @@ import (
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
+	appI18n "github.com/aihop/gopanel/i18n"
 	"github.com/aihop/gopanel/utils/encrypt"
 	"github.com/aihop/gopanel/utils/token"
 	"github.com/gofiber/fiber/v3"
@@ -188,4 +189,23 @@ func aiProviderAccountLLMConfig(account *model.AIProviderAccount) (codeMemoryLLM
 		apiKey = decrypted
 	}
 	return codeMemoryLLMConfig{BaseURL: account.BaseURL, APIKey: apiKey, Model: account.Model}, nil
+}
+
+func codeProviderRequestForAccount(userID, accountID uint) (*codeProviderRequest, error) {
+	if global.DB == nil || userID == 0 || accountID == 0 {
+		return nil, appI18n.GetErrMsg("ErrCodeProviderAccountUnavailable")
+	}
+	var account model.AIProviderAccount
+	if err := global.DB.Where("id = ? AND user_id = ? AND enabled = ?", accountID, userID, true).
+		First(&account).Error; err != nil {
+		return nil, appI18n.GetErrMsg("ErrCodeProviderAccountDisabled")
+	}
+	config, err := aiProviderAccountLLMConfig(&account)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(config.APIKey) == "" {
+		return nil, appI18n.GetErrMsg("ErrCodeProviderAccountKeyMissing")
+	}
+	return &codeProviderRequest{BaseURL: config.BaseURL, APIKey: config.APIKey, Model: config.Model}, nil
 }

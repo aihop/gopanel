@@ -6,6 +6,7 @@ import (
 
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/global"
+	"github.com/aihop/gopanel/utils/encrypt"
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 )
@@ -95,6 +96,36 @@ func TestSelectAIProviderAccountForMemoryIsolatesUsers(t *testing.T) {
 	}
 	if _, err := selectAIProviderAccountForMemory(3, foreign.ID); err == nil {
 		t.Fatal("按 id 指定也不该跨用户命中")
+	}
+}
+
+func TestCodeProviderRequestForAccountUsesOwnedEnabledAccount(t *testing.T) {
+	withAIProviderDB(t)
+	oldKey := global.CONF.System.EncryptKey
+	global.CONF.System.EncryptKey = "0123456789abcdef0123456789abcdef"
+	t.Cleanup(func() { global.CONF.System.EncryptKey = oldKey })
+	ciphertext, err := encrypt.StringEncrypt("session-secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	account := newProviderAccount(3, "开发账号", 1, true, false)
+	account.APIKey = ciphertext
+	if err := global.DB.Create(account).Error; err != nil {
+		t.Fatal(err)
+	}
+	provider, err := codeProviderRequestForAccount(3, account.ID)
+	if err != nil || provider.APIKey != "session-secret" || provider.Model != account.Model {
+		t.Fatalf("应解析当前用户启用的账号：%#v, %v", provider, err)
+	}
+	if _, err := codeProviderRequestForAccount(99, account.ID); err == nil {
+		t.Fatal("不应允许其他用户使用该账号")
+	}
+	account.Enabled = false
+	if err := global.DB.Save(account).Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := codeProviderRequestForAccount(3, account.ID); err == nil {
+		t.Fatal("不应允许会话使用已停用账号")
 	}
 }
 

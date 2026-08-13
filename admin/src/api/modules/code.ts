@@ -179,6 +179,7 @@ export function createCodeSession(
 		approvalPolicy: CodeApprovalPolicy
 		isolated: boolean
 		includeUncommitted: boolean
+		providerAccountId?: number
 		provider?: CodeExecutorConfig
 	},
 	messages: { initializationFailed: string; initializationTimedOut: string },

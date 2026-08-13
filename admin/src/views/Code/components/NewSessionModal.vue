@@ -2,7 +2,13 @@
 import { computed, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 import { useMessage } from "naive-ui"
-import { commitCodeProjectChanges, createCodeSession, getCodeExecutors, getCodeWorktreeCapability } from "@/api/modules/code"
+import {
+	commitCodeProjectChanges,
+	createCodeSession,
+	getAIProviderAccounts,
+	getCodeExecutors,
+	getCodeWorktreeCapability
+} from "@/api/modules/code"
 import type {
 	CodeApprovalPolicy,
 	CodeExecutor,
@@ -10,6 +16,7 @@ import type {
 	CodeSession,
 	CodeWorktreeCapability
 } from "@/api/interface/code"
+import type { AIProviderAccount } from "@/api/interface/aiAccounts"
 import { newCodeSessionMessages } from "../newCodeSessionMessages"
 
 const props = defineProps<{
@@ -28,6 +35,9 @@ const executors = ref<CodeExecutor[]>([])
 const selectedExecutorId = ref("")
 const approvalPolicy = ref<CodeApprovalPolicy>("safe_auto")
 const providerMode = ref<"default" | "custom">("default")
+const providerSource = ref<"account" | "manual">("account")
+const providerAccounts = ref<AIProviderAccount[]>([])
+const selectedProviderAccountId = ref<number | null>(null)
 const providerConfig = ref<CodeExecutorConfig>({ baseUrl: "", apiKey: "", model: "" })
 const isolated = ref(false)
 const worktreeCapability = ref<CodeWorktreeCapability | null>(null)
@@ -35,6 +45,8 @@ const title = ref("")
 const loading = ref(false)
 const submitting = ref(false)
 const loadError = ref("")
+const providerAccountLoading = ref(false)
+const providerAccountLoadError = ref("")
 const submitError = ref("")
 
 const aiExecutors = computed(() => executors.value.filter(executor => executor.id !== "terminal"))
@@ -46,6 +58,15 @@ const approvalPolicies = computed<CodeApprovalPolicy[]>(() =>
 )
 const providerFields = computed(() => selectedExecutor.value?.configSchema?.fields || [])
 const showProviderConfig = computed(() => providerFields.value.length > 0)
+const availableProviderAccounts = computed(() =>
+	providerAccounts.value.filter(account => account.enabled && account.hasApiKey)
+)
+const providerAccountOptions = computed(() =>
+	availableProviderAccounts.value.map(account => ({
+		label: `${account.name} · ${account.model}`,
+		value: account.id
+	}))
+)
 const providerFieldLabel = (key: keyof CodeExecutorConfig) => t(`code.providerField_${key}`)
 const providerFieldPlaceholder = (key: keyof CodeExecutorConfig) => t(`code.providerPlaceholder_${key}`)
 const dirtyRepositories = computed(() => worktreeCapability.value?.dirtyRepositories || [])
@@ -107,6 +128,23 @@ const loadWorktreeCapability = async () => {
 	}
 }
 
+const loadProviderAccounts = async () => {
+	providerAccountLoading.value = true
+	providerAccountLoadError.value = ""
+	try {
+		const response = await getAIProviderAccounts()
+		providerAccounts.value = response.data || []
+		if (!availableProviderAccounts.value.some(account => account.id === selectedProviderAccountId.value)) {
+			selectedProviderAccountId.value = availableProviderAccounts.value[0]?.id || null
+		}
+	} catch (error) {
+		providerAccounts.value = []
+		providerAccountLoadError.value = error instanceof Error ? error.message : t("code.providerAccountLoadFailed")
+	} finally {
+		providerAccountLoading.value = false
+	}
+}
+
 watch(
 	() => props.show,
 	show => {
@@ -115,8 +153,10 @@ watch(
 			submitError.value = ""
 			approvalPolicy.value = "safe_auto"
 			providerMode.value = "default"
+			providerSource.value = "account"
+			selectedProviderAccountId.value = null
 			providerConfig.value = { baseUrl: "", apiKey: "", model: "" }
-			void Promise.all([loadExecutors(), loadWorktreeCapability()])
+			void Promise.all([loadExecutors(), loadWorktreeCapability(), loadProviderAccounts()])
 		}
 	}
 )
@@ -139,12 +179,18 @@ const submit = async () => {
 		return
 	}
 	if (showProviderConfig.value && providerMode.value === "custom") {
-		const missingField = providerFields.value.find(
-			field => field.required && !providerConfig.value[field.key].trim()
-		)
-		if (missingField) {
-			message.warning(t("code.providerFieldRequired", { field: providerFieldLabel(missingField.key) }))
+		if (providerSource.value === "account" && !selectedProviderAccountId.value) {
+			message.warning(t("code.providerAccountRequired"))
 			return
+		}
+		if (providerSource.value === "manual") {
+			const missingField = providerFields.value.find(
+				field => field.required && !providerConfig.value[field.key].trim()
+			)
+			if (missingField) {
+				message.warning(t("code.providerFieldRequired", { field: providerFieldLabel(missingField.key) }))
+				return
+			}
 		}
 	}
 	submitting.value = true
@@ -158,8 +204,12 @@ const submit = async () => {
 			approvalPolicy: approvalPolicy.value,
 			isolated: isolated.value,
 			includeUncommitted: dirtyStrategy.value === "snapshot",
+			providerAccountId:
+				showProviderConfig.value && providerMode.value === "custom" && providerSource.value === "account"
+					? selectedProviderAccountId.value || undefined
+					: undefined,
 			provider:
-				showProviderConfig.value && providerMode.value === "custom"
+				showProviderConfig.value && providerMode.value === "custom" && providerSource.value === "manual"
 					? (Object.fromEntries(
 							providerFields.value.map(field => [field.key, providerConfig.value[field.key].trim()])
 						) as unknown as CodeExecutorConfig)
@@ -276,8 +326,37 @@ const submit = async () => {
 											: t("code.providerCustomHint")
 									}}
 								</n-alert>
+								<n-radio-group v-if="providerMode === 'custom'" v-model:value="providerSource">
+									<n-space>
+										<n-radio value="account">
+											{{ t("code.providerSavedAccount") }}
+										</n-radio>
+										<n-radio value="manual">{{ t("code.providerManual") }}</n-radio>
+									</n-space>
+								</n-radio-group>
+								<div v-if="providerMode === 'custom' && providerSource === 'account'" class="space-y-2">
+									<n-form-item :label="t('code.providerAccount')" :show-feedback="false">
+										<n-select
+											v-model:value="selectedProviderAccountId"
+											:options="providerAccountOptions"
+											:loading="providerAccountLoading"
+											:placeholder="t('code.providerAccountPlaceholder')"
+										/>
+									</n-form-item>
+									<n-alert v-if="providerAccountLoadError" type="error" :show-icon="false">
+										<div class="flex items-center justify-between gap-3">
+											<span>{{ providerAccountLoadError }}</span>
+											<n-button size="tiny" @click="loadProviderAccounts">{{ t("code.retry") }}</n-button>
+										</div>
+									</n-alert>
+									<n-empty
+										v-else-if="!providerAccountLoading && !availableProviderAccounts.length"
+										:description="t('code.providerAccountEmpty')"
+										size="small"
+									/>
+								</div>
 								<div
-									v-if="providerMode === 'custom'"
+									v-if="providerMode === 'custom' && providerSource === 'manual'"
 									class="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:grid-cols-2"
 								>
 									<n-form-item

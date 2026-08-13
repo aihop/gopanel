@@ -13,6 +13,7 @@ import (
 	"github.com/aihop/gopanel/app/service"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
+	appI18n "github.com/aihop/gopanel/i18n"
 	"github.com/aihop/gopanel/utils/token"
 	"github.com/gofiber/fiber/v3"
 	"gorm.io/gorm"
@@ -153,6 +154,7 @@ func CreateAISession(c fiber.Ctx) error {
 		ApprovalPolicy     string               `json:"approvalPolicy"`
 		Isolated           bool                 `json:"isolated"`
 		IncludeUncommitted *bool                `json:"includeUncommitted"`
+		ProviderAccountID  uint                 `json:"providerAccountId"`
 		Provider           *codeProviderRequest `json:"provider"`
 		CodexProvider      *codeProviderRequest `json:"codexProvider"`
 	}
@@ -201,6 +203,15 @@ func CreateAISession(c fiber.Ctx) error {
 	providerRequest := req.Provider
 	if providerRequest == nil {
 		providerRequest = req.CodexProvider
+	}
+	if req.ProviderAccountID > 0 {
+		if providerRequest != nil {
+			return c.JSON(e.Fail(appI18n.GetErrMsg("ErrCodeProviderAccountConflict")))
+		}
+		providerRequest, err = codeProviderRequestForAccount(claims.UserId, req.ProviderAccountID)
+		if err != nil {
+			return c.JSON(e.Fail(err))
+		}
 	}
 	provider, err := normalizeCodeProviderRequest(executorID, providerRequest)
 	if err != nil {
