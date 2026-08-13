@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, watch } from "vue"
+import { computed, ref, watch } from "vue"
 import { useStorage } from "@vueuse/core"
 import { useI18n } from "vue-i18n"
 import type { AIProject } from "@/api/interface/code"
 import type { CodeTaskListItem } from "@/api/interface/codeTasks"
+import type { CodeProjectDropPosition } from "../codeProjectOrder"
 import Icon from "@/components/common/Icon.vue"
 import { codeProjectMessages } from "@/i18n/locales/codeProject"
 import CodeDashboardTaskRow from "./CodeDashboardTaskRow.vue"
@@ -21,10 +22,13 @@ const emit = defineEmits<{
 	openWorkspace: [task: CodeTaskListItem]
 	createTask: [projectId: number]
 	projectAction: [action: string, projectId: number]
+	reorderProject: [projectId: number, targetProjectId: number, position: CodeProjectDropPosition]
 	refresh: []
 }>()
 const { t } = useI18n({ messages: codeProjectMessages })
 const collapsedProjects = useStorage<Record<string, boolean>>("code-dashboard-collapsed-projects", {})
+const draggingProjectId = ref<number | null>(null)
+const dropTarget = ref<{ projectId: number; position: CodeProjectDropPosition } | null>(null)
 
 const groups = computed(() => {
 	const tasksByProject = new Map<number, CodeTaskListItem[]>()
@@ -60,6 +64,37 @@ const toggleProject = (projectId: number) => {
 	}
 }
 
+const handleDragStart = (event: DragEvent, projectId: number) => {
+	draggingProjectId.value = projectId
+	if (event.dataTransfer) {
+		event.dataTransfer.effectAllowed = "move"
+		event.dataTransfer.setData("text/plain", String(projectId))
+	}
+}
+
+const handleDragOver = (event: DragEvent, targetProjectId: number) => {
+	if (!draggingProjectId.value || draggingProjectId.value === targetProjectId) return
+	event.preventDefault()
+	const target = event.currentTarget as HTMLElement
+	const position = event.clientY < target.getBoundingClientRect().top + target.offsetHeight / 2 ? "before" : "after"
+	dropTarget.value = { projectId: targetProjectId, position }
+	if (event.dataTransfer) event.dataTransfer.dropEffect = "move"
+}
+
+const handleDrop = (event: DragEvent, targetProjectId: number) => {
+	event.preventDefault()
+	const projectId = draggingProjectId.value
+	const position = dropTarget.value?.projectId === targetProjectId ? dropTarget.value.position : "before"
+	if (projectId && projectId !== targetProjectId) emit("reorderProject", projectId, targetProjectId, position)
+	draggingProjectId.value = null
+	dropTarget.value = null
+}
+
+const handleDragEnd = () => {
+	draggingProjectId.value = null
+	dropTarget.value = null
+}
+
 const projectActionOptions = computed(() => [
 	{ label: t("code.enterProject"), key: "enter" },
 	{ label: t("code.quickPanel"), key: "panel" },
@@ -80,9 +115,29 @@ watch(() => props.selectedTaskId, () => {
     <section
       v-for="group in groups"
       :key="group.id"
-      class="overflow-hidden rounded-2xl"
+      class="relative overflow-hidden rounded-2xl"
     >
-      <div class="group/project flex h-10 items-center gap-1 px-1">
+      <div
+        class="group/project relative flex h-10 items-center gap-1 px-1"
+        @dragover="group.available && handleDragOver($event, group.id)"
+        @drop="group.available && handleDrop($event, group.id)"
+      >
+        <div
+          v-if="dropTarget?.projectId === group.id"
+          class="pointer-events-none absolute inset-x-2 z-10 h-0.5 rounded-full bg-[var(--n-primary-color)]"
+          :class="dropTarget.position === 'before' ? 'top-0' : 'bottom-0'"
+        />
+        <button
+          v-if="group.available && projects.length > 1"
+          type="button"
+          draggable="true"
+          class="hidden h-7 w-6 shrink-0 cursor-grab items-center justify-center rounded-md text-[var(--n-text-color-3)] hover:bg-[var(--n-color-embedded)] hover:text-[var(--n-text-color)] active:cursor-grabbing md:inline-flex"
+          :aria-label="t('code.project')"
+          @dragstart="handleDragStart($event, group.id)"
+          @dragend="handleDragEnd"
+        >
+          <Icon name="mdi:drag-vertical" :size="17" />
+        </button>
         <button
           type="button"
           class="flex min-w-0 flex-1 items-center gap-2 rounded-xl pr-2 py-1.5 text-left text-sm text-[var(--n-text-color-2)] transition-colors hover:bg-[var(--n-color-embedded)] hover:text-[var(--n-text-color)]"

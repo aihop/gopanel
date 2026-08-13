@@ -5,6 +5,7 @@ import { useMessage } from "naive-ui"
 import { useI18n } from "vue-i18n"
 import type { AIProject } from "@/api/interface/code"
 import type { CodeTaskListItem } from "@/api/interface/codeTasks"
+import type { CodeProjectDropPosition } from "../codeProjectOrder"
 import { setAITaskArchived } from "@/api/modules/code"
 import Icon from "@/components/common/Icon.vue"
 import { codeProjectMessages } from "@/i18n/locales/codeProject"
@@ -26,6 +27,7 @@ const emit = defineEmits<{
 	createProject: []
 	createTask: [projectId: number]
 	projectAction: [action: string, projectId: number]
+	reorderProject: [projectId: number, targetProjectId: number, position: CodeProjectDropPosition]
 	openTask: [task: CodeTaskListItem]
 }>()
 const { t } = useI18n({ messages: codeProjectMessages })
@@ -394,6 +396,7 @@ const toggleArchived = async (task: CodeTaskListItem) => {
               @open-workspace="emit('openTask', $event)"
               @create-task="emit('createTask', $event)"
               @project-action="(action, projectId) => emit('projectAction', action, projectId)"
+              @reorder-project="(projectId, targetProjectId, position) => emit('reorderProject', projectId, targetProjectId, position)"
               @refresh="refreshTasks(true)"
             />
           </div>

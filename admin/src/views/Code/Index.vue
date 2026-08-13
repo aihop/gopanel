@@ -18,6 +18,7 @@
         @create-project="openCreateProjectModal"
         @create-task="openNewProjectTask"
         @project-action="handleProjectAction"
+        @reorder-project="reorderProject"
         @open-task="openTask"
       >
         <!--
@@ -221,6 +222,7 @@ import { computed, h, ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
+import { useAuthStore } from '@/store/auth'
 import { getAIProjects, createAIProject, discoverCodeProjectRepositories, updateAIProject } from '@/api/modules/code'
 import type { AIProject, CodeProjectQualityCheck } from '@/api/interface/code'
 import type { CodeTaskListItem } from '@/api/interface/codeTasks'
@@ -232,6 +234,15 @@ import ProjectGitCredentialSelect from './components/ProjectGitCredentialSelect.
 import ProjectQuickPanels from './components/ProjectQuickPanels.vue'
 import ProjectQualityGateSettings from './components/ProjectQualityGateSettings.vue'
 import { codeProjectMessages } from '@/i18n/locales/codeProject'
+import {
+  codeProjectOrderStorageKey,
+  loadCodeProjectOrder,
+  moveCodeProject,
+  reconcileCodeProjectOrder,
+  saveCodeProjectOrder,
+  sortCodeProjectsByOrder,
+  type CodeProjectDropPosition,
+} from './codeProjectOrder'
 
 defineOptions({ name: "CodeIndex" })
 
@@ -239,6 +250,7 @@ const AddIcon = () => '+'
 
 const message = useMessage()
 const router = useRouter()
+const authStore = useAuthStore()
 const { t } = useI18n({ messages: codeProjectMessages })
 
 const showCreateProjectModal = ref(false)
@@ -297,7 +309,14 @@ const fetchProjects = async (silent = false) => {
   try {
     const res = await getAIProjects({ page: 1, limit: 50 })
     if (res.code === 0) {
-      projects.value = res.data.items || []
+      const loadedProjects = res.data.items || []
+      const storageKey = codeProjectOrderStorageKey(authStore.user?.id)
+      const order = reconcileCodeProjectOrder(
+        loadedProjects.map(project => project.id),
+        loadCodeProjectOrder(storageKey),
+      )
+      projects.value = sortCodeProjectsByOrder(loadedProjects, order)
+      saveCodeProjectOrder(storageKey, order)
       const directoryDefaults = res.data as typeof res.data & { defaultWorkDir?: string; directoryRoot?: string }
       defaultWorkDir.value = directoryDefaults.defaultWorkDir || "/"
       directoryRoot.value = directoryDefaults.directoryRoot || "/"
@@ -311,6 +330,14 @@ const fetchProjects = async (silent = false) => {
     if (!silent) projectsLoading.value = false
     projectsRefreshing.value = false
   }
+}
+
+const reorderProject = (projectId: number, targetProjectId: number, position: CodeProjectDropPosition) => {
+  const currentOrder = projects.value.map(project => project.id)
+  const nextOrder = moveCodeProject(currentOrder, projectId, targetProjectId, position)
+  if (nextOrder === currentOrder) return
+  projects.value = sortCodeProjectsByOrder(projects.value, nextOrder)
+  saveCodeProjectOrder(codeProjectOrderStorageKey(authStore.user?.id), nextOrder)
 }
 
 onMounted(() => {
