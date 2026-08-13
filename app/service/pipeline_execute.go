@@ -166,15 +166,19 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 	}
 	switch strings.TrimSpace(p.ActionType) {
 	case "build_image", "build":
-		imageRef, err := s.stepBuildImage(ctx, logger, p, releaseDir, recordID)
+		imageArtifact, err := s.stepBuildImage(ctx, logger, p, releaseDir, recordID)
 		if err != nil {
 			s.recordRepo.UpdateStatus(recordID, "failed", fmt.Sprintf("镜像构建失败: %v", err))
 			logger.Error("镜像构建失败: %v", err)
 			return
 		}
-		_ = s.recordRepo.UpdateImageTag(recordID, imageRef)
-		s.recordRepo.UpdateStatus(recordID, "success", fmt.Sprintf("镜像构建成功: %s", imageRef))
-		logger.Info("镜像构建成功: %s", imageRef)
+		_ = s.recordRepo.UpdateImageArtifact(recordID, imageArtifact.Tag, imageArtifact.ID, imageArtifact.Digest, imageArtifact.ImmutableRef)
+		record.ImageTag = imageArtifact.Tag
+		record.ImageID = imageArtifact.ID
+		record.ImageDigest = imageArtifact.Digest
+		record.ImageRef = imageArtifact.ImmutableRef
+		s.recordRepo.UpdateStatus(recordID, "success", fmt.Sprintf("镜像构建成功: %s", imageArtifact.ImmutableRef))
+		logger.Info("镜像构建成功: %s", imageArtifact.ImmutableRef)
 
 	default:
 		s.recordRepo.UpdateStatus(recordID, "success", "构建成功（未配置后续操作）")

@@ -20,6 +20,8 @@ export namespace Notify {
 		enableOffline: boolean
 		enableCert: boolean
 		enableCode: boolean
+		enableSecurity: boolean
+		enableSecurityLowMedium: boolean
 		/** 后端只回是否已设置密码，不回明文 */
 		hasPassword?: boolean
 	}

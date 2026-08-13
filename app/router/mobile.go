@@ -21,6 +21,7 @@ func MobileRouter(r fiber.Router) {
 
 	app := mobile.Group("/app").Use(middleware.MobileDeviceAuth)
 	app.Get("/overview", api.GetMobileOverview)
+	app.Get("/security-risks", api.SecurityEventSummary)
 	app.Get("/attention", api.GetCodeAttention)
 	app.Get("/nodes", api.GetMobileNodes)
 	app.Post("/logout", api.LogoutMobileDevice)

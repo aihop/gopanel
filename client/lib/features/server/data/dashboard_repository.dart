@@ -1,5 +1,6 @@
 import '../../../core/network/api_client.dart';
 import '../models/monitor_info.dart';
+import '../models/security_risk.dart';
 import '../models/system_info.dart';
 
 /// 仪表盘与系统资源仓库
@@ -38,5 +39,19 @@ class DashboardRepository {
       data: {'scope': 'ioNet', 'ioOption': ioOption, 'netOption': netOption},
     );
     return IoNetInfo.fromJson(response.data ?? {});
+  }
+
+  Future<List<SecurityRisk>> getSecurityRisks() async {
+    final response = await _apiClient.get<Map<String, dynamic>>(
+      '/api/mobile/app/security-risks',
+    );
+    final items = response.data?['items'];
+    if (items is! List) return const [];
+    return items
+        .whereType<Map>()
+        .map((item) => SecurityRisk.fromJson(item.map(
+              (key, value) => MapEntry(key.toString(), value),
+            )))
+        .toList();
   }
 }

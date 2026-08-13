@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, h, onMounted, ref } from "vue"
+import { useI18n } from "vue-i18n"
 import { NButton, NSpace, NSwitch, NTag, useDialog, useMessage } from "naive-ui"
 import type { DataTableColumns } from "naive-ui"
 import { deleteAIProviderAccount, getAIProviderAccounts, saveAIProviderAccount } from "@/api/modules/code"
@@ -7,6 +8,7 @@ import type { AIProviderAccount, AIReasoningEffort } from "@/api/interface/aiAcc
 
 const message = useMessage()
 const dialog = useDialog()
+const { t } = useI18n()
 const accounts = ref<AIProviderAccount[]>([])
 const loading = ref(false)
 const saving = ref(false)
@@ -20,6 +22,7 @@ const emptyForm = () => ({
 	model: "",
 	enabled: true,
 	useForMemoryExtraction: false,
+	useForSecurityAnalysis: false,
 	priority: 100,
 	defaultReasoningEffort: "" as AIReasoningEffort,
 })
@@ -61,6 +64,7 @@ function openEditModal(account: AIProviderAccount) {
 		model: account.model,
 		enabled: account.enabled,
 		useForMemoryExtraction: account.useForMemoryExtraction,
+		useForSecurityAnalysis: account.useForSecurityAnalysis,
 		priority: account.priority,
 		defaultReasoningEffort: account.defaultReasoningEffort,
 	}
@@ -133,6 +137,17 @@ const columns: DataTableColumns<AIProviderAccount> = [
 				NTag,
 				{ size: "small", type: account.useForMemoryExtraction ? "success" : "default", bordered: false },
 				{ default: () => (account.useForMemoryExtraction ? "已授权" : "未授权") },
+			),
+	},
+	{
+		title: () => t("securityMonitoring.aiAuthorization"),
+		key: "useForSecurityAnalysis",
+		width: 110,
+		render: account =>
+			h(
+				NTag,
+				{ size: "small", type: account.useForSecurityAnalysis ? "success" : "default", bordered: false },
+				{ default: () => t(account.useForSecurityAnalysis ? "securityMonitoring.authorized" : "securityMonitoring.unauthorized") },
 			),
 	},
 	{
@@ -261,6 +276,12 @@ onMounted(() => void fetchData())
             抽取会把整段会话记录发给该服务，需要单独授权
           </template>
         </n-form-item>
+		<n-form-item :label="t('securityMonitoring.aiAuthorization')">
+		  <n-switch v-model:value="form.useForSecurityAnalysis" />
+		  <template #feedback>
+			{{ t("securityMonitoring.aiAuthorizationHint") }}
+		  </template>
+		</n-form-item>
       </n-form>
       <template #footer>
         <div class="flex justify-end gap-2">

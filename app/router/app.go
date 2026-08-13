@@ -15,29 +15,30 @@ func AppRegister(r fiber.Router) {
 	apiRouter := r.Group("api")
 	apiRouter.Use(middleware.OperationLog()) // 增加操作日志拦截
 
-	AuthRouter(apiRouter)      // 认证相关路由
-	DashboardRouter(apiRouter) // 首页
-	HostRouter(apiRouter)      // 主机信息
-	UserRouter(apiRouter)      // 用户
-	ContainerRouter(apiRouter) // 容器
-	FileRouter(apiRouter)      // 文件
-	HttpRouter(apiRouter)      // HTTP 服务
-	ProcessRouter(apiRouter)   // 进程管理
-	AppsRouter(apiRouter)      // app 安装
-	SettingRouter(apiRouter)   // 系统设置
-	DatabaseRouter(apiRouter)  // 数据库
-	BackupRouter(apiRouter)    // 备份
-	CloudRouter(apiRouter)     // 云服务
-	WebsiteRouter(apiRouter)   // 网站
-	SSLRouter(apiRouter)       // SSL 证书
-	PipelineRouter(apiRouter)  // 流水线
-	CodeRouter(apiRouter)      // GoPanel Code
-	LogsRouter(apiRouter)      // 日志
-	DaemonRouter(apiRouter)    // 守护进程
-	AgentRouter(apiRouter)     // gp-agent
-	CronjobRouter(apiRouter)   // 计划任务
-	NodeRouter(apiRouter)      // 多节点观测
-	MobileRouter(apiRouter)    // 手机免登录控制台
+	AuthRouter(apiRouter)               // 认证相关路由
+	DashboardRouter(apiRouter)          // 首页
+	HostRouter(apiRouter)               // 主机信息
+	UserRouter(apiRouter)               // 用户
+	ContainerRouter(apiRouter)          // 容器
+	FileRouter(apiRouter)               // 文件
+	HttpRouter(apiRouter)               // HTTP 服务
+	ProcessRouter(apiRouter)            // 进程管理
+	AppsRouter(apiRouter)               // app 安装
+	SettingRouter(apiRouter)            // 系统设置
+	DatabaseRouter(apiRouter)           // 数据库
+	BackupRouter(apiRouter)             // 备份
+	CloudRouter(apiRouter)              // 云服务
+	WebsiteRouter(apiRouter)            // 网站
+	SSLRouter(apiRouter)                // SSL 证书
+	PipelineRouter(apiRouter)           // 流水线
+	CodeRouter(apiRouter)               // GoPanel Code
+	LogsRouter(apiRouter)               // 日志
+	SecurityMonitoringRouter(apiRouter) // AI 安全监测
+	DaemonRouter(apiRouter)             // 守护进程
+	AgentRouter(apiRouter)              // gp-agent
+	CronjobRouter(apiRouter)            // 计划任务
+	NodeRouter(apiRouter)               // 多节点观测
+	MobileRouter(apiRouter)             // 手机免登录控制台
 
 	staticRouter(r) // 静态资源文件
 }

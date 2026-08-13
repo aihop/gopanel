@@ -33,6 +33,7 @@ func (r *NotifyRepo) GetConfig() (model.NotifyConfig, error) {
 			EnableContainer: true,
 			EnableOffline:   true,
 			EnableCode:      true,
+			EnableSecurity:  true,
 		}, err
 	}
 	return cfg, nil

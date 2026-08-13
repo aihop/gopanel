@@ -11,6 +11,8 @@ import '../widgets/dashboard_attention_card.dart';
 import '../widgets/dashboard_disk_card.dart';
 import '../widgets/dashboard_metric_card.dart';
 import '../widgets/dashboard_monitor_card.dart';
+import '../widgets/dashboard_security_risk_card.dart';
+import '../controllers/security_risk_controller.dart';
 
 /// 真正的 Dashboard (类似 GoPanel 的 StatusCard 概览)
 /// 作为 MainScaffoldScreen 的第一个 Tab 内容
@@ -39,6 +41,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             onPressed: () {
               ref.read(dashboardControllerProvider.notifier).refresh();
               ref.read(taskCenterControllerProvider.notifier).refresh();
+              ref.read(securityRiskControllerProvider.notifier).refresh();
               ref.invalidate(pendingAiApprovalCountProvider);
             },
           ),
@@ -100,6 +103,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         await Future.wait([
           ref.read(dashboardControllerProvider.notifier).refresh(),
           ref.read(taskCenterControllerProvider.notifier).refresh(),
+          ref.read(securityRiskControllerProvider.notifier).refresh(),
         ]);
         ref.invalidate(pendingAiApprovalCountProvider);
       },
@@ -112,6 +116,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             DashboardBaseCard(osInfo: osInfo, currentInfo: currentInfo),
             const SizedBox(height: 20),
             const DashboardAttentionCard(),
+            const SizedBox(height: 20),
+            const DashboardSecurityRiskCard(),
             const SizedBox(height: 20),
             const DashboardAiSummaryCard(),
             const SizedBox(height: 20),

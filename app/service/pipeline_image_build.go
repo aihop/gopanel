@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/aihop/gopanel/app/model"
@@ -12,7 +13,15 @@ import (
 
 // stepBuildImage builds a Docker image from the release directory
 // and pushes it if a registry is configured in actionParams.
-func (s *PipelineService) stepBuildImage(ctx context.Context, logger *PipelineLogger, p *model.Pipeline, releaseDir string, recordID uint) (string, error) {
+type pipelineImageArtifact struct {
+	Tag          string
+	ID           string
+	Digest       string
+	RepoDigest   string
+	ImmutableRef string
+}
+
+func (s *PipelineService) stepBuildImage(ctx context.Context, logger *PipelineLogger, p *model.Pipeline, releaseDir string, recordID uint) (pipelineImageArtifact, error) {
 	logger.Info("开始构建 Docker 镜像...")
 
 	// Parse action params
@@ -47,14 +56,74 @@ func (s *PipelineService) stepBuildImage(ctx context.Context, logger *PipelineLo
 	// Use Dockerfile from artifactPath if specified, otherwise Dockerfile in releaseDir
 	args = append(args, "-f", dockerfile)
 
-	out, err := docker.RuntimeCommand(ctx, args...)
+	cmd, err := docker.RuntimeCommand(ctx, args...)
 	if err != nil {
-		return "", fmt.Errorf("镜像构建失败: %w (output: %s)", err, out)
+		return pipelineImageArtifact{}, fmt.Errorf("镜像构建失败: %w", err)
+	}
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return pipelineImageArtifact{}, fmt.Errorf("镜像构建失败: %w (output: %s)", err, strings.TrimSpace(string(out)))
 	}
 	logger.Info("镜像构建成功: %s", imageRef)
-	logger.Info("构建输出:\n%s", out)
+	if output := strings.TrimSpace(string(out)); output != "" {
+		logger.Info("构建输出:\n%s", output)
+	}
 
-	return imageRef, nil
+	artifact, err := inspectPipelineImageArtifact(ctx, imageRef)
+	if err != nil {
+		return pipelineImageArtifact{}, fmt.Errorf("读取镜像不可变身份失败: %w", err)
+	}
+	logger.Info("镜像不可变引用: %s", artifact.ImmutableRef)
+	return artifact, nil
+}
+
+func inspectPipelineImageArtifact(ctx context.Context, imageRef string) (pipelineImageArtifact, error) {
+	cmd, err := docker.RuntimeCommand(ctx, "image", "inspect", imageRef)
+	if err != nil {
+		return pipelineImageArtifact{}, err
+	}
+	output, err := cmd.Output()
+	if err != nil {
+		return pipelineImageArtifact{}, err
+	}
+	return parsePipelineImageInspect(imageRef, output)
+}
+
+func parsePipelineImageInspect(imageRef string, output []byte) (pipelineImageArtifact, error) {
+	var rows []struct {
+		ID          string   `json:"Id"`
+		Digest      string   `json:"Digest"`
+		RepoDigests []string `json:"RepoDigests"`
+	}
+	if err := json.Unmarshal(output, &rows); err != nil || len(rows) == 0 {
+		if err == nil {
+			err = fmt.Errorf("empty image inspect result")
+		}
+		return pipelineImageArtifact{}, err
+	}
+	row := rows[0]
+	repoDigests := append([]string(nil), row.RepoDigests...)
+	sort.Strings(repoDigests)
+	repoDigest := ""
+	if len(repoDigests) > 0 {
+		repoDigest = strings.TrimSpace(repoDigests[0])
+	}
+	digest := strings.TrimSpace(row.Digest)
+	if at := strings.LastIndex(repoDigest, "@"); digest == "" && at >= 0 {
+		digest = strings.TrimSpace(repoDigest[at+1:])
+	}
+	imageID := strings.TrimSpace(row.ID)
+	if digest == "" {
+		digest = imageID
+	}
+	immutableRef := repoDigest
+	if immutableRef == "" {
+		immutableRef = imageID
+	}
+	if digest == "" || immutableRef == "" {
+		return pipelineImageArtifact{}, fmt.Errorf("image inspect did not return a content digest")
+	}
+	return pipelineImageArtifact{Tag: strings.TrimSpace(imageRef), ID: imageID, Digest: digest, RepoDigest: repoDigest, ImmutableRef: immutableRef}, nil
 }
 
 func recordVersionTag(recordID uint) string {

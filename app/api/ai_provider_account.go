@@ -61,6 +61,7 @@ func SaveAIProviderAccount(c fiber.Ctx) error {
 		Model                  string `json:"model"`
 		Enabled                bool   `json:"enabled"`
 		UseForMemoryExtraction bool   `json:"useForMemoryExtraction"`
+		UseForSecurityAnalysis bool   `json:"useForSecurityAnalysis"`
 		Priority               int    `json:"priority"`
 		DefaultReasoningEffort string `json:"defaultReasoningEffort"`
 	}
@@ -79,6 +80,7 @@ func SaveAIProviderAccount(c fiber.Ctx) error {
 	account.Model = strings.TrimSpace(req.Model)
 	account.Enabled = req.Enabled
 	account.UseForMemoryExtraction = req.UseForMemoryExtraction
+	account.UseForSecurityAnalysis = req.UseForSecurityAnalysis
 	account.Priority = normalizeAIProviderPriority(req.Priority)
 	account.DefaultReasoningEffort = normalizeCodeReasoningEffort(req.DefaultReasoningEffort)
 	if account.Name == "" || account.BaseURL == "" || account.Model == "" {

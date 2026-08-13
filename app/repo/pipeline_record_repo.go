@@ -22,8 +22,10 @@ func (r *PipelineRecordRepo) UpdateStatus(id uint, status, errMsg string) error 
 func (r *PipelineRecordRepo) UpdateArchive(id uint, archiveFile string) error {
 	return r.db.Model(&model.PipelineRecord{}).Where("id = ?", id).Update("archive_file", archiveFile).Error
 }
-func (r *PipelineRecordRepo) UpdateImageTag(id uint, imageTag string) error {
-	return r.db.Model(&model.PipelineRecord{}).Where("id = ?", id).Update("image_tag", imageTag).Error
+func (r *PipelineRecordRepo) UpdateImageArtifact(id uint, imageTag, imageID, imageDigest, imageRef string) error {
+	return r.db.Model(&model.PipelineRecord{}).Where("id = ?", id).Updates(map[string]interface{}{
+		"image_tag": imageTag, "image_id": imageID, "image_digest": imageDigest, "image_ref": imageRef,
+	}).Error
 }
 func (r *PipelineRecordRepo) UpdateCommitHash(id uint, commitHash string) error {
 	return r.db.Model(&model.PipelineRecord{}).Where("id = ?", id).Update("commit_hash", commitHash).Error

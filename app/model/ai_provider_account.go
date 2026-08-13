@@ -22,6 +22,8 @@ type AIProviderAccount struct {
 	// 用户可能同时配着公司内网、自费和借来的额度——默认拿任意一个去发全部
 	// 对话内容，不该由系统替他决定。
 	UseForMemoryExtraction bool `gorm:"column:use_for_memory_extraction;not null;default:false" json:"useForMemoryExtraction"`
+	// UseForSecurityAnalysis 单独授权把脱敏后的安全证据发送给模型。
+	UseForSecurityAnalysis bool `gorm:"column:use_for_security_analysis;not null;default:false" json:"useForSecurityAnalysis"`
 	// Priority 越小越优先，用于「自动」挑选。
 	Priority int `gorm:"column:priority;not null;default:100" json:"priority"`
 	// DefaultReasoningEffort 是用户给这个账号定的推理强度基线。

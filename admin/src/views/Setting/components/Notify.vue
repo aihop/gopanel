@@ -56,7 +56,9 @@ const form = ref<Notify.Config>({
 	enableContainer: true,
 	enableOffline: true,
 	enableCert: false,
-	enableCode: true
+	enableCode: true,
+	enableSecurity: true,
+	enableSecurityLowMedium: false
 })
 
 const tlsOptions = [
@@ -256,6 +258,8 @@ onMounted(() => {
 						<n-checkbox v-model:checked="form.enableOffline">节点离线 / 令牌失效</n-checkbox>
 						<n-checkbox v-model:checked="form.enableCert">证书即将到期</n-checkbox>
 						<n-checkbox v-model:checked="form.enableCode">{{ t("notify.codeTasks") }}</n-checkbox>
+						<n-checkbox v-model:checked="form.enableSecurity">{{ t("securityMonitoring.emailNotifications") }}</n-checkbox>
+						<n-checkbox v-model:checked="form.enableSecurityLowMedium">{{ t("securityMonitoring.emailLowMedium") }}</n-checkbox>
 						<n-checkbox v-model:checked="form.notifyResolved">恢复时也通知</n-checkbox>
 					</n-space>
 				</n-form-item>

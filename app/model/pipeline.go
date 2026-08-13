@@ -51,6 +51,9 @@ type PipelineRecord struct {
 	ErrorMessage string `gorm:"column:error_message;type:text" json:"errorMessage"`
 	ArchiveFile  string `gorm:"column:archive_file;type:varchar(255)" json:"archiveFile"` // Path to the zip backup
 	ImageTag     string `gorm:"column:image_tag;type:varchar(255)" json:"imageTag"`
+	ImageID      string `gorm:"column:image_id;type:varchar(255)" json:"imageId"`
+	ImageDigest  string `gorm:"column:image_digest;type:varchar(255);index" json:"imageDigest"`
+	ImageRef     string `gorm:"column:image_ref;type:varchar(512)" json:"imageRef"`
 
 	RunnerReleaseDir  string `gorm:"column:runner_release_dir;type:varchar(255)" json:"runnerReleaseDir"`
 	RunnerContainerID string `gorm:"column:runner_container_id;type:varchar(128)" json:"runnerContainerId"`
@@ -77,8 +80,11 @@ type Release struct {
 	Changelog        string    `gorm:"column:changelog;type:text" json:"changelog"` // 发布时从构建记录复制，一行一条提交标题
 	SourceType       string    `gorm:"column:source_type;type:varchar(32);not null;default:'archive';index" json:"sourceType"`
 	ImageTag         string    `gorm:"column:image_tag;type:varchar(255);index" json:"imageTag"`
+	ImageDigest      string    `gorm:"column:image_digest;type:varchar(255);index" json:"imageDigest"`
 	ArchiveFile      string    `gorm:"column:archive_file;type:varchar(255)" json:"archiveFile"`
 	ReleaseDir       string    `gorm:"column:release_dir;type:varchar(255)" json:"releaseDir"`
+	ArtifactDigest   string    `gorm:"column:artifact_digest;type:varchar(255);index" json:"artifactDigest"`
+	ArtifactManifest string    `gorm:"column:artifact_manifest;type:longtext" json:"artifactManifest"`
 	ArtifactMeta     string    `gorm:"column:artifact_meta;type:longtext" json:"artifactMeta"`
 	Status           string    `gorm:"column:status;type:varchar(32);not null;default:'ready';index" json:"status"`
 	Remark           string    `gorm:"column:remark;type:varchar(255)" json:"remark"`

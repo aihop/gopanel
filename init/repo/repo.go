@@ -32,6 +32,7 @@ func Init() error {
 		{"cloud account", func() error { return repo.NewCloudAccount().MigrateTable() }},
 		{"ACME account", func() error { return repo.NewAcmeAccount().MigrateTable() }},
 		{"notify", func() error { return repo.NewNotify().MigrateTable() }},
+		{"security monitoring", func() error { return repo.NewSecurityMonitoring().MigrateTable() }},
 		{"pipeline", func() error { return repo.NewPipeline(global.DB).MigrateTable() }},
 		{"pipeline record", func() error { return repo.NewPipelineRecord(global.DB).MigrateTable() }},
 		{"release", func() error { return repo.NewRelease(global.DB).MigrateTable() }},

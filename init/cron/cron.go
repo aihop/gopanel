@@ -51,6 +51,15 @@ func Init() {
 		global.LOG.Errorf("[Cron] 添加节点摘要采集任务失败: %v", err)
 	}
 
+	_, err = global.Cron.AddFunc("* * * * *", func() {
+		service.EvaluateSecurityRisks()
+		service.RetrySecurityNotifications()
+		service.AnalyzePendingSecurityEvents()
+	})
+	if err != nil {
+		global.LOG.Errorf("[Cron] 添加 AI 安全监测任务失败: %v", err)
+	}
+
 	global.Cron.Start()
 	global.LOG.Info("[Cron] task scheduler started")
 

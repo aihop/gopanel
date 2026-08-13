@@ -59,6 +59,9 @@ export namespace Pipeline {
     errorMessage: string;
     archiveFile: string;
     imageTag?: string;
+    imageId?: string;
+    imageDigest?: string;
+    imageRef?: string;
     runnerReleaseDir?: string;
     runnerContainerId?: string;
     runnerHostPort?: number;
@@ -80,8 +83,11 @@ export namespace Pipeline {
     changelog?: string; // 发布时从构建记录复制的更新说明
     sourceType: string;
     imageTag?: string;
+    imageDigest?: string;
     archiveFile?: string;
     releaseDir?: string;
+    artifactDigest?: string;
+    artifactManifest?: string;
     artifactMeta?: string;
     status: string;
     remark?: string;

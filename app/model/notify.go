@@ -47,6 +47,9 @@ type NotifyConfig struct {
 	EnableOffline   bool `json:"enableOffline"`
 	EnableCert      bool `json:"enableCert"`
 	EnableCode      bool `json:"enableCode"`
+	EnableSecurity  bool `json:"enableSecurity"`
+	// EnableSecurityLowMedium 控制低/中风险邮件；高/严重风险不受此开关影响。
+	EnableSecurityLowMedium bool `json:"enableSecurityLowMedium"`
 }
 
 func (NotifyConfig) TableName() string {
