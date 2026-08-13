@@ -78,6 +78,20 @@ export default function getItems(_: { mode: "vertical" | "horizontal"; collapsed
 					RouterLink,
 					{
 						to: {
+							name: "Pipeline-Index"
+						}
+					},
+					{ default: () => t("menu.pipeline") }
+				),
+			key: "pipeline",
+			icon: renderIcon("mdi:source-merge")
+		},
+		{
+			label: () =>
+				h(
+					RouterLink,
+					{
+						to: {
 							name: "Website-Index"
 						}
 					},
@@ -137,20 +151,6 @@ export default function getItems(_: { mode: "vertical" | "horizontal"; collapsed
 					RouterLink,
 					{
 						to: {
-							name: "Pipeline-Index"
-						}
-					},
-					{ default: () => t("menu.pipeline") }
-				),
-			key: "pipeline",
-			icon: renderIcon("mdi:source-merge")
-		},
-		{
-			label: () =>
-				h(
-					RouterLink,
-					{
-						to: {
 							name: "Apps-Index"
 						}
 					},
@@ -170,12 +170,12 @@ export default function getItems(_: { mode: "vertical" | "horizontal"; collapsed
 							RouterLink,
 							{
 								to: {
-									name: "Host-Terminal"
+									name: "Host-Files"
 								}
 							},
-							{ default: () => t("menu.terminal") }
+							{ default: () => t("menu.files") }
 						),
-					key: "Host-Terminal"
+					key: "Host-Files"
 				},
 				{
 					label: () =>
@@ -183,12 +183,12 @@ export default function getItems(_: { mode: "vertical" | "horizontal"; collapsed
 							RouterLink,
 							{
 								to: {
-									name: "Host-Files"
+									name: "Host-Terminal"
 								}
 							},
-							{ default: () => t("menu.files") }
+							{ default: () => t("menu.terminal") }
 						),
-					key: "Host-Files"
+					key: "Host-Terminal"
 				},
 				{
 					label: () =>

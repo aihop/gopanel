@@ -24,7 +24,7 @@ type pipelineImageArtifact struct {
 var pipelineRuntimeCommand = docker.RuntimeCommand
 
 func (s *PipelineService) stepBuildImage(ctx context.Context, logger *PipelineLogger, p *model.Pipeline, releaseDir string, recordID uint) (pipelineImageArtifact, error) {
-	logger.Info("开始构建 Docker 镜像...")
+	logger.Info("开始构建 容器镜像...")
 
 	// Parse action params
 	params := struct {

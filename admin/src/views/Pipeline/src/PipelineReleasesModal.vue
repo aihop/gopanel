@@ -198,7 +198,7 @@ watch(
     @update:show="(val) => emit('update:show', val)"
   >
     <div class="mb-4 text-sm text-slate-500">
-      正式版本承接稳定上线、网站切换与回滚；这里展示每个版本的交付结果，以及当前有哪些站点正在使用它。
+      正式版本承接稳定上线、网站切换与回滚；这里展示每个版本的交付结果，以及当前有哪些站点正在使用它
     </div>
     <div class="h-[520px] overflow-auto">
       <n-data-table

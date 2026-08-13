@@ -16,8 +16,6 @@ import (
 	"github.com/aihop/gopanel/utils/aiprovider"
 )
 
-const systemDiagnosticMaxToolRounds = 6
-
 type systemDiagnosticLLMMessage struct {
 	Role             string                     `json:"role"`
 	Content          string                     `json:"content,omitempty"`
@@ -49,10 +47,10 @@ type systemDiagnosticToolAudit struct {
 
 func runSystemDiagnosticLLM(ctx context.Context, account *model.AIProviderAccount, apiKey string, messages []systemDiagnosticLLMMessage, onDelta func(string) error) (string, string, systemDiagnosticUsage, []systemDiagnosticToolAudit, error) {
 	var totalUsage systemDiagnosticUsage
-	rawOutputs := make([]string, 0, systemDiagnosticMaxToolRounds)
-	audits := make([]systemDiagnosticToolAudit, 0, systemDiagnosticMaxToolRounds)
+	var rawOutputs []string
+	var audits []systemDiagnosticToolAudit
 	var streamedAnswer strings.Builder
-	for round := 0; round < systemDiagnosticMaxToolRounds; round++ {
+	for {
 		assistant, usage, raw, err := callSystemDiagnosticLLM(ctx, account, apiKey, messages, func(delta string) error {
 			streamedAnswer.WriteString(delta)
 			if onDelta != nil {
@@ -83,7 +81,6 @@ func runSystemDiagnosticLLM(ctx context.Context, account *model.AIProviderAccoun
 			messages = append(messages, systemDiagnosticLLMMessage{Role: "tool", ToolCallID: toolCall.ID, Content: string(encoded)})
 		}
 	}
-	return "", strings.Join(rawOutputs, "\n"), totalUsage, audits, errors.New("诊断模型查询次数过多，请缩小问题范围后重试")
 }
 
 func callSystemDiagnosticLLM(ctx context.Context, account *model.AIProviderAccount, apiKey string, messages []systemDiagnosticLLMMessage, onDelta func(string) error) (systemDiagnosticLLMMessage, systemDiagnosticUsage, string, error) {

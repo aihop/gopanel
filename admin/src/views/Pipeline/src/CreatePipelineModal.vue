@@ -69,15 +69,6 @@ const currentRuntimeModeLabel = computed(() => {
   })
 })
 
-const runnerRuntimeHint = computed(() => {
-  if (!runtimeValidate.value?.runtimeKind) {
-    return "Runner 会跟随当前面板已选中的容器运行时，不会改变宿主机是 rootless 还是 rootful"
-  }
-  const host = String(runtimeValidate.value?.runtimeHost || "").trim()
-  const hostText = host ? `；当前 Host：${host}` : ""
-  return `Runner 当前会跟随 ${currentRuntimeKindLabel.value} / ${currentRuntimeModeLabel.value}${hostText}。非 root 安装会落到 rootless 运行时 `
-})
-
 const existingRuntimeHint = computed(() => {
   if (!props.editData?.runnerMode) return ""
   if (!(props.editData.runtimeKind || props.editData.runtimeMode || props.editData.runUser)) return ""
@@ -239,7 +230,6 @@ const handleSubmit = () => {
     try {
       const payload: any = { ...formModel }
       payload.pipelineKey = normalizePipelineKey(payload.pipelineKey || "")
-
       if (payload.pipelineMode === "runner") {
         payload.buildImage = ""
         payload.buildScript = ""
@@ -368,7 +358,6 @@ watch(() => [formModel.repoUrl, formModel.branch, formModel.authType, formModel.
         :is-edit="isEdit"
         :existing-runtime-hint="existingRuntimeHint"
         :existing-runner-directory-hint="existingRunnerDirectoryHint"
-        :runner-runtime-hint="runnerRuntimeHint"
         :runner-preset="runnerPreset"
         :runner-preset-options="runnerPresetOptions"
         :runner-preset-auto-label="runnerPresetAutoLabel"

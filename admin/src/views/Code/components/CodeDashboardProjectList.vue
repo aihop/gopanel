@@ -151,7 +151,7 @@ watch(() => props.selectedTaskId, () => {
           @dragstart="handleDragStart($event, group.id)"
           @dragend="handleDragEnd"
         >
-          <Icon name="mdi:drag-vertical" :size="17" />
+          <Icon name="mdi:dots-vertical" :size="17" />
         </button>
         <button
           type="button"

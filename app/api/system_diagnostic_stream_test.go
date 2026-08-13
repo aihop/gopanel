@@ -64,7 +64,7 @@ func TestSystemDiagnosticAssistantMessagePreservesReasoningContent(t *testing.T)
 	}
 }
 
-func TestRunSystemDiagnosticLLMReturnsReasoningContentOnToolRound(t *testing.T) {
+func TestRunSystemDiagnosticLLMContinuesPastPreviousToolRoundLimit(t *testing.T) {
 	requests := 0
 	previousClient := http.DefaultClient
 	t.Cleanup(func() { http.DefaultClient = previousClient })
@@ -77,8 +77,12 @@ func TestRunSystemDiagnosticLLMReturnsReasoningContentOnToolRound(t *testing.T) 
 			t.Fatal(err)
 		}
 		responseBody := "data: {\"choices\":[{\"delta\":{\"content\":\"诊断完成\"}}]}\n\ndata: [DONE]\n\n"
-		if requests == 1 {
-			responseBody = "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"先读取快照\"}}]}\n\n" +
+		if requests <= 7 {
+			reasoning := ""
+			if requests == 1 {
+				reasoning = "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"先读取快照\"}}]}\n\n"
+			}
+			responseBody = reasoning +
 				"data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"unknown_test_tool\",\"arguments\":\"{}\"}}]}}]}\n\n" +
 				"data: [DONE]\n\n"
 		}
@@ -99,7 +103,7 @@ func TestRunSystemDiagnosticLLMReturnsReasoningContentOnToolRound(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if answer != "诊断完成" || requests != 2 {
+	if answer != "诊断完成" || requests != 8 {
 		t.Fatalf("unexpected diagnostic result: answer=%q requests=%d", answer, requests)
 	}
 }

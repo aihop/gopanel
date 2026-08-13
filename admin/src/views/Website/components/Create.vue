@@ -22,7 +22,7 @@
 						:disabled="actionType === 'update'"
 						:options="[
 							{ label: '📦 静态网站 (HTML/Vue/React)', value: 'static' },
-							{ label: '🚀 容器化应用 (需 Docker 镜像)', value: 'web_app' },
+							{ label: '🚀 容器化应用 (需容器镜像)', value: 'web_app' },
 							{ label: '🔌 纯反向代理 (不托管代码)', value: 'proxy' },
 							{ label: '🔗 URL 重定向 (301/302)', value: 'redirect' }
 						]"

@@ -7,7 +7,6 @@ defineProps<{
   isEdit: boolean
   existingRuntimeHint: string
   existingRunnerDirectoryHint: string
-  runnerRuntimeHint: string
   runnerPreset: string
   runnerPresetOptions: Array<{ label: string; value: string }>
   runnerPresetAutoLabel: string
@@ -42,9 +41,6 @@ const markCustomPreset = () => {
     class="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm text-slate-700"
   >
     {{ existingRunnerDirectoryHint }}
-  </div>
-  <div class="mb-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
-    {{ runnerRuntimeHint }}
   </div>
   <n-form-item label="项目预设">
     <div class="w-full">
@@ -158,7 +154,7 @@ const markCustomPreset = () => {
           placeholder="留空则自动分配，例如：3101"
         />
         <div class="mt-2 text-xs text-slate-500">
-          这是宿主机稳定入口端口，不是容器内部监听端口。留空时每次自动分配并同步网站代理；填写后会固定绑定到 `127.0.0.1:该端口`，后续发布无需再变更网站端口
+          这是容器外映射的默认端口，如不填写将默认获取，无非特别需要，不建议填写
         </div>
       </div>
     </n-form-item>
@@ -170,7 +166,7 @@ const markCustomPreset = () => {
           placeholder="留空则使用镜像默认用户，例如：node / 1000 / 1000:1000"
         />
         <div class="mt-2 text-xs text-slate-500">
-          这里只控制容器内进程用户，不影响宿主机容器运行时。若使用非 root 用户，请不要持久化 `node_modules`，否则 npm 容易报权限错。
+          这里只控制容器内进程用户，不影响宿主机容器运行时。若使用非 root 用户，请不要持久化 `node_modules`，否则 npm 容易报权限错
         </div>
       </div>
     </n-form-item>
