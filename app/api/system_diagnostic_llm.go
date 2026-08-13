@@ -115,7 +115,7 @@ func callSystemDiagnosticLLM(ctx context.Context, account *model.AIProviderAccou
 	defer response.Body.Close()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		raw, _ := io.ReadAll(io.LimitReader(response.Body, 3<<20))
-		return systemDiagnosticLLMMessage{}, systemDiagnosticUsage{}, string(raw), fmt.Errorf("诊断模型返回 %d", response.StatusCode)
+		return systemDiagnosticLLMMessage{}, systemDiagnosticUsage{}, string(raw), fmt.Errorf("诊断模型返回 %d：%s", response.StatusCode, systemDiagnosticProviderError(raw))
 	}
 	return readSystemDiagnosticLLMStream(response.Body, onDelta)
 }
@@ -230,7 +230,9 @@ func readSystemDiagnosticLLMStream(reader io.Reader, onDelta func(string) error)
 			}
 			toolCall := &assistant.ToolCalls[toolDelta.Index]
 			toolCall.ID += toolDelta.ID
-			toolCall.Type += toolDelta.Type
+			if toolDelta.Type != "" {
+				toolCall.Type = toolDelta.Type
+			}
 			toolCall.Function.Name += toolDelta.Function.Name
 			toolCall.Function.Arguments += toolDelta.Function.Arguments
 		}
@@ -242,6 +244,26 @@ func readSystemDiagnosticLLMStream(reader io.Reader, onDelta func(string) error)
 		return assistant, usage, raw.String(), errors.New("诊断模型返回了空结果")
 	}
 	return assistant, usage, raw.String(), nil
+}
+
+func systemDiagnosticProviderError(raw []byte) string {
+	var response struct {
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(raw, &response) == nil && strings.TrimSpace(response.Error.Message) != "" {
+		return truncateSystemDiagnosticError(response.Error.Message, 300)
+	}
+	return truncateSystemDiagnosticError(string(raw), 300)
+}
+
+func truncateSystemDiagnosticError(value string, limit int) string {
+	runes := []rune(strings.TrimSpace(value))
+	if len(runes) <= limit {
+		return string(runes)
+	}
+	return string(runes[:limit]) + "..."
 }
 
 func executeSystemDiagnosticTool(call systemDiagnosticToolCall) (any, systemDiagnosticToolAudit) {

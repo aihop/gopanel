@@ -12,7 +12,7 @@ func TestReadSystemDiagnosticLLMStreamAccumulatesContentAndToolCalls(t *testing.
 		`data: {"choices":[{"delta":{"content":"正在"}}]}`,
 		`data: {"choices":[{"delta":{"content":"分析"}}]}`,
 		`data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"query_panel_","arguments":"{\"sql\":\"SELECT "}}]}}]}`,
-		`data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"name":"database","arguments":"id FROM backup_records\"}"}}]}}]}`,
+		`data: {"choices":[{"delta":{"tool_calls":[{"index":0,"type":"function","function":{"name":"database","arguments":"id FROM backup_records\"}"}}]}}]}`,
 		`data: {"choices":[],"usage":{"prompt_tokens":12,"completion_tokens":4,"total_tokens":16}}`,
 		`data: [DONE]`,
 	}, "\n\n")
@@ -27,11 +27,18 @@ func TestReadSystemDiagnosticLLMStreamAccumulatesContentAndToolCalls(t *testing.
 	if message.Content != "正在分析" || deltas.String() != message.Content {
 		t.Fatalf("unexpected streamed content: message=%q deltas=%q", message.Content, deltas.String())
 	}
-	if len(message.ToolCalls) != 1 || message.ToolCalls[0].Function.Name != "query_panel_database" || message.ToolCalls[0].Function.Arguments != `{"sql":"SELECT id FROM backup_records"}` {
+	if len(message.ToolCalls) != 1 || message.ToolCalls[0].Type != "function" || message.ToolCalls[0].Function.Name != "query_panel_database" || message.ToolCalls[0].Function.Arguments != `{"sql":"SELECT id FROM backup_records"}` {
 		t.Fatalf("unexpected streamed tool call: %#v", message.ToolCalls)
 	}
 	if usage.TotalTokens != 16 {
 		t.Fatalf("unexpected usage: %#v", usage)
+	}
+}
+
+func TestSystemDiagnosticProviderErrorExtractsMessage(t *testing.T) {
+	raw := []byte(`{"error":{"message":"messages[2]: unknown variant functionfunction","type":"invalid_request_error"}}`)
+	if message := systemDiagnosticProviderError(raw); message != "messages[2]: unknown variant functionfunction" {
+		t.Fatalf("unexpected provider error: %q", message)
 	}
 }
 
