@@ -27,3 +27,33 @@ export interface CodeMemorySetting {
 	ready: boolean
 	readyReason?: string
 }
+
+export type CodeMemoryExtractionState = "idle" | "queued" | "running" | "success" | "skipped" | "failed"
+
+export interface CodeMemoryExtractionStatus {
+	sessionId: number
+	status: CodeMemoryExtractionState
+	trigger?: "automatic" | "manual"
+	reason?: string
+	added: number
+	merged: number
+	replaced: number
+	archived: number
+	startedAt?: string
+	completedAt?: string
+}
+
+export interface CodeMemoryExtractResult {
+	queued: boolean
+	status: CodeMemoryExtractionStatus | null
+}
+
+export interface CodeMemoryAuditEvent {
+	id: number
+	createdAt: string
+	sessionId?: number
+	action: "summary_update" | "summary_clear"
+	source: "extraction" | "manual"
+	before: string
+	after: string
+}

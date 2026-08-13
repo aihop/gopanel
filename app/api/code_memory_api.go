@@ -11,6 +11,7 @@ import (
 	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/utils/token"
 	"github.com/gofiber/fiber/v3"
+	"gorm.io/gorm"
 )
 
 type codeMemoryListView struct {
@@ -27,6 +28,11 @@ func GetCodeMemories(c fiber.Ctx) error {
 	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
 	projectID, _ := strconv.ParseUint(strings.TrimSpace(c.Query("projectId")), 10, 64)
 	includeArchived := strings.TrimSpace(c.Query("includeArchived")) == "true"
+	if projectID > 0 {
+		if _, err := getCodeProjectWithPermission(uint(projectID), claims); err != nil {
+			return c.JSON(e.Fail(err))
+		}
+	}
 
 	query := global.DB.Model(&model.AICodeMemoryEntry{}).Where("user_id = ?", claims.UserId)
 	if !includeArchived {
@@ -83,6 +89,11 @@ func CreateCodeMemory(c fiber.Ctx) error {
 	if scope == codeMemoryScopeProject && req.ProjectID == 0 {
 		return c.JSON(e.Fail(errors.New("请先选择项目，或改为对所有项目生效")))
 	}
+	if scope == codeMemoryScopeProject {
+		if _, err := getCodeProjectWithPermission(req.ProjectID, claims); err != nil {
+			return c.JSON(e.Fail(err))
+		}
+	}
 	entry := model.AICodeMemoryEntry{
 		UserID: claims.UserId, ProjectID: codeMemoryProjectIDForScope(scope, req.ProjectID),
 		Scope: scope, Kind: codeMemoryKindDecision, Tier: codeMemoryTierForKind(codeMemoryKindDecision),
@@ -128,6 +139,98 @@ func ExtractCodeSessionMemory(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	enqueueCodeMemoryExtraction(session.ID)
+	queued := enqueueCodeMemoryExtraction(session.ID, codeMemoryTriggerManual, true)
+	state, statusErr := loadCodeMemoryExtractionStatus(session.ID)
+	if statusErr != nil {
+		return c.JSON(e.Fail(statusErr))
+	}
+	return c.JSON(e.Succ(fiber.Map{"queued": queued, "status": state}))
+}
+
+func GetCodeSessionMemoryStatus(c fiber.Ctx) error {
+	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
+	sessionID, err := strconv.ParseUint(c.Params("id"), 10, 64)
+	if err != nil || sessionID == 0 {
+		return c.JSON(e.Fail(errors.New("会话 ID 无效")))
+	}
+	if _, err := getAISessionWithPermission(uint(sessionID), claims); err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	state, err := loadCodeMemoryExtractionStatus(uint(sessionID))
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	if state == nil {
+		state = &model.AICodeMemoryExtractionState{SessionID: uint(sessionID), Status: codeMemoryExtractionIdle}
+	}
+	return c.JSON(e.Succ(state))
+}
+
+func SaveCodeMemorySummary(c fiber.Ctx) error {
+	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
+	var req struct {
+		Content string `json:"content"`
+	}
+	if err := c.Bind().JSON(&req); err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	content := truncateCodeMemoryText(scrubCodeMemoryText(req.Content), codeMemorySummaryMaxRunes)
+	if content == "" {
+		return c.JSON(e.Fail(errors.New("用户画像不能为空")))
+	}
+	err := global.DB.Transaction(func(tx *gorm.DB) error {
+		var summary model.AICodeMemorySummary
+		lookupErr := tx.Where("user_id = ?", claims.UserId).First(&summary).Error
+		before := ""
+		if lookupErr == nil {
+			before = summary.Content
+			if before == content {
+				return nil
+			}
+			if err := tx.Model(&summary).Update("content", content).Error; err != nil {
+				return err
+			}
+		} else if errors.Is(lookupErr, gorm.ErrRecordNotFound) {
+			if err := tx.Create(&model.AICodeMemorySummary{UserID: claims.UserId, Content: content}).Error; err != nil {
+				return err
+			}
+		} else {
+			return lookupErr
+		}
+		return createCodeMemorySummaryAudit(tx, claims.UserId, 0, "summary_update", "manual", before, content, c.IP())
+	})
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	return c.JSON(e.Succ(fiber.Map{"content": content}))
+}
+
+func DeleteCodeMemorySummary(c fiber.Ctx) error {
+	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
+	err := global.DB.Transaction(func(tx *gorm.DB) error {
+		var summary model.AICodeMemorySummary
+		if err := tx.Where("user_id = ?", claims.UserId).First(&summary).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil
+			}
+			return err
+		}
+		if err := tx.Delete(&summary).Error; err != nil {
+			return err
+		}
+		return createCodeMemorySummaryAudit(tx, claims.UserId, 0, "summary_clear", "manual", summary.Content, "", c.IP())
+	})
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
 	return c.JSON(e.Succ(nil))
+}
+
+func GetCodeMemoryAuditEvents(c fiber.Ctx) error {
+	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
+	var events []model.AICodeMemoryAuditEvent
+	if err := global.DB.Where("user_id = ?", claims.UserId).Order("created_at desc").Limit(50).Find(&events).Error; err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	return c.JSON(e.Succ(events))
 }

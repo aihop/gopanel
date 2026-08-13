@@ -76,11 +76,34 @@ func (AICodeMemorySetting) TableName() string { return "ai_code_memory_settings"
 // 消息行是自增且只追加的，记住最后一条 id 就能精确算出增量，
 // 不需要像按文件抽取那样去比对行数和前缀哈希。
 type AICodeMemoryExtractionState struct {
-	ID            uint      `gorm:"primaryKey" json:"id"`
-	CreatedAt     time.Time `json:"createdAt"`
-	UpdatedAt     time.Time `json:"updatedAt"`
-	SessionID     uint      `gorm:"column:session_id;not null;uniqueIndex" json:"sessionId"`
-	LastMessageID uint      `gorm:"column:last_message_id;not null;default:0" json:"lastMessageId"`
+	ID            uint       `gorm:"primaryKey" json:"id"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	UpdatedAt     time.Time  `json:"updatedAt"`
+	SessionID     uint       `gorm:"column:session_id;not null;uniqueIndex" json:"sessionId"`
+	LastMessageID uint       `gorm:"column:last_message_id;not null;default:0" json:"lastMessageId"`
+	Status        string     `gorm:"column:status;type:varchar(16);not null;default:idle;index" json:"status"`
+	Trigger       string     `gorm:"column:trigger;type:varchar(16);not null;default:automatic" json:"trigger"`
+	Reason        string     `gorm:"column:reason;type:varchar(500)" json:"reason,omitempty"`
+	Added         int        `gorm:"column:added;not null;default:0" json:"added"`
+	Merged        int        `gorm:"column:merged;not null;default:0" json:"merged"`
+	Replaced      int        `gorm:"column:replaced;not null;default:0" json:"replaced"`
+	Archived      int        `gorm:"column:archived;not null;default:0" json:"archived"`
+	StartedAt     *time.Time `gorm:"column:started_at" json:"startedAt,omitempty"`
+	CompletedAt   *time.Time `gorm:"column:completed_at" json:"completedAt,omitempty"`
 }
 
 func (AICodeMemoryExtractionState) TableName() string { return "ai_code_memory_extraction_states" }
+
+type AICodeMemoryAuditEvent struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	CreatedAt time.Time `gorm:"index:idx_ai_code_memory_audit_user_created,priority:2" json:"createdAt"`
+	UserID    uint      `gorm:"column:user_id;not null;index;index:idx_ai_code_memory_audit_user_created,priority:1" json:"userId"`
+	SessionID uint      `gorm:"column:session_id;not null;default:0;index" json:"sessionId,omitempty"`
+	Action    string    `gorm:"column:action;type:varchar(32);not null;index" json:"action"`
+	Source    string    `gorm:"column:source;type:varchar(16);not null;index" json:"source"`
+	Before    string    `gorm:"column:before_content;type:text" json:"before"`
+	After     string    `gorm:"column:after_content;type:text" json:"after"`
+	IP        string    `gorm:"column:ip;type:varchar(64)" json:"ip,omitempty"`
+}
+
+func (AICodeMemoryAuditEvent) TableName() string { return "ai_code_memory_audit_events" }

@@ -31,7 +31,14 @@ import type {
 import type { CodeProjectBranches } from "../interface/codeBranches"
 import type { CodeProjectCommitResult } from "../interface/codeProjectCommit"
 import type { AIProviderAccount, AIProviderAccountInput } from "../interface/aiAccounts"
-import type { CodeMemoryEntry, CodeMemoryList, CodeMemorySetting } from "../interface/codeMemories"
+import type {
+	CodeMemoryAuditEvent,
+	CodeMemoryEntry,
+	CodeMemoryExtractResult,
+	CodeMemoryExtractionStatus,
+	CodeMemoryList,
+	CodeMemorySetting
+} from "../interface/codeMemories"
 import type { CodeResidueCleanupOutcome, CodeWorktreeResidueSummary } from "../interface/codeResidues"
 import type { CodeTaskListItem } from "../interface/codeTasks"
 import type { HostTerminalSession } from "../interface/hostTerminal"
@@ -124,6 +131,26 @@ export function createCodeMemory(data: { content: string; projectId: number; all
 
 export function deleteCodeMemory(id: number) {
 	return http.delete(`/code/memories/${id}`)
+}
+
+export function saveCodeMemorySummary(content: string) {
+	return http.put<{ content: string }>("/code/memory/summary", { content })
+}
+
+export function deleteCodeMemorySummary() {
+	return http.delete("/code/memory/summary")
+}
+
+export function getCodeMemoryAuditEvents() {
+	return http.get<CodeMemoryAuditEvent[]>("/code/memory/audit-events")
+}
+
+export function getCodeSessionMemoryStatus(sessionId: number) {
+	return http.get<CodeMemoryExtractionStatus>(`/code/sessions/${sessionId}/memory/status`)
+}
+
+export function extractCodeSessionMemory(sessionId: number) {
+	return http.post<CodeMemoryExtractResult>(`/code/sessions/${sessionId}/memory/extract`)
 }
 
 // 扫描要逐个 worktree 跑 git status 和 merge-base，仓库多时会慢，给足超时。

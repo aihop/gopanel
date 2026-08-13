@@ -144,6 +144,7 @@ async function openMemory() {
       <CodeMemoryManager
         ref="memoryManager"
         :project-id="projectId"
+        :session-id="sessionId"
       />
 
       <div

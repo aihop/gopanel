@@ -23,7 +23,8 @@ export const codeMemoryMessages = {
 			memoryRemoveLabel: "移除这条记忆",
 			memorySetting: "抽取设置",
 			memoryDisabledTitle: "记忆抽取未启用",
-			memoryDisabledHint: "抽取需要一个 AI 账号。执行器（Codex/Claude）用的是它们自己的登录态，面板拿不到，需要在 系统设置 › AI 账号 里添加并授权",
+			memoryDisabledHint:
+				"抽取需要一个 AI 账号。执行器（Codex/Claude）用的是它们自己的登录态，面板拿不到，需要在 系统设置 › AI 账号 里添加并授权",
 			memoryEnable: "启用抽取",
 			memoryAccountAuto: "自动（按优先级挑选）",
 			memoryAccountHint: "账号在 系统设置 › AI 账号 里统一管理",
@@ -31,9 +32,61 @@ export const codeMemoryMessages = {
 			memoryThresholdHint: "填 0 表示每次执行都抽。默认 8，避免同一段对话被反复消化",
 			memorySettingSaved: "抽取设置已保存",
 			memorySettingSaveFailed: "抽取设置保存失败",
+			memorySettingLoadFailed: "抽取设置加载失败",
+			memorySettingReason: {
+				disabled: "启用后，系统会在执行结束时自动沉淀值得长期保留的信息",
+				account_unavailable: "没有可用的 AI 账号，请在系统设置中添加并授权用于记忆抽取"
+			},
+			memoryExtraction: "本次会话抽取",
+			memoryExtractNow: "立即抽取",
+			memoryExtractQueued: "已加入记忆抽取队列",
+			memoryExtractAlreadyRunning: "记忆抽取正在进行",
+			memoryExtractFailed: "触发记忆抽取失败",
+			memoryStatusLoadFailed: "抽取状态加载失败",
+			memoryExtractionIdleHint: "执行完成后会自动抽取，也可以现在手动抽取",
+			memoryExtractionNeedsSetting: "请先启用抽取并配置可用的 AI 账号",
+			memoryExtractionCompletedAt: "完成于 {time}",
+			memoryExtractionResult: "共变更 {count} 条：新增 {added}、合并 {merged}、归档 {archived}",
+			memoryExtractionStatus: {
+				idle: "未开始",
+				queued: "排队中",
+				running: "抽取中",
+				success: "已完成",
+				skipped: "已跳过",
+				failed: "失败"
+			},
+			memoryExtractionReason: {
+				disabled: "记忆抽取未启用",
+				empty_transcript: "会话没有可抽取的内容",
+				low_signal: "本轮没有发现值得长期保留的信息",
+				insufficient_growth: "新增对话尚未达到抽取阈值",
+				extraction_failed: "抽取失败，请重试；若仍失败，请检查 AI 账号配置"
+			},
+			memoryProfile: "用户画像",
+			memoryProfileHint: "跨项目生效，用来描述你的长期习惯与协作偏好",
+			memoryProfileEmpty: "尚未形成用户画像，自动抽取几轮后会逐步完善",
+			memoryProfilePlaceholder: "例如：偏好先给结论，再说明关键取舍；改动后主动验证并提交",
+			memoryProfileAdd: "添加画像",
+			memoryProfileSaved: "用户画像已保存",
+			memoryProfileSaveFailed: "用户画像保存失败",
+			memoryProfileLoadFailed: "用户画像加载失败",
+			memoryProfileClearTitle: "清除用户画像",
+			memoryProfileClearConfirm: "清除后将不再把这份长期画像注入 AI，上一次内容仍保留在审计记录中。",
+			memoryProfileCleared: "用户画像已清除",
+			memoryProfileClearFailed: "用户画像清除失败",
+			memoryAuditTitle: "画像变更记录",
+			memoryAuditLoadFailed: "画像变更记录加载失败",
+			memoryAuditEmpty: "暂无画像变更记录",
+			memoryAuditCleared: "画像已清除",
+			memoryAuditAction: {
+				summary_update: "更新画像",
+				summary_clear: "清除画像"
+			},
 			save: "保存",
 			disable: "停用",
-		},
+			clear: "清除",
+			edit: "编辑"
+		}
 	},
 	en: {
 		code: {
@@ -65,8 +118,63 @@ export const codeMemoryMessages = {
 			memoryThresholdHint: "0 extracts after every run. Default 8, so the same conversation is not re-digested.",
 			memorySettingSaved: "Settings saved",
 			memorySettingSaveFailed: "Failed to save settings",
+			memorySettingLoadFailed: "Failed to load extraction settings",
+			memorySettingReason: {
+				disabled: "Once enabled, the system distills durable information after each run.",
+				account_unavailable:
+					"No AI account is available. Add one in Settings and authorize it for memory extraction."
+			},
+			memoryExtraction: "Session extraction",
+			memoryExtractNow: "Extract now",
+			memoryExtractQueued: "Memory extraction queued",
+			memoryExtractAlreadyRunning: "Memory extraction is already running",
+			memoryExtractFailed: "Failed to start memory extraction",
+			memoryStatusLoadFailed: "Failed to load extraction status",
+			memoryExtractionIdleHint: "Memory is extracted after runs, or you can start it now",
+			memoryExtractionNeedsSetting: "Enable extraction and configure an available AI account first",
+			memoryExtractionCompletedAt: "Completed at {time}",
+			memoryExtractionResult: "{count} changes: {added} added, {merged} merged, {archived} archived",
+			memoryExtractionStatus: {
+				idle: "Not started",
+				queued: "Queued",
+				running: "Extracting",
+				success: "Complete",
+				skipped: "Skipped",
+				failed: "Failed"
+			},
+			memoryExtractionReason: {
+				disabled: "Memory extraction is disabled",
+				empty_transcript: "The conversation has no extractable content",
+				low_signal: "No information worth retaining was found in this run",
+				insufficient_growth: "New messages have not reached the extraction threshold",
+				extraction_failed: "Extraction failed. Retry, then check the AI account configuration if it persists."
+			},
+			memoryProfile: "User profile",
+			memoryProfileHint: "Applies across projects and captures long-term working preferences",
+			memoryProfileEmpty: "No user profile yet. It will improve as more conversations are extracted.",
+			memoryProfilePlaceholder:
+				"e.g. Lead with the outcome, explain key tradeoffs, then verify and commit changes",
+			memoryProfileAdd: "Add profile",
+			memoryProfileSaved: "User profile saved",
+			memoryProfileSaveFailed: "Failed to save user profile",
+			memoryProfileLoadFailed: "Failed to load user profile",
+			memoryProfileClearTitle: "Clear user profile",
+			memoryProfileClearConfirm:
+				"The profile will no longer be injected into AI prompts. Its previous content remains in the audit history.",
+			memoryProfileCleared: "User profile cleared",
+			memoryProfileClearFailed: "Failed to clear user profile",
+			memoryAuditTitle: "Profile change history",
+			memoryAuditLoadFailed: "Failed to load profile change history",
+			memoryAuditEmpty: "No profile changes yet",
+			memoryAuditCleared: "Profile cleared",
+			memoryAuditAction: {
+				summary_update: "Profile updated",
+				summary_clear: "Profile cleared"
+			},
 			save: "Save",
 			disable: "Disable",
-		},
-	},
+			clear: "Clear",
+			edit: "Edit"
+		}
+	}
 }

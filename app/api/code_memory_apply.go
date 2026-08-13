@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -51,7 +52,7 @@ func applyCodeMemoryExtraction(
 			return err
 		}
 		result.Archived += archived
-		return applyCodeMemoryUserSummary(tx, response.UserSummary, context.UserID)
+		return applyCodeMemoryUserSummary(tx, response.UserSummary, context)
 	})
 	return result, err
 }
@@ -121,16 +122,19 @@ func codeMemoryProjectIDForScope(scope string, projectID uint) uint {
 
 // loadCodeMemoryTarget 按 id 取一条属于当前用户的记忆。
 //
-// 必须带 user_id 过滤：id 是模型给出来的，它有可能引用到别人的记忆
-// （提示词里只会出现本人的条目，但模型会编号码）。少了这个条件，
-// 一次幻觉就能改写别人的记忆库。
+// 必须同时限制用户和当前作用域：id 是模型给出来的，它有可能引用到别人的
+// 记忆，也可能编到同一用户另一个项目。抽取提示词只包含用户级记忆和当前
+// 项目记忆，因此目标也只能落在这两个范围内。
 func loadCodeMemoryTarget(tx *gorm.DB, rawID string, context codeMemoryApplyContext) *model.AICodeMemoryEntry {
 	id, err := strconv.ParseUint(strings.TrimSpace(rawID), 10, 64)
 	if err != nil || id == 0 {
 		return nil
 	}
 	var entry model.AICodeMemoryEntry
-	if err := tx.Where("id = ? AND user_id = ?", uint(id), context.UserID).First(&entry).Error; err != nil {
+	if err := tx.Where("id = ? AND user_id = ?", uint(id), context.UserID).
+		Where("scope = ? OR (scope = ? AND project_id = ?)",
+			codeMemoryScopeUser, codeMemoryScopeProject, context.ProjectID).
+		First(&entry).Error; err != nil {
 		return nil
 	}
 	return &entry
@@ -170,14 +174,35 @@ func archiveCodeMemoryEntry(tx *gorm.DB, entry *model.AICodeMemoryEntry, superse
 // applyCodeMemoryUserSummary 整体重写用户画像。
 // 空字符串表示「保持不变」——这是提示词里约定的语义，
 // 当成"清空"会让一次无内容的抽取抹掉长期积累的画像。
-func applyCodeMemoryUserSummary(tx *gorm.DB, summary string, userID uint) error {
-	if strings.TrimSpace(summary) == "" || userID == 0 {
+func applyCodeMemoryUserSummary(tx *gorm.DB, summary string, context codeMemoryApplyContext) error {
+	summary = strings.TrimSpace(summary)
+	if summary == "" || context.UserID == 0 {
 		return nil
 	}
 	var existing model.AICodeMemorySummary
-	err := tx.Where("user_id = ?", userID).First(&existing).Error
-	if err != nil {
-		return tx.Create(&model.AICodeMemorySummary{UserID: userID, Content: summary}).Error
+	err := tx.Where("user_id = ?", context.UserID).First(&existing).Error
+	before := ""
+	if err == nil {
+		before = existing.Content
+		if before == summary {
+			return nil
+		}
+		if err := tx.Model(&existing).Update("content", summary).Error; err != nil {
+			return err
+		}
+	} else if errors.Is(err, gorm.ErrRecordNotFound) {
+		if err := tx.Create(&model.AICodeMemorySummary{UserID: context.UserID, Content: summary}).Error; err != nil {
+			return err
+		}
+	} else {
+		return err
 	}
-	return tx.Model(&existing).Update("content", summary).Error
+	return createCodeMemorySummaryAudit(tx, context.UserID, context.SessionID, "summary_update", "extraction", before, summary, "")
+}
+
+func createCodeMemorySummaryAudit(tx *gorm.DB, userID, sessionID uint, action, source, before, after, ip string) error {
+	return tx.Create(&model.AICodeMemoryAuditEvent{
+		UserID: userID, SessionID: sessionID, Action: action, Source: source,
+		Before: before, After: after, IP: ip,
+	}).Error
 }

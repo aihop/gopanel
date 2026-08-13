@@ -143,7 +143,7 @@ func executeCodeAgentRun(
 	// 一次执行结束就顺手沉淀一次。放在这里而不是交付时：多数会话最终并不
 	// 走到交付（实测 58 个会话只有 1 个到达终态），等交付再抽就几乎什么都留不下。
 	if execErr == nil {
-		enqueueCodeMemoryExtraction(sessionID)
+		enqueueCodeMemoryExtraction(sessionID, codeMemoryTriggerAutomatic, false)
 	}
 	return run, run.Output, execErr
 }

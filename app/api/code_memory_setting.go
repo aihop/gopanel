@@ -13,6 +13,8 @@ import (
 
 const codeMemoryDefaultGrowthThreshold = 8
 
+var errCodeMemoryExtractionDisabled = errors.New("尚未启用记忆抽取")
+
 type codeMemorySettingView struct {
 	Enabled         bool   `json:"enabled"`
 	AccountID       uint   `json:"accountId"`
@@ -32,12 +34,12 @@ func buildCodeMemorySettingView(userID uint, setting *model.AICodeMemorySetting)
 		view.GrowthThreshold = setting.GrowthThreshold
 	}
 	if !view.Enabled {
-		view.ReadyReason = "尚未启用记忆抽取"
+		view.ReadyReason = "disabled"
 		return view
 	}
 	account, err := selectAIProviderAccountForMemory(userID, view.AccountID)
 	if err != nil {
-		view.ReadyReason = err.Error()
+		view.ReadyReason = "account_unavailable"
 		return view
 	}
 	view.Ready, view.AccountName = true, account.Name
@@ -119,7 +121,7 @@ func resolveCodeMemoryExtraction(userID uint) (*model.AIProviderAccount, codeMem
 		return nil, codeMemoryLLMConfig{}, 0, err
 	}
 	if setting == nil || !setting.Enabled {
-		return nil, codeMemoryLLMConfig{}, 0, errors.New("尚未启用记忆抽取")
+		return nil, codeMemoryLLMConfig{}, 0, errCodeMemoryExtractionDisabled
 	}
 	account, err := selectAIProviderAccountForMemory(userID, setting.AccountID)
 	if err != nil {

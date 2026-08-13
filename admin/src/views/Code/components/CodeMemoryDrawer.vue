@@ -1,27 +1,52 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
-import type { CodeMemoryEntry, CodeMemorySetting } from "@/api/interface/codeMemories"
+import type {
+	CodeMemoryAuditEvent,
+	CodeMemoryEntry,
+	CodeMemoryExtractionStatus,
+	CodeMemorySetting
+} from "@/api/interface/codeMemories"
 import type { AIProviderAccount } from "@/api/interface/aiAccounts"
 import Icon from "@/components/common/Icon.vue"
 import { codeMemoryMessages } from "../codeMemoryMessages"
+import CodeMemoryExtractionStatusPanel from "./CodeMemoryExtractionStatus.vue"
+import CodeMemoryProfile from "./CodeMemoryProfile.vue"
 
 const props = defineProps<{
 	show: boolean
 	entries: CodeMemoryEntry[]
+	summary: string
+	hasSession: boolean
 	setting: CodeMemorySetting | null
 	accounts: AIProviderAccount[]
+	extractionStatus: CodeMemoryExtractionStatus | null
+	auditEvents: CodeMemoryAuditEvent[]
 	loading: boolean
 	loadFailed: boolean
+	settingLoading: boolean
+	settingLoadFailed: boolean
+	statusLoading: boolean
+	statusLoadFailed: boolean
+	auditLoading: boolean
+	auditLoadFailed: boolean
 	saving: boolean
 	savingSetting: boolean
+	savingSummary: boolean
+	extracting: boolean
 	removingId: number
 }>()
 const emit = defineEmits<{
 	"update:show": [show: boolean]
 	refresh: []
+	refreshSetting: []
+	refreshStatus: []
+	refreshAudit: []
 	add: [content: string, allProjects: boolean]
 	remove: [id: number]
+	extract: []
+	saveSummary: [content: string]
+	clearSummary: []
 	saveSetting: [value: { enabled: boolean; accountId: number; growthThreshold: number }]
 }>()
 const { t } = useI18n({ messages: codeMemoryMessages })
@@ -39,7 +64,7 @@ watch(
 			draft.value = ""
 			allProjects.value = false
 		}
-	},
+	}
 )
 
 function submit() {
@@ -61,17 +86,24 @@ watch(
 		if (!value) return
 		settingDraft.value = {
 			accountId: value.accountId ?? 0,
-			growthThreshold: value.growthThreshold ?? 8,
+			growthThreshold: value.growthThreshold ?? 8
 		}
 	},
-	{ immediate: true },
+	{ immediate: true }
 )
 
 // 账号在系统设置里统一管理，这里只选用哪个。0 表示自动（按优先级挑）。
 const accountOptions = computed(() => [
 	{ label: t("code.memoryAccountAuto"), value: 0 },
-	...props.accounts.map(account => ({ label: `${account.name} · ${account.model}`, value: account.id })),
+	...props.accounts.map(account => ({ label: `${account.name} · ${account.model}`, value: account.id }))
 ])
+const settingReason = computed(() => {
+	const reason = props.setting?.readyReason
+	if (reason === "disabled" || reason === "account_unavailable") {
+		return t(`code.memorySettingReason.${reason}`)
+	}
+	return t("code.memoryDisabledHint")
+})
 
 function saveSetting(enabled: boolean) {
 	emit("saveSetting", { enabled, ...settingDraft.value })
@@ -79,48 +111,127 @@ function saveSetting(enabled: boolean) {
 </script>
 
 <template>
-	<n-drawer :show="show" placement="right" style="width: min(560px, 100vw)" @update:show="emit('update:show', $event)">
+	<n-drawer
+		:show="show"
+		placement="right"
+		style="width: min(560px, 100vw)"
+		@update:show="emit('update:show', $event)"
+	>
 		<n-drawer-content :title="t('code.memoryTitle')" closable body-content-style="padding: 16px;">
 			<div class="mb-3 flex items-center justify-between gap-3">
 				<p class="text-xs text-slate-400">{{ t("code.memoryHint") }}</p>
 				<div class="flex shrink-0 items-center gap-1">
-					<n-button quaternary circle size="small" :aria-label="t('code.memorySetting')" @click="showSetting = !showSetting">
+					<n-button
+						quaternary
+						circle
+						size="small"
+						:aria-label="t('code.memorySetting')"
+						@click="showSetting = !showSetting"
+					>
 						<template #icon><Icon name="mdi:cog-outline" :size="16" /></template>
 					</n-button>
-					<n-button quaternary circle size="small" :loading="loading" :aria-label="t('code.memoryRefresh')" @click="emit('refresh')">
+					<n-button
+						quaternary
+						circle
+						size="small"
+						:loading="loading"
+						:aria-label="t('code.memoryRefresh')"
+						@click="emit('refresh')"
+					>
 						<template #icon><Icon name="mdi:refresh" :size="16" /></template>
 					</n-button>
-					<n-button quaternary circle size="small" :aria-label="t('code.memoryAdd')" @click="composing = true">
+					<n-button
+						quaternary
+						circle
+						size="small"
+						:aria-label="t('code.memoryAdd')"
+						@click="composing = true"
+					>
 						<template #icon><Icon name="mdi:plus" :size="18" /></template>
 					</n-button>
 				</div>
+			</div>
+
+			<div class="mb-3 space-y-3">
+				<CodeMemoryExtractionStatusPanel
+					v-if="hasSession"
+					:status="extractionStatus"
+					:loading="statusLoading"
+					:load-failed="statusLoadFailed"
+					:extracting="extracting"
+					:ready="Boolean(setting?.ready)"
+					:setting-loading="settingLoading"
+					@refresh="emit('refreshStatus')"
+					@extract="emit('extract')"
+				/>
+				<CodeMemoryProfile
+					:summary="summary"
+					:audit-events="auditEvents"
+					:profile-loading="loading"
+					:profile-load-failed="loadFailed"
+					:audit-loading="auditLoading"
+					:audit-load-failed="auditLoadFailed"
+					:saving="savingSummary"
+					@refresh-profile="emit('refresh')"
+					@refresh-audit="emit('refreshAudit')"
+					@save="emit('saveSummary', $event)"
+					@clear="emit('clearSummary')"
+				/>
 			</div>
 
 			<!-- 没启用时把提示顶到最前：这时候列表必然是空的，
 			     不说清原因用户只会以为功能坏了 -->
 			<n-alert v-if="setting && !setting.ready && !showSetting" type="warning" :show-icon="false" class="mb-3">
 				<div class="text-xs font-medium">{{ t("code.memoryDisabledTitle") }}</div>
-				<p class="mt-1 text-[11px] leading-relaxed opacity-80">{{ setting.readyReason || t("code.memoryDisabledHint") }}</p>
+				<p class="mt-1 text-[11px] leading-relaxed opacity-80">{{ settingReason }}</p>
 				<n-button size="tiny" class="mt-2" @click="showSetting = true">{{ t("code.memorySetting") }}</n-button>
 			</n-alert>
 
-			<div v-if="showSetting" class="mb-3 flex flex-col gap-2 rounded-xl border border-slate-200/80 p-3">
-				<n-select v-model:value="settingDraft.accountId" size="small" :options="accountOptions" />
-				<p class="text-[11px] text-slate-400">{{ t("code.memoryAccountHint") }}</p>
-				<div class="flex items-center gap-2">
-					<span class="shrink-0 text-[11px] text-slate-500">{{ t("code.memoryThreshold") }}</span>
-					<n-input-number v-model:value="settingDraft.growthThreshold" size="small" :min="0" :max="100" class="w-24" />
-				</div>
-				<p class="text-[11px] text-slate-400">{{ t("code.memoryThresholdHint") }}</p>
-				<div class="flex justify-end gap-2">
-					<n-button size="tiny" quaternary :disabled="savingSetting" @click="showSetting = false">{{ t("code.cancel") }}</n-button>
-					<n-button v-if="setting?.enabled" size="tiny" :loading="savingSetting" @click="saveSetting(false)">
-						{{ t("code.disable") }}
-					</n-button>
-					<n-button size="tiny" type="primary" :loading="savingSetting" @click="saveSetting(true)">
-						{{ setting?.enabled ? t("code.save") : t("code.memoryEnable") }}
+			<div
+				v-if="showSetting"
+				class="mb-3 flex flex-col gap-2 rounded-xl border border-slate-200/80 p-3 dark:border-[var(--border-color)]"
+			>
+				<div v-if="settingLoading" class="flex h-20 items-center justify-center"><n-spin size="small" /></div>
+				<div
+					v-else-if="settingLoadFailed"
+					class="flex h-20 flex-col items-center justify-center gap-2 text-xs text-red-500"
+				>
+					<span>{{ t("code.memorySettingLoadFailed") }}</span>
+					<n-button text type="primary" size="tiny" @click="emit('refreshSetting')">
+						{{ t("code.retry") }}
 					</n-button>
 				</div>
+				<template v-else>
+					<n-select v-model:value="settingDraft.accountId" size="small" :options="accountOptions" />
+					<p class="text-[11px] text-slate-400">{{ t("code.memoryAccountHint") }}</p>
+					<div class="flex items-center gap-2">
+						<span class="shrink-0 text-[11px] text-slate-500">{{ t("code.memoryThreshold") }}</span>
+						<n-input-number
+							v-model:value="settingDraft.growthThreshold"
+							size="small"
+							:min="0"
+							:max="100"
+							style="width: 96px"
+						/>
+					</div>
+					<p class="text-[11px] text-slate-400">{{ t("code.memoryThresholdHint") }}</p>
+					<div class="flex justify-end gap-2">
+						<n-button size="tiny" quaternary :disabled="savingSetting" @click="showSetting = false">
+							{{ t("code.cancel") }}
+						</n-button>
+						<n-button
+							v-if="setting?.enabled"
+							size="tiny"
+							:loading="savingSetting"
+							@click="saveSetting(false)"
+						>
+							{{ t("code.disable") }}
+						</n-button>
+						<n-button size="tiny" type="primary" :loading="savingSetting" @click="saveSetting(true)">
+							{{ setting?.enabled ? t("code.save") : t("code.memoryEnable") }}
+						</n-button>
+					</div>
+				</template>
 			</div>
 
 			<div v-if="composing" class="mb-3 rounded-xl border border-slate-200/80 p-3">
@@ -137,8 +248,16 @@ function saveSetting(enabled: boolean) {
 						{{ t("code.memoryAllProjects") }}
 					</n-checkbox>
 					<div class="flex items-center gap-2">
-						<n-button size="tiny" quaternary :disabled="saving" @click="composing = false">{{ t("code.cancel") }}</n-button>
-						<n-button size="tiny" type="primary" :loading="saving" :disabled="!draft.trim()" @click="submit">
+						<n-button size="tiny" quaternary :disabled="saving" @click="composing = false">
+							{{ t("code.cancel") }}
+						</n-button>
+						<n-button
+							size="tiny"
+							type="primary"
+							:loading="saving"
+							:disabled="!draft.trim()"
+							@click="submit"
+						>
 							{{ t("code.memoryAdd") }}
 						</n-button>
 					</div>
@@ -148,11 +267,17 @@ function saveSetting(enabled: boolean) {
 			<div v-if="loading && entries.length === 0" class="flex min-h-[200px] items-center justify-center">
 				<n-spin size="small" />
 			</div>
-			<div v-else-if="loadFailed && entries.length === 0" class="flex min-h-[200px] flex-col items-center justify-center gap-2 text-xs text-red-500">
+			<div
+				v-else-if="loadFailed && entries.length === 0"
+				class="flex min-h-[200px] flex-col items-center justify-center gap-2 text-xs text-red-500"
+			>
 				<span>{{ t("code.memoryLoadFailed") }}</span>
 				<n-button text type="primary" size="tiny" @click="emit('refresh')">{{ t("code.retry") }}</n-button>
 			</div>
-			<div v-else-if="entries.length === 0 && !composing" class="flex min-h-[200px] flex-col items-center justify-center gap-2 text-center">
+			<div
+				v-else-if="entries.length === 0 && !composing"
+				class="flex min-h-[200px] flex-col items-center justify-center gap-2 text-center"
+			>
 				<div class="text-sm font-medium text-slate-600">{{ t("code.memoryEmptyTitle") }}</div>
 				<p class="max-w-[280px] text-xs text-slate-400">{{ t("code.memoryEmptyHint") }}</p>
 				<n-button size="small" class="mt-1" @click="composing = true">{{ t("code.memoryAddFirst") }}</n-button>

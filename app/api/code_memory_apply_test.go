@@ -18,7 +18,12 @@ func withCodeMemoryDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := database.AutoMigrate(&model.AICodeMemoryEntry{}, &model.AICodeMemorySummary{}); err != nil {
+	if err := database.AutoMigrate(
+		&model.AICodeMemoryEntry{},
+		&model.AICodeMemorySummary{},
+		&model.AICodeMemoryExtractionState{},
+		&model.AICodeMemoryAuditEvent{},
+	); err != nil {
 		t.Fatal(err)
 	}
 	previous := global.DB
@@ -179,6 +184,55 @@ func TestApplyCodeMemoryExtractionIgnoresOtherUsersEntries(t *testing.T) {
 	}
 }
 
+func TestApplyCodeMemoryExtractionIgnoresOtherProjectEntries(t *testing.T) {
+	withCodeMemoryDB(t)
+	foreignProject := model.AICodeMemoryEntry{
+		UserID: 3, ProjectID: 77, Scope: codeMemoryScopeProject, Kind: codeMemoryKindFact,
+		Tier: codeMemoryTierWorking, ModuleKey: "git", Content: "另一个项目的记忆", Status: codeMemoryStatusActive,
+	}
+	if err := global.DB.Create(&foreignProject).Error; err != nil {
+		t.Fatal(err)
+	}
+	item := memoryItem("当前项目的记忆", codeMemoryKindFact, codeMemoryScopeProject, "git")
+	item.MergeWith = strconv.FormatUint(uint64(foreignProject.ID), 10)
+	item.Archive = []string{strconv.FormatUint(uint64(foreignProject.ID), 10)}
+	result, err := applyCodeMemoryExtraction(codeMemoryExtractionResponse{
+		WorkingAdd: []codeMemoryExtractionItem{item},
+	}, applyContext())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Merged != 0 || result.Archived != 0 || result.Added != 1 {
+		t.Fatalf("跨项目引用应被忽略并退化为新增：%#v", result)
+	}
+	var reloaded model.AICodeMemoryEntry
+	if err := global.DB.First(&reloaded, foreignProject.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if reloaded.Content != "另一个项目的记忆" || reloaded.Status != codeMemoryStatusActive {
+		t.Fatalf("另一个项目的记忆被改写了：%#v", reloaded)
+	}
+}
+
+func TestApplyCodeMemoryExtractionCanReferenceUserMemoryAcrossProjects(t *testing.T) {
+	withCodeMemoryDB(t)
+	userMemory := model.AICodeMemoryEntry{
+		UserID: 3, ProjectID: 0, Scope: codeMemoryScopeUser, Kind: codeMemoryKindPreference,
+		Tier: codeMemoryTierWorking, ModuleKey: codeMemoryUserModuleKey, Content: "旧偏好", Status: codeMemoryStatusActive,
+	}
+	if err := global.DB.Create(&userMemory).Error; err != nil {
+		t.Fatal(err)
+	}
+	item := memoryItem("新偏好", codeMemoryKindPreference, codeMemoryScopeUser, codeMemoryUserModuleKey)
+	item.MergeWith = strconv.FormatUint(uint64(userMemory.ID), 10)
+	result, err := applyCodeMemoryExtraction(codeMemoryExtractionResponse{
+		WorkingAdd: []codeMemoryExtractionItem{item},
+	}, applyContext())
+	if err != nil || result.Merged != 1 || result.Added != 0 {
+		t.Fatalf("当前项目抽取应能合并用户级记忆：%#v, %v", result, err)
+	}
+}
+
 // 空摘要表示「保持不变」。当成清空会让一次无内容的抽取抹掉长期积累的画像。
 func TestApplyCodeMemoryExtractionKeepsSummaryWhenEmpty(t *testing.T) {
 	withCodeMemoryDB(t)
@@ -194,6 +248,70 @@ func TestApplyCodeMemoryExtractionKeepsSummaryWhenEmpty(t *testing.T) {
 	}
 	if summary.Content != "已有画像" {
 		t.Fatalf("空摘要不该清空已有画像：%q", summary.Content)
+	}
+}
+
+func TestApplyCodeMemoryExtractionAuditsSummaryChanges(t *testing.T) {
+	withCodeMemoryDB(t)
+	if _, err := applyCodeMemoryExtraction(codeMemoryExtractionResponse{UserSummary: "偏好先看结论"}, applyContext()); err != nil {
+		t.Fatal(err)
+	}
+	var event model.AICodeMemoryAuditEvent
+	if err := global.DB.First(&event).Error; err != nil {
+		t.Fatal(err)
+	}
+	if event.UserID != 3 || event.SessionID != 41 || event.Action != "summary_update" || event.Source != "extraction" {
+		t.Fatalf("画像审计上下文不完整：%#v", event)
+	}
+	if event.Before != "" || event.After != "偏好先看结论" {
+		t.Fatalf("画像审计内容不正确：%#v", event)
+	}
+}
+
+func TestFinishCodeMemoryExtractionStatusAdvancesCursorOnlyOnSuccess(t *testing.T) {
+	withCodeMemoryDB(t)
+	if err := updateCodeMemoryExtractionStatus(41, map[string]any{"last_message_id": 10}); err != nil {
+		t.Fatal(err)
+	}
+	result := codeMemoryApplyResult{Added: 1, Merged: 2, Replaced: 3, Archived: 4}
+	if err := finishCodeMemoryExtractionStatus(41, codeMemoryExtractionFailed, "provider failed", result, 25); err != nil {
+		t.Fatal(err)
+	}
+	failed, err := loadCodeMemoryExtractionStatus(41)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if failed.LastMessageID != 10 || failed.Status != codeMemoryExtractionFailed || failed.Reason != "provider failed" {
+		t.Fatalf("失败状态不应推进游标：%#v", failed)
+	}
+	if failed.Added != 1 || failed.Merged != 2 || failed.Replaced != 3 || failed.Archived != 4 || failed.CompletedAt == nil {
+		t.Fatalf("失败状态应保留结果与完成时间：%#v", failed)
+	}
+	if err := finishCodeMemoryExtractionStatus(41, codeMemoryExtractionSuccess, "", result, 25); err != nil {
+		t.Fatal(err)
+	}
+	succeeded, err := loadCodeMemoryExtractionStatus(41)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if succeeded.LastMessageID != 25 || succeeded.Status != codeMemoryExtractionSuccess {
+		t.Fatalf("成功状态应推进游标：%#v", succeeded)
+	}
+}
+
+func TestLoadCodeMemoryExtractionStateTreatsQueuedRowAsFirstExtraction(t *testing.T) {
+	withCodeMemoryDB(t)
+	if err := queueCodeMemoryExtractionStatus(41, codeMemoryTriggerAutomatic); err != nil {
+		t.Fatal(err)
+	}
+	if cursor := loadCodeMemoryExtractionState(41); cursor != -1 {
+		t.Fatalf("尚未成功抽取的排队状态不应成为游标基线：%d", cursor)
+	}
+	if err := finishCodeMemoryExtractionStatus(41, codeMemoryExtractionSuccess, "", codeMemoryApplyResult{}, 25); err != nil {
+		t.Fatal(err)
+	}
+	if cursor := loadCodeMemoryExtractionState(41); cursor != 25 {
+		t.Fatalf("成功抽取后应返回已保存游标：%d", cursor)
 	}
 }
 

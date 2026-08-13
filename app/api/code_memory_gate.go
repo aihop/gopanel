@@ -126,20 +126,9 @@ func loadCodeMemoryExtractionState(sessionID uint) int64 {
 	if err := global.DB.Where("session_id = ?", sessionID).First(&state).Error; err != nil {
 		return -1
 	}
+	// 排队时就会创建状态行；游标仍为 0 说明从未成功抽取，首次抽取必须放行。
+	if state.LastMessageID == 0 {
+		return -1
+	}
 	return int64(state.LastMessageID)
-}
-
-// saveCodeMemoryExtractionState 记下这次抽到哪条。
-// 抽取成功才写：失败后重来应当重新读同一批消息，而不是跳过它们。
-func saveCodeMemoryExtractionState(sessionID uint, lastMessageID uint) {
-	if global.DB == nil || sessionID == 0 || lastMessageID == 0 {
-		return
-	}
-	state := model.AICodeMemoryExtractionState{SessionID: sessionID, LastMessageID: lastMessageID}
-	err := global.DB.Where("session_id = ?", sessionID).
-		Assign(map[string]any{"last_message_id": lastMessageID}).
-		FirstOrCreate(&state).Error
-	if err != nil {
-		warnCodeDelivery("Save Code memory extraction state for session %d failed: %v", sessionID, err)
-	}
 }

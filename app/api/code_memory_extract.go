@@ -21,41 +21,70 @@ const codeMemoryTranscriptMaxMessages = 60
 //
 // 不阻塞调用方：抽取是"顺手做的沉淀"，失败了不该影响任务本身的结果。
 // 也正因如此，所有错误都只记日志，不向上冒泡。
-func enqueueCodeMemoryExtraction(sessionID uint) {
+func enqueueCodeMemoryExtraction(sessionID uint, trigger string, force bool) bool {
 	if sessionID == 0 || global.DB == nil {
-		return
+		return false
 	}
 	if _, loaded := codeMemoryExtracting.LoadOrStore(sessionID, struct{}{}); loaded {
-		return
+		return false
+	}
+	if err := queueCodeMemoryExtractionStatus(sessionID, trigger); err != nil {
+		codeMemoryExtracting.Delete(sessionID)
+		warnCodeDelivery("Queue Code memory extraction for session %d failed: %v", sessionID, err)
+		return false
 	}
 	go func() {
 		defer codeMemoryExtracting.Delete(sessionID)
-		if err := runCodeMemoryExtraction(context.Background(), sessionID); err != nil {
-			warnCodeDelivery("Extract Code memory for session %d skipped: %v", sessionID, err)
+		if err := startCodeMemoryExtractionStatus(sessionID, trigger); err != nil {
+			warnCodeDelivery("Start Code memory extraction for session %d failed: %v", sessionID, err)
+			return
+		}
+		result, lastMessageID, err := runCodeMemoryExtraction(context.Background(), sessionID, force)
+		status := codeMemoryExtractionSuccess
+		reason := ""
+		if err != nil {
+			status = codeMemoryExtractionFailed
+			reason = codeMemoryExtractionReasonFailed
+			var skip codeMemorySkipError
+			if errors.As(err, &skip) {
+				status = codeMemoryExtractionSkipped
+				reason = err.Error()
+			}
+			warnCodeDelivery("Extract Code memory for session %d did not complete: %v", sessionID, err)
+		}
+		if statusErr := finishCodeMemoryExtractionStatus(sessionID, status, reason, result, lastMessageID); statusErr != nil {
+			warnCodeDelivery("Finish Code memory extraction status for session %d failed: %v", sessionID, statusErr)
 		}
 	}()
+	return true
 }
 
-func runCodeMemoryExtraction(ctx context.Context, sessionID uint) error {
+func runCodeMemoryExtraction(ctx context.Context, sessionID uint, force bool) (codeMemoryApplyResult, uint, error) {
+	result := codeMemoryApplyResult{}
 	var session model.AIDevSession
 	if err := global.DB.First(&session, sessionID).Error; err != nil {
-		return err
+		return result, 0, err
 	}
 	account, config, threshold, err := resolveCodeMemoryExtraction(session.UserID)
 	if err != nil {
-		return err
+		if errors.Is(err, errCodeMemoryExtractionDisabled) {
+			return result, 0, codeMemorySkipError{reason: "disabled"}
+		}
+		return result, 0, err
 	}
 	transcript, lastMessageID, newMessages, err := loadCodeMemoryTranscript(sessionID)
 	if err != nil {
-		return err
+		return result, 0, err
 	}
 	if strings.TrimSpace(transcript) == "" {
-		return errors.New("会话没有可抽取的内容")
+		return result, 0, codeMemorySkipError{reason: "empty_transcript"}
 	}
 	// 闸门在模型调用之前：挡掉的这些本来就抽不出东西，
 	// 花一次调用去确认它没东西可抽是纯粹的浪费。
-	if gate := evaluateCodeMemoryGate(sessionID, transcript, threshold, newMessages); gate != codeMemoryGateAllow {
-		return errors.New("未达抽取条件：" + gate)
+	if !force {
+		if gate := evaluateCodeMemoryGate(sessionID, transcript, threshold, newMessages); gate != codeMemoryGateAllow {
+			return result, 0, codeMemorySkipError{reason: gate}
+		}
 	}
 	userEntries, projectEntries, summary := loadCodeMemoryForPrompt(session.UserID, session.ProjectID)
 	prompt := buildCodeMemoryExtractionPrompt(codeMemoryPromptInput{
@@ -73,21 +102,19 @@ func runCodeMemoryExtraction(ctx context.Context, sessionID uint) error {
 		{Role: "user", Content: prompt},
 	}, codeMemoryOptionsForAccount(account, codeMemoryExtractionSchema()))
 	if err != nil {
-		return err
+		return result, 0, err
 	}
 	response, err := parseCodeMemoryExtractionResponse(raw)
 	if err != nil {
-		return err
+		return result, 0, err
 	}
-	if _, err := applyCodeMemoryExtraction(response, codeMemoryApplyContext{
+	result, err = applyCodeMemoryExtraction(response, codeMemoryApplyContext{
 		UserID: session.UserID, ProjectID: session.ProjectID, SessionID: sessionID,
-	}); err != nil {
-		return err
+	})
+	if err != nil {
+		return result, 0, err
 	}
-	// 落库成功才推进游标：中途失败时下一次应当重读同一批消息，
-	// 而不是把它们当成已经消化过。
-	saveCodeMemoryExtractionState(sessionID, lastMessageID)
-	return nil
+	return result, lastMessageID, nil
 }
 
 func codeMemoryProjectName(projectID uint) string {
