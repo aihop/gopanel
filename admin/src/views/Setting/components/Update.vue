@@ -254,23 +254,29 @@
 
 <script setup lang="ts">
 import { useDialog, useMessage } from "naive-ui"
+import { useI18n } from "vue-i18n"
 import SystemUpdateProvider from "@/components/system/SystemUpdateProvider.vue"
 
 const message = useMessage()
 const dialog = useDialog()
+const { t } = useI18n()
 
 const handleCheckUpdate = async (u: any) => {
-	await u.checkUpdate()
-	if (u.updateInfo.needUpdate) {
-		message.warning("发现新版本，建议及时更新")
+	const checked = await u.checkUpdate()
+	if (!checked) {
+		message.error(t("setting.updateCheckFailed"))
+		return
+	}
+	if (u.effectiveNeedUpdate === true) {
+		message.warning(t("setting.updateAvailable"))
 	} else {
-		message.success("当前已是最新版本")
+		message.success(t("setting.noUpgrade"))
 	}
 }
 
 const handleUpdate = async (u: any) => {
-	if (!u.updateInfo.needUpdate) {
-		message.warning("当前已是最新版本")
+	if (u.effectiveNeedUpdate !== true) {
+		message.warning(t("setting.noUpgrade"))
 		return
 	}
 

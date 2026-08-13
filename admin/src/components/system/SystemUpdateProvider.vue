@@ -231,7 +231,7 @@ const fetchUpdateInfo = async (silent = false) => {
 }
 
 const checkUpdate = async () => {
-	await fetchUpdateInfo(false)
+	return fetchUpdateInfo(false)
 }
 
 const appendLogLine = (line: string) => {

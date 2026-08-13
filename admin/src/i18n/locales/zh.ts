@@ -1900,6 +1900,8 @@ export default {
 
 		upgrading: "正在升级中，请稍候...",
 		upgradeHelper: "升级操作需要重启 GoPanel 服务，是否继续？",
+		updateAvailable: "发现新版本，建议及时更新",
+		updateCheckFailed: "检查更新失败，请稍后重试",
 		noUpgrade: "当前已经是最新版本",
 		upgradeNotes: "更新内容",
 		upgradeNow: "立即更新",

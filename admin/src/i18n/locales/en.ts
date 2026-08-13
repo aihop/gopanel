@@ -2087,6 +2087,8 @@ export default {
 			"Rolling back this recovery will replace all files from this recovery, and may require restarting Docker and GoPanel services. Do you want to continue?",
 
 		upgradeHelper: "The upgrade requires restarting the GoPanel service. Do you want to continue?",
+		updateAvailable: "A new version is available. Updating is recommended.",
+		updateCheckFailed: "Failed to check for updates. Please try again later.",
 		noUpgrade: "It is currently the latest version",
 		upgradeNotes: "Release note",
 		upgradeNow: "Upgrade now",
