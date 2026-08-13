@@ -7,7 +7,7 @@
 <p align="center"><strong>The self-hosted AI development and delivery cockpit for solo founders and small teams.</strong></p>
 
 <p align="center">
-  Delegate development from your phone, follow structured progress, review code, approve risky actions, and operate the infrastructure that ships your product.
+  Delegate development from your phone, run rootless containers, automate HTTPS, manage data and backups, and operate everything required to ship your product.
 </p>
 
 <p align="center">
@@ -110,13 +110,57 @@ GoPanel also provides the infrastructure needed to turn code into a running prod
 
 - **Pipelines and releases**: fetch source, run scripts, build files or container images, retain logs and records, and publish versioned artifacts.
 - **Delivery Flow**: coordinate a selected code baseline with a pipeline and environment-oriented run state as the end-to-end workflow is consolidated.
-- **Websites**: host static sites, reverse proxies, and containerized applications; manage domains, upstreams, access logs, and deployment history.
-- **Certificates and CDN**: issue and renew certificates, manage ACME accounts, and push certificates through configured CDN rules.
-- **Containers**: manage Docker or Podman containers, Compose projects, images, networks, volumes, logs, ports, and resource state.
-- **Databases**: install database services and work with databases, tables, SQL, imports, exports, transfers, backups, and connection information from the panel.
-- **Applications and processes**: install common services, operate long-running processes, inspect host resources, schedule jobs, and manage backups.
 - **Multiple nodes**: observe registered servers and route controlled HTTP and WebSocket operations through the main control plane.
 - **Built-in access and updates**: serve the panel without an extra web server, manage its secure access entry, and update the installed binary through the release channel.
+
+## Practical Production Features
+
+AI delivery is the differentiator, but GoPanel is also a practical server panel for the work that keeps a product online every day.
+
+### Websites, domains, and automatic HTTPS
+
+- Host static sites, reverse proxies, and containerized web applications from one website workspace.
+- Manage domains, upstreams, access logs, deployment history, version switching, and application snapshots.
+- Create ACME accounts and obtain certificates without assembling a separate certificate toolchain.
+- Seed a daily certificate-renewal job automatically and renew every certificate that has automatic renewal enabled and is approaching expiry.
+- Upload or manage existing certificates when automatic issuance is not appropriate.
+- Define certificate push rules so newly issued or renewed certificates are automatically deployed to configured CDN providers and domains.
+- Follow issuance, renewal, and CDN deployment through detailed logs instead of treating HTTPS as a black box.
+
+### A real database management workspace
+
+- Connect local, remote, or container-discovered **MySQL, MariaDB, and PostgreSQL** servers.
+- Create and delete databases; manage database users, passwords, hosts, and privileges.
+- Browse tables and data with pagination, search records, and insert, edit, or delete rows directly.
+- Inspect and modify table structures, columns, indexes, views, routines, triggers, sequences, and database metadata where supported by the engine.
+- Run SQL in the built-in console and keep common administration work inside GoPanel.
+- Import SQL or CSV from pasted content or uploaded files, including chunked import for larger datasets.
+- Export CSV or SQL with column, filter, and schema options; copy tables and perform engine-appropriate maintenance operations.
+- Back up, restore, and transfer database data without switching to a separate database administration product.
+
+### Backups, recovery, and scheduled maintenance
+
+- Create and restore backups for databases, websites, and installed applications, with progress logs and downloadable backup records.
+- Recover from an existing record or an uploaded backup file.
+- Store backups locally or use configured **S3, OSS, SFTP, OneDrive, MinIO, COS, KODO, and WebDAV** targets.
+- Schedule database backups, certificate renewal, log cleanup, and shell tasks from the same job center.
+- Enable, disable, run immediately, and inspect execution records for every scheduled task.
+
+### Containers, applications, files, and host operations
+
+- Manage rootless Podman or Docker containers, Compose projects, images, registries, networks, volumes, logs, ports, and resource state.
+- Install common databases, middleware, developer tools, and self-hosted applications; inspect connection details and manage installed versions and parameters.
+- Detect and repair common runtime problems including Compose availability, Podman socket/session setup, subordinate IDs, image short names, and port conflicts.
+- Upload, download, edit, move, compress, extract, search, and permission files from the built-in file manager.
+- Inspect processes and ports, operate long-running services, view host resources, and use the terminal when direct intervention is required.
+
+### Host visibility, firewall, audit, and alerts
+
+- Monitor CPU, memory, disks, network traffic, I/O, processes, and key host conditions from one dashboard.
+- Manage firewall port, IP, and forwarding rules without losing visibility into the effective policy.
+- Scan for large disk usage and perform protected cleanup with explicit targets instead of relying on opaque cleanup scripts.
+- Review login, SSH, operation, terminal, and system logs so important changes remain traceable.
+- Receive notifications for disk, container, node, certificate, Code, and security events, with debouncing, silence windows, and recovery messages to reduce alert noise.
 
 ### Production problems can return to Code
 
@@ -140,6 +184,7 @@ GoPanel is especially useful when one person maintains several SaaS products, cl
 - **Replace tool switching**: connect code agents, Git, CI/CD, containers, websites, certificates, databases, and monitoring in one workspace.
 - **Keep the stack yours**: run the control plane, project context, operational data, and credentials on infrastructure you control.
 - **Lower maintenance cost**: use a Go single-binary control plane with embedded web assets and a Docker/Podman-first application model.
+- **Automate recurring operations**: let certificate renewal, CDN deployment, database backups, and maintenance jobs run without becoming another personal checklist.
 - **Bootstrap products faster**: install common databases, middleware, and self-hosted applications without rebuilding the same environment by hand.
 
 GoPanel starts with solo founders because the need is immediate and the workflow is clear. The same foundation can grow with a small team through shared projects, roles, approval boundaries, and multiple managed nodes.
