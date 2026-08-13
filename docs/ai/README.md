@@ -53,6 +53,7 @@
 
 ## 关键文档索引
 
+- [GoPanel Flow 产品与开发规划](./flow.md)
 - [AI 任务契约（目标、范围、风险与验收）](../../.ai/README.md)
 - [知识库（已解决问题 & 技术债）](./knowledge-base.md)
 - [文件拆分方案（重构参考）](./refactoring.md)
