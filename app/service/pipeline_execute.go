@@ -89,7 +89,7 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 	logger.Info("发布目录: %s", releaseDir)
 	if pipelineSourceType(p) == "code" {
 		s.recordRepo.UpdateStatus(recordID, "cloning", "")
-		commitHash, sourceDigest, err := s.prepareCodeProjectSnapshot(ctx, logger, p, workspaceDir, record.ExpectedCommit)
+		commitHash, sourceDigest, err := s.prepareCodePipelineSource(ctx, logger, p, record, workspaceDir)
 		if err != nil {
 			s.recordRepo.UpdateStatus(recordID, "failed", fmt.Sprintf("Code snapshot failed: %v", err))
 			logger.Error("Code 项目快照失败: %v", err)

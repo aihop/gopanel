@@ -22,6 +22,15 @@ func (r *FlowRepo) CreateRun(item *model.FlowRun, stage *model.FlowStageRun) err
 	})
 }
 
+func (r *FlowRepo) DeleteRun(id uint) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("flow_run_id = ?", id).Delete(&model.FlowStageRun{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&model.FlowRun{}, id).Error
+	})
+}
+
 func (r *FlowRepo) GetRun(id uint, userID uint, includeAll bool) (*model.FlowRun, error) {
 	query := r.db.Model(&model.FlowRun{}).
 		Joins("JOIN flows ON flows.id = flow_runs.flow_id")

@@ -84,6 +84,10 @@ func (s *FlowRunApplicationService) finishFlowBuild(run *model.FlowRun, record *
 		s.failStage(run, "building", "pipeline_identity_mismatch", "pipeline record does not match the locked flow version and commit")
 		return
 	}
+	if run.SourceType == "code_delivery" && strings.TrimSpace(record.SourceDigest) != strings.TrimSpace(run.SourceDigest) {
+		s.failStage(run, "building", "pipeline_source_mismatch", "pipeline record does not match the locked Code delivery source")
+		return
+	}
 	now := time.Now()
 	_ = s.repo.UpsertStage(&model.FlowStageRun{
 		FlowRunID: run.ID, Stage: "building", Attempt: 1, Status: "success",

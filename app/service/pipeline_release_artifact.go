@@ -46,6 +46,9 @@ func buildPipelineReleaseArtifact(ctx context.Context, pipeline *model.Pipeline,
 		PipelineID:       pipeline.ID,
 		PipelineRecordID: record.ID,
 		Commit:           strings.TrimSpace(record.CommitHash),
+		SourceType:       strings.TrimSpace(record.SourceType),
+		SourceID:         record.SourceID,
+		SourceDigest:     strings.TrimSpace(record.SourceDigest),
 		Runtime:          pipelineArtifactRuntime(pipeline, record),
 	}
 

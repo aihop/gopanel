@@ -13,6 +13,9 @@ type ArtifactManifest struct {
 	PipelineID       uint                    `json:"pipelineId"`
 	PipelineRecordID uint                    `json:"pipelineRecordId"`
 	Commit           string                  `json:"commit"`
+	SourceType       string                  `json:"sourceType,omitempty"`
+	SourceID         uint                    `json:"sourceId,omitempty"`
+	SourceDigest     string                  `json:"sourceDigest,omitempty"`
 	Digest           string                  `json:"digest"`
 	SizeBytes        int64                   `json:"sizeBytes,omitempty"`
 	Image            *ArtifactImageManifest  `json:"image,omitempty"`

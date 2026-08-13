@@ -19,6 +19,7 @@ export namespace Flow {
 		name: string
 		pipelineId: number
 		pipelineName: string
+		pipelineSourceType: "git" | "code"
 		enabled: boolean
 		autoStartAfterCodeDelivery: boolean
 		createdBy: number
@@ -35,6 +36,13 @@ export namespace Flow {
 	export interface CreateInput {
 		name: string
 		projectId: number
+		pipelineId: number
+		autoStartAfterCodeDelivery: boolean
+		environments: CreateEnvironment[]
+	}
+
+	export interface UpdateInput {
+		name: string
 		pipelineId: number
 		autoStartAfterCodeDelivery: boolean
 		environments: CreateEnvironment[]
@@ -70,7 +78,12 @@ export namespace Flow {
 		pipelineName: string
 		version: string
 		sourceBranch: string
+		sourceType: "git" | "code_delivery"
 		sourceCommit: string
+		sourceDigest: string
+		sourceTaskTitle: string
+		sourceRepositories?: SourceRepository[]
+		codeDeliveryJobId: number
 		pipelineRecordId: number
 		releaseId: number
 		artifactDigest: string
@@ -85,7 +98,25 @@ export namespace Flow {
 
 	export interface RunCreateInput {
 		flowId: number
-		sourceCommit: string
+		codeDeliveryJobId?: number
+		sourceCommit?: string
 		version?: string
+	}
+
+	export interface SourceRepository {
+		name: string
+		workspacePath: string
+		targetBranch: string
+		commit: string
+	}
+
+	export interface CodeDeliverySource {
+		jobId: number
+		sessionId: number
+		taskId: number
+		taskTitle: string
+		completedAt?: string
+		sourceDigest: string
+		repositories: SourceRepository[]
 	}
 }

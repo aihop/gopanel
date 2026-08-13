@@ -1,11 +1,15 @@
 package service
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
+	"github.com/aihop/gopanel/constant"
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 )
@@ -16,7 +20,10 @@ func flowTestDatabase(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := database.AutoMigrate(&model.AIProject{}, &model.Pipeline{}, &model.Website{}); err != nil {
+	if err := database.AutoMigrate(
+		&model.AIProject{}, &model.AITask{}, &model.AICodeDeliveryJob{}, &model.AICodeDelivery{},
+		&model.AIDevSessionRepository{}, &model.Pipeline{}, &model.Website{},
+	); err != nil {
 		t.Fatal(err)
 	}
 	if err := repo.NewFlow(database).MigrateTable(); err != nil {
@@ -29,6 +36,83 @@ func flowTestDatabase(t *testing.T) *gorm.DB {
 		t.Fatal(err)
 	}
 	return database
+}
+
+func TestFlowRunLocksCompletedCodeDeliveryManifest(t *testing.T) {
+	database := flowTestDatabase(t)
+	first := flowTestGitRepository(t, "api")
+	second := flowTestGitRepository(t, "web")
+	project := model.AIProject{Name: "Multi", CreatorID: 7, SourceDirs: []string{first, second}, PrimaryRepository: first}
+	if err := database.Create(&project).Error; err != nil {
+		t.Fatal(err)
+	}
+	pipeline := model.Pipeline{Name: "Build", SourceType: "code", CodeProjectID: project.ID, Version: "1.0.0", BuildImage: "host"}
+	website := model.Website{Alias: "preview", PrimaryDomain: "preview.example.com", Type: "proxy", Status: "Running", Protocol: "HTTP"}
+	for _, item := range []interface{}{&pipeline, &website} {
+		if err := database.Create(item).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	flow, err := NewFlowApplication(database).Create(FlowCreateInput{
+		Name: "Delivery", ProjectID: project.ID, PipelineID: pipeline.ID,
+		Environments: []FlowEnvironmentInput{{Name: "preview", WebsiteID: website.ID}},
+	}, 7, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := model.AITask{UserID: 7, ProjectID: project.ID, Title: "multi repository change", WorkDir: first}
+	if err := database.Create(&task).Error; err != nil {
+		t.Fatal(err)
+	}
+	firstCommit := gitInRepo(t, first, "rev-parse", "HEAD")
+	secondCommit := gitInRepo(t, second, "rev-parse", "HEAD")
+	repositories, _ := json.Marshal([]flowStoredDeliveryRepository{
+		{RepositoryName: "api", RepositoryPath: first, Status: "completed", TargetBranch: "main", Commit: firstCommit},
+		{RepositoryName: "web", RepositoryPath: second, Status: "completed", TargetBranch: "main", Commit: secondCommit},
+	})
+	now := time.Now()
+	job := model.AICodeDeliveryJob{
+		SessionID: 91, TaskID: task.ID, ProjectID: project.ID, UserID: 7, Status: "completed",
+		Stage: "completed", Progress: 100, RepositoryResults: string(repositories), CompletedAt: &now,
+	}
+	if err := database.Create(&job).Error; err != nil {
+		t.Fatal(err)
+	}
+	service := NewFlowRunApplication(database)
+	service.autoStart = false
+	run, err := service.Create(FlowRunCreateInput{FlowID: flow.ID, CodeDeliveryJobID: job.ID}, 7, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run.SourceType != "code_delivery" || run.CodeDeliveryJobID != job.ID || run.TaskID != task.ID || run.SourceDigest == "" {
+		t.Fatalf("flow run source was not locked: %+v", run)
+	}
+	var manifest flowSourceManifest
+	if err := json.Unmarshal([]byte(run.SourceManifest), &manifest); err != nil || len(manifest.Repositories) != 2 {
+		t.Fatalf("source manifest = %+v, %v", manifest, err)
+	}
+	if err := database.Model(&job).Updates(map[string]any{"repository_results": "[]", "status": "failed"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	stored, err := service.Get(run.ID, 7, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.SourceTaskTitle != task.Title || len(stored.SourceRepositories) != 2 || stored.SourceDigest != run.SourceDigest {
+		t.Fatalf("locked source changed with delivery job: %+v", stored)
+	}
+}
+
+func flowTestGitRepository(t *testing.T, content string) string {
+	t.Helper()
+	repository := t.TempDir()
+	gitInRepo(t, repository, "init", "-q", "-b", "main")
+	if err := os.WriteFile(filepath.Join(repository, "source.txt"), []byte(content+"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	gitInRepo(t, repository, "add", "source.txt")
+	gitInRepo(t, repository, "-c", "user.name=GoPanel Test", "-c", "user.email=test@gopanel.local", "commit", "-q", "-m", "initial")
+	return repository
 }
 
 func TestFlowCreatePersistsConfigurationAndEnvironments(t *testing.T) {
@@ -112,6 +196,116 @@ func TestFlowCreateRejectsCodePipelineFromAnotherProject(t *testing.T) {
 	}, 7, false)
 	if err == nil {
 		t.Fatal("Code pipeline bound to another project should be rejected")
+	}
+}
+
+func TestFlowUpdateReplacesConfigurationAndPreservesProject(t *testing.T) {
+	database := flowTestDatabase(t)
+	project := model.AIProject{Name: "Shoply", CreatorID: 7}
+	otherProject := model.AIProject{Name: "Other", CreatorID: 7}
+	initialPipeline := model.Pipeline{Name: "Initial Build", PipelineKey: "initial-build", BuildImage: "host"}
+	replacementPipeline := model.Pipeline{Name: "Replacement Build", PipelineKey: "replacement-build", SourceType: "code", BuildImage: "host"}
+	foreignPipeline := model.Pipeline{Name: "Foreign Build", PipelineKey: "foreign-build", SourceType: "code", BuildImage: "host"}
+	preview := model.Website{Alias: "preview", PrimaryDomain: "preview.example.com", Type: "proxy", Status: "Running", Protocol: "HTTP"}
+	production := model.Website{Alias: "production", PrimaryDomain: "example.com", Type: "proxy", Status: "Running", Protocol: "HTTP"}
+	for _, item := range []interface{}{&project, &otherProject, &initialPipeline, &preview, &production} {
+		if err := database.Create(item).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	replacementPipeline.CodeProjectID = project.ID
+	foreignPipeline.CodeProjectID = otherProject.ID
+	for _, pipeline := range []*model.Pipeline{&replacementPipeline, &foreignPipeline} {
+		if err := database.Create(pipeline).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	flow, err := NewFlowApplication(database).Create(FlowCreateInput{
+		Name: "Initial Delivery", ProjectID: project.ID, PipelineID: initialPipeline.ID,
+		Environments: []FlowEnvironmentInput{{Name: "preview", WebsiteID: preview.ID}},
+	}, 7, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewFlowApplication(database).Update(flow.ID, FlowUpdateInput{
+		Name: "Forbidden", PipelineID: initialPipeline.ID,
+		Environments: []FlowEnvironmentInput{{Name: "preview", WebsiteID: preview.ID}},
+	}, 9, false); !isBusinessError(err, constant.ErrFlowForbidden) {
+		t.Fatalf("expected owner check, got %v", err)
+	}
+	if _, err := NewFlowApplication(database).Update(flow.ID, FlowUpdateInput{
+		Name: "Mismatch", PipelineID: foreignPipeline.ID,
+		Environments: []FlowEnvironmentInput{{Name: "preview", WebsiteID: preview.ID}},
+	}, 7, false); !isBusinessError(err, constant.ErrFlowPipelineProjectMismatch) {
+		t.Fatalf("expected project mismatch, got %v", err)
+	}
+	updated, err := NewFlowApplication(database).Update(flow.ID, FlowUpdateInput{
+		Name: "Production Delivery", PipelineID: replacementPipeline.ID, AutoStartAfterCodeDelivery: true,
+		Environments: []FlowEnvironmentInput{{Name: "production", WebsiteID: production.ID, ApprovalRequired: true}},
+	}, 7, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.ProjectID != project.ID || updated.PipelineID != replacementPipeline.ID || !updated.AutoStartAfterCodeDelivery {
+		t.Fatalf("unexpected updated flow: %+v", updated)
+	}
+	stored, err := repo.NewFlow(database).Get(flow.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.Name != "Production Delivery" || stored.ProjectID != project.ID || len(stored.Environments) != 1 || stored.Environments[0].Name != "production" {
+		t.Fatalf("configuration was not replaced atomically: %+v", stored)
+	}
+}
+
+func TestFlowDeleteRemovesUnusedConfigurationAndProtectsHistory(t *testing.T) {
+	database := flowTestDatabase(t)
+	project := model.AIProject{Name: "Shoply", CreatorID: 7}
+	pipeline := model.Pipeline{Name: "Build", BuildImage: "host"}
+	website := model.Website{Alias: "preview", PrimaryDomain: "preview.example.com", Type: "proxy", Status: "Running", Protocol: "HTTP"}
+	for _, item := range []interface{}{&project, &pipeline, &website} {
+		if err := database.Create(item).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	create := func(name string) *model.Flow {
+		flow, err := NewFlowApplication(database).Create(FlowCreateInput{
+			Name: name, ProjectID: project.ID, PipelineID: pipeline.ID,
+			Environments: []FlowEnvironmentInput{{Name: "preview", WebsiteID: website.ID}},
+		}, 7, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return flow
+	}
+	unused := create("Unused")
+	if err := NewFlowApplication(database).Delete(unused.ID, 9, false); !isBusinessError(err, constant.ErrFlowForbidden) {
+		t.Fatalf("expected owner check, got %v", err)
+	}
+	if err := NewFlowApplication(database).Delete(unused.ID, 7, false); err != nil {
+		t.Fatal(err)
+	}
+	var flowCount, environmentCount int64
+	database.Model(&model.Flow{}).Where("id = ?", unused.ID).Count(&flowCount)
+	database.Model(&model.FlowEnvironment{}).Where("flow_id = ?", unused.ID).Count(&environmentCount)
+	if flowCount != 0 || environmentCount != 0 {
+		t.Fatalf("unused configuration remains: flow=%d environments=%d", flowCount, environmentCount)
+	}
+
+	protected := create("Protected")
+	run := model.FlowRun{
+		FlowID: protected.ID, ProjectID: project.ID, PipelineID: pipeline.ID, Version: "1.0.0",
+		SourceType: "git", SourceCommit: "0123456789abcdef0123456789abcdef01234567",
+		CurrentStage: "created", Status: "queued", RequestedBy: 7,
+	}
+	if err := database.Create(&run).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := NewFlowApplication(database).Delete(protected.ID, 7, false); !isBusinessError(err, constant.ErrFlowDeleteHistory) {
+		t.Fatalf("expected history protection, got %v", err)
+	}
+	if err := database.First(&model.Flow{}, protected.ID).Error; err != nil {
+		t.Fatalf("protected flow was deleted: %v", err)
 	}
 }
 

@@ -25,6 +25,13 @@ type FlowCreateInput struct {
 	Environments               []FlowEnvironmentInput `json:"environments"`
 }
 
+type FlowUpdateInput struct {
+	Name                       string                 `json:"name"`
+	PipelineID                 uint                   `json:"pipelineId"`
+	AutoStartAfterCodeDelivery bool                   `json:"autoStartAfterCodeDelivery"`
+	Environments               []FlowEnvironmentInput `json:"environments"`
+}
+
 type FlowApplicationService struct {
 	db   *gorm.DB
 	repo *repo.FlowRepo
@@ -64,12 +71,21 @@ func (s *FlowApplicationService) Page(userID uint, includeAll bool, page, limit 
 	for index := range items {
 		items[index].ProjectName = projectNames[items[index].ProjectID]
 		items[index].PipelineName = pipelineNames[items[index].PipelineID]
+		items[index].PipelineSourceType = loadFlowPipelineSourceType(s.db, items[index].PipelineID)
 		for envIndex := range items[index].Environments {
 			environment := &items[index].Environments[envIndex]
 			environment.WebsiteName = websiteNames[environment.WebsiteID]
 		}
 	}
 	return total, items, nil
+}
+
+func loadFlowPipelineSourceType(db *gorm.DB, id uint) string {
+	var pipeline model.Pipeline
+	if db.Select("source_type").First(&pipeline, id).Error != nil {
+		return "git"
+	}
+	return pipelineSourceType(&pipeline)
 }
 
 func loadFlowNames(db *gorm.DB, table string, ids []uint) (map[uint]string, error) {
@@ -124,9 +140,6 @@ func (s *FlowApplicationService) Create(input FlowCreateInput, userID uint, incl
 	if input.PipelineID == 0 {
 		return nil, buserr.New(constant.ErrFlowPipelineRequired)
 	}
-	if len(input.Environments) == 0 {
-		return nil, buserr.New(constant.ErrFlowEnvironmentRequired)
-	}
 	var project model.AIProject
 	if err := s.db.First(&project, input.ProjectID).Error; err != nil {
 		return nil, buserr.New(constant.ErrFlowProjectNotFound)
@@ -148,18 +161,9 @@ func (s *FlowApplicationService) Create(input FlowCreateInput, userID uint, incl
 	if count > 0 {
 		return nil, buserr.New(constant.ErrFlowProjectExists)
 	}
-	environments := make([]model.FlowEnvironment, 0, len(input.Environments))
-	seen := make(map[string]bool)
-	for index, raw := range input.Environments {
-		name := strings.ToLower(strings.TrimSpace(raw.Name))
-		if (name != "preview" && name != "production") || seen[name] || raw.WebsiteID == 0 {
-			return nil, buserr.New(constant.ErrFlowEnvironmentInvalid)
-		}
-		seen[name] = true
-		if err := s.db.First(&model.Website{}, raw.WebsiteID).Error; err != nil {
-			return nil, buserr.New(constant.ErrFlowWebsiteNotFound)
-		}
-		environments = append(environments, defaultFlowEnvironment(name, raw, index))
+	environments, err := s.validateEnvironments(input.Environments)
+	if err != nil {
+		return nil, err
 	}
 	item := &model.Flow{
 		ProjectID: input.ProjectID, Name: input.Name, PipelineID: input.PipelineID, Enabled: true,
@@ -172,6 +176,80 @@ func (s *FlowApplicationService) Create(input FlowCreateInput, userID uint, incl
 		return nil, err
 	}
 	return item, nil
+}
+
+func (s *FlowApplicationService) Update(id uint, input FlowUpdateInput, userID uint, includeAll bool) (*model.Flow, error) {
+	item, err := s.getAccessible(id, userID, includeAll)
+	if err != nil {
+		return nil, err
+	}
+	input.Name = strings.TrimSpace(input.Name)
+	if input.Name == "" {
+		return nil, buserr.New(constant.ErrFlowNameRequired)
+	}
+	if input.PipelineID == 0 {
+		return nil, buserr.New(constant.ErrFlowPipelineRequired)
+	}
+	var pipeline model.Pipeline
+	if err := s.db.First(&pipeline, input.PipelineID).Error; err != nil {
+		return nil, buserr.New(constant.ErrFlowPipelineNotFound)
+	}
+	if pipelineSourceType(&pipeline) == "code" && pipeline.CodeProjectID != item.ProjectID {
+		return nil, buserr.New(constant.ErrFlowPipelineProjectMismatch)
+	}
+	environments, err := s.validateEnvironments(input.Environments)
+	if err != nil {
+		return nil, err
+	}
+	item.Name = input.Name
+	item.PipelineID = input.PipelineID
+	item.AutoStartAfterCodeDelivery = input.AutoStartAfterCodeDelivery
+	if err := s.repo.UpdateWithEnvironments(item, environments); err != nil {
+		return nil, err
+	}
+	item.Environments = environments
+	return item, nil
+}
+
+func (s *FlowApplicationService) Delete(id uint, userID uint, includeAll bool) error {
+	if _, err := s.getAccessible(id, userID, includeAll); err != nil {
+		return err
+	}
+	return s.repo.DeleteConfiguration(id)
+}
+
+func (s *FlowApplicationService) getAccessible(id uint, userID uint, includeAll bool) (*model.Flow, error) {
+	item, err := s.repo.Get(id)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, buserr.New(constant.ErrFlowNotFound)
+		}
+		return nil, err
+	}
+	if !includeAll && item.CreatedBy != userID {
+		return nil, buserr.New(constant.ErrFlowForbidden)
+	}
+	return item, nil
+}
+
+func (s *FlowApplicationService) validateEnvironments(inputs []FlowEnvironmentInput) ([]model.FlowEnvironment, error) {
+	if len(inputs) == 0 {
+		return nil, buserr.New(constant.ErrFlowEnvironmentRequired)
+	}
+	environments := make([]model.FlowEnvironment, 0, len(inputs))
+	seen := make(map[string]bool)
+	for index, raw := range inputs {
+		name := strings.ToLower(strings.TrimSpace(raw.Name))
+		if (name != "preview" && name != "production") || seen[name] || raw.WebsiteID == 0 {
+			return nil, buserr.New(constant.ErrFlowEnvironmentInvalid)
+		}
+		seen[name] = true
+		if err := s.db.First(&model.Website{}, raw.WebsiteID).Error; err != nil {
+			return nil, buserr.New(constant.ErrFlowWebsiteNotFound)
+		}
+		environments = append(environments, defaultFlowEnvironment(name, raw, index))
+	}
+	return environments, nil
 }
 
 func defaultFlowEnvironment(name string, input FlowEnvironmentInput, sortOrder int) model.FlowEnvironment {

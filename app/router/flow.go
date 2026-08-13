@@ -11,7 +11,10 @@ func FlowRouter(r fiber.Router) {
 	group := r.Group("flow", middleware.JWT(constant.UserRoleSubAdmin))
 	group.Get("/list", api.FlowPage)
 	group.Post("/", api.FlowCreate)
+	group.Put("/:id", api.FlowUpdate)
+	group.Delete("/:id", api.FlowDelete)
 	group.Get("/runs", api.FlowRunPage)
 	group.Get("/runs/:id", api.FlowRunGet)
+	group.Get("/:id/code-deliveries", api.FlowCodeDeliverySources)
 	group.Post("/runs", api.FlowRunCreate)
 }

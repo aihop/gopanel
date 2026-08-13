@@ -12,6 +12,7 @@ type Flow struct {
 	CreatedBy                  uint              `gorm:"column:created_by;not null;index" json:"createdBy"`
 	ProjectName                string            `gorm:"-" json:"projectName"`
 	PipelineName               string            `gorm:"-" json:"pipelineName"`
+	PipelineSourceType         string            `gorm:"-" json:"pipelineSourceType"`
 	Environments               []FlowEnvironment `gorm:"foreignKey:FlowID" json:"environments"`
 }
 
@@ -45,32 +46,44 @@ func (FlowEnvironment) TableName() string {
 
 type FlowRun struct {
 	BaseModel
-	FlowID            uint           `gorm:"column:flow_id;not null;uniqueIndex:uniq_flow_run_version;index" json:"flowId"`
-	ProjectID         uint           `gorm:"column:project_id;not null;index" json:"projectId"`
-	PipelineID        uint           `gorm:"column:pipeline_id;not null;index" json:"pipelineId"`
-	Version           string         `gorm:"column:version;type:varchar(50);not null;uniqueIndex:uniq_flow_run_version" json:"version"`
-	SourceRepository  string         `gorm:"column:source_repository;type:varchar(512)" json:"-"`
-	SourceBranch      string         `gorm:"column:source_branch;type:varchar(255)" json:"sourceBranch"`
-	SourceCommit      string         `gorm:"column:source_commit;type:varchar(64);not null;index" json:"sourceCommit"`
-	SessionID         uint           `gorm:"column:session_id;index" json:"sessionId"`
-	TaskID            uint           `gorm:"column:task_id;index" json:"taskId"`
-	CodeDeliveryJobID uint           `gorm:"column:code_delivery_job_id;index" json:"codeDeliveryJobId"`
-	PipelineRecordID  uint           `gorm:"column:pipeline_record_id;index" json:"pipelineRecordId"`
-	ReleaseID         uint           `gorm:"column:release_id;index" json:"releaseId"`
-	CurrentStage      string         `gorm:"column:current_stage;type:varchar(32);not null;index" json:"currentStage"`
-	Status            string         `gorm:"column:status;type:varchar(32);not null;index" json:"status"`
-	FailureCode       string         `gorm:"column:failure_code;type:varchar(64)" json:"failureCode"`
-	ErrorSummary      string         `gorm:"column:error_summary;type:text" json:"errorSummary"`
-	RequestedBy       uint           `gorm:"column:requested_by;not null;index" json:"requestedBy"`
-	StartedAt         *time.Time     `gorm:"column:started_at" json:"startedAt,omitempty"`
-	CompletedAt       *time.Time     `gorm:"column:completed_at" json:"completedAt,omitempty"`
-	LeaseOwner        string         `gorm:"column:lease_owner;type:varchar(128);index" json:"-"`
-	LeaseExpiresAt    *time.Time     `gorm:"column:lease_expires_at;index" json:"-"`
-	FlowName          string         `gorm:"-" json:"flowName"`
-	ProjectName       string         `gorm:"-" json:"projectName"`
-	PipelineName      string         `gorm:"-" json:"pipelineName"`
-	ArtifactDigest    string         `gorm:"-" json:"artifactDigest"`
-	Stages            []FlowStageRun `gorm:"foreignKey:FlowRunID" json:"stages,omitempty"`
+	FlowID             uint                   `gorm:"column:flow_id;not null;uniqueIndex:uniq_flow_run_version;index" json:"flowId"`
+	ProjectID          uint                   `gorm:"column:project_id;not null;index" json:"projectId"`
+	PipelineID         uint                   `gorm:"column:pipeline_id;not null;index" json:"pipelineId"`
+	Version            string                 `gorm:"column:version;type:varchar(50);not null;uniqueIndex:uniq_flow_run_version" json:"version"`
+	SourceRepository   string                 `gorm:"column:source_repository;type:varchar(512)" json:"-"`
+	SourceType         string                 `gorm:"column:source_type;type:varchar(32);not null;default:'git';index" json:"sourceType"`
+	SourceBranch       string                 `gorm:"column:source_branch;type:varchar(255)" json:"sourceBranch"`
+	SourceCommit       string                 `gorm:"column:source_commit;type:varchar(64);not null;index" json:"sourceCommit"`
+	SourceDigest       string                 `gorm:"column:source_digest;type:varchar(80);index" json:"sourceDigest"`
+	SourceManifest     string                 `gorm:"column:source_manifest;type:longtext" json:"-"`
+	SessionID          uint                   `gorm:"column:session_id;index" json:"sessionId"`
+	TaskID             uint                   `gorm:"column:task_id;index" json:"taskId"`
+	CodeDeliveryJobID  uint                   `gorm:"column:code_delivery_job_id;index" json:"codeDeliveryJobId"`
+	PipelineRecordID   uint                   `gorm:"column:pipeline_record_id;index" json:"pipelineRecordId"`
+	ReleaseID          uint                   `gorm:"column:release_id;index" json:"releaseId"`
+	CurrentStage       string                 `gorm:"column:current_stage;type:varchar(32);not null;index" json:"currentStage"`
+	Status             string                 `gorm:"column:status;type:varchar(32);not null;index" json:"status"`
+	FailureCode        string                 `gorm:"column:failure_code;type:varchar(64)" json:"failureCode"`
+	ErrorSummary       string                 `gorm:"column:error_summary;type:text" json:"errorSummary"`
+	RequestedBy        uint                   `gorm:"column:requested_by;not null;index" json:"requestedBy"`
+	StartedAt          *time.Time             `gorm:"column:started_at" json:"startedAt,omitempty"`
+	CompletedAt        *time.Time             `gorm:"column:completed_at" json:"completedAt,omitempty"`
+	LeaseOwner         string                 `gorm:"column:lease_owner;type:varchar(128);index" json:"-"`
+	LeaseExpiresAt     *time.Time             `gorm:"column:lease_expires_at;index" json:"-"`
+	FlowName           string                 `gorm:"-" json:"flowName"`
+	ProjectName        string                 `gorm:"-" json:"projectName"`
+	PipelineName       string                 `gorm:"-" json:"pipelineName"`
+	SourceTaskTitle    string                 `gorm:"-" json:"sourceTaskTitle"`
+	SourceRepositories []FlowSourceRepository `gorm:"-" json:"sourceRepositories,omitempty"`
+	ArtifactDigest     string                 `gorm:"-" json:"artifactDigest"`
+	Stages             []FlowStageRun         `gorm:"foreignKey:FlowRunID" json:"stages,omitempty"`
+}
+
+type FlowSourceRepository struct {
+	Name          string `json:"name"`
+	WorkspacePath string `json:"workspacePath"`
+	TargetBranch  string `json:"targetBranch"`
+	Commit        string `json:"commit"`
 }
 
 func (FlowRun) TableName() string {

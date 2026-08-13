@@ -41,6 +41,13 @@ function flowTime(value?: string) {
 	return Number.isNaN(date.getTime()) ? value : date.toLocaleString()
 }
 
+function runSourceLabel(run: Flow.Run) {
+	if (run.sourceType === "code_delivery") {
+		return run.sourceTaskTitle || t("flow.codeDeliveryJob", { id: run.codeDeliveryJobId })
+	}
+	return run.sourceCommit.slice(0, 12)
+}
+
 async function loadRuns(silent = false) {
 	if (!silent) loading.value = true
 	loadError.value = false
@@ -91,7 +98,7 @@ useIntervalFn(() => {
 			<n-empty v-if="!loading && !runs.length" class="py-10" :description="t('flow.runEmpty')" />
 			<div v-else class="mt-5 space-y-3">
 				<button v-for="run in runs" :key="run.id" type="button" class="flex w-full flex-col gap-3 rounded-2xl border border-slate-200 p-4 text-left transition hover:border-blue-400 sm:flex-row sm:items-center sm:justify-between" @click="openDetail(run)">
-					<div class="min-w-0"><div class="flex flex-wrap items-center gap-2"><span class="font-semibold fg-base-100">v{{ run.version }}</span><n-tag size="small" :type="runType(run.status)">{{ t(`flow.runStatus.${run.status}`) }}</n-tag><span class="text-xs text-slate-400">#{{ run.id }}</span></div><div class="mt-2 truncate text-xs text-slate-500">{{ run.flowName }} · {{ run.sourceCommit.slice(0, 12) }} · {{ flowTime(run.createdAt) }}</div><div v-if="run.errorSummary" class="mt-2 line-clamp-2 text-xs text-red-500">{{ run.errorSummary }}</div></div>
+					<div class="min-w-0"><div class="flex flex-wrap items-center gap-2"><span class="font-semibold fg-base-100">v{{ run.version }}</span><n-tag size="small" :type="runType(run.status)">{{ t(`flow.runStatus.${run.status}`) }}</n-tag><span class="text-xs text-slate-400">#{{ run.id }}</span></div><div class="mt-2 truncate text-xs text-slate-500">{{ run.flowName }} · {{ runSourceLabel(run) }} · {{ flowTime(run.createdAt) }}</div><div v-if="run.errorSummary" class="mt-2 line-clamp-2 text-xs text-red-500">{{ run.errorSummary }}</div></div>
 					<div class="flex shrink-0 items-center gap-4 text-xs text-slate-500"><span>{{ t(`flow.runStage.${run.currentStage}`) }}</span><span v-if="run.pipelineRecordId">{{ t("flow.pipelineRecordId", { id: run.pipelineRecordId }) }}</span><span v-if="run.releaseId">{{ t("flow.releaseId", { id: run.releaseId }) }}</span><Icon name="mdi:chevron-right" :size="18" /></div>
 				</button>
 			</div>
@@ -103,12 +110,23 @@ useIntervalFn(() => {
 					<div v-if="detail" class="space-y-5">
 						<n-descriptions bordered :column="1" size="small">
 							<n-descriptions-item :label="t('flow.runVersion')">{{ detail.version }}</n-descriptions-item>
-							<n-descriptions-item :label="t('flow.sourceCommit')"><span class="break-all font-mono text-xs">{{ detail.sourceCommit }}</span></n-descriptions-item>
+							<n-descriptions-item v-if="detail.sourceType === 'git'" :label="t('flow.sourceCommit')"><span class="break-all font-mono text-xs">{{ detail.sourceCommit }}</span></n-descriptions-item>
+							<n-descriptions-item v-else :label="t('flow.codeDeliverySource')">{{ detail.sourceTaskTitle || t("flow.codeDeliveryJob", { id: detail.codeDeliveryJobId }) }}</n-descriptions-item>
+							<n-descriptions-item v-if="detail.sourceDigest" :label="t('flow.sourceDigest')"><span class="break-all font-mono text-xs">{{ detail.sourceDigest }}</span></n-descriptions-item>
 							<n-descriptions-item :label="t('flow.runStatusLabel')"><n-tag size="small" :type="runType(detail.status)">{{ t(`flow.runStatus.${detail.status}`) }}</n-tag></n-descriptions-item>
 							<n-descriptions-item :label="t('flow.pipelineRecord')">{{ detail.pipelineRecordId || "-" }}</n-descriptions-item>
 							<n-descriptions-item :label="t('flow.release')">{{ detail.releaseId || "-" }}</n-descriptions-item>
 							<n-descriptions-item :label="t('flow.artifactDigest')"><span class="break-all font-mono text-xs">{{ detail.artifactDigest || "-" }}</span></n-descriptions-item>
 						</n-descriptions>
+						<div v-if="detail.sourceRepositories?.length">
+							<h3 class="mb-3 font-semibold fg-base-100">{{ t("flow.sourceRepositories") }}</h3>
+							<div class="space-y-2">
+								<div v-for="repository in detail.sourceRepositories" :key="repository.workspacePath" class="rounded-xl border border-slate-200 p-3">
+									<div class="flex items-center justify-between gap-3 text-sm"><span class="truncate font-medium fg-base-100">{{ repository.name }}</span><span class="shrink-0 text-xs text-slate-500">{{ repository.targetBranch }}</span></div>
+									<div class="mt-2 break-all font-mono text-xs text-slate-500">{{ repository.commit }}</div>
+								</div>
+							</div>
+						</div>
 						<n-alert v-if="detail.errorSummary" type="error" :title="detail.failureCode">{{ detail.errorSummary }}</n-alert>
 						<div><h3 class="mb-3 font-semibold fg-base-100">{{ t("flow.stageRecords") }}</h3><div class="space-y-3"><div v-for="stage in detail.stages || []" :key="stage.id" class="rounded-2xl border border-slate-200 p-4"><div class="flex items-center justify-between gap-3"><span class="font-medium fg-base-100">{{ t(`flow.runStage.${stage.stage}`) }}</span><n-tag size="small" :type="stageType(stage.status)">{{ t(`flow.stageStatus.${stage.status}`) }}</n-tag></div><div v-if="stage.errorDetail" class="mt-2 text-xs text-red-500">{{ stage.errorDetail }}</div><div v-if="stage.resourceId" class="mt-2 text-xs text-slate-400">{{ resourceLabel(stage.resourceType) }} #{{ stage.resourceId }}</div></div></div></div>
 					</div>

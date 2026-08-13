@@ -52,6 +52,45 @@ func FlowCreate(c fiber.Ctx) error {
 	return c.JSON(e.Succ(item))
 }
 
+func FlowUpdate(c fiber.Ctx) error {
+	claims, err := middleware.JwtClaims(c)
+	if err != nil {
+		return c.JSON(e.Auth(err.Error()))
+	}
+	id, err := strconv.Atoi(c.Params("id"))
+	if err != nil || id <= 0 {
+		return c.JSON(e.Fail(buserr.New(constant.ErrParameterError)))
+	}
+	input, err := e.BodyToStruct[service.FlowUpdateInput](c.Body())
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	item, err := service.NewFlowApplication(global.DB).Update(
+		uint(id), *input, claims.UserId, claims.Role == constant.UserRoleSuper,
+	)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	return c.JSON(e.Succ(item))
+}
+
+func FlowDelete(c fiber.Ctx) error {
+	claims, err := middleware.JwtClaims(c)
+	if err != nil {
+		return c.JSON(e.Auth(err.Error()))
+	}
+	id, err := strconv.Atoi(c.Params("id"))
+	if err != nil || id <= 0 {
+		return c.JSON(e.Fail(buserr.New(constant.ErrParameterError)))
+	}
+	if err := service.NewFlowApplication(global.DB).Delete(
+		uint(id), claims.UserId, claims.Role == constant.UserRoleSuper,
+	); err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	return c.JSON(e.Succ())
+}
+
 func FlowRunPage(c fiber.Ctx) error {
 	claims, err := middleware.JwtClaims(c)
 	if err != nil {
@@ -91,6 +130,24 @@ func FlowRunGet(c fiber.Ctx) error {
 		return c.JSON(e.Fail(err))
 	}
 	return c.JSON(e.Succ(item))
+}
+
+func FlowCodeDeliverySources(c fiber.Ctx) error {
+	claims, err := middleware.JwtClaims(c)
+	if err != nil {
+		return c.JSON(e.Auth(err.Error()))
+	}
+	flowID, parseErr := strconv.Atoi(c.Params("id"))
+	if parseErr != nil || flowID <= 0 {
+		return c.JSON(e.Fail(buserr.New(constant.ErrParameterError)))
+	}
+	items, err := service.NewFlowRunApplication(global.DB).CodeDeliverySources(
+		uint(flowID), claims.UserId, claims.Role == constant.UserRoleSuper, 30,
+	)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	return c.JSON(e.Succ(items))
 }
 
 func FlowRunCreate(c fiber.Ctx) error {
