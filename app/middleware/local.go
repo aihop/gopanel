@@ -154,6 +154,9 @@ func Entrance(c fiber.Ctx) error {
 		return c.Next()
 	}
 	if authorizeEntrance(c, entrance) {
+		if isSecurityEntrancePath(c.Path(), entrance) && isMobileUserAgent(c.UserAgent()) {
+			return c.Redirect().Status(fiber.StatusFound).To("/mobile")
+		}
 		return c.Next()
 	}
 	return renderNoEntrance(c)
@@ -168,8 +171,7 @@ func shouldBypassEntrance(path string) bool {
 	case "/health", "/api/mobile/health", "/api/mobile/pair/exchange":
 		return true
 	default:
-		return path == "/mobile" || strings.HasPrefix(path, "/mobile/") ||
-			strings.HasPrefix(path, "/api/mobile/app/") ||
+		return strings.HasPrefix(path, "/api/mobile/app/") ||
 			strings.HasPrefix(path, "/assets/") ||
 			strings.HasPrefix(path, "/images/") ||
 			path == "/favicon.svg" || path == "/favicon.ico"
@@ -177,12 +179,7 @@ func shouldBypassEntrance(path string) bool {
 }
 
 func authorizeEntrance(c fiber.Ctx, entrance string) bool {
-	securityEntrance := "/" + strings.TrimPrefix(entrance, "/")
-	currentPath := strings.TrimRight(c.Path(), "/")
-	if currentPath == "" {
-		currentPath = "/"
-	}
-	if currentPath == securityEntrance {
+	if isSecurityEntrancePath(c.Path(), entrance) {
 		setEntranceCookie(c, entrance)
 		return true
 	}
@@ -199,6 +196,25 @@ func authorizeEntrance(c fiber.Ctx, entrance string) bool {
 
 	if matchesEntranceValue(c.Cookies(constant.Entrance), entrance) {
 		return true
+	}
+	return false
+}
+
+func isSecurityEntrancePath(path string, entrance string) bool {
+	securityEntrance := "/" + strings.Trim(strings.TrimSpace(entrance), "/")
+	currentPath := strings.TrimRight(path, "/")
+	if currentPath == "" {
+		currentPath = "/"
+	}
+	return currentPath == securityEntrance
+}
+
+func isMobileUserAgent(userAgent string) bool {
+	userAgent = strings.ToLower(userAgent)
+	for _, marker := range []string{"android", "iphone", "ipad", "ipod", "mobile", "windows phone", "harmonyos"} {
+		if strings.Contains(userAgent, marker) {
+			return true
+		}
 	}
 	return false
 }
