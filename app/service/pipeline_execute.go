@@ -172,7 +172,11 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 			logger.Error("镜像构建失败: %v", err)
 			return
 		}
-		_ = s.recordRepo.UpdateImageArtifact(recordID, imageArtifact.Tag, imageArtifact.ID, imageArtifact.Digest, imageArtifact.ImmutableRef)
+		if err := s.recordRepo.UpdateImageArtifact(recordID, imageArtifact.Tag, imageArtifact.ID, imageArtifact.Digest, imageArtifact.ImmutableRef); err != nil {
+			s.recordRepo.UpdateStatus(recordID, "failed", fmt.Sprintf("保存镜像制品身份失败: %v", err))
+			logger.Error("保存镜像制品身份失败: %v", err)
+			return
+		}
 		record.ImageTag = imageArtifact.Tag
 		record.ImageID = imageArtifact.ID
 		record.ImageDigest = imageArtifact.Digest

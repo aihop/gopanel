@@ -2,9 +2,9 @@ package model
 
 const (
 	ArtifactManifestSchemaVersion = 1
-	ArtifactTypeContainerImage     = "container_image"
-	ArtifactTypeStaticArchive      = "static_archive"
-	ArtifactTypeReleaseDirectory   = "release_directory"
+	ArtifactTypeContainerImage    = "container_image"
+	ArtifactTypeStaticArchive     = "static_archive"
+	ArtifactTypeReleaseDirectory  = "release_directory"
 )
 
 type ArtifactManifest struct {

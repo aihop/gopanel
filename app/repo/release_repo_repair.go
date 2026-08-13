@@ -63,7 +63,7 @@ func (r *ReleaseRepo) mergeDuplicatePipelineRecordReleases(recordID uint) error 
 		return duplicateIDs[i] < duplicateIDs[j]
 	})
 	return r.db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(&model.Release{}).Where("id = ?", keeper.ID).Updates(map[string]interface{}{"version": merged.Version, "commit_hash": merged.CommitHash, "changelog": merged.Changelog, "source_type": merged.SourceType, "image_tag": merged.ImageTag, "archive_file": merged.ArchiveFile, "release_dir": merged.ReleaseDir, "artifact_meta": merged.ArtifactMeta, "status": merged.Status, "remark": merged.Remark}).Error; err != nil {
+		if err := tx.Model(&model.Release{}).Where("id = ?", keeper.ID).Updates(map[string]interface{}{"version": merged.Version, "commit_hash": merged.CommitHash, "changelog": merged.Changelog, "source_type": merged.SourceType, "image_tag": merged.ImageTag, "image_digest": merged.ImageDigest, "archive_file": merged.ArchiveFile, "release_dir": merged.ReleaseDir, "artifact_digest": merged.ArtifactDigest, "artifact_manifest": merged.ArtifactManifest, "artifact_meta": merged.ArtifactMeta, "status": merged.Status, "remark": merged.Remark}).Error; err != nil {
 			return err
 		}
 		return tx.Delete(&model.Release{}, duplicateIDs).Error
@@ -196,11 +196,20 @@ func mergeReleaseFields(dst, src *model.Release) {
 	if strings.TrimSpace(dst.ImageTag) == "" && strings.TrimSpace(src.ImageTag) != "" {
 		dst.ImageTag = src.ImageTag
 	}
+	if strings.TrimSpace(dst.ImageDigest) == "" && strings.TrimSpace(src.ImageDigest) != "" {
+		dst.ImageDigest = src.ImageDigest
+	}
 	if strings.TrimSpace(dst.ArchiveFile) == "" && strings.TrimSpace(src.ArchiveFile) != "" {
 		dst.ArchiveFile = src.ArchiveFile
 	}
 	if strings.TrimSpace(dst.ReleaseDir) == "" && strings.TrimSpace(src.ReleaseDir) != "" {
 		dst.ReleaseDir = src.ReleaseDir
+	}
+	if strings.TrimSpace(dst.ArtifactDigest) == "" && strings.TrimSpace(src.ArtifactDigest) != "" {
+		dst.ArtifactDigest = src.ArtifactDigest
+	}
+	if strings.TrimSpace(dst.ArtifactManifest) == "" && strings.TrimSpace(src.ArtifactManifest) != "" {
+		dst.ArtifactManifest = src.ArtifactManifest
 	}
 	if strings.TrimSpace(dst.ArtifactMeta) == "" && strings.TrimSpace(src.ArtifactMeta) != "" {
 		dst.ArtifactMeta = src.ArtifactMeta

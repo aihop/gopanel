@@ -21,6 +21,8 @@ type pipelineImageArtifact struct {
 	ImmutableRef string
 }
 
+var pipelineRuntimeCommand = docker.RuntimeCommand
+
 func (s *PipelineService) stepBuildImage(ctx context.Context, logger *PipelineLogger, p *model.Pipeline, releaseDir string, recordID uint) (pipelineImageArtifact, error) {
 	logger.Info("开始构建 Docker 镜像...")
 
@@ -52,11 +54,11 @@ func (s *PipelineService) stepBuildImage(ctx context.Context, logger *PipelineLo
 	}
 
 	// docker build -t <image> <releaseDir>
-	args := []string{"build", "-t", imageRef, releaseDir}
+	args := []string{"build", "-t", imageRef}
 	// Use Dockerfile from artifactPath if specified, otherwise Dockerfile in releaseDir
-	args = append(args, "-f", dockerfile)
+	args = append(args, "-f", dockerfile, releaseDir)
 
-	cmd, err := docker.RuntimeCommand(ctx, args...)
+	cmd, err := pipelineRuntimeCommand(ctx, args...)
 	if err != nil {
 		return pipelineImageArtifact{}, fmt.Errorf("镜像构建失败: %w", err)
 	}
@@ -78,7 +80,7 @@ func (s *PipelineService) stepBuildImage(ctx context.Context, logger *PipelineLo
 }
 
 func inspectPipelineImageArtifact(ctx context.Context, imageRef string) (pipelineImageArtifact, error) {
-	cmd, err := docker.RuntimeCommand(ctx, "image", "inspect", imageRef)
+	cmd, err := pipelineRuntimeCommand(ctx, "image", "inspect", imageRef)
 	if err != nil {
 		return pipelineImageArtifact{}, err
 	}
@@ -104,10 +106,7 @@ func parsePipelineImageInspect(imageRef string, output []byte) (pipelineImageArt
 	row := rows[0]
 	repoDigests := append([]string(nil), row.RepoDigests...)
 	sort.Strings(repoDigests)
-	repoDigest := ""
-	if len(repoDigests) > 0 {
-		repoDigest = strings.TrimSpace(repoDigests[0])
-	}
+	repoDigest := selectPipelineRepoDigest(imageRef, repoDigests)
 	digest := strings.TrimSpace(row.Digest)
 	if at := strings.LastIndex(repoDigest, "@"); digest == "" && at >= 0 {
 		digest = strings.TrimSpace(repoDigest[at+1:])
@@ -124,6 +123,24 @@ func parsePipelineImageInspect(imageRef string, output []byte) (pipelineImageArt
 		return pipelineImageArtifact{}, fmt.Errorf("image inspect did not return a content digest")
 	}
 	return pipelineImageArtifact{Tag: strings.TrimSpace(imageRef), ID: imageID, Digest: digest, RepoDigest: repoDigest, ImmutableRef: immutableRef}, nil
+}
+
+func selectPipelineRepoDigest(imageRef string, repoDigests []string) string {
+	repository := strings.TrimSpace(imageRef)
+	lastSlash := strings.LastIndex(repository, "/")
+	if colon := strings.LastIndex(repository, ":"); colon > lastSlash {
+		repository = repository[:colon]
+	}
+	for _, candidate := range repoDigests {
+		candidate = strings.TrimSpace(candidate)
+		if strings.HasPrefix(candidate, repository+"@") {
+			return candidate
+		}
+	}
+	if len(repoDigests) > 0 {
+		return strings.TrimSpace(repoDigests[0])
+	}
+	return ""
 }
 
 func recordVersionTag(recordID uint) string {

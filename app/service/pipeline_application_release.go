@@ -2,10 +2,8 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/aihop/gopanel/app/model"
 	"gorm.io/gorm"
@@ -74,29 +72,11 @@ func (s *PipelineApplicationService) PublishRecord(recordID uint) (*model.Releas
 	if err != nil {
 		return nil, err
 	}
-	sourceType := "release_dir"
-	imageTag := strings.TrimSpace(record.ImageTag)
-	archiveFile := strings.TrimSpace(record.ArchiveFile)
-	releaseDir := strings.TrimSpace(record.RunnerReleaseDir)
-	if releaseDir == "" {
-		releaseDir = pipelineReleaseDir(pipeline)
-	}
-	switch {
-	case imageTag != "":
-		sourceType = "image"
-	case archiveFile != "":
-		sourceType = "archive"
-	default:
-		releaseDir, err = snapshotPipelineReleaseDir(pipeline, record, releaseDir)
-		if err != nil {
-			return nil, err
-		}
-	}
-	artifactMeta, err := json.Marshal(map[string]interface{}{"artifactPath": strings.TrimSpace(pipeline.ArtifactPath), "buildImage": strings.TrimSpace(pipeline.BuildImage), "pipelineKey": strings.TrimSpace(pipeline.PipelineKey), "runnerMode": strings.TrimSpace(pipeline.RunnerMode), "runnerHostPort": record.RunnerHostPort, "runnerContainerId": strings.TrimSpace(record.RunnerContainerID)})
+	artifact, err := buildPipelineReleaseArtifact(context.Background(), pipeline, record)
 	if err != nil {
 		return nil, err
 	}
-	item := &model.Release{PipelineID: pipeline.ID, PipelineRecordID: record.ID, Version: strings.TrimSpace(record.Version), CommitHash: strings.TrimSpace(record.CommitHash), Changelog: strings.TrimSpace(record.Changelog), SourceType: sourceType, ImageTag: imageTag, ArchiveFile: archiveFile, ReleaseDir: releaseDir, ArtifactMeta: string(artifactMeta), Status: "ready"}
+	item := artifact.release(pipeline, record)
 	if err := s.releaseRepo.Create(item); err != nil {
 		if isReleasePipelineRecordDuplicate(err) {
 			existing, findErr := s.releaseRepo.GetByPipelineRecordID(recordID)
