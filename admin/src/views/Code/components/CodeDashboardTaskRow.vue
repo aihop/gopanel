@@ -40,7 +40,7 @@ const executorLabel = computed(() =>
 
 <template>
   <div
-    class="dashboard-task-row group/row relative mb-1 flex cursor-pointer items-stretch gap-3 rounded-lg py-3 ml-5 pr-3.5 transition-colors"
+    class="dashboard-task-row group/row relative mb-1 flex cursor-pointer items-stretch gap-3 rounded-lg py-2 ml-5 pr-3.5 transition-colors"
     :class="selected ? 'dashboard-task-row--selected' : ''"
     @click="emit('open', task)"
   >

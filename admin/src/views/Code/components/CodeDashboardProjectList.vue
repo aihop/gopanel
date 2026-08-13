@@ -212,7 +212,7 @@ watch(() => props.selectedTaskId, () => {
       <div v-if="!isCollapsed(group.id)">
         <div
           v-if="group.tasks.length === 0"
-          class="px-10 py-2 text-xs text-[var(--n-text-color-3)]"
+          class="px-10 py-2 text-xs text-gray-500"
         >
           {{ t("code.dashboardNoProjectTasks") }}
         </div>
