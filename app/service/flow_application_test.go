@@ -227,6 +227,9 @@ func TestFlowUpdateReplacesConfigurationAndPreservesProject(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := database.Model(&model.FlowEnvironment{}).Where("flow_id = ? AND name = ?", flow.ID, "preview").Update("health_check_success_count", 9).Error; err != nil {
+		t.Fatal(err)
+	}
 	if _, err := NewFlowApplication(database).Update(flow.ID, FlowUpdateInput{
 		Name: "Forbidden", PipelineID: initialPipeline.ID,
 		Environments: []FlowEnvironmentInput{{Name: "preview", WebsiteID: preview.ID}},
@@ -241,7 +244,10 @@ func TestFlowUpdateReplacesConfigurationAndPreservesProject(t *testing.T) {
 	}
 	updated, err := NewFlowApplication(database).Update(flow.ID, FlowUpdateInput{
 		Name: "Production Delivery", PipelineID: replacementPipeline.ID, AutoStartAfterCodeDelivery: true,
-		Environments: []FlowEnvironmentInput{{Name: "production", WebsiteID: production.ID, ApprovalRequired: true}},
+		Environments: []FlowEnvironmentInput{
+			{Name: "preview", WebsiteID: production.ID, AutoDeploy: true},
+			{Name: "production", WebsiteID: production.ID, ApprovalRequired: true},
+		},
 	}, 7, false)
 	if err != nil {
 		t.Fatal(err)
@@ -249,12 +255,18 @@ func TestFlowUpdateReplacesConfigurationAndPreservesProject(t *testing.T) {
 	if updated.ProjectID != project.ID || updated.PipelineID != replacementPipeline.ID || !updated.AutoStartAfterCodeDelivery {
 		t.Fatalf("unexpected updated flow: %+v", updated)
 	}
+	if len(updated.Environments) != 2 || updated.Environments[0].HealthCheckSuccessCount != 9 {
+		t.Fatalf("updated response did not return persisted environment policy: %+v", updated.Environments)
+	}
 	stored, err := repo.NewFlow(database).Get(flow.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if stored.Name != "Production Delivery" || stored.ProjectID != project.ID || len(stored.Environments) != 1 || stored.Environments[0].Name != "production" {
+	if stored.Name != "Production Delivery" || stored.ProjectID != project.ID || len(stored.Environments) != 2 || stored.Environments[0].Name != "preview" {
 		t.Fatalf("configuration was not replaced atomically: %+v", stored)
+	}
+	if stored.Environments[0].WebsiteID != production.ID || stored.Environments[0].HealthCheckSuccessCount != 9 {
+		t.Fatalf("existing environment policy was not preserved: %+v", stored.Environments[0])
 	}
 }
 

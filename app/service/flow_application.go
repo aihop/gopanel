@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"strings"
 
 	"github.com/aihop/gopanel/app/model"
@@ -207,15 +208,20 @@ func (s *FlowApplicationService) Update(id uint, input FlowUpdateInput, userID u
 	if err := s.repo.UpdateWithEnvironments(item, environments); err != nil {
 		return nil, err
 	}
-	item.Environments = environments
-	return item, nil
+	return s.repo.Get(item.ID)
 }
 
 func (s *FlowApplicationService) Delete(id uint, userID uint, includeAll bool) error {
 	if _, err := s.getAccessible(id, userID, includeAll); err != nil {
 		return err
 	}
-	return s.repo.DeleteConfiguration(id)
+	if err := s.repo.DeleteConfiguration(id); err != nil {
+		if errors.Is(err, repo.ErrFlowHasHistory) {
+			return buserr.New(constant.ErrFlowDeleteHistory)
+		}
+		return err
+	}
+	return nil
 }
 
 func (s *FlowApplicationService) getAccessible(id uint, userID uint, includeAll bool) (*model.Flow, error) {

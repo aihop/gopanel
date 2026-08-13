@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue"
 import { useI18n } from "vue-i18n"
-import { useMessage } from "naive-ui"
+import { useDialog, useMessage } from "naive-ui"
 import { useRouter } from "vue-router"
 import Icon from "@/components/common/Icon.vue"
 import type { Flow } from "@/api/interface/flow"
-import { getFlowPage } from "@/api/modules/flow"
+import { deleteFlow, getFlowPage } from "@/api/modules/flow"
 import { flowMessages } from "./flowMessages"
 import CreateFlowModal from "./CreateFlowModal.vue"
 import StartFlowRunModal from "./StartFlowRunModal.vue"
@@ -13,12 +13,15 @@ import FlowRunPanel from "./FlowRunPanel.vue"
 
 const { t } = useI18n({ messages: flowMessages })
 const message = useMessage()
+const dialog = useDialog()
 const router = useRouter()
 const loading = ref(false)
 const loadError = ref(false)
 const createVisible = ref(false)
 const runVisible = ref(false)
 const selectedFlow = ref<Flow.Item | null>(null)
+const editingFlow = ref<Flow.Item | null>(null)
+const deletingFlowId = ref<number | null>(null)
 const runPanel = ref<InstanceType<typeof FlowRunPanel> | null>(null)
 const total = ref(0)
 const flows = ref<Flow.Item[]>([])
@@ -50,7 +53,40 @@ async function loadFlows() {
 }
 
 function created() {
+	editingFlow.value = null
 	void loadFlows()
+}
+
+function openCreate() {
+	editingFlow.value = null
+	createVisible.value = true
+}
+
+function editFlow(item: Flow.Item) {
+	editingFlow.value = item
+	createVisible.value = true
+}
+
+function confirmDelete(item: Flow.Item) {
+	dialog.warning({
+		title: t("flow.deleteTitle"),
+		content: t("flow.deleteDescription", { name: item.name }),
+		positiveText: t("flow.deleteConfirm"),
+		negativeText: t("flow.cancel"),
+		onPositiveClick: async () => {
+			deletingFlowId.value = item.id
+			try {
+				await deleteFlow(item.id)
+				message.success(t("flow.deleteSuccess"))
+				await loadFlows()
+			} catch {
+				message.error(t("flow.deleteFailed"))
+				throw new Error(t("flow.deleteFailed"))
+			} finally {
+				deletingFlowId.value = null
+			}
+		}
+	})
 }
 
 function startRun(flow: Flow.Item) {
@@ -76,7 +112,7 @@ onMounted(loadFlows)
 				</div>
 				<div class="flex flex-wrap gap-2">
 					<n-button secondary @click="router.push({ name: 'Code-Index' })">{{ t("flow.goCode") }}</n-button>
-					<n-button type="primary" @click="createVisible = true">
+					<n-button type="primary" @click="openCreate">
 						<template #icon><Icon name="mdi:plus" :size="18" /></template>{{ t("flow.createFlow") }}
 					</n-button>
 					<n-button quaternary circle :loading="loading" :aria-label="t('flow.refresh')" @click="loadFlows">
@@ -99,13 +135,17 @@ onMounted(loadFlows)
 		<n-spin :show="loading">
 			<n-empty v-if="!loading && !flows.length" :description="t('flow.emptyDescription')" class="rounded-3xl border border-slate-200 bg-base-100 py-16 shadow-sm">
 				<template #icon><Icon name="mdi:transit-connection-variant" :size="46" class="text-blue-500" /></template>
-				<template #extra><n-button type="primary" @click="createVisible = true">{{ t("flow.createFirst") }}</n-button></template>
+				<template #extra><n-button type="primary" @click="openCreate">{{ t("flow.createFirst") }}</n-button></template>
 			</n-empty>
 			<div v-else class="grid gap-4 xl:grid-cols-2">
 				<article v-for="item in flows" :key="item.id" class="rounded-3xl border border-slate-200 bg-base-100 p-6 shadow-sm">
 					<div class="flex items-start justify-between gap-4">
 						<div class="min-w-0"><div class="flex items-center gap-2"><h2 class="truncate text-lg font-semibold fg-base-100">{{ item.name }}</h2><n-tag size="small" type="success">{{ t("flow.flowId", { id: item.id }) }}</n-tag></div><div class="mt-2 text-xs text-slate-400">{{ flowTime(item.createdAt) }}</div></div>
-						<n-tag size="small" :type="item.enabled ? 'success' : 'default'">{{ t(item.enabled ? "flow.enabled" : "flow.disabled") }}</n-tag>
+						<div class="flex items-center gap-1">
+							<n-tag size="small" :type="item.enabled ? 'success' : 'default'">{{ t(item.enabled ? "flow.enabled" : "flow.disabled") }}</n-tag>
+							<n-button quaternary circle size="small" :aria-label="t('flow.edit')" @click="editFlow(item)"><template #icon><Icon name="mdi:pencil-outline" :size="16" /></template></n-button>
+							<n-button quaternary circle size="small" type="error" :loading="deletingFlowId === item.id" :aria-label="t('flow.delete')" @click="confirmDelete(item)"><template #icon><Icon name="mdi:trash-can-outline" :size="16" /></template></n-button>
+						</div>
 					</div>
 
 					<div class="mt-6 flex flex-wrap items-center gap-2 text-sm">
@@ -128,7 +168,7 @@ onMounted(loadFlows)
 		</n-spin>
 		<FlowRunPanel ref="runPanel" />
 
-		<CreateFlowModal v-model:show="createVisible" @success="created" />
+		<CreateFlowModal v-model:show="createVisible" :flow="editingFlow" @success="created" />
 		<StartFlowRunModal v-model:show="runVisible" :flow="selectedFlow" @success="runCreated" />
 	</div>
 </template>

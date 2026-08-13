@@ -9,10 +9,10 @@ import type { Flow } from "@/api/interface/flow"
 import { getAIProjects } from "@/api/modules/code"
 import { getPipelinePage } from "@/api/modules/pipeline"
 import { websiteListAPI } from "@/api/modules/website"
-import { createFlow } from "@/api/modules/flow"
+import { createFlow, updateFlow } from "@/api/modules/flow"
 import { flowMessages } from "./flowMessages"
 
-const props = defineProps<{ show: boolean }>()
+const props = defineProps<{ show: boolean; flow?: Flow.Item | null }>()
 const emit = defineEmits<{ "update:show": [value: boolean]; success: [] }>()
 const { t } = useI18n({ messages: flowMessages })
 const message = useMessage()
@@ -22,6 +22,7 @@ const loadError = ref(false)
 const projects = ref<AIProject[]>([])
 const pipelines = ref<Pipeline.ResPipeline[]>([])
 const websites = ref<Website.WebsiteDTO[]>([])
+const editing = computed(() => Boolean(props.flow))
 const form = reactive({
 	name: "",
 	projectId: null as number | null,
@@ -44,10 +45,17 @@ const websiteOptions = computed(() => websites.value.map(item => ({
 const missingResources = computed(() => !projects.value.length || !pipelines.value.length || !websites.value.length)
 
 function resetForm() {
+	const preview = props.flow?.environments.find(item => item.name === "preview")
+	const production = props.flow?.environments.find(item => item.name === "production")
 	Object.assign(form, {
-		name: "", projectId: null, pipelineId: null, autoStart: false,
-		previewEnabled: true, previewWebsiteId: null,
-		productionEnabled: false, productionWebsiteId: null
+		name: props.flow?.name || "",
+		projectId: props.flow?.projectId || null,
+		pipelineId: props.flow?.pipelineId || null,
+		autoStart: props.flow?.autoStartAfterCodeDelivery || false,
+		previewEnabled: editing.value ? Boolean(preview) : true,
+		previewWebsiteId: preview?.websiteId || null,
+		productionEnabled: Boolean(production),
+		productionWebsiteId: production?.websiteId || null
 	})
 }
 
@@ -101,15 +109,20 @@ async function submit() {
 	}
 	saving.value = true
 	try {
-		await createFlow({
-			name: form.name.trim(), projectId: form.projectId, pipelineId: form.pipelineId,
+		const configuration = {
+			name: form.name.trim(), pipelineId: form.pipelineId,
 			autoStartAfterCodeDelivery: form.autoStart, environments
-		})
-		message.success(t("flow.createSuccess"))
+		}
+		if (props.flow) {
+			await updateFlow(props.flow.id, configuration)
+		} else {
+			await createFlow({ ...configuration, projectId: form.projectId })
+		}
+		message.success(t(editing.value ? "flow.updateSuccess" : "flow.createSuccess"))
 		close()
 		emit("success")
 	} catch {
-		message.error(t("flow.createFailed"))
+		message.error(t(editing.value ? "flow.updateFailed" : "flow.createFailed"))
 	} finally {
 		saving.value = false
 	}
@@ -122,13 +135,14 @@ watch(() => props.show, value => {
 })
 
 watch(() => form.projectId, () => {
+	if (loading.value || !pipelines.value.length) return
 	if (!form.pipelineId || pipelineOptions.value.some(item => item.value === form.pipelineId)) return
 	form.pipelineId = null
 })
 </script>
 
 <template>
-	<n-modal :show="show" preset="card" style="width: min(760px, calc(100vw - 32px))" :title="t('flow.createTitle')" @update:show="emit('update:show', $event)">
+	<n-modal :show="show" preset="card" style="width: min(760px, calc(100vw - 32px))" :title="t(editing ? 'flow.editTitle' : 'flow.createTitle')" @update:show="emit('update:show', $event)">
 		<n-spin :show="loading">
 			<n-alert v-if="loadError" type="error" :title="t('flow.optionsLoadFailed')" class="mb-5">
 				<n-button class="mt-3" size="small" @click="loadOptions">{{ t("flow.retry") }}</n-button>
@@ -138,7 +152,7 @@ watch(() => form.projectId, () => {
 					<div class="mb-4 flex items-center gap-3"><span class="flex size-7 items-center justify-center rounded-full bg-blue-600 text-xs font-semibold text-white">1</span><span class="font-semibold fg-base-100">{{ t("flow.basicTitle") }}</span></div>
 					<div class="grid gap-4 md:grid-cols-2">
 						<n-form-item :label="t('flow.name')" required><n-input v-model:value="form.name" :placeholder="t('flow.namePlaceholder')" /></n-form-item>
-						<n-form-item :label="t('flow.project')" required><n-select v-model:value="form.projectId" filterable :options="projectOptions" :placeholder="t('flow.projectPlaceholder')" /></n-form-item>
+						<n-form-item :label="t('flow.project')" required><n-select v-model:value="form.projectId" filterable :disabled="editing" :options="projectOptions" :placeholder="t('flow.projectPlaceholder')" /><div v-if="editing" class="mt-1 text-xs text-slate-500">{{ t("flow.projectImmutable") }}</div></n-form-item>
 						<n-form-item :label="t('flow.pipeline')" required><n-select v-model:value="form.pipelineId" filterable :options="pipelineOptions" :placeholder="t('flow.pipelinePlaceholder')" /></n-form-item>
 						<n-form-item :label="t('flow.autoStart')"><n-switch v-model:value="form.autoStart" /><span class="ml-3 text-xs text-slate-500">{{ t("flow.autoStartHelper") }}</span></n-form-item>
 					</div>
@@ -160,7 +174,7 @@ watch(() => form.projectId, () => {
 			</div>
 		</n-spin>
 		<template #footer>
-			<div class="flex justify-end gap-2"><n-button @click="close">{{ t("flow.cancel") }}</n-button><n-button type="primary" :loading="saving" :disabled="loading || loadError || missingResources" @click="submit">{{ t("flow.createConfirm") }}</n-button></div>
+			<div class="flex justify-end gap-2"><n-button @click="close">{{ t("flow.cancel") }}</n-button><n-button type="primary" :loading="saving" :disabled="loading || loadError || missingResources" @click="submit">{{ t(editing ? "flow.saveChanges" : "flow.createConfirm") }}</n-button></div>
 		</template>
 	</n-modal>
 </template>
