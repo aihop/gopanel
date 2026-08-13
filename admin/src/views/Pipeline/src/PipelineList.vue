@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { h, onMounted, ref, computed } from "vue"
-import { NButton, NDataTable, NSpace, NTag, useMessage, NModal, NForm, NFormItem, NInput } from "naive-ui"
+import { NButton, NDataTable, NSpace, NTag, useMessage, NModal, NForm, NFormItem, NInput, NTooltip, NDropdown } from "naive-ui"
 import type { DataTableColumns } from "naive-ui"
 import { getPipelinePage, forceDeletePipeline, runPipeline } from "@/api/modules/pipeline"
 import { Pipeline } from "@/api/interface/pipeline"
@@ -12,6 +12,7 @@ import { useAuthStore } from "@/store/auth"
 import { t } from "@/i18n"
 import { buildRuntimeDetailText, getRuntimeKindLabel, getRuntimeModeLabel, getRunUserLabel } from "@/utils/runtime"
 import { formatTime } from "@/utils/date"
+import Icon from "@/components/common/Icon.vue"
 const authStore = useAuthStore()
 const isSubAdmin = computed(() => authStore.user?.role === 'SUB_ADMIN')
 const isSuperAdmin = computed(() => authStore.user?.role === 'SUPER')
@@ -28,7 +29,7 @@ const pagination = ref({
   onChange: (page: number) => {
     pagination.value.page = page
     fetchData()
-  }
+  },
 })
 
 const recordsModalShow = ref(false)
@@ -87,7 +88,7 @@ const columns: DataTableColumns<Pipeline.ResPipeline> = [
   {
     title: t("container.runtimeType"),
     key: "runtimeType",
-    minWidth: 180,
+    width: 160,
     render: (row: Pipeline.ResPipeline) => {
       return h("div", { class: "flex flex-col gap-1" }, [
         h("div", { class: "flex flex-wrap items-center gap-2" }, [
@@ -102,65 +103,63 @@ const columns: DataTableColumns<Pipeline.ResPipeline> = [
             })
           })
         ]),
-        h("div", { class: "text-xs text-slate-500" }, `${t("container.runUser")}: ${getRunUserLabel(row, { userFallback: t("container.userDefault") })}`),
-        row.runtimeHost
-          ? h("div", { class: "text-xs text-slate-500 break-all" }, `Host: ${row.runtimeHost}`)
-          : null
+        h("div", { class: "flex items-center gap-1 text-xs text-slate-500" }, [
+          `${t("container.runUser")}: ${getRunUserLabel(row, { userFallback: t("container.userDefault") })}`,
+          row.runtimeHost
+            ? h(NTooltip, { trigger: "hover" }, {
+                trigger: () => h(Icon, { name: "mdi:server-outline", size: 15, class: "text-slate-500" }),
+                default: () => `Host: ${row.runtimeHost}`
+              })
+            : null
+        ])
       ])
     }
   },
   { title: t("pipeline.branch"), key: "branch", render: (row: Pipeline.ResPipeline) => h(NTag, { type: "info", size: "small" }, { default: () => row.branch }) },
   { title: t("pipeline.currentVersion"), key: "version", render: (row: Pipeline.ResPipeline) => h(NTag, { type: "success", size: "small" }, { default: () => `v${row.version}` }) },
-  { title: t("pipeline.artifactPath"), key: "artifactPath" },
   { title: t("commons.table.createdAt"), key: "createdAt", render: (row: Pipeline.ResPipeline) => h("div", { class: "text-xs text-slate-500" }, formatTime(row.createdAt || "")) },
   {
     title: t("pipeline.actions"),
     key: "actions",
-    width: 220,
+    width: 160,
     fixed: "right",
     render(row: Pipeline.ResPipeline) {
-      return h(NSpace, {}, {
-        default: () => {
-          const btns = [
-            h(NButton, {
-              size: "small",
-              type: "primary",
-              onClick: () => handleRun(row)
-            }, { default: () => t("pipeline.run") }),
-            h(NButton, {
-              size: "small",
-              onClick: () => handleViewRecords(row)
-            }, { default: () => t("pipeline.records") }),
-            h(NButton, {
-              size: "small",
-              onClick: () => handleViewReleases(row)
-            }, { default: () => "正式版本" }),
-          ]
-          
-          if (isSuperAdmin.value) {
-            btns.push(
-              h(NButton, {
-                size: "small",
-                type: "warning",
-                ghost: true,
-                onClick: () => emit("edit", row)
-              }, { default: () => t("pipeline.edit") })
-            )
-          }
-
-          if (!isSubAdmin.value) {
-            btns.push(
-              h(NButton, {
-                size: "small",
-                type: "error",
-                ghost: true,
-                onClick: () => handleDelete(row)
-              }, { default: () => t("pipeline.delete") })
-            )
-          }
-          
-          return btns
-        }
+      const options = [
+        { key: "releases", label: t("pipeline.releases") }
+      ]
+      if (isSuperAdmin.value) {
+        options.push({ key: "edit", label: t("pipeline.edit") })
+      }
+      if (!isSubAdmin.value) {
+        options.push({ key: "delete", label: t("pipeline.delete") })
+      }
+      const onSelect = (key: string | number) => {
+        if (key === "releases") handleViewReleases(row)
+        else if (key === "edit") emit("edit", row)
+        else if (key === "delete") handleDelete(row)
+      }
+      return h(NSpace, { size: 8 }, {
+        default: () => [
+          h(NButton, {
+            size: "small",
+            type: "primary",
+            onClick: () => handleRun(row)
+          }, { default: () => t("pipeline.run") }),
+          h(NButton, {
+            size: "small",
+            onClick: () => handleViewRecords(row)
+          }, { default: () => t("pipeline.records") }),
+          h(NDropdown, {
+            trigger: "click",
+            placement: "bottom-end",
+            options,
+            onSelect
+          }, {
+            default: () => h(NButton, { text: true, size: "small" }, {
+              default: () => h(Icon, { name: "mdi:dots-horizontal", size: 16, class: "text-slate-500" })
+            })
+          })
+        ]
       })
     }
   }

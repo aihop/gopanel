@@ -2215,6 +2215,7 @@ export default {
 		artifactPath: "产物目录",
 		run: "执行",
 		records: "记录",
+		releases: "正式版本",
 		edit: "编辑",
 		delete: "删除",
 		forceDeleteTitle: "强制删除流水线",

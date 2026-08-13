@@ -2342,6 +2342,7 @@ export default {
 		artifactPath: "Artifact Path",
 		run: "Run",
 		records: "Records",
+		releases: "Releases",
 		edit: "Edit",
 		delete: "Delete",
 		forceDeleteTitle: "Force Delete Pipeline",
