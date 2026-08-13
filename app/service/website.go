@@ -186,6 +186,9 @@ func (s WebsiteService) Create(ctx context.Context, req *request.WebsiteCreate, 
 			return err
 		}
 	}
+	if _, err = ensureWebsiteTrackingDirs(website.Alias); err != nil {
+		return err
+	}
 	tx := global.DB.Begin()
 	defer func() {
 		if tx != nil {

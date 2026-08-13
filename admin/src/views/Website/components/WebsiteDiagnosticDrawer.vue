@@ -23,6 +23,25 @@
 
 			<div v-else class="space-y-6">
 				<n-alert type="info" :show-icon="true">{{ t("websiteDiagnostic.description") }}</n-alert>
+				<n-tabs v-model:value="activeTab" type="segment">
+					<n-tab name="issues">{{ t("websiteDiagnostic.issuesTab") }}</n-tab>
+					<n-tab name="settings">{{ t("websiteDiagnostic.settingsTab") }}</n-tab>
+					<n-tab name="probes">{{ t("websiteDiagnostic.probesTab") }}</n-tab>
+				</n-tabs>
+
+				<website-diagnostic-issues
+					v-if="activeTab === 'issues' && website.id"
+					:website-id="website.id"
+					:code-project-id="form.codeProjectId"
+					@changed="emit('confirm')"
+				/>
+
+				<website-diagnostic-probes
+					v-else-if="activeTab === 'probes' && website.id"
+					:website-id="website.id"
+				/>
+
+				<template v-else>
 
 				<section class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
 					<div class="flex items-start justify-between gap-6">
@@ -109,9 +128,22 @@
 					<div class="mt-1 break-all font-mono text-xs">{{ form.trackingDir }}</div>
 					<div class="mt-1 text-xs text-slate-500">{{ t("websiteDiagnostic.trackingDirHint") }}</div>
 				</n-alert>
+				<n-card v-if="form.backendHook || form.browserHook" size="small" :title="t('websiteDiagnostic.hookIntegration')">
+					<div class="space-y-3 text-xs text-slate-600">
+						<div>{{ t("websiteDiagnostic.hookIntegrationHint") }}</div>
+						<div class="break-all font-mono">POST {{ form.remoteEndpoint }}</div>
+						<div>{{ t("websiteDiagnostic.hookSignatureHint") }}</div>
+						<n-alert v-if="generatedSecret" type="warning" :show-icon="true">
+							<div>{{ t("websiteDiagnostic.hookSecretOnce") }}</div>
+							<div class="mt-1 break-all font-mono">{{ generatedSecret }}</div>
+						</n-alert>
+						<n-button :loading="secretLoading" @click="rotateHookSecret">{{ form.hookSecretConfigured ? t("websiteDiagnostic.rotateHookSecret") : t("websiteDiagnostic.generateHookSecret") }}</n-button>
+					</div>
+				</n-card>
+				</template>
 			</div>
 
-			<template #footer>
+			<template v-if="activeTab === 'settings'" #footer>
 				<div class="flex justify-end gap-3">
 					<n-button @click="visible = false">{{ t("websiteDiagnostic.cancel") }}</n-button>
 					<n-button type="primary" :loading="saving" :disabled="loading || !!loadError" @click="save">
@@ -131,8 +163,10 @@ import type { Website } from "@/api/interface/website"
 import type { WebsiteDiagnosticSetting } from "@/api/interface/websiteDiagnostic"
 import type { AIProject, CodeExecutor } from "@/api/interface/code"
 import { getAIProjects, getCodeExecutors } from "@/api/modules/code"
-import { getWebsiteDiagnosticSettingAPI, saveWebsiteDiagnosticSettingAPI } from "@/api/modules/website"
+import { getWebsiteDiagnosticSettingAPI, rotateWebsiteDiagnosticHookSecretAPI, saveWebsiteDiagnosticSettingAPI } from "@/api/modules/website"
 import { websiteDiagnosticMessages } from "../websiteDiagnosticMessages"
+import WebsiteDiagnosticIssues from "./WebsiteDiagnosticIssues.vue"
+import WebsiteDiagnosticProbes from "./WebsiteDiagnosticProbes.vue"
 
 type BooleanSettingKey =
 	| "caddyMonitoring" | "activeProbes" | "backendHook" | "browserHook"
@@ -148,6 +182,9 @@ const saving = ref(false)
 const auxiliaryLoading = ref(false)
 const loadError = ref("")
 const auxiliaryError = ref("")
+const activeTab = ref("issues")
+const secretLoading = ref(false)
+const generatedSecret = ref("")
 const website = reactive<Partial<Website.WebsiteDTO>>({})
 const projects = ref<AIProject[]>([])
 const executors = ref<CodeExecutor[]>([])
@@ -181,7 +218,8 @@ function emptySetting(): WebsiteDiagnosticSetting {
 		monitorHttp5xx: true, monitorUpstreamErrors: true, monitorSlowRequests: true,
 		monitorBusinessErrors: true, monitorBrowserErrors: true, monitorResourceErrors: true,
 		slowRequestThresholdMs: 1500, triggerCount: 5, triggerWindowMinutes: 10, retentionDays: 7,
-		defaultExecutorId: "codex", approvalPolicy: "safe_auto", configured: false, trackingDir: ""
+		defaultExecutorId: "codex", approvalPolicy: "safe_auto", configured: false, trackingDir: "",
+		hookSecretConfigured: false, remoteEndpoint: ""
 	}
 }
 
@@ -251,8 +289,24 @@ async function load() {
 
 function open(row: Website.WebsiteDTO) {
 	Object.assign(website, row)
+	activeTab.value = "issues"
+	generatedSecret.value = ""
 	visible.value = true
 	void load()
+}
+
+async function rotateHookSecret() {
+	if (!website.id) return
+	secretLoading.value = true
+	try {
+		generatedSecret.value = (await rotateWebsiteDiagnosticHookSecretAPI(website.id)).data.secret
+		form.hookSecretConfigured = true
+		message.success(t("websiteDiagnostic.hookSecretGenerated"))
+	} catch (error) {
+		message.error(errorText(error, t("websiteDiagnostic.hookSecretFailed")))
+	} finally {
+		secretLoading.value = false
+	}
 }
 
 function validate() {

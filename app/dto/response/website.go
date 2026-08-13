@@ -19,12 +19,15 @@ type WebsiteUpstream struct {
 }
 
 type WebsiteDiagnosticSummary struct {
-	Configured    bool `json:"configured"`
-	Enabled       bool `json:"enabled"`
-	SourceCount   int  `json:"sourceCount"`
-	ContentCount  int  `json:"contentCount"`
-	CodeProjectID uint `json:"codeProjectId"`
-	AutoAnalysis  bool `json:"autoAnalysis"`
+	Configured      bool  `json:"configured"`
+	Enabled         bool  `json:"enabled"`
+	SourceCount     int   `json:"sourceCount"`
+	ContentCount    int   `json:"contentCount"`
+	CodeProjectID   uint  `json:"codeProjectId"`
+	AutoAnalysis    bool  `json:"autoAnalysis"`
+	OpenCount       int64 `json:"openCount"`
+	ReopenedCount   int64 `json:"reopenedCount"`
+	ProcessingCount int64 `json:"processingCount"`
 }
 
 type WebsiteRes struct {

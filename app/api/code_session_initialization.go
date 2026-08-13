@@ -135,6 +135,11 @@ func initializeCodeSession(sessionID uint) error {
 		if err := tx.Create(task).Error; err != nil {
 			return err
 		}
+		if err := tx.Model(&model.AIInstruction{}).
+			Where("session_id = ? AND task_id = 0", session.ID).
+			Update("task_id", task.ID).Error; err != nil {
+			return err
+		}
 		result := tx.Model(&model.AIDevSession{}).
 			Where("id = ? AND status = ?", session.ID, codeSessionStatusInitializing).
 			Updates(map[string]any{
@@ -158,6 +163,7 @@ func initializeCodeSession(sessionID uint) error {
 		rollbackCodeSessionWorktree(session)
 		return failCodeSessionInitialization(session, err)
 	}
+	_ = reconcileWebsiteIssueCodeTasks()
 	return nil
 }
 

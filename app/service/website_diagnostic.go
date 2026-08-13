@@ -1,6 +1,7 @@
 package service
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -19,8 +20,10 @@ const (
 
 type WebsiteDiagnosticSettingView struct {
 	model.WebsiteDiagnosticSetting
-	Configured  bool   `json:"configured"`
-	TrackingDir string `json:"trackingDir"`
+	Configured           bool   `json:"configured"`
+	TrackingDir          string `json:"trackingDir"`
+	HookSecretConfigured bool   `json:"hookSecretConfigured"`
+	RemoteEndpoint       string `json:"remoteEndpoint"`
 }
 
 func defaultWebsiteDiagnosticSetting(websiteID uint) model.WebsiteDiagnosticSetting {
@@ -126,7 +129,10 @@ func (s *WebsiteService) GetDiagnosticSetting(websiteID uint) (*WebsiteDiagnosti
 		setting = &defaults
 	}
 	trackingDir, _ := websiteTrackingDir(website.Alias)
-	return &WebsiteDiagnosticSettingView{WebsiteDiagnosticSetting: *setting, Configured: configured, TrackingDir: trackingDir}, nil
+	return &WebsiteDiagnosticSettingView{
+		WebsiteDiagnosticSetting: *setting, Configured: configured, TrackingDir: trackingDir,
+		HookSecretConfigured: setting.HookSecretEncrypted != "", RemoteEndpoint: "/api/website-diagnostics/" + fmt.Sprint(websiteID) + "/events",
+	}, nil
 }
 
 func (s *WebsiteService) SaveDiagnosticSetting(setting *model.WebsiteDiagnosticSetting, userID uint, includeAllProjects bool) (*WebsiteDiagnosticSettingView, error) {
@@ -149,6 +155,10 @@ func (s *WebsiteService) SaveDiagnosticSetting(setting *model.WebsiteDiagnosticS
 			return nil, buserr.New("ErrWebsiteDiagnosticProjectForbidden")
 		}
 	}
+	setting.ConfiguredByUserID = userID
+	if existing, loadErr := repo.NewWebsiteDiagnostic(global.DB).GetByWebsiteID(setting.WebsiteID); loadErr == nil && existing != nil {
+		setting.HookSecretEncrypted = existing.HookSecretEncrypted
+	}
 	if setting.BackendHook || setting.BrowserHook {
 		if _, err := ensureWebsiteTrackingDirs(website.Alias); err != nil {
 			return nil, err
@@ -161,16 +171,25 @@ func (s *WebsiteService) SaveDiagnosticSetting(setting *model.WebsiteDiagnosticS
 }
 
 func loadWebsiteDiagnosticSummaries(websiteIDs []uint) (map[uint]response.WebsiteDiagnosticSummary, error) {
-	settings, err := repo.NewWebsiteDiagnostic(global.DB).ListByWebsiteIDs(websiteIDs)
+	repository := repo.NewWebsiteDiagnostic(global.DB)
+	settings, err := repository.ListByWebsiteIDs(websiteIDs)
+	if err != nil {
+		return nil, err
+	}
+	counts, err := repository.CountIssueSummary(websiteIDs)
 	if err != nil {
 		return nil, err
 	}
 	result := make(map[uint]response.WebsiteDiagnosticSummary, len(settings))
 	for _, setting := range settings {
-		result[setting.WebsiteID] = response.WebsiteDiagnosticSummary{
+		summary := response.WebsiteDiagnosticSummary{
 			Configured: true, Enabled: setting.Enabled, SourceCount: websiteDiagnosticSourceCount(setting),
 			ContentCount: websiteDiagnosticContentCount(setting), CodeProjectID: setting.CodeProjectID, AutoAnalysis: setting.AutoAnalysis,
 		}
+		summary.OpenCount = counts[setting.WebsiteID]["open"] + counts[setting.WebsiteID]["confirmed"]
+		summary.ReopenedCount = counts[setting.WebsiteID]["reopened"]
+		summary.ProcessingCount = counts[setting.WebsiteID]["code_processing"] + counts[setting.WebsiteID]["fix_ready"] + counts[setting.WebsiteID]["verifying"]
+		result[setting.WebsiteID] = summary
 	}
 	return result, nil
 }

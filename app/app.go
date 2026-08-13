@@ -183,6 +183,7 @@ func (r *App) Serve(listener net.Listener) error {
 	api.StartCodeSessionInitialization()
 	api.StartCodeInstructionRecovery()
 	api.StartCodeDeliveryRecovery()
+	service.StartWebsiteDiagnosticRuntime()
 	r.startupMessage(listener.Addr().String())
 
 	err := r.App.Listener(listener, fiber.ListenConfig{DisableStartupMessage: true})
@@ -193,9 +194,10 @@ func (r *App) Serve(listener net.Listener) error {
 }
 
 func (r *App) Shutdown(ctx context.Context) error {
+	diagnosticErr := service.ShutdownWebsiteDiagnosticRuntime(ctx)
 	codeErr := api.ShutdownCodeExecutions(ctx)
 	httpErr := r.App.ShutdownWithContext(ctx)
-	return errors.Join(codeErr, httpErr)
+	return errors.Join(diagnosticErr, codeErr, httpErr)
 }
 
 func (app *App) startupMessage(address string) {

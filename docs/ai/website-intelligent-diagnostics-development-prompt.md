@@ -629,6 +629,8 @@ Code 状态回写、部署后验证、重新打开和回滚提示。
 
 二十、验收标准
 
+项目 Hook 的实际接入协议和示例见 `docs/ai/website-diagnostics-hook-integration.md`。
+
 完成后，管理员应能在 GoPanel 中完成以下真实操作：
 
 1. 创建或编辑网站，开启智能诊断并绑定 Code 项目。

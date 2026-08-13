@@ -14,7 +14,10 @@ func TestWebsiteDiagnosticRepositoryPreservesDisabledOptions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := database.AutoMigrate(&model.WebsiteDiagnosticSetting{}); err != nil {
+	if err := database.AutoMigrate(
+		&model.WebsiteDiagnosticSetting{}, &model.WebsiteDiagnosticEvent{}, &model.WebsiteIssue{},
+		&model.WebsiteDiagnosticTimeline{}, &model.WebsiteProbe{}, &model.WebsiteDiagnosticNonce{},
+	); err != nil {
 		t.Fatal(err)
 	}
 	repository := NewWebsiteDiagnostic(database)

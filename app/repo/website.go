@@ -21,7 +21,11 @@ type WebsiteRepo struct {
 }
 
 func (r *WebsiteRepo) MigrateTable() error {
-	if err := r.db.AutoMigrate(&model.Website{}, &model.WebsiteDomain{}, &model.WebsiteUpstream{}, &model.WebsiteDiagnosticSetting{}); err != nil {
+	if err := r.db.AutoMigrate(
+		&model.Website{}, &model.WebsiteDomain{}, &model.WebsiteUpstream{}, &model.WebsiteDiagnosticSetting{},
+		&model.WebsiteDiagnosticEvent{}, &model.WebsiteIssue{}, &model.WebsiteDiagnosticTimeline{}, &model.WebsiteProbe{},
+		&model.WebsiteDiagnosticNonce{},
+	); err != nil {
 		return err
 	}
 	if err := r.db.Model(&model.Website{}).Where("code_source = ?", "pipeline").Update("code_source", "container").Error; err != nil {

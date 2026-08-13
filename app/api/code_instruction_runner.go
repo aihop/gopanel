@@ -67,6 +67,8 @@ func StartCodeInstructionRecovery() {
 			for {
 				select {
 				case <-ticker.C:
+					_ = reconcileWebsiteIssueCodeTasks()
+					_ = autoHandoffWebsiteDiagnosticIssues()
 					enqueuePersistedCodeInstructions()
 				case <-codeExecutions.stop:
 					return

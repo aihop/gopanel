@@ -181,7 +181,10 @@ export function createWebsiteTableColumns(options: WebsiteTableColumnOptions): D
 					diagnostic.codeProjectId ? h("span", { class: "text-xs text-slate-500" }, [
 						options.diagnosticText("websiteDiagnostic.linkedCode"),
 						diagnostic.autoAnalysis ? ` · ${options.diagnosticText("websiteDiagnostic.autoEnabled")}` : ""
-					]) : null
+					]) : null,
+					h("span", { class: "text-xs text-slate-500" }, options.diagnosticText("websiteDiagnostic.issueSummary", {
+						open: diagnostic.openCount || 0, reopened: diagnostic.reopenedCount || 0, processing: diagnostic.processingCount || 0
+					}))
 				])
 			}
 		},
