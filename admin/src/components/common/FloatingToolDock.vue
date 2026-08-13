@@ -30,7 +30,7 @@
 						<Icon name="mdi:notebook-edit-outline" :size="21" />
 					</button>
 				</template>
-				{{ noteT("floatingNote.open") }}
+				{{ t("floatingNote.open") }}
 			</n-tooltip>
 		</nav>
 	</div>
@@ -51,8 +51,12 @@ type DockTool = "diagnostic" | "note"
 const SCREEN_GAP = 16
 const DOCK_HEIGHT = 144
 const authStore = useAuthStore()
-const { t } = useI18n({ messages: systemDiagnosticMessages })
-const { t: noteT } = useI18n({ messages: floatingNoteMessages })
+const { t } = useI18n({
+	messages: {
+		zh: { ...systemDiagnosticMessages.zh, ...floatingNoteMessages.zh },
+		en: { ...systemDiagnosticMessages.en, ...floatingNoteMessages.en }
+	}
+})
 const activeTool = ref<DockTool | null>(null)
 const positionY = ref(120)
 const panelTop = ref(SCREEN_GAP)
