@@ -301,15 +301,15 @@ func buildCodeExecutorCommand(ctx context.Context, executorID, workDir, prompt, 
 
 func GetCodeExecutors(c fiber.Ctx) error {
 	claims, _ := c.Locals(constant.AppAuthName).(*token.CustomClaims)
-	statuses := make([]codeExecutorStatus, 0, len(codeExecutorDefinitions))
-	for _, definition := range codeExecutorDefinitions {
-		status := detectCodeExecutor(definition)
+	statuses := loadCodeExecutorStatuses()
+	for index := range statuses {
+		status := &statuses[index]
+		definition := codeExecutorDefinitions[index]
 		if claims != nil && claims.Role == constant.UserRoleSubAdmin && definition.ID != "terminal" {
 			status.Available = false
 			status.Reason = "子管理员只能使用隔离终端执行器"
 			status.ReasonCode = "role_restricted"
 		}
-		statuses = append(statuses, status)
 	}
 	return c.JSON(e.Succ(statuses))
 }

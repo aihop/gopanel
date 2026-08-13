@@ -128,8 +128,31 @@ export function cleanupCodeWorktreeResidues(sessionIds: number[]) {
 	return http.post<CodeResidueCleanupOutcome[]>("/code/worktree-residues/cleanup", { sessionIds }, 60000)
 }
 
-export function getCodeExecutors() {
-	return http.get<CodeExecutor[]>("/code/executors")
+const fetchCodeExecutors = () => http.get<CodeExecutor[]>("/code/executors")
+type CodeExecutorsResponse = Awaited<ReturnType<typeof fetchCodeExecutors>>
+let codeExecutorsCache: { response: CodeExecutorsResponse; expiresAt: number } | null = null
+let codeExecutorsPending: Promise<CodeExecutorsResponse> | null = null
+
+export function getCodeExecutors(force = false) {
+	if (!force && codeExecutorsCache && Date.now() < codeExecutorsCache.expiresAt) {
+		return Promise.resolve(codeExecutorsCache.response)
+	}
+	if (!force && codeExecutorsPending) return codeExecutorsPending
+	const request = fetchCodeExecutors().then(response => {
+		codeExecutorsCache = { response, expiresAt: Date.now() + 5 * 60 * 1000 }
+		return response
+	})
+	codeExecutorsPending = request.then(
+		response => {
+			codeExecutorsPending = null
+			return response
+		},
+		error => {
+			codeExecutorsPending = null
+			throw error
+		}
+	)
+	return codeExecutorsPending
 }
 
 export function getCodeWorktreeCapability(projectId: number) {
