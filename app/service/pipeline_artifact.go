@@ -58,6 +58,18 @@ func preparePipelineReleaseDir(logger *PipelineLogger, workspaceDir, releaseDir 
 	return nil
 }
 
+func resetPipelineReleaseSyncMarker(releaseDir string) error {
+	releaseDir = strings.TrimSpace(releaseDir)
+	if releaseDir == "" || releaseDir == string(filepath.Separator) {
+		return fmt.Errorf("发布目录非法")
+	}
+	err := os.Remove(filepath.Join(releaseDir, ".gopanel_release_synced"))
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
 func ensurePipelineSyncPathsSafe(workspaceDir, releaseDir string) error {
 	absWorkspace, err := filepath.Abs(filepath.Clean(workspaceDir))
 	if err != nil {

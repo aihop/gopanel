@@ -39,8 +39,12 @@ func TestFlowRunUsesCommittedProjectBaselineWithoutDelivery(t *testing.T) {
 	if err := json.Unmarshal([]byte(run.SourceManifest), &manifest); err != nil || manifest.SourceType != "code_baseline" {
 		t.Fatalf("baseline manifest = %+v, %v", manifest, err)
 	}
+	resolvedManifest, err := resolvePipelineCodeSourceManifest(project, manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
 	workspace := t.TempDir()
-	if err := materializeFlowSourceManifest(context.Background(), manifest, workspace); err != nil {
+	if err := materializeCodeSourceManifest(context.Background(), nil, resolvedManifest, workspace); err != nil {
 		t.Fatal(err)
 	}
 	content, err := os.ReadFile(filepath.Join(workspace, "source.txt"))

@@ -19,7 +19,10 @@ import (
 	"gorm.io/gorm"
 )
 
-const flowSourceManifestSchemaVersion = 1
+const (
+	flowSourceManifestLegacySchemaVersion = 1
+	flowSourceManifestSchemaVersion       = 2
+)
 
 type FlowCodeDeliverySource struct {
 	JobID        uint                         `json:"jobId"`
@@ -43,7 +46,7 @@ type flowSourceManifest struct {
 
 type flowSourceManifestRepository struct {
 	Name          string `json:"name"`
-	SourceDir     string `json:"sourceDir"`
+	SourceDir     string `json:"-"`
 	WorkspacePath string `json:"workspacePath"`
 	TargetBranch  string `json:"targetBranch"`
 	Commit        string `json:"commit"`

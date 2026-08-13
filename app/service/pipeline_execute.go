@@ -160,10 +160,19 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 		}
 		logger.Info("工作区目录检查 (%s): [%s]", workspaceDir, strings.Join(fileNames, ", "))
 	}
-	if err := preparePipelineReleaseDir(logger, workspaceDir, releaseDir); err != nil {
-		s.recordRepo.UpdateStatus(recordID, "failed", fmt.Sprintf("Prepare release failed: %v", err))
-		logger.Error("准备发布目录失败: %v", err)
-		return
+	if pipelineShouldPrepareReleaseBeforeBuild(p) {
+		if err := preparePipelineReleaseDir(logger, workspaceDir, releaseDir); err != nil {
+			s.recordRepo.UpdateStatus(recordID, "failed", fmt.Sprintf("Prepare release failed: %v", err))
+			logger.Error("准备发布目录失败: %v", err)
+			return
+		}
+	} else {
+		if err := resetPipelineReleaseSyncMarker(releaseDir); err != nil {
+			s.recordRepo.UpdateStatus(recordID, "failed", fmt.Sprintf("Prepare release sync failed: %v", err))
+			logger.Error("准备 Release 固化状态失败: %v", err)
+			return
+		}
+		logger.Info("宿主机构建将在完成后一次性固化 Release，跳过构建前源码复制")
 	}
 	s.recordRepo.UpdateStatus(recordID, "building", "")
 	logger.Info("开始构建版本...，版本号: %s", record.Version)
@@ -247,6 +256,10 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 		logger.Info("流水线构建成功，网站发布请从容器列表选择端口绑定")
 	}
 	logger.Info("====== Pipeline #%d 执行成功！======", recordID)
+}
+
+func pipelineShouldPrepareReleaseBeforeBuild(pipeline *model.Pipeline) bool {
+	return pipeline == nil || pipeline.BuildImage != "host" || strings.TrimSpace(pipeline.BuildScript) == "" || pipeline.RunnerMode == constant.PipelineRunnerModeRunner
 }
 
 func ensurePipelineClonePrerequisites(repoURL string) error {

@@ -82,6 +82,7 @@ func (s *FlowRunApplicationService) Create(input FlowRunCreateInput, userID uint
 	}
 	sourceType, sourceDigest, sourceManifest := "git", "", ""
 	commit, sessionID, taskID, codeDeliveryJobID := "", input.SessionID, input.TaskID, uint(0)
+	var lockedCodeManifest flowSourceManifest
 	if pipelineSourceType(pipeline) == "code" {
 		var manifest flowSourceManifest
 		var digest string
@@ -109,6 +110,7 @@ func (s *FlowRunApplicationService) Create(input FlowRunCreateInput, userID uint
 		}
 		sourceDigest, sourceManifest = digest, string(encodedManifest)
 		commit = flowManifestPrimaryCommit(manifest)
+		lockedCodeManifest = manifest
 	} else {
 		commit, err = normalizePipelineExpectedCommit(input.SourceCommit)
 		if err != nil || commit == "" {
@@ -165,12 +167,7 @@ func (s *FlowRunApplicationService) Create(input FlowRunCreateInput, userID uint
 			return nil, createErr
 		}
 		if isFlowCodeSourceType(sourceType) {
-			var manifest flowSourceManifest
-			if json.Unmarshal([]byte(sourceManifest), &manifest) != nil {
-				_ = s.repo.DeleteRun(item.ID)
-				return nil, buserr.New(constant.ErrFlowCodeSourceInvalid)
-			}
-			if retainErr := retainFlowSourceCommits(item.ID, manifest); retainErr != nil {
+			if retainErr := retainFlowSourceCommits(item.ID, lockedCodeManifest); retainErr != nil {
 				_ = s.repo.DeleteRun(item.ID)
 				return nil, buserr.New(constant.ErrFlowCodeSourceInvalid)
 			}

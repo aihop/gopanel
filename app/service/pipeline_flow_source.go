@@ -12,11 +12,14 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/aihop/gopanel/app/model"
 )
 
 const flowBuildFactFileName = "gopanel_flow.json"
+
+const codeSourceMaterializeTimeout = 15 * time.Minute
 
 type flowBuildFact struct {
 	SchemaVersion int                          `json:"schemaVersion"`
@@ -39,12 +42,12 @@ func (s *PipelineService) prepareCodePipelineSource(
 	workspace string,
 ) (string, string, error) {
 	if record != nil && record.SourceType == "flow_run" && record.SourceID > 0 {
-		return s.prepareFlowCodeDeliverySource(ctx, logger, pipeline, record, workspace)
+		return s.prepareLockedCodeSource(ctx, logger, pipeline, record, workspace)
 	}
 	return s.prepareCodeProjectSnapshot(ctx, logger, pipeline, workspace, record.ExpectedCommit)
 }
 
-func (s *PipelineService) prepareFlowCodeDeliverySource(
+func (s *PipelineService) prepareLockedCodeSource(
 	ctx context.Context,
 	logger *PipelineLogger,
 	pipeline *model.Pipeline,
@@ -62,6 +65,9 @@ func (s *PipelineService) prepareFlowCodeDeliverySource(
 	if err := json.Unmarshal([]byte(run.SourceManifest), &manifest); err != nil || len(manifest.Repositories) == 0 {
 		return "", "", errors.New("Flow 正式版本的代码来源清单无效")
 	}
+	if manifest.SchemaVersion != flowSourceManifestLegacySchemaVersion && manifest.SchemaVersion != flowSourceManifestSchemaVersion {
+		return "", "", errors.New("Flow 正式版本的代码来源清单版本不受支持")
+	}
 	digest, err := flowSourceManifestDigest(manifest)
 	if err != nil || digest != run.SourceDigest {
 		return "", "", errors.New("Flow 正式版本的代码来源摘要不匹配")
@@ -69,17 +75,30 @@ func (s *PipelineService) prepareFlowCodeDeliverySource(
 	if record.ExpectedCommit != "" && !pipelineCommitEqual(record.ExpectedCommit, flowManifestPrimaryCommit(manifest)) {
 		return "", "", errors.New("Flow 正式版本的兼容提交身份不匹配")
 	}
+	var project model.AIProject
+	if err := s.db.First(&project, pipeline.CodeProjectID).Error; err != nil {
+		return "", "", fmt.Errorf("读取 Code 项目失败: %w", err)
+	}
+	resolvedManifest, err := resolvePipelineCodeSourceManifest(&project, manifest)
+	if err != nil {
+		return "", "", err
+	}
 	baseDir := filepath.Dir(workspace)
 	if err := os.MkdirAll(baseDir, 0755); err != nil {
 		return "", "", err
 	}
-	tempDir, err := os.MkdirTemp(baseDir, ".flow-source-")
+	tempDir, err := os.MkdirTemp(baseDir, ".code-source-")
 	if err != nil {
 		return "", "", err
 	}
 	defer os.RemoveAll(tempDir)
-	logger.Info("正在物化 Flow 正式版本: version=%s, source=%s", run.Version, run.SourceType)
-	if err := materializeFlowSourceManifest(ctx, manifest, tempDir); err != nil {
+	materializeCtx, cancel := context.WithTimeout(ctx, codeSourceMaterializeTimeout)
+	defer cancel()
+	logger.Info("Pipeline 正在从 Code 准备锁定源码: version=%s, source=%s", run.Version, run.SourceType)
+	if err := materializeCodeSourceManifest(materializeCtx, logger, resolvedManifest, tempDir); err != nil {
+		if errors.Is(materializeCtx.Err(), context.DeadlineExceeded) {
+			return "", "", fmt.Errorf("准备 Code 锁定源码超时: %w", materializeCtx.Err())
+		}
 		return "", "", err
 	}
 	fact := flowBuildFact{
@@ -94,18 +113,56 @@ func (s *PipelineService) prepareFlowCodeDeliverySource(
 	if err := replacePipelineWorkspace(workspace, tempDir); err != nil {
 		return "", "", err
 	}
-	logger.Info("Flow 正式版本源码已就绪: repositories=%d, digest=%s", len(manifest.Repositories), digest)
+	logger.Info("Code 锁定源码已就绪: repositories=%d, digest=%s", len(manifest.Repositories), digest)
 	return flowManifestPrimaryCommit(manifest), digest, nil
 }
 
-func materializeFlowSourceManifest(ctx context.Context, manifest flowSourceManifest, destination string) error {
+func resolvePipelineCodeSourceManifest(project *model.AIProject, manifest flowSourceManifest) (flowSourceManifest, error) {
+	if project == nil || len(project.SourceDirs) == 0 {
+		return flowSourceManifest{}, errors.New("Code 项目没有源目录")
+	}
+	repositories, err := discoverFlowGitRepositories(project.SourceDirs)
+	if err != nil {
+		return flowSourceManifest{}, fmt.Errorf("解析 Code 项目仓库失败: %w", err)
+	}
+	byWorkspacePath := make(map[string]string, len(repositories))
+	for _, repository := range repositories {
+		_, workspacePath, resolveErr := flowRepositoryWorkspacePath(project.SourceDirs, repository)
+		if resolveErr != nil {
+			return flowSourceManifest{}, resolveErr
+		}
+		if _, exists := byWorkspacePath[workspacePath]; exists {
+			return flowSourceManifest{}, fmt.Errorf("Code 项目仓库映射重复: %s", workspacePath)
+		}
+		byWorkspacePath[workspacePath] = repository
+	}
+	resolved := manifest
+	resolved.Repositories = append([]flowSourceManifestRepository(nil), manifest.Repositories...)
+	for index := range resolved.Repositories {
+		repository := &resolved.Repositories[index]
+		sourceDir, exists := byWorkspacePath[repository.WorkspacePath]
+		if !exists {
+			return flowSourceManifest{}, fmt.Errorf("Code 项目仓库映射已失效: %s", repository.WorkspacePath)
+		}
+		if !flowGitCommitExists(sourceDir, repository.Commit) {
+			return flowSourceManifest{}, fmt.Errorf("Code 项目仓库提交不可用: %s", repository.Name)
+		}
+		repository.SourceDir = sourceDir
+	}
+	return resolved, nil
+}
+
+func materializeCodeSourceManifest(ctx context.Context, logger *PipelineLogger, manifest flowSourceManifest, destination string) error {
 	repositories := append([]flowSourceManifestRepository(nil), manifest.Repositories...)
 	sort.SliceStable(repositories, func(left, right int) bool {
 		return flowWorkspacePathDepth(repositories[left].WorkspacePath) < flowWorkspacePathDepth(repositories[right].WorkspacePath)
 	})
-	for _, repository := range repositories {
+	for index, repository := range repositories {
 		if err := ctx.Err(); err != nil {
 			return err
+		}
+		if logger != nil {
+			logger.Info("正在准备 Code 仓库 (%d/%d): %s @ %s", index+1, len(repositories), repository.Name, repository.Commit)
 		}
 		target, err := safeFlowWorkspaceTarget(destination, repository.WorkspacePath)
 		if err != nil {
@@ -120,7 +177,10 @@ func materializeFlowSourceManifest(ctx context.Context, manifest flowSourceManif
 			return err
 		}
 		if err := extractFlowGitArchive(ctx, repository.SourceDir, repository.Commit, target); err != nil {
-			return fmt.Errorf("物化仓库 %s 失败: %w", repository.Name, err)
+			return fmt.Errorf("准备 Code 仓库 %s 失败: %w", repository.Name, err)
+		}
+		if logger != nil {
+			logger.Info("Code 仓库已准备完成 (%d/%d): %s", index+1, len(repositories), repository.Name)
 		}
 	}
 	return nil
@@ -163,6 +223,12 @@ func extractFlowGitArchive(ctx context.Context, repository, commit, destination 
 		return err
 	}
 	extractErr := extractFlowTar(stdout, destination)
+	if extractErr != nil {
+		_ = stdout.Close()
+		if command.Process != nil {
+			_ = command.Process.Kill()
+		}
+	}
 	waitErr := command.Wait()
 	if extractErr != nil {
 		return extractErr

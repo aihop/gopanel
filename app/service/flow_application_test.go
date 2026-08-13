@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -90,6 +91,9 @@ func TestFlowRunLocksCompletedCodeDeliveryManifest(t *testing.T) {
 	var manifest flowSourceManifest
 	if err := json.Unmarshal([]byte(run.SourceManifest), &manifest); err != nil || len(manifest.Repositories) != 2 {
 		t.Fatalf("source manifest = %+v, %v", manifest, err)
+	}
+	if manifest.SchemaVersion != flowSourceManifestSchemaVersion || strings.Contains(run.SourceManifest, "sourceDir") {
+		t.Fatalf("flow persisted physical Code paths: %s", run.SourceManifest)
 	}
 	if err := database.Model(&job).Updates(map[string]any{"repository_results": "[]", "status": "failed"}).Error; err != nil {
 		t.Fatal(err)
