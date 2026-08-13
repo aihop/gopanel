@@ -5,6 +5,7 @@ import (
 
 	"github.com/aihop/gopanel/app/dto"
 	"github.com/aihop/gopanel/app/e"
+	"github.com/aihop/gopanel/app/service"
 	"github.com/gofiber/fiber/v3"
 
 	"github.com/aihop/gopanel/constant"
@@ -74,6 +75,34 @@ func LoadDashboardCurrentInfo(c fiber.Ctx) error {
 	}
 	data := dashboardService.LoadCurrentInfo(*req)
 	return c.JSON(e.Succ(data))
+}
+
+// @Tags Dashboard
+// @Summary Update system hostname
+// @Accept json
+// @Param request body dto.DashboardHostnameUpdate true "request"
+// @Success 200 {object} dto.DashboardHostnameResult
+// @Security ApiKeyAuth
+// @Security Timestamp
+// @Router /dashboard/hostname [post]
+// @x-panel-log {"bodyKeys":["hostname"],"paramKeys":[],"BeforeFunctions":[],"formatZH":"修改服务器名称为 [hostname]","formatEN":"Update server hostname to [hostname]"}
+func UpdateDashboardHostname(c fiber.Ctx) error {
+	req, err := e.BodyToStruct[dto.DashboardHostnameUpdate](c.Body())
+	if err != nil {
+		return c.JSON(e.RetError(constant.CodeErrBadRequest, service.ErrHostnameInvalid.Error()))
+	}
+
+	hostname, err := dashboardService.UpdateHostname(req.Hostname)
+	if err != nil {
+		if errors.Is(err, service.ErrHostnameInvalid) {
+			return c.JSON(e.RetError(constant.CodeErrBadRequest, service.ErrHostnameInvalid.Error()))
+		}
+		if errors.Is(err, service.ErrHostnameToolUnavailable) {
+			return c.JSON(e.RetError(constant.CodeErrInternalServer, service.ErrHostnameToolUnavailable.Error()))
+		}
+		return c.JSON(e.RetError(constant.CodeErrInternalServer, service.ErrHostnameUpdateFailed.Error()))
+	}
+	return c.JSON(e.Succ(dto.DashboardHostnameResult{Hostname: hostname}))
 }
 
 // @Tags Dashboard

@@ -1,4 +1,13 @@
 {
+	"/dashboard/hostname": {
+		"bodyKeys": [
+			"hostname"
+		],
+		"paramKeys": [],
+		"beforeFunctions": [],
+		"formatZH": "修改服务器名称为 [hostname]",
+		"formatEN": "Update server hostname to [hostname]"
+	},
 	"/agent/ensure": {
 		"bodyKeys": [],
 		"paramKeys": [],

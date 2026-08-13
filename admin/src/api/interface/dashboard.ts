@@ -111,4 +111,8 @@ export namespace Dashboard {
 		ioOption: string
 		netOption: string
 	}
+
+	export interface HostnameResult {
+		hostname: string
+	}
 }

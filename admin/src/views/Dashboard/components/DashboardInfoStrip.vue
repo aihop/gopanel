@@ -2,7 +2,38 @@
   <div class="grid gap-5 rounded-[22px] p-[22px] shadow-[0_1px_2px_rgba(37,99,235,0.05)] lg:grid-cols-[minmax(0,1.3fr)_minmax(0,2fr)]">
     <div class="flex min-w-0 flex-col justify-center gap-2">
       <div class="text-xs font-bold uppercase tracking-[0.08em] text-blue-600">{{ t("home.baseInfo") }}</div>
-      <div class="text-2xl font-bold leading-[1.1] text-slate-900">{{ baseInfo.hostname || "--" }}</div>
+      <div v-if="editingHostname" class="flex max-w-xl flex-col gap-1.5">
+        <div class="flex items-center gap-2">
+          <n-input
+            ref="hostnameInputRef"
+            :value="hostnameDraft"
+            :placeholder="t('dashboardHostname.placeholder')"
+            :status="hostnameError ? 'error' : undefined"
+            :maxlength="253"
+            :disabled="hostnameSaving"
+            @update:value="handleHostnameInput"
+            @keydown.enter.prevent="saveHostname"
+            @keydown.esc.prevent="cancelHostnameEdit"
+          />
+          <n-button size="small" type="primary" :loading="hostnameSaving" @click="saveHostname">
+            {{ t("dashboardHostname.save") }}
+          </n-button>
+          <n-button size="small" :disabled="hostnameSaving" @click="cancelHostnameEdit">
+            {{ t("dashboardHostname.cancel") }}
+          </n-button>
+        </div>
+        <span class="text-xs" :class="hostnameError ? 'text-red-500' : 'text-slate-500'">
+          {{ hostnameError || t("dashboardHostname.rule") }}
+        </span>
+      </div>
+      <div v-else class="flex min-w-0 items-center gap-2">
+        <span class="min-w-0 truncate text-2xl font-bold leading-[1.1] text-slate-900">
+          {{ baseInfo.hostname || "--" }}
+        </span>
+        <n-button size="tiny" quaternary type="primary" @click="startHostnameEdit">
+          {{ t("dashboardHostname.edit") }}
+        </n-button>
+      </div>
       <div class="break-words text-[13px] leading-[1.6] text-slate-500">
         <div>{{ [baseInfo.os, baseInfo.platform, baseInfo.platformVersion, baseInfo.kernelArch].filter(Boolean).join(" · ") || "--" }}</div>
         <div class="mt-3 flex items-center gap-3">
@@ -78,10 +109,14 @@
 
 <script setup lang="ts">
 import type { Dashboard } from "@/api/interface/dashboard"
+import { updateHostname } from "@/api/modules/dashboard"
+import { dashboardHostnameMessages } from "@/i18n/locales/dashboardHostname"
+import { nextTick, ref } from "vue"
 import { useI18n } from "vue-i18n"
+import { useMessage } from "naive-ui"
 import { formatUptime, shortText } from "./dashboardStatusHelpers"
 
-defineProps<{
+const props = defineProps<{
   baseInfo: Dashboard.BaseInfo
   currentInfo: Dashboard.CurrentInfo
   lowPowerMode: boolean
@@ -95,5 +130,67 @@ const emit = defineEmits<{
   (e: "cpu-relieve"): void
 }>()
 
-const { t } = useI18n()
+const { t } = useI18n({ messages: dashboardHostnameMessages })
+const message = useMessage()
+const editingHostname = ref(false)
+const hostnameDraft = ref("")
+const hostnameError = ref("")
+const hostnameSaving = ref(false)
+const hostnameInputRef = ref<{ focus: () => void } | null>(null)
+
+function startHostnameEdit() {
+  hostnameDraft.value = props.baseInfo.hostname
+  hostnameError.value = ""
+  editingHostname.value = true
+  nextTick(() => hostnameInputRef.value?.focus())
+}
+
+function cancelHostnameEdit() {
+  if (hostnameSaving.value) return
+  editingHostname.value = false
+  hostnameDraft.value = ""
+  hostnameError.value = ""
+}
+
+function handleHostnameInput(value: string) {
+  hostnameDraft.value = value.replace(/[^A-Za-z0-9.-]/g, "")
+  hostnameError.value = value === hostnameDraft.value ? "" : t("dashboardHostname.ErrHostnameInvalid")
+}
+
+async function saveHostname() {
+  if (hostnameSaving.value) return
+  const hostname = hostnameDraft.value.trim()
+  if (!isValidHostname(hostname)) {
+    hostnameError.value = t("dashboardHostname.ErrHostnameInvalid")
+    return
+  }
+  if (hostname === props.baseInfo.hostname) {
+    cancelHostnameEdit()
+    return
+  }
+
+  hostnameSaving.value = true
+  try {
+    const res = await updateHostname(hostname)
+    if (res.code !== 0 || !res.data?.hostname) {
+      throw new Error(res.msg || res.message || "ErrHostnameUpdateFailed")
+    }
+    props.baseInfo.hostname = res.data.hostname
+    editingHostname.value = false
+    message.success(t("dashboardHostname.updated"))
+  } catch (error: any) {
+    const errorCode = error?.message
+    const knownError = ["ErrHostnameInvalid", "ErrHostnameToolUnavailable", "ErrHostnameUpdateFailed"].includes(errorCode)
+    message.error(t(knownError ? `dashboardHostname.${errorCode}` : "dashboardHostname.updateFailed"))
+  } finally {
+    hostnameSaving.value = false
+  }
+}
+
+function isValidHostname(hostname: string) {
+  if (!hostname || hostname.length > 253 || !/^[A-Za-z0-9.-]+$/.test(hostname)) return false
+  return hostname.split(".").every(label =>
+    label.length > 0 && label.length <= 63 && !label.startsWith("-") && !label.endsWith("-")
+  )
+}
 </script>

@@ -28,6 +28,7 @@ type IDashboardService interface {
 	LoadOsInfo() (*dto.OsInfo, error)
 	LoadBaseInfo(ioOption string, netOption string) (*dto.DashboardBase, error)
 	LoadCurrentInfo(req dto.DashboardReq) *dto.DashboardCurrent
+	UpdateHostname(hostname string) (string, error)
 
 	Restart(operation string) error
 }

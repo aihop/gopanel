@@ -13,6 +13,10 @@ export const loadCurrentInfo = (req: Dashboard.DashboardReq) => {
 	return http.get<Dashboard.CurrentInfo>(`/dashboard/current`, req)
 }
 
+export const updateHostname = (hostname: string) => {
+	return http.post<Dashboard.HostnameResult>(`/dashboard/hostname`, { hostname })
+}
+
 export const systemRestart = (operation: string) => {
 	return http.post(`/dashboard/system/restart/${operation}`)
 }

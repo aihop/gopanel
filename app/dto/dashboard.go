@@ -44,6 +44,14 @@ type DashboardReq struct {
 	NetOption string `json:"netOption"`
 }
 
+type DashboardHostnameUpdate struct {
+	Hostname string `json:"hostname"`
+}
+
+type DashboardHostnameResult struct {
+	Hostname string `json:"hostname"`
+}
+
 type DashboardCurrent struct {
 	Uptime          uint64 `json:"uptime"`
 	TimeSinceUptime string `json:"timeSinceUptime"`
