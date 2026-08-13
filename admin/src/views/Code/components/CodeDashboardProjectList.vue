@@ -69,14 +69,18 @@ const handleDragStart = (event: DragEvent, projectId: number) => {
 	if (event.dataTransfer) {
 		event.dataTransfer.effectAllowed = "move"
 		event.dataTransfer.setData("text/plain", String(projectId))
+		const projectHeader = (event.currentTarget as HTMLElement).closest<HTMLElement>("[data-project-drag-target]")
+		if (projectHeader) event.dataTransfer.setDragImage(projectHeader, 20, projectHeader.offsetHeight / 2)
 	}
 }
 
 const handleDragOver = (event: DragEvent, targetProjectId: number) => {
 	if (!draggingProjectId.value || draggingProjectId.value === targetProjectId) return
 	event.preventDefault()
-	const target = event.currentTarget as HTMLElement
-	const position = event.clientY < target.getBoundingClientRect().top + target.offsetHeight / 2 ? "before" : "after"
+	const target = (event.currentTarget as HTMLElement).querySelector<HTMLElement>("[data-project-drag-target]")
+	if (!target) return
+	const targetRect = target.getBoundingClientRect()
+	const position = event.clientY < targetRect.top + targetRect.height / 2 ? "before" : "after"
 	dropTarget.value = { projectId: targetProjectId, position }
 	if (event.dataTransfer) event.dataTransfer.dropEffect = "move"
 }
@@ -115,16 +119,27 @@ watch(() => props.selectedTaskId, () => {
     <section
       v-for="group in groups"
       :key="group.id"
-      class="relative overflow-hidden rounded-2xl"
+      class="relative rounded-2xl transition-opacity duration-150"
+      :class="draggingProjectId === group.id ? 'opacity-40' : ''"
+      @dragover="group.available && handleDragOver($event, group.id)"
+      @drop="group.available && handleDrop($event, group.id)"
     >
       <div
-        class="group/project relative flex h-10 items-center gap-1 px-1"
-        @dragover="group.available && handleDragOver($event, group.id)"
-        @drop="group.available && handleDrop($event, group.id)"
+        v-if="dropTarget?.projectId === group.id"
+        class="pointer-events-none absolute inset-x-1 z-20 h-1 rounded-full bg-[var(--n-primary-color)] shadow-[0_0_8px_var(--n-primary-color)]"
+        :class="dropTarget.position === 'before' ? 'top-0' : 'bottom-0'"
+      >
+        <span class="absolute -left-1 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-[var(--n-primary-color)]" />
+        <span class="absolute -right-1 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-[var(--n-primary-color)]" />
+      </div>
+      <div
+        data-project-drag-target
+        class="group/project relative flex h-10 items-center gap-1 overflow-hidden rounded-xl px-1 transition-colors duration-150"
+        :class="dropTarget?.projectId === group.id ? 'ring-1 ring-inset ring-[var(--n-primary-color)]' : ''"
       >
         <div
           v-if="dropTarget?.projectId === group.id"
-          class="pointer-events-none absolute inset-x-2 z-10 h-0.5 rounded-full bg-[var(--n-primary-color)]"
+          class="pointer-events-none absolute inset-x-0 h-1/2 bg-[var(--n-primary-color)] opacity-15"
           :class="dropTarget.position === 'before' ? 'top-0' : 'bottom-0'"
         />
         <button
