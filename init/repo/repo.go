@@ -36,6 +36,7 @@ func Init() error {
 		{"pipeline", func() error { return repo.NewPipeline(global.DB).MigrateTable() }},
 		{"pipeline record", func() error { return repo.NewPipelineRecord(global.DB).MigrateTable() }},
 		{"release", func() error { return repo.NewRelease(global.DB).MigrateTable() }},
+		{"flow", func() error { return repo.NewFlow(global.DB).MigrateTable() }},
 		{"app deploy", func() error { return repo.NewAppDeploy(global.DB).MigrateTable() }},
 		{"cronjob", func() error { return repo.NewCronjob().MigrateTable() }},
 		{"node", func() error { return repo.NewNode().MigrateTable() }},

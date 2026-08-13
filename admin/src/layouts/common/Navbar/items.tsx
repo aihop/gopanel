@@ -64,6 +64,20 @@ export default function getItems(_: { mode: "vertical" | "horizontal"; collapsed
 					RouterLink,
 					{
 						to: {
+							name: "Flow-Index"
+						}
+					},
+					{ default: () => t("menu.flow") }
+				),
+			key: "flow",
+			icon: renderIcon("mdi:transit-connection-variant")
+		},
+		{
+			label: () =>
+				h(
+					RouterLink,
+					{
+						to: {
 							name: "Website-Index"
 						}
 					},

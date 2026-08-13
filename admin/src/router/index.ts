@@ -99,6 +99,20 @@ const router = createRouter({
 			]
 		},
 		{
+			path: "/flow",
+			name: "Flow",
+			redirect: "/flow/index",
+			meta: { title: t("menu.flow"), titleKey: "menu.flow", auth: true, roles: "all" },
+			children: [
+				{
+					path: "index",
+					name: "Flow-Index",
+					component: () => import("@/views/Flow/Index.vue"),
+					meta: { title: t("menu.flow"), titleKey: "menu.flow", auth: true, roles: "all" }
+				}
+			]
+		},
+		{
 			path: "/database",
 			name: "Database",
 			redirect: "/database/index",

@@ -80,6 +80,16 @@ var (
 	ErrAppParamKey                   = "ErrAppParamKey"
 	ErrPipelineExpectedCommitInvalid = "ErrPipelineExpectedCommitInvalid"
 	ErrPipelineExpectedCommitRepo    = "ErrPipelineExpectedCommitRepo"
+	ErrFlowNameRequired              = "ErrFlowNameRequired"
+	ErrFlowProjectRequired           = "ErrFlowProjectRequired"
+	ErrFlowPipelineRequired          = "ErrFlowPipelineRequired"
+	ErrFlowEnvironmentRequired       = "ErrFlowEnvironmentRequired"
+	ErrFlowProjectNotFound           = "ErrFlowProjectNotFound"
+	ErrFlowPipelineNotFound          = "ErrFlowPipelineNotFound"
+	ErrFlowWebsiteNotFound           = "ErrFlowWebsiteNotFound"
+	ErrFlowProjectForbidden          = "ErrFlowProjectForbidden"
+	ErrFlowProjectExists             = "ErrFlowProjectExists"
+	ErrFlowEnvironmentInvalid        = "ErrFlowEnvironmentInvalid"
 )
 
 // website

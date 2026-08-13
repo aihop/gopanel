@@ -31,6 +31,7 @@ func AppRegister(r fiber.Router) {
 	WebsiteRouter(apiRouter)            // 网站
 	SSLRouter(apiRouter)                // SSL 证书
 	PipelineRouter(apiRouter)           // 流水线
+	FlowRouter(apiRouter)               // 交付流程
 	CodeRouter(apiRouter)               // GoPanel Code
 	LogsRouter(apiRouter)               // 日志
 	SecurityMonitoringRouter(apiRouter) // AI 安全监测
