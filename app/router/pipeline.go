@@ -27,6 +27,7 @@ func PipelineRouter(r fiber.Router) {
 		adminOnlyGroup.Post("/release/publish", api.PipelineReleasePublish)
 		adminOnlyGroup.Put("/", api.PipelineUpdate)
 		adminOnlyGroup.Delete("/", api.PipelineDelete)
+		adminOnlyGroup.Post("/force-delete", api.PipelineForceDelete)
 		adminOnlyGroup.Delete("/record", api.PipelineRecordDelete)
 	}
 }

@@ -93,6 +93,13 @@ export namespace Pipeline {
     remark?: string;
   }
 
+  export interface ResForceDelete {
+    pipelineId: number;
+    recordCount: number;
+    releaseCount: number;
+    cleanupWarnings: string[];
+  }
+
   export interface ReqDetectRunnerPreset {
     repoUrl: string;
     branch: string;

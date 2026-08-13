@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { h, onMounted, ref, computed } from "vue"
-import { NButton, NDataTable, NSpace, NTag, useMessage, useDialog, NModal, NForm, NFormItem, NInput } from "naive-ui"
+import { NButton, NDataTable, NSpace, NTag, useMessage, NModal, NForm, NFormItem, NInput } from "naive-ui"
 import type { DataTableColumns } from "naive-ui"
-import { getPipelinePage, deletePipeline, runPipeline } from "@/api/modules/pipeline"
+import { getPipelinePage, forceDeletePipeline, runPipeline } from "@/api/modules/pipeline"
 import { Pipeline } from "@/api/interface/pipeline"
 import PipelineRecordsModal from "./PipelineRecordsModal.vue"
 import PipelineLogsModal from "./PipelineLogsModal.vue"
 import PipelineReleasesModal from "./PipelineReleasesModal.vue"
+import PipelineForceDeleteModal from "./PipelineForceDeleteModal.vue"
 import { useAuthStore } from "@/store/auth"
 import { t } from "@/i18n"
 import { buildRuntimeDetailText, getRuntimeKindLabel, getRuntimeModeLabel, getRunUserLabel } from "@/utils/runtime"
@@ -18,7 +19,6 @@ const isSuperAdmin = computed(() => authStore.user?.role === 'SUPER')
 const emit = defineEmits(["edit"])
 
 const message = useMessage()
-const dialog = useDialog()
 const data = ref<Pipeline.ResPipeline[]>([])
 const loading = ref(false)
 const pagination = ref({
@@ -34,6 +34,9 @@ const pagination = ref({
 const recordsModalShow = ref(false)
 const releasesModalShow = ref(false)
 const currentPipelineId = ref<number | null>(null)
+const forceDeleteModalShow = ref(false)
+const forceDeleteLoading = ref(false)
+const forceDeleteRow = ref<Pipeline.ResPipeline | null>(null)
 
 // 执行版本号弹窗
 const runModalShow = ref(false)
@@ -251,21 +254,29 @@ const handleViewReleases = (row: Pipeline.ResPipeline) => {
 
 
 const handleDelete = async (row: Pipeline.ResPipeline) => {
-  await dialog.warning({
-    title: "确认删除",
-    content: `确定要删除流水线 ${row.name} 吗？`,
-    positiveText: "确定",
-    negativeText: "取消",
-    onPositiveClick: async () => {
-      try {
-        await deletePipeline({ id: row.id })
-        message.success("删除成功")
-        fetchData()
-      } catch (error: any) {
-        void 0
-      }
+  forceDeleteRow.value = row
+  forceDeleteModalShow.value = true
+}
+
+const confirmForceDelete = async (confirmName: string) => {
+  if (!forceDeleteRow.value) return
+  forceDeleteLoading.value = true
+  try {
+    const res = await forceDeletePipeline({ id: forceDeleteRow.value.id, confirmName })
+    forceDeleteModalShow.value = false
+    message.success(t("pipeline.forceDeleteSuccess", {
+      records: res.data.recordCount,
+      releases: res.data.releaseCount
+    }))
+    for (const warning of res.data.cleanupWarnings || []) {
+      message.warning(t(`pipeline.${warning}`), { duration: 8000 })
     }
-  })
+    await fetchData()
+  } catch (error: any) {
+    message.error(error?.message || t("pipeline.forceDeleteFailed"))
+  } finally {
+    forceDeleteLoading.value = false
+  }
 }
 
 onMounted(() => {
@@ -297,6 +308,12 @@ defineExpose({
       v-if="currentPipelineId"
       v-model:show="releasesModalShow"
       :pipeline-id="currentPipelineId"
+    />
+    <PipelineForceDeleteModal
+      v-model:show="forceDeleteModalShow"
+      :pipeline="forceDeleteRow"
+      :loading="forceDeleteLoading"
+      @confirm="confirmForceDelete"
     />
 
     <!-- 新增流水线日志弹窗 -->

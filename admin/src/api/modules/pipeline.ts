@@ -18,6 +18,10 @@ export const deletePipeline = (params: { id: number }) => {
   return http.delete(`/pipeline`, params);
 };
 
+export const forceDeletePipeline = (params: { id: number; confirmName: string }) => {
+  return http.post<Pipeline.ResForceDelete>(`/pipeline/force-delete`, params);
+};
+
 export const runPipeline = (params: { id: number; version: string; expectedCommit?: string }) => {
   return http.post<{ recordId: number }>(`/pipeline/run`, params);
 };

@@ -97,3 +97,15 @@ func (r *PipelineRecordRepo) CountByPipelineID(pipelineID uint) (int64, error) {
 	err := r.db.Model(&model.PipelineRecord{}).Where("pipeline_id = ?", pipelineID).Count(&count).Error
 	return count, err
 }
+func (r *PipelineRecordRepo) RunnerContainerIDsByPipelineID(pipelineID uint) ([]string, error) {
+	var ids []string
+	err := r.db.Model(&model.PipelineRecord{}).
+		Where("pipeline_id = ? AND runner_container_id <> ''", pipelineID).
+		Distinct("runner_container_id").Pluck("runner_container_id", &ids).Error
+	return ids, err
+}
+func (r *PipelineRecordRepo) IDsByPipelineID(pipelineID uint) ([]uint, error) {
+	var ids []uint
+	err := r.db.Model(&model.PipelineRecord{}).Where("pipeline_id = ?", pipelineID).Pluck("id", &ids).Error
+	return ids, err
+}

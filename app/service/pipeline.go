@@ -18,7 +18,8 @@ import (
 )
 
 var (
-	pipelineCancels sync.Map
+	pipelineCancels    sync.Map
+	pipelineMutationMu sync.Mutex
 )
 
 func StopPipeline(recordID uint) {

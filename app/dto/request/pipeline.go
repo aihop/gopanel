@@ -43,6 +43,11 @@ type PipelineRun struct {
 	ExpectedCommit string `json:"expectedCommit"`
 }
 
+type PipelineForceDelete struct {
+	ID          uint   `json:"id" validate:"required"`
+	ConfirmName string `json:"confirmName" validate:"required"`
+}
+
 type PipelineDetect struct {
 	RepoUrl  string `json:"repoUrl" validate:"required"`
 	Branch   string `json:"branch" validate:"required"`

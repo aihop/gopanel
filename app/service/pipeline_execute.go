@@ -25,6 +25,9 @@ type PipelineRunSource struct {
 }
 
 func (s *PipelineService) RunPipelineForSource(pipelineID uint, version, expectedCommit string, source PipelineRunSource) (uint, error) {
+	pipelineMutationMu.Lock()
+	defer pipelineMutationMu.Unlock()
+
 	if source.IdempotencyKey != "" {
 		existing, err := s.recordRepo.GetByIdempotencyKey(source.IdempotencyKey)
 		if err == nil {

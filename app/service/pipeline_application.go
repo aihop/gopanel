@@ -12,6 +12,7 @@ import (
 )
 
 type PipelineApplicationService struct {
+	db           *gorm.DB
 	pipelineRepo *repo.PipelineRepo
 	recordRepo   *repo.PipelineRecordRepo
 	releaseRepo  *repo.ReleaseRepo
@@ -19,7 +20,7 @@ type PipelineApplicationService struct {
 }
 
 func NewPipelineApplication(db *gorm.DB) *PipelineApplicationService {
-	return &PipelineApplicationService{pipelineRepo: repo.NewPipeline(db), recordRepo: repo.NewPipelineRecord(db), releaseRepo: repo.NewRelease(db), executor: NewPipelineService(db)}
+	return &PipelineApplicationService{db: db, pipelineRepo: repo.NewPipeline(db), recordRepo: repo.NewPipelineRecord(db), releaseRepo: repo.NewRelease(db), executor: NewPipelineService(db)}
 }
 func (s *PipelineApplicationService) Page(ctx context.Context, page, limit int) (int64, []model.Pipeline, error) {
 	total, list, err := s.pipelineRepo.Page(page, limit)

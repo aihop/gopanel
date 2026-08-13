@@ -125,6 +125,22 @@ func PipelineDelete(c fiber.Ctx) error {
 	return c.JSON(e.Succ())
 }
 
+func PipelineForceDelete(c fiber.Ctx) error {
+	if err := requirePipelineManagePermission(c); err != nil {
+		return c.JSON(e.Auth(err.Error()))
+	}
+	req, err := e.BodyToStruct[request.PipelineForceDelete](c.Body())
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+
+	result, err := service.NewPipelineApplication(global.DB).ForceDelete(req.ID, req.ConfirmName)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	return c.JSON(e.Succ(result))
+}
+
 func PipelineRun(c fiber.Ctx) error {
 	req, err := e.BodyToStruct[request.PipelineRun](c.Body())
 	if err != nil {
