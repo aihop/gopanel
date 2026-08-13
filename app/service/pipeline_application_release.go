@@ -6,6 +6,8 @@ import (
 	"fmt"
 
 	"github.com/aihop/gopanel/app/model"
+	"github.com/aihop/gopanel/buserr"
+	"github.com/aihop/gopanel/constant"
 	"gorm.io/gorm"
 )
 
@@ -43,6 +45,9 @@ func (s *PipelineApplicationService) DeleteRecord(recordID uint) error {
 	}
 	if record.Status == "pending" || record.Status == "cloning" || record.Status == "building" || record.Status == "deploying" {
 		return fmt.Errorf("执行中的记录不允许删除")
+	}
+	if record.SourceType == "flow_run" {
+		return buserr.New(constant.ErrFlowPipelineRecordProtected)
 	}
 	releaseCount, err := s.releaseRepo.CountByPipelineRecordID(recordID)
 	if err != nil {

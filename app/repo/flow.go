@@ -14,7 +14,7 @@ func NewFlow(db *gorm.DB) *FlowRepo {
 }
 
 func (r *FlowRepo) MigrateTable() error {
-	return r.db.AutoMigrate(&model.Flow{}, &model.FlowEnvironment{})
+	return r.db.AutoMigrate(&model.Flow{}, &model.FlowEnvironment{}, &model.FlowRun{}, &model.FlowStageRun{})
 }
 
 func (r *FlowRepo) Page(userID uint, includeAll bool, page, limit int) (int64, []model.Flow, error) {
@@ -37,4 +37,12 @@ func (r *FlowRepo) CreateWithEnvironments(item *model.Flow) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
 		return tx.Create(item).Error
 	})
+}
+
+func (r *FlowRepo) Get(id uint) (*model.Flow, error) {
+	var item model.Flow
+	err := r.db.Preload("Environments", func(db *gorm.DB) *gorm.DB {
+		return db.Order("sort asc, id asc")
+	}).First(&item, id).Error
+	return &item, err
 }

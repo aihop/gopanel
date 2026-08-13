@@ -60,7 +60,13 @@ func Init() {
 		global.LOG.Errorf("[Cron] 添加 AI 安全监测任务失败: %v", err)
 	}
 
+	_, err = global.Cron.AddFunc("* * * * *", service.ReconcileFlowRuns)
+	if err != nil {
+		global.LOG.Errorf("[Cron] 添加 Flow 恢复任务失败: %v", err)
+	}
+
 	global.Cron.Start()
+	service.ReconcileFlowRuns()
 	global.LOG.Info("[Cron] task scheduler started")
 
 	seedDefaultSSLRenewJob()

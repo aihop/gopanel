@@ -9,3 +9,15 @@ export function getFlowPage(params: { page: number; limit: number }) {
 export function createFlow(input: Flow.CreateInput) {
 	return http.post<Flow.Item>("/flow", input)
 }
+
+export function getFlowRunPage(params: { flowId?: number; page: number; limit: number }) {
+	return http.get<ResPage<Flow.Run>>("/flow/runs", params)
+}
+
+export function getFlowRun(id: number) {
+	return http.get<Flow.Run>(`/flow/runs/${id}`)
+}
+
+export function createFlowRun(input: Flow.RunCreateInput) {
+	return http.post<Flow.Run>("/flow/runs", input)
+}

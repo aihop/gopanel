@@ -39,4 +39,53 @@ export namespace Flow {
 		autoStartAfterCodeDelivery: boolean
 		environments: CreateEnvironment[]
 	}
+
+	export type RunStatus = "queued" | "running" | "failed" | "waiting_deployment"
+	export type RunStage = "created" | "building" | "publishing" | "release_ready" | "waiting_deployment" | "failed"
+
+	export interface StageRun {
+		id: number
+		flowRunId: number
+		stage: RunStage
+		attempt: number
+		status: "pending" | "running" | "success" | "failed"
+		resourceType: string
+		resourceId: number
+		summary: string
+		errorCode: string
+		errorDetail: string
+		startedAt?: string
+		completedAt?: string
+	}
+
+	export interface Run {
+		id: number
+		createdAt: string
+		updatedAt: string
+		flowId: number
+		flowName: string
+		projectId: number
+		projectName: string
+		pipelineId: number
+		pipelineName: string
+		version: string
+		sourceBranch: string
+		sourceCommit: string
+		pipelineRecordId: number
+		releaseId: number
+		artifactDigest: string
+		currentStage: RunStage
+		status: RunStatus
+		failureCode: string
+		errorSummary: string
+		startedAt?: string
+		completedAt?: string
+		stages?: StageRun[]
+	}
+
+	export interface RunCreateInput {
+		flowId: number
+		sourceCommit: string
+		version?: string
+	}
 }

@@ -11,9 +11,29 @@ import (
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/buserr"
 	"github.com/aihop/gopanel/constant"
+	"gorm.io/gorm"
 )
 
 func (s *PipelineService) RunPipeline(pipelineID uint, version, expectedCommit string) (uint, error) {
+	return s.RunPipelineForSource(pipelineID, version, expectedCommit, PipelineRunSource{})
+}
+
+type PipelineRunSource struct {
+	Type           string
+	ID             uint
+	IdempotencyKey string
+}
+
+func (s *PipelineService) RunPipelineForSource(pipelineID uint, version, expectedCommit string, source PipelineRunSource) (uint, error) {
+	if source.IdempotencyKey != "" {
+		existing, err := s.recordRepo.GetByIdempotencyKey(source.IdempotencyKey)
+		if err == nil {
+			return existing.ID, nil
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return 0, err
+		}
+	}
 	pipeline, err := s.repo.Get(pipelineID)
 	if err != nil {
 		return 0, err
@@ -25,7 +45,10 @@ func (s *PipelineService) RunPipeline(pipelineID uint, version, expectedCommit s
 	if expectedCommit != "" && strings.TrimSpace(pipeline.RepoUrl) == "" {
 		return 0, buserr.New(constant.ErrPipelineExpectedCommitRepo)
 	}
-	record := &model.PipelineRecord{PipelineID: pipeline.ID, Status: "pending", Version: version, ExpectedCommit: expectedCommit}
+	record := &model.PipelineRecord{
+		PipelineID: pipeline.ID, Status: "pending", Version: version, ExpectedCommit: expectedCommit,
+		SourceType: source.Type, SourceID: source.ID, IdempotencyKey: source.IdempotencyKey,
+	}
 	err = s.recordRepo.Create(record)
 	if err != nil {
 		return 0, err

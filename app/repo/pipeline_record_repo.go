@@ -13,6 +13,11 @@ func (r *PipelineRecordRepo) Get(id uint) (*model.PipelineRecord, error) {
 	err := r.db.First(&record, id).Error
 	return &record, err
 }
+func (r *PipelineRecordRepo) GetByIdempotencyKey(key string) (*model.PipelineRecord, error) {
+	var record model.PipelineRecord
+	err := r.db.Where("idempotency_key = ?", key).Order("id desc").First(&record).Error
+	return &record, err
+}
 func (r *PipelineRecordRepo) Delete(id uint) error {
 	return r.db.Delete(&model.PipelineRecord{}, id).Error
 }

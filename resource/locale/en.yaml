@@ -35,6 +35,13 @@ ErrFlowWebsiteNotFound: "The website bound to the delivery environment does not 
 ErrFlowProjectForbidden: "You cannot create a delivery flow for this code project"
 ErrFlowProjectExists: "This code project already has a delivery flow"
 ErrFlowEnvironmentInvalid: "The delivery environment is invalid or duplicated"
+ErrFlowNotFound: "The delivery flow does not exist"
+ErrFlowForbidden: "You cannot access this delivery flow"
+ErrFlowDisabled: "The delivery flow is disabled"
+ErrFlowCommitRequired: "Enter a full commit SHA"
+ErrFlowVersionInvalid: "The version format is invalid"
+ErrFlowVersionExists: "This delivery flow already has the same version"
+ErrFlowPipelineRecordProtected: "This pipeline record belongs to a delivery run; view it in Delivery Center"
 
 ErrMinQuickJump: "Set at least one quick jump entry"
 ErrMaxQuickJump: "At most 4 quick jump entries"

@@ -44,6 +44,9 @@ type PipelineRecord struct {
 	Status         string    `gorm:"column:status;type:varchar(20);not null;default:'pending'" json:"status"` // pending, cloning, building, deploying, success, failed
 	Version        string    `gorm:"column:version;type:varchar(50)" json:"version"`                          // 记录本次执行的版本号
 	ExpectedCommit string    `gorm:"column:expected_commit;type:varchar(64);index" json:"expectedCommit"`
+	SourceType     string    `gorm:"column:source_type;type:varchar(32);index" json:"sourceType"`
+	SourceID       uint      `gorm:"column:source_id;index" json:"sourceId"`
+	IdempotencyKey string    `gorm:"column:idempotency_key;type:varchar(128);index" json:"idempotencyKey"`
 	CommitHash     string    `gorm:"column:commit_hash;type:varchar(64)" json:"commitHash"`
 	// Changelog 本次构建包含的提交标题，一行一条，来自「上次成功构建的 commit..HEAD」。
 	// 只存纯文本，展示端不要按 HTML 渲染——内容来自仓库提交信息，属于外部输入。

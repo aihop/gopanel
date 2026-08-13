@@ -8,6 +8,8 @@ import type { Flow } from "@/api/interface/flow"
 import { getFlowPage } from "@/api/modules/flow"
 import { flowMessages } from "./flowMessages"
 import CreateFlowModal from "./CreateFlowModal.vue"
+import StartFlowRunModal from "./StartFlowRunModal.vue"
+import FlowRunPanel from "./FlowRunPanel.vue"
 
 const { t } = useI18n({ messages: flowMessages })
 const message = useMessage()
@@ -15,6 +17,9 @@ const router = useRouter()
 const loading = ref(false)
 const loadError = ref(false)
 const createVisible = ref(false)
+const runVisible = ref(false)
+const selectedFlow = ref<Flow.Item | null>(null)
+const runPanel = ref<InstanceType<typeof FlowRunPanel> | null>(null)
 const total = ref(0)
 const flows = ref<Flow.Item[]>([])
 
@@ -46,6 +51,15 @@ async function loadFlows() {
 
 function created() {
 	void loadFlows()
+}
+
+function startRun(flow: Flow.Item) {
+	selectedFlow.value = flow
+	runVisible.value = true
+}
+
+function runCreated() {
+	runPanel.value?.refresh()
 }
 
 onMounted(loadFlows)
@@ -108,11 +122,13 @@ onMounted(loadFlows)
 							<div class="mt-2 flex items-center gap-2 text-xs text-slate-500"><Icon name="mdi:web" :size="15" />{{ environment.websiteName || `#${environment.websiteId}` }}</div>
 						</div>
 					</div>
-					<div class="mt-5 flex items-center justify-between border-t border-slate-200 pt-4 text-xs text-slate-500"><span>{{ t(item.autoStartAfterCodeDelivery ? "flow.autoStartEnabled" : "flow.manualStart") }}</span><span class="text-amber-600">{{ t("flow.runNotAvailable") }}</span></div>
+					<div class="mt-5 flex items-center justify-between gap-4 border-t border-slate-200 pt-4"><span class="text-xs text-slate-500">{{ t(item.autoStartAfterCodeDelivery ? "flow.autoStartEnabled" : "flow.manualStart") }}</span><n-button size="small" type="primary" :disabled="!item.enabled" @click="startRun(item)"><template #icon><Icon name="mdi:play" :size="16" /></template>{{ t("flow.startRun") }}</n-button></div>
 				</article>
 			</div>
 		</n-spin>
+		<FlowRunPanel ref="runPanel" />
 
 		<CreateFlowModal v-model:show="createVisible" @success="created" />
+		<StartFlowRunModal v-model:show="runVisible" :flow="selectedFlow" @success="runCreated" />
 	</div>
 </template>

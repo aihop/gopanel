@@ -90,6 +90,13 @@ var (
 	ErrFlowProjectForbidden          = "ErrFlowProjectForbidden"
 	ErrFlowProjectExists             = "ErrFlowProjectExists"
 	ErrFlowEnvironmentInvalid        = "ErrFlowEnvironmentInvalid"
+	ErrFlowNotFound                  = "ErrFlowNotFound"
+	ErrFlowForbidden                 = "ErrFlowForbidden"
+	ErrFlowDisabled                  = "ErrFlowDisabled"
+	ErrFlowCommitRequired            = "ErrFlowCommitRequired"
+	ErrFlowVersionInvalid            = "ErrFlowVersionInvalid"
+	ErrFlowVersionExists             = "ErrFlowVersionExists"
+	ErrFlowPipelineRecordProtected   = "ErrFlowPipelineRecordProtected"
 )
 
 // website
