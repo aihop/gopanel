@@ -19,10 +19,11 @@ import (
 const systemDiagnosticMaxToolRounds = 6
 
 type systemDiagnosticLLMMessage struct {
-	Role       string                     `json:"role"`
-	Content    string                     `json:"content,omitempty"`
-	ToolCallID string                     `json:"tool_call_id,omitempty"`
-	ToolCalls  []systemDiagnosticToolCall `json:"tool_calls,omitempty"`
+	Role             string                     `json:"role"`
+	Content          string                     `json:"content,omitempty"`
+	ReasoningContent string                     `json:"reasoning_content,omitempty"`
+	ToolCallID       string                     `json:"tool_call_id,omitempty"`
+	ToolCalls        []systemDiagnosticToolCall `json:"tool_calls,omitempty"`
 }
 
 type systemDiagnosticToolCall struct {
@@ -188,8 +189,9 @@ func readSystemDiagnosticLLMStream(reader io.Reader, onDelta func(string) error)
 		var chunk struct {
 			Choices []struct {
 				Delta struct {
-					Content   string `json:"content"`
-					ToolCalls []struct {
+					Content          string `json:"content"`
+					ReasoningContent string `json:"reasoning_content"`
+					ToolCalls        []struct {
 						Index    int    `json:"index"`
 						ID       string `json:"id"`
 						Type     string `json:"type"`
@@ -216,6 +218,7 @@ func readSystemDiagnosticLLMStream(reader io.Reader, onDelta func(string) error)
 			continue
 		}
 		delta := chunk.Choices[0].Delta
+		assistant.ReasoningContent += delta.ReasoningContent
 		if delta.Content != "" {
 			assistant.Content += delta.Content
 			if onDelta != nil {

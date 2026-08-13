@@ -82,7 +82,7 @@
 			</div>
 
 			<footer class="diagnostic-panel__composer">
-				<n-alert v-if="sendError" type="error" :show-icon="false">{{ t("systemDiagnostic.sendFailed") }}</n-alert>
+				<n-alert v-if="sendError" type="error" :show-icon="false">{{ sendError }}</n-alert>
 				<n-input
 					v-model:value="content"
 					type="textarea"
@@ -123,7 +123,7 @@ const messages = ref<SystemDiagnosticMessage[]>([])
 const loading = ref(true)
 const sending = ref(false)
 const loadError = ref(false)
-const sendError = ref(false)
+const sendError = ref("")
 const content = ref("")
 const accountId = ref<number | null>(null)
 const messageList = ref<HTMLElement | null>(null)
@@ -181,7 +181,7 @@ async function send() {
 	streamingMessage.value = assistantMessage
 	content.value = ""
 	sending.value = true
-	sendError.value = false
+	sendError.value = ""
 	const controller = new AbortController()
 	streamController = controller
 	await scrollToBottom()
@@ -200,9 +200,11 @@ async function send() {
 				Object.assign(assistantMessage, value.assistantMessage)
 			}
 		}, controller.signal)
-	} catch {
+	} catch (error) {
 		if (!streamStarted) messages.value = messages.value.filter(item => item !== userMessage && item !== assistantMessage)
-		if (!controller.signal.aborted) sendError.value = true
+		if (!controller.signal.aborted) {
+			sendError.value = error instanceof Error && error.message ? error.message : t("systemDiagnostic.sendFailed")
+		}
 	} finally {
 		sending.value = false
 		streamingMessage.value = null
