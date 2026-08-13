@@ -2,7 +2,6 @@ package client
 
 import (
 	"bytes"
-	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
@@ -156,35 +155,30 @@ func (r *Local) Backup(info BackupInfo) error {
 }
 
 func (r *Local) Recover(info RecoverInfo) error {
-	fi, _ := os.Open(info.SourceFile)
-	defer fi.Close()
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(info.Timeout*uint(time.Second)))
-	defer cancel()
-	cmd, err := udocker.RuntimeCommand(ctx, "exec", "-i", r.ContainerName, "sh", "-c", fmt.Sprintf("PGPASSWORD=%s pg_restore -F c -c --if-exists --no-owner -U %s -d %s", r.Password, r.Username, info.Name))
+	input, err := openPostgresqlRecoverStream(info.SourceFile, info.Progress)
 	if err != nil {
 		return err
 	}
-	if strings.HasSuffix(info.SourceFile, ".gz") {
-		gzipFile, err := os.Open(info.SourceFile)
-		if err != nil {
-			return err
-		}
-		defer gzipFile.Close()
-		gzipReader, err := gzip.NewReader(gzipFile)
-		if err != nil {
-			return err
-		}
-		defer gzipReader.Close()
-		cmd.Stdin = gzipReader
-	} else {
-		cmd.Stdin = fi
-	}
-	stdout, err := cmd.CombinedOutput()
-	if err != nil || strings.HasPrefix(string(stdout), "ERROR ") {
-		return errors.New(string(stdout))
-	}
+	defer input.Close()
 
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(info.Timeout*uint(time.Second)))
+	defer cancel()
+	cmd, err := udocker.RuntimeCommand(ctx, "exec", "-i", r.ContainerName, "sh", "-c", fmt.Sprintf("PGPASSWORD=%s pg_restore --verbose --exit-on-error -F c -c --if-exists --no-owner -U %s -d %s", r.Password, r.Username, info.Name))
+	if err != nil {
+		return err
+	}
+	cmd.Stdin = input
+	outputWriter := newPostgresqlOutputWriter(info.Output)
+	cmd.Stdout = outputWriter
+	cmd.Stderr = outputWriter
+	if err := cmd.Run(); err != nil {
+		_ = outputWriter.Close()
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return errors.New("ErrExecTimeOut")
+		}
+		return fmt.Errorf("pg_restore failed: %s", strings.TrimSpace(outputWriter.String()))
+	}
+	_ = outputWriter.Close()
 	return nil
 }
 

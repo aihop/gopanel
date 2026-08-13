@@ -71,6 +71,12 @@ func (u *BackupRecordRepo) Create(record *model.BackupRecord) error {
 	return global.DB.Create(record).Error
 }
 
+func (u *BackupRecordRepo) GetByID(id uint) (model.BackupRecord, error) {
+	var record model.BackupRecord
+	err := global.DB.First(&record, id).Error
+	return record, err
+}
+
 func (u *BackupRecordRepo) Delete(ctx context.Context, opts ...DBOption) error {
 	return getTx(ctx, opts...).Delete(&model.BackupRecord{}).Error
 }

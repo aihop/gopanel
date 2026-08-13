@@ -132,13 +132,19 @@ func JWT(role string) func(fiber.Ctx) error {
 }
 
 // queryTokenAllowedSuffixes 允许用 ?token= 代替请求头做鉴权的路径后缀。
-// 仅限 EventSource / WebSocket 这类无法自定义请求头的场景——
+// 仅限 EventSource / WebSocket 或浏览器原生下载这类无法自定义请求头的场景——
 // URL 里的 token 会进访问日志和 Referer，不能对所有接口开放。
 var queryTokenAllowedSuffixes = []string{"/logs", "/terminal", "/stream", "/ws", "/container/exec"}
+var queryTokenAllowedPaths = []string{"/backup/record/download"}
 
 func isQueryTokenAllowed(method, path string) bool {
 	if method != fiber.MethodGet {
 		return false
+	}
+	for _, allowedPath := range queryTokenAllowedPaths {
+		if strings.HasSuffix(path, allowedPath) {
+			return true
+		}
 	}
 	for _, suffix := range queryTokenAllowedSuffixes {
 		if strings.HasSuffix(path, suffix) {

@@ -5,16 +5,11 @@ import type { Backup } from "../interface/backup"
 export const backupRecordListAPI = (params: any) => {
 	return http.post(`/backup/record/list`, params)
 }
- 
 
 export const backupRecordDeletesAPI = (params: { ids: number[] }) => {
 	return http.post(`/backup/record/deletes`, params)
 }
-export const backupRecordDownloadAPI = (params: any) => {
-	return http.post(`/backup/record/download`, params, TimeoutEnum.T_10M)
-}
-
-export const backupRecordSizeAPI = (params: any) => {
+export const backupRecordSizeAPI = (params: { id: number }) => {
 	return http.post(`/backup/record/size`, params)
 }
 

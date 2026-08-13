@@ -1,6 +1,9 @@
 package api
 
 import (
+	"errors"
+	"strconv"
+
 	"github.com/aihop/gopanel/app/dto"
 	"github.com/aihop/gopanel/app/dto/request"
 	"github.com/aihop/gopanel/app/e"
@@ -28,13 +31,15 @@ func BackupRecordList(c fiber.Ctx) error {
 }
 
 func BackupRecordSize(c fiber.Ctx) error {
-	R, err := e.BodyToContext(c.Body())
+	R, err := e.BodyToStruct[struct {
+		ID uint `json:"id" validate:"required"`
+	}](c.Body())
 	if err != nil {
-		return c.JSON(e.Result(err))
+		return c.JSON(e.Fail(err))
 	}
-	data, err := service.NewBackupRecord().Sizes(&R)
+	data, err := service.NewBackupRecord().SizeByID(R.ID)
 	if err != nil {
-		return c.JSON(e.Result(err))
+		return c.JSON(e.Fail(err))
 	}
 	return c.JSON(e.Succ(data))
 }
@@ -62,4 +67,17 @@ func BackupRecordDownload(c fiber.Ctx) error {
 		return c.JSON(e.Fail(err))
 	}
 	return c.JSON(e.Succ(filePath))
+}
+
+func BackupRecordDownloadDirect(c fiber.Ctx) error {
+	id, err := strconv.ParseUint(c.Query("id"), 10, 64)
+	if err != nil || id == 0 {
+		return c.JSON(e.Fail(errors.New("invalid backup record id")))
+	}
+	filePath, fileName, err := service.NewBackup().DownloadRecordByID(uint(id))
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	c.Set(fiber.HeaderContentType, "application/octet-stream")
+	return c.Download(filePath, fileName)
 }

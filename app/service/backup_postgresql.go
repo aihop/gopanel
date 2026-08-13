@@ -216,6 +216,19 @@ func estimatePostgresqlDBBytes(cli interface{}, dbName string) (int64, bool) {
 	return 0, false
 }
 
+func buildPostgresqlRecoverProgressLogger(stage string, logger *BackupLogger) func(readBytes, totalBytes int64) {
+	return buildMysqlRecoverProgressLogger(stage, logger)
+}
+
+func buildPostgresqlRecoverOutputLogger(logger *BackupLogger) func(string) {
+	if logger == nil {
+		return nil
+	}
+	return func(line string) {
+		logger.AppendLine(line)
+	}
+}
+
 func handlePostgresqlRecover(req *dto.CommonRecover, isRollback bool, logger *BackupLogger) error {
 	isOk := false
 	fileOp := files.NewFileOp()
@@ -248,7 +261,7 @@ func handlePostgresqlRecover(req *dto.CommonRecover, isRollback bool, logger *Ba
 			TargetDir: path.Dir(rollbackFile),
 			FileName:  path.Base(rollbackFile),
 
-			Timeout: 300,
+			Timeout: calcMysqlBackupTimeout(estimatedPostgresqlBytes(cli, req.DetailName)),
 		}); err != nil {
 			return fmt.Errorf("backup postgresql db %s for rollback before recover failed, err: %v", req.DetailName, err)
 		}
@@ -264,8 +277,9 @@ func handlePostgresqlRecover(req *dto.CommonRecover, isRollback bool, logger *Ba
 				if err := cli.Recover(pgClient.RecoverInfo{
 					Name:       req.DetailName,
 					SourceFile: rollbackFile,
-
-					Timeout: 300,
+					Progress:   buildPostgresqlRecoverProgressLogger("回滚中", logger),
+					Output:     buildPostgresqlRecoverOutputLogger(logger),
+					Timeout:    calcMysqlRecoverTimeout(readFileSize(rollbackFile)),
 				}); err != nil {
 					global.LOG.Errorf("rollback postgresql db %s from %s failed, err: %v", req.DetailName, rollbackFile, err)
 					if logger != nil {
@@ -290,7 +304,9 @@ func handlePostgresqlRecover(req *dto.CommonRecover, isRollback bool, logger *Ba
 		Name:       req.DetailName,
 		SourceFile: req.File,
 		// Username:   dbInfo.Username,
-		Timeout: 300,
+		Progress: buildPostgresqlRecoverProgressLogger("恢复中", logger),
+		Output:   buildPostgresqlRecoverOutputLogger(logger),
+		Timeout:  calcMysqlRecoverTimeout(readFileSize(req.File)),
 	}); err != nil {
 		global.LOG.Errorf("recover postgresql db %s from %s failed, err: %v", req.DetailName, req.File, err)
 		return err
@@ -300,4 +316,9 @@ func handlePostgresqlRecover(req *dto.CommonRecover, isRollback bool, logger *Ba
 		logger.AppendLine("PostgreSQL 恢复完成")
 	}
 	return nil
+}
+
+func estimatedPostgresqlBytes(cli interface{}, dbName string) int64 {
+	estimatedBytes, _ := estimatePostgresqlDBBytes(cli, dbName)
+	return estimatedBytes
 }

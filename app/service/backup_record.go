@@ -3,7 +3,10 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -49,6 +52,42 @@ func (s *BackupRecordService) Sizes(c *gormx.Contextx) ([]dto.BackupFile, error)
 		return nil, err
 	}
 	return s.loadRecordSize(records)
+}
+
+func (s *BackupRecordService) SizeByID(id uint) (dto.BackupFile, error) {
+	record, err := s.repo.GetByID(id)
+	if err != nil {
+		return dto.BackupFile{}, err
+	}
+	result := dto.BackupFile{ID: record.ID, Name: record.FileName}
+	itemPath := path.Join(record.FileDir, record.FileName)
+	if record.Source == model.BackupSourceLOCAL {
+		backupRoot, err := filepath.Abs(constant.BackupDir)
+		if err != nil {
+			return dto.BackupFile{}, err
+		}
+		filePath, err := filepath.Abs(filepath.Join(backupRoot, record.FileDir, record.FileName))
+		if err != nil || (filePath != backupRoot && !strings.HasPrefix(filePath, backupRoot+string(os.PathSeparator))) {
+			return dto.BackupFile{}, errors.New("backup file path is outside the backup directory")
+		}
+		info, err := os.Stat(filePath)
+		if err != nil {
+			return dto.BackupFile{}, err
+		}
+		result.Size = info.Size()
+		return result, nil
+	}
+
+	backup, err := repo.NewCloudAccount().Get(context.Background(), string(record.Source))
+	if err != nil {
+		return dto.BackupFile{}, err
+	}
+	client, config, err := s.NewClient(&backup)
+	if err != nil {
+		return dto.BackupFile{}, err
+	}
+	result.Size, err = client.Size(path.Join(strings.TrimLeft(config.BackupPath, "/"), itemPath))
+	return result, err
 }
 
 type loadSizeHelper struct {

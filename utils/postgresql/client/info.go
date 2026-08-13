@@ -56,9 +56,11 @@ type BackupInfo struct {
 }
 
 type RecoverInfo struct {
-	Name       string `json:"name"`
-	SourceFile string `json:"sourceFile"`
-	Username   string `json:"username"`
+	Name       string                            `json:"name"`
+	SourceFile string                            `json:"sourceFile"`
+	Username   string                            `json:"username"`
+	Progress   func(readBytes, totalBytes int64) `json:"-"`
+	Output     func(line string)                 `json:"-"`
 
 	Timeout uint `json:"timeout"` // second
 }

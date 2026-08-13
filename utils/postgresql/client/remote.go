@@ -1,13 +1,11 @@
 package client
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"sort"
@@ -184,58 +182,41 @@ func (r *Remote) Recover(info RecoverInfo) error {
 	if err != nil {
 		return err
 	}
-	fileName := info.SourceFile
-	if strings.HasSuffix(info.SourceFile, ".sql.gz") {
-		fileName = strings.TrimSuffix(info.SourceFile, ".gz")
-		gzipCmd := exec.Command("gunzip", info.SourceFile)
-		stdout, err := gzipCmd.CombinedOutput()
-		if err != nil {
-			return fmt.Errorf("gunzip file %s failed, stdout: %v, err: %v", info.SourceFile, string(stdout), err)
-		}
-		defer func() {
-			gzipCmd := exec.Command("gzip", fileName)
-			_, _ = gzipCmd.CombinedOutput()
-		}()
-	}
-	fi, err := os.Open(fileName)
+	input, err := openPostgresqlRecoverStream(info.SourceFile, info.Progress)
 	if err != nil {
 		return err
 	}
-	defer fi.Close()
+	defer input.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(info.Timeout)*time.Second)
 	defer cancel()
+	roleArgument := ""
+	if strings.TrimSpace(info.Username) != "" {
+		roleArgument = fmt.Sprintf(" --role=%q", info.Username)
+	}
 	recoverCommand, err := docker.RuntimeCommand(ctx,
 		"run", "--rm", "--net=host", "-i",
 		imageTag,
 		"/bin/bash", "-c",
-		fmt.Sprintf("PGPASSWORD=%q pg_restore -h %s -p %d --verbose --clean --no-privileges --no-owner -Fc -c --if-exists --no-owner -U %s -d %s --role=%s", r.Password, r.Address, r.Port, r.User, info.Name, info.Username),
+		fmt.Sprintf("PGPASSWORD=%q pg_restore -h %s -p %d --verbose --exit-on-error --clean --no-privileges --no-owner -Fc --if-exists -U %s -d %s%s", r.Password, r.Address, r.Port, r.User, info.Name, roleArgument),
 	)
 	if err != nil {
 		return err
 	}
-	recoverCommand.Stdin = fi
-	pipe, _ := recoverCommand.StdoutPipe()
-	stderrPipe, _ := recoverCommand.StderrPipe()
-	defer pipe.Close()
-	defer stderrPipe.Close()
-	if err := recoverCommand.Start(); err != nil {
-		return err
-	}
-	reader := bufio.NewReader(pipe)
-	for {
-		readString, err := reader.ReadString('\n')
-		if errors.Is(err, io.EOF) {
-			break
+	recoverCommand.Stdin = input
+	outputWriter := newPostgresqlOutputWriter(info.Output)
+	recoverCommand.Stdout = outputWriter
+	recoverCommand.Stderr = outputWriter
+	if err := recoverCommand.Run(); err != nil {
+		_ = outputWriter.Close()
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return errors.New("ErrExecTimeOut")
 		}
-		if err != nil {
-			all, _ := io.ReadAll(stderrPipe)
-			global.LOG.Errorf("[PostgreSQL] DB:[%s] Recover Error: %s", info.Name, string(all))
-			return err
-		}
-		global.LOG.Infof("[PostgreSQL] DB:[%s] Restoring: %s", info.Name, readString)
+		message := strings.TrimSpace(outputWriter.String())
+		global.LOG.Errorf("[PostgreSQL] DB:[%s] Recover Error: %s", info.Name, message)
+		return fmt.Errorf("pg_restore failed: %s", message)
 	}
-
+	_ = outputWriter.Close()
 	return nil
 }
 

@@ -23,7 +23,8 @@ export function createBackupColumns(
 	t: Translate,
 	onDelete: BackupAction,
 	onRecover: BackupAction,
-	onDownload: BackupAction
+	onDownload: BackupAction,
+	onLoadSize: BackupAction
 ): DataTableColumns<any> {
 	return [
 		{ type: "selection" as const, width: 48 },
@@ -34,7 +35,17 @@ export function createBackupColumns(
 			width: 100,
 			render(row: any) {
 				if (row.hasLoad) return row.size ? computeSize(row.size) : "-"
-				return h(NButton, { quaternary: true, size: "tiny", loading: true })
+				return h(
+					NButton,
+					{
+						text: true,
+						type: "primary",
+						size: "tiny",
+						loading: row.sizeLoading,
+						onClick: () => onLoadSize(row)
+					},
+					{ default: () => t("file.calculate") }
+				)
 			}
 		},
 		{
@@ -53,6 +64,7 @@ export function createBackupColumns(
 			title: t("commons.table.operate"),
 			key: "actions",
 			width: 240,
+			fixed: "right",
 			render(row: Backup.RecordInfo) {
 				const action = (label: string, handler: BackupAction) =>
 					h(NButton, { size: "small", onClick: () => handler(row) }, { default: () => t(label) })

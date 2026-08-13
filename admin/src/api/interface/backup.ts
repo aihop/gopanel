@@ -39,6 +39,9 @@ export namespace Backup {
 		backupType: string
 		fileDir: string
 		fileName: string
+		size?: number
+		hasLoad?: boolean
+		sizeLoading?: boolean
 	}
 	export interface BackupFile {
 		id: number

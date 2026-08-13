@@ -155,7 +155,6 @@ import {
 
 import DrawerHeader from "./DrawerHeader.vue"
 import OpDialog from "./OpDialog.vue"
-import { downloadAuthenticatedFile } from "../utils/fileDownload"
 import { createBackupColumns, createBackupPagination } from "./backupColumns"
 import { renderIcon } from "../utils"
 import { NIcon } from "naive-ui"
@@ -165,7 +164,6 @@ import {
 	backupRecordSizeAPI,
 	backupRecordDeletesAPI,
 	backupRecoverAPI,
-	backupRecordDownloadAPI,
 	backupListAPI
 } from "../api/modules/backup"
 import { useRouter } from "vue-router"
@@ -225,28 +223,17 @@ const goFile = async () => {
 	router.push({ name: "File", query: { path: `${backupPath.value}/app/${name.value}/${detailName.value}` } })
 }
 
-const loadSize = async () => {
+const loadSize = async (row: Backup.RecordInfo) => {
+	if (row.sizeLoading || row.hasLoad) return
+	row.sizeLoading = true
 	try {
-		// 复用 useTable 的查询参数构造，保证 size 查询和列表查询命中同一批记录
-		const res = await backupRecordSizeAPI({
-			page: curPage.value,
-			limit: pageSize.value,
-			...(getParams() || {})
-		})
-		const stats = (res.data as any[]) || []
-		const statsMap = new Map(stats.map((item: any) => [item.id, item.size]))
-		for (const backup of list.value) {
-			backup.hasLoad = true
-			// 后端没返回的记录保持 size 为 undefined（显示 "-" 且不禁用恢复/下载），
-			// 不能写 0：size===0 会被当作空备份禁用恢复和下载按钮
-			if (statsMap.has(backup.id)) {
-				backup.size = statsMap.get(backup.id)
-			}
-		}
+		const res = await backupRecordSizeAPI({ id: row.id })
+		row.size = (res.data as any)?.size ?? 0
+		row.hasLoad = true
 	} catch {
-		for (const backup of list.value) {
-			backup.hasLoad = true
-		}
+		MsgError(t("file.downloadFailed"))
+	} finally {
+		row.sizeLoading = false
 	}
 }
 
@@ -362,12 +349,10 @@ const params = reactive({
 	}
 })
 
-const { list, curPage, pageSize, loading, getData, getParams, total } = useTable(params)
+const { list, curPage, pageSize, loading, getData, total } = useTable(params)
 
 const refreshBackupRecords = async () => {
 	await getData()
-	if (!list.value.length) return
-	await loadSize()
 }
 
 const handlePageChange = async (page: number) => {
@@ -400,14 +385,16 @@ const onRecover = async (row: Backup.RecordInfo) => {
 	open.value = true
 }
 
-const onDownload = async (row: Backup.RecordInfo) => {
-	const params = {
-		source: row.source,
-		fileDir: row.fileDir,
-		fileName: row.fileName
-	}
-	const res = await backupRecordDownloadAPI(params)
-	await downloadAuthenticatedFile(res.data as any)
+const onDownload = (row: Backup.RecordInfo) => {
+	const apiUrl = (window as any).__VITE_API_URL__ || "/api"
+	const authStore = useAuthStore()
+	const downloadUrl = `${apiUrl}/backup/record/download?id=${encodeURIComponent(row.id)}&token=${encodeURIComponent(authStore.auth || "")}`
+	const link = document.createElement("a")
+	link.href = downloadUrl
+	link.download = row.fileName
+	document.body.appendChild(link)
+	link.click()
+	link.remove()
 }
 
 const onBatchDelete = async (row: Backup.RecordInfo | null) => {
@@ -450,7 +437,7 @@ const handleBackupClose = () => {
 	open.value = false
 }
 
-const columns = createBackupColumns(t, onBatchDelete, onRecover, onDownload)
+const columns = createBackupColumns(t, onBatchDelete, onRecover, onDownload, loadSize)
 
 const acceptParams = (param: { type: string; name: string; detailName: string; status: string; detailId: number }) => {
 	type.value = param.type
