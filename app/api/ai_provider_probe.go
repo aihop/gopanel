@@ -35,6 +35,10 @@ type aiProviderProbeResult struct {
 	SupportsReasoningEffort bool
 }
 
+// 推理模型会先消耗一部分输出预算生成 reasoning。16 tokens 对 Responses
+// 模型过小，可能 HTTP 200 但正文尚未生成，进而被误判为连接失败。
+const aiProviderProbeMaxTokens = 512
+
 // probeAIProviderAccount 探测账号的连通性与参数支持情况。
 //
 // 逐项降级而不是一次全发：一次全发只能得到「失败」这一个结论，
@@ -50,25 +54,25 @@ func probeAIProviderAccount(ctx context.Context, config codeMemoryLLMConfig, rea
 	// 第一步只验最基本的连通与鉴权：任何附加参数都可能让请求因为
 	// 「参数不支持」而失败，那样就分不清到底是不是密钥的问题。
 	if _, err := callCodeMemoryLLMWithOptions(ctx, config, messages, codeMemoryLLMOptions{
-		MaxTokens: 16,
+		MaxTokens: aiProviderProbeMaxTokens,
 	}); err != nil {
 		return result, err
 	}
 
 	// 逐项加参数，能加上就说明支持。失败不是错误，只是这项不支持。
 	if _, err := callCodeMemoryLLMWithOptions(ctx, config, messages, codeMemoryLLMOptions{
-		MaxTokens: 16, Temperature: floatPointer(0),
+		MaxTokens: aiProviderProbeMaxTokens, Temperature: floatPointer(0),
 	}); err == nil {
 		result.SupportsTemperature = true
 	}
 	if _, err := callCodeMemoryLLMWithOptions(ctx, config, messages, codeMemoryLLMOptions{
-		MaxTokens: 16, Schema: codeMemoryProbeSchema(),
+		MaxTokens: aiProviderProbeMaxTokens, Schema: codeMemoryProbeSchema(),
 	}); err == nil {
 		result.SupportsJSONSchema = true
 	}
 	if effort := normalizeCodeReasoningEffort(reasoningEffort); effort != codeReasoningEffortNone {
 		if _, err := callCodeMemoryLLMWithOptions(ctx, config, messages, codeMemoryLLMOptions{
-			MaxTokens: 16, ReasoningEffort: effort,
+			MaxTokens: aiProviderProbeMaxTokens, ReasoningEffort: effort,
 		}); err == nil {
 			result.SupportsReasoningEffort = true
 		}

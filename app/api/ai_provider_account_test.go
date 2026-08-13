@@ -238,3 +238,9 @@ func TestNormalizeAIProviderPriorityClampsRange(t *testing.T) {
 		}
 	}
 }
+
+func TestAIProviderProbeUsesReasoningSafeTokenBudget(t *testing.T) {
+	if aiProviderProbeMaxTokens < 256 {
+		t.Fatalf("探测输出预算过小，推理模型可能只返回 reasoning：%d", aiProviderProbeMaxTokens)
+	}
+}

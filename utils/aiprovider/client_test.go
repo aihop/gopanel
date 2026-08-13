@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -106,5 +107,47 @@ func TestNormalizeProtocolDefaultsLegacyValues(t *testing.T) {
 	}
 	if NormalizeProtocol("unknown") != "" {
 		t.Fatal("unknown protocols must be rejected")
+	}
+}
+
+func TestCallOpenAIResponsesReportsOutputLimit(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"status":"incomplete","incomplete_details":{"reason":"max_output_tokens"},"output":[{"type":"reasoning"}]}`))
+	}))
+	defer server.Close()
+
+	_, err := Call(context.Background(), Config{
+		Protocol: ProtocolOpenAIResponses, BaseURL: server.URL, Model: "reasoning-model",
+	}, Request{Messages: []Message{{Role: "user", Content: "ping"}}, MaxTokens: 16})
+	if err == nil || !strings.Contains(err.Error(), "token 上限") {
+		t.Fatalf("应明确报告输出被截断，实际：%v", err)
+	}
+}
+
+func TestCallReportsProtocolMismatch(t *testing.T) {
+	tests := []struct {
+		name     string
+		protocol string
+		body     string
+	}{
+		{name: "chat", protocol: ProtocolOpenAIChat, body: `{"output":[]}`},
+		{name: "responses", protocol: ProtocolOpenAIResponses, body: `{"choices":[]}`},
+		{name: "anthropic", protocol: ProtocolAnthropic, body: `{"choices":[]}`},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+				writer.Header().Set("Content-Type", "application/json")
+				_, _ = writer.Write([]byte(test.body))
+			}))
+			defer server.Close()
+			_, err := Call(context.Background(), Config{
+				Protocol: test.protocol, BaseURL: server.URL, Model: "model",
+			}, Request{Messages: []Message{{Role: "user", Content: "ping"}}})
+			if err == nil || !strings.Contains(err.Error(), "协议不匹配") {
+				t.Fatalf("应明确报告协议不匹配，实际：%v", err)
+			}
+		})
 	}
 }

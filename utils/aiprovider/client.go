@@ -124,7 +124,7 @@ func callOpenAIChat(ctx context.Context, config Config, input Request) (Response
 		} `json:"usage"`
 	}
 	if json.Unmarshal(raw, &decoded) != nil || len(decoded.Choices) == 0 {
-		return Response{Raw: string(raw)}, errors.New("模型服务响应无法解析")
+		return Response{Raw: string(raw)}, errors.New("响应结构与 OpenAI Chat Completions 协议不匹配，请检查接口协议和 Base URL")
 	}
 	return Response{
 		Message: decoded.Choices[0].Message,
@@ -160,6 +160,10 @@ func callOpenAIResponses(ctx context.Context, config Config, input Request) (Res
 		return Response{Raw: string(raw)}, err
 	}
 	var decoded struct {
+		Status            string `json:"status"`
+		IncompleteDetails struct {
+			Reason string `json:"reason"`
+		} `json:"incomplete_details"`
 		Output []struct {
 			Type      string `json:"type"`
 			CallID    string `json:"call_id"`
@@ -179,6 +183,9 @@ func callOpenAIResponses(ctx context.Context, config Config, input Request) (Res
 	if json.Unmarshal(raw, &decoded) != nil {
 		return Response{Raw: string(raw)}, errors.New("模型服务响应无法解析")
 	}
+	if decoded.Output == nil {
+		return Response{Raw: string(raw)}, errors.New("响应结构与 OpenAI Responses 协议不匹配，请检查接口协议和 Base URL")
+	}
 	message := Message{Role: "assistant"}
 	texts := make([]string, 0)
 	for _, item := range decoded.Output {
@@ -196,6 +203,12 @@ func callOpenAIResponses(ctx context.Context, config Config, input Request) (Res
 		}
 	}
 	message.Content = strings.Join(texts, "\n")
+	if message.Content == "" && len(message.ToolCalls) == 0 {
+		if decoded.Status == "incomplete" && decoded.IncompleteDetails.Reason == "max_output_tokens" {
+			return Response{Raw: string(raw)}, errors.New("Responses 模型输出达到 token 上限，尚未生成正文")
+		}
+		return Response{Raw: string(raw)}, errors.New("Responses 服务未返回文本或工具调用，请检查模型名称和接口兼容性")
+	}
 	return Response{
 		Message: message,
 		Usage: Usage{
@@ -245,6 +258,9 @@ func callAnthropic(ctx context.Context, config Config, input Request) (Response,
 	if json.Unmarshal(raw, &decoded) != nil {
 		return Response{Raw: string(raw)}, errors.New("模型服务响应无法解析")
 	}
+	if decoded.Content == nil {
+		return Response{Raw: string(raw)}, errors.New("响应结构与 Anthropic Messages 协议不匹配，请检查接口协议和 Base URL")
+	}
 	message := Message{Role: "assistant"}
 	texts := make([]string, 0)
 	for _, content := range decoded.Content {
@@ -259,6 +275,9 @@ func callAnthropic(ctx context.Context, config Config, input Request) (Response,
 		}
 	}
 	message.Content = strings.Join(texts, "\n")
+	if message.Content == "" && len(message.ToolCalls) == 0 {
+		return Response{Raw: string(raw)}, errors.New("Anthropic Messages 服务未返回文本或工具调用，请检查模型名称和接口兼容性")
+	}
 	usage := Usage{InputTokens: decoded.Usage.InputTokens, OutputTokens: decoded.Usage.OutputTokens}
 	usage.TotalTokens = usage.InputTokens + usage.OutputTokens
 	return Response{Message: message, Usage: usage, Raw: string(raw)}, nil
