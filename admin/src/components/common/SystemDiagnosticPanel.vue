@@ -64,7 +64,18 @@
 					:class="messageItem.role === 'user' ? 'is-user' : 'is-agent'"
 				>
 					<div class="diagnostic-message__content">
-						{{ messageItem.content }}
+						<MdPreview
+							v-if="messageItem.role === 'agent'"
+							:editor-id="`diagnostic-message-${messageItem.id}`"
+							:model-value="messageItem.content"
+							:sanitize="sanitizeDiagnosticMarkdown"
+							no-mermaid
+							no-echarts
+							no-katex
+							no-highlight
+							class="diagnostic-message__markdown"
+						/>
+						<template v-else>{{ messageItem.content }}</template>
 						<span v-if="sending && messageItem === streamingMessage" class="diagnostic-message__cursor" />
 					</div>
 				</article>
@@ -78,8 +89,7 @@
 					:placeholder="t('systemDiagnostic.placeholder')"
 					:autosize="{ minRows: 2, maxRows: 5 }"
 					maxlength="4000"
-					@keydown.ctrl.enter.prevent="send"
-					@keydown.meta.enter.prevent="send"
+					@keydown="handleComposerKeydown"
 				/>
 				<div class="flex items-center justify-between gap-3">
 					<span class="text-xs leading-5 opacity-50">{{ t("systemDiagnostic.privacy") }}</span>
@@ -98,10 +108,14 @@ import { getSystemDiagnosticState, streamSystemDiagnostic } from "@/api/modules/
 import type { SystemDiagnosticMessage, SystemDiagnosticState } from "@/api/interface/systemDiagnostic"
 import { systemDiagnosticMessages } from "@/i18n/locales/systemDiagnostic"
 import { useMessage } from "naive-ui"
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 
 const emit = defineEmits<{ close: []; "drag-start": [event: PointerEvent] }>()
+const MdPreview = defineAsyncComponent(async () => {
+	const [module] = await Promise.all([import("md-editor-v3"), import("md-editor-v3/lib/preview.css")])
+	return module.MdPreview
+})
 const { t } = useI18n({ messages: systemDiagnosticMessages })
 const message = useMessage()
 const state = ref<SystemDiagnosticState | null>(null)
@@ -116,6 +130,12 @@ const messageList = ref<HTMLElement | null>(null)
 const streamingMessage = ref<SystemDiagnosticMessage | null>(null)
 let streamController: AbortController | null = null
 const accountStorageKey = "gopanel_system_diagnostic_account"
+const diagnosticMarkdownTags = new Set([
+	"a", "b", "blockquote", "br", "code", "del", "details", "div", "em", "h1", "h2", "h3", "h4", "h5", "h6",
+	"hr", "i", "kbd", "li", "mark", "ol", "p", "pre", "s", "span", "strong", "sub", "summary", "sup", "table",
+	"tbody", "td", "th", "thead", "tr", "ul"
+])
+const diagnosticMarkdownAttributes = new Set(["class", "colspan", "href", "language", "rel", "rowspan", "target", "title"])
 
 const accountOptions = computed(() => (state.value?.accounts || []).map(account => ({
 	label: `${account.name} · ${account.model}`,
@@ -190,6 +210,34 @@ async function send() {
 	}
 }
 
+function handleComposerKeydown(event: KeyboardEvent) {
+	if (event.key !== "Enter" || event.shiftKey || event.isComposing || event.keyCode === 229) return
+	event.preventDefault()
+	void send()
+}
+
+function sanitizeDiagnosticMarkdown(html: string) {
+	const documentNode = new DOMParser().parseFromString(html, "text/html")
+	documentNode.body.querySelectorAll("*").forEach(element => {
+		if (!diagnosticMarkdownTags.has(element.tagName.toLowerCase())) {
+			element.replaceWith(...Array.from(element.childNodes))
+			return
+		}
+		for (const attribute of Array.from(element.attributes)) {
+			const name = attribute.name.toLowerCase()
+			if (!diagnosticMarkdownAttributes.has(name)) {
+				element.removeAttribute(attribute.name)
+				continue
+			}
+			if (name === "href" && !/^(https?:|mailto:|tel:|\/|\.\/|\.\.\/|#)/i.test(attribute.value.trim())) {
+				element.removeAttribute(attribute.name)
+			}
+		}
+		if (element.tagName.toLowerCase() === "a") element.setAttribute("rel", "noopener noreferrer")
+	})
+	return documentNode.body.innerHTML
+}
+
 function useQuickQuestion(question: string) {
 	content.value = question
 }
@@ -219,7 +267,20 @@ onBeforeUnmount(() => streamController?.abort())
 .diagnostic-message.is-user { justify-content: flex-end; }
 .diagnostic-message__content { max-width: 88%; white-space: pre-wrap; overflow-wrap: anywhere; border-radius: 14px; padding: 10px 12px; font-size: 14px; line-height: 1.65; }
 .diagnostic-message.is-user .diagnostic-message__content { border-bottom-right-radius: 4px; background: #2563eb; color: white; }
-.diagnostic-message.is-agent .diagnostic-message__content { border-bottom-left-radius: 4px; background: rgb(148 163 184 / 14%); }
+.diagnostic-message.is-agent .diagnostic-message__content { white-space: normal; border-bottom-left-radius: 4px; background: rgb(148 163 184 / 14%); }
+.diagnostic-message__markdown { background: transparent; color: inherit; font-size: inherit; }
+.diagnostic-message__markdown :deep(.md-editor-preview) { padding: 0; color: inherit; font-size: inherit; line-height: 1.6; word-break: break-word; }
+.diagnostic-message__markdown :deep(h1), .diagnostic-message__markdown :deep(h2), .diagnostic-message__markdown :deep(h3), .diagnostic-message__markdown :deep(h4), .diagnostic-message__markdown :deep(h5), .diagnostic-message__markdown :deep(h6) { margin: 0.65em 0 0.3em; padding: 0; line-height: 1.35; }
+.diagnostic-message__markdown :deep(h1) { font-size: 1.3em; }
+.diagnostic-message__markdown :deep(h2) { font-size: 1.2em; }
+.diagnostic-message__markdown :deep(h3), .diagnostic-message__markdown :deep(h4), .diagnostic-message__markdown :deep(h5), .diagnostic-message__markdown :deep(h6) { font-size: 1.08em; }
+.diagnostic-message__markdown :deep(p), .diagnostic-message__markdown :deep(ul), .diagnostic-message__markdown :deep(ol), .diagnostic-message__markdown :deep(blockquote), .diagnostic-message__markdown :deep(pre), .diagnostic-message__markdown :deep(table), .diagnostic-message__markdown :deep(details) { margin: 0.4em 0; }
+.diagnostic-message__markdown :deep(ul), .diagnostic-message__markdown :deep(ol) { padding-left: 1.5em; }
+.diagnostic-message__markdown :deep(li) { margin: 0.12em 0; line-height: 1.55; }
+.diagnostic-message__markdown :deep(blockquote) { padding: 0.25em 0.7em; }
+.diagnostic-message__markdown :deep(pre) { max-width: 100%; padding: 0.65em; overflow-x: auto; }
+.diagnostic-message__markdown :deep(.md-editor-preview > :first-child) { margin-top: 0; }
+.diagnostic-message__markdown :deep(.md-editor-preview > :last-child) { margin-bottom: 0; }
 .diagnostic-message__cursor { display: inline-block; width: 2px; height: 1em; margin-left: 2px; vertical-align: -2px; background: currentColor; animation: diagnostic-cursor 0.9s steps(1) infinite; }
 .diagnostic-panel__composer { display: flex; flex-direction: column; gap: 9px; padding: 12px; border-top: 1px solid var(--border-color); }
 @keyframes diagnostic-cursor { 50% { opacity: 0; } }
