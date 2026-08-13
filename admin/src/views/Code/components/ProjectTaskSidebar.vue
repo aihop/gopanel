@@ -23,6 +23,14 @@ const emit = defineEmits<{
 	createTask: []
 }>()
 const { t } = useI18n({ messages: codeWorkspaceMessages })
+
+const taskTime = (task: CodeTaskListItem) =>
+	new Date(task.createdAt).toLocaleString(undefined, {
+		month: "2-digit",
+		day: "2-digit",
+		hour: "2-digit",
+		minute: "2-digit",
+	})
 </script>
 
 <template>
@@ -86,44 +94,44 @@ const { t } = useI18n({ messages: codeWorkspaceMessages })
                     :size="14"
                     class="shrink-0 text-slate-500"
                   />
-                  <span class="truncate">{{ task.title }}</span>
+                  <span class="min-w-0 truncate">{{ task.title }}</span>
+                  <TaskApprovalAction
+                    class="shrink-0"
+                    :task="task"
+                    @approved="emit('refreshTasks')"
+                  />
+                  <div
+                    class="ml-auto shrink-0 opacity-100 transition-opacity md:opacity-0 md:group-hover/task:opacity-100"
+                    @click.stop
+                  >
+                    <n-dropdown
+                      trigger="click"
+                      :options="taskActionOptions"
+                      @select="key => emit('taskAction', String(key), task)"
+                    >
+                      <n-button
+                        quaternary
+                        circle
+                        size="small"
+                        class="ai-workspace-task-btn !bg-transparent"
+                      >
+                        <template #icon>
+                          <Icon name="mdi:dots-horizontal" />
+                        </template>
+                      </n-button>
+                    </n-dropdown>
+                  </div>
                 </div>
                 <CodeTaskMetaLine
                   :task="task"
                   class="mt-1.5"
                 >
                   <template #lead>
-                    <TaskApprovalAction
-                      class="shrink-0"
-                      :task="task"
-                      @approved="emit('refreshTasks')"
-                    />
+                    <span class="shrink-0">{{ taskTime(task) }}</span>
                   </template>
                 </CodeTaskMetaLine>
 
                 <CodeTaskUserSnippet :task="task" />
-              </div>
-              <!-- self-start：行改成 items-stretch 让竖线通高后，这里要单独顶对齐 -->
-              <div
-                class="self-start opacity-100 transition-opacity md:opacity-0 md:group-hover/task:opacity-100"
-                @click.stop
-              >
-                <n-dropdown
-                  trigger="click"
-                  :options="taskActionOptions"
-                  @select="key => emit('taskAction', String(key), task)"
-                >
-                  <n-button
-                    quaternary
-                    circle
-                    size="small"
-                    class="ai-workspace-task-btn !bg-transparent"
-                  >
-                    <template #icon>
-                      <Icon name="mdi:dots-horizontal" />
-                    </template>
-                  </n-button>
-                </n-dropdown>
               </div>
             </div>
           </div>

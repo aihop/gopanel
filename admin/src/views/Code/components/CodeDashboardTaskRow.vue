@@ -60,24 +60,21 @@ const executorLabel = computed(() =>
           :name="projectName || t('code.projectFallback')"
         />
         <span
-          class="truncate text-sm font-semibold text-[var(--n-text-color)]"
+          class="min-w-0 truncate text-sm font-semibold text-[var(--n-text-color)]"
           :title="task.title"
         >
           {{ task.title }}
         </span>
+        <TaskApprovalAction
+          class="shrink-0"
+          :task="task"
+          @approved="emit('refresh')"
+        />
       </div>
       <CodeTaskMetaLine
         :task="task"
         class="mt-1.5"
-      >
-        <template #lead>
-          <TaskApprovalAction
-            class="shrink-0"
-            :task="task"
-            @approved="emit('refresh')"
-          />
-        </template>
-      </CodeTaskMetaLine>
+      />
 
       <!--
         选中行就是这条任务的详情头 —— 终端上面不再重复一遍。
