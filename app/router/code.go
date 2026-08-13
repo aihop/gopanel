@@ -40,6 +40,8 @@ func CodeRouter(r fiber.Router) {
 		group.Post("/ai-accounts", api.SaveAIProviderAccount)
 		group.Put("/ai-accounts/:id", api.SaveAIProviderAccount)
 		group.Delete("/ai-accounts/:id", api.DeleteAIProviderAccount)
+		group.Get("/system-diagnostics/state", api.GetSystemDiagnosticState)
+		group.Post("/system-diagnostics/chat", api.ChatSystemDiagnostic)
 		group.Get("/memory/setting", api.GetCodeMemorySetting)
 		group.Put("/memory/setting", api.SaveCodeMemorySetting)
 		group.Get("/memories", api.GetCodeMemories)

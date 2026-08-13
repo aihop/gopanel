@@ -39,7 +39,7 @@
 
       <SplashScreen :show="loading" />
       <SearchDialog v-if="isLogged" />
-      <FloatingNote v-if="showFloatingNote" />
+      <FloatingToolDock v-if="showFloatingTools" />
       <!-- <LayoutSettings /> -->
     </Provider>
   </n-config-provider>
@@ -55,7 +55,7 @@ import SplashScreen from "@/layouts/common/SplashScreen.vue"
 import HorizontalNav from "@/layouts/HorizontalNav"
 import VerticalNav from "@/layouts/VerticalNav"
 import SearchDialog from "@/components/common/SearchDialog.vue"
-import FloatingNote from "@/components/common/FloatingNote.vue"
+import FloatingToolDock from "@/components/common/FloatingToolDock.vue"
 import { useAuthStore } from "@/store/auth"
 import { useMainStore } from "@/store/main"
 import { useThemeStore } from "@/store/theme"
@@ -87,7 +87,7 @@ const routerTransition = computed<RouterTransition>(() => themeStore.routerTrans
 const themeName = computed<ThemeNameEnum>(() => themeStore.themeName)
 const isLogged = computed(() => authStore.isLogged)
 const persistentViewNames = computed(() => (isLogged.value ? ["HostTerminalView"] : []))
-const showFloatingNote = computed(() => authStore.isLogged && authStore.role !== "DEMO")
+const showFloatingTools = computed(() => authStore.isLogged && authStore.role !== "DEMO")
 
 function checkThemeOverrides(currentRoute: RouteLocationNormalized) {
 	if (currentRoute.meta?.theme?.layout !== undefined) {
