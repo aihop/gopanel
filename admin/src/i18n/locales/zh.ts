@@ -888,7 +888,8 @@ export default {
 		colComment: "注释",
 		recordInsertSuccess: "插入成功",
 		recordUpdateSuccess: "更新成功",
-		recordSaveFailed: "保存记录失败"
+		recordSaveFailed: "保存记录失败",
+		sqlExecuteFailed: "SQL 执行失败"
 	},
 	container: {
 		create: "创建容器",

@@ -909,7 +909,8 @@ export default {
 		colComment: "Comment",
 		recordInsertSuccess: "Record inserted",
 		recordUpdateSuccess: "Record updated",
-		recordSaveFailed: "Failed to save record"
+		recordSaveFailed: "Failed to save record",
+		sqlExecuteFailed: "Failed to execute SQL"
 	},
 	container: {
 		create: "Create container",

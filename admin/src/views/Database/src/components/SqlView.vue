@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useMessage, NEmpty, NIcon, NButton, NDataTable, NInput, NAlert, NPopconfirm } from 'naive-ui'
 import { execDBManagerSqlAPI } from '@/api/modules/database'
 import { renderIcon } from '@/utils'
@@ -13,6 +14,7 @@ const props = defineProps<{
 }>()
 
 const message = useMessage()
+const { t } = useI18n()
 const sqlQuery = ref('')
 const executingSql = ref(false)
 const sqlResult = ref<any>(null)
@@ -190,9 +192,11 @@ const executeSql = async () => {
       } else {
         message.success(`执行成功，影响 ${res.data.affected || 0} 行`)
       }
-    } 
+    } else {
+      message.error(res.msg || res.message || t('database.sqlExecuteFailed'))
+    }
   } catch (error: any) {
-    void 0
+    message.error(error?.message || t('database.sqlExecuteFailed'))
   } finally {
     executingSql.value = false
   }
@@ -259,7 +263,7 @@ const executeSql = async () => {
         >执行 (Ctrl+Enter)</n-button>
       </div>
     </div>
-    <div class="flex-1 overflow-auto p-2 bg-[#f0f0f0]">
+    <div class="flex-1 min-h-0 overflow-auto p-2 bg-[#f0f0f0] flex flex-col">
       <div
         v-if="sqlHistory.length > 0"
         class="mb-2 border border-slate-200 bg-white"
@@ -298,7 +302,7 @@ const executeSql = async () => {
         >
           影响行数: {{ sqlResult.affected }}
         </n-alert>
-        <div v-else class="bg-white border border-slate-200 flex flex-col h-full">
+        <div v-else class="bg-white border border-slate-200 flex flex-col flex-1 min-h-0">
           <div class="p-1.5 border-b border-slate-200 bg-[#f8f9fa] flex justify-end gap-2">
             <n-button size="tiny" @click="exportSqlResultAsCSV">
               <template #icon><n-icon :component="renderIcon('mdi:file-delimited-outline')" /></template>
@@ -311,7 +315,7 @@ const executeSql = async () => {
             :bordered="true"
             size="small"
             :scroll-x="sqlResultColumns.length * 120"
-            class="text-xs"
+            class="flex-1 min-h-0 text-xs"
             flex-height
           />
         </div>
