@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/aihop/gopanel/global"
 	"github.com/docker/docker/api/types/container"
@@ -46,10 +47,33 @@ func waitForEnginePortBinding(ctx context.Context, cli *dockerclient.Client, con
 	return nil, buildEngineContainerDiagError(ctx, cli, containerID, containerPort, inspect)
 }
 
+// 端口绑定阶段的诊断：容器压根没把端口绑上来。
 func buildEngineContainerDiagError(ctx context.Context, cli *dockerclient.Client, containerID, containerPort string, inspect container.InspectResponse) error {
+	parts := append([]string{fmt.Sprintf("containerPort=%s", containerPort)},
+		collectEngineContainerDiagParts(ctx, cli, containerID, inspect)...)
+	return fmt.Errorf("could not find bound port for engine container (%s)", strings.Join(parts, ", "))
+}
+
+// 就绪等待阶段的诊断：端口早已绑好，是 Runner 在构建/启动完成前自己退出或被重启了，
+// 复用上面那句「找不到绑定端口」会把人往完全错误的方向带。
+func buildRunnerNotReadyDiagError(ctx context.Context, cli *dockerclient.Client, containerID, containerPort string, hostPort int, reason string, inspect container.InspectResponse) error {
+	parts := append([]string{
+		fmt.Sprintf("containerPort=%s", containerPort),
+		fmt.Sprintf("hostPort=%d", hostPort),
+	}, collectEngineContainerDiagParts(ctx, cli, containerID, inspect)...)
+	return fmt.Errorf("%s (%s)", reason, strings.Join(parts, ", "))
+}
+
+func collectEngineContainerDiagParts(ctx context.Context, cli *dockerclient.Client, containerID string, inspect container.InspectResponse) []string {
 	var parts []string
-	if inspect.ContainerJSONBase != nil && inspect.ContainerJSONBase.State != nil {
-		state := inspect.ContainerJSONBase.State
+	var state *container.State
+	if inspect.ContainerJSONBase != nil {
+		state = inspect.ContainerJSONBase.State
+		if inspect.ContainerJSONBase.RestartCount > 0 {
+			parts = append(parts, fmt.Sprintf("restartCount=%d", inspect.ContainerJSONBase.RestartCount))
+		}
+	}
+	if state != nil {
 		parts = append(parts, fmt.Sprintf("state=%s", state.Status))
 		if state.ExitCode != 0 {
 			parts = append(parts, fmt.Sprintf("exitCode=%d", state.ExitCode))
@@ -58,17 +82,91 @@ func buildEngineContainerDiagError(ctx context.Context, cli *dockerclient.Client
 			parts = append(parts, fmt.Sprintf("dockerError=%s", state.Error))
 		}
 	}
-	if logs := readEngineContainerLogs(ctx, cli, containerID); logs != "" {
+	rawLogs := readEngineContainerLogTail(ctx, cli, containerID)
+	if hint := detectEngineContainerKillHint(state, rawLogs); hint != "" {
+		parts = append(parts, hint)
+	}
+	if logs := formatEngineContainerLogs(rawLogs); logs != "" {
 		parts = append(parts, fmt.Sprintf("logs=%s", logs))
 	}
-	return fmt.Errorf("could not find bound port for engine container (containerPort=%s, %s)", containerPort, strings.Join(parts, ", "))
+	return parts
 }
 
-func readEngineContainerLogs(ctx context.Context, cli *dockerclient.Client, containerID string) string {
+// detectEngineContainerKillHint 补上 state 判断不了的场景：被 OOM 杀掉的往往是构建子进程，
+// PID 1 的 shell 只是 set -e 正常退出 1，此时 OOMKilled=false、ExitCode≠137，
+// 唯一的线索留在日志里（SIGKILL / Killed / heap out of memory）。
+func detectEngineContainerKillHint(state *container.State, rawLogs string) string {
+	if state != nil && state.OOMKilled {
+		return "oomKilled=true（容器内存不足，构建进程被系统终止）"
+	}
+	if state != nil && state.ExitCode == 137 {
+		return "exitSignal=SIGKILL（进程被强制终止，通常是内存不足）"
+	}
+	if line := findEngineContainerKillLine(rawLogs); line != "" {
+		return fmt.Sprintf("possibleOOM=true（日志出现内存不足/强制终止特征，请确认容器运行时可用内存: %s）", line)
+	}
+	return ""
+}
+
+func findEngineContainerKillLine(rawLogs string) string {
+	if strings.TrimSpace(rawLogs) == "" {
+		return ""
+	}
+	caseSensitive := []string{"SIGKILL", "Killed", "OOMKilled"}
+	caseInsensitive := []string{
+		"out of memory",
+		"heap limit",
+		"cannot allocate memory",
+		"exit code 137",
+		"signal 9",
+	}
+	for _, line := range strings.Split(rawLogs, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		lower := strings.ToLower(trimmed)
+		matched := false
+		for _, keyword := range caseSensitive {
+			if strings.Contains(trimmed, keyword) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			for _, keyword := range caseInsensitive {
+				if strings.Contains(lower, keyword) {
+					matched = true
+					break
+				}
+			}
+		}
+		if !matched {
+			continue
+		}
+		if len(trimmed) > engineDiagKillLineLimit {
+			trimmed = trimmed[:runeSafeCut(trimmed, engineDiagKillLineLimit)] + "..."
+		}
+		return trimmed
+	}
+	return ""
+}
+
+const (
+	// 构建日志很容易被上百行 warning 刷屏，tail 太短会把真正的死因冲掉。
+	engineDiagLogTailLines  = "200"
+	engineDiagLogLimit      = 1200
+	engineDiagKillLineLimit = 200
+)
+
+func readEngineContainerLogTail(ctx context.Context, cli *dockerclient.Client, containerID string) string {
+	if cli == nil {
+		return ""
+	}
 	reader, err := cli.ContainerLogs(ctx, containerID, container.LogsOptions{
 		ShowStdout: true,
 		ShowStderr: true,
-		Tail:       "50",
+		Tail:       engineDiagLogTailLines,
 	})
 	if err != nil {
 		return ""
@@ -88,15 +186,34 @@ func readEngineContainerLogs(ctx context.Context, cli *dockerclient.Client, cont
 		}
 		logs += errLogs
 	}
-	logs = strings.TrimSpace(logs)
+	return strings.TrimSpace(logs)
+}
+
+func formatEngineContainerLogs(rawLogs string) string {
+	logs := strings.TrimSpace(rawLogs)
 	if logs == "" {
 		return ""
 	}
 	logs = strings.ReplaceAll(logs, "\n", " | ")
-	if len(logs) > 600 {
-		logs = logs[:600] + "..."
+	// 保留末尾而不是开头：失败原因总在日志最后，截断开头才有意义。
+	if len(logs) > engineDiagLogLimit {
+		logs = "..." + logs[runeSafeCut(logs, len(logs)-engineDiagLogLimit):]
 	}
 	return logs
+}
+
+// 日志里中文很常见，按字节切会切出半个字符，这里对齐到最近的 rune 边界。
+func runeSafeCut(s string, offset int) int {
+	if offset <= 0 {
+		return 0
+	}
+	if offset >= len(s) {
+		return len(s)
+	}
+	for offset < len(s) && !utf8.RuneStart(s[offset]) {
+		offset++
+	}
+	return offset
 }
 
 func startEngineContainerLogStreaming(ctx context.Context, cli *dockerclient.Client, containerID string, progress func(format string, a ...interface{})) context.CancelFunc {

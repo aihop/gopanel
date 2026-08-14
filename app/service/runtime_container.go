@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"time"
 
@@ -34,6 +35,10 @@ type runtimeContainerSpec struct {
 	ExtraNetworks       []string
 	PreviousContainerID string
 	WaitForReady        bool
+	// ReadyTimeout 等待容器就绪的预算。0 表示用默认值。
+	// build_run 模式要在容器里装依赖 + 完整构建，慢机器上远超普通启动，
+	// 由调用方按模式给足；给不够会把「还在构建」误判成「构建失败」。
+	ReadyTimeout time.Duration
 }
 
 type runtimeContainerResult struct {
@@ -111,7 +116,7 @@ func startRuntimeContainer(ctx context.Context, cli *dockerclient.Client, imageI
 	}
 
 	hostConfig := &container.HostConfig{
-		RestartPolicy: container.RestartPolicy{Name: "always"},
+		RestartPolicy: initialRuntimeRestartPolicy(spec.WaitForReady),
 		PortBindings: nat.PortMap{
 			nat.Port(containerPort + "/tcp"): []nat.PortBinding{{HostIP: "127.0.0.1", HostPort: publishedHostPort}},
 		},
@@ -189,20 +194,60 @@ func startRuntimeContainer(ctx context.Context, cli *dockerclient.Client, imageI
 	var hostPort int
 	_, _ = fmt.Sscanf(bindings[0].HostPort, "%d", &hostPort)
 	if spec.WaitForReady {
-		logEngineProgress(progress, "端口已绑定，正在等待 Runner 构建完成并开始监听: 127.0.0.1:%d", hostPort)
-		if err := waitForRuntimeContainerReady(ctx, cli, resp.ID, hostPort); err != nil {
+		readyTimeout := resolveRuntimeReadyTimeout(spec.ReadyTimeout)
+		logEngineProgress(progress, "端口已绑定，正在等待 Runner 构建完成并开始监听: 127.0.0.1:%d（最长等待 %s）", hostPort, readyTimeout)
+		if err := waitForRuntimeContainerReady(ctx, cli, resp.ID, containerPort, hostPort, readyTimeout); err != nil {
 			return runtimeContainerResult{}, restorePreviousContainer(err)
 		}
+		if _, err := cli.ContainerUpdate(ctx, resp.ID, readyRuntimeUpdateConfig()); err != nil {
+			return runtimeContainerResult{}, restorePreviousContainer(fmt.Errorf("Runner 就绪后启用自动重启失败: %w", err))
+		}
 		logEngineProgress(progress, "Runner 服务已就绪: 127.0.0.1:%d", hostPort)
+		logEngineProgress(progress, "Runner 已启用运行期自动重启策略")
 	}
 	return runtimeContainerResult{HostPort: hostPort, ContainerID: resp.ID}, nil
 }
 
-func waitForRuntimeContainerReady(ctx context.Context, cli *dockerclient.Client, containerID string, hostPort int) error {
+func initialRuntimeRestartPolicy(waitForReady bool) container.RestartPolicy {
+	if waitForReady {
+		return container.RestartPolicy{Name: "no"}
+	}
+	return container.RestartPolicy{Name: "always"}
+}
+
+func readyRuntimeUpdateConfig() container.UpdateConfig {
+	return container.UpdateConfig{RestartPolicy: container.RestartPolicy{Name: "always"}}
+}
+
+const (
+	defaultRuntimeReadyTimeout = 15 * time.Minute
+	// 运维逃生口：机器特别慢（低配 ARM + swap）时不必改代码重装面板。
+	runtimeReadyTimeoutEnv = "GOPANEL_RUNNER_READY_TIMEOUT"
+)
+
+func resolveRuntimeReadyTimeout(specTimeout time.Duration) time.Duration {
+	if raw := strings.TrimSpace(os.Getenv(runtimeReadyTimeoutEnv)); raw != "" {
+		if parsed, err := time.ParseDuration(raw); err == nil && parsed > 0 {
+			return parsed
+		}
+		if global.LOG != nil {
+			global.LOG.Warnf("ignored invalid %s=%q, expected a duration like 45m", runtimeReadyTimeoutEnv, raw)
+		}
+	}
+	if specTimeout > 0 {
+		return specTimeout
+	}
+	return defaultRuntimeReadyTimeout
+}
+
+func waitForRuntimeContainerReady(ctx context.Context, cli *dockerclient.Client, containerID, containerPort string, hostPort int, readyTimeout time.Duration) error {
 	if hostPort <= 0 {
 		return fmt.Errorf("runner host port is invalid: %d", hostPort)
 	}
-	readyCtx, cancel := context.WithTimeout(ctx, 15*time.Minute)
+	if readyTimeout <= 0 {
+		readyTimeout = defaultRuntimeReadyTimeout
+	}
+	readyCtx, cancel := context.WithTimeout(ctx, readyTimeout)
 	defer cancel()
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
@@ -214,10 +259,12 @@ func waitForRuntimeContainerReady(ctx context.Context, cli *dockerclient.Client,
 			return fmt.Errorf("failed to inspect runner container readiness: %w", err)
 		}
 		if inspect.ContainerJSONBase == nil || inspect.ContainerJSONBase.State == nil || !inspect.ContainerJSONBase.State.Running || inspect.ContainerJSONBase.State.Restarting {
-			return buildEngineContainerDiagError(readyCtx, cli, containerID, fmt.Sprintf("%d", hostPort), inspect)
+			return buildRunnerNotReadyDiagError(readyCtx, cli, containerID, containerPort, hostPort,
+				"Runner 在构建/启动完成前退出", inspect)
 		}
 		if inspect.RestartCount > 0 {
-			return buildEngineContainerDiagError(readyCtx, cli, containerID, fmt.Sprintf("%d", hostPort), inspect)
+			return buildRunnerNotReadyDiagError(readyCtx, cli, containerID, containerPort, hostPort,
+				"Runner 在构建/启动完成前被重启（构建会从头重跑，常见原因是内存不足或启动命令崩溃）", inspect)
 		}
 		requestCtx, requestCancel := context.WithTimeout(readyCtx, 3*time.Second)
 		checkErr := checkContainerWebsiteEndpoint(requestCtx, "http", address)
@@ -228,18 +275,25 @@ func waitForRuntimeContainerReady(ctx context.Context, cli *dockerclient.Client,
 		lastDialErr = checkErr
 		select {
 		case <-readyCtx.Done():
-			return buildRuntimeContainerReadinessError(context.Background(), cli, containerID, address, lastDialErr)
+			return buildRuntimeContainerReadinessError(context.Background(), cli, containerID, address, readyTimeout, lastDialErr)
 		case <-ticker.C:
 		}
 	}
 }
 
-func buildRuntimeContainerReadinessError(ctx context.Context, cli *dockerclient.Client, containerID, address string, lastErr error) error {
-	detail := fmt.Sprintf("runner HTTP readiness timeout at http://%s/", address)
+func buildRuntimeContainerReadinessError(ctx context.Context, cli *dockerclient.Client, containerID, address string, readyTimeout time.Duration, lastErr error) error {
+	// 把预算和调大的办法写进报错：超时最常见的原因是机器慢、构建还没跑完，
+	// 而不是构建失败——不写清楚，用户会去查一个并不存在的构建错误。
+	detail := fmt.Sprintf("Runner 在 %s 内未就绪 (http://%s/)，若构建本身仍在进行可用 %s 调大预算",
+		readyTimeout, address, runtimeReadyTimeoutEnv)
 	if lastErr != nil {
 		detail += fmt.Sprintf(": %v", lastErr)
 	}
-	if logs := readEngineContainerLogs(ctx, cli, containerID); logs != "" {
+	rawLogs := readEngineContainerLogTail(ctx, cli, containerID)
+	if hint := detectEngineContainerKillHint(nil, rawLogs); hint != "" {
+		detail += fmt.Sprintf(", %s", hint)
+	}
+	if logs := formatEngineContainerLogs(rawLogs); logs != "" {
 		detail += fmt.Sprintf(", logs=%s", logs)
 	}
 	return errors.New(detail)

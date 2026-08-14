@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/aihop/gopanel/utils/docker"
 	"github.com/docker/docker/api/types/container"
@@ -96,6 +97,7 @@ func buildPipelineRunnerRuntimeSpec(request pipelineRunnerDeployRequest, rc runn
 		NetworkMode:         container.NetworkMode(runnerNetworkName),
 		PreviousContainerID: strings.TrimSpace(request.PreviousContainerID),
 		WaitForReady:        true,
+		ReadyTimeout:        resolveRunnerReadyTimeout(rc),
 	}
 	if rc.HasCustomWorkingDir {
 		spec.Binds = append(spec.Binds, fmt.Sprintf("%s:%s", codeRoot, sourceMountDir))
@@ -114,6 +116,22 @@ func buildPipelineRunnerRuntimeSpec(request pipelineRunnerDeployRequest, rc runn
 	spec.Binds = append(spec.Binds, persistentBinds...)
 	spec.Mounts = buildRunnerEphemeralMounts(rc, workingDir, codeRoot)
 	return spec, nil
+}
+
+const (
+	// build_run 要在容器里装依赖 + 完整构建。低配机器（4 核 ARM + swap）上，
+	// 一个中型 Nuxt 项目光 npm install 就可能十几分钟，15 分钟根本不够，
+	// 超时还会连容器一起删掉、现场无从查起。
+	runnerBuildReadyTimeout = 45 * time.Minute
+	// 只启动预构建产物，几秒就该监听；给太长只会让真的挂了的容器拖着不报错。
+	runnerStartReadyTimeout = 10 * time.Minute
+)
+
+func resolveRunnerReadyTimeout(rc runnerConfig) time.Duration {
+	if strings.EqualFold(strings.TrimSpace(rc.Mode), "build_run") {
+		return runnerBuildReadyTimeout
+	}
+	return runnerStartReadyTimeout
 }
 
 func logPipelineRunnerSpec(progress func(format string, a ...interface{}), imageName string, rc runnerConfig, spec runtimeContainerSpec, codeRoot, sourceMountDir string, persistentBindCount int) {

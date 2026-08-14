@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
@@ -76,6 +77,9 @@ func TestBuildPipelineRunnerRuntimeSpecOwnsRunnerSettings(t *testing.T) {
 	if len(spec.Cmd) != 3 || spec.Cmd[0] != "sh" || !strings.Contains(spec.Cmd[2], "node .output/server/index.mjs") {
 		t.Fatalf("runner startup command missing: %v", spec.Cmd)
 	}
+	if !spec.WaitForReady {
+		t.Fatal("Runner must keep restart disabled until HTTP readiness succeeds")
+	}
 	envs := envSliceToMap(spec.Env)
 	if envs["PATH"] != "/usr/bin" || envs["PORT"] != "3000" || envs["PIPELINE_VERSION"] != "1.2.3" {
 		t.Fatalf("unexpected runner environment: %v", envs)
@@ -91,4 +95,48 @@ func envSliceToMap(envs []string) map[string]string {
 		}
 	}
 	return result
+}
+
+func TestRuntimeRestartPolicyChangesAfterReadiness(t *testing.T) {
+	if got := initialRuntimeRestartPolicy(true).Name; got != "no" {
+		t.Fatalf("initial Runner restart policy = %q, want no", got)
+	}
+	if got := initialRuntimeRestartPolicy(false).Name; got != "always" {
+		t.Fatalf("regular runtime restart policy = %q, want always", got)
+	}
+	if got := readyRuntimeUpdateConfig().RestartPolicy.Name; got != "always" {
+		t.Fatalf("ready Runner restart policy = %q, want always", got)
+	}
+}
+
+func TestRunnerReadyTimeoutMatchesMode(t *testing.T) {
+	buildRun := resolveRunnerReadyTimeout(parseRunnerConfig(map[string]interface{}{"mode": "build_run"}))
+	if buildRun != runnerBuildReadyTimeout {
+		t.Fatalf("build_run ready timeout = %s, want %s", buildRun, runnerBuildReadyTimeout)
+	}
+	startOnly := resolveRunnerReadyTimeout(parseRunnerConfig(map[string]interface{}{"mode": "start"}))
+	if startOnly != runnerStartReadyTimeout {
+		t.Fatalf("start-only ready timeout = %s, want %s", startOnly, runnerStartReadyTimeout)
+	}
+	if buildRun <= startOnly {
+		t.Fatal("build_run must get a larger budget than start-only")
+	}
+}
+
+func TestResolveRuntimeReadyTimeoutPrecedence(t *testing.T) {
+	if got := resolveRuntimeReadyTimeout(0); got != defaultRuntimeReadyTimeout {
+		t.Fatalf("zero spec timeout = %s, want the default %s", got, defaultRuntimeReadyTimeout)
+	}
+	if got := resolveRuntimeReadyTimeout(30 * time.Minute); got != 30*time.Minute {
+		t.Fatalf("spec timeout ignored, got %s", got)
+	}
+	t.Setenv(runtimeReadyTimeoutEnv, "90m")
+	if got := resolveRuntimeReadyTimeout(30 * time.Minute); got != 90*time.Minute {
+		t.Fatalf("env override must win over the spec, got %s", got)
+	}
+	// 写错的值不能把预算悄悄清零，否则 Runner 一启动就判超时。
+	t.Setenv(runtimeReadyTimeoutEnv, "not-a-duration")
+	if got := resolveRuntimeReadyTimeout(30 * time.Minute); got != 30*time.Minute {
+		t.Fatalf("invalid env must fall back to the spec, got %s", got)
+	}
 }
