@@ -63,6 +63,9 @@ func snapshotPipelineRunnerArtifact(ctx context.Context, logger *PipelineLogger,
 	if err := extractRunnerArtifactTar(ctx, reader, temporaryDir, stat.Name, excludedPaths); err != nil {
 		return "", fmt.Errorf("解包 Runner 构建结果失败: %w", err)
 	}
+	if err := validatePipelineRunnerArtifact(pipeline, temporaryDir); err != nil {
+		return "", err
+	}
 	resultDir := filepath.Join(archiveDir, fmt.Sprintf("runner-record-%d", recordID))
 	if err := os.RemoveAll(resultDir); err != nil {
 		return "", err
@@ -74,6 +77,62 @@ func snapshotPipelineRunnerArtifact(ctx context.Context, logger *PipelineLogger,
 		logger.Info("Runner 构建结果已固化: %s", resultDir)
 	}
 	return resultDir, nil
+}
+
+func validatePipelineRunnerArtifact(pipeline *model.Pipeline, artifactDir string) error {
+	if pipeline == nil {
+		return errors.New("Runner 制品校验缺少流水线信息")
+	}
+	raw := map[string]interface{}{}
+	if strings.TrimSpace(pipeline.RunnerConfig) != "" {
+		if err := json.Unmarshal([]byte(pipeline.RunnerConfig), &raw); err != nil {
+			return fmt.Errorf("Runner 配置无效，无法校验正式制品: %w", err)
+		}
+	}
+	startCommand := strings.TrimSpace(parseRunnerConfig(raw).StartCommand)
+	requiredPath := runnerStartCommandArtifactPath(startCommand)
+	if requiredPath == "" {
+		return nil
+	}
+	target, err := safeRunnerArtifactTarget(artifactDir, filepath.FromSlash(requiredPath))
+	if err != nil {
+		return err
+	}
+	info, err := os.Stat(target)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("Runner 构建未生成启动入口 %s，禁止发布正式制品", requiredPath)
+		}
+		return fmt.Errorf("检查 Runner 启动入口 %s 失败: %w", requiredPath, err)
+	}
+	if info.IsDir() {
+		return fmt.Errorf("Runner 启动入口 %s 不是文件，禁止发布正式制品", requiredPath)
+	}
+	return nil
+}
+
+func runnerStartCommandArtifactPath(command string) string {
+	for _, field := range strings.Fields(command) {
+		candidate := strings.Trim(field, "'\"")
+		if candidate == "" || strings.HasPrefix(candidate, "-") || strings.ContainsAny(candidate, "$|&;<>(){}*?") {
+			continue
+		}
+		explicitRelative := strings.HasPrefix(candidate, "./")
+		candidate = strings.TrimPrefix(candidate, "./")
+		candidate = path.Clean(candidate)
+		if candidate == "." || path.IsAbs(candidate) || candidate == ".." || strings.HasPrefix(candidate, "../") {
+			continue
+		}
+		extension := strings.ToLower(path.Ext(candidate))
+		switch extension {
+		case ".js", ".mjs", ".cjs", ".ts", ".py", ".php", ".rb", ".jar", ".html":
+			return candidate
+		}
+		if explicitRelative || candidate == "artisan" {
+			return candidate
+		}
+	}
+	return ""
 }
 
 func runnerArtifactExcludedPaths(pipeline *model.Pipeline, workingDir string) map[string]struct{} {

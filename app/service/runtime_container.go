@@ -2,9 +2,9 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
-	"net"
 	"strings"
 	"time"
 
@@ -219,18 +219,30 @@ func waitForRuntimeContainerReady(ctx context.Context, cli *dockerclient.Client,
 		if inspect.RestartCount > 0 {
 			return buildEngineContainerDiagError(readyCtx, cli, containerID, fmt.Sprintf("%d", hostPort), inspect)
 		}
-		connection, dialErr := (&net.Dialer{Timeout: time.Second}).DialContext(readyCtx, "tcp", address)
-		if dialErr == nil {
-			_ = connection.Close()
+		requestCtx, requestCancel := context.WithTimeout(readyCtx, 3*time.Second)
+		checkErr := checkContainerWebsiteEndpoint(requestCtx, "http", address)
+		requestCancel()
+		if checkErr == nil {
 			return nil
 		}
-		lastDialErr = dialErr
+		lastDialErr = checkErr
 		select {
 		case <-readyCtx.Done():
-			return fmt.Errorf("runner service readiness timeout at %s: %w", address, lastDialErr)
+			return buildRuntimeContainerReadinessError(context.Background(), cli, containerID, address, lastDialErr)
 		case <-ticker.C:
 		}
 	}
+}
+
+func buildRuntimeContainerReadinessError(ctx context.Context, cli *dockerclient.Client, containerID, address string, lastErr error) error {
+	detail := fmt.Sprintf("runner HTTP readiness timeout at http://%s/", address)
+	if lastErr != nil {
+		detail += fmt.Sprintf(": %v", lastErr)
+	}
+	if logs := readEngineContainerLogs(ctx, cli, containerID); logs != "" {
+		detail += fmt.Sprintf(", logs=%s", logs)
+	}
+	return errors.New(detail)
 }
 
 func cloneRuntimeExposedPorts(imageInspect image.InspectResponse) nat.PortSet {

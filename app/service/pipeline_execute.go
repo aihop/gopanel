@@ -292,8 +292,13 @@ func (s *PipelineService) executePipeline(p *model.Pipeline, record *model.Pipel
 		if !s.persistRunnerResult(ctx, logger, p, record) {
 			return
 		}
-		s.recordRepo.UpdateStatus(recordID, "success", "构建成功（未配置后续操作）")
-		logger.Info("流水线构建成功，网站发布请从容器列表选择端口绑定")
+		if runnerEnabled {
+			s.recordRepo.UpdateStatus(recordID, "success", "Runner 构建、制品固化与服务启动成功")
+			logger.Info("Runner 构建、正式制品固化与服务启动成功")
+		} else {
+			s.recordRepo.UpdateStatus(recordID, "success", "构建成功（未配置后续操作）")
+			logger.Info("流水线构建成功，网站发布请从容器列表选择端口绑定")
+		}
 	}
 	logger.Info("====== Pipeline #%d 执行成功！======", recordID)
 }

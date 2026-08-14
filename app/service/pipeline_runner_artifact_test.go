@@ -75,3 +75,36 @@ func TestRunnerArtifactExcludedPathsUsesPersistentConfig(t *testing.T) {
 		}
 	}
 }
+
+func TestValidatePipelineRunnerArtifactRequiresConfiguredStartEntry(t *testing.T) {
+	pipeline := &model.Pipeline{RunnerConfig: `{"startCommand":"node .output/server/index.mjs"}`}
+	artifactDir := t.TempDir()
+	if err := validatePipelineRunnerArtifact(pipeline, artifactDir); err == nil {
+		t.Fatal("expected missing Nuxt entry to reject the artifact")
+	}
+	entry := filepath.Join(artifactDir, ".output", "server", "index.mjs")
+	if err := os.MkdirAll(filepath.Dir(entry), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(entry, []byte("built"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := validatePipelineRunnerArtifact(pipeline, artifactDir); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRunnerStartCommandArtifactPathHandlesRelativeEntry(t *testing.T) {
+	if got := runnerStartCommandArtifactPath("node ./.output/server/index.mjs"); got != ".output/server/index.mjs" {
+		t.Fatalf("artifact path = %q", got)
+	}
+	if got := runnerStartCommandArtifactPath("python server/app.py"); got != "server/app.py" {
+		t.Fatalf("Python artifact path = %q", got)
+	}
+	if got := runnerStartCommandArtifactPath("./app --port 3000"); got != "app" {
+		t.Fatalf("binary artifact path = %q", got)
+	}
+	if got := runnerStartCommandArtifactPath("npm run start"); got != "" {
+		t.Fatalf("script command should use HTTP readiness only, got %q", got)
+	}
+}
