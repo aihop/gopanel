@@ -423,7 +423,6 @@ func buildRunnerScript(rc runnerConfig, sourceDir string) string {
 	}
 	if mode == "build_run" {
 		b.WriteString("export NPM_CONFIG_INCLUDE=dev\n")
-		b.WriteString("export NPM_CONFIG_PRODUCTION=false\n")
 		b.WriteString("export YARN_PRODUCTION=false\n")
 		if installCmd != "" {
 			b.WriteString("echo \"[BUILD+RUN] executing custom build command\"\n")

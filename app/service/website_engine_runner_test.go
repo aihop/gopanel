@@ -121,10 +121,13 @@ func TestBuildRunnerScriptIncludesBuildDependenciesForCustomCommand(t *testing.T
 		"buildCommand": "npm ci --legacy-peer-deps && npm run build",
 	})
 	script := buildRunnerScript(rc, runnerWorkspaceMountPath)
-	for _, expected := range []string{"NPM_CONFIG_INCLUDE=dev", "NPM_CONFIG_PRODUCTION=false", "YARN_PRODUCTION=false", rc.BuildCommand} {
+	for _, expected := range []string{"NPM_CONFIG_INCLUDE=dev", "YARN_PRODUCTION=false", rc.BuildCommand} {
 		if !strings.Contains(script, expected) {
 			t.Fatalf("expected custom Runner script to contain %q, script=%s", expected, script)
 		}
+	}
+	if strings.Contains(script, "NPM_CONFIG_PRODUCTION") {
+		t.Fatalf("custom Runner script contains deprecated npm production config: %s", script)
 	}
 }
 
