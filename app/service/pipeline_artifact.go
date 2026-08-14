@@ -219,6 +219,16 @@ func createFilteredZipArchive(srcPath, archivePath string, preserveNestedDepende
 			_, err = zw.CreateHeader(header)
 			return err
 		}
+		// filepath.Walk 走的是 Lstat：指向目录的软链接（npm 嵌套去重会大量产生）
+		// IsDir() 为 false，当成普通文件 os.Open 会跟随到目录，io.Copy 直接报
+		// "is a directory"。copyPipelineTree 早就按软链接处理了，这里要对齐。
+		if currentInfo.Mode()&os.ModeSymlink != 0 {
+			return addArchiveSymlinkToZip(zw, current, nameInArchive, currentInfo)
+		}
+		// 套接字/FIFO/设备文件没有可归档的内容，打开还可能阻塞，跳过。
+		if !currentInfo.Mode().IsRegular() {
+			return nil
+		}
 		return addArchiveFileToZip(zw, current, nameInArchive, currentInfo)
 	})
 }
@@ -241,6 +251,27 @@ func shouldSkipArchiveEntry(rel string, info os.FileInfo, preserveNestedDependen
 	}
 	return false
 }
+
+// zip 里软链接的通行表示：条目内容就是链接目标，模式位带 os.ModeSymlink。
+func addArchiveSymlinkToZip(zw *zip.Writer, diskPath, nameInArchive string, info os.FileInfo) error {
+	linkTarget, err := os.Readlink(diskPath)
+	if err != nil {
+		return err
+	}
+	header, err := zip.FileInfoHeader(info)
+	if err != nil {
+		return err
+	}
+	header.Name = nameInArchive
+	header.Method = zip.Deflate
+	writer, err := zw.CreateHeader(header)
+	if err != nil {
+		return err
+	}
+	_, err = io.WriteString(writer, linkTarget)
+	return err
+}
+
 func addArchiveFileToZip(zw *zip.Writer, diskPath, nameInArchive string, info os.FileInfo) error {
 	header, err := zip.FileInfoHeader(info)
 	if err != nil {
