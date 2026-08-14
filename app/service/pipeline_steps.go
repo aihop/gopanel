@@ -428,7 +428,8 @@ func (s *PipelineService) stepArchive(ctx context.Context, logger *PipelineLogge
 	archiveName := fmt.Sprintf("build_%d_%s.zip", recordID, time.Now().Format("20060102150405"))
 	archivePath := filepath.Join(archiveDir, archiveName)
 	logger.Info("正在对产物进行 Zip 归档留档...")
-	err := createFilteredZipArchive(artifactSrc, archivePath)
+	preserveNestedDependencies := p.RunnerMode == constant.PipelineRunnerModeRunner
+	err := createFilteredZipArchive(artifactSrc, archivePath, preserveNestedDependencies)
 	if err != nil {
 		return "", err
 	}

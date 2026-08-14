@@ -422,6 +422,9 @@ func buildRunnerScript(rc runnerConfig, sourceDir string) string {
 		}
 	}
 	if mode == "build_run" {
+		b.WriteString("export NPM_CONFIG_INCLUDE=dev\n")
+		b.WriteString("export NPM_CONFIG_PRODUCTION=false\n")
+		b.WriteString("export YARN_PRODUCTION=false\n")
 		if installCmd != "" {
 			b.WriteString("echo \"[BUILD+RUN] executing custom build command\"\n")
 			b.WriteString(installCmd)
@@ -429,9 +432,9 @@ func buildRunnerScript(rc runnerConfig, sourceDir string) string {
 		} else {
 			b.WriteString("if [ -f package.json ]; then\n")
 			b.WriteString("  echo \"[BUILD+RUN] package.json detected, rebuilding app\"\n")
-			b.WriteString("  if [ -f pnpm-lock.yaml ]; then pnpm install --frozen-lockfile; ")
-			b.WriteString("elif [ -f yarn.lock ]; then yarn install --frozen-lockfile; ")
-			b.WriteString("elif [ -f package-lock.json ]; then npm ci; else npm install; fi\n")
+			b.WriteString("  if [ -f pnpm-lock.yaml ]; then pnpm install --frozen-lockfile --prod=false; ")
+			b.WriteString("elif [ -f yarn.lock ]; then yarn install --frozen-lockfile --production=false; ")
+			b.WriteString("elif [ -f package-lock.json ]; then npm ci --include=dev; else npm install --include=dev; fi\n")
 			b.WriteString("  npm run build\n")
 			b.WriteString("elif [ -f .output/server/index.mjs ]; then\n")
 			b.WriteString("  echo \"[RUN] detected standalone .output, start directly\"\n")

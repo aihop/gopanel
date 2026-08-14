@@ -15,11 +15,12 @@ func TestExtractRunnerArtifactTarKeepsBuildAndFiltersRuntimeData(t *testing.T) {
 	var archive bytes.Buffer
 	writer := tar.NewWriter(&archive)
 	files := map[string]string{
-		"app/.output/server/index.mjs":  "built",
-		"app/package.json":              "{}",
-		"app/node_modules/pkg/index.js": "dependency",
-		"app/storage/database.sqlite":   "runtime-data",
-		"app/.gopanel_shims/docker":     "shim",
+		"app/.output/server/index.mjs":                            "built",
+		"app/.output/server/node_modules/vue-router/package.json": "runtime-dependency",
+		"app/package.json":                                        "{}",
+		"app/node_modules/pkg/index.js":                           "build-dependency",
+		"app/storage/database.sqlite":                             "runtime-data",
+		"app/.gopanel_shims/docker":                               "shim",
 	}
 	for name, content := range files {
 		if err := writer.WriteHeader(&tar.Header{Name: name, Mode: 0644, Size: int64(len(content)), Typeflag: tar.TypeReg}); err != nil {
@@ -41,6 +42,10 @@ func TestExtractRunnerArtifactTarKeepsBuildAndFiltersRuntimeData(t *testing.T) {
 	content, err := os.ReadFile(filepath.Join(destination, ".output", "server", "index.mjs"))
 	if err != nil || string(content) != "built" {
 		t.Fatalf("built artifact missing: %q, %v", content, err)
+	}
+	runtimeDependency, err := os.ReadFile(filepath.Join(destination, ".output", "server", "node_modules", "vue-router", "package.json"))
+	if err != nil || string(runtimeDependency) != "runtime-dependency" {
+		t.Fatalf("runtime dependency missing: %q, %v", runtimeDependency, err)
 	}
 	for _, relative := range []string{"node_modules", "storage", ".gopanel_shims"} {
 		if _, err := os.Stat(filepath.Join(destination, relative)); !os.IsNotExist(err) {

@@ -263,6 +263,9 @@ func safeRunnerArtifactTarget(root, relative string) (string, error) {
 func shouldSkipRunnerArtifactEntry(relative string, excludedPaths map[string]struct{}) bool {
 	clean := filepath.ToSlash(filepath.Clean(relative))
 	for _, part := range strings.Split(clean, "/") {
+		if part == "node_modules" && clean != "node_modules" && !strings.HasPrefix(clean, "node_modules/") {
+			continue
+		}
 		if _, ok := archiveExcludedNames[part]; ok {
 			return true
 		}

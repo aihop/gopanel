@@ -171,7 +171,7 @@ func copyPipelineFile(srcPath, dstPath string, mode os.FileMode) error {
 	_, err = io.Copy(dst, src)
 	return err
 }
-func createFilteredZipArchive(srcPath, archivePath string) error {
+func createFilteredZipArchive(srcPath, archivePath string, preserveNestedDependencies bool) error {
 	info, err := os.Stat(srcPath)
 	if err != nil {
 		return err
@@ -206,7 +206,7 @@ func createFilteredZipArchive(srcPath, archivePath string) error {
 		if rel == "." {
 			return nil
 		}
-		if shouldSkipArchiveEntry(rel, currentInfo) {
+		if shouldSkipArchiveEntry(rel, currentInfo, preserveNestedDependencies) {
 			if currentInfo.IsDir() {
 				return filepath.SkipDir
 			}
@@ -222,15 +222,19 @@ func createFilteredZipArchive(srcPath, archivePath string) error {
 		return addArchiveFileToZip(zw, current, nameInArchive, currentInfo)
 	})
 }
-func shouldSkipArchiveEntry(rel string, info os.FileInfo) bool {
+func shouldSkipArchiveEntry(rel string, info os.FileInfo, preserveNestedDependencies bool) bool {
 	name := info.Name()
 	if name == ".DS_Store" || strings.HasPrefix(name, "._") {
 		return true
 	}
-	if _, ok := archiveExcludedNames[name]; ok {
+	cleanRel := filepath.ToSlash(filepath.Clean(rel))
+	if _, ok := archiveExcludedNames[name]; ok && !(preserveNestedDependencies && name == "node_modules" && cleanRel != "node_modules") {
 		return true
 	}
-	for _, part := range strings.Split(filepath.ToSlash(rel), "/") {
+	for _, part := range strings.Split(cleanRel, "/") {
+		if preserveNestedDependencies && part == "node_modules" && cleanRel != "node_modules" && !strings.HasPrefix(cleanRel, "node_modules/") {
+			continue
+		}
 		if _, ok := archiveExcludedNames[part]; ok {
 			return true
 		}

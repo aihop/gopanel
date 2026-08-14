@@ -109,9 +109,21 @@ func TestBuildRunnerScriptSkipsSyncWhenSourceEqualsWorkingDir(t *testing.T) {
 
 func TestBuildRunnerScriptBuildsDefaultNodeProject(t *testing.T) {
 	script := buildRunnerScript(parseRunnerConfig(nil), runnerWorkspaceMountPath)
-	for _, expected := range []string{"package.json detected, rebuilding app", "npm ci", "npm run build"} {
+	for _, expected := range []string{"package.json detected, rebuilding app", "NPM_CONFIG_INCLUDE=dev", "npm ci --include=dev", "npm run build"} {
 		if !strings.Contains(script, expected) {
 			t.Fatalf("expected default Runner script to contain %q, script=%s", expected, script)
+		}
+	}
+}
+
+func TestBuildRunnerScriptIncludesBuildDependenciesForCustomCommand(t *testing.T) {
+	rc := parseRunnerConfig(map[string]interface{}{
+		"buildCommand": "npm ci --legacy-peer-deps && npm run build",
+	})
+	script := buildRunnerScript(rc, runnerWorkspaceMountPath)
+	for _, expected := range []string{"NPM_CONFIG_INCLUDE=dev", "NPM_CONFIG_PRODUCTION=false", "YARN_PRODUCTION=false", rc.BuildCommand} {
+		if !strings.Contains(script, expected) {
+			t.Fatalf("expected custom Runner script to contain %q, script=%s", expected, script)
 		}
 	}
 }
