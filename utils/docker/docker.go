@@ -21,6 +21,12 @@ type Client struct {
 	cli *client.Client
 }
 
+type networkRuntimeClient interface {
+	Close()
+	NetworkExist(name string) bool
+	CreateNetwork(name string) error
+}
+
 func NewRuntimeClient() (Client, error) {
 	cli, err := DefaultRuntimeAdapter().DockerClient(context.Background())
 	if err != nil {
@@ -160,21 +166,11 @@ func (c Client) NetworkExist(name string) bool {
 func CreateDefaultDockerNetwork() error {
 	resolved := ResolveRuntime(context.Background())
 	if resolved.Kind == RuntimePodman {
-		if err := ensurePodmanNetwork("gopanel-network"); err == nil {
-			return nil
-		} else {
-			cli, cerr := NewClient()
-			if cerr == nil {
-				defer cli.Close()
-				if !cli.NetworkExist("gopanel-network") {
-					if nerr := cli.CreateNetwork("gopanel-network"); nerr == nil {
-						return nil
-					}
-				}
-			}
+		if err := ensurePodmanNetworkWithFallback("gopanel-network", ensurePodmanNetwork, newNetworkRuntimeClient); err != nil {
 			global.LOG.Errorf("create default podman network error %s", err.Error())
 			return err
 		}
+		return nil
 	}
 	cli, err := NewClient()
 	if err != nil {
@@ -198,20 +194,7 @@ func EnsureNetwork(name string) error {
 	}
 	resolved := ResolveRuntime(context.Background())
 	if resolved.Kind == RuntimePodman {
-		if err := ensurePodmanNetwork(name); err == nil {
-			return nil
-		} else {
-			cli, cerr := NewClient()
-			if cerr == nil {
-				defer cli.Close()
-				if !cli.NetworkExist(name) {
-					if nerr := cli.CreateNetwork(name); nerr == nil {
-						return nil
-					}
-				}
-			}
-			return err
-		}
+		return ensurePodmanNetworkWithFallback(name, ensurePodmanNetwork, newNetworkRuntimeClient)
 	}
 	cli, err := NewClient()
 	if err != nil {
@@ -220,6 +203,29 @@ func EnsureNetwork(name string) error {
 	defer cli.Close()
 	if !cli.NetworkExist(name) {
 		return cli.CreateNetwork(name)
+	}
+	return nil
+}
+
+func newNetworkRuntimeClient() (networkRuntimeClient, error) {
+	return NewClient()
+}
+
+func ensurePodmanNetworkWithFallback(name string, ensureCLI func(string) error, newClient func() (networkRuntimeClient, error)) error {
+	cliErr := ensureCLI(name)
+	if cliErr == nil {
+		return nil
+	}
+	apiClient, err := newClient()
+	if err != nil {
+		return fmt.Errorf("Podman CLI 网络准备失败: %v；Socket API 初始化失败: %w", cliErr, err)
+	}
+	defer apiClient.Close()
+	if apiClient.NetworkExist(name) {
+		return nil
+	}
+	if err := apiClient.CreateNetwork(name); err != nil {
+		return fmt.Errorf("Podman CLI 网络准备失败: %v；Socket API 创建网络失败: %w", cliErr, err)
 	}
 	return nil
 }
