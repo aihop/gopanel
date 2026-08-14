@@ -1,6 +1,8 @@
 package service
 
 import (
+	"os"
+	"os/exec"
 	"strings"
 	"testing"
 )
@@ -145,5 +147,60 @@ func TestBuildRunnerScriptKeepsPersistentPathsOutOfCleanup(t *testing.T) {
 	}
 	if !strings.Contains(script, "/var/www/app/.git") {
 		t.Fatalf("expected cleanup script to keep transient dirs, script=%s", script)
+	}
+}
+
+// 构建阶段必须与运行阶段隔离。现场事故：buildCommand 里的 `unset DATABASE_URL`
+// 本意只针对构建期预渲染，却因为共用 shell + 末尾 exec 泄漏进运行时，服务起来后
+// 读不到连接串。这里直接跑生成的脚本验证语义，字符串匹配证明不了这件事。
+func TestBuildRunnerScriptIsolatesBuildShellFromRuntime(t *testing.T) {
+	shell, err := exec.LookPath("sh")
+	if err != nil {
+		t.Skipf("sh unavailable: %v", err)
+	}
+	workDir := t.TempDir()
+	rc := parseRunnerConfig(map[string]interface{}{
+		"mode":         "build_run",
+		"workingDir":   workDir,
+		"buildCommand": "unset LEAK_PROBE; export BUILD_ONLY=yes",
+		"startCommand": `sh -c 'echo "probe=[$LEAK_PROBE] buildOnly=[$BUILD_ONLY]"'`,
+	})
+	// sourceDir == workingDir 让脚本跳过同步，只留构建 + 启动这两段。
+	script := buildRunnerScript(rc, workDir)
+
+	cmd := exec.Command(shell, "-lc", script)
+	cmd.Env = append(os.Environ(), "LEAK_PROBE=kept", "BUILD_ONLY=")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("script failed: %v\n%s", err, out)
+	}
+	if !strings.Contains(string(out), "probe=[kept]") {
+		t.Fatalf("buildCommand's unset leaked into the runtime process:\n%s", out)
+	}
+	if !strings.Contains(string(out), "buildOnly=[]") {
+		t.Fatalf("buildCommand's export leaked into the runtime process:\n%s", out)
+	}
+}
+
+func TestBuildRunnerScriptStillAbortsOnBuildFailure(t *testing.T) {
+	shell, err := exec.LookPath("sh")
+	if err != nil {
+		t.Skipf("sh unavailable: %v", err)
+	}
+	workDir := t.TempDir()
+	rc := parseRunnerConfig(map[string]interface{}{
+		"mode":         "build_run",
+		"workingDir":   workDir,
+		"buildCommand": "echo building; exit 3",
+		"startCommand": "echo SHOULD_NOT_START",
+	})
+	script := buildRunnerScript(rc, workDir)
+
+	out, err := exec.Command(shell, "-lc", script).CombinedOutput()
+	if err == nil {
+		t.Fatalf("a failing build must abort the script, got success:\n%s", out)
+	}
+	if strings.Contains(string(out), "SHOULD_NOT_START") {
+		t.Fatalf("start command ran despite a failed build:\n%s", out)
 	}
 }

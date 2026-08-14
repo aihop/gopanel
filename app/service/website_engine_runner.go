@@ -422,6 +422,13 @@ func buildRunnerScript(rc runnerConfig, sourceDir string) string {
 		}
 	}
 	if mode == "build_run" {
+		// 整个构建阶段放进子 shell。构建和运行共用一个 shell 进程，末尾又是
+		// exec，buildCommand 里的 unset/export/cd 会原样带进运行时——实际踩过：
+		// buildCommand 写了 `unset DATABASE_URL`（本意只想让构建期的预渲染别连
+		// 生产库），结果服务起来后也读不到连接串，只在请求时报 500。
+		// 要给运行时传变量请用 Runner 的环境变量配置，那才是会写进容器 Env 的。
+		// 顺带把 NPM_CONFIG_INCLUDE/YARN_PRODUCTION 这类构建期开关也一并关在里面。
+		b.WriteString("(\n")
 		b.WriteString("export NPM_CONFIG_INCLUDE=dev\n")
 		b.WriteString("export YARN_PRODUCTION=false\n")
 		if installCmd != "" {
@@ -442,6 +449,8 @@ func buildRunnerScript(rc runnerConfig, sourceDir string) string {
 			b.WriteString("  exit 1\n")
 			b.WriteString("fi\n")
 		}
+		// 子 shell 非零退出时，外层的 set -e 照样会中断脚本，失败语义不变。
+		b.WriteString(")\n")
 	}
 	if startCmd != "" {
 		b.WriteString("exec ")
