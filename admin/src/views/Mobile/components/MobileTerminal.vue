@@ -13,6 +13,7 @@ import MobileTerminalHeader from "./MobileTerminalHeader.vue"
 import MobileTerminalInput from "./MobileTerminalInput.vue"
 import { terminalBufferText } from "./mobileTerminalClipboard"
 import { MobileTerminalOutputQueue } from "./mobileTerminalOutputQueue"
+import { terminalSizeData, terminalTakeControlMessage } from "@/views/Code/components/codeTerminalSession"
 import "./mobileTerminal.css"
 import "@xterm/xterm/css/xterm.css"
 
@@ -85,7 +86,7 @@ function requestResync() {
 
 function fit() {
 	try {
-		fitAddon?.fit()
+		if (!connected.value || hasControl.value) fitAddon?.fit()
 		if (
 			socket?.readyState === WebSocket.OPEN &&
 			hasControl.value &&
@@ -95,7 +96,7 @@ function fit() {
 			socket.send(
 				JSON.stringify({
 					type: "resize",
-					data: JSON.stringify({ cols: terminal.cols, rows: terminal.rows })
+					data: terminalSizeData(terminal.cols, terminal.rows)
 				})
 			)
 			reportedCols = terminal.cols
@@ -115,6 +116,22 @@ function updateControl(value: boolean) {
 			terminal?.focus()
 			scheduleFit()
 		})
+}
+
+function applyAuthoritativeSize(cols: unknown, rows: unknown) {
+	const authoritativeCols = Number(cols)
+	const authoritativeRows = Number(rows)
+	if (
+		!terminal ||
+		!Number.isInteger(authoritativeCols) ||
+		!Number.isInteger(authoritativeRows) ||
+		authoritativeCols <= 0 ||
+		authoritativeRows <= 0
+	)
+		return
+	if (terminal.cols !== authoritativeCols || terminal.rows !== authoritativeRows) {
+		terminal.resize(authoritativeCols, authoritativeRows)
+	}
 }
 
 function sendTerminalInput(data: string) {
@@ -201,6 +218,7 @@ function connect() {
 			const message = JSON.parse(event.data)
 			if (message.type === "baseline") {
 				if (props.mode === "ai" && pendingResyncId && message.requestId !== pendingResyncId) return
+				if (props.mode === "ai") applyAuthoritativeSize(message.cols, message.rows)
 				const sequence = Number(message.sequence) || 0
 				const chunkIndex = Number(message.chunkIndex) || 0
 				const chunkCount = Number(message.chunkCount) || 1
@@ -232,6 +250,7 @@ function connect() {
 			} else if (message.type === "resync_required") {
 				requestResync()
 			} else if (message.type === "control") {
+				if (props.mode === "ai") applyAuthoritativeSize(message.cols, message.rows)
 				updateControl(Boolean(message.hasControl))
 				if (message.controlReason || message.data)
 					queueTerminalData(`\r\n\x1b[33m[GoPanel] ${t("mobile.terminalControlBusy")}\x1b[0m\r\n`)
@@ -354,8 +373,9 @@ function closeTerminal() {
 }
 
 function takeControl() {
-	if (socket?.readyState !== WebSocket.OPEN) return
-	socket.send(JSON.stringify({ type: "take_control", data: "" }))
+	if (socket?.readyState !== WebSocket.OPEN || !terminal) return
+	const dimensions = fitAddon?.proposeDimensions() || { cols: terminal.cols, rows: terminal.rows }
+	socket.send(terminalTakeControlMessage(dimensions.cols, dimensions.rows))
 }
 
 function releaseControl() {

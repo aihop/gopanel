@@ -39,6 +39,8 @@ type nativeCodeTerminal struct {
 	controllerID     string
 	controlExpiresAt time.Time
 	controlTimer     *time.Timer
+	cols             uint16
+	rows             uint16
 	done             chan struct{}
 	lease            *codeExecutionLease
 	executorName     string
@@ -114,6 +116,8 @@ func (manager *nativeCodeTerminalManager) attach(
 		command:      command,
 		ptmx:         ptmx,
 		subscribers:  make(map[string]*nativeTerminalSubscription),
+		cols:         cols,
+		rows:         rows,
 		done:         make(chan struct{}),
 		lease:        lease,
 		executorName: session.AgentName,
@@ -224,8 +228,35 @@ func (terminal *nativeCodeTerminal) write(subscriptionID string, data []byte) er
 	return err
 }
 
-func (terminal *nativeCodeTerminal) resize(cols, rows uint16) error {
-	return terminal.ptmx.Resize(cols, rows)
+func (terminal *nativeCodeTerminal) resize(subscriptionID string, cols, rows uint16) error {
+	terminal.mu.Lock()
+	if terminal.controllerID != subscriptionID || terminal.controlExpiredLocked(time.Now()) {
+		terminal.mu.Unlock()
+		return errors.New("当前连接没有终端控制权")
+	}
+	if err := terminal.resizeLocked(cols, rows); err != nil {
+		terminal.mu.Unlock()
+		return err
+	}
+	terminal.renewControlLeaseLocked(time.Now())
+	terminal.broadcastControlLocked()
+	terminal.mu.Unlock()
+	return nil
+}
+
+func (terminal *nativeCodeTerminal) resizeLocked(cols, rows uint16) error {
+	if cols == 0 || rows == 0 {
+		return errors.New("终端尺寸无效")
+	}
+	if terminal.ptmx == nil {
+		return errors.New("终端不可用")
+	}
+	if err := terminal.ptmx.Resize(cols, rows); err != nil {
+		return err
+	}
+	terminal.cols = cols
+	terminal.rows = rows
+	return nil
 }
 
 func (terminal *nativeCodeTerminal) wait(manager *nativeCodeTerminalManager) {
@@ -286,9 +317,13 @@ func serveNativeCodeTerminal(
 	}
 	if wsConn.Query("take_control") == "1" {
 		startedAt := time.Now()
-		granted, reason := terminal.takeControl(subscription.ID)
+		granted, reason := terminal.takeControl(subscription.ID, cols, rows)
 		baseline.HasControl = granted
 		baseline.ControlReason = reason
+		if granted && cols > 0 && rows > 0 {
+			baseline.Cols = cols
+			baseline.Rows = rows
+		}
 		status := "success"
 		if !granted {
 			status = "denied"
@@ -317,6 +352,8 @@ func serveNativeCodeTerminal(
 				HasControl     bool   `json:"hasControl"`
 				ControlReason  string `json:"controlReason,omitempty"`
 				LeaseExpiresAt int64  `json:"leaseExpiresAt,omitempty"`
+				Cols           uint16 `json:"cols,omitempty"`
+				Rows           uint16 `json:"rows,omitempty"`
 				Truncated      bool   `json:"truncated,omitempty"`
 				ChunkIndex     int    `json:"chunkIndex,omitempty"`
 				ChunkCount     int    `json:"chunkCount,omitempty"`
@@ -324,6 +361,7 @@ func serveNativeCodeTerminal(
 				Type: chunk.Type, Sequence: chunk.Sequence, StartSequence: chunk.StartSequence,
 				RequestID: chunk.RequestID, Data: string(chunk.Data), HasControl: chunk.HasControl,
 				ControlReason: chunk.ControlReason, LeaseExpiresAt: chunk.LeaseExpiresAt,
+				Cols: chunk.Cols, Rows: chunk.Rows,
 				Truncated: chunk.Truncated && index == 0, ChunkIndex: index, ChunkCount: len(chunks),
 			})
 			if err := wsConn.WriteMessage(websocket.TextMessage, payload); err != nil {
@@ -360,8 +398,10 @@ func serveNativeCodeTerminal(
 				_ = writeEvent(nativeTerminalEvent{Type: "control", HasControl: false})
 			}
 		case "take_control":
+			var request nativeTerminalControlRequest
+			_ = json.Unmarshal([]byte(message.Data), &request)
 			startedAt := time.Now()
-			granted, reason := terminal.takeControl(subscription.ID)
+			granted, reason := terminal.takeControl(subscription.ID, request.Cols, request.Rows)
 			status := "success"
 			if !granted {
 				status = "denied"
@@ -393,9 +433,8 @@ func serveNativeCodeTerminal(
 				Cols uint16 `json:"cols"`
 				Rows uint16 `json:"rows"`
 			}
-			if json.Unmarshal([]byte(message.Data), &size) == nil && terminal.hasControl(subscription.ID) {
-				terminal.renewControlLease(subscription.ID)
-				_ = terminal.resize(size.Cols, size.Rows)
+			if json.Unmarshal([]byte(message.Data), &size) == nil {
+				_ = terminal.resize(subscription.ID, size.Cols, size.Rows)
 			}
 		case "ping":
 			writeMu.Lock()

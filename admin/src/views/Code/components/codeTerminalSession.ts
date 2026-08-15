@@ -8,6 +8,14 @@ export const isDeliveredCodeSession = (status: string | undefined) => status?.tr
  */
 export const CODE_TERMINAL_POOL_SIZE = 8
 
+export function terminalSizeData(cols: number, rows: number) {
+	return JSON.stringify({ cols, rows })
+}
+
+export function terminalTakeControlMessage(cols: number, rows: number) {
+	return JSON.stringify({ type: "take_control", data: terminalSizeData(cols, rows) })
+}
+
 /**
  * 终端实例在 KeepAlive 池里的身份。
  * 相同身份命中缓存 —— 连接不断、滚屏不丢；身份变了才会新建一条终端。

@@ -9,7 +9,7 @@ import { getCodeSession } from "@/api/modules/code"
 import { codeProjectMessages } from "@/i18n/locales/codeProject"
 import { useCodexRuntimeState } from "../useCodexRuntimeState"
 import CodeTerminalStatusBar from "./CodeTerminalStatusBar.vue"
-import { isDeliveredCodeSession } from "./codeTerminalSession"
+import { isDeliveredCodeSession, terminalSizeData, terminalTakeControlMessage } from "./codeTerminalSession"
 
 const authStore = useAuthStore()
 const { t } = useI18n({ messages: codeProjectMessages })
@@ -131,9 +131,8 @@ const initTerminal = () => {
 		} catch (e) {
 			console.warn("Fit addon error on init", e)
 		}
+		connectWebSocket()
 	})
-
-	connectWebSocket()
 
 	term.onData(data => {
 		if (ws && ws.readyState === WebSocket.OPEN && hasTerminalControl.value) {
@@ -188,6 +187,7 @@ const connectWebSocket = () => {
 				nativeProtocol.value = true
 				connectionFailed.value = false
 				if (pendingResyncId && msg.requestId !== pendingResyncId) return
+				applyAuthoritativeSize(msg.cols, msg.rows)
 				autoTakeControlPending = false
 				const sequence = Number(msg.sequence) || 0
 				const chunkIndex = Number(msg.chunkIndex) || 0
@@ -199,6 +199,7 @@ const connectWebSocket = () => {
 					lastSequence = sequence
 					pendingResyncId = ""
 					hasTerminalControl.value = Boolean(msg.hasControl)
+					if (hasTerminalControl.value) void nextTick(handleResize)
 					sendTerminalAck(sequence)
 				}
 			} else if (msg.type === "output") {
@@ -216,7 +217,10 @@ const connectWebSocket = () => {
 			} else if (msg.type === "resync_required") {
 				requestTerminalResync()
 			} else if (msg.type === "control") {
+				applyAuthoritativeSize(msg.cols, msg.rows)
+				const gainedControl = !hasTerminalControl.value && Boolean(msg.hasControl)
 				hasTerminalControl.value = Boolean(msg.hasControl)
+				if (gainedControl) void nextTick(handleResize)
 				if (msg.controlReason) term.writeln(`\r\n\x1b[33m[GoPanel] ${t("code.terminalControlBusy")}\x1b[0m`)
 			} else if (msg.type === "closed") {
 				intentionalClose = true
@@ -263,6 +267,21 @@ const connectWebSocket = () => {
 	}
 }
 
+const applyAuthoritativeSize = (cols: unknown, rows: unknown) => {
+	const authoritativeCols = Number(cols)
+	const authoritativeRows = Number(rows)
+	if (
+		!Number.isInteger(authoritativeCols) ||
+		!Number.isInteger(authoritativeRows) ||
+		authoritativeCols <= 0 ||
+		authoritativeRows <= 0
+	)
+		return
+	if (term.cols !== authoritativeCols || term.rows !== authoritativeRows) {
+		term.resize(authoritativeCols, authoritativeRows)
+	}
+}
+
 const reconnectTerminal = () => {
 	if (reconnectTimer) {
 		clearTimeout(reconnectTimer)
@@ -282,7 +301,8 @@ const reconnectTerminal = () => {
 
 const takeTerminalControl = () => {
 	if (ws && ws.readyState === WebSocket.OPEN) {
-		ws.send(JSON.stringify({ type: "take_control", data: "" }))
+		const dimensions = fitAddon.proposeDimensions() || { cols: term.cols, rows: term.rows }
+		ws.send(terminalTakeControlMessage(dimensions.cols, dimensions.rows))
 		term.focus()
 	}
 }
@@ -294,10 +314,11 @@ const handleResize = () => {
 	if (!isActive.value) return
 	const element = terminalRef.value
 	if (!element || element.clientWidth === 0 || element.clientHeight === 0) return
+	if (nativeProtocol.value && !hasTerminalControl.value) return
 	try {
 		fitAddon.fit()
-		if (ws && ws.readyState === WebSocket.OPEN) {
-			ws.send(JSON.stringify({ type: "resize", data: JSON.stringify({ cols: term.cols, rows: term.rows }) }))
+		if (ws && ws.readyState === WebSocket.OPEN && (!nativeProtocol.value || hasTerminalControl.value)) {
+			ws.send(JSON.stringify({ type: "resize", data: terminalSizeData(term.cols, term.rows) }))
 		}
 	} catch (e) {
 		console.warn("Fit addon resize error", e)

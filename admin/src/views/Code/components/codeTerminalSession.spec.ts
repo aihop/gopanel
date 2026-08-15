@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest"
-import { codeTerminalIdentity, isDeliveredCodeSession } from "./codeTerminalSession"
+import {
+	codeTerminalIdentity,
+	isDeliveredCodeSession,
+	terminalSizeData,
+	terminalTakeControlMessage,
+} from "./codeTerminalSession"
 
 describe("isDeliveredCodeSession", () => {
 	it("识别已完成统一交付的终态会话", () => {
@@ -29,5 +34,15 @@ describe("codeTerminalIdentity", () => {
 
 	it("回到任务主页时没有身份，池里的实例被缓存而不是销毁", () => {
 		expect(codeTerminalIdentity(null, null)).toBe("")
+	})
+})
+
+describe("terminal control protocol", () => {
+	it("接管时携带当前终端尺寸", () => {
+		expect(JSON.parse(terminalTakeControlMessage(120, 36))).toEqual({
+			type: "take_control",
+			data: terminalSizeData(120, 36),
+		})
+		expect(JSON.parse(terminalSizeData(120, 36))).toEqual({ cols: 120, rows: 36 })
 	})
 })

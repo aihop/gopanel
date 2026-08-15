@@ -23,6 +23,13 @@ type nativeTerminalEvent struct {
 	Truncated      bool
 	ControlReason  string
 	LeaseExpiresAt int64
+	Cols           uint16
+	Rows           uint16
+}
+
+type nativeTerminalControlRequest struct {
+	Cols uint16 `json:"cols"`
+	Rows uint16 `json:"rows"`
 }
 
 type nativeTerminalSubscription struct {
@@ -69,6 +76,8 @@ func (terminal *nativeCodeTerminal) subscribe(afterSequence uint64, readOnly boo
 	baseline := terminal.baselineAfter(afterSequence, "")
 	baseline.HasControl = terminal.controllerID == subscription.ID
 	baseline.LeaseExpiresAt = terminal.controlExpiresAt.UnixMilli()
+	baseline.Cols = terminal.cols
+	baseline.Rows = terminal.rows
 	subscription.AckSequence = afterSequence
 	terminal.mu.Unlock()
 	return subscription, baseline
@@ -143,7 +152,7 @@ func (terminal *nativeCodeTerminal) unsubscribe(subscription *nativeTerminalSubs
 	}
 }
 
-func (terminal *nativeCodeTerminal) takeControl(subscriptionID string) (bool, string) {
+func (terminal *nativeCodeTerminal) takeControl(subscriptionID string, cols, rows uint16) (bool, string) {
 	terminal.mu.Lock()
 	subscription, exists := terminal.subscribers[subscriptionID]
 	if !exists {
@@ -159,6 +168,12 @@ func (terminal *nativeCodeTerminal) takeControl(subscriptionID string) (bool, st
 		terminal.mu.Unlock()
 		return false, "其他设备正在控制终端"
 	}
+	if cols > 0 && rows > 0 {
+		if err := terminal.resizeLocked(cols, rows); err != nil {
+			terminal.mu.Unlock()
+			return false, err.Error()
+		}
+	}
 	if terminal.controllerID != "" && terminal.controllerID != subscriptionID {
 		terminal.restoreSubscriptionReadOnlyLocked(terminal.controllerID)
 	}
@@ -166,10 +181,10 @@ func (terminal *nativeCodeTerminal) takeControl(subscriptionID string) (bool, st
 	terminal.controllerID = subscriptionID
 	subscription.ReadOnly = false
 	terminal.renewControlLeaseLocked(now)
-	terminal.mu.Unlock()
-	if changed {
-		terminal.broadcastControl()
+	if changed || cols > 0 && rows > 0 {
+		terminal.broadcastControlLocked()
 	}
+	terminal.mu.Unlock()
 	return true, ""
 }
 
@@ -203,8 +218,12 @@ func (terminal *nativeCodeTerminal) hasControl(subscriptionID string) bool {
 func (terminal *nativeCodeTerminal) broadcastControl() {
 	terminal.mu.Lock()
 	defer terminal.mu.Unlock()
+	terminal.broadcastControlLocked()
+}
+
+func (terminal *nativeCodeTerminal) broadcastControlLocked() {
 	for subscriptionID, subscription := range terminal.subscribers {
-		event := nativeTerminalEvent{Type: "control", Sequence: terminal.sequence, HasControl: terminal.controllerID == subscriptionID, LeaseExpiresAt: terminal.controlExpiresAt.UnixMilli()}
+		event := nativeTerminalEvent{Type: "control", Sequence: terminal.sequence, HasControl: terminal.controllerID == subscriptionID, LeaseExpiresAt: terminal.controlExpiresAt.UnixMilli(), Cols: terminal.cols, Rows: terminal.rows}
 		select {
 		case subscription.Events <- event:
 		default:
@@ -298,6 +317,8 @@ func (terminal *nativeCodeTerminal) resync(subscriptionID string, afterSequence 
 	baseline := terminal.baselineAfter(afterSequence, requestID)
 	baseline.HasControl = terminal.controllerID == subscriptionID
 	baseline.LeaseExpiresAt = terminal.controlExpiresAt.UnixMilli()
+	baseline.Cols = terminal.cols
+	baseline.Rows = terminal.rows
 	subscription.Events <- baseline
 	return true
 }

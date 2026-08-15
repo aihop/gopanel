@@ -119,7 +119,7 @@ func TestNativeTerminalProtocolPreventsControlLeasePreemption(t *testing.T) {
 	if !firstBaseline.HasControl || secondBaseline.HasControl {
 		t.Fatalf("unexpected initial control: first=%v second=%v", firstBaseline.HasControl, secondBaseline.HasControl)
 	}
-	if granted, _ := terminal.takeControl(second.ID); granted {
+	if granted, _ := terminal.takeControl(second.ID, 0, 0); granted {
 		t.Fatal("second subscriber should not preempt active control lease")
 	}
 	if !terminal.releaseControl(first.ID) {
@@ -127,7 +127,7 @@ func TestNativeTerminalProtocolPreventsControlLeasePreemption(t *testing.T) {
 	}
 	<-first.Events
 	<-second.Events
-	if granted, reason := terminal.takeControl(second.ID); !granted || reason != "" {
+	if granted, reason := terminal.takeControl(second.ID, 0, 0); !granted || reason != "" {
 		t.Fatalf("second subscriber failed to acquire released control: %q", reason)
 	}
 	firstControl := <-first.Events
@@ -145,11 +145,11 @@ func TestNativeTerminalProtocolReadOnlySubscriberRequiresExplicitControl(t *test
 	if baseline.HasControl || terminal.controllerID != "" {
 		t.Fatal("read-only subscriber should not receive terminal control")
 	}
-	if granted, reason := terminal.takeControl(subscription.ID); granted || reason != "只读连接不能接管终端输入" {
+	if granted, reason := terminal.takeControl(subscription.ID, 0, 0); granted || reason != "只读连接不能接管终端输入" {
 		t.Fatalf("untrusted read-only subscriber took control: granted=%v reason=%q", granted, reason)
 	}
 	subscription.AllowControl = true
-	if granted, reason := terminal.takeControl(subscription.ID); !granted || reason != "" {
+	if granted, reason := terminal.takeControl(subscription.ID, 0, 0); !granted || reason != "" {
 		t.Fatalf("read-only subscriber failed to explicitly take control: granted=%v reason=%q", granted, reason)
 	}
 	if subscription.ReadOnly {
@@ -167,7 +167,7 @@ func TestNativeTerminalProtocolExpiredControlRestoresReadOnlyState(t *testing.T)
 	terminal := newNativeTerminalProtocolTestSubject()
 	subscription, _ := terminal.subscribe(0, true)
 	subscription.AllowControl = true
-	if granted, reason := terminal.takeControl(subscription.ID); !granted || reason != "" {
+	if granted, reason := terminal.takeControl(subscription.ID, 0, 0); !granted || reason != "" {
 		t.Fatalf("take control failed: %q", reason)
 	}
 	terminal.mu.Lock()
@@ -187,7 +187,7 @@ func TestNativeTerminalProtocolAllowsExpiredLeaseTakeover(t *testing.T) {
 	terminal.mu.Lock()
 	terminal.controlExpiresAt = time.Now().Add(-time.Second)
 	terminal.mu.Unlock()
-	if granted, reason := terminal.takeControl(second.ID); !granted || reason != "" {
+	if granted, reason := terminal.takeControl(second.ID, 0, 0); !granted || reason != "" {
 		t.Fatalf("expired lease should be acquirable: %q", reason)
 	}
 	terminal.unsubscribe(second)
@@ -202,4 +202,54 @@ func TestNativeTerminalProtocolResetsStaleSequence(t *testing.T) {
 	if baseline.Sequence != 1 || string(baseline.Data) != "fresh" {
 		t.Fatalf("unexpected reset baseline: %#v", baseline)
 	}
+}
+
+func TestNativeTerminalProtocolTakeoverAppliesAndBroadcastsSize(t *testing.T) {
+	pty := &fakeHostTerminalPTY{}
+	terminal := newNativeTerminalProtocolTestSubject()
+	terminal.ptmx = pty
+	terminal.cols = 42
+	terminal.rows = 18
+	first, _ := terminal.subscribe(0, false)
+	second, baseline := terminal.subscribe(0, true)
+	second.AllowControl = true
+	if baseline.Cols != 42 || baseline.Rows != 18 {
+		t.Fatalf("baseline omitted authoritative size: %#v", baseline)
+	}
+	if !terminal.releaseControl(first.ID) {
+		t.Fatal("first subscriber failed to release control")
+	}
+	<-first.Events
+	<-second.Events
+	if granted, reason := terminal.takeControl(second.ID, 56, 21); !granted || reason != "" {
+		t.Fatalf("takeover failed: granted=%v reason=%q", granted, reason)
+	}
+	if pty.cols != 56 || pty.rows != 21 || terminal.cols != 56 || terminal.rows != 21 {
+		t.Fatalf("takeover did not apply size: pty=%dx%d terminal=%dx%d", pty.cols, pty.rows, terminal.cols, terminal.rows)
+	}
+	firstControl := <-first.Events
+	secondControl := <-second.Events
+	if firstControl.Cols != 56 || firstControl.Rows != 21 || secondControl.Cols != 56 || secondControl.Rows != 21 {
+		t.Fatalf("authoritative size was not broadcast: first=%#v second=%#v", firstControl, secondControl)
+	}
+	terminal.unsubscribe(second)
+	terminal.unsubscribe(first)
+}
+
+func TestNativeTerminalProtocolDeniedTakeoverPreservesSize(t *testing.T) {
+	pty := &fakeHostTerminalPTY{cols: 100, rows: 40}
+	terminal := newNativeTerminalProtocolTestSubject()
+	terminal.ptmx = pty
+	terminal.cols = 100
+	terminal.rows = 40
+	first, _ := terminal.subscribe(0, false)
+	second, _ := terminal.subscribe(0, false)
+	if granted, _ := terminal.takeControl(second.ID, 48, 20); granted {
+		t.Fatal("active control lease should reject takeover")
+	}
+	if pty.cols != 100 || pty.rows != 40 || terminal.cols != 100 || terminal.rows != 40 {
+		t.Fatalf("denied takeover changed size: pty=%dx%d terminal=%dx%d", pty.cols, pty.rows, terminal.cols, terminal.rows)
+	}
+	terminal.unsubscribe(second)
+	terminal.unsubscribe(first)
 }
