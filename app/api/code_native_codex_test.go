@@ -120,6 +120,7 @@ func TestBuildNativeCodexCommandStartsAndResumesInteractiveSession(t *testing.T)
 	expected := []string{
 		command.Path,
 		"-c", codexNetworkConfig,
+		"-c", codexDisableDocsMCP,
 		"--ask-for-approval", "on-request",
 		"--sandbox", "workspace-write",
 		"--no-alt-screen",

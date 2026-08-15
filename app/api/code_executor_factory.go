@@ -18,6 +18,7 @@ import (
 const (
 	codexSessionAPIKeyEnv   = "GOPANEL_CODEX_SESSION_API_KEY"
 	codexNetworkConfig      = "sandbox_workspace_write.network_access=true"
+	codexDisableDocsMCP     = "mcp_servers.openaiDeveloperDocs.enabled=false"
 	openCodeSessionKeyEnv   = "GOPANEL_OPENCODE_SESSION_API_KEY"
 	claudeSessionAPIKeyEnv  = "ANTHROPIC_API_KEY"
 	claudeSessionBaseURLEnv = "ANTHROPIC_BASE_URL"
@@ -86,6 +87,7 @@ func (codexExecutorFactory) BuildArgs(prompt, nativeSessionID string, _ uint, ap
 func codexSandboxArgs(approvalPolicy string) []string {
 	return []string{
 		"-c", codexNetworkConfig,
+		"-c", codexDisableDocsMCP,
 		"--ask-for-approval", codexApprovalPolicy(approvalPolicy),
 		"--sandbox", "workspace-write",
 	}
