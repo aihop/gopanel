@@ -15,6 +15,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -63,6 +64,7 @@ func main() {
 		Height:           800,
 		MinWidth:         900,
 		MinHeight:        600,
+		HideWindowOnClose: runtime.GOOS == "darwin",
 		BackgroundColour: options.NewRGB(15, 23, 42),
 		Menu:             app.applicationMenu(),
 		AssetServer: &assetserver.Options{
@@ -158,9 +160,11 @@ func (a *desktopApp) startup(ctx context.Context) {
 			wailsruntime.WindowReload(ctx)
 		}
 	}
+	a.startCodeStatusSync(ctx)
 }
 
 func (a *desktopApp) shutdown(context.Context) {
+	stopDesktopStatusBar()
 	middleware.SetDesktopAccessToken("")
 	if a.panel == nil {
 		return

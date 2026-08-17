@@ -39,6 +39,7 @@
 
       <SplashScreen :show="loading" />
       <SearchDialog v-if="isLogged" />
+      <DesktopCodeStatusSync v-if="isLogged" />
       <FloatingToolDock v-if="showFloatingTools" />
       <!-- <LayoutSettings /> -->
     </Provider>
@@ -56,6 +57,7 @@ import HorizontalNav from "@/layouts/HorizontalNav"
 import VerticalNav from "@/layouts/VerticalNav"
 import SearchDialog from "@/components/common/SearchDialog.vue"
 import FloatingToolDock from "@/components/common/FloatingToolDock.vue"
+import DesktopCodeStatusSync from "@/components/system/DesktopCodeStatusSync.vue"
 import { useAuthStore } from "@/store/auth"
 import { useMainStore } from "@/store/main"
 import { useThemeStore } from "@/store/theme"

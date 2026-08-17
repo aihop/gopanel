@@ -109,6 +109,7 @@ func CodeRouter(r fiber.Router) {
 		group.Post("/approvals/:id/reject", api.RejectAIApproval)
 
 		// Tasks APIs
+		group.Get("/desktop-summary", api.GetCodeDesktopSummary)
 		group.Get("/tasks", api.GetAITasks)
 		group.Get("/tasks/:id/messages", api.GetAITaskMessages)
 		group.Put("/tasks/:id", api.UpdateAITask)

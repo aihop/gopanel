@@ -41,10 +41,15 @@ import type {
 } from "../interface/codeMemories"
 import type { CodeResidueCleanupOutcome, CodeWorktreeResidueSummary } from "../interface/codeResidues"
 import type { CodeTaskListItem } from "../interface/codeTasks"
+import type { CodeDesktopSummary } from "../interface/codeDesktop"
 import type { HostTerminalSession } from "../interface/hostTerminal"
 import { waitForCodeSessionInitialization } from "./codeSessionInitialization"
 
 // === Project APIs ===
+
+export function getCodeDesktopSummary() {
+	return http.get<CodeDesktopSummary>("/code/desktop-summary")
+}
 
 export function getAIProjects(params: { page: number; limit: number }) {
 	return http.get<{ items: AIProject[]; total: number }>("/code/projects", params)
