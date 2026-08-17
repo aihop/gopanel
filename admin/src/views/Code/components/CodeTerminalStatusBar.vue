@@ -2,7 +2,7 @@
 import { computed } from "vue"
 import { useI18n } from "vue-i18n"
 import type { CodexRuntimeState } from "@/api/interface/code"
-import { codeProjectMessages } from "@/i18n/locales/codeProject"
+import { codeTerminalMessages } from "../codeTerminalMessages"
 
 const props = defineProps<{
 	runtimeState: CodexRuntimeState | null
@@ -11,9 +11,10 @@ const props = defineProps<{
 	hasControl: boolean
 	reconnecting: boolean
 	connectionFailed: boolean
+	terminalInactive: boolean
 }>()
-defineEmits<{ reconnect: []; takeControl: [] }>()
-const { t } = useI18n({ messages: codeProjectMessages })
+defineEmits<{ reconnect: []; resume: []; takeControl: [] }>()
+const { t } = useI18n({ messages: codeTerminalMessages })
 
 const runtimeTagType = computed(() => {
 	if (props.runtimeState?.responseState === "failed") return "error"
@@ -49,7 +50,15 @@ const formatTokens = (count: number) => new Intl.NumberFormat().format(count)
 			</span>
 		</div>
 		<div class="flex shrink-0 items-center gap-3 text-xs text-slate-400">
-			<n-button v-if="connectionFailed && !reconnecting" size="tiny" type="warning" @click="$emit('reconnect')">
+			<n-button v-if="terminalInactive" size="tiny" type="primary" @click="$emit('resume')">
+				{{ t("code.resumeTerminalSession") }}
+			</n-button>
+			<n-button
+				v-else-if="connectionFailed && !reconnecting"
+				size="tiny"
+				type="warning"
+				@click="$emit('reconnect')"
+			>
 				{{ t("code.reconnectTerminal") }}
 			</n-button>
 			<n-tag v-else-if="reconnecting" size="small" type="warning" :bordered="false">

@@ -1,10 +1,26 @@
 package api
 
 import (
+	"encoding/json"
+	"errors"
 	"strconv"
 	"sync/atomic"
 	"time"
 )
+
+func nativeTerminalConnectionErrorPayload(err error) []byte {
+	eventType, code := "error", "start_failed"
+	if errors.Is(err, errNativeCodeTerminalInactive) {
+		eventType, code = "inactive", "terminal_inactive"
+	} else if errors.Is(err, errCodeExecutionBusy) {
+		code = "workspace_busy"
+	}
+	payload, _ := json.Marshal(struct {
+		Type string `json:"type"`
+		Code string `json:"code"`
+	}{Type: eventType, Code: code})
+	return payload
+}
 
 const nativeTerminalControlLease = 60 * time.Second
 

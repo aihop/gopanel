@@ -2,8 +2,9 @@ import { describe, expect, it } from "vitest"
 import {
 	codeTerminalIdentity,
 	isDeliveredCodeSession,
+	shouldAttachOnlyToTerminal,
 	terminalSizeData,
-	terminalTakeControlMessage,
+	terminalTakeControlMessage
 } from "./codeTerminalSession"
 
 describe("isDeliveredCodeSession", () => {
@@ -41,8 +42,19 @@ describe("terminal control protocol", () => {
 	it("接管时携带当前终端尺寸", () => {
 		expect(JSON.parse(terminalTakeControlMessage(120, 36))).toEqual({
 			type: "take_control",
-			data: terminalSizeData(120, 36),
+			data: terminalSizeData(120, 36)
 		})
 		expect(JSON.parse(terminalSizeData(120, 36))).toEqual({ cols: 120, rows: 36 })
+	})
+})
+
+describe("terminal startup intent", () => {
+	it("查看已有任务时只附加，不自动恢复执行器", () => {
+		expect(shouldAttachOnlyToTerminal(12, false)).toBe(true)
+	})
+
+	it("新会话和显式恢复会启动执行器", () => {
+		expect(shouldAttachOnlyToTerminal(null, false)).toBe(false)
+		expect(shouldAttachOnlyToTerminal(12, true)).toBe(false)
 	})
 })

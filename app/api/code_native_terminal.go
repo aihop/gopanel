@@ -60,9 +60,31 @@ func (manager *nativeCodeTerminalManager) running(sessionID uint) bool {
 
 var codeNativeTerminals = &nativeCodeTerminalManager{sessions: make(map[uint]*nativeCodeTerminal)}
 
+var errNativeCodeTerminalInactive = errors.New("原生终端当前未运行")
+
 func supportsNativeCodeTerminal(executorID string) bool {
 	definition, err := getCodeExecutorDefinition(executorID)
 	return err == nil && definition.NativeTerminal && nativeTerminalPlatformSupported()
+}
+
+func (manager *nativeCodeTerminalManager) connect(
+	session *model.AIDevSession,
+	cols, rows uint16,
+	attachOnly bool,
+) (*nativeCodeTerminal, bool, error) {
+	if !attachOnly {
+		return manager.attach(session, cols, rows)
+	}
+	if session == nil || session.ID == 0 {
+		return nil, false, errors.New("开发会话不可用")
+	}
+	manager.mu.Lock()
+	terminal := manager.sessions[session.ID]
+	manager.mu.Unlock()
+	if terminal == nil {
+		return nil, false, errNativeCodeTerminalInactive
+	}
+	return terminal, false, nil
 }
 
 func (manager *nativeCodeTerminalManager) attach(
@@ -300,9 +322,9 @@ func serveNativeCodeTerminal(
 	// 在这里补回数据库：用户一打开任务就能看到历史，不用先去点「完整对话」。
 	// 每个进程每个会话只做一次，终端重连不会重复解析。
 	recoverNativeCodeHistoryOnce(session)
-	terminal, _, err := codeNativeTerminals.attach(session, cols, rows)
+	terminal, _, err := codeNativeTerminals.connect(session, cols, rows, wsConn.Query("attach_only") == "1")
 	if err != nil {
-		_ = wsConn.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("启动原生 %s 会话失败: %v", session.AgentName, err)))
+		_ = wsConn.WriteMessage(websocket.TextMessage, nativeTerminalConnectionErrorPayload(err))
 		return
 	}
 	afterSequence, _ := strconv.ParseUint(wsConn.Query("after_sequence", "0"), 10, 64)

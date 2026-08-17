@@ -2,13 +2,60 @@ package api
 
 import (
 	"bytes"
+	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 	"unicode/utf8"
+
+	"github.com/aihop/gopanel/app/model"
 )
 
 func newNativeTerminalProtocolTestSubject() *nativeCodeTerminal {
 	return &nativeCodeTerminal{subscribers: make(map[string]*nativeTerminalSubscription)}
+}
+
+func TestNativeTerminalAttachOnlyDoesNotStartInactiveSession(t *testing.T) {
+	manager := &nativeCodeTerminalManager{sessions: make(map[uint]*nativeCodeTerminal)}
+	terminal, started, err := manager.connect(&model.AIDevSession{ID: 41}, 120, 40, true)
+	if terminal != nil || started || !errors.Is(err, errNativeCodeTerminalInactive) {
+		t.Fatalf("attach-only inactive result = %#v, %v, %v", terminal, started, err)
+	}
+	if len(manager.sessions) != 0 {
+		t.Fatal("attach-only connection started a terminal")
+	}
+}
+
+func TestNativeTerminalAttachOnlyReusesRunningSession(t *testing.T) {
+	running := newNativeTerminalProtocolTestSubject()
+	manager := &nativeCodeTerminalManager{sessions: map[uint]*nativeCodeTerminal{42: running}}
+	terminal, started, err := manager.connect(&model.AIDevSession{ID: 42}, 120, 40, true)
+	if err != nil || started || terminal != running {
+		t.Fatalf("attach-only running result = %#v, %v, %v", terminal, started, err)
+	}
+}
+
+func TestNativeTerminalConnectionErrorsAreStructured(t *testing.T) {
+	for _, test := range []struct {
+		err       error
+		eventType string
+		code      string
+	}{
+		{err: errNativeCodeTerminalInactive, eventType: "inactive", code: "terminal_inactive"},
+		{err: errCodeExecutionBusy, eventType: "error", code: "workspace_busy"},
+		{err: errors.New("boom"), eventType: "error", code: "start_failed"},
+	} {
+		var event struct {
+			Type string `json:"type"`
+			Code string `json:"code"`
+		}
+		if err := json.Unmarshal(nativeTerminalConnectionErrorPayload(test.err), &event); err != nil {
+			t.Fatal(err)
+		}
+		if event.Type != test.eventType || event.Code != test.code {
+			t.Fatalf("connection event = %#v, want %s/%s", event, test.eventType, test.code)
+		}
+	}
 }
 
 func TestNativeTerminalProtocolResyncsAfterSequenceGap(t *testing.T) {

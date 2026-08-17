@@ -16,6 +16,10 @@ export function terminalTakeControlMessage(cols: number, rows: number) {
 	return JSON.stringify({ type: "take_control", data: terminalSizeData(cols, rows) })
 }
 
+export function shouldAttachOnlyToTerminal(taskId: number | null, forceStart: boolean) {
+	return taskId !== null && !forceStart
+}
+
 /**
  * 终端实例在 KeepAlive 池里的身份。
  * 相同身份命中缓存 —— 连接不断、滚屏不丢；身份变了才会新建一条终端。

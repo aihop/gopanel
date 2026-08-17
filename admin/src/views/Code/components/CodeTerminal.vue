@@ -6,25 +6,27 @@ import "@xterm/xterm/css/xterm.css"
 import { useAuthStore } from "@/store/auth"
 import { useI18n } from "vue-i18n"
 import { getCodeSession } from "@/api/modules/code"
-import { codeProjectMessages } from "@/i18n/locales/codeProject"
 import { useCodexRuntimeState } from "../useCodexRuntimeState"
+import { codeTerminalMessages } from "../codeTerminalMessages"
 import CodeTerminalStatusBar from "./CodeTerminalStatusBar.vue"
-import { isDeliveredCodeSession, terminalSizeData, terminalTakeControlMessage } from "./codeTerminalSession"
+import {
+	isDeliveredCodeSession,
+	shouldAttachOnlyToTerminal,
+	terminalSizeData,
+	terminalTakeControlMessage
+} from "./codeTerminalSession"
 
 const authStore = useAuthStore()
-const { t } = useI18n({ messages: codeProjectMessages })
-
+const { t } = useI18n({ messages: codeTerminalMessages })
 const props = defineProps<{
 	taskId: number | null
 	sessionId?: number | null
 	autoTakeControl?: boolean
 }>()
-
 const emit = defineEmits<{
 	(e: "task-created", taskId: number): void
 	(e: "new-session"): void
 }>()
-
 const terminalRef = ref<HTMLElement | null>(null)
 let term: Terminal
 let fitAddon: FitAddon
@@ -41,6 +43,8 @@ let receivedServerMessage = false
 let initialReconnectAttempts = 0
 let autoTakeControlPending = Boolean(props.autoTakeControl)
 let activatedOnce = false
+let forceStart = false
+let connectionErrorObserved = false
 // 实例会被 KeepAlive 缓存复用：切走时 DOM 进隐藏容器但 WebSocket 不断，
 // isActive 用来把「只有在屏幕上才该做」的事（fit、codex 状态轮询）关掉。
 const isActive = ref(true)
@@ -48,6 +52,7 @@ const nativeProtocol = ref(false)
 const hasTerminalControl = ref(true)
 const reconnecting = ref(false)
 const connectionFailed = ref(false)
+const terminalInactive = ref(false)
 const sessionDelivered = ref(false)
 const {
 	runtimeState,
@@ -57,7 +62,7 @@ const {
 	loadRuntimeState,
 	startRuntimePolling,
 	stopRuntimePolling,
-	disableRuntimeState,
+	disableRuntimeState
 } = useCodexRuntimeState(() => props.sessionId, isActive)
 
 const markSessionDelivered = () => {
@@ -102,10 +107,12 @@ const writeTerminalData = (data: string, forceBottom = false) => {
 const requestTerminalResync = () => {
 	if (ws?.readyState !== WebSocket.OPEN || pendingResyncId) return
 	pendingResyncId = `${Date.now()}-${++resyncRequest}`
-	ws.send(JSON.stringify({
-		type: "resync",
-		data: JSON.stringify({ sequence: lastSequence, requestId: pendingResyncId }),
-	}))
+	ws.send(
+		JSON.stringify({
+			type: "resync",
+			data: JSON.stringify({ sequence: lastSequence, requestId: pendingResyncId })
+		})
+	)
 }
 
 const initTerminal = () => {
@@ -117,8 +124,8 @@ const initTerminal = () => {
 		fontFamily: 'Menlo, Monaco, "Courier New", monospace',
 		theme: {
 			background: "#1e1e1e",
-			foreground: "#d4d4d4",
-		},
+			foreground: "#d4d4d4"
+		}
 	})
 
 	fitAddon = new FitAddon()
@@ -155,18 +162,21 @@ const connectWebSocket = () => {
 
 	if (props.sessionId) {
 		wsUrl += `&session_id=${props.sessionId}`
+		if (shouldAttachOnlyToTerminal(props.taskId, forceStart)) wsUrl += "&attach_only=1"
 		if (lastSequence > 0) wsUrl += `&after_sequence=${lastSequence}`
 		if (autoTakeControlPending) {
 			wsUrl += "&take_control=1"
 		}
 	} else if (props.taskId) {
 		wsUrl += `&task_id=${props.taskId}`
+		if (shouldAttachOnlyToTerminal(props.taskId, forceStart)) wsUrl += "&attach_only=1"
 	}
 
 	ws = new WebSocket(wsUrl)
 
 	ws.onopen = () => {
 		reconnecting.value = false
+		connectionErrorObserved = false
 		if (props.sessionId) {
 			term.writeln(`\x1b[32m[GoPanel] ${t("code.openingSession", { id: props.sessionId })}\x1b[0m\r\n`)
 		} else if (props.taskId) {
@@ -177,15 +187,13 @@ const connectWebSocket = () => {
 	ws.onmessage = event => {
 		receivedServerMessage = true
 		initialReconnectAttempts = 0
-		if (typeof event.data === "string" && (event.data.includes("失败") || event.data.includes("错误"))) {
-			serverErrorShown = true
-			connectionFailed.value = true
-		}
 		try {
 			const msg = JSON.parse(event.data)
 			if (msg.type === "baseline") {
 				nativeProtocol.value = true
 				connectionFailed.value = false
+				terminalInactive.value = false
+				forceStart = false
 				if (pendingResyncId && msg.requestId !== pendingResyncId) return
 				applyAuthoritativeSize(msg.cols, msg.rows)
 				autoTakeControlPending = false
@@ -226,6 +234,25 @@ const connectWebSocket = () => {
 				intentionalClose = true
 				hasTerminalControl.value = false
 				lastSequence = 0
+			} else if (msg.type === "inactive") {
+				intentionalClose = true
+				serverErrorShown = true
+				terminalInactive.value = true
+				hasTerminalControl.value = false
+				writeTerminalData(`\r\n\x1b[33m[GoPanel] ${t("code.terminalSessionInactive")}\x1b[0m\r\n`)
+			} else if (msg.type === "error") {
+				serverErrorShown = true
+				hasTerminalControl.value = false
+				if (msg.code === "workspace_busy") {
+					intentionalClose = true
+					forceStart = false
+					terminalInactive.value = true
+					connectionFailed.value = false
+					writeTerminalData(`\r\n\x1b[33m[GoPanel] ${t("code.terminalWorkspaceBusy")}\x1b[0m\r\n`)
+				} else {
+					connectionFailed.value = true
+					writeTerminalData(`\r\n\x1b[31m[GoPanel] ${t("code.terminalStartFailed")}\x1b[0m\r\n`)
+				}
 			} else if (msg.type === "cmd") {
 				writeTerminalData(msg.data)
 			} else if (msg.type === "meta" && msg.task_id) {
@@ -242,7 +269,7 @@ const connectWebSocket = () => {
 	}
 
 	ws.onerror = () => {
-		term.writeln("\r\n\x1b[31m[错误] WebSocket 连接失败。\x1b[0m")
+		connectionErrorObserved = true
 	}
 
 	ws.onclose = () => {
@@ -251,7 +278,8 @@ const connectWebSocket = () => {
 			return
 		}
 		if (!serverErrorShown) {
-			term.writeln("\r\n\x1b[33m[系统] 终端连接已断开。\x1b[0m")
+			const messageKey = connectionErrorObserved ? "code.terminalWebSocketFailed" : "code.terminalDisconnected"
+			writeTerminalData(`\r\n\x1b[33m[GoPanel] ${t(messageKey)}\x1b[0m\r\n`)
 		}
 		const canRetryInitialConnection = !receivedServerMessage && initialReconnectAttempts < 3
 		if (!connectionFailed.value && (nativeProtocol.value || canRetryInitialConnection) && !reconnectTimer) {
@@ -294,6 +322,23 @@ const reconnectTerminal = () => {
 	serverErrorShown = false
 	receivedServerMessage = false
 	initialReconnectAttempts = 0
+	connectionFailed.value = false
+	terminalInactive.value = false
+	connectionErrorObserved = false
+	reconnecting.value = true
+	connectWebSocket()
+}
+
+const resumeTerminal = () => {
+	if (ws && ws.readyState !== WebSocket.CLOSED) {
+		ws.onclose = null
+		ws.close()
+	}
+	forceStart = true
+	intentionalClose = false
+	terminalInactive.value = false
+	serverErrorShown = false
+	receivedServerMessage = false
 	connectionFailed.value = false
 	reconnecting.value = true
 	connectWebSocket()
@@ -351,7 +396,7 @@ watch(
 		if (!requested || sessionDelivered.value) return
 		if (ws?.readyState === WebSocket.OPEN) takeTerminalControl()
 		else autoTakeControlPending = true
-	},
+	}
 )
 
 // 缓存复用的两个 Vue 生命周期。挂载那一次不会走 onActivated 之外的路径，
@@ -362,7 +407,7 @@ onActivated(() => {
 		activatedOnce = true
 		return
 	}
-	if (intentionalClose && !sessionDelivered.value) {
+	if (intentionalClose && !sessionDelivered.value && !terminalInactive.value) {
 		intentionalClose = false
 		serverErrorShown = false
 		receivedServerMessage = false
@@ -393,44 +438,38 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="flex h-full min-h-0 w-full flex-col bg-[#1e1e1e]">
-    <CodeTerminalStatusBar
-      v-if="sessionId && runtimeSupported"
-      :runtime-state="runtimeState"
-      :runtime-error="runtimeError"
-      :native-protocol="nativeProtocol"
-      :has-control="hasTerminalControl"
-      :reconnecting="reconnecting"
-      :connection-failed="connectionFailed"
-      @reconnect="reconnectTerminal"
-      @take-control="takeTerminalControl"
-    />
-    <div
-      v-if="sessionDelivered"
-      class="flex min-h-0 flex-1 items-center justify-center p-6 text-center text-slate-200"
-    >
-      <div class="max-w-md">
-        <div class="text-base font-medium">
-          {{ t("code.deliveredSessionTerminalClosed") }}
-        </div>
-        <div class="mt-2 text-sm text-slate-400">
-          {{ t("code.deliveredSessionTerminalHint") }}
-        </div>
-        <n-button
-          class="mt-5"
-          type="primary"
-          @click="emit('new-session')"
-        >
-          {{ t("code.createNextSession") }}
-        </n-button>
-      </div>
-    </div>
-    <div
-      v-else
-      ref="terminalRef"
-      class="min-h-0 w-full flex-1"
-    />
-  </div>
+	<div class="flex h-full min-h-0 w-full flex-col bg-[#1e1e1e]">
+		<CodeTerminalStatusBar
+			v-if="sessionId && runtimeSupported"
+			:runtime-state="runtimeState"
+			:runtime-error="runtimeError"
+			:native-protocol="nativeProtocol"
+			:has-control="hasTerminalControl"
+			:reconnecting="reconnecting"
+			:connection-failed="connectionFailed"
+			:terminal-inactive="terminalInactive"
+			@reconnect="reconnectTerminal"
+			@resume="resumeTerminal"
+			@take-control="takeTerminalControl"
+		/>
+		<div
+			v-if="sessionDelivered"
+			class="flex min-h-0 flex-1 items-center justify-center p-6 text-center text-slate-200"
+		>
+			<div class="max-w-md">
+				<div class="text-base font-medium">
+					{{ t("code.deliveredSessionTerminalClosed") }}
+				</div>
+				<div class="mt-2 text-sm text-slate-400">
+					{{ t("code.deliveredSessionTerminalHint") }}
+				</div>
+				<n-button class="mt-5" type="primary" @click="emit('new-session')">
+					{{ t("code.createNextSession") }}
+				</n-button>
+			</div>
+		</div>
+		<div v-else ref="terminalRef" class="min-h-0 w-full flex-1" />
+	</div>
 </template>
 
 <style scoped>
