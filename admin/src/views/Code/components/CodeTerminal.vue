@@ -10,8 +10,12 @@ import { useCodexRuntimeState } from "../useCodexRuntimeState"
 import { codeTerminalMessages } from "../codeTerminalMessages"
 import CodeTerminalStatusBar from "./CodeTerminalStatusBar.vue"
 import {
+	authoritativeTerminalSize,
+	codeTerminalOptions,
 	isDeliveredCodeSession,
 	shouldAttachOnlyToTerminal,
+	terminalWebSocketUrl,
+	terminalInputIntent,
 	terminalSizeData,
 	terminalTakeControlMessage
 } from "./codeTerminalSession"
@@ -118,15 +122,7 @@ const requestTerminalResync = () => {
 const initTerminal = () => {
 	if (!terminalRef.value) return
 
-	term = new Terminal({
-		cursorBlink: true,
-		fontSize: 14,
-		fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-		theme: {
-			background: "#1e1e1e",
-			foreground: "#d4d4d4"
-		}
-	})
+	term = new Terminal(codeTerminalOptions())
 
 	fitAddon = new FitAddon()
 	term.loadAddon(fitAddon)
@@ -142,8 +138,18 @@ const initTerminal = () => {
 	})
 
 	term.onData(data => {
-		if (ws && ws.readyState === WebSocket.OPEN && hasTerminalControl.value) {
-			ws.send(JSON.stringify({ type: "cmd", data }))
+		const intent = terminalInputIntent(
+			terminalInactive.value,
+			Boolean(ws) && ws?.readyState === WebSocket.OPEN,
+			hasTerminalControl.value,
+		)
+		if (intent === "resume") {
+			writeTerminalData(`\r\n\x1b[36m[GoPanel] ${t("code.terminalResumingByInput")}\x1b[0m\r\n`)
+			resumeTerminal()
+			return
+		}
+		if (intent === "send") {
+			ws?.send(JSON.stringify({ type: "cmd", data }))
 		}
 	})
 
@@ -155,24 +161,20 @@ const initTerminal = () => {
 }
 
 const connectWebSocket = () => {
-	const protocol = window.location.protocol === "https:" ? "wss:" : "ws:"
-	const token = authStore.auth || ""
-
-	let wsUrl = `${protocol}//${window.location.host}/api/code/terminal?token=${token}&cols=${term.cols}&rows=${term.rows}`
-
-	if (props.sessionId) {
-		wsUrl += `&session_id=${props.sessionId}`
-		if (shouldAttachOnlyToTerminal(props.taskId, forceStart)) wsUrl += "&attach_only=1"
-		if (lastSequence > 0) wsUrl += `&after_sequence=${lastSequence}`
-		if (autoTakeControlPending) {
-			wsUrl += "&take_control=1"
-		}
-	} else if (props.taskId) {
-		wsUrl += `&task_id=${props.taskId}`
-		if (shouldAttachOnlyToTerminal(props.taskId, forceStart)) wsUrl += "&attach_only=1"
-	}
-
-	ws = new WebSocket(wsUrl)
+	ws = new WebSocket(
+		terminalWebSocketUrl({
+			host: window.location.host,
+			secure: window.location.protocol === "https:",
+			token: authStore.auth || "",
+			cols: term.cols,
+			rows: term.rows,
+			sessionId: props.sessionId,
+			taskId: props.taskId,
+			attachOnly: shouldAttachOnlyToTerminal(props.taskId, forceStart),
+			afterSequence: lastSequence,
+			takeControl: autoTakeControlPending,
+		}),
+	)
 
 	ws.onopen = () => {
 		reconnecting.value = false
@@ -239,7 +241,10 @@ const connectWebSocket = () => {
 				serverErrorShown = true
 				terminalInactive.value = true
 				hasTerminalControl.value = false
-				writeTerminalData(`\r\n\x1b[33m[GoPanel] ${t("code.terminalSessionInactive")}\x1b[0m\r\n`)
+				// 用中性色而不是警告黄：这不是故障，是待命状态。
+				// 提示里直接给出可执行的动作（敲一下就恢复），而不是让用户
+				// 去别处找按钮——那个按钮在上方状态栏，视线不在一处。
+				writeTerminalData(`\r\n\x1b[36m[GoPanel] ${t("code.terminalSessionInactive")}\x1b[0m\r\n`)
 			} else if (msg.type === "error") {
 				serverErrorShown = true
 				hasTerminalControl.value = false
@@ -296,18 +301,9 @@ const connectWebSocket = () => {
 }
 
 const applyAuthoritativeSize = (cols: unknown, rows: unknown) => {
-	const authoritativeCols = Number(cols)
-	const authoritativeRows = Number(rows)
-	if (
-		!Number.isInteger(authoritativeCols) ||
-		!Number.isInteger(authoritativeRows) ||
-		authoritativeCols <= 0 ||
-		authoritativeRows <= 0
-	)
-		return
-	if (term.cols !== authoritativeCols || term.rows !== authoritativeRows) {
-		term.resize(authoritativeCols, authoritativeRows)
-	}
+	const size = authoritativeTerminalSize(cols, rows)
+	if (!size) return
+	if (term.cols !== size.cols || term.rows !== size.rows) term.resize(size.cols, size.rows)
 }
 
 const reconnectTerminal = () => {
