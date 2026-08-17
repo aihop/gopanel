@@ -6,6 +6,7 @@
   -->
   <div
     class="page page-wrapped page-mobile-full page-without-footer bg-base-accent border-base-accent relative flex w-full flex-col overflow-hidden rounded-[24px]"
+    :class="{ 'code-index--immersive': isCodeImmersive }"
   >
     <!-- 整页不滚：右侧是终端，页面滚起来终端会跟着跑。滚动交给左右两栏各自处理。 -->
     <!-- 横向可以给足，纵向省着用：只有纵向内边距会从终端高度里扣 -->
@@ -233,6 +234,7 @@ import ProjectDirectoryPicker from './components/ProjectDirectoryPicker.vue'
 import ProjectGitCredentialSelect from './components/ProjectGitCredentialSelect.vue'
 import ProjectQuickPanels from './components/ProjectQuickPanels.vue'
 import ProjectQualityGateSettings from './components/ProjectQualityGateSettings.vue'
+import { useCodeImmersiveMode } from './useCodeImmersiveMode'
 import { codeProjectMessages } from '@/i18n/locales/codeProject'
 import {
   codeProjectOrderStorageKey,
@@ -251,6 +253,7 @@ const AddIcon = () => '+'
 const message = useMessage()
 const router = useRouter()
 const authStore = useAuthStore()
+const { isImmersive: isCodeImmersive } = useCodeImmersiveMode()
 const { t } = useI18n({ messages: codeProjectMessages })
 
 const showCreateProjectModal = ref(false)
@@ -463,3 +466,21 @@ const toggleRepositoryIncluded = (path: string, included: boolean) => {
 
 const openQuickPanel = (project: AIProject) => quickPanelsRef.value?.open(project)
 </script>
+
+<style scoped>
+.code-index--immersive {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  width: 100vw;
+  max-width: none;
+  height: 100dvh !important;
+  min-height: 100dvh !important;
+  margin: 0;
+  border-radius: 0;
+}
+
+.code-index--immersive .project-lobby {
+  border-radius: 0;
+}
+</style>

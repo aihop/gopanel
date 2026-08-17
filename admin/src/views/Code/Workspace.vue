@@ -1,7 +1,10 @@
 <template>
   <div
     class="ai-workspace-root page page-wrapped page-mobile-full page-without-footer relative flex w-full flex-col overflow-hidden rounded-[24px] border border-slate-200/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.92))] shadow-[0_18px_45px_rgba(15,23,42,0.08)]"
-    :class="{ 'ai-workspace-root--embedded': embedded }"
+    :class="{
+      'ai-workspace-root--embedded': embedded,
+      'ai-workspace-root--immersive': isWorkspaceFullscreen,
+    }"
   >
     <n-layout
       has-sider
@@ -81,7 +84,6 @@
       <n-layout-content content-style="padding: 0; display: flex; flex-direction: column; height: 100%;">
         <div
           class="ai-workspace-content-panel flex h-full min-h-0 flex-1 flex-col bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.08),transparent_28%)] p-2 md:p-3"
-          :class="isWorkspaceFullscreen ? 'fixed inset-0 z-[1000] bg-slate-50' : ''"
         >
           <CodeWorkspaceToolbar
             :session-label="sessionLabel"
@@ -91,6 +93,7 @@
             :is-terminal-session="isTerminalSession"
             :workspace-mode="workspaceMode"
             :embedded="embedded"
+            :fullscreen-enabled="isDesktop"
             :fullscreen-label="fullscreenLabel"
             :is-fullscreen="isWorkspaceFullscreen"
             :project-id="currentProjectId"
@@ -240,11 +243,17 @@ import ProjectTaskSidebar from "./components/ProjectTaskSidebar.vue"
 import ProjectOverviewPanel from "./components/ProjectOverviewPanel.vue"
 import CodeGitReview from "./components/CodeGitReview.vue"
 import { useCodeWorkspace } from "./useCodeWorkspace"
-import { nextTick, watch } from "vue"
+import { useCodeImmersiveMode } from "./useCodeImmersiveMode"
+import { computed, nextTick, watch } from "vue"
 import { useRoute, useRouter } from "vue-router"
 
 const props = withDefaults(defineProps<{ projectId?: number; embedded?: boolean }>(), { embedded: false })
 const emit = defineEmits<{ close: [] }>()
+const {
+	isDesktop,
+	isImmersive: isWorkspaceFullscreen,
+	toggleImmersive: toggleWorkspaceFullscreen,
+} = useCodeImmersiveMode(() => !props.embedded)
 const {
 	activeFilePath,
 	aiTaskTotal,
@@ -260,7 +269,6 @@ const {
 	editingTaskTitle,
 	fetchTasks,
 	fileEditorRef,
-	fullscreenLabel,
 	goTaskHome,
 	handleProjectTerminalClosed,
 	handleSessionCreated,
@@ -269,7 +277,6 @@ const {
 	hasWorkspaceContext,
 	isProjectTerminalActive,
 	isTerminalSession,
-	isWorkspaceFullscreen,
 	openFile,
 	openFileFromDrawer,
 	openProjectTerminal,
@@ -295,9 +302,12 @@ const {
 	terminalIdentity,
 	terminalMounted,
 	terminalTakeoverRequested,
-	toggleWorkspaceFullscreen,
 	workspaceMode,
 } = useCodeWorkspace(props, emit)
+
+const fullscreenLabel = computed(() =>
+	t(isWorkspaceFullscreen.value ? "code.exitWorkspaceFullscreen" : "code.enterWorkspaceFullscreen")
+)
 
 // 从开发面板点任务进来时带 ?taskId=，任务列表回来后自动定位过去。
 // 只认第一批任务：之后用户在侧栏切走了，不该被地址栏里的旧参数拽回来。

@@ -16,6 +16,19 @@
 	box-shadow: none;
 }
 
+.ai-workspace-root--immersive {
+	position: fixed;
+	inset: 0;
+	z-index: 1000;
+	width: 100vw;
+	max-width: none;
+	height: 100dvh !important;
+	min-height: 100dvh !important;
+	margin: 0;
+	border: 0;
+	border-radius: 0;
+}
+
 .theme-dark .ai-workspace-sider {
 	background: color-mix(in srgb, var(--bg-secondary-color) 75%, transparent) !important;
 }

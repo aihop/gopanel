@@ -67,7 +67,7 @@ func TestDesktopMiddlewareShowsLauncherWhenDisconnected(t *testing.T) {
 	handler := app.desktopMiddleware()(http.NotFoundHandler())
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
-	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "连接你的 GoPanel") {
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "服务器连接中心") {
 		t.Fatalf("unexpected launcher response: %d %s", response.Code, response.Body.String())
 	}
 }
@@ -79,6 +79,25 @@ func TestNormalizeDesktopTarget(t *testing.T) {
 	}
 	if target.String() != "http://127.0.0.1:15470" {
 		t.Fatalf("normalizeDesktopTarget() = %q", target.String())
+	}
+}
+
+func TestDesktopConnectionLabels(t *testing.T) {
+	target, err := normalizeDesktopTarget("https://panel.example.com:8443")
+	if err != nil {
+		t.Fatal(err)
+	}
+	title, menuLabel := desktopConnectionLabels(target, "remote", "在线")
+	if title != "GoPanel — 远程服务器 · panel.example.com:8443 · 在线" {
+		t.Fatalf("unexpected window title: %q", title)
+	}
+	if menuLabel != "当前：远程服务器 · panel.example.com:8443 · 在线" {
+		t.Fatalf("unexpected connection menu label: %q", menuLabel)
+	}
+
+	title, menuLabel = desktopConnectionLabels(nil, "builtin", "离线")
+	if title != "GoPanel — 未连接 · 离线" || menuLabel != "当前：未连接 · 离线" {
+		t.Fatalf("unexpected disconnected labels: %q, %q", title, menuLabel)
 	}
 }
 
@@ -265,5 +284,67 @@ func TestDesktopFirstRunMigratesDatabase(t *testing.T) {
 		if !global.DB.Migrator().HasTable(table) {
 			t.Fatalf("desktop first run did not create %s table", table)
 		}
+	}
+}
+
+// 切换服务器只改服务端的代理目标，已打开页面里的 WebSocket 补丁还指着旧地址：
+// HTTP 走代理感知不到，只有终端连不上。配置必须跟着目标走。
+func TestDesktopWebSocketConfigFollowsTargetChange(t *testing.T) {
+	first, err := normalizeDesktopTarget("http://127.0.0.1:54701")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := normalizeDesktopTarget("https://panel.example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gateway := &desktopGateway{}
+	gateway.setTarget(first, "token-a", "http://127.0.0.1:54701/mobile", "entry-a")
+	before := gateway.webSocketConfigScript()
+	if !strings.Contains(before, first.Host) || !strings.Contains(before, `"ws:"`) {
+		t.Fatalf("首个目标应产出 ws 与对应主机：%s", before)
+	}
+
+	gateway.setTarget(second, "token-b", "https://panel.example.com/mobile", "entry-b")
+	after := gateway.webSocketConfigScript()
+	if strings.Contains(after, first.Host) {
+		t.Fatalf("切换后不该还带着旧主机：%s", after)
+	}
+	if !strings.Contains(after, second.Host) {
+		t.Fatalf("切换后应指向新主机：%s", after)
+	}
+	// https 目标必须用 wss，否则浏览器会以混合内容为由直接拒绝。
+	if !strings.Contains(after, `"wss:"`) {
+		t.Fatalf("https 目标应使用 wss：%s", after)
+	}
+	if !strings.Contains(after, "token-b") {
+		t.Fatalf("切换后应带上新令牌：%s", after)
+	}
+}
+
+// 目标变化必须通知出去，否则已打开的页面永远不知道该换地址。
+func TestDesktopGatewayNotifiesOnTargetChange(t *testing.T) {
+	target, err := normalizeDesktopTarget("http://127.0.0.1:54701")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gateway := &desktopGateway{}
+	notified := 0
+	gateway.setTargetChangedListener(func() { notified++ })
+	gateway.setTarget(target, "", "", "")
+	if notified != 1 {
+		t.Fatalf("设置目标应触发一次通知，实际 %d", notified)
+	}
+	gateway.setTarget(target, "", "", "")
+	if notified != 2 {
+		t.Fatalf("每次设置目标都应通知，实际 %d", notified)
+	}
+}
+
+// 还没连上任何服务时，补丁要能识别出「没有目标」而不是拿空主机去连。
+func TestDesktopWebSocketConfigIsNullWithoutTarget(t *testing.T) {
+	gateway := &desktopGateway{}
+	if script := gateway.webSocketConfigScript(); !strings.Contains(script, "null") {
+		t.Fatalf("没有目标时应产出 null：%s", script)
 	}
 }

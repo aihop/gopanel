@@ -26,6 +26,23 @@ export function isDeliveringTask(task: CodeTaskListItem) {
 	return task.status === "delivering" || ACTIVE_DELIVERY_STATUSES.includes(task.summary.deliveryStatus || "")
 }
 
+export function codeDashboardFocusStatus(task: CodeTaskListItem) {
+	if (task.status === "pending_approval") return "pending_approval"
+	if (isDeliveringTask(task)) return "delivering"
+	return task.status
+}
+
+export function focusCodeDashboardTasks(tasks: CodeTaskListItem[]) {
+	const priority = { pending_approval: 0, running: 1, delivering: 2, queued: 3 }
+	return tasks
+		.filter(task => ["pending_approval", "running", "queued", "delivering"].includes(codeDashboardFocusStatus(task)))
+		.sort((left, right) => {
+			const statusDifference = priority[codeDashboardFocusStatus(left) as keyof typeof priority]
+				- priority[codeDashboardFocusStatus(right) as keyof typeof priority]
+			return statusDifference || right.id - left.id
+		})
+}
+
 /**
  * 一个任务只落一个桶，优先级：待我处理 > 运行中 > 今日完成。
  * 交付冲突/失败排在最前面，因为它卡住的是整条交付队列，不处理后面都跑不动。
@@ -53,11 +70,6 @@ export function groupCodeDashboardTasks(tasks: CodeTaskListItem[], now: Date) {
 	}
 }
 
-export function filterCodeDashboardTasksByProject(tasks: CodeTaskListItem[], projectId: number | null) {
-	if (projectId === null) return tasks
-	return tasks.filter(task => task.projectId === projectId)
-}
-
 /**
  * 列表的显示顺序：按任务 id 倒序，新建的在上面。
  *
@@ -68,14 +80,4 @@ export function filterCodeDashboardTasksByProject(tasks: CodeTaskListItem[], pro
  */
 export function sortCodeTasksStably(tasks: CodeTaskListItem[]) {
 	return [...tasks].sort((left, right) => right.id - left.id)
-}
-
-/** 状态筛选是用户主动点的，位置跳变是预期内的；自动分组不是，所以列表里不做分组。 */
-export function matchesCodeDashboardFilter(
-	task: CodeTaskListItem,
-	filter: CodeDashboardBucket | "delivering",
-	now: Date,
-) {
-	if (filter === "delivering") return isDeliveringTask(task)
-	return codeTaskBucket(task, now) === filter
 }

@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -42,6 +43,7 @@ type desktopApp struct {
 	initialCredentials *desktopCredentials
 	baseDir            string
 	gateway            *desktopGateway
+	connectionStatus   *menu.MenuItem
 	builtinMu          sync.Mutex
 }
 
@@ -59,14 +61,14 @@ func main() {
 	}
 
 	err = wails.Run(&options.App{
-		Title:            "GoPanel",
-		Width:            1280,
-		Height:           800,
-		MinWidth:         900,
-		MinHeight:        600,
+		Title:             "GoPanel",
+		Width:             1280,
+		Height:            800,
+		MinWidth:          900,
+		MinHeight:         600,
 		HideWindowOnClose: runtime.GOOS == "darwin",
-		BackgroundColour: options.NewRGB(15, 23, 42),
-		Menu:             app.applicationMenu(),
+		BackgroundColour:  options.NewRGB(15, 23, 42),
+		Menu:              app.applicationMenu(),
 		AssetServer: &assetserver.Options{
 			Assets:     frontend,
 			Handler:    app.gateway,
@@ -160,6 +162,11 @@ func (a *desktopApp) startup(ctx context.Context) {
 			wailsruntime.WindowReload(ctx)
 		}
 	}
+	// 切换服务器只改了服务端的代理目标；已打开页面里的 WebSocket 补丁
+	// 还指着旧地址，必须主动推一份新的过去，否则表现为「面板正常、终端连不上」。
+	a.gateway.setTargetChangedListener(func() { a.pushDesktopWebSocketConfig() })
+	a.pushDesktopWebSocketConfig()
+	go a.monitorConnectionStatus(ctx)
 	a.startCodeStatusSync(ctx)
 }
 
@@ -223,7 +230,9 @@ func (a *desktopApp) showWindow(options.SecondInstanceData) {
 func (a *desktopApp) applicationMenu() *menu.Menu {
 	applicationMenu := menu.NewMenuFromItems(menu.AppMenu())
 	connectionMenu := applicationMenu.AddSubmenu("连接")
-	connectionMenu.AddText("连接设置…", nil, func(*menu.CallbackData) {
+	a.connectionStatus = connectionMenu.AddText("当前：检测中", nil, nil).Disable()
+	connectionMenu.AddSeparator()
+	connectionMenu.AddText("切换服务器…", nil, func(*menu.CallbackData) {
 		if a.context != nil {
 			wailsruntime.WindowExecJS(a.context, `window.location.href="/__desktop"`)
 		}
@@ -236,4 +245,70 @@ func (a *desktopApp) applicationMenu() *menu.Menu {
 	applicationMenu.Append(menu.EditMenu())
 	applicationMenu.Append(menu.WindowMenu())
 	return applicationMenu
+}
+
+func (a *desktopApp) monitorConnectionStatus(ctx context.Context) {
+	a.updateConnectionStatus(ctx, "检测中")
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+	for {
+		target, mode, desktopToken := a.desktopConnectionTarget()
+		status := "离线"
+		if desktopTargetHealthyWithToken(target, desktopToken) {
+			status = "在线"
+		}
+		a.updateConnectionStatusWithTarget(ctx, target, mode, status)
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+func (a *desktopApp) desktopConnectionTarget() (*url.URL, string, string) {
+	a.gateway.RLock()
+	defer a.gateway.RUnlock()
+	if a.gateway.target == nil {
+		return nil, a.gateway.config.Mode, a.gateway.desktopToken
+	}
+	target := *a.gateway.target
+	return &target, a.gateway.config.Mode, a.gateway.desktopToken
+}
+
+func (a *desktopApp) updateConnectionStatus(ctx context.Context, status string) {
+	target, mode, _ := a.desktopConnectionTarget()
+	a.updateConnectionStatusWithTarget(ctx, target, mode, status)
+}
+
+func (a *desktopApp) updateConnectionStatusWithTarget(ctx context.Context, target *url.URL, mode, status string) {
+	title, menuLabel := desktopConnectionLabels(target, mode, status)
+	wailsruntime.WindowSetTitle(ctx, title)
+	if a.connectionStatus != nil {
+		a.connectionStatus.SetLabel(menuLabel)
+		wailsruntime.MenuUpdateApplicationMenu(ctx)
+	}
+}
+
+func desktopConnectionLabels(target *url.URL, mode, status string) (string, string) {
+	if target == nil {
+		detail := fmt.Sprintf("未连接 · %s", status)
+		return "GoPanel — " + detail, "当前：" + detail
+	}
+	modeLabel := "远程服务器"
+	if mode == "builtin" {
+		modeLabel = "内置服务"
+	}
+	detail := fmt.Sprintf("%s · %s · %s", modeLabel, target.Host, status)
+	return "GoPanel — " + detail, "当前：" + detail
+}
+
+// pushDesktopWebSocketConfig 把当前 WebSocket 目标推给已经打开的页面。
+// 连接目标可能在窗口就绪之前就变化（启动时的健康检查会调 setTarget），
+// 所以 context 还没准备好时直接跳过——窗口加载时的注入会带上正确的值。
+func (a *desktopApp) pushDesktopWebSocketConfig() {
+	if a.context == nil || a.gateway == nil {
+		return
+	}
+	wailsruntime.WindowExecJS(a.context, a.gateway.webSocketConfigScript())
 }

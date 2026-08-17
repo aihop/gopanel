@@ -19,6 +19,7 @@ const props = defineProps<{
 	isTerminalSession: boolean
 	workspaceMode: CodeWorkspaceMode
 	embedded: boolean
+	fullscreenEnabled: boolean
 	fullscreenLabel: string
 	isFullscreen: boolean
 	projectId: number
@@ -165,7 +166,7 @@ async function openMemory() {
           </template>
           {{ t("code.conversationHistory") }}
         </n-tooltip>
-        <n-tooltip v-if="!embedded">
+        <n-tooltip v-if="!embedded && fullscreenEnabled">
           <template #trigger>
             <n-button
               quaternary

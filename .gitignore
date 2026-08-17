@@ -4,7 +4,6 @@ gopanel
 /tmp
 /dist
 /desktop/build/bin
-/desktop/build/appicon.png
 /admin/wailsjs
 /admin/package.json.md5
 .air.toml

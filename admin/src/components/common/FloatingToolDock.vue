@@ -7,7 +7,7 @@
 			</keep-alive>
 		</div>
 
-		<nav class="tool-dock" :style="dockStyle">
+		<nav ref="dockRef" class="tool-dock" :style="dockStyle">
 			<n-tooltip placement="left">
 				<template #trigger>
 					<button class="tool-dock__handle" type="button" :aria-label="t('systemDiagnostic.drag')" @pointerdown="startDrag">
@@ -32,6 +32,23 @@
 				</template>
 				{{ t("floatingNote.open") }}
 			</n-tooltip>
+			<n-tooltip v-if="showCodeImmersive" placement="left">
+				<template #trigger>
+					<button
+						class="tool-dock__button is-code"
+						:class="{ 'is-active': codeImmersiveStore.isImmersive }"
+						type="button"
+						:aria-label="codeImmersiveLabel"
+						@click="codeImmersiveStore.toggleImmersive()"
+					>
+						<Icon
+							:name="codeImmersiveStore.isImmersive ? 'fluent:full-screen-minimize-24-regular' : 'fluent:full-screen-maximize-24-regular'"
+							:size="21"
+						/>
+					</button>
+				</template>
+				{{ codeImmersiveLabel }}
+			</n-tooltip>
 		</nav>
 	</div>
 </template>
@@ -42,30 +59,43 @@ import FloatingNote from "@/components/common/FloatingNote.vue"
 import SystemDiagnosticPanel from "@/components/common/SystemDiagnosticPanel.vue"
 import { floatingNoteMessages } from "@/i18n/locales/floatingNote"
 import { systemDiagnosticMessages } from "@/i18n/locales/systemDiagnostic"
+import { codeImmersiveMessages } from "@/i18n/locales/codeImmersive"
 import { useAuthStore } from "@/store/auth"
+import { useCodeImmersiveStore } from "@/store/codeImmersive"
+import { useMediaQuery } from "@vueuse/core"
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
+import { useRoute } from "vue-router"
 
 type DockTool = "diagnostic" | "note"
 
 const SCREEN_GAP = 16
-const DOCK_HEIGHT = 144
 const authStore = useAuthStore()
+const codeImmersiveStore = useCodeImmersiveStore()
+const route = useRoute()
+const isDesktop = useMediaQuery("(min-width: 1000px)")
 const { t } = useI18n({
 	messages: {
-		zh: { ...systemDiagnosticMessages.zh, ...floatingNoteMessages.zh },
-		en: { ...systemDiagnosticMessages.en, ...floatingNoteMessages.en }
+		zh: { ...systemDiagnosticMessages.zh, ...floatingNoteMessages.zh, ...codeImmersiveMessages.zh },
+		en: { ...systemDiagnosticMessages.en, ...floatingNoteMessages.en, ...codeImmersiveMessages.en }
 	}
 })
 const activeTool = ref<DockTool | null>(null)
 const positionY = ref(120)
 const panelTop = ref(SCREEN_GAP)
 const panelRef = ref<HTMLElement | null>(null)
+const dockRef = ref<HTMLElement | null>(null)
 const diagnosticButtonRef = ref<HTMLButtonElement | null>(null)
 const noteButtonRef = ref<HTMLButtonElement | null>(null)
 let dragOffsetY = 0
 
 const canDiagnose = computed(() => authStore.role === "ADMIN" || authStore.role === "SUPER")
+const showCodeImmersive = computed(
+	() => (route.name === "Code-Index" || route.name === "Code-Project") && isDesktop.value
+)
+const codeImmersiveLabel = computed(() =>
+	t(codeImmersiveStore.isImmersive ? "codeImmersive.exit" : "codeImmersive.enter")
+)
 const storageKey = computed(() => `gopanel_floating_tool_dock_${authStore.user?.id || "default"}`)
 const dockStyle = computed(() => ({ transform: `translate3d(0, ${positionY.value}px, 0)` }))
 const panelStyle = computed(() => ({ top: `${panelTop.value}px` }))
@@ -73,7 +103,8 @@ const panelStyle = computed(() => ({ top: `${panelTop.value}px` }))
 function clampY(value: number) {
 	const fallback = 120
 	const safeValue = Number.isFinite(value) ? value : fallback
-	return Math.min(Math.max(SCREEN_GAP, safeValue), Math.max(SCREEN_GAP, window.innerHeight - DOCK_HEIGHT - SCREEN_GAP))
+	const dockHeight = dockRef.value?.offsetHeight ?? 144
+	return Math.min(Math.max(SCREEN_GAP, safeValue), Math.max(SCREEN_GAP, window.innerHeight - dockHeight - SCREEN_GAP))
 }
 
 function updatePanelPosition() {
@@ -137,6 +168,17 @@ watch(activeTool, async () => {
 	updatePanelPosition()
 })
 
+watch(
+	() => authStore.user?.id ?? null,
+	userId => codeImmersiveStore.restoreForUser(userId),
+	{ immediate: true }
+)
+
+watch(showCodeImmersive, async () => {
+	await nextTick()
+	handleResize()
+})
+
 onMounted(() => {
 	restorePosition()
 	window.addEventListener("resize", handleResize)
@@ -157,6 +199,7 @@ onBeforeUnmount(() => {
 .tool-dock__button:hover, .tool-dock__button.is-active { background: rgb(59 130 246 / 10%); }
 .tool-dock__button.is-diagnostic { color: #2563eb; }
 .tool-dock__button.is-note { color: #d97706; }
+.tool-dock__button.is-code { color: #7c3aed; }
 .tool-dock-panel { position: absolute; right: 70px; pointer-events: auto; }
 @media (max-width: 640px) {
 	.tool-dock { top: auto; right: 12px; bottom: 12px; width: 52px; transform: none !important; border-right: 1px solid rgb(148 163 184 / 28%); border-radius: 14px; }

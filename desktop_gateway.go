@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -25,12 +24,6 @@ import (
 
 const desktopSettingsPath = "/__desktop"
 
-type desktopConnectionConfig struct {
-	Mode     string `json:"mode"`
-	URL      string `json:"url,omitempty"`
-	Entrance string `json:"entrance,omitempty"`
-}
-
 type desktopGateway struct {
 	sync.RWMutex
 	baseDir        string
@@ -42,6 +35,10 @@ type desktopGateway struct {
 	mobileURL      string
 	builtinStarter func() error
 	builtinRunning bool
+	// targetChanged 在连接目标变化后触发，用来把新的 WebSocket 目标推给前端。
+	// 注入脚本里的地址是 HTML 生成那一刻的快照，运行时切换服务器不会自动更新——
+	// HTTP 走服务端代理感知不到这点，只有 WebSocket 会一直连向旧地址。
+	targetChanged func()
 }
 
 func newDesktopGateway(baseDir string) (*desktopGateway, error) {
@@ -59,6 +56,11 @@ func newDesktopGateway(baseDir string) (*desktopGateway, error) {
 			}
 			if desktopTargetAccessError(target, entrance) == nil {
 				gateway.config.Entrance = entrance
+				name := target.Host
+				if saved, ok := desktopSavedServer(&gateway.config, target); ok {
+					name = saved.Name
+				}
+				rememberDesktopServer(&gateway.config, desktopServerConfig{Name: name, URL: target.String(), Entrance: entrance})
 				gateway.setTarget(target, "", desktopMobileURL(target), entrance)
 				_ = gateway.saveConfig()
 			}
@@ -68,7 +70,10 @@ func newDesktopGateway(baseDir string) (*desktopGateway, error) {
 		if target := discoverLocalDesktopTarget(baseDir); target != nil && desktopTargetHealthy(target) {
 			entrance := discoverLocalDesktopEntrance(baseDir, target)
 			if desktopTargetAccessError(target, entrance) == nil {
-				gateway.config = desktopConnectionConfig{Mode: "remote", URL: target.String(), Entrance: entrance}
+				gateway.config.Mode = "remote"
+				gateway.config.URL = target.String()
+				gateway.config.Entrance = entrance
+				rememberDesktopServer(&gateway.config, desktopServerConfig{Name: target.Host, URL: target.String(), Entrance: entrance})
 				gateway.setTarget(target, "", desktopMobileURL(target), entrance)
 				_ = gateway.saveConfig()
 			}
@@ -115,7 +120,9 @@ func (gateway *desktopGateway) setBuiltinStarter(starter func() error) {
 func (gateway *desktopGateway) useBuiltin(target *url.URL, mobileURL, token string) {
 	gateway.setTarget(target, token, mobileURL, "")
 	gateway.Lock()
-	gateway.config = desktopConnectionConfig{Mode: "builtin"}
+	gateway.config.Mode = "builtin"
+	gateway.config.URL = ""
+	gateway.config.Entrance = ""
 	gateway.builtinRunning = true
 	gateway.Unlock()
 	_ = gateway.saveConfig()
@@ -132,11 +139,46 @@ func (gateway *desktopGateway) setTarget(target *url.URL, token, mobileURL, entr
 	gateway.desktopToken = token
 	gateway.entrance = entrance
 	gateway.mobileURL = mobileURL
+	listener := gateway.targetChanged
+	gateway.Unlock()
+	if listener != nil {
+		listener()
+	}
+}
+
+func (gateway *desktopGateway) setTargetChangedListener(listener func()) {
+	gateway.Lock()
+	gateway.targetChanged = listener
 	gateway.Unlock()
 }
 
+// desktopWebSocketConfigScript 生成一段把当前 WebSocket 目标写进全局的 JS。
+// 注入 HTML 时和运行时切换服务器后都用它，两处共用同一份拼装逻辑，
+// 免得改了一处忘了另一处——那种漏改的症状正是「HTTP 正常、终端连不上」。
+func (gateway *desktopGateway) webSocketConfigScript() string {
+	gateway.RLock()
+	target := gateway.target
+	token := gateway.desktopToken
+	entrance := gateway.entrance
+	gateway.RUnlock()
+	if target == nil {
+		return "window.__GOPANEL_DESKTOP_WS__=null;"
+	}
+	scheme := "ws:"
+	if target.Scheme == "https" {
+		scheme = "wss:"
+	}
+	encodedEntrance := ""
+	if entrance != "" {
+		encodedEntrance = base64.StdEncoding.EncodeToString([]byte(entrance))
+	}
+	return fmt.Sprintf("window.__GOPANEL_DESKTOP_WS__={scheme:%s,host:%s,token:%s,entrance:%s};",
+		strconv.Quote(scheme), strconv.Quote(target.Host),
+		strconv.Quote(token), strconv.Quote(encodedEntrance))
+}
+
 func (gateway *desktopGateway) handleDesktopRoute(response http.ResponseWriter, request *http.Request) bool {
-	if request.URL.Path != desktopSettingsPath && request.URL.Path != desktopSettingsPath+"/connect" && request.URL.Path != desktopSettingsPath+"/builtin" {
+	if request.URL.Path != desktopSettingsPath && request.URL.Path != desktopSettingsPath+"/state" && request.URL.Path != desktopSettingsPath+"/connect" && request.URL.Path != desktopSettingsPath+"/builtin" && request.URL.Path != desktopSettingsPath+"/delete" {
 		return false
 	}
 	switch request.URL.Path {
@@ -144,98 +186,31 @@ func (gateway *desktopGateway) handleDesktopRoute(response http.ResponseWriter, 
 		response.Header().Set("Content-Type", "text/html; charset=utf-8")
 		response.Header().Set("Cache-Control", "no-store")
 		_, _ = response.Write([]byte(gateway.launcherHTML()))
+	case desktopSettingsPath + "/state":
+		gateway.handleConnectionState(response, request)
 	case desktopSettingsPath + "/connect":
 		gateway.handleConnect(response, request)
 	case desktopSettingsPath + "/builtin":
 		gateway.handleBuiltin(response, request)
+	case desktopSettingsPath + "/delete":
+		gateway.handleDeleteServer(response, request)
 	}
 	return true
-}
-
-func (gateway *desktopGateway) handleConnect(response http.ResponseWriter, request *http.Request) {
-	if request.Method != http.MethodPost {
-		http.Error(response, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	var payload struct {
-		URL      string `json:"url"`
-		Entrance string `json:"entrance"`
-	}
-	if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
-		writeDesktopJSON(response, http.StatusBadRequest, err)
-		return
-	}
-	target, entrance, err := normalizeDesktopConnection(payload.URL, payload.Entrance)
-	if err != nil || !desktopTargetHealthy(target) {
-		writeDesktopJSON(response, http.StatusBadGateway, errors.New("无法连接该 GoPanel 服务，请确认地址和端口"))
-		return
-	}
-	if err := desktopTargetAccessError(target, entrance); err != nil {
-		writeDesktopJSON(response, http.StatusForbidden, err)
-		return
-	}
-	gateway.RLock()
-	builtinRunning := gateway.builtinRunning
-	gateway.RUnlock()
-	if builtinRunning {
-		gateway.Lock()
-		gateway.config = desktopConnectionConfig{Mode: "remote", URL: target.String(), Entrance: entrance}
-		gateway.Unlock()
-		if err := gateway.saveConfig(); err != nil {
-			writeDesktopJSON(response, http.StatusInternalServerError, err)
-			return
-		}
-		writeDesktopResult(response, http.StatusConflict, map[string]any{
-			"ok": false, "restart": true, "error": "连接地址已保存，请重启 GoPanel 完成切换",
-		})
-		return
-	}
-	gateway.setTarget(target, "", desktopMobileURL(target), entrance)
-	gateway.Lock()
-	gateway.config = desktopConnectionConfig{Mode: "remote", URL: target.String(), Entrance: entrance}
-	gateway.Unlock()
-	if err := gateway.saveConfig(); err != nil {
-		writeDesktopJSON(response, http.StatusInternalServerError, err)
-		return
-	}
-	writeDesktopJSON(response, http.StatusOK, nil)
-}
-
-func (gateway *desktopGateway) handleBuiltin(response http.ResponseWriter, request *http.Request) {
-	if request.Method != http.MethodPost {
-		http.Error(response, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	gateway.RLock()
-	starter := gateway.builtinStarter
-	gateway.RUnlock()
-	if starter == nil {
-		writeDesktopJSON(response, http.StatusServiceUnavailable, errors.New("内置服务尚未准备好"))
-		return
-	}
-	if err := starter(); err != nil {
-		writeDesktopJSON(response, http.StatusInternalServerError, err)
-		return
-	}
-	writeDesktopJSON(response, http.StatusOK, nil)
 }
 
 func (gateway *desktopGateway) bootstrapHTML() string {
 	gateway.RLock()
 	target := gateway.target
-	token := gateway.desktopToken
-	entrance := gateway.entrance
 	mobileURL := gateway.mobileURL
 	gateway.RUnlock()
 	if target == nil {
 		return ""
 	}
-	websocketScheme := "ws"
-	if target.Scheme == "https" {
-		websocketScheme = "wss"
-	}
-	return fmt.Sprintf(`<style>*{scrollbar-width:none!important}*::-webkit-scrollbar{display:none!important;width:0!important;height:0!important}</style><script>(()=>{window.__GOPANEL_DESKTOP_MOBILE_URL__=%s;const N=window.WebSocket;window.WebSocket=class extends N{constructor(u,p){const x=new URL(u,window.location.href);if(x.protocol==="wails:"||x.hostname==="wails"||x.hostname==="wails.localhost"||x.hostname.endsWith(".wails")){x.protocol=%s;x.host=%s;%s}super(x.toString(),p)}}})();</script>`,
-		strconv.Quote(mobileURL), strconv.Quote(websocketScheme+":"), strconv.Quote(target.Host), desktopAccessQuery(token, entrance))
+	// 补丁在构造每一条 WebSocket 时才去读 __GOPANEL_DESKTOP_WS__，
+	// 而不是把地址编译进闭包：切换服务器后网关会推一份新的全局进来，
+	// 已经打开的页面无需重新加载也能连对地方。
+	return fmt.Sprintf(`<style>*{scrollbar-width:none!important}*::-webkit-scrollbar{display:none!important;width:0!important;height:0!important}</style><script>(()=>{window.__GOPANEL_DESKTOP_MOBILE_URL__=%s;%sconst N=window.WebSocket;window.WebSocket=class extends N{constructor(u,p){const c=window.__GOPANEL_DESKTOP_WS__;const x=new URL(u,window.location.href);if(c&&c.host&&(x.protocol==="wails:"||x.hostname==="wails"||x.hostname==="wails.localhost"||x.hostname.endsWith(".wails"))){x.protocol=c.scheme;x.host=c.host;if(c.token)x.searchParams.set("desktop_token",c.token);if(c.entrance)x.searchParams.set("entrance",c.entrance)}super(x.toString(),p)}}})();</script>`,
+		strconv.Quote(mobileURL), gateway.webSocketConfigScript())
 }
 
 func desktopAccessQuery(token, entrance string) string {
@@ -284,13 +259,24 @@ func normalizeDesktopTarget(raw string) (*url.URL, error) {
 }
 
 func desktopTargetHealthy(target *url.URL) bool {
+	return desktopTargetHealthyWithToken(target, "")
+}
+
+func desktopTargetHealthyWithToken(target *url.URL, desktopToken string) bool {
 	if target == nil {
 		return false
 	}
 	healthURL := *target
 	healthURL.Path = "/health"
 	client := &http.Client{Timeout: 1500 * time.Millisecond}
-	response, err := client.Get(healthURL.String())
+	request, err := http.NewRequest(http.MethodGet, healthURL.String(), nil)
+	if err != nil {
+		return false
+	}
+	if desktopToken != "" {
+		request.Header.Set("X-GoPanel-Desktop-Token", desktopToken)
+	}
+	response, err := client.Do(request)
 	if err != nil {
 		return false
 	}
@@ -388,35 +374,6 @@ func discoverLocalDesktopEntrance(baseDir string, target *url.URL) string {
 		return ""
 	}
 	return strings.Trim(strings.TrimSpace(configuration.GetString("system.entrance")), "/")
-}
-
-func loadDesktopConnection(baseDir string) (desktopConnectionConfig, error) {
-	data, err := os.ReadFile(filepath.Join(baseDir, "desktop.json"))
-	if os.IsNotExist(err) {
-		return desktopConnectionConfig{}, nil
-	}
-	if err != nil {
-		return desktopConnectionConfig{}, fmt.Errorf("read desktop connection: %w", err)
-	}
-	var config desktopConnectionConfig
-	if err := json.Unmarshal(data, &config); err != nil {
-		return desktopConnectionConfig{}, fmt.Errorf("parse desktop connection: %w", err)
-	}
-	return config, nil
-}
-
-func (gateway *desktopGateway) saveConfig() error {
-	gateway.RLock()
-	config := gateway.config
-	gateway.RUnlock()
-	data, err := json.MarshalIndent(config, "", "  ")
-	if err != nil {
-		return err
-	}
-	if err := os.WriteFile(filepath.Join(gateway.baseDir, "desktop.json"), data, 0o600); err != nil {
-		return fmt.Errorf("save desktop connection: %w", err)
-	}
-	return nil
 }
 
 func writeDesktopJSON(response http.ResponseWriter, status int, err error) {

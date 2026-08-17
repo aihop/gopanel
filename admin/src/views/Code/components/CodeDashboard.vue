@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue"
-import { useIntervalFn, useStorage } from "@vueuse/core"
+import { useStorage } from "@vueuse/core"
 import { useMessage } from "naive-ui"
 import { useI18n } from "vue-i18n"
 import type { AIProject } from "@/api/interface/code"
@@ -9,15 +9,10 @@ import type { CodeProjectDropPosition } from "../codeProjectOrder"
 import { setAITaskArchived } from "@/api/modules/code"
 import Icon from "@/components/common/Icon.vue"
 import { codeProjectMessages } from "@/i18n/locales/codeProject"
-import {
-	filterCodeDashboardTasksByProject,
-	groupCodeDashboardTasks,
-	matchesCodeDashboardFilter,
-	sortCodeTasksStably,
-	type CodeDashboardBucket,
-} from "../codeDashboardBuckets"
+import { focusCodeDashboardTasks, sortCodeTasksStably } from "../codeDashboardBuckets"
 import { useCodeTaskPolling } from "../useCodeTaskPolling"
 import CodeDashboardProjectList from "./CodeDashboardProjectList.vue"
+import CodeDashboardFocusTasks from "./CodeDashboardFocusTasks.vue"
 import SessionHistoryDrawer from "./SessionHistoryDrawer.vue"
 import CodeTaskDetailPane from "./CodeTaskDetailPane.vue"
 
@@ -37,15 +32,11 @@ const tasks = ref<CodeTaskListItem[]>([])
 const taskTotal = ref(0)
 const tasksInitialLoading = ref(true)
 const tasksLoadError = ref(false)
-const activeFilter = ref<CodeDashboardBucket | "delivering" | null>(null)
-const selectedProjectId = ref<number | null>(null)
 const showArchived = ref(false)
 const selectedTaskId = ref<number | null>(null)
 const showHistoryDrawer = ref(false)
 // 折叠状态存起来：习惯用宽终端的人不该每次进页面都再折一次。
 const listCollapsed = useStorage("code-dashboard-list-collapsed", false)
-// 分组要按「现在」判断今天，用一个随轮询推进的时间戳，跨零点也不会停在昨天。
-const now = ref(new Date())
 
 // 面板是常驻页面，比工作台松：5 秒一轮，每 6 轮（30 秒）才带一次 git 汇总。
 // git 汇总要按会话读工作区算 diff，跨项目每轮都拉会把低配机器压垮。
@@ -71,12 +62,8 @@ const { fetchTasks, fetchTasksFast } = useCodeTaskPolling(
 const refreshTasks = async (silent = true) => {
 	// 失败标记在每次显式刷新前清掉，成功后 onError 不会再置回来，横幅自己就消失了。
 	if (!silent) tasksLoadError.value = false
-	now.value = new Date()
 	await fetchTasks(silent, "full")
 }
-
-// 「今天」是按本地日历判断的，时间戳得自己往前走，否则跨零点会一直停在昨天。
-useIntervalFn(() => (now.value = new Date()), 30000)
 
 onMounted(async () => {
 	tasksLoadError.value = false
@@ -92,58 +79,12 @@ const projectNameById = computed(() => {
 	return map
 })
 
-const selectedProjectName = computed(
-	() => props.projects.find(project => project.id === selectedProjectId.value)?.name || "",
-)
-const handleProjectFilterSelect = (key: string) => {
-	const id = Number(key)
-	selectedProjectId.value = id > 0 ? id : null
-}
-const visibleProjects = computed(() =>
-	selectedProjectId.value ? props.projects.filter(project => project.id === selectedProjectId.value) : props.projects,
-)
-const projectTasks = computed(() => filterCodeDashboardTasksByProject(tasks.value, selectedProjectId.value))
-const grouped = computed(() => groupCodeDashboardTasks(projectTasks.value, now.value))
+const focusTasks = computed(() => (showArchived.value ? [] : focusCodeDashboardTasks(tasks.value)))
 
-const stats = computed(() => [
-	{
-		key: "active" as const,
-		labelKey: "code.dashboardActive",
-		icon: "mdi:play-circle-outline",
-		count: grouped.value.active.length,
-		tone: "running",
-	},
-	{
-		key: "attention" as const,
-		labelKey: "code.dashboardAttention",
-		icon: "mdi:shield-alert-outline",
-		count: grouped.value.attention.length,
-		tone: "attention",
-	},
-	{
-		key: "delivering" as const,
-		labelKey: "code.dashboardDelivering",
-		icon: "mdi:source-merge",
-		count: grouped.value.deliveringCount,
-		tone: "delivering",
-	},
-	{
-		key: "doneToday" as const,
-		labelKey: "code.dashboardDoneToday",
-		icon: "mdi:check-circle-outline",
-		count: grouped.value.doneToday.length,
-		tone: "done",
-	},
-])
-
-// 项目内仍按稳定规则排序，不按状态拆成多个区块。
+// 仍按稳定规则排序，不按状态拆成多个区块。
 // 任务状态变化时只更新行内徽标，不会在“运行中/今日完成”之间跳来跳去。
 const visibleTasks = computed(() => {
-	const filter = activeFilter.value
-	const scoped = filter
-		? projectTasks.value.filter(task => matchesCodeDashboardFilter(task, filter, now.value))
-		: projectTasks.value
-	return sortCodeTasksStably(scoped)
+	return sortCodeTasksStably(tasks.value)
 })
 
 const selectedTask = computed(() => visibleTasks.value.find(task => task.id === selectedTaskId.value) || null)
@@ -163,15 +104,13 @@ watch(
 	{ immediate: true },
 )
 
-const toggleFilter = (key: CodeDashboardBucket | "delivering") => {
-	activeFilter.value = activeFilter.value === key ? null : key
+const selectFocusTask = (task: CodeTaskListItem) => {
+	selectedTaskId.value = task.id
 }
 
 // 切归档视图要立刻换列表，不能等下一轮轮询（最长 5 秒）才刷。
-// 顺手清掉状态筛选：归档列表里「今日完成」这种口径没有意义。
 const toggleArchivedView = () => {
 	showArchived.value = !showArchived.value
-	activeFilter.value = null
 	tasks.value = []
 	void refreshTasks(false)
 }
@@ -211,56 +150,11 @@ const toggleArchived = async (task: CodeTaskListItem) => {
       />
     </div>
     <template v-else>
-    <!--
-      顶部只留一行：标题 + 状态数字（既是概览也是筛选器）+ 工具栏插槽。
-      大标题和副标题去掉了 —— 面包屑已经写了「开发工作台」，
-      在一个天天用的工作页面上再占 80px 讲一遍是纯装饰，那 80px 归终端。
-      项目筛选紧跟标题，保持低视觉权重；默认仍展示所有项目的任务。
-    -->
-    <div class="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 px-5 md:px-7">
+    <!-- 标题后放视图工具，项目管理与新建项目靠右保持主操作层级。 -->
+    <div class="mb-4 flex flex-wrap items-center gap-2 px-5 md:px-7">
       <span class="shrink-0 text-base font-semibold tracking-[-0.01em] text-[var(--n-text-color)]">
         {{ t("code.workspace") }}
       </span>
-      <div
-        v-show="!showArchived"
-        class="flex flex-1 flex-wrap items-center gap-2"
-      >
-        <button
-          v-for="stat in stats"
-          :key="stat.key"
-          type="button"
-          class="dashboard-stat flex items-center gap-2 rounded-full px-3.5 py-2"
-          :class="[`dashboard-stat--${stat.tone}`, activeFilter === stat.key ? 'dashboard-stat--selected' : '']"
-          @click="toggleFilter(stat.key)"
-        >
-          <Icon
-            :name="stat.icon"
-            :size="15"
-            class="dashboard-stat__icon shrink-0"
-          />
-          <span class="dashboard-stat__count text-sm font-bold">{{ stat.count }}</span>
-          <span class="text-xs text-[var(--n-text-color-3)]">{{ t(stat.labelKey) }}</span>
-        </button>
-        <n-button
-          v-if="activeFilter"
-          text
-          size="tiny"
-          type="primary"
-          @click="activeFilter = null"
-        >
-          {{ t("code.dashboardClearFilter") }}
-        </n-button>
-      </div>
-      <div
-        v-show="showArchived"
-        class="flex flex-1 items-center gap-2 text-sm text-[var(--n-text-color-2)]"
-      >
-        <Icon
-          name="mdi:archive-outline"
-          :size="16"
-        />
-        {{ t("code.dashboardArchivedTitle") }}
-      </div>
 
       <n-button
         size="small"
@@ -286,7 +180,7 @@ const toggleArchived = async (task: CodeTaskListItem) => {
       >
         <template #icon>
           <Icon
-            :name="listCollapsed ? 'mdi:dock-left' : 'mdi:dock-window'"
+            :name="listCollapsed ? 'mdi:arrow-expand-right' : 'mdi:arrow-collapse-left'"
             :size="16"
           />
         </template>
@@ -307,8 +201,10 @@ const toggleArchived = async (task: CodeTaskListItem) => {
         </template>
       </n-button>
 
-      <!-- 项目管理和新建项目由 Index 注入：它们属于项目，不属于任务列表 -->
-      <slot name="toolbar" />
+      <div class="ml-auto flex items-center gap-2">
+        <!-- 项目管理和新建项目由 Index 注入：它们属于项目，不属于任务列表 -->
+        <slot name="toolbar" />
+      </div>
     </div>
 
     <n-alert
@@ -359,6 +255,13 @@ const toggleArchived = async (task: CodeTaskListItem) => {
         v-if="!listCollapsed"
         class="dashboard-panel flex min-h-0 flex-col overflow-hidden"
       >
+        <CodeDashboardFocusTasks
+          v-if="focusTasks.length"
+          :projects="projects"
+          :tasks="focusTasks"
+          :selected-task-id="selectedTaskId"
+          @select="selectFocusTask"
+        />
         <n-scrollbar class="min-h-0 flex-1">
           <!-- 左列独立滚动，所以这里的密度不吃终端高度，可以给足 -->
           <div class="py-2">
@@ -386,7 +289,7 @@ const toggleArchived = async (task: CodeTaskListItem) => {
             </div>
             <CodeDashboardProjectList
               v-else
-              :projects="visibleProjects"
+              :projects="projects"
               :tasks="visibleTasks"
               :selected-task-id="selectedTaskId"
               :archived="showArchived"
@@ -436,39 +339,5 @@ const toggleArchived = async (task: CodeTaskListItem) => {
 		border-right: 1px solid var(--n-border-color);
 		border-bottom: 0;
 	}
-}
-.dashboard-stat {
-	--stat-accent: #94a3b8;
-	background: color-mix(in srgb, var(--n-color) 97%, transparent);
-	border: 1px solid color-mix(in srgb, var(--n-border-color) 92%, transparent);
-	box-shadow: 0 4px 12px rgb(15 23 42 / 3.5%);
-	transition:
-		border-color 0.18s ease,
-		box-shadow 0.18s ease,
-		background-color 0.18s ease;
-}
-.dashboard-stat:hover {
-	border-color: color-mix(in srgb, var(--stat-accent) 42%, var(--n-border-color));
-	box-shadow: 0 8px 20px rgb(15 23 42 / 7%);
-}
-.dashboard-stat--selected {
-	border-color: var(--stat-accent);
-	background: color-mix(in srgb, var(--stat-accent) 10%, var(--n-color));
-}
-.dashboard-stat--running {
-	--stat-accent: #10b981;
-}
-.dashboard-stat--attention {
-	--stat-accent: #f59e0b;
-}
-.dashboard-stat--delivering {
-	--stat-accent: #3b82f6;
-}
-.dashboard-stat--done {
-	--stat-accent: #64748b;
-}
-.dashboard-stat__icon,
-.dashboard-stat__count {
-	color: var(--stat-accent);
 }
 </style>

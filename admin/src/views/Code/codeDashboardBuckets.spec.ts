@@ -3,10 +3,10 @@ import type { CodeTaskListItem } from "@/api/interface/codeTasks"
 import type { CodeTaskSummary } from "@/api/interface/codeTasks"
 import {
 	codeTaskBucket,
-	filterCodeDashboardTasksByProject,
+	codeDashboardFocusStatus,
+	focusCodeDashboardTasks,
 	groupCodeDashboardTasks,
 	isDeliveringTask,
-	matchesCodeDashboardFilter,
 	sortCodeTasksStably,
 } from "./codeDashboardBuckets"
 
@@ -113,11 +113,21 @@ describe("groupCodeDashboardTasks", () => {
 	})
 })
 
-describe("filterCodeDashboardTasksByProject", () => {
-	it("未选择项目时保留全部任务，选择后只保留对应项目", () => {
-		const tasks = [task({ id: 1, projectId: 1 }), task({ id: 2, projectId: 2 })]
-		expect(filterCodeDashboardTasksByProject(tasks, null)).toBe(tasks)
-		expect(filterCodeDashboardTasksByProject(tasks, 2).map(item => item.id)).toEqual([2])
+describe("focusCodeDashboardTasks", () => {
+	it("只保留仍需关注的执行中任务，并按待审批、运行、交付、排队排序", () => {
+		const tasks = [
+			task({ id: 1, status: "completed" }),
+			task({ id: 2, status: "queued" }),
+			task({ id: 3, status: "completed", summary: summary({ deliveryStatus: "running" }) }),
+			task({ id: 4, status: "running" }),
+			task({ id: 5, status: "pending_approval" }),
+		]
+		expect(focusCodeDashboardTasks(tasks).map(item => item.id)).toEqual([5, 4, 3, 2])
+	})
+
+	it("交付中的已完成任务显示为交付中，而不是已完成", () => {
+		const delivering = task({ status: "completed", summary: summary({ deliveryStatus: "queued" }) })
+		expect(codeDashboardFocusStatus(delivering)).toBe("delivering")
 	})
 })
 
@@ -141,20 +151,6 @@ describe("sortCodeTasksStably", () => {
 		const tasks = [task({ id: 1 }), task({ id: 2 })]
 		sortCodeTasksStably(tasks)
 		expect(tasks.map(item => item.id)).toEqual([1, 2])
-	})
-})
-
-describe("matchesCodeDashboardFilter", () => {
-	it("状态筛选和分桶口径一致", () => {
-		expect(matchesCodeDashboardFilter(task({ status: "running" }), "active", now)).toBe(true)
-		expect(matchesCodeDashboardFilter(task({ status: "running" }), "attention", now)).toBe(false)
-		expect(matchesCodeDashboardFilter(task({ status: "pending_approval" }), "attention", now)).toBe(true)
-	})
-
-	it("交付中横跨其它桶，单独按谓词判断", () => {
-		const delivering = task({ status: "completed", summary: summary({ deliveryStatus: "running" }) })
-		expect(matchesCodeDashboardFilter(delivering, "delivering", now)).toBe(true)
-		expect(matchesCodeDashboardFilter(delivering, "active", now)).toBe(true)
 	})
 })
 

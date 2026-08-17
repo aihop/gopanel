@@ -5,7 +5,6 @@ import { useI18n } from "vue-i18n"
 import { useAuthStore } from "@/store/auth"
 import { useHideLayoutFooter } from "@/composables/useHideLayoutFooter"
 import { useCodeTaskPolling } from "./useCodeTaskPolling"
-import { useCodeWorkspaceFullscreen } from "./useCodeWorkspaceFullscreen"
 import { useProjectTerminal } from "./useProjectTerminal"
 import { deleteAITask, getAIProjects, updateAITask } from "@/api/modules/code"
 import type { AIProject, AITask, CodeSession } from "@/api/interface/code"
@@ -47,7 +46,6 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 	const projectTerminalSessionId = ref<number | null>(null)
 	const projectTerminalWorkDir = ref("")
 	const currentSessionWorkDir = ref("")
-	const { isWorkspaceFullscreen, fullscreenLabel, toggleWorkspaceFullscreen } = useCodeWorkspaceFullscreen(t)
 	const selectedFile = ref({ path: "", extension: "" })
 	const activeFilePath = ref("")
 	const fileEditorRef = ref<{ hasUnsavedChanges: boolean } | null>(null)
@@ -318,7 +316,6 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 		showProjectStructure.value = false
 		workspaceMode.value = "terminal"
 		terminalMounted.value = false
-		isWorkspaceFullscreen.value = false
 		resetSelectedFile()
 	}
 
@@ -365,9 +362,6 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 		isProjectTerminalActive,
 		projectTerminalSessionId,
 		projectTerminalWorkDir,
-		isWorkspaceFullscreen,
-		fullscreenLabel,
-		toggleWorkspaceFullscreen,
 		selectedFile,
 		activeFilePath,
 		fileEditorRef,
