@@ -67,6 +67,12 @@ const latestRunTokenLabel = computed(() => {
 	if (props.state?.latestRun?.tokenUsageStatus === "pending") return t("mobile.tokenPending")
 	return tokenLabel(props.state?.latestRun?.totalTokens || 0)
 })
+const runtimeProgress = computed(() => props.state?.codexRuntime?.progress)
+const runtimePercentage = computed(() => {
+	const progress = runtimeProgress.value
+	if (!progress?.totalSteps) return 0
+	return Math.round((progress.completedSteps / progress.totalSteps) * 100)
+})
 
 function previewCanOpen(status: string) {
 	return status === "ready"
@@ -161,6 +167,39 @@ watch(
 						<div class="flex items-center justify-between">
 							<strong>{{ t("mobile.latestResult") }}</strong>
 							<n-tag size="small" :bordered="false">{{ stageLabel }}</n-tag>
+						</div>
+						<div
+							v-if="runtimeProgress?.totalSteps || runtimeProgress?.changedFiles"
+							class="mt-3 rounded-xl bg-slate-50 p-3"
+						>
+							<div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+								<span v-if="runtimeProgress.totalSteps" class="font-semibold text-blue-700">
+									{{
+										t("mobile.runtimeStep", {
+											current: runtimeProgress.currentStep,
+											total: runtimeProgress.totalSteps
+										})
+									}}
+								</span>
+								<span v-if="runtimeProgress.changedFiles" class="font-medium text-emerald-700">
+									{{ t("mobile.runtimeChangedFiles", { count: runtimeProgress.changedFiles }) }}
+								</span>
+								<span v-if="runtimeProgress.additions || runtimeProgress.deletions" class="text-slate-500">
+									<span class="text-emerald-600">+{{ runtimeProgress.additions }}</span>
+									<span class="ml-1 text-rose-600">-{{ runtimeProgress.deletions }}</span>
+								</span>
+							</div>
+							<p v-if="runtimeProgress.stepTitle" class="mt-1 truncate text-sm text-slate-700">
+								{{ runtimeProgress.stepTitle }}
+							</p>
+							<n-progress
+								v-if="runtimeProgress.totalSteps"
+								class="mt-2"
+								type="line"
+								:percentage="runtimePercentage"
+								:show-indicator="false"
+								:height="5"
+							/>
 						</div>
 						<p class="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-600">
 							{{ state?.recentOutput || t("mobile.noResult") }}

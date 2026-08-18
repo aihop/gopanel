@@ -24,18 +24,19 @@ const (
 )
 
 type codexRuntimeState struct {
-	ResponseState        string    `json:"responseState"`
-	NeedsInput           bool      `json:"needsInput"`
-	AwaitingApproval     bool      `json:"awaitingApproval"`
-	Model                string    `json:"model"`
-	InputTokens          int64     `json:"inputTokens"`
-	OutputTokens         int64     `json:"outputTokens"`
-	CachedInputTokens    int64     `json:"cachedInputTokens"`
-	ReasoningTokens      int64     `json:"reasoningTokens"`
-	TotalTokens          int64     `json:"totalTokens"`
-	LastAssistantPreview string    `json:"lastAssistantPreview"`
-	UpdatedAt            time.Time `json:"updatedAt"`
-	WasInterrupted       bool      `json:"wasInterrupted"`
+	ResponseState        string               `json:"responseState"`
+	NeedsInput           bool                 `json:"needsInput"`
+	AwaitingApproval     bool                 `json:"awaitingApproval"`
+	Model                string               `json:"model"`
+	InputTokens          int64                `json:"inputTokens"`
+	OutputTokens         int64                `json:"outputTokens"`
+	CachedInputTokens    int64                `json:"cachedInputTokens"`
+	ReasoningTokens      int64                `json:"reasoningTokens"`
+	TotalTokens          int64                `json:"totalTokens"`
+	LastAssistantPreview string               `json:"lastAssistantPreview"`
+	UpdatedAt            time.Time            `json:"updatedAt"`
+	WasInterrupted       bool                 `json:"wasInterrupted"`
+	Progress             *codeRuntimeProgress `json:"progress,omitempty"`
 }
 
 type codexRuntimeEvent struct {
@@ -49,6 +50,7 @@ type codexRuntimeEvent struct {
 		Model          string          `json:"model"`
 		ApprovalPolicy string          `json:"approval_policy"`
 		Name           string          `json:"name"`
+		Input          string          `json:"input"`
 		CallID         string          `json:"call_id"`
 		Message        json.RawMessage `json:"message"`
 		Content        json.RawMessage `json:"content"`
@@ -83,25 +85,41 @@ func GetCodexRuntimeState(c fiber.Ctx) error {
 }
 
 func getCodexRuntimeState(session *model.AIDevSession) *codexRuntimeState {
+	return getCodeRuntimeState(session, true)
+}
+
+func getCodeRuntimeState(session *model.AIDevSession, includeProgress bool) *codexRuntimeState {
 	if session == nil {
 		return nil
 	}
+	var state *codexRuntimeState
 	switch session.AgentName {
 	case "claude":
-		return getNativeClaudeRuntimeState(session)
+		state = getNativeClaudeRuntimeState(session)
 	case "opencode":
-		return getNativeOpenCodeRuntimeState(session)
+		state = getNativeOpenCodeRuntimeState(session)
 	case "codex":
 	default:
 		return nil
 	}
-	path := findCodexRuntimePath(session)
-	if path == "" {
-		return &codexRuntimeState{ResponseState: "idle", NeedsInput: true}
+	if session.AgentName == "codex" {
+		path := findCodexRuntimePath(session)
+		if path == "" {
+			state = &codexRuntimeState{ResponseState: "idle", NeedsInput: true}
+		} else {
+			parsed, err := parseCodexRuntimeFile(path, time.Now())
+			if err != nil {
+				state = &codexRuntimeState{ResponseState: "idle", NeedsInput: true}
+			} else {
+				state = parsed
+			}
+		}
 	}
-	state, err := parseCodexRuntimeFile(path, time.Now())
-	if err != nil {
-		return &codexRuntimeState{ResponseState: "idle", NeedsInput: true}
+	if state == nil {
+		state = &codexRuntimeState{ResponseState: "idle", NeedsInput: true}
+	}
+	if includeProgress {
+		state.Progress = loadCodeRuntimeProgress(session, state.Progress)
 	}
 	return state
 }
@@ -193,6 +211,9 @@ func parseCodexRuntime(reader io.Reader, now time.Time) (*codexRuntimeState, err
 		case "response_item":
 			activeTurn = !turnClosed
 			trackCodexCall(event, eventAt, pendingCalls)
+			if progress := parseCodexPlanProgress(event.Payload.Name, event.Payload.Input, eventAt); progress != nil {
+				state.Progress = progress
+			}
 			if event.Payload.Type == "message" && event.Payload.Role == "assistant" {
 				if preview := codexContentText(event.Payload.Content); preview != "" {
 					state.LastAssistantPreview = preview
@@ -206,6 +227,7 @@ func parseCodexRuntime(reader io.Reader, now time.Time) (*codexRuntimeState, err
 				activeTurn = true
 				turnClosed = false
 				state.WasInterrupted = false
+				state.Progress = nil
 			case "task_complete":
 				completedAt = codexUnixTime(event.Payload.CompletedAt, eventAt)
 				activeTurn = false

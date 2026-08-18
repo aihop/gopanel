@@ -69,7 +69,7 @@ func watchNativeCodeNotifications(sessionID uint, done <-chan struct{}) {
 		if err != nil {
 			return
 		}
-		state := getCodexRuntimeState(session)
+		state := getCodeRuntimeState(session, false)
 		status, _ := nativeCodeTaskState(state)
 		if status != "" && (session.LastTaskID != tracker.lastTaskID || status != tracker.taskStatus) {
 			if syncNativeCodeTaskStatus(session, state) {

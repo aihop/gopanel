@@ -74,3 +74,36 @@ func TestParseCodexRuntimeTailInfersActiveTurn(t *testing.T) {
 		t.Fatalf("unexpected tail state: %#v", state)
 	}
 }
+
+func TestParseCodexRuntimeExtractsLatestEmbeddedPlan(t *testing.T) {
+	transcript := strings.Join([]string{
+		`{"timestamp":"2026-07-29T10:00:00Z","type":"event_msg","payload":{"type":"task_started"}}`,
+		`{"timestamp":"2026-07-29T10:00:01Z","type":"response_item","payload":{"type":"custom_tool_call","name":"exec","input":"const p = await tools.update_plan({plan:[{step:'分析需求',status:'in_progress'},{step:'实现功能',status:'pending'}]});"}}`,
+		`{"timestamp":"2026-07-29T10:00:02Z","type":"response_item","payload":{"type":"custom_tool_call","name":"exec","input":"await tools.update_plan({ explanation: '括号 ) 和转义 \\\" 都不能截断', plan: [{ step: '分析需求', status: 'completed' }, { step: '实现 (核心) 功能', status: 'in_progress' }, { step: '完成验证', status: 'pending' }] });"}}`,
+	}, "\n")
+	state, err := parseCodexRuntime(strings.NewReader(transcript), time.Date(2026, 7, 29, 10, 0, 3, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Progress == nil {
+		t.Fatal("expected plan progress")
+	}
+	if state.Progress.CurrentStep != 2 || state.Progress.TotalSteps != 3 || state.Progress.CompletedSteps != 1 {
+		t.Fatalf("unexpected plan counters: %#v", state.Progress)
+	}
+	if state.Progress.StepTitle != "实现 (核心) 功能" || state.Progress.Source != "codex_plan" {
+		t.Fatalf("unexpected current plan step: %#v", state.Progress)
+	}
+}
+
+func TestParseCodexPlanProgressSelectsPendingAndCompletedSteps(t *testing.T) {
+	updatedAt := time.Date(2026, 7, 29, 10, 0, 0, 0, time.UTC)
+	pending := parseCodexPlanProgress("update_plan", `{"plan":[{"step":"第一步","status":"completed"},{"step":"第二步","status":"pending"}]}`, updatedAt)
+	if pending == nil || pending.CurrentStep != 2 || pending.StepTitle != "第二步" {
+		t.Fatalf("unexpected pending plan: %#v", pending)
+	}
+	completed := parseCodexPlanProgress("update_plan", `{"plan":[{"step":"第一步","status":"completed"},{"step":"第二步","status":"completed"}]}`, updatedAt)
+	if completed == nil || completed.CurrentStep != 2 || completed.CompletedSteps != 2 {
+		t.Fatalf("unexpected completed plan: %#v", completed)
+	}
+}

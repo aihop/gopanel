@@ -6,15 +6,20 @@ import {
 	getMobileProjects,
 	getMobileSessionState,
 	getMobileSessions,
-	logoutMobileDevice,
 	retryMobileInstruction,
 	stopMobileSession,
 	type MobileNode,
 	type MobileOverview
 } from "@/api/modules/mobile"
 import type { AIProject, CodeSession, CodeSessionState } from "@/api/interface/code"
+import type { CodeTaskListItem } from "@/api/interface/codeTasks"
 import type { HostTerminalSession } from "@/api/interface/hostTerminal"
-import { mobileMessages } from "@/i18n/locales/mobile"
+import { mobileAlignmentMessages } from "@/i18n/locales/mobileAlignment"
+import { findMobileSessionProject, useMobileSessionDisplay } from "./mobileConsoleSession"
+import { useMobileConsoleRoute, type MobileConsoleTab } from "./useMobileConsoleRoute"
+import { useMobileNodeMetrics } from "./useMobileNodeMetrics"
+import { useMobileLogout } from "./useMobileLogout"
+import { useMobileConsoleRefresh } from "./useMobileConsoleRefresh"
 import MobileConsoleHeader from "./components/MobileConsoleHeader.vue"
 import MobileAttentionPanel from "./components/MobileAttentionPanel.vue"
 import MobileConsoleNavigation from "./components/MobileConsoleNavigation.vue"
@@ -22,38 +27,44 @@ import MobileResourcePanel from "./components/MobileResourcePanel.vue"
 import MobileFileBrowser from "./components/MobileFileBrowser.vue"
 import MobileRecentSessions from "./components/MobileRecentSessions.vue"
 import MobileSessionCreator from "./components/MobileSessionCreator.vue"
-import MobileSessionBrowser from "./components/MobileSessionBrowser.vue"
+import MobileCodePanel from "./components/MobileCodePanel.vue"
 import MobileSystemUpdate from "./components/MobileSystemUpdate.vue"
 import MobileSettingsPanel from "./components/MobileSettingsPanel.vue"
 import MobileTaskStatusDrawer from "./components/MobileTaskStatusDrawer.vue"
-import MobileTerminal from "./components/MobileTerminal.vue"
 import { useI18n } from "vue-i18n"
-import { computed, onBeforeUnmount, onMounted, ref } from "vue"
-import { useDialog, useMessage } from "naive-ui"
-import { useRouter } from "vue-router"
+import { computed, onMounted, ref } from "vue"
+import { useMessage } from "naive-ui"
 import MobileNodeSwitcher from "./components/MobileNodeSwitcher.vue"
 import MobileNodeOverview from "./components/MobileNodeOverview.vue"
 import MobileProjectTerminals from "./components/MobileProjectTerminals.vue"
-
-const { t } = useI18n({ messages: mobileMessages })
+const { t } = useI18n({ messages: mobileAlignmentMessages })
 const message = useMessage()
-const dialog = useDialog()
-const router = useRouter()
-type MobileConsoleTab = "overview" | "resources" | "code" | "settings"
-
-const activeTab = ref<MobileConsoleTab>("overview")
 const overview = ref<MobileOverview | null>(null)
 const nodes = ref<MobileNode[]>([])
-const selectedNodeId = ref(Number(localStorage.getItem("gopanel-mobile-node-id") || 0))
 const showNodeSwitcher = ref(false)
 const nodesLoading = ref(false)
 const nodesLoadError = ref("")
 const projects = ref<AIProject[]>([])
 const sessions = ref<CodeSession[]>([])
-const selectedProjectId = ref<number | null>(Number(localStorage.getItem("gopanel-mobile-project-id")) || null)
-const selectedSessionId = ref(0)
 const sessionsLoading = ref(false)
 const sessionState = ref<CodeSessionState | null>(null)
+const {
+	activeTab,
+	selectedNodeId,
+	selectedProjectId,
+	selectedSessionId,
+	selectedTaskId,
+	showSessionDetail,
+	syncRoute,
+	router
+} = useMobileConsoleRoute({
+	isLocalNode: nodeId => nodeId === 0 || Boolean(nodes.value.find(item => item.id === nodeId)?.isLocal),
+	sessions,
+	sessionState,
+	loadSessions,
+	loadSessionState
+})
+const confirmLogout = useMobileLogout(t, router)
 const loading = ref(false)
 const actionLoading = ref(false)
 const loadError = ref("")
@@ -63,39 +74,36 @@ const showTaskStatus = ref(false)
 const showProjectTerminals = ref(false)
 const projectTerminalSession = ref<HostTerminalSession | null>(null)
 const projectTerminalProject = ref<AIProject | null>(null)
-let refreshTimer: ReturnType<typeof setInterval> | null = null
-let nodeRefreshTicks = 0
 
 async function handleDeliveryUpdated() {
 	await Promise.all([loadSessions(), loadSessionState(true)])
 }
 
-const selectedSession = computed(() => sessions.value.find(item => item.id === selectedSessionId.value) || null)
-const selectedNode = computed(
-	() => nodes.value.find(item => item.id === selectedNodeId.value) || nodes.value[0] || null
+const { selectedSession, selectedTaskName, selectedProjectName } = useMobileSessionDisplay(
+	sessions,
+	selectedSessionId,
+	projects,
+	() => t("mobile.unlinkedProject")
+)
+const { selectedNode, memoryPercent, cpuPercent, load1, nodeIsOnline, nodeCanOperate } = useMobileNodeMetrics(
+	nodes,
+	selectedNodeId,
+	overview
 )
 const isProjectTerminal = computed(() => activeTab.value === "code" && Boolean(projectTerminalSession.value))
 const isTaskDetail = computed(
-	() => activeTab.value === "code" && (Boolean(selectedSession.value) || isProjectTerminal.value)
+	() =>
+		activeTab.value === "code" &&
+		(Boolean(showSessionDetail.value && selectedSession.value) || isProjectTerminal.value)
 )
-const memoryPercent = computed(() =>
-	Math.round(
-		selectedNode.value?.isLocal
-			? overview.value?.system.memoryUsedPercent || 0
-			: selectedNode.value?.summary.memPercent || 0
-	)
-)
-const cpuPercent = computed(() =>
-	Math.round(
-		selectedNode.value?.isLocal
-			? overview.value?.system.cpuUsedPercent || 0
-			: selectedNode.value?.summary.cpuPercent || 0
-	)
-)
-const load1 = computed(() =>
-	selectedNode.value?.isLocal ? overview.value?.system.load1 || 0 : selectedNode.value?.summary.load1 || 0
-)
-const nodeIsOnline = computed(() => selectedNode.value?.status === "online")
+const startRefresh = useMobileConsoleRefresh({
+	activeTab,
+	selectedNode,
+	selectedSessionId,
+	loadOverview,
+	loadNodes,
+	loadSessionState
+})
 
 async function loadNodes(silent = false) {
 	if (!silent) nodesLoading.value = true
@@ -114,31 +122,20 @@ async function loadNodes(silent = false) {
 	}
 }
 
-function selectNode(node: MobileNode) {
+async function selectNode(node: MobileNode) {
 	selectedNodeId.value = node.id
 	localStorage.setItem("gopanel-mobile-node-id", String(node.id))
-}
-
-function normalizedProjectPath(value?: string) {
-	return (value || "").replace(/\\/g, "/").replace(/\/+$/, "")
-}
-
-function sessionProject(session: CodeSession) {
-	const projectById = projects.value.find(item => item.id === session.projectId)
-	if (projectById) return projectById
-	const sessionPaths = [session.sourceWorkDir, session.workDir].map(normalizedProjectPath).filter(Boolean)
-	return projects.value.find(project => {
-		const projectPaths = [project.workDir, ...(project.sourceDirs || [])].map(normalizedProjectPath).filter(Boolean)
-		return projectPaths.some(path => sessionPaths.includes(path))
-	})
-}
-
-function sessionProjectName(session: CodeSession) {
-	return sessionProject(session)?.name || t("mobile.unlinkedProject")
-}
-
-function sessionTaskTitle(session: CodeSession) {
-	return session.currentTaskTitle || session.title
+	if (!node.isLocal) {
+		sessions.value = []
+		selectedSessionId.value = 0
+		selectedTaskId.value = 0
+		sessionState.value = null
+		showSessionDetail.value = false
+		projectTerminalSession.value = null
+		projectTerminalProject.value = null
+	}
+	syncRoute(true)
+	if (node.isLocal && activeTab.value === "code") await loadSessions(true)
 }
 
 async function loadProjects() {
@@ -207,12 +204,15 @@ async function selectSession(session: CodeSession) {
 	projectTerminalSession.value = null
 	projectTerminalProject.value = null
 	selectedSessionId.value = session.id
+	selectedTaskId.value = 0
+	showSessionDetail.value = true
 	await loadSessionState()
+	syncRoute(true)
 }
 
 async function openSession(session: CodeSession) {
 	activeTab.value = "code"
-	const projectId = sessionProject(session)?.id || session.projectId
+	const projectId = findMobileSessionProject(session, projects.value)?.id || session.projectId
 	if (projectId) {
 		selectedProjectId.value = projectId
 		localStorage.setItem("gopanel-mobile-project-id", String(projectId))
@@ -221,6 +221,28 @@ async function openSession(session: CodeSession) {
 		sessions.value = [session]
 	}
 	await selectSession(session)
+}
+
+async function openTask(task: CodeTaskListItem) {
+	activeTab.value = "code"
+	selectedProjectId.value = task.projectId || null
+	selectedSessionId.value = task.sessionId
+	selectedTaskId.value = task.id
+	showSessionDetail.value = true
+	if (task.projectId) localStorage.setItem("gopanel-mobile-project-id", String(task.projectId))
+	if (task.projectId) await loadSessions(true)
+	if (!sessions.value.some(session => session.id === task.sessionId)) {
+		try {
+			const state = await getMobileSessionState(task.sessionId)
+			sessionState.value = state
+			sessions.value = [state.session, ...sessions.value]
+		} catch (error) {
+			message.error(error instanceof Error ? error.message : t("mobile.loadFailed"))
+			return
+		}
+	}
+	if (!sessionState.value || sessionState.value.session.id !== task.sessionId) await loadSessionState()
+	syncRoute(true)
 }
 
 async function openAttentionSession(sessionId: number) {
@@ -241,43 +263,53 @@ async function selectProject(projectId: number) {
 	selectedProjectId.value = projectId
 	localStorage.setItem("gopanel-mobile-project-id", String(projectId))
 	selectedSessionId.value = 0
+	selectedTaskId.value = 0
+	showSessionDetail.value = false
 	sessionState.value = null
+	syncRoute()
 	await loadSessions(true)
 }
 
 async function switchToOverview() {
 	activeTab.value = "overview"
+	syncRoute(true)
 	await loadOverview()
 }
 
 async function switchToCode() {
 	activeTab.value = "code"
-	selectedSessionId.value = 0
-	sessionState.value = null
+	showSessionDetail.value = false
 	projectTerminalSession.value = null
 	projectTerminalProject.value = null
-	await loadSessions(true)
+	syncRoute(true)
+	if (selectedNode.value?.isLocal) await loadSessions(true)
 }
 
 function selectTab(tab: MobileConsoleTab) {
 	if (tab === "overview") void switchToOverview()
 	else if (tab === "code") void switchToCode()
-	else activeTab.value = tab
+	else {
+		activeTab.value = tab
+		syncRoute(true)
+	}
 }
 
 async function leaveTaskDetail() {
 	if (isProjectTerminal.value) {
 		projectTerminalSession.value = null
 		projectTerminalProject.value = null
+		syncRoute()
 		return
 	}
-	activeTab.value = "overview"
-	await loadOverview()
+	showSessionDetail.value = false
+	syncRoute()
 }
 
 function openProjectTerminal(session: HostTerminalSession, project: AIProject) {
 	activeTab.value = "code"
 	selectedSessionId.value = 0
+	selectedTaskId.value = 0
+	showSessionDetail.value = false
 	sessionState.value = null
 	projectTerminalSession.value = session
 	projectTerminalProject.value = project
@@ -288,6 +320,8 @@ async function handleSessionCreated(session: CodeSession) {
 	selectedProjectId.value = session.projectId
 	localStorage.setItem("gopanel-mobile-project-id", String(session.projectId))
 	selectedSessionId.value = session.id
+	selectedTaskId.value = 0
+	showSessionDetail.value = true
 	await loadSessions(true)
 	await loadSessionState()
 }
@@ -300,7 +334,7 @@ async function decideApproval(approved: boolean, reason = "") {
 		await decideMobileApproval(approvalId, approved, reason)
 		await loadSessionState(true)
 	} catch (error) {
-		void 0
+		message.error(error instanceof Error ? error.message : t("mobile.loadFailed"))
 	} finally {
 		actionLoading.value = false
 	}
@@ -312,7 +346,7 @@ async function stopExecution() {
 		await stopMobileSession(selectedSessionId.value)
 		await loadSessionState(true)
 	} catch (error) {
-		void 0
+		message.error(error instanceof Error ? error.message : t("mobile.loadFailed"))
 	} finally {
 		actionLoading.value = false
 	}
@@ -326,47 +360,17 @@ async function retryExecution() {
 		await retryMobileInstruction(instructionId)
 		await loadSessionState(true)
 	} catch (error) {
-		void 0
+		message.error(error instanceof Error ? error.message : t("mobile.loadFailed"))
 	} finally {
 		actionLoading.value = false
 	}
 }
 
-function confirmLogout() {
-	dialog.warning({
-		title: t("mobile.logout"),
-		content: t("mobile.logoutConfirm"),
-		positiveText: t("mobile.logout"),
-		negativeText: t("commons.button.cancel"),
-		onPositiveClick: async () => {
-			await logoutMobileDevice()
-			await router.replace("/mobile/auth")
-		}
-	})
-}
-
-function startRefresh() {
-	refreshTimer = setInterval(() => {
-		if (activeTab.value === "overview") {
-			if (selectedNode.value?.isLocal) void loadOverview(true)
-			nodeRefreshTicks++
-			if (nodeRefreshTicks >= 5) {
-				nodeRefreshTicks = 0
-				void loadNodes(true)
-				if (!selectedNode.value?.isLocal) void loadOverview(true)
-			}
-		} else if (activeTab.value === "code" && selectedSessionId.value) void loadSessionState(true)
-	}, 2000)
-}
-
 onMounted(async () => {
 	await Promise.all([loadOverview(), loadNodes(), loadProjects()])
-	await loadSessions()
+	if (selectedNode.value?.isLocal) await loadSessions()
+	syncRoute()
 	startRefresh()
-})
-
-onBeforeUnmount(() => {
-	if (refreshTimer) clearInterval(refreshTimer)
 })
 </script>
 
@@ -377,6 +381,7 @@ onBeforeUnmount(() => {
 			:active-tab="activeTab"
 			:node-name="selectedNode?.name || ''"
 			:node-online="nodeIsOnline"
+			:can-create-session="Boolean(selectedNode?.isLocal)"
 			@select-node="showNodeSwitcher = true"
 			@new-session="showSessionCreator = true"
 		/>
@@ -405,7 +410,7 @@ onBeforeUnmount(() => {
 
 			<n-spin :show="loading">
 				<div v-if="activeTab === 'overview'" class="space-y-4">
-					<MobileAttentionPanel @open-session="openAttentionSession" />
+					<MobileAttentionPanel v-if="selectedNode?.isLocal" @open-session="openAttentionSession" />
 					<MobileNodeOverview
 						:node="selectedNode"
 						:online="nodeIsOnline"
@@ -414,6 +419,7 @@ onBeforeUnmount(() => {
 						:load="load1"
 					/>
 					<MobileRecentSessions
+						v-if="selectedNode?.isLocal"
 						:sessions="overview?.sessions || []"
 						:projects="projects"
 						:pending-count="overview?.pendingApprovals.length || 0"
@@ -422,7 +428,11 @@ onBeforeUnmount(() => {
 					/>
 				</div>
 
-				<MobileResourcePanel v-else-if="activeTab === 'resources'" />
+				<MobileResourcePanel
+					v-else-if="activeTab === 'resources'"
+					:node-id="selectedNodeId"
+					:node-available="nodeIsOnline && nodeCanOperate"
+				/>
 
 				<MobileSettingsPanel
 					v-else-if="activeTab === 'settings'"
@@ -432,39 +442,31 @@ onBeforeUnmount(() => {
 					@logout="confirmLogout"
 				/>
 
-				<div v-else :class="isTaskDetail ? '' : 'space-y-4'">
-					<MobileSessionBrowser
-						v-if="!isTaskDetail"
-						:projects="projects"
-						:sessions="sessions"
-						:selected-project-id="selectedProjectId"
-						:selected-session-id="selectedSessionId"
-						:loading="sessionsLoading"
-						@update:selected-project-id="selectProject"
-						@new-session="showSessionCreator = true"
-						@project-terminal="showProjectTerminals = true"
-						@select-session="selectSession"
-					/>
-					<MobileTerminal
-						v-if="projectTerminalSession && projectTerminalProject"
-						:session-id="projectTerminalSession.id"
-						:task-name="t('mobile.projectTerminal')"
-						:project-name="projectTerminalProject.name"
-						mode="native"
-						@back="leaveTaskDetail"
-					/>
-					<template v-else-if="selectedSession">
-						<MobileTerminal
-							:session-id="selectedSessionId"
-							:task-name="sessionTaskTitle(selectedSession)"
-							:project-name="sessionProjectName(selectedSession)"
-							@back="leaveTaskDetail"
-							@open-files="showFiles = true"
-							@open-status="showTaskStatus = true"
-							@renamed="loadSessions"
-						/>
-					</template>
-				</div>
+				<MobileCodePanel
+					v-else
+					:remote-node="!selectedNode?.isLocal"
+					:task-detail="isTaskDetail"
+					:projects="projects"
+					:sessions="sessions"
+					:selected-project-id="selectedProjectId"
+					:selected-session-id="selectedSessionId"
+					:selected-task-id="selectedTaskId"
+					:sessions-loading="sessionsLoading"
+					:project-terminal-session="projectTerminalSession"
+					:project-terminal-project="projectTerminalProject"
+					:selected-session="selectedSession"
+					:selected-task-name="selectedTaskName"
+					:selected-project-name="selectedProjectName"
+					@select-project="selectProject"
+					@select-session="selectSession"
+					@open-task="openTask"
+					@new-session="showSessionCreator = true"
+					@project-terminal="showProjectTerminals = true"
+					@back="leaveTaskDetail"
+					@open-files="showFiles = true"
+					@open-status="showTaskStatus = true"
+					@renamed="loadSessions"
+				/>
 			</n-spin>
 		</main>
 

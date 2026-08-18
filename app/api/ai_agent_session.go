@@ -473,9 +473,13 @@ func GetAISessionState(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
+	runtimeState := getCodexRuntimeState(session)
+	if runtimeState != nil && runtimeState.Progress != nil {
+		changedFiles = runtimeState.Progress.Files
+	}
 	return c.JSON(e.Succ(fiber.Map{
 		"session":           session,
-		"codexRuntime":      getCodexRuntimeState(session),
+		"codexRuntime":      runtimeState,
 		"currentTask":       currentTask,
 		"latestInstruction": latestInstruction,
 		"currentStage":      session.CurrentStage,

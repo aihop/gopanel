@@ -316,6 +316,20 @@ export interface CodexRuntimeState {
 	lastAssistantPreview: string
 	updatedAt: string
 	wasInterrupted: boolean
+	progress?: CodeRuntimeProgress
+}
+
+export interface CodeRuntimeProgress {
+	currentStep: number
+	totalSteps: number
+	completedSteps: number
+	stepTitle: string
+	changedFiles: number
+	additions: number
+	deletions: number
+	files: string[]
+	source: "git" | "codex_plan" | "codex_plan+git"
+	updatedAt: string
 }
 
 export interface CodeSessionState {

@@ -150,6 +150,7 @@ func discoverCodeGitRepositories(
 			}
 			repository.Isolated = true
 			repository.DeliveryStatus = sessionRepository.Status
+			repository.BaseCommit = strings.TrimSpace(sessionRepository.BaseCommit)
 			loadCodeGitSavedState(&repository, sessionRepository.BaseCommit)
 			repositories = append(repositories, repository)
 		}
@@ -159,6 +160,7 @@ func discoverCodeGitRepositories(
 		if repository, ok := inspectCodeGitRepository("session", filepath.Base(session.WorkDir), session.WorkDir, ""); ok {
 			repository.Isolated = session.WorktreeBranch != ""
 			if repository.Isolated {
+				repository.BaseCommit = strings.TrimSpace(session.BaseCommit)
 				loadCodeGitSavedState(&repository, session.BaseCommit)
 			}
 			return []codeGitRepository{repository}
