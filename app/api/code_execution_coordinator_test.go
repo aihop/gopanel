@@ -94,10 +94,14 @@ func TestCodeExecutionCoordinatorNewSessionDoesNotInterruptSharedWorkspace(t *te
 	var interrupted atomic.Bool
 	first.SetCancel(func() { interrupted.Store(true) })
 
+	// 终端之间现在可以共存（各干各的，风险由开发者掌握）。
+	// 但这条用例真正要守的不变量没变：新会话绝不能打断已经在跑的那条。
 	secondSession := &model.AIDevSession{ID: 22, WorkDir: "/workspace/shared"}
-	if _, err := coordinator.acquireSession(context.Background(), secondSession, codeExecutionInteractive, false); !errors.Is(err, errCodeExecutionBusy) {
-		t.Fatalf("new session error = %v", err)
+	second, err := coordinator.acquireSession(context.Background(), secondSession, codeExecutionInteractive, false)
+	if err != nil {
+		t.Fatalf("同一工作区的第二个终端应能打开：%v", err)
 	}
+	defer second.Release()
 	if interrupted.Load() {
 		t.Fatal("existing session was interrupted by a new session")
 	}
@@ -114,9 +118,11 @@ func TestCodeExecutionCoordinatorDoesNotInterruptDirectWorkspaceOnSessionSwitch(
 	first.SetCancel(func() { interrupted.Store(true) })
 
 	secondSession := &model.AIDevSession{ID: 22, WorkDir: "/workspace/shared", IsolationMode: codeIsolationDirect}
-	if _, err := coordinator.acquireInteractiveSession(context.Background(), secondSession); !errors.Is(err, errCodeExecutionBusy) {
-		t.Fatalf("direct workspace switch error = %v", err)
+	second, err := coordinator.acquireInteractiveSession(context.Background(), secondSession)
+	if err != nil {
+		t.Fatalf("直连模式的第二个终端应能打开：%v", err)
 	}
+	defer second.Release()
 	if interrupted.Load() {
 		t.Fatal("session switch interrupted the running Codex process")
 	}
@@ -153,9 +159,11 @@ func TestCodeExecutionCoordinatorDoesNotInterruptLegacyDirectSession(t *testing.
 	var interrupted atomic.Bool
 	first.SetCancel(func() { interrupted.Store(true) })
 	legacyDirect := &model.AIDevSession{ID: 22, ProjectID: project.ID, WorkDir: "/workspace/shared"}
-	if _, err := coordinator.acquireInteractiveSession(context.Background(), legacyDirect); !errors.Is(err, errCodeExecutionBusy) {
-		t.Fatalf("legacy direct workspace switch error = %v", err)
+	second, err := coordinator.acquireInteractiveSession(context.Background(), legacyDirect)
+	if err != nil {
+		t.Fatalf("旧式直连会话的第二个终端应能打开：%v", err)
 	}
+	defer second.Release()
 	if interrupted.Load() {
 		t.Fatal("legacy session switch interrupted the running Codex process")
 	}

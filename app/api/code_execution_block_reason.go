@@ -34,7 +34,7 @@ func (coordinator *codeExecutionCoordinator) deliveryBlockReason(session *model.
 	}
 	keys := codeExecutionDeliveryKeys(session)
 	coordinator.mu.Lock()
-	holders := coordinator.conflicts(keys)
+	holders := coordinator.conflicts(keys, codeExecutionDelivery)
 	deliverySlotsFree := len(coordinator.deliveryCapacity) < cap(coordinator.deliveryCapacity)
 	coordinator.mu.Unlock()
 

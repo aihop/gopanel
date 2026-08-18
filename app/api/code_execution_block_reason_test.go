@@ -166,3 +166,96 @@ func TestCodeDeliveryConcurrencyFallsBackToASafeDefault(t *testing.T) {
 		t.Fatalf("应读取环境变量，实际 %d", value)
 	}
 }
+
+// 两个终端在同一个目录各干各的，本来就是日常操作。面板在自己界面里拦一道
+// 也挡不住风险——SSH 上去开两个终端跑同一个 CLI 谁也拦不住，拦只会让面板
+// 比裸终端更难用。
+func TestInteractiveTerminalsShareTheSameWorkspace(t *testing.T) {
+	coordinator := newCodeExecutionCoordinator(2, 2)
+	first, err := coordinator.acquireOwned(
+		context.Background(), 1, []string{"/project/src"}, codeExecutionInteractive, false,
+	)
+	if err != nil {
+		t.Fatalf("首个终端应能打开：%v", err)
+	}
+	defer first.Release()
+
+	second, err := coordinator.acquireOwned(
+		context.Background(), 2, []string{"/project/src"}, codeExecutionInteractive, false,
+	)
+	if err != nil {
+		t.Fatalf("同一工作区的第二个终端也应能打开：%v", err)
+	}
+	defer second.Release()
+}
+
+// 放行终端之后仍要能看见「还有终端在跑」：交付据此决定要不要等。
+// 单值 map 时后来的终端会覆盖先来的登记，先来的那条就被遗忘了。
+func TestConcurrentTerminalsRemainVisibleToDelivery(t *testing.T) {
+	coordinator := newCodeExecutionCoordinator(2, 2)
+	first, err := coordinator.acquireOwned(
+		context.Background(), 1, []string{"/project/src"}, codeExecutionInteractive, false,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := coordinator.acquireOwned(
+		context.Background(), 2, []string{"/project/src"}, codeExecutionInteractive, false,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 后开的先关：先开的那条必须仍然登记在案。
+	second.Release()
+	if !coordinator.hasSessionKind(1, codeExecutionInteractive) {
+		t.Fatal("后开的终端关闭后，先开的那条不该被一起遗忘")
+	}
+	first.Release()
+	if coordinator.hasSessionKind(1, codeExecutionInteractive) {
+		t.Fatal("全部关闭后不该还留着登记")
+	}
+}
+
+// 交付要把提交合进源仓库，那是一次真正的原子写；并发写坏的是 Git 对象
+// 和分支指针，不是「两个人各改各的文件」。所以这条边界必须保留。
+func TestDeliveryStillExcludesRunningWork(t *testing.T) {
+	coordinator := newCodeExecutionCoordinator(2, 2)
+	terminal, err := coordinator.acquireOwned(
+		context.Background(), 1, []string{"/repo"}, codeExecutionInteractive, false,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer terminal.Release()
+	if _, err := coordinator.acquireOwned(
+		context.Background(), 2, []string{"/repo"}, codeExecutionDelivery, false,
+	); err == nil {
+		t.Fatal("终端还开着时交付不该直接放行")
+	}
+	// 反向也要挡住：交付进行中不能再起终端去动同一棵树。
+	delivery := newCodeExecutionCoordinator(2, 2)
+	held, err := delivery.acquireOwned(context.Background(), 1, []string{"/repo"}, codeExecutionDelivery, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer held.Release()
+	if _, err := delivery.acquireOwned(
+		context.Background(), 2, []string{"/repo"}, codeExecutionInteractive, false,
+	); err == nil {
+		t.Fatal("交付进行中不该允许新终端占用同一工作区")
+	}
+}
+
+func TestCodeExecutionCoexistsOnlyForTerminals(t *testing.T) {
+	if !codeExecutionCoexists(codeExecutionInteractive, codeExecutionInteractive) {
+		t.Fatal("终端之间应可共存")
+	}
+	for _, kind := range []string{codeExecutionDelivery, codeExecutionInstruction, codeExecutionMutation, codeExecutionQuality} {
+		if codeExecutionCoexists(codeExecutionInteractive, kind) {
+			t.Fatalf("终端不应与 %s 共存", kind)
+		}
+		if codeExecutionCoexists(kind, codeExecutionInteractive) {
+			t.Fatalf("%s 不应与终端共存", kind)
+		}
+	}
+}

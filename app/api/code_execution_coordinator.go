@@ -23,7 +23,7 @@ const (
 )
 
 var (
-	errCodeExecutionBusy     = errors.New("当前工作区已有任务正在执行，原任务不会停止；如需并行请启用 Git Worktree 隔离")
+	errCodeExecutionBusy     = errors.New("当前工作区正在交付或执行 AI 指令，需要独占目录；请等它结束后重试。多个开发终端可以同时打开，不受此限制")
 	errCodeExecutionCapacity = errors.New("Code 执行并发已满，请稍后重试")
 	errCodeExecutionStopping = errors.New("Code 执行服务正在停止")
 )
@@ -43,9 +43,12 @@ type codeExecutionLease struct {
 }
 
 type codeExecutionCoordinator struct {
-	mu       sync.Mutex
-	nextID   uint64
-	active   map[string]*codeExecutionLease
+	mu     sync.Mutex
+	nextID uint64
+	// 一个工作区键可以同时挂多条租约：终端之间允许共存，
+	// 用单值 map 的话后来的会把先来的登记覆盖掉，先来的那条一旦被
+	// 遗忘，交付就看不见「还有终端在跑」了。
+	active   map[string]map[uint64]*codeExecutionLease
 	capacity chan struct{}
 	// 交付单独一个池子。之前交付和所有会话的 AI 执行共抢同一批槽位，
 	// 会话一多，槽位长期被执行占满，交付只能排队到超时——实测这是
@@ -89,7 +92,7 @@ func newCodeExecutionCoordinator(capacity, deliveryCapacity int) *codeExecutionC
 		deliveryCapacity = 1
 	}
 	return &codeExecutionCoordinator{
-		active:           make(map[string]*codeExecutionLease),
+		active:           make(map[string]map[uint64]*codeExecutionLease),
 		capacity:         make(chan struct{}, capacity),
 		deliveryCapacity: make(chan struct{}, deliveryCapacity),
 		stop:             make(chan struct{}),
@@ -234,7 +237,7 @@ func (coordinator *codeExecutionCoordinator) acquireOwned(
 			coordinator.mu.Unlock()
 			return nil, errCodeExecutionStopping
 		}
-		conflicts := coordinator.conflicts(keys)
+		conflicts := coordinator.conflicts(keys, kind)
 		if len(conflicts) == 0 {
 			coordinator.nextID++
 			lease := &codeExecutionLease{
@@ -246,7 +249,10 @@ func (coordinator *codeExecutionCoordinator) acquireOwned(
 				done:        make(chan struct{}),
 			}
 			for _, key := range lease.keys {
-				coordinator.active[key] = lease
+				if coordinator.active[key] == nil {
+					coordinator.active[key] = make(map[uint64]*codeExecutionLease)
+				}
+				coordinator.active[key][lease.id] = lease
 			}
 			coordinator.mu.Unlock()
 			if kind == codeExecutionInteractive {
@@ -305,19 +311,32 @@ func (coordinator *codeExecutionCoordinator) acquireOwned(
 	}
 }
 
-func (coordinator *codeExecutionCoordinator) conflicts(keys []string) []*codeExecutionLease {
+// codeExecutionCoexists 判断两类工作能不能同时占同一个工作区。
+//
+// 终端之间放行：两个终端在同一个目录各干各的本来就是日常操作，
+// 面板在自己的界面里拦一道也挡不住风险——SSH 上去开两个终端跑同一个 CLI
+// 谁也拦不住，拦只会让面板比裸终端更难用。风险由开发者自己掌握。
+//
+// 交付仍然独占：它要把提交合进源仓库，那是一次真正的原子写，
+// 并发写坏的是 Git 对象和分支指针，不是「两个人各改各的文件」。
+func codeExecutionCoexists(existing, incoming string) bool {
+	return existing == codeExecutionInteractive && incoming == codeExecutionInteractive
+}
+
+func (coordinator *codeExecutionCoordinator) conflicts(keys []string, kind string) []*codeExecutionLease {
 	seen := make(map[uint64]struct{})
 	conflicts := make([]*codeExecutionLease, 0)
 	for _, key := range keys {
-		lease := coordinator.active[key]
-		if lease == nil {
-			continue
+		for _, lease := range coordinator.active[key] {
+			if _, exists := seen[lease.id]; exists {
+				continue
+			}
+			if codeExecutionCoexists(lease.kind, kind) {
+				continue
+			}
+			seen[lease.id] = struct{}{}
+			conflicts = append(conflicts, lease)
 		}
-		if _, exists := seen[lease.id]; exists {
-			continue
-		}
-		seen[lease.id] = struct{}{}
-		conflicts = append(conflicts, lease)
 	}
 	return conflicts
 }
@@ -377,15 +396,17 @@ func (coordinator *codeExecutionCoordinator) cancelSessionKindAndWait(ctx contex
 func (coordinator *codeExecutionCoordinator) sessionLeases(sessionID uint, kind string) []*codeExecutionLease {
 	seen := make(map[uint64]struct{})
 	leases := make([]*codeExecutionLease, 0)
-	for _, lease := range coordinator.active {
-		if lease.sessionID != sessionID || (kind != "" && lease.kind != kind) {
-			continue
+	for _, holders := range coordinator.active {
+		for _, lease := range holders {
+			if lease.sessionID != sessionID || (kind != "" && lease.kind != kind) {
+				continue
+			}
+			if _, exists := seen[lease.id]; exists {
+				continue
+			}
+			seen[lease.id] = struct{}{}
+			leases = append(leases, lease)
 		}
-		if _, exists := seen[lease.id]; exists {
-			continue
-		}
-		seen[lease.id] = struct{}{}
-		leases = append(leases, lease)
 	}
 	return leases
 }
@@ -398,8 +419,11 @@ func (lease *codeExecutionLease) Release() {
 		coordinator := lease.coordinator
 		coordinator.mu.Lock()
 		for _, key := range lease.keys {
-			if coordinator.active[key] == lease {
-				delete(coordinator.active, key)
+			if holders := coordinator.active[key]; holders != nil {
+				delete(holders, lease.id)
+				if len(holders) == 0 {
+					delete(coordinator.active, key)
+				}
 			}
 		}
 		slotPool := lease.slotPool
@@ -446,12 +470,14 @@ func ShutdownCodeExecutions(ctx context.Context) error {
 func (coordinator *codeExecutionCoordinator) conflictsMap() []*codeExecutionLease {
 	seen := make(map[uint64]struct{})
 	leases := make([]*codeExecutionLease, 0, len(coordinator.active))
-	for _, lease := range coordinator.active {
-		if _, exists := seen[lease.id]; exists {
-			continue
+	for _, holders := range coordinator.active {
+		for _, lease := range holders {
+			if _, exists := seen[lease.id]; exists {
+				continue
+			}
+			seen[lease.id] = struct{}{}
+			leases = append(leases, lease)
 		}
-		seen[lease.id] = struct{}{}
-		leases = append(leases, lease)
 	}
 	return leases
 }
