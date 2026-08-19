@@ -1,58 +1,108 @@
 <template>
-	<div class="tool-dock-layer">
-		<div ref="panelRef" v-show="activeTool" class="tool-dock-panel" :style="panelStyle">
-			<keep-alive>
-				<SystemDiagnosticPanel v-if="activeTool === 'diagnostic'" @close="activeTool = null" @drag-start="startDrag" />
-				<FloatingNote v-else-if="activeTool === 'note'" @close="activeTool = null" @drag-start="startDrag" />
-			</keep-alive>
-		</div>
+  <div class="tool-dock-layer">
+    <div
+      v-show="activeTool"
+      ref="panelRef"
+      class="tool-dock-panel"
+      :style="panelStyle"
+    >
+      <keep-alive>
+        <SystemDiagnosticPanel
+          v-if="activeTool === 'diagnostic'"
+          @close="activeTool = null"
+          @drag-start="startDrag"
+        />
+        <FloatingNote
+          v-else-if="activeTool === 'note'"
+          @close="activeTool = null"
+          @drag-start="startDrag"
+        />
+      </keep-alive>
+    </div>
 
-		<nav ref="dockRef" class="tool-dock" :style="dockStyle">
-			<n-tooltip placement="left">
-				<template #trigger>
-					<button class="tool-dock__handle" type="button" :aria-label="collapsed ? t('systemDiagnostic.expand') : t('systemDiagnostic.drag')" @pointerdown="startDrag" @click="toggleCollapse">
-						<Icon :name="collapsed ? 'mdi:chevron-right' : 'mdi:drag-vertical'" :size="16" />
-					</button>
-				</template>
-				{{ collapsed ? t("systemDiagnostic.expand") : t("systemDiagnostic.drag") }}
-			</n-tooltip>
-			<template v-if="!collapsed">
-				<n-tooltip v-if="canDiagnose" placement="left">
-					<template #trigger>
-						<button ref="diagnosticButtonRef" class="tool-dock__button is-diagnostic" :class="{ 'is-active': activeTool === 'diagnostic' }" type="button" @click="toggle('diagnostic')">
-							<Icon name="mdi:stethoscope" :size="18" />
-						</button>
-					</template>
-					{{ t("systemDiagnostic.open") }}
-				</n-tooltip>
-				<n-tooltip placement="left">
-					<template #trigger>
-						<button ref="noteButtonRef" class="tool-dock__button is-note" :class="{ 'is-active': activeTool === 'note' }" type="button" @click="toggle('note')">
-							<Icon name="mdi:notebook-edit-outline" :size="17" />
-						</button>
-					</template>
-					{{ t("floatingNote.open") }}
-				</n-tooltip>
-				<n-tooltip v-if="showCodeImmersive" placement="left">
-					<template #trigger>
-						<button
-							class="tool-dock__button is-code"
-							:class="{ 'is-active': codeImmersiveStore.isImmersive }"
-							type="button"
-							:aria-label="codeImmersiveLabel"
-							@click="codeImmersiveStore.toggleImmersive()"
-						>
-							<Icon
-								:name="codeImmersiveStore.isImmersive ? 'fluent:full-screen-minimize-24-regular' : 'fluent:full-screen-maximize-24-regular'"
-								:size="17"
-							/>
-						</button>
-					</template>
-					{{ codeImmersiveLabel }}
-				</n-tooltip>
-			</template>
-		</nav>
-	</div>
+    <nav
+      ref="dockRef"
+      class="tool-dock"
+      :style="dockStyle"
+    >
+      <n-tooltip placement="left">
+        <template #trigger>
+          <button
+            class="tool-dock__handle"
+            type="button"
+            :aria-label="collapsed ? t('systemDiagnostic.expand') : t('systemDiagnostic.drag')"
+            @pointerdown="startDrag"
+            @click="toggleCollapse"
+          >
+            <Icon
+              :name="collapsed ? 'mdi:chevron-right' : 'mdi:drag-vertical'"
+              :size="16"
+            />
+          </button>
+        </template>
+        {{ collapsed ? t("systemDiagnostic.expand") : t("systemDiagnostic.drag") }}
+      </n-tooltip>
+      <template v-if="!collapsed">
+        <n-tooltip
+          v-if="canDiagnose"
+          placement="left"
+        >
+          <template #trigger>
+            <button
+              ref="diagnosticButtonRef"
+              class="tool-dock__button is-diagnostic"
+              :class="{ 'is-active': activeTool === 'diagnostic' }"
+              type="button"
+              @click="toggle('diagnostic')"
+            >
+              <Icon
+                name="mdi:stethoscope"
+                :size="18"
+              />
+            </button>
+          </template>
+          {{ t("systemDiagnostic.open") }}
+        </n-tooltip>
+        <n-tooltip placement="left">
+          <template #trigger>
+            <button
+              ref="noteButtonRef"
+              class="tool-dock__button is-note"
+              :class="{ 'is-active': activeTool === 'note' }"
+              type="button"
+              @click="toggle('note')"
+            >
+              <Icon
+                name="mdi:notebook-edit-outline"
+                :size="17"
+              />
+            </button>
+          </template>
+          {{ t("floatingNote.open") }}
+        </n-tooltip>
+        <n-tooltip
+          v-if="showCodeImmersive"
+          placement="left"
+        >
+          <template #trigger>
+            <button
+              class="tool-dock__button is-code"
+              :class="{ 'is-active': codeImmersiveStore.isImmersive }"
+              type="button"
+              :aria-label="codeImmersiveLabel"
+              @click="codeImmersiveStore.toggleImmersive()"
+            >
+              <Icon
+                :name="codeImmersiveStore.isImmersive ? 'fluent:full-screen-minimize-24-regular' : 'fluent:full-screen-maximize-24-regular'"
+                :size="17"
+              />
+            </button>
+          </template>
+          {{ codeImmersiveLabel }}
+        </n-tooltip>
+      </template>
+    </nav>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -82,8 +132,8 @@ const isDesktop = useMediaQuery("(min-width: 1000px)")
 const { t } = useI18n({
 	messages: {
 		zh: { ...systemDiagnosticMessages.zh, ...floatingNoteMessages.zh, ...codeImmersiveMessages.zh },
-		en: { ...systemDiagnosticMessages.en, ...floatingNoteMessages.en, ...codeImmersiveMessages.en }
-	}
+		en: { ...systemDiagnosticMessages.en, ...floatingNoteMessages.en, ...codeImmersiveMessages.en },
+	},
 })
 const activeTool = ref<DockTool | null>(null)
 const collapsed = ref(false)
@@ -97,19 +147,19 @@ let dragOffsetY = 0
 
 const canDiagnose = computed(() => authStore.role === "ADMIN" || authStore.role === "SUPER")
 const showCodeImmersive = computed(
-	() => (route.name === "Code-Index" || route.name === "Code-Project") && isDesktop.value
+	() => (route.name === "Code-Index" || route.name === "Code-Project") && isDesktop.value,
 )
 const codeImmersiveLabel = computed(() =>
-	t(codeImmersiveStore.isImmersive ? "codeImmersive.exit" : "codeImmersive.enter")
+	t(codeImmersiveStore.isImmersive ? "codeImmersive.exit" : "codeImmersive.enter"),
 )
 const storageKey = computed(() => `gopanel_floating_tool_dock_${authStore.user?.id || "default"}`)
 const dockStyle = computed(() => ({
 	transform: `translate3d(0, ${positionY.value}px, 0)`,
-	width: `${collapsed.value ? COLLAPSED_WIDTH : DOCK_WIDTH}px`
+	width: `${collapsed.value ? COLLAPSED_WIDTH : DOCK_WIDTH}px`,
 }))
 const panelStyle = computed(() => ({
 	top: `${panelTop.value}px`,
-	right: `${collapsed.value ? COLLAPSED_WIDTH + 12 : DOCK_WIDTH + 12}px`
+	right: `${collapsed.value ? COLLAPSED_WIDTH + 12 : DOCK_WIDTH + 12}px`,
 }))
 
 function clampY(value: number) {
@@ -131,7 +181,7 @@ function updatePanelPosition() {
 	const centeredTop = anchorY - panelRef.value.offsetHeight / 2
 	panelTop.value = Math.min(
 		Math.max(SCREEN_GAP, centeredTop),
-		Math.max(SCREEN_GAP, window.innerHeight - panelRef.value.offsetHeight - SCREEN_GAP)
+		Math.max(SCREEN_GAP, window.innerHeight - panelRef.value.offsetHeight - SCREEN_GAP),
 	)
 }
 
@@ -199,7 +249,7 @@ watch(activeTool, async () => {
 watch(
 	() => authStore.user?.id ?? null,
 	userId => codeImmersiveStore.restoreForUser(userId),
-	{ immediate: true }
+	{ immediate: true },
 )
 
 watch(collapsed, (newVal) => {
