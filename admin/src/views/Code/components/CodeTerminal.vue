@@ -43,7 +43,7 @@ const terminalConnection = useCodeTerminalConnection({
 	onTaskCreated: (taskId) => emit("task-created", taskId),
 	onWriteTerminalData: (data, forceBottom) => {
 		const buffer = term.buffer.active
-		const shouldFollow = forceBottom || buffer.viewportY >= buffer.baseY + buffer.rows - 1
+		const shouldFollow = forceBottom || buffer.baseY - buffer.viewportY <= 1
 		term.write(data, () => {
 			if (shouldFollow) term.scrollToBottom()
 			syncScrollAnchor()

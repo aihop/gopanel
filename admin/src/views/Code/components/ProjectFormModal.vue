@@ -151,7 +151,7 @@ import ProjectGitCredentialSelect from "./ProjectGitCredentialSelect.vue"
 import ProjectQualityGateSettings from "./ProjectQualityGateSettings.vue"
 import { codeProjectMessages } from "@/i18n/locales/codeProject"
 
-defineProps<{
+const props = defineProps<{
 	showModal: boolean
 	editingProjectId: number | null
 	form: {
@@ -198,5 +198,9 @@ const deliveryModeOptions = computed(() => [
 
 const toggleRepositoryIncluded = (path: string, included: boolean) => {
 	if (!included && path === props.form.primaryRepository) return
+	const excluded = new Set(props.form.excludedRepositories)
+	if (included) excluded.delete(path)
+	else excluded.add(path)
+	props.form.excludedRepositories = [...excluded]
 }
 </script>
