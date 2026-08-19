@@ -1,9 +1,9 @@
 export const isDeliveredCodeSession = (status: string | undefined) => status?.trim() === "delivered"
 
 /**
- * 终端实例池上限。每个活实例 = 一个 xterm + 一条 WebSocket，
- * 瓶颈在客户端渲染和内存，不在服务端（后端本来就是多订阅者广播）。
- * 超过上限时 KeepAlive 按 LRU 淘汰最久没看的那个，那次才真正断连。
+ * 终端实例池上限。每个缓存实例保留一个 xterm，只有当前可见实例维持 WebSocket；
+ * 隐藏实例释放控制并断开，重新显示时按 sequence 补回输出。
+ * 超过上限时 KeepAlive 按 LRU 淘汰最久没看的 xterm。
  * 工作台和开发面板共用同一个上限，免得两处各设一个数对不上。
  */
 export const CODE_TERMINAL_POOL_SIZE = 8
@@ -26,6 +26,21 @@ export function terminalTakeControlMessage(cols: number, rows: number) {
 	return JSON.stringify({ type: "take_control", data: terminalSizeData(cols, rows) })
 }
 
+export function terminalReleaseControlMessage() {
+	return JSON.stringify({ type: "release_control", data: "" })
+}
+
+export function shouldAutoAcquireTerminalControl(
+	hasControl: boolean,
+	controlReason: unknown,
+	leaseExpiresAt: unknown,
+	now = Date.now(),
+) {
+	if (hasControl || controlReason) return false
+	const expiresAt = Number(leaseExpiresAt)
+	return Number.isFinite(expiresAt) && expiresAt <= now
+}
+
 export function shouldAttachOnlyToTerminal(taskId: number | null, forceStart: boolean) {
 	return taskId !== null && !forceStart
 }
@@ -41,6 +56,33 @@ export function authoritativeTerminalSize(cols: unknown, rows: unknown) {
 	if (!Number.isInteger(authoritativeCols) || !Number.isInteger(authoritativeRows)) return null
 	if (authoritativeCols <= 0 || authoritativeRows <= 0) return null
 	return { cols: authoritativeCols, rows: authoritativeRows }
+}
+
+/** 只取本模块用得到的那几个字段，避免为了纯逻辑去依赖 xterm 的类型。 */
+export interface TerminalViewport {
+	buffer: { active: { baseY: number; viewportY: number } }
+	scrollToBottom: () => void
+}
+
+/**
+ * 视口是不是贴着底部。留 1 行容差：光标所在行会让差值在 0/1 之间来回跳，
+ * 严格相等会把「正在跟看最新输出」误判成「用户翻到历史里去了」。
+ */
+export function isTerminalViewportAtBottom(baseY: number, viewportY: number) {
+	return baseY - viewportY <= 1
+}
+
+/**
+ * 执行一次会重排缓冲区的操作（fit / resize），并保证原本贴底的视口重排完还在底部。
+ *
+ * xterm 重排时按行重新折行，行数一变视口位置就跟着漂——回到会话经常落在历史中间，
+ * 得手动往下滚一大截才能看到当前进度。原本就翻在历史里的不动，那是用户自己选的位置。
+ */
+export function keepingTerminalBottom(terminal: TerminalViewport, reflow: () => void) {
+	const { baseY, viewportY } = terminal.buffer.active
+	const followingBottom = isTerminalViewportAtBottom(baseY, viewportY)
+	reflow()
+	if (followingBottom) terminal.scrollToBottom()
 }
 
 export interface TerminalSocketParams {
@@ -91,9 +133,84 @@ export function terminalInputIntent(
 	return "ignore"
 }
 
+export class CodeTerminalInputFallback {
+	private composing = false
+	private compositionEnding = false
+	private terminalData: string[] = []
+	private timers = new Set<ReturnType<typeof setTimeout>>()
+	private compositionTimer: ReturnType<typeof setTimeout> | null = null
+
+	recordTerminalData(data: string) {
+		this.terminalData.push(data)
+		this.schedule(() => {
+			const index = this.terminalData.indexOf(data)
+			if (index >= 0) this.terminalData.splice(index, 1)
+		}, 50)
+	}
+
+	startComposition() {
+		if (this.compositionTimer) {
+			clearTimeout(this.compositionTimer)
+			this.timers.delete(this.compositionTimer)
+			this.compositionTimer = null
+		}
+		this.composing = true
+		this.compositionEnding = false
+	}
+
+	endComposition() {
+		this.composing = false
+		this.compositionEnding = true
+		if (this.compositionTimer) {
+			clearTimeout(this.compositionTimer)
+			this.timers.delete(this.compositionTimer)
+		}
+		this.compositionTimer = this.schedule(() => {
+			this.compositionEnding = false
+			this.compositionTimer = null
+		}, 0)
+	}
+
+	queueInput(event: Pick<InputEvent, "data" | "inputType" | "isComposing">, send: (data: string) => void) {
+		if (
+			event.inputType !== "insertText" ||
+			!event.data ||
+			event.isComposing ||
+			this.composing ||
+			this.compositionEnding
+		)
+			return
+		const data = event.data
+		this.schedule(() => {
+			const index = this.terminalData.indexOf(data)
+			if (index >= 0) {
+				this.terminalData.splice(index, 1)
+				return
+			}
+			send(data)
+		})
+	}
+
+	dispose() {
+		for (const timer of this.timers) clearTimeout(timer)
+		this.timers.clear()
+		this.compositionTimer = null
+		this.terminalData = []
+	}
+
+	private schedule(callback: () => void, delay = 0) {
+		const timer = setTimeout(() => {
+			this.timers.delete(timer)
+			callback()
+		}, delay)
+		this.timers.add(timer)
+		return timer
+	}
+}
+
 /**
  * 终端实例在 KeepAlive 池里的身份。
- * 相同身份命中缓存 —— 连接不断、滚屏不丢；身份变了才会新建一条终端。
+ * 相同身份命中缓存 —— 滚屏不丢，重新显示时增量重连；身份变了才会新建一条终端。
  * 会话优先于任务：后端的 PTY 是按会话建的，同一会话下的多个任务本来就共用一条终端，
  * 按任务分身份会凭空多出几条连接，还会各自重放一遍历史。
  */

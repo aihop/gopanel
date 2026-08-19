@@ -96,12 +96,42 @@ func TestGetTasksByProjectIDPrioritizesActiveTasks(t *testing.T) {
 	if err := database.Create(&tasks).Error; err != nil {
 		t.Fatal(err)
 	}
-	items, total, err := (&aiTaskRepo{}).GetTasksByProjectID(1, 1, 2, false)
+	items, total, err := (&aiTaskRepo{}).GetTasksByProjectID(1, 1, 2, false, AITaskListOrderMonitor)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if total != 3 || len(items) != 2 || items[0].Status != "pending_approval" || items[1].Status != "running" {
 		t.Fatalf("unexpected task order: total=%d items=%#v", total, items)
+	}
+}
+
+func TestGetTasksByUserIDRecentOrderUsesCreationTime(t *testing.T) {
+	oldDB := global.DB
+	t.Cleanup(func() { global.DB = oldDB })
+	database, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "recent-task-list.db")), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := database.AutoMigrate(&model.AITask{}); err != nil {
+		t.Fatal(err)
+	}
+	global.DB = database
+	now := time.Now()
+	tasks := []*model.AITask{
+		{CreatedAt: now.Add(-time.Hour), UserID: 1, Title: "old running", WorkDir: "/tmp", Status: "running"},
+		{CreatedAt: now, UserID: 1, Title: "new completed", WorkDir: "/tmp", Status: "completed"},
+		{CreatedAt: now.Add(-2 * time.Hour), UserID: 1, Title: "old approval", WorkDir: "/tmp", Status: "pending_approval"},
+	}
+	if err := database.Create(&tasks).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	items, total, err := (&aiTaskRepo{}).GetTasksByUserID(1, 1, 2, false, AITaskListOrderRecent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 3 || len(items) != 2 || items[0].Title != "new completed" || items[1].Title != "old running" {
+		t.Fatalf("unexpected recent task order: total=%d items=%#v", total, items)
 	}
 }
 
@@ -128,7 +158,7 @@ func TestListCodeTasksSeparatesArchived(t *testing.T) {
 	}
 
 	// 默认列表：归档的不出现，而且总数也不能把它算进去，否则前端分页对不上。
-	items, total, err := (&aiTaskRepo{}).GetTasksByUserID(1, 1, 50, false)
+	items, total, err := (&aiTaskRepo{}).GetTasksByUserID(1, 1, 50, false, AITaskListOrderMonitor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +172,7 @@ func TestListCodeTasksSeparatesArchived(t *testing.T) {
 	}
 
 	// 归档列表：只出归档的，这是找回误归档任务的唯一入口。
-	archivedItems, archivedTotal, err := (&aiTaskRepo{}).GetTasksByUserID(1, 1, 50, true)
+	archivedItems, archivedTotal, err := (&aiTaskRepo{}).GetTasksByUserID(1, 1, 50, true, AITaskListOrderMonitor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,7 +181,7 @@ func TestListCodeTasksSeparatesArchived(t *testing.T) {
 	}
 
 	// 归档过滤要和项目过滤叠加，不能互相覆盖。
-	_, projectTotal, err := (&aiTaskRepo{}).GetTasksByProjectAndUserID(1, 1, 1, 50, false)
+	_, projectTotal, err := (&aiTaskRepo{}).GetTasksByProjectAndUserID(1, 1, 1, 50, false, AITaskListOrderMonitor)
 	if err != nil {
 		t.Fatal(err)
 	}

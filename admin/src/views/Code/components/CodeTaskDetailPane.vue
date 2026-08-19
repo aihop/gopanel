@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue"
 import { useI18n } from "vue-i18n"
+import type { CodeSession } from "@/api/interface/code"
 import type { CodeTaskListItem } from "@/api/interface/codeTasks"
 import Icon from "@/components/common/Icon.vue"
 import { codeProjectMessages } from "@/i18n/locales/codeProject"
@@ -10,7 +11,12 @@ import CodeTerminal from "./CodeTerminal.vue"
 import TaskStatusBadge from "./TaskStatusBadge.vue"
 import { CODE_TERMINAL_POOL_SIZE, codeTerminalIdentity } from "./codeTerminalSession"
 
-const props = defineProps<{ task: CodeTaskListItem | null; projectName?: string; showHeader?: boolean }>()
+const props = defineProps<{
+	task: CodeTaskListItem | null
+	session?: CodeSession | null
+	projectName?: string
+	showHeader?: boolean
+}>()
 const emit = defineEmits<{
 	openWorkspace: [task: CodeTaskListItem]
 	openHistory: [task: CodeTaskListItem]
@@ -21,9 +27,11 @@ const { t } = useI18n({ messages: codeProjectMessages })
 // 复用工作台那套全屏（含 Escape 退出），不另写一份。
 const { isWorkspaceFullscreen, fullscreenLabel, toggleWorkspaceFullscreen } = useCodeWorkspaceFullscreen(t)
 
-// 和工作台用同一套身份：在面板里看过的任务，进工作台再看还是同一条终端实例。
+// 和工作台用同一套身份算法，但两边各有各的 KeepAlive 树——key 相同也不共享实例，
+// 面板和工作台各有自己的 xterm 缓存；隐藏实例会释放控制并断开，重新显示时增量接回，
+// 避免两棵 KeepAlive 树同时占着同一个 PTY 的控制权。
 const terminalIdentity = computed(() =>
-	props.task ? codeTerminalIdentity(props.task.sessionId || null, props.task.id) : "",
+	codeTerminalIdentity(props.session?.id || props.task?.sessionId || null, props.task?.id || null),
 )
 </script>
 
@@ -40,7 +48,7 @@ const terminalIdentity = computed(() =>
     :class="isWorkspaceFullscreen ? 'detail-pane--fullscreen' : ''"
   >
     <div
-      v-if="!task"
+      v-if="!task && !session"
       class="flex min-h-0 flex-1 items-center justify-center p-8"
     >
       <n-empty :description="t('code.detailNoSelection')">
@@ -56,25 +64,26 @@ const terminalIdentity = computed(() =>
         class="detail-pane__header flex shrink-0 items-center gap-2 px-4 py-2"
       >
         <Icon
-          v-if="task.agentName === 'terminal'"
+          v-if="task?.agentName === 'terminal'"
           name="mdi:console-line"
           :size="14"
           class="shrink-0 text-slate-400"
         />
         <span
           class="truncate text-sm font-semibold text-[var(--n-text-color)]"
-          :title="task.title"
+          :title="task?.title || session?.title"
         >
-          {{ task.title }}
+          {{ task?.title || session?.title }}
         </span>
         <TaskStatusBadge
+          v-if="task"
           :status="task.status"
           class="shrink-0"
         />
         <CodeProjectIdentity
           v-if="projectName"
           class="shrink-0 text-[11px] text-[var(--n-text-color-3)]"
-          :project-id="task.projectId"
+          :project-id="task?.projectId || session?.projectId || 0"
           :name="projectName"
         />
       </header>
@@ -83,7 +92,7 @@ const terminalIdentity = computed(() =>
         <!-- 对话和全屏都属于当前执行任务，浮在终端上避免占用输出高度。 -->
         <div class="detail-pane__floating absolute right-3 top-2 z-[2] flex items-center gap-1">
           <n-button
-            v-if="task.agentName !== 'terminal'"
+            v-if="task && task.agentName !== 'terminal'"
             quaternary
             circle
             size="tiny"
@@ -116,10 +125,11 @@ const terminalIdentity = computed(() =>
         <KeepAlive :max="CODE_TERMINAL_POOL_SIZE">
           <CodeTerminal
             :key="terminalIdentity"
-            :task-id="task.id"
-            :session-id="task.sessionId || null"
+            :task-id="task?.id || null"
+            :session-id="session?.id || task?.sessionId || null"
+            reserve-top-right-actions
             @task-created="emit('taskCreated', $event)"
-            @new-session="emit('openWorkspace', task)"
+            @new-session="task && emit('openWorkspace', task)"
           />
         </KeepAlive>
       </div>

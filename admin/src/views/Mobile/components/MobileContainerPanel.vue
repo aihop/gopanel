@@ -1,15 +1,21 @@
 <script setup lang="ts">
-import { getMobileContainers, operateMobileContainer, type MobileContainer, type MobileContainerList } from "@/api/modules/mobile"
+import {
+	getMobileContainers,
+	operateMobileContainer,
+	type MobileContainer,
+	type MobileContainerList
+} from "@/api/modules/mobile"
 import Icon from "@/components/common/Icon.vue"
 import { mobileMessages } from "@/i18n/locales/mobile"
 import MobileContainerWebsiteModal from "./MobileContainerWebsiteModal.vue"
-import { computed, onBeforeUnmount, onMounted, ref } from "vue"
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { useDialog, useMessage } from "naive-ui"
 import { useI18n } from "vue-i18n"
 import { useRouter } from "vue-router"
 
 type ContainerOperation = "start" | "stop" | "restart"
 
+const props = defineProps<{ nodeId: number }>()
 const { t } = useI18n({ messages: mobileMessages })
 const dialog = useDialog()
 const message = useMessage()
@@ -32,8 +38,13 @@ const stateOptions = computed(() => [
 const filteredContainers = computed(() => {
 	const search = keyword.value.trim().toLowerCase()
 	return containerList.value.items.filter(container => {
-		const stateMatches = state.value === "all" || (state.value === "running" ? container.state === "running" : container.state !== "running")
-		const keywordMatches = !search || container.name.toLowerCase().includes(search) || container.imageName.toLowerCase().includes(search)
+		const stateMatches =
+			state.value === "all" ||
+			(state.value === "running" ? container.state === "running" : container.state !== "running")
+		const keywordMatches =
+			!search ||
+			container.name.toLowerCase().includes(search) ||
+			container.imageName.toLowerCase().includes(search)
 		return stateMatches && keywordMatches
 	})
 })
@@ -69,7 +80,7 @@ function hasPublishedTCPPort(container: MobileContainer) {
 async function loadContainers(silent = false) {
 	if (!silent) loading.value = true
 	try {
-		containerList.value = await getMobileContainers()
+		containerList.value = await getMobileContainers(props.nodeId)
 		loadError.value = ""
 	} catch (error) {
 		loadError.value = error instanceof Error ? error.message : t("mobile.containerLoadFailed")
@@ -96,11 +107,11 @@ function confirmOperation(container: MobileContainer, operation: ContainerOperat
 async function runOperation(container: MobileContainer, operation: ContainerOperation) {
 	operationKey.value = `${container.containerID}:${operation}`
 	try {
-		await operateMobileContainer(container, operation)
+		await operateMobileContainer(container, operation, props.nodeId)
 		message.success(t("mobile.containerOperationSuccess", { operation: operationLabel(operation) }))
 		await loadContainers(true)
 	} catch (error) {
-		void 0
+		message.error(error instanceof Error ? error.message : t("mobile.containerOperationFailed"))
 	} finally {
 		operationKey.value = ""
 	}
@@ -114,6 +125,14 @@ onMounted(async () => {
 onBeforeUnmount(() => {
 	if (refreshTimer) clearInterval(refreshTimer)
 })
+
+watch(
+	() => props.nodeId,
+	() => {
+		containerList.value = { items: [], total: 0, running: 0, stopped: 0 }
+		void loadContainers()
+	}
+)
 </script>
 
 <template>
@@ -138,7 +157,14 @@ onBeforeUnmount(() => {
 				<template #prefix><Icon name="mdi:magnify" /></template>
 			</n-input>
 			<n-select v-model:value="state" style="width: 112px" :options="stateOptions" />
-			<n-button circle secondary :loading="loading" :title="t('mobile.refreshContainers')" :aria-label="t('mobile.refreshContainers')" @click="loadContainers()">
+			<n-button
+				circle
+				secondary
+				:loading="loading"
+				:title="t('mobile.refreshContainers')"
+				:aria-label="t('mobile.refreshContainers')"
+				@click="loadContainers()"
+			>
 				<template #icon><Icon name="mdi:refresh" /></template>
 			</n-button>
 		</div>
@@ -151,9 +177,17 @@ onBeforeUnmount(() => {
 		</n-alert>
 
 		<n-spin :show="loading">
-			<n-empty v-if="!filteredContainers.length" class="rounded-2xl bg-white py-16" :description="containerList.total ? t('mobile.noMatchingContainers') : t('mobile.noContainers')" />
+			<n-empty
+				v-if="!filteredContainers.length"
+				class="rounded-2xl bg-white py-16"
+				:description="containerList.total ? t('mobile.noMatchingContainers') : t('mobile.noContainers')"
+			/>
 			<div v-else class="space-y-3">
-				<article v-for="container in filteredContainers" :key="container.containerID" class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+				<article
+					v-for="container in filteredContainers"
+					:key="container.containerID"
+					class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+				>
 					<div class="flex items-start justify-between gap-3">
 						<div class="min-w-0 flex-1">
 							<div class="truncate font-semibold">{{ container.name }}</div>
@@ -172,7 +206,9 @@ onBeforeUnmount(() => {
 							<span class="text-slate-400">{{ t("mobile.memory") }}</span>
 							<span class="ml-2 font-medium">{{ formatPercent(container.memoryPercent) }}</span>
 						</div>
-						<div class="col-span-2 truncate text-slate-500">{{ formatBytes(container.memoryUsage) }} / {{ formatBytes(container.memoryLimit) }}</div>
+						<div class="col-span-2 truncate text-slate-500">
+							{{ formatBytes(container.memoryUsage) }} / {{ formatBytes(container.memoryLimit) }}
+						</div>
 						<div v-if="container.runTime" class="col-span-2 truncate text-slate-500">
 							{{ container.runTime }}
 						</div>
@@ -187,19 +223,42 @@ onBeforeUnmount(() => {
 						>
 							{{ t("container.bindWebsite") }}
 						</n-button>
-						<n-button v-if="container.state !== 'running'" size="small" type="primary" secondary :loading="operationKey === `${container.containerID}:start`" :disabled="Boolean(operationKey)" @click="confirmOperation(container, 'start')">
+						<n-button
+							v-if="container.state !== 'running'"
+							size="small"
+							type="primary"
+							secondary
+							:loading="operationKey === `${container.containerID}:start`"
+							:disabled="Boolean(operationKey)"
+							@click="confirmOperation(container, 'start')"
+						>
 							{{ t("mobile.containerOperation_start") }}
 						</n-button>
-						<n-button v-if="container.state === 'running'" size="small" secondary :loading="operationKey === `${container.containerID}:restart`" :disabled="Boolean(operationKey)" @click="confirmOperation(container, 'restart')">
+						<n-button
+							v-if="container.state === 'running'"
+							size="small"
+							secondary
+							:loading="operationKey === `${container.containerID}:restart`"
+							:disabled="Boolean(operationKey)"
+							@click="confirmOperation(container, 'restart')"
+						>
 							{{ t("mobile.containerOperation_restart") }}
 						</n-button>
-						<n-button v-if="container.state === 'running'" size="small" type="warning" secondary :loading="operationKey === `${container.containerID}:stop`" :disabled="Boolean(operationKey)" @click="confirmOperation(container, 'stop')">
+						<n-button
+							v-if="container.state === 'running'"
+							size="small"
+							type="warning"
+							secondary
+							:loading="operationKey === `${container.containerID}:stop`"
+							:disabled="Boolean(operationKey)"
+							@click="confirmOperation(container, 'stop')"
+						>
 							{{ t("mobile.containerOperation_stop") }}
 						</n-button>
 					</div>
 				</article>
 			</div>
 		</n-spin>
-		<MobileContainerWebsiteModal ref="websiteModalRef" @success="loadContainers(true)" />
+		<MobileContainerWebsiteModal ref="websiteModalRef" :node-id="nodeId" @success="loadContainers(true)" />
 	</div>
 </template>

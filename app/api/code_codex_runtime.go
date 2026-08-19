@@ -50,7 +50,7 @@ type codexRuntimeEvent struct {
 		Model          string          `json:"model"`
 		ApprovalPolicy string          `json:"approval_policy"`
 		Name           string          `json:"name"`
-		Input          string          `json:"input"`
+		Input          json.RawMessage `json:"input"`
 		CallID         string          `json:"call_id"`
 		Message        json.RawMessage `json:"message"`
 		Content        json.RawMessage `json:"content"`
@@ -211,7 +211,7 @@ func parseCodexRuntime(reader io.Reader, now time.Time) (*codexRuntimeState, err
 		case "response_item":
 			activeTurn = !turnClosed
 			trackCodexCall(event, eventAt, pendingCalls)
-			if progress := parseCodexPlanProgress(event.Payload.Name, event.Payload.Input, eventAt); progress != nil {
+			if progress := parseCodexPlanProgress(event.Payload.Name, codexCallInput(event.Payload.Input), eventAt); progress != nil {
 				state.Progress = progress
 			}
 			if event.Payload.Type == "message" && event.Payload.Role == "assistant" {
@@ -318,6 +318,14 @@ func codexRawString(value json.RawMessage) string {
 	var text string
 	_ = json.Unmarshal(value, &text)
 	return buildTimelineContent(text)
+}
+
+func codexCallInput(value json.RawMessage) string {
+	var input string
+	if json.Unmarshal(value, &input) == nil {
+		return input
+	}
+	return strings.TrimSpace(string(value))
 }
 
 func codexContentText(value json.RawMessage) string {

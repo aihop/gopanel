@@ -2,7 +2,7 @@ import http from "@/api"
 import type { ResultData } from "@/api/interface"
 import type { NodeSummary, NodeWarning } from "./node"
 import type { MobileOverview } from "../interface/mobileControlPlane"
-import { mobileHttp, mobileRequest } from "./mobileClient"
+import { mobileHttp, mobileNodePath, mobileRequest } from "./mobileClient"
 export type { MobileOverview } from "../interface/mobileControlPlane"
 
 // Code 项目 / 会话 / 交付接口拆到 mobileCode.ts，这里重新导出以保持导入路径不变。
@@ -35,6 +35,7 @@ export interface MobileNode {
 	lastSeenAt?: string
 	summary: NodeSummary
 	warnings: NodeWarning[]
+	hasControlToken: boolean
 }
 
 export interface MobileContainer {
@@ -134,9 +135,12 @@ export interface MobileUpdateInfo {
 
 export function issueMobilePairing(deviceTtlDays: number) {
 	return managementRequest(
-		http.post<{ code: string; expiresAt: string; deviceTtlDays: number; entrancePath: string }>("/mobile/management/pair/issue", {
-			deviceTtlDays
-		})
+		http.post<{ code: string; expiresAt: string; deviceTtlDays: number; entrancePath: string }>(
+			"/mobile/management/pair/issue",
+			{
+				deviceTtlDays
+			}
+		)
 	)
 }
 
@@ -194,80 +198,92 @@ export function startMobileSystemUpgrade(currentVersion: string, targetVersion: 
 	)
 }
 
-export function getMobileContainers() {
-	return mobileRequest(mobileHttp.get<ResultData<MobileContainerList>>("/mobile/app/containers")).then(result => ({
-		...result,
-		items: result.items || []
-	}))
+export function getMobileContainers(nodeId = 0) {
+	return mobileRequest(mobileHttp.get<ResultData<MobileContainerList>>(mobileNodePath(nodeId, "/containers"))).then(
+		result => ({
+			...result,
+			items: result.items || []
+		})
+	)
 }
 
-export function operateMobileContainer(container: MobileContainer, operation: "start" | "stop" | "restart") {
+export function operateMobileContainer(
+	container: MobileContainer,
+	operation: "start" | "stop" | "restart",
+	nodeId = 0
+) {
 	return mobileRequest(
-		mobileHttp.post<ResultData<void>>("/mobile/app/containers/operate", {
+		mobileHttp.post<ResultData<void>>(mobileNodePath(nodeId, "/containers/operate"), {
 			containerID: container.containerID,
 			operation
 		})
 	)
 }
 
-export function getMobileContainerPublishOptions(container: MobileContainer) {
+export function getMobileContainerPublishOptions(container: MobileContainer, nodeId = 0) {
 	return mobileRequest(
 		mobileHttp.get<ResultData<MobileContainerPublishOptions>>(
-			`/mobile/app/containers/${encodeURIComponent(container.containerID)}/publish-options`,
-			{ params: { runtimeHost: container.runtimeHost || "" } },
-		),
+			mobileNodePath(nodeId, `/containers/${encodeURIComponent(container.containerID)}/publish-options`),
+			{ params: { runtimeHost: container.runtimeHost || "" } }
+		)
 	)
 }
 
-export function publishMobileContainerWebsite(data: {
-	containerId: string
-	runtimeHost: string
-	websiteId: number
-	hostPort: number
-	scheme: "http" | "https"
-}) {
+export function publishMobileContainerWebsite(
+	data: {
+		containerId: string
+		runtimeHost: string
+		websiteId: number
+		hostPort: number
+		scheme: "http" | "https"
+	},
+	nodeId = 0
+) {
+	return mobileRequest(mobileHttp.post<ResultData<void>>(mobileNodePath(nodeId, "/containers/publish-website"), data))
+}
+
+function getMobileResourceList<T>(resource: string, nodeId = 0) {
 	return mobileRequest(
-		mobileHttp.post<ResultData<void>>("/mobile/app/containers/publish-website", data),
-	)
+		mobileHttp.get<ResultData<MobileResourceList<T>>>(mobileNodePath(nodeId, `/resources/${resource}`))
+	).then(result => ({ ...result, items: result.items || [] }))
 }
 
-function getMobileResourceList<T>(resource: string) {
-	return mobileRequest(mobileHttp.get<ResultData<MobileResourceList<T>>>(`/mobile/app/resources/${resource}`)).then(
-		result => ({ ...result, items: result.items || [] })
-	)
+export function getMobileWebsites(nodeId = 0) {
+	return getMobileResourceList<MobileWebsite>("websites", nodeId)
 }
 
-export function getMobileWebsites() {
-	return getMobileResourceList<MobileWebsite>("websites")
-}
-
-export function updateMobileWebsiteDomainBindings(data: {
-	websiteId: number
-	primaryDomain: string
-	otherDomains: string
-	redirectDomainsToPrimary: boolean
-}) {
+export function updateMobileWebsiteDomainBindings(
+	data: {
+		websiteId: number
+		primaryDomain: string
+		otherDomains: string
+		redirectDomainsToPrimary: boolean
+	},
+	nodeId = 0
+) {
 	return mobileRequest(
-		mobileHttp.post<ResultData<void>>("/mobile/app/resources/websites/domains", { ...data, confirm: true }),
+		mobileHttp.post<ResultData<void>>(mobileNodePath(nodeId, "/resources/websites/domains"), {
+			...data,
+			confirm: true
+		})
 	)
 }
 
-export function getMobileDatabases() {
-	return getMobileResourceList<MobileDatabase>("databases")
+export function getMobileDatabases(nodeId = 0) {
+	return getMobileResourceList<MobileDatabase>("databases", nodeId)
 }
 
-export function getMobileSSLs() {
-	return getMobileResourceList<MobileSSL>("ssl")
+export function getMobileSSLs(nodeId = 0) {
+	return getMobileResourceList<MobileSSL>("ssl", nodeId)
 }
 
-export function getMobileApps() {
-	return getMobileResourceList<MobileApp>("apps")
+export function getMobileApps(nodeId = 0) {
+	return getMobileResourceList<MobileApp>("apps", nodeId)
 }
 
 export function getMobileNodes() {
 	return mobileRequest(mobileHttp.get<ResultData<MobileNode[]>>("/mobile/app/nodes"))
 }
-
 
 export function logoutMobileDevice() {
 	return mobileRequest(mobileHttp.post<ResultData<void>>("/mobile/app/logout", {}))

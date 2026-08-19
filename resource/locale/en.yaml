@@ -25,6 +25,8 @@ ErrCodeProviderAccountDisabled: "The selected AI account does not exist or is di
 ErrCodeProviderAccountKeyMissing: "The selected AI account does not have a usable API key"
 ErrCodeProviderProtocolMismatch: "The selected AI account protocol is incompatible with this development terminal"
 ErrAIProviderProtocolUnsupported: "Unsupported AI API protocol"
+ErrMobileNodeProxyDenied: "The mobile console cannot proxy this node endpoint"
+ErrMobileNodeProxyUnauthorized: "The node proxy cannot access this mobile endpoint"
 ErrPipelineExpectedCommitInvalid: "expectedCommit must be a full 40 or 64 character commit SHA"
 ErrPipelineExpectedCommitRepo: "A source repository is required to build a locked commit"
 ErrPipelineSourceInvalid: "The pipeline code source is not supported"

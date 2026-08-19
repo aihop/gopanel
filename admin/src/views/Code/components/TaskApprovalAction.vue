@@ -8,7 +8,7 @@ import { useI18n } from "vue-i18n"
 import { codeWorkspaceMessages } from "../codeWorkspaceMessages"
 import TaskStatusBadge from "./TaskStatusBadge.vue"
 
-const props = defineProps<{ task: AITask }>()
+const props = defineProps<{ task: AITask; compact?: boolean }>()
 const emit = defineEmits<{ approved: [] }>()
 const { t } = useI18n({ messages: codeWorkspaceMessages })
 const message = useMessage()
@@ -36,12 +36,13 @@ async function approve() {
 	if (!approval.value || approving.value) return
 	approving.value = true
 	try {
-		await approveCodeInstruction(approval.value.id)
+		const response = await approveCodeInstruction(approval.value.id)
+		if (response.code !== 0) throw new Error(response.message)
 		approval.value = null
 		message.success(t("code.quickContinueSuccess"))
 		emit("approved")
 	} catch (error) {
-		void 0
+		message.error(error instanceof Error && error.message ? error.message : t("code.quickContinueFailed"))
 	} finally {
 		approving.value = false
 	}
@@ -52,7 +53,7 @@ watch(() => `${props.task.status}:${props.task.sessionId}:${props.task.id}`, () 
 
 <template>
 	<div class="flex items-center gap-1.5">
-		<TaskStatusBadge :status="task.status" />
+		<TaskStatusBadge :status="task.status" :compact="compact" />
 		<n-tooltip v-if="approval" placement="top" style="max-width: min(420px, 80vw)">
 			<template #trigger>
 				<n-button text type="warning" size="tiny" :loading="approving" @click.stop="approve">

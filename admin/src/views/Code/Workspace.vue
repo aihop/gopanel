@@ -247,6 +247,9 @@ import { useCodeImmersiveMode } from "./useCodeImmersiveMode"
 import { computed, nextTick, watch } from "vue"
 import { useRoute, useRouter } from "vue-router"
 
+// App.vue 的 keep-alive 按组件名筛选，改名要同步改那边的 persistentViewNames。
+defineOptions({ name: "CodeWorkspaceView" })
+
 const props = withDefaults(defineProps<{ projectId?: number; embedded?: boolean }>(), { embedded: false })
 const emit = defineEmits<{ close: [] }>()
 const {
@@ -272,6 +275,7 @@ const {
 	goTaskHome,
 	handleProjectTerminalClosed,
 	handleSessionCreated,
+	loadRouteSession,
 	handleTaskAction,
 	handleTaskCreated,
 	hasWorkspaceContext,
@@ -309,19 +313,29 @@ const fullscreenLabel = computed(() =>
 	t(isWorkspaceFullscreen.value ? "code.exitWorkspaceFullscreen" : "code.enterWorkspaceFullscreen")
 )
 
-// 从开发面板点任务进来时带 ?taskId=，任务列表回来后自动定位过去。
-// 只认第一批任务：之后用户在侧栏切走了，不该被地址栏里的旧参数拽回来。
-// 快捷面板和主页面共用这个路由，所以内嵌模式不参与。
+// 工作台会被 KeepAlive：离开后从开发面板再次进入同一项目，组件不会重新挂载，
+// 所以任务和会话入口都必须持续监听 query，不能只在首次进入时读取一次。
 const route = useRoute()
 const router = useRouter()
-let pendingTaskId = props.embedded ? 0 : Number(route.query.taskId) || 0
 watch(
-	aiTasks,
-	list => {
-		if (!pendingTaskId || !list.length) return
-		const target = list.find(task => task.id === pendingTaskId)
-		pendingTaskId = 0
+	[() => route.query.taskId, aiTasks],
+	([taskIdValue, list]) => {
+		if (props.embedded) return
+		const taskId = Number(taskIdValue) || 0
+		if (!taskId || taskId === currentTaskId.value || !list.length) return
+		const target = list.find(task => task.id === taskId)
 		if (target) selectTask(target)
+	},
+	{ immediate: true },
+)
+
+watch(
+	[currentProjectId, () => route.query.sessionId],
+	([, sessionIdValue]) => {
+		const sessionId = Number(sessionIdValue) || 0
+		if (props.embedded || route.query.taskId || !sessionId) return
+		if (sessionId === currentSessionId.value && currentTaskId.value === null) return
+		void loadRouteSession()
 	},
 	{ immediate: true },
 )

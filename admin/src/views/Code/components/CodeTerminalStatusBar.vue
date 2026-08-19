@@ -1,8 +1,11 @@
 <script setup lang="ts">
+import { useMediaQuery } from "@vueuse/core"
 import { computed } from "vue"
 import { useI18n } from "vue-i18n"
 import type { CodexRuntimeState } from "@/api/interface/code"
+import Icon from "@/components/common/Icon.vue"
 import { codeTerminalMessages } from "../codeTerminalMessages"
+import CodeTerminalProgressSummary from "./CodeTerminalProgressSummary.vue"
 
 const props = defineProps<{
 	runtimeState: CodexRuntimeState | null
@@ -12,9 +15,11 @@ const props = defineProps<{
 	reconnecting: boolean
 	connectionFailed: boolean
 	terminalInactive: boolean
+	reserveTopRightActions?: boolean
 }>()
 defineEmits<{ reconnect: []; resume: []; takeControl: [] }>()
 const { t } = useI18n({ messages: codeTerminalMessages })
+const isDesktop = useMediaQuery("(min-width: 768px)")
 
 const runtimeTagType = computed(() => {
 	if (props.runtimeState?.responseState === "failed") return "error"
@@ -24,6 +29,13 @@ const runtimeTagType = computed(() => {
 })
 
 const formatTokens = (count: number) => new Intl.NumberFormat().format(count)
+const cacheHitRate = computed(() => {
+	if (!props.runtimeState?.inputTokens) return null
+	return new Intl.NumberFormat(undefined, {
+		style: "percent",
+		maximumFractionDigits: 1,
+	}).format(Math.min(props.runtimeState.cachedInputTokens / props.runtimeState.inputTokens, 1))
+})
 </script>
 
 <template>
@@ -34,8 +46,9 @@ const formatTokens = (count: number) => new Intl.NumberFormat().format(count)
 	-->
 	<div
 		class="flex min-h-12 items-center justify-between gap-3 border-b border-slate-700 bg-slate-900 px-4 py-2 text-slate-300"
+		:style="{ paddingRight: reserveTopRightActions ? '5rem' : undefined }"
 	>
-		<div class="flex min-w-0 items-center gap-3">
+		<div class="flex min-w-0 flex-1 items-center gap-3 overflow-hidden">
 			<n-tag v-if="runtimeState" :type="runtimeTagType" size="small" round :bordered="false">
 				{{ t(`code.codexState_${runtimeState.responseState}`) }}
 			</n-tag>
@@ -45,6 +58,10 @@ const formatTokens = (count: number) => new Intl.NumberFormat().format(count)
 			<span v-if="runtimeState?.awaitingApproval" class="truncate text-xs font-medium text-amber-300">
 				{{ t("code.codexApprovalHint") }}
 			</span>
+			<CodeTerminalProgressSummary
+				v-else-if="runtimeState?.progress && (runtimeState.progress.totalSteps || runtimeState.progress.changedFiles)"
+				:progress="runtimeState.progress"
+			/>
 			<span v-else-if="runtimeState?.lastAssistantPreview" class="truncate text-xs text-slate-400">
 				{{ runtimeState.lastAssistantPreview }}
 			</span>
@@ -72,12 +89,58 @@ const formatTokens = (count: number) => new Intl.NumberFormat().format(count)
 			</n-button>
 			<template v-if="runtimeState">
 				<span v-if="runtimeState.model">{{ runtimeState.model }}</span>
-				<span v-if="runtimeState.totalTokens">
-					{{ t("code.codexTokenUsage", { count: formatTokens(runtimeState.totalTokens) }) }}
-				</span>
-				<span v-if="runtimeState.cachedInputTokens" class="hidden md:inline">
-					{{ t("code.codexCachedTokens", { count: formatTokens(runtimeState.cachedInputTokens) }) }}
-				</span>
+				<n-popover
+					v-if="runtimeState.totalTokens"
+					:trigger="isDesktop ? 'hover' : 'click'"
+					placement="bottom-end"
+					style="width: 280px"
+				>
+					<template #trigger>
+						<n-button
+							quaternary
+							circle
+							size="tiny"
+							:title="t('code.tokenUsageDetails')"
+							:aria-label="t('code.tokenUsageDetails')"
+						>
+							<template #icon>
+								<Icon name="mdi:chart-donut-variant" :size="16" />
+							</template>
+						</n-button>
+					</template>
+					<div class="space-y-3 p-1">
+						<div class="flex items-center justify-between gap-4">
+							<span class="text-sm font-medium text-[var(--n-text-color)]">
+								{{ t("code.tokenUsageDetails") }}
+							</span>
+							<span class="text-sm font-semibold text-[var(--n-text-color)]">
+								{{ formatTokens(runtimeState.totalTokens) }}
+							</span>
+						</div>
+						<div class="grid grid-cols-2 gap-x-5 gap-y-2 text-xs">
+							<span class="text-[var(--n-text-color-3)]">{{ t("code.inputTokens") }}</span>
+							<span class="text-right text-[var(--n-text-color-2)]">
+								{{ formatTokens(runtimeState.inputTokens) }}
+							</span>
+							<span class="text-[var(--n-text-color-3)]">{{ t("code.outputTokens") }}</span>
+							<span class="text-right text-[var(--n-text-color-2)]">
+								{{ formatTokens(runtimeState.outputTokens) }}
+							</span>
+							<span class="text-[var(--n-text-color-3)]">{{ t("code.cachedInputTokens") }}</span>
+							<span class="text-right text-[var(--n-text-color-2)]">
+								{{ formatTokens(runtimeState.cachedInputTokens) }}
+							</span>
+							<span class="text-[var(--n-text-color-3)]">{{ t("code.reasoningTokens") }}</span>
+							<span class="text-right text-[var(--n-text-color-2)]">
+								{{ formatTokens(runtimeState.reasoningTokens) }}
+							</span>
+							<template v-if="cacheHitRate">
+								<span class="text-[var(--n-text-color-3)]">{{ t("code.cacheHitRate") }}</span>
+								<span class="text-right text-[var(--n-text-color-2)]">{{ cacheHitRate }}</span>
+							</template>
+						</div>
+					</div>
+				</n-popover>
 			</template>
 		</div>
 	</div>

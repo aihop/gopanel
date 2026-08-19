@@ -254,15 +254,16 @@ func toMobileNodeRes(node model.Node, isLocal bool) dto.MobileNodeRes {
 		summary = model.NodeSummary{}
 	}
 	return dto.MobileNodeRes{
-		ID:         node.ID,
-		Name:       node.Name,
-		IsLocal:    isLocal,
-		IsProd:     node.IsProd,
-		Status:     node.Status,
-		Version:    node.Version,
-		LastSeenAt: lastSeenAt,
-		Summary:    summary,
-		Warnings:   buildNodeWarnings(node),
+		ID:              node.ID,
+		Name:            node.Name,
+		IsLocal:         isLocal,
+		IsProd:          node.IsProd,
+		Status:          node.Status,
+		Version:         node.Version,
+		LastSeenAt:      lastSeenAt,
+		Summary:         summary,
+		Warnings:        buildNodeWarnings(node),
+		HasControlToken: isLocal || strings.TrimSpace(node.ControlToken) != "",
 	}
 }
 

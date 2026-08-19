@@ -7,7 +7,7 @@ import {
 	type MobileApp,
 	type MobileDatabase,
 	type MobileSSL,
-	type MobileWebsite,
+	type MobileWebsite
 } from "@/api/modules/mobile"
 import Icon from "@/components/common/Icon.vue"
 import { mobileResourceMessages } from "@/i18n/locales/mobileResources"
@@ -21,6 +21,7 @@ import MobileWebsiteDomainEditor from "./MobileWebsiteDomainEditor.vue"
 type ResourceTab = "websites" | "databases" | "ssl" | "containers" | "apps"
 type ResourceItem = MobileWebsite | MobileDatabase | MobileSSL | MobileApp
 
+const props = defineProps<{ nodeId: number; nodeAvailable: boolean }>()
 const { locale, t } = useI18n({ messages: mobileResourceMessages })
 const message = useMessage()
 const router = useRouter()
@@ -65,7 +66,7 @@ const filteredItems = computed(() => {
 	const search = keyword.value.trim().toLowerCase()
 	if (!search) return activeItems.value
 	return activeItems.value.filter(item =>
-		Object.values(item).some(value => String(value).toLowerCase().includes(search)),
+		Object.values(item).some(value => String(value).toLowerCase().includes(search))
 	)
 })
 
@@ -113,19 +114,19 @@ async function loadActiveResource(silent = false) {
 	try {
 		switch (activeTab.value) {
 			case "websites":
-				websites.value = (await getMobileWebsites()).items
+				websites.value = (await getMobileWebsites(props.nodeId)).items
 				break
 			case "databases": {
-				const result = await getMobileDatabases()
+				const result = await getMobileDatabases(props.nodeId)
 				databases.value = result.items
 				databaseWarningCount.value = result.warningCount || 0
 				break
 			}
 			case "ssl":
-				certificates.value = (await getMobileSSLs()).items
+				certificates.value = (await getMobileSSLs(props.nodeId)).items
 				break
 			case "apps":
-				apps.value = (await getMobileApps()).items
+				apps.value = (await getMobileApps(props.nodeId)).items
 				break
 		}
 		if (!loadedTabs.value.includes(activeTab.value)) loadedTabs.value.push(activeTab.value)
@@ -153,6 +154,18 @@ watch(activeTab, tab => {
 	loadError.value = ""
 	if (!loadedTabs.value.includes(tab)) void loadActiveResource()
 })
+
+watch(
+	() => props.nodeId,
+	() => {
+		loadedTabs.value = ["containers"]
+		websites.value = []
+		databases.value = []
+		certificates.value = []
+		apps.value = []
+		if (activeTab.value !== "containers" && props.nodeAvailable) void loadActiveResource()
+	}
+)
 </script>
 
 <template>
@@ -160,6 +173,7 @@ watch(activeTab, tab => {
 		<MobileWebsiteDomainEditor
 			v-model:show="showWebsiteDomains"
 			:website="selectedWebsite"
+			:node-id="nodeId"
 			@saved="handleWebsiteDomainsSaved"
 		/>
 		<div class="overflow-x-auto rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
@@ -178,7 +192,10 @@ watch(activeTab, tab => {
 			</div>
 		</div>
 
-		<MobileContainerPanel v-if="activeTab === 'containers'" />
+		<n-alert v-if="!nodeAvailable" type="warning" :title="t('mobile.remoteNodeControlUnavailable')">
+			{{ t("mobile.remoteNodeControlHint") }}
+		</n-alert>
+		<MobileContainerPanel v-else-if="activeTab === 'containers'" :node-id="nodeId" />
 
 		<template v-else>
 			<div class="flex gap-2">

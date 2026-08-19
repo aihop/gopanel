@@ -26,21 +26,30 @@ export function isDeliveringTask(task: CodeTaskListItem) {
 	return task.status === "delivering" || ACTIVE_DELIVERY_STATUSES.includes(task.summary.deliveryStatus || "")
 }
 
-export function codeDashboardFocusStatus(task: CodeTaskListItem) {
+export function codeDashboardRecentStatus(task: CodeTaskListItem) {
 	if (task.status === "pending_approval") return "pending_approval"
 	if (isDeliveringTask(task)) return "delivering"
 	return task.status
 }
 
-export function focusCodeDashboardTasks(tasks: CodeTaskListItem[]) {
-	const priority = { pending_approval: 0, running: 1, delivering: 2, queued: 3 }
-	return tasks
-		.filter(task => ["pending_approval", "running", "queued", "delivering"].includes(codeDashboardFocusStatus(task)))
+export function recentCodeDashboardTasks(tasks: CodeTaskListItem[], limit = 7) {
+	return [...tasks]
 		.sort((left, right) => {
-			const statusDifference = priority[codeDashboardFocusStatus(left) as keyof typeof priority]
-				- priority[codeDashboardFocusStatus(right) as keyof typeof priority]
-			return statusDifference || right.id - left.id
+			const timeDifference = new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
+			return timeDifference || right.id - left.id
 		})
+		.slice(0, limit)
+}
+
+export function mergeCodeDashboardTasks(primaryTasks: CodeTaskListItem[], supplementalTasks: CodeTaskListItem[]) {
+	const mergedTasks = new Map(supplementalTasks.map(task => [task.id, task]))
+	for (const task of primaryTasks) mergedTasks.set(task.id, task)
+	return [...mergedTasks.values()]
+}
+
+export function excludeRecentCodeDashboardTasks(tasks: CodeTaskListItem[], recentTasks: CodeTaskListItem[]) {
+	const recentTaskIds = new Set(recentTasks.map(task => task.id))
+	return sortCodeTasksStably(tasks).filter(task => !recentTaskIds.has(task.id))
 }
 
 /**

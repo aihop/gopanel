@@ -3,10 +3,12 @@ import type { CodeTaskListItem } from "@/api/interface/codeTasks"
 import type { CodeTaskSummary } from "@/api/interface/codeTasks"
 import {
 	codeTaskBucket,
-	codeDashboardFocusStatus,
-	focusCodeDashboardTasks,
+	codeDashboardRecentStatus,
+	excludeRecentCodeDashboardTasks,
 	groupCodeDashboardTasks,
+	mergeCodeDashboardTasks,
 	isDeliveringTask,
+	recentCodeDashboardTasks,
 	sortCodeTasksStably,
 } from "./codeDashboardBuckets"
 
@@ -113,21 +115,36 @@ describe("groupCodeDashboardTasks", () => {
 	})
 })
 
-describe("focusCodeDashboardTasks", () => {
-	it("只保留仍需关注的执行中任务，并按待审批、运行、交付、排队排序", () => {
-		const tasks = [
-			task({ id: 1, status: "completed" }),
-			task({ id: 2, status: "queued" }),
-			task({ id: 3, status: "completed", summary: summary({ deliveryStatus: "running" }) }),
-			task({ id: 4, status: "running" }),
-			task({ id: 5, status: "pending_approval" }),
-		]
-		expect(focusCodeDashboardTasks(tasks).map(item => item.id)).toEqual([5, 4, 3, 2])
+describe("recentCodeDashboardTasks", () => {
+	it("按创建时间倒序保留最近七条，不按状态过滤", () => {
+		const tasks = Array.from({ length: 9 }, (_, index) => task({
+			id: 20 - index,
+			createdAt: `2026-08-${String(index + 1).padStart(2, "0")}T09:00:00`,
+			status: "completed",
+		}))
+		tasks[0].status = "failed"
+		expect(recentCodeDashboardTasks(tasks).map(item => item.id)).toEqual([12, 13, 14, 15, 16, 17, 18])
 	})
 
 	it("交付中的已完成任务显示为交付中，而不是已完成", () => {
 		const delivering = task({ status: "completed", summary: summary({ deliveryStatus: "queued" }) })
-		expect(codeDashboardFocusStatus(delivering)).toBe("delivering")
+		expect(codeDashboardRecentStatus(delivering)).toBe("delivering")
+	})
+
+	it("项目手风琴排除已经显示在最近任务里的项目", () => {
+		const tasks = Array.from({ length: 9 }, (_, index) => task({ id: index + 1 }))
+		const recent = recentCodeDashboardTasks(tasks)
+		expect(excludeRecentCodeDashboardTasks(tasks, recent).map(item => item.id)).toEqual([2, 1])
+	})
+})
+
+describe("mergeCodeDashboardTasks", () => {
+	it("合并监控与最近任务并按 id 去重，优先保留带 Git 汇总的监控数据", () => {
+		const recent = [task({ id: 3 }), task({ id: 2, summary: summary({ branch: "recent" }) })]
+		const monitored = [task({ id: 2, summary: summary({ branch: "monitored" }) }), task({ id: 1 })]
+		const merged = mergeCodeDashboardTasks(monitored, recent)
+		expect(merged.map(item => item.id)).toEqual([3, 2, 1])
+		expect(merged.find(item => item.id === 2)?.summary.branch).toBe("monitored")
 	})
 })
 

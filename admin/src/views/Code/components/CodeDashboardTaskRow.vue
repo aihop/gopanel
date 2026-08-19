@@ -42,7 +42,11 @@ const executorLabel = computed(() =>
   <div
     class="dashboard-task-row group/row relative mb-1 flex cursor-pointer items-stretch gap-3 rounded-lg py-2 ml-5 pr-3.5 transition-colors"
     :class="selected ? 'dashboard-task-row--selected' : ''"
+    role="button"
+    tabindex="0"
     @click="emit('open', task)"
+    @keydown.enter.self="emit('open', task)"
+    @keydown.space.self.prevent="emit('open', task)"
   >
     <CodeTaskFocusMarker :active="selected" />
     <div class="min-w-0 flex-1">
@@ -69,6 +73,8 @@ const executorLabel = computed(() =>
           <TaskApprovalAction
             class="shrink-0"
             :task="task"
+            compact
+            @click.stop
             @approved="emit('refresh')"
           />
         </div>

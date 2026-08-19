@@ -98,7 +98,7 @@ async function saveChanges() {
 		await loadGitStatus(true)
 		emit("updated")
 	} catch (error) {
-		void 0
+		message.error(error instanceof Error ? error.message : t("mobile.gitSaveFailed"))
 	} finally {
 		loading.value = false
 	}

@@ -5,7 +5,7 @@ import { reactive, ref, watch } from "vue"
 import { useDialog, useMessage } from "naive-ui"
 import { useI18n } from "vue-i18n"
 
-const props = defineProps<{ show: boolean; website: MobileWebsite | null }>()
+const props = defineProps<{ show: boolean; website: MobileWebsite | null; nodeId: number }>()
 const emit = defineEmits<{ "update:show": [value: boolean]; saved: [] }>()
 const { t } = useI18n({ messages: mobileResourceMessages })
 const dialog = useDialog()
@@ -15,7 +15,7 @@ const saveError = ref("")
 const form = reactive({
 	primaryDomain: "",
 	otherDomains: "",
-	redirectDomainsToPrimary: false,
+	redirectDomainsToPrimary: false
 })
 
 watch(
@@ -27,7 +27,7 @@ watch(
 		form.redirectDomainsToPrimary = Boolean(props.website.redirectDomainsToPrimary)
 		saveError.value = ""
 	},
-	{ immediate: true },
+	{ immediate: true }
 )
 
 function close(value = false) {
@@ -44,7 +44,7 @@ function confirmSave() {
 		content: t("mobile.websiteDomainConfirm"),
 		positiveText: t("commons.button.confirm"),
 		negativeText: t("commons.button.cancel"),
-		onPositiveClick: save,
+		onPositiveClick: save
 	})
 }
 
@@ -53,12 +53,15 @@ async function save() {
 	saving.value = true
 	saveError.value = ""
 	try {
-		await updateMobileWebsiteDomainBindings({
-			websiteId: props.website.id,
-			primaryDomain: form.primaryDomain.trim(),
-			otherDomains: form.otherDomains,
-			redirectDomainsToPrimary: form.redirectDomainsToPrimary,
-		})
+		await updateMobileWebsiteDomainBindings(
+			{
+				websiteId: props.website.id,
+				primaryDomain: form.primaryDomain.trim(),
+				otherDomains: form.otherDomains,
+				redirectDomainsToPrimary: form.redirectDomainsToPrimary
+			},
+			props.nodeId
+		)
 		message.success(t("mobile.websiteDomainSaved"))
 		emit("saved")
 		emit("update:show", false)
@@ -72,13 +75,21 @@ async function save() {
 
 <template>
 	<n-drawer :show="show" placement="bottom" height="min(620px, 82dvh)" :mask-closable="!saving" @update:show="close">
-		<n-drawer-content :title="t('mobile.websiteDomainBindings')" :closable="!saving" body-content-style="padding: 16px;">
+		<n-drawer-content
+			:title="t('mobile.websiteDomainBindings')"
+			:closable="!saving"
+			body-content-style="padding: 16px;"
+		>
 			<div class="space-y-4">
 				<n-alert type="info" :bordered="false">{{ t("mobile.websiteDomainDnsHint") }}</n-alert>
 				<n-alert v-if="saveError" type="error">{{ saveError }}</n-alert>
 				<n-form label-placement="top">
 					<n-form-item :label="t('mobile.websitePrimaryDomain')" required>
-						<n-input v-model:value="form.primaryDomain" :placeholder="t('mobile.websitePrimaryDomainPlaceholder')" :disabled="saving" />
+						<n-input
+							v-model:value="form.primaryDomain"
+							:placeholder="t('mobile.websitePrimaryDomainPlaceholder')"
+							:disabled="saving"
+						/>
 					</n-form-item>
 					<n-form-item :label="t('mobile.websiteOtherDomains')">
 						<n-input

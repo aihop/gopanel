@@ -9,6 +9,7 @@ import type {
 	CodeWorktreeCapability
 } from "@/api/interface/code"
 import type { HostTerminalSession } from "@/api/interface/hostTerminal"
+import type { CodeTaskListItem } from "@/api/interface/codeTasks"
 import type { CodeProjectSyncStatus } from "@/api/interface/codeOverview"
 import type {
 	CodeDeliveryConflictFile,
@@ -60,6 +61,18 @@ export function getMobileSessions(projectId: number, page = 1, limit = 50) {
 		...result,
 		items: result.items || []
 	}))
+}
+
+export function getMobileTasks(archived = false, limit = 20) {
+	return mobileRequest(
+		mobileHttp.get<ResultData<{ items: CodeTaskListItem[]; total: number }>>("/mobile/app/tasks", {
+			params: { page: 1, limit, includeGit: false, archived: archived ? 1 : undefined }
+		})
+	).then(result => ({ ...result, items: result.items || [] }))
+}
+
+export function setMobileTaskArchived(taskId: number, archived: boolean) {
+	return mobileRequest(mobileHttp.put<ResultData<void>>(`/mobile/app/tasks/${taskId}`, { archived }))
 }
 
 export function getMobileProjects() {

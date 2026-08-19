@@ -49,7 +49,23 @@ func TestMobileNodeSnapshotKeepsMonitoringFields(t *testing.T) {
 
 func TestLocalMobileNodeUsesReservedID(t *testing.T) {
 	got := toMobileNodeRes(model.Node{Name: "controller", Status: NodeStatusOnline}, true)
-	if got.ID != 0 || !got.IsLocal {
+	if got.ID != 0 || !got.IsLocal || !got.HasControlToken {
 		t.Fatalf("unexpected local mobile node: %#v", got)
+	}
+}
+
+func TestRemoteMobileNodeReportsControlCapabilityWithoutLeakingToken(t *testing.T) {
+	got := toMobileNodeRes(model.Node{
+		BaseModel: model.BaseModel{ID: 7}, Name: "edge", Status: NodeStatusOnline, ControlToken: "encrypted-control-token",
+	}, false)
+	if !got.HasControlToken {
+		t.Fatalf("expected remote control capability: %#v", got)
+	}
+	payload, err := json.Marshal(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(payload), "encrypted-control-token") {
+		t.Fatalf("mobile node payload leaked control token: %s", payload)
 	}
 }

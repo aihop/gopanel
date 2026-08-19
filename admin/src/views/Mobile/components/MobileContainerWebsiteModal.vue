@@ -3,13 +3,14 @@ import {
 	getMobileContainerPublishOptions,
 	publishMobileContainerWebsite,
 	type MobileContainer,
-	type MobileContainerPublishOptions,
+	type MobileContainerPublishOptions
 } from "@/api/modules/mobile"
 import { useMessage } from "naive-ui"
 import { computed, ref } from "vue"
 import { useI18n } from "vue-i18n"
 
 const emit = defineEmits(["success"])
+const props = defineProps<{ nodeId: number }>()
 const { t } = useI18n()
 const message = useMessage()
 const visible = ref(false)
@@ -21,19 +22,23 @@ const websiteId = ref<number | null>(null)
 const hostPort = ref<number | null>(null)
 const scheme = ref<"http" | "https">("http")
 
-const websiteOptions = computed(() => options.value.websites.map(website => ({
-	label: website.primaryDomain || website.alias,
-	value: website.id,
-})))
+const websiteOptions = computed(() =>
+	options.value.websites.map(website => ({
+		label: website.primaryDomain || website.alias,
+		value: website.id
+	}))
+)
 
-const portOptions = computed(() => options.value.ports.map(port => ({
-	label: `${port.hostPort} → ${port.containerPort}/tcp`,
-	value: port.hostPort,
-})))
+const portOptions = computed(() =>
+	options.value.ports.map(port => ({
+		label: `${port.hostPort} → ${port.containerPort}/tcp`,
+		value: port.hostPort
+	}))
+)
 
 const schemeOptions = computed(() => [
 	{ label: "HTTP", value: "http" },
-	{ label: "HTTPS", value: "https" },
+	{ label: "HTTPS", value: "https" }
 ])
 
 async function acceptParams(container: MobileContainer) {
@@ -45,11 +50,11 @@ async function acceptParams(container: MobileContainer) {
 	visible.value = true
 	loading.value = true
 	try {
-		options.value = await getMobileContainerPublishOptions(container)
+		options.value = await getMobileContainerPublishOptions(container, props.nodeId)
 		if (websiteOptions.value.length === 1) websiteId.value = websiteOptions.value[0].value
 		if (portOptions.value.length === 1) hostPort.value = portOptions.value[0].value
 	} catch (error) {
-		void 0
+		message.error(error instanceof Error ? error.message : t("container.bindWebsiteLoadFailed"))
 	} finally {
 		loading.value = false
 	}
@@ -62,18 +67,21 @@ async function submit() {
 	}
 	submitting.value = true
 	try {
-		await publishMobileContainerWebsite({
-			containerId: target.value.containerID,
-			runtimeHost: target.value.runtimeHost || "",
-			websiteId: websiteId.value,
-			hostPort: hostPort.value,
-			scheme: scheme.value,
-		})
+		await publishMobileContainerWebsite(
+			{
+				containerId: target.value.containerID,
+				runtimeHost: target.value.runtimeHost || "",
+				websiteId: websiteId.value,
+				hostPort: hostPort.value,
+				scheme: scheme.value
+			},
+			props.nodeId
+		)
 		message.success(t("container.bindWebsiteSuccess"))
 		visible.value = false
 		emit("success")
 	} catch (error) {
-		void 0
+		message.error(error instanceof Error ? error.message : t("container.bindWebsiteFailed"))
 	} finally {
 		submitting.value = false
 	}
@@ -95,14 +103,24 @@ defineExpose({ acceptParams })
 			</n-alert>
 			<n-empty
 				v-if="!loading && (!websiteOptions.length || !portOptions.length)"
-				:description="!portOptions.length ? t('container.bindWebsiteNoPort') : t('container.bindWebsiteNoProxy')"
+				:description="
+					!portOptions.length ? t('container.bindWebsiteNoPort') : t('container.bindWebsiteNoProxy')
+				"
 			/>
 			<n-form v-else label-placement="top">
 				<n-form-item :label="t('container.bindWebsiteTarget')" required>
-					<n-select v-model:value="websiteId" :options="websiteOptions" :placeholder="t('container.bindWebsiteTargetPlaceholder')" />
+					<n-select
+						v-model:value="websiteId"
+						:options="websiteOptions"
+						:placeholder="t('container.bindWebsiteTargetPlaceholder')"
+					/>
 				</n-form-item>
 				<n-form-item :label="t('container.bindWebsitePort')" required>
-					<n-select v-model:value="hostPort" :options="portOptions" :placeholder="t('container.bindWebsitePortPlaceholder')" />
+					<n-select
+						v-model:value="hostPort"
+						:options="portOptions"
+						:placeholder="t('container.bindWebsitePortPlaceholder')"
+					/>
 				</n-form-item>
 				<n-form-item :label="t('container.bindWebsiteScheme')">
 					<n-select v-model:value="scheme" :options="schemeOptions" />

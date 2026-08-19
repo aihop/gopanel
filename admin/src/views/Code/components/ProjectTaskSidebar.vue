@@ -81,7 +81,11 @@ const taskTime = (task: CodeTaskListItem) =>
               :key="task.id"
               class="ai-workspace-task-row group/task relative flex cursor-pointer items-stretch justify-between gap-2.5 rounded-xl py-2.5 pl-2 pr-3 transition-colors duration-200"
               :class="currentTaskId === task.id ? 'ai-workspace-task-row--active' : ''"
+              role="button"
+              tabindex="0"
               @click="emit('selectTask', task)"
+              @keydown.enter.self="emit('selectTask', task)"
+              @keydown.space.self.prevent="emit('selectTask', task)"
             >
               <CodeTaskFocusMarker :active="currentTaskId === task.id" />
               <div class="min-w-0 flex-1">
@@ -99,6 +103,8 @@ const taskTime = (task: CodeTaskListItem) =>
                   <TaskApprovalAction
                     class="shrink-0"
                     :task="task"
+                    compact
+                    @click.stop
                     @approved="emit('refreshTasks')"
                   />
                   <div

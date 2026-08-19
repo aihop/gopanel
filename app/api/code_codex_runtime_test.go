@@ -107,3 +107,14 @@ func TestParseCodexPlanProgressSelectsPendingAndCompletedSteps(t *testing.T) {
 		t.Fatalf("unexpected completed plan: %#v", completed)
 	}
 }
+
+func TestParseCodexRuntimeAcceptsObjectPlanInput(t *testing.T) {
+	transcript := `{"timestamp":"2026-07-29T10:00:01Z","type":"response_item","payload":{"type":"custom_tool_call","name":"update_plan","input":{"plan":[{"step":"直接计划","status":"inProgress"}]}}}`
+	state, err := parseCodexRuntime(strings.NewReader(transcript), time.Date(2026, 7, 29, 10, 0, 2, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Progress == nil || state.Progress.CurrentStep != 1 || state.Progress.StepTitle != "直接计划" {
+		t.Fatalf("unexpected object plan: %#v", state.Progress)
+	}
+}

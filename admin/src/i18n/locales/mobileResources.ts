@@ -12,6 +12,8 @@ export const mobileResourceMessages = {
 			resourceRefresh: "刷新{name}",
 			resourceTotal: "共 {count} 项",
 			resourceLoadFailed: "{name}加载失败",
+			remoteNodeControlUnavailable: "当前节点不可操作",
+			remoteNodeControlHint: "该节点离线或未配置控制令牌，只能查看概览快照。",
 			resourceEmpty: "暂无{name}",
 			resourceNoMatch: "没有匹配的{name}",
 			resourceType: "类型",
@@ -58,6 +60,9 @@ export const mobileResourceMessages = {
 			resourceRefresh: "Refresh {name}",
 			resourceTotal: "{count} items",
 			resourceLoadFailed: "Failed to load {name}",
+			remoteNodeControlUnavailable: "This node cannot be controlled",
+			remoteNodeControlHint:
+				"The node is offline or has no control token. Only its overview snapshot is available.",
 			resourceEmpty: "No {name}",
 			resourceNoMatch: "No matching {name}",
 			resourceType: "Type",
@@ -70,7 +75,8 @@ export const mobileResourceMessages = {
 			websiteOtherDomains: "Additional domains",
 			websiteOtherDomainsPlaceholder: "One per line, for example www.example.com",
 			websiteRedirectToPrimary: "Redirect additional domains to primary",
-			websiteDomainDnsHint: "This only changes GoPanel website bindings. Point these domains to this server at your DNS provider as well.",
+			websiteDomainDnsHint:
+				"This only changes GoPanel website bindings. Point these domains to this server at your DNS provider as well.",
 			websiteDomainRequired: "Enter a primary domain",
 			websiteDomainConfirmTitle: "Confirm domain binding changes",
 			websiteDomainConfirm: "Saving reloads the website configuration immediately. Continue?",

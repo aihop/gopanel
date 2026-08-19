@@ -6,7 +6,7 @@ import { useAuthStore } from "@/store/auth"
 import { useHideLayoutFooter } from "@/composables/useHideLayoutFooter"
 import { useCodeTaskPolling } from "./useCodeTaskPolling"
 import { useProjectTerminal } from "./useProjectTerminal"
-import { deleteAITask, getAIProjects, updateAITask } from "@/api/modules/code"
+import { deleteAITask, getAIProjects, getCodeSession, updateAITask } from "@/api/modules/code"
 import type { AIProject, AITask, CodeSession } from "@/api/interface/code"
 import type { CodeTaskListItem } from "@/api/interface/codeTasks"
 import type { HostTerminalSession } from "@/api/interface/hostTerminal"
@@ -163,8 +163,23 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 		terminalTakeoverRequested.value = false
 		workspaceMode.value = "terminal"
 		terminalMounted.value = true
-		syncTaskQuery(null)
+		syncSessionQuery(session.id)
 		void fetchTasks()
+	}
+
+	const loadRouteSession = async () => {
+		if (props.embedded) return
+		const sessionId = Number(route.query.sessionId)
+		if (!sessionId) return
+		try {
+			const response = await getCodeSession(sessionId)
+			if (response.data.session.projectId !== currentProjectId.value) {
+				throw new Error(t("code.sessionProjectMismatch"))
+			}
+			handleSessionCreated(response.data.session)
+		} catch (error) {
+			message.error(error instanceof Error && error.message ? error.message : t("code.sessionLoadFailed"))
+		}
 	}
 
 	/**
@@ -174,16 +189,22 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 	 * 否则「后退」要点很多次才出得去。
 	 * 内嵌模式（快捷浮窗）不写：它和主页面共用路由，写了会篡改主页面的地址。
 	 */
-	const syncTaskQuery = (taskId: number | null) => {
+	const syncWorkspaceQuery = (taskId: number | null, sessionId: number | null) => {
 		if (props.embedded) return
-		const current = route.query.taskId ? String(route.query.taskId) : ""
-		const next = taskId ? String(taskId) : ""
-		if (current === next) return
+		const currentTask = route.query.taskId ? String(route.query.taskId) : ""
+		const currentSession = route.query.sessionId ? String(route.query.sessionId) : ""
+		const nextTask = taskId ? String(taskId) : ""
+		const nextSession = sessionId ? String(sessionId) : ""
+		if (currentTask === nextTask && currentSession === nextSession) return
 		const query = { ...route.query }
-		if (next) query.taskId = next
+		if (nextTask) query.taskId = nextTask
 		else delete query.taskId
+		if (nextSession) query.sessionId = nextSession
+		else delete query.sessionId
 		void router.replace({ path: route.path, query })
 	}
+	const syncTaskQuery = (taskId: number | null) => syncWorkspaceQuery(taskId, null)
+	const syncSessionQuery = (sessionId: number) => syncWorkspaceQuery(null, sessionId)
 
 	const activateTask = (task: AITask) => {
 		resetSelectedFile()
@@ -271,7 +292,8 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 			negativeText: t("code.cancel"),
 			onPositiveClick: async () => {
 				try {
-					await deleteAITask(task.id)
+					const response = await deleteAITask(task.id)
+					if (response.code !== 0) throw new Error(response.message)
 					message.success(t("code.taskDeleted"))
 					if (currentTaskId.value === task.id) {
 						currentTaskId.value = null
@@ -279,10 +301,11 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 						workspaceMode.value = "terminal"
 						terminalMounted.value = false
 						resetSelectedFile()
+						syncTaskQuery(null)
 					}
 					await fetchTasks()
 				} catch (error) {
-					void 0
+					message.error(error instanceof Error && error.message ? error.message : t("code.taskDeleteFailed"))
 				}
 			},
 		})
@@ -292,12 +315,13 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 		if (!editingTaskTitle.value.trim() || !editingTaskId.value) return
 		renaming.value = true
 		try {
-			await updateAITask(editingTaskId.value, editingTaskTitle.value.trim())
+			const response = await updateAITask(editingTaskId.value, editingTaskTitle.value.trim())
+			if (response.code !== 0) throw new Error(response.message)
 			message.success(t("code.taskRenamed"))
 			showRenameModal.value = false
 			await fetchTasks()
 		} catch (error) {
-			void 0
+			message.error(error instanceof Error && error.message ? error.message : t("code.taskRenameFailed"))
 		} finally {
 			renaming.value = false
 		}
@@ -385,6 +409,7 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 		goTaskHome,
 		createNewTask,
 		handleSessionCreated,
+		loadRouteSession,
 		activateTask,
 		selectTask,
 		activateProjectTerminal,

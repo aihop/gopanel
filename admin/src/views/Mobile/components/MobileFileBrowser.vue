@@ -28,7 +28,7 @@ const saving = ref(false)
 
 const editing = computed(() => !!filePath.value)
 const dirty = computed(() => content.value !== originalContent.value)
-const breadcrumbs = computed(() => currentPath.value ? currentPath.value.split("/") : [])
+const breadcrumbs = computed(() => (currentPath.value ? currentPath.value.split("/") : []))
 
 async function loadDirectory(path = "") {
 	loading.value = true
@@ -57,7 +57,7 @@ async function openEntry(entry: MobileCodeStructureEntry) {
 		originalContent.value = result.content
 		fileVersion.value = result.version
 	} catch (error) {
-		void 0
+		message.error(error instanceof Error ? error.message : t("mobile.filesLoadFailed"))
 	} finally {
 		loading.value = false
 	}
@@ -73,7 +73,9 @@ function closeEditor() {
 		content: t("mobile.unsavedChangesHint"),
 		positiveText: t("mobile.discard"),
 		negativeText: t("mobile.cancel"),
-		onPositiveClick: () => { filePath.value = "" }
+		onPositiveClick: () => {
+			filePath.value = ""
+		}
 	})
 }
 
@@ -100,7 +102,7 @@ async function save() {
 		fileVersion.value = result.version
 		message.success(t("mobile.fileSaved"))
 	} catch (error) {
-		void 0
+		message.error(error instanceof Error ? error.message : t("mobile.fileSaveFailed"))
 	} finally {
 		saving.value = false
 	}
@@ -121,11 +123,19 @@ watch(
 </script>
 
 <template>
-	<n-drawer :show="show" placement="right" style="width: min(760px, 100vw)" @mask-click="requestClose" @esc="requestClose">
+	<n-drawer
+		:show="show"
+		placement="right"
+		style="width: min(760px, 100vw)"
+		@mask-click="requestClose"
+		@esc="requestClose"
+	>
 		<n-drawer-content :closable="false" body-content-style="padding: 0;">
 			<template #header>
 				<div class="flex w-full min-w-0 items-center justify-between gap-3">
-					<span class="min-w-0 truncate font-semibold">{{ editing ? filePath : t("mobile.projectFiles") }}</span>
+					<span class="min-w-0 truncate font-semibold">
+						{{ editing ? filePath : t("mobile.projectFiles") }}
+					</span>
 					<n-button quaternary circle :title="t('mobile.close')" @click="requestClose">
 						<template #icon><Icon name="mdi:close" /></template>
 					</n-button>
@@ -135,17 +145,25 @@ watch(
 				<div v-if="editing" class="flex h-full min-h-0 flex-col">
 					<div class="flex items-center justify-between border-b border-slate-200 px-3 py-2">
 						<n-button quaternary size="small" @click="closeEditor">
-							<template #icon><Icon name="mdi:arrow-left" /></template>{{ t("mobile.files") }}
+							<template #icon><Icon name="mdi:arrow-left" /></template>
+							{{ t("mobile.files") }}
 						</n-button>
 						<span class="text-xs" :class="dirty ? 'text-amber-600' : 'text-slate-400'">
 							{{ dirty ? t("mobile.unsaved") : t("mobile.saved") }}
 						</span>
 					</div>
-					<n-input v-model:value="content" type="textarea" :bordered="false" class="mobile-code-editor min-h-0 flex-1" />
+					<n-input
+						v-model:value="content"
+						type="textarea"
+						:bordered="false"
+						class="mobile-code-editor min-h-0 flex-1"
+					/>
 				</div>
 				<div v-else class="h-full overflow-y-auto p-3">
 					<div class="mb-3 flex flex-wrap items-center gap-1 text-sm">
-						<n-button text type="primary" @click="loadDirectory()">{{ t("mobile.rootDirectory") }}</n-button>
+						<n-button text type="primary" @click="loadDirectory()">
+							{{ t("mobile.rootDirectory") }}
+						</n-button>
 						<template v-for="(part, index) in breadcrumbs" :key="`${part}-${index}`">
 							<span class="text-slate-300">/</span>
 							<n-button text @click="openBreadcrumb(index)">{{ part }}</n-button>
@@ -153,19 +171,38 @@ watch(
 					</div>
 					<n-alert v-if="loadError" type="error" :title="t('mobile.filesLoadFailed')">
 						<div class="flex items-center justify-between gap-3">
-							<span>{{ loadError }}</span><n-button size="small" @click="loadDirectory(currentPath)">{{ t("mobile.retry") }}</n-button>
+							<span>{{ loadError }}</span>
+							<n-button size="small" @click="loadDirectory(currentPath)">
+								{{ t("mobile.retry") }}
+							</n-button>
 						</div>
 					</n-alert>
-					<n-empty v-else-if="!loading && entries.length === 0" :description="t('mobile.directoryEmpty')" class="py-16" />
-					<button v-for="entry in entries" :key="entry.path" type="button" class="flex w-full items-center gap-3 rounded-xl border-0 bg-transparent px-3 py-3 text-left hover:bg-slate-100 active:bg-slate-200" @click="openEntry(entry)">
-						<Icon :name="entry.isDir ? 'mdi:folder-outline' : 'mdi:file-code-outline'" :size="20" :color="entry.isDir ? '#2563eb' : '#64748b'" />
+					<n-empty
+						v-else-if="!loading && entries.length === 0"
+						:description="t('mobile.directoryEmpty')"
+						class="py-16"
+					/>
+					<button
+						v-for="entry in entries"
+						:key="entry.path"
+						type="button"
+						class="flex w-full items-center gap-3 rounded-xl border-0 bg-transparent px-3 py-3 text-left hover:bg-slate-100 active:bg-slate-200"
+						@click="openEntry(entry)"
+					>
+						<Icon
+							:name="entry.isDir ? 'mdi:folder-outline' : 'mdi:file-code-outline'"
+							:size="20"
+							:color="entry.isDir ? '#2563eb' : '#64748b'"
+						/>
 						<span class="min-w-0 flex-1 truncate text-sm">{{ entry.name }}</span>
 						<Icon name="mdi:chevron-right" :size="18" color="#94a3b8" />
 					</button>
 				</div>
 			</n-spin>
 			<template v-if="editing" #footer>
-				<n-button type="primary" block size="large" :loading="saving" :disabled="!dirty" @click="save">{{ t("mobile.saveFile") }}</n-button>
+				<n-button type="primary" block size="large" :loading="saving" :disabled="!dirty" @click="save">
+					{{ t("mobile.saveFile") }}
+				</n-button>
 			</template>
 		</n-drawer-content>
 	</n-drawer>

@@ -12,6 +12,7 @@ import { mobileTerminalMessages } from "../mobileTerminalMessages"
 import MobileTerminalHeader from "./MobileTerminalHeader.vue"
 import MobileTerminalInput from "./MobileTerminalInput.vue"
 import { terminalBufferText } from "./mobileTerminalClipboard"
+import { MobileTerminalInputFallback } from "./mobileTerminalInput"
 import { MobileTerminalOutputQueue } from "./mobileTerminalOutputQueue"
 import { terminalSizeData, terminalTakeControlMessage } from "@/views/Code/components/codeTerminalSession"
 import "./mobileTerminal.css"
@@ -46,6 +47,7 @@ const renameLoading = ref(false)
 const hasTerminalSelection = ref(false)
 let terminal: Terminal | null = null
 let fitAddon: FitAddon | null = null
+let inputFallback: MobileTerminalInputFallback | null = null
 let outputQueue: MobileTerminalOutputQueue | null = null
 let socket: WebSocket | null = null
 let resizeObserver: ResizeObserver | null = null
@@ -324,13 +326,21 @@ function openTerminal() {
 	const viewport = terminalElement.value.querySelector<HTMLElement>(".xterm-viewport")
 	if (viewport) outputQueue.bindTouchScrolling(viewport)
 	if (terminal.textarea) {
-		terminal.textarea.inputMode = "text"
-		terminal.textarea.autocapitalize = "none"
-		terminal.textarea.autocomplete = "off"
-		terminal.textarea.spellcheck = false
-		terminal.textarea.setAttribute("autocorrect", "off")
+		const textarea = terminal.textarea
+		textarea.inputMode = "text"
+		textarea.autocapitalize = "none"
+		textarea.autocomplete = "off"
+		textarea.spellcheck = false
+		textarea.setAttribute("autocorrect", "off")
+		inputFallback = new MobileTerminalInputFallback()
+		textarea.addEventListener("compositionstart", () => inputFallback?.startComposition())
+		textarea.addEventListener("compositionend", () => inputFallback?.endComposition())
+		textarea.addEventListener("input", event => {
+			inputFallback?.queueInput(event as InputEvent, data => sendTerminalInput(applyCtrlModifier(data)))
+		})
 	}
 	terminal.onData(data => {
+		inputFallback?.recordTerminalData(data)
 		sendTerminalInput(applyCtrlModifier(data))
 	})
 	terminal.onSelectionChange(() => {
@@ -363,6 +373,8 @@ function closeTerminal() {
 	resizeObserver = null
 	outputQueue?.dispose()
 	outputQueue = null
+	inputFallback?.dispose()
+	inputFallback = null
 	const activeSocket = socket
 	socket = null
 	activeSocket?.close()

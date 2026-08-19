@@ -15,7 +15,7 @@
         <RouterView v-slot="{ Component: RouterComponent }">
           <keep-alive
             :include="persistentViewNames"
-            :max="1"
+            :max="persistentViewNames.length || 1"
           >
             <component
               v-if="route.meta.keepAlive"
@@ -88,7 +88,11 @@ const layoutComponent = computed<Component>(() => layoutComponents[layoutCompone
 const routerTransition = computed<RouterTransition>(() => themeStore.routerTransition)
 const themeName = computed<ThemeNameEnum>(() => themeStore.themeName)
 const isLogged = computed(() => authStore.isLogged)
-const persistentViewNames = computed(() => (isLogged.value ? ["HostTerminalView"] : []))
+// 这里列的都是「离开再回来必须还是原样」的页面：里面挂着活的 PTY 连接，
+// 重建一次就意味着断连、丢滚屏、重跑一遍握手。数量要跟着 max 一起加。
+const persistentViewNames = computed(() =>
+	isLogged.value ? ["HostTerminalView", "CodeWorkspaceView"] : [],
+)
 const showFloatingTools = computed(() => authStore.isLogged && authStore.role !== "DEMO")
 
 function checkThemeOverrides(currentRoute: RouteLocationNormalized) {

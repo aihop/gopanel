@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest"
-import { insertTerminalSymbol } from "./mobileTerminalInput"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { insertTerminalSymbol, MobileTerminalInputFallback } from "./mobileTerminalInput"
 
 describe("insertTerminalSymbol", () => {
 	it("inserts a slash at the cursor", () => {
@@ -12,5 +12,51 @@ describe("insertTerminalSymbol", () => {
 
 	it("clamps stale mobile selection positions", () => {
 		expect(insertTerminalSymbol("cmd", "/", 99, 120)).toEqual({ value: "cmd/", cursor: 4 })
+	})
+})
+
+describe("MobileTerminalInputFallback", () => {
+	beforeEach(() => vi.useFakeTimers())
+	afterEach(() => vi.useRealTimers())
+
+	it("forwards symbols emitted only by the mobile input event", () => {
+		const fallback = new MobileTerminalInputFallback()
+		const send = vi.fn()
+		fallback.queueInput({ data: "@", inputType: "insertText", isComposing: false }, send)
+		vi.runAllTimers()
+		expect(send).toHaveBeenCalledWith("@")
+		fallback.dispose()
+	})
+
+	it("does not duplicate symbols already emitted by xterm keyboard handling", () => {
+		const fallback = new MobileTerminalInputFallback()
+		const send = vi.fn()
+		fallback.recordTerminalData("#")
+		fallback.queueInput({ data: "#", inputType: "insertText", isComposing: false }, send)
+		vi.runAllTimers()
+		expect(send).not.toHaveBeenCalled()
+		fallback.dispose()
+	})
+
+	it("waits for xterm keyCode 229 fallback before forwarding input", () => {
+		const fallback = new MobileTerminalInputFallback()
+		const send = vi.fn()
+		setTimeout(() => fallback.recordTerminalData("?"), 0)
+		fallback.queueInput({ data: "?", inputType: "insertText", isComposing: false }, send)
+		vi.runAllTimers()
+		expect(send).not.toHaveBeenCalled()
+		fallback.dispose()
+	})
+
+	it("leaves composition input to xterm", () => {
+		const fallback = new MobileTerminalInputFallback()
+		const send = vi.fn()
+		fallback.startComposition()
+		fallback.queueInput({ data: "中", inputType: "insertText", isComposing: true }, send)
+		fallback.endComposition()
+		fallback.queueInput({ data: "中", inputType: "insertText", isComposing: false }, send)
+		vi.runAllTimers()
+		expect(send).not.toHaveBeenCalled()
+		fallback.dispose()
 	})
 })

@@ -54,6 +54,8 @@ export const codeWorkspaceMessages = {
 			noProjectHistory: "该项目暂无历史任务",
 			projectLoadFailed: "项目加载失败",
 			taskLoadFailed: "历史任务加载失败",
+			sessionLoadFailed: "会话加载失败",
+			sessionProjectMismatch: "该会话不属于当前项目",
 			taskChangedFiles: "{count} 文件",
 			taskRepositoryBranches: "任务涉及的仓库与分支",
 			taskRepositoryFallback: "任务仓库",
@@ -161,8 +163,8 @@ export const codeWorkspaceMessages = {
 			saveChanges: "保存修改",
 			unsavedChanges: "未保存的修改",
 			switchSessionUnsavedHint: "当前会话有未保存的文件，继续后这些修改会丢失。",
-			discardAndContinue: "放弃并继续"
-		}
+			discardAndContinue: "放弃并继续",
+		},
 	},
 	en: {
 		code: {
@@ -221,6 +223,8 @@ export const codeWorkspaceMessages = {
 			noProjectHistory: "No task history for this project",
 			projectLoadFailed: "Failed to load project",
 			taskLoadFailed: "Failed to load task history",
+			sessionLoadFailed: "Failed to load session",
+			sessionProjectMismatch: "This session does not belong to the current project",
 			taskChangedFiles: "{count} files",
 			taskRepositoryBranches: "Repositories and branches in this task",
 			taskRepositoryFallback: "Task repository",
@@ -329,7 +333,7 @@ export const codeWorkspaceMessages = {
 			saveChanges: "Save changes",
 			unsavedChanges: "Unsaved changes",
 			switchSessionUnsavedHint: "The current session has unsaved files. Continuing will discard those changes.",
-			discardAndContinue: "Discard and continue"
-		}
-	}
+			discardAndContinue: "Discard and continue",
+		},
+	},
 } as const

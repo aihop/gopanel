@@ -82,6 +82,7 @@ const formatTime = (value?: string) =>
 				{{ t("mobile.projectTerminal") }}
 			</n-button>
 		</div>
+		<slot name="tasks" />
 		<n-empty
 			v-if="projects.length === 0"
 			:description="t('mobile.noProjects')"

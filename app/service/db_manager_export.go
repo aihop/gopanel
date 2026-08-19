@@ -76,6 +76,69 @@ func appendPostgresSetval(b *strings.Builder, db *sql.DB, dbType model.DatabaseT
 	}
 }
 
+// postgresInboundForeignKey 是一条「别的表指向本表」的外键。
+type postgresInboundForeignKey struct {
+	owner string // 引用方表名，取自 regclass，PG 已按需加好引号
+	name  string
+	def   string
+}
+
+// postgresInboundForeignKeys 查出所有指向 tableName 的外键。
+//
+// 这类约束不属于本表——getCreateTableSQL 里那段只导出本表自己拥有的外键（conrelid），
+// 抓不到反向指过来的（confrelid）。但它们正是 DROP TABLE 报 2BP01 的原因：
+// 不先解开，导出的备份就永远回灌不了自己。
+//
+// 只取顶层表：分区表的子分区会自动派生同名约束，单独去 DROP/ADD 它们会报错，
+// 对父表操作时 PG 自己会处理所有分区。
+func postgresInboundForeignKeys(db *sql.DB, dbType model.DatabaseType, regclass string) []postgresInboundForeignKey {
+	if dbType != model.DatabaseTypePostgresql {
+		return nil
+	}
+	rows, err := db.Query(fmt.Sprintf(`
+		SELECT c.conrelid::regclass::text, c.conname, pg_catalog.pg_get_constraintdef(c.oid)
+		FROM pg_catalog.pg_constraint c
+		JOIN pg_catalog.pg_class cl ON cl.oid = c.conrelid
+		WHERE c.confrelid = '%s'::regclass AND c.contype = 'f' AND NOT cl.relispartition
+		ORDER BY c.conname`, regclass))
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	var keys []postgresInboundForeignKey
+	for rows.Next() {
+		var fk postgresInboundForeignKey
+		if err := rows.Scan(&fk.owner, &fk.name, &fk.def); err != nil {
+			continue
+		}
+		if strings.TrimSpace(fk.def) == "" {
+			continue
+		}
+		keys = append(keys, fk)
+	}
+	return keys
+}
+
+// appendPostgresInboundForeignKeys 在数据插入完成后把上面解开的外键原样加回来。
+//
+// 用 ALTER TABLE IF EXISTS：往空库恢复单表时引用方还不存在，静默跳过即可——
+// 那条外键属于引用方，等它自己被恢复时会随建表语句一起带回来。
+//
+// 这里刻意不加 BEGIN/COMMIT：execSQLImport 已经把整个文件包在一个事务里跑，
+// 再写一个 COMMIT 反而会把外层事务提前提交，毁掉导入器自己的回滚保证。
+func appendPostgresInboundForeignKeys(b *strings.Builder, keys []postgresInboundForeignKey, quote func(string) string) {
+	if len(keys) == 0 {
+		return
+	}
+	b.WriteString("\n-- 恢复指向本表的外键（开头已先解开，否则 DROP TABLE 会被它们挡住）\n")
+	for _, fk := range keys {
+		b.WriteString(fmt.Sprintf(
+			"ALTER TABLE IF EXISTS %s ADD CONSTRAINT %s %s;\n", fk.owner, quote(fk.name), fk.def,
+		))
+	}
+}
+
 func getCreateTableSQL(db *sql.DB, dbType model.DatabaseType, tableName string, quote func(string) string) string {
 	switch dbType {
 	case model.DatabaseTypeMysql, model.DatabaseTypeMariaDB:
@@ -218,8 +281,25 @@ func generateSQLDump(db *sql.DB, dbType model.DatabaseType, tableName string, re
 	b.WriteString(fmt.Sprintf("-- Database: %s\n", req.DatabaseName))
 	b.WriteString(fmt.Sprintf("-- Date: %s\n\n", time.Now().Format("2006-01-02 15:04:05")))
 
+	// 指向本表的外键：先解开，末尾再原样加回。查一次，两处复用。
+	// 刻意不用 DROP TABLE ... CASCADE——CASCADE 连视图等依赖对象一起删，
+	// 而我们只有能力还原外键。真有别的依赖，就让 DROP TABLE 照常报错，
+	// 那比无声无息删掉一个视图安全得多。
+	var inboundFKs []postgresInboundForeignKey
+	if req.IncludeDropTable {
+		inboundFKs = postgresInboundForeignKeys(db, dbType, quote(tableName))
+	}
+
 	// DROP TABLE
 	if req.IncludeDropTable {
+		for _, fk := range inboundFKs {
+			b.WriteString(fmt.Sprintf(
+				"ALTER TABLE IF EXISTS %s DROP CONSTRAINT IF EXISTS %s;\n", fk.owner, quote(fk.name),
+			))
+		}
+		if len(inboundFKs) > 0 {
+			b.WriteString("\n")
+		}
 		b.WriteString(fmt.Sprintf("DROP TABLE IF EXISTS %s;\n\n", quote(tableName)))
 	}
 
@@ -234,6 +314,7 @@ func generateSQLDump(db *sql.DB, dbType model.DatabaseType, tableName string, re
 	// 只有有数据列时才输出 INSERT
 	if len(columns) == 0 {
 		appendPostgresSetval(&b, db, dbType, tableName, quote)
+		appendPostgresInboundForeignKeys(&b, inboundFKs, quote)
 		return b.String()
 	}
 
@@ -272,6 +353,7 @@ func generateSQLDump(db *sql.DB, dbType model.DatabaseType, tableName string, re
 	b.WriteString(strings.Join(rowValues, ",\n"))
 	b.WriteString(";\n")
 	appendPostgresSetval(&b, db, dbType, tableName, quote)
+	appendPostgresInboundForeignKeys(&b, inboundFKs, quote)
 	return b.String()
 }
 

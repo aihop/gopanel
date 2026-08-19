@@ -1,12 +1,17 @@
-import { describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
+	CodeTerminalInputFallback,
 	codeTerminalIdentity,
 	isDeliveredCodeSession,
+	isTerminalViewportAtBottom,
+	keepingTerminalBottom,
+	shouldAutoAcquireTerminalControl,
 	shouldAttachOnlyToTerminal,
 	terminalInputIntent,
+	terminalReleaseControlMessage,
 	terminalWebSocketUrl,
 	terminalSizeData,
-	terminalTakeControlMessage
+	terminalTakeControlMessage,
 } from "./codeTerminalSession"
 
 describe("isDeliveredCodeSession", () => {
@@ -23,6 +28,7 @@ describe("isDeliveredCodeSession", () => {
 
 describe("codeTerminalIdentity", () => {
 	it("会话优先：同一会话下换任务命中同一条终端，不重连", () => {
+		expect(codeTerminalIdentity(7, null)).toBe(codeTerminalIdentity(7, 11))
 		expect(codeTerminalIdentity(7, 11)).toBe("session-7")
 		expect(codeTerminalIdentity(7, 12)).toBe("session-7")
 	})
@@ -47,6 +53,17 @@ describe("terminal control protocol", () => {
 			data: terminalSizeData(120, 36)
 		})
 		expect(JSON.parse(terminalSizeData(120, 36))).toEqual({ cols: 120, rows: 36 })
+	})
+
+	it("离开缓存终端时显式释放控制权", () => {
+		expect(JSON.parse(terminalReleaseControlMessage())).toEqual({ type: "release_control", data: "" })
+	})
+
+	it("旧连接释放后自动接管，但不抢占仍有效的其他控制者", () => {
+		expect(shouldAutoAcquireTerminalControl(false, "", 0, 100)).toBe(true)
+		expect(shouldAutoAcquireTerminalControl(false, "", 200, 100)).toBe(false)
+		expect(shouldAutoAcquireTerminalControl(false, "其他设备正在控制终端", 0, 100)).toBe(false)
+		expect(shouldAutoAcquireTerminalControl(true, "", 0, 100)).toBe(false)
 	})
 })
 
@@ -79,6 +96,43 @@ describe("terminalInputIntent", () => {
 		// 只读旁观者的按键不该串到别人的终端里。
 		expect(terminalInputIntent(false, true, false)).toBe("ignore")
 		expect(terminalInputIntent(false, false, true)).toBe("ignore")
+	})
+})
+
+describe("CodeTerminalInputFallback", () => {
+	beforeEach(() => vi.useFakeTimers())
+	afterEach(() => vi.useRealTimers())
+
+	it("补发 xterm 未产生 onData 的组合符号", () => {
+		const fallback = new CodeTerminalInputFallback()
+		const send = vi.fn()
+		fallback.queueInput({ data: "?", inputType: "insertText", isComposing: false }, send)
+		vi.runAllTimers()
+		expect(send).toHaveBeenCalledOnce()
+		expect(send).toHaveBeenCalledWith("?")
+		fallback.dispose()
+	})
+
+	it("xterm 已产生 onData 时不重复发送", () => {
+		const fallback = new CodeTerminalInputFallback()
+		const send = vi.fn()
+		fallback.recordTerminalData("@")
+		fallback.queueInput({ data: "@", inputType: "insertText", isComposing: false }, send)
+		vi.runAllTimers()
+		expect(send).not.toHaveBeenCalled()
+		fallback.dispose()
+	})
+
+	it("输入法组合阶段交给 xterm 处理", () => {
+		const fallback = new CodeTerminalInputFallback()
+		const send = vi.fn()
+		fallback.startComposition()
+		fallback.queueInput({ data: "中", inputType: "insertText", isComposing: true }, send)
+		fallback.endComposition()
+		fallback.queueInput({ data: "中", inputType: "insertText", isComposing: false }, send)
+		vi.runAllTimers()
+		expect(send).not.toHaveBeenCalled()
+		fallback.dispose()
 	})
 })
 
@@ -126,5 +180,59 @@ describe("terminalWebSocketUrl", () => {
 
 	it("默认不带 attach_only，避免误判成只读附加", () => {
 		expect(terminalWebSocketUrl({ ...base, sessionId: 1 })).not.toContain("attach_only")
+	})
+})
+
+describe("终端视口贴底判定", () => {
+	it("光标行造成的 1 行差值仍算贴底", () => {
+		expect(isTerminalViewportAtBottom(100, 100)).toBe(true)
+		expect(isTerminalViewportAtBottom(100, 99)).toBe(true)
+	})
+
+	it("真正翻进历史才算离开底部", () => {
+		expect(isTerminalViewportAtBottom(100, 98)).toBe(false)
+		expect(isTerminalViewportAtBottom(100, 0)).toBe(false)
+	})
+})
+
+describe("keepingTerminalBottom", () => {
+	const terminalAt = (baseY: number, viewportY: number) => {
+		const calls: string[] = []
+		return {
+			calls,
+			terminal: {
+				buffer: { active: { baseY, viewportY } },
+				scrollToBottom: () => calls.push("scrollToBottom")
+			}
+		}
+	}
+
+	// fit()/resize() 会按新宽度重新折行，行数一变视口就漂。原来在跟看最新输出的，
+	// 重排完必须还在底部——否则每次回到会话都被甩到历史里，得手动往下滚一大截。
+	it("原本贴底的，重排后按回底部", () => {
+		const { calls, terminal } = terminalAt(100, 100)
+		keepingTerminalBottom(terminal, () => calls.push("reflow"))
+		expect(calls).toEqual(["reflow", "scrollToBottom"])
+	})
+
+	// 用户自己翻上去看历史时，重排不该把人拽回底部。
+	it("原本翻在历史里的，重排后不动", () => {
+		const { calls, terminal } = terminalAt(100, 20)
+		keepingTerminalBottom(terminal, () => calls.push("reflow"))
+		expect(calls).toEqual(["reflow"])
+	})
+
+	// 判定必须取重排「之前」的位置：重排本身就会改 viewportY，
+	// 排完再看等于问一个已经被搅乱的值。
+	it("按重排前的位置判定", () => {
+		const calls: string[] = []
+		const buffer = { active: { baseY: 100, viewportY: 100 } }
+		keepingTerminalBottom(
+			{ buffer, scrollToBottom: () => calls.push("scrollToBottom") },
+			() => {
+				buffer.active.viewportY = 3
+			}
+		)
+		expect(calls).toEqual(["scrollToBottom"])
 	})
 })

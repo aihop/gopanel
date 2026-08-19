@@ -31,6 +31,10 @@ func GetAITasks(c fiber.Ctx) error {
 	// 默认只列没归档的：归档就是「别再让我看到它」。
 	// 传 archived=1 才单独看归档列表，用于找回误归档的任务。
 	archived := c.Query("archived") == "1"
+	order := repo.AITaskListOrderMonitor
+	if c.Query("order") == string(repo.AITaskListOrderRecent) {
+		order = repo.AITaskListOrderRecent
+	}
 	aiRepo := repo.NewAITaskRepo()
 	var tasks []*model.AITask
 	var total int64
@@ -41,12 +45,12 @@ func GetAITasks(c fiber.Ctx) error {
 			return c.JSON(e.Fail(projectErr))
 		}
 		if claims.Role == constant.UserRoleSuper {
-			tasks, total, err = aiRepo.GetTasksByProjectID(project.ID, page, limit, archived)
+			tasks, total, err = aiRepo.GetTasksByProjectID(project.ID, page, limit, archived, order)
 		} else {
-			tasks, total, err = aiRepo.GetTasksByProjectAndUserID(project.ID, claims.UserId, page, limit, archived)
+			tasks, total, err = aiRepo.GetTasksByProjectAndUserID(project.ID, claims.UserId, page, limit, archived, order)
 		}
 	} else {
-		tasks, total, err = aiRepo.GetTasksByUserID(claims.UserId, page, limit, archived)
+		tasks, total, err = aiRepo.GetTasksByUserID(claims.UserId, page, limit, archived, order)
 	}
 	if err != nil {
 		return c.JSON(e.Fail(err))

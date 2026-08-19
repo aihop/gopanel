@@ -11,6 +11,11 @@ export const mobileHttp = axios.create({
 	withCredentials: true
 })
 
+export function mobileNodePath(nodeId: number, path: string) {
+	const clean = path.startsWith("/") ? path : `/${path}`
+	return nodeId > 0 ? `/mobile/app/node-proxy/${nodeId}/mobile/app${clean}` : `/mobile/app${clean}`
+}
+
 mobileHttp.interceptors.request.use(config => {
 	config.headers.set("X-Mobile-Request", "1")
 	return config

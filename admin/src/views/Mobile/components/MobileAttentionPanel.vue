@@ -48,7 +48,7 @@ function run(item: MobileAttentionItem, action: MobileAttentionAction) {
 			message.success(t("mobile.attentionActionSuccess"))
 			await load()
 		} catch (error) {
-			void 0
+			message.error(error instanceof Error ? error.message : t("mobile.attentionActionFailed"))
 		} finally {
 			actionKey.value = ""
 		}

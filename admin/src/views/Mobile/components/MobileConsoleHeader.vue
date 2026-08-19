@@ -7,6 +7,7 @@ defineProps<{
 	activeTab: "overview" | "resources" | "code" | "settings"
 	nodeName: string
 	nodeOnline: boolean
+	canCreateSession: boolean
 }>()
 const emit = defineEmits<{ selectNode: []; newSession: [] }>()
 const { t } = useI18n({ messages: mobileMessages })
@@ -18,7 +19,7 @@ const { t } = useI18n({ messages: mobileMessages })
 			<div class="flex min-w-0 items-center gap-3">
 				<Logo :dark="false" class="shrink-0" />
 				<button
-					v-if="activeTab === 'overview'"
+					v-if="activeTab !== 'code' || !canCreateSession"
 					type="button"
 					class="mt-0.5 flex max-w-[65vw] items-center gap-1 border-0 bg-transparent p-0 text-xs text-slate-500"
 					@click="emit('selectNode')"
@@ -33,7 +34,7 @@ const { t } = useI18n({ messages: mobileMessages })
 			</div>
 			<div class="flex shrink-0 items-center gap-1">
 				<n-button
-					v-if="activeTab === 'overview' || activeTab === 'code'"
+					v-if="canCreateSession && (activeTab === 'overview' || activeTab === 'code')"
 					size="small"
 					type="primary"
 					secondary

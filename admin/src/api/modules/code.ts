@@ -340,6 +340,7 @@ export function getAITasks(params: {
 	gitScope?: "full" | "live"
 	selectedTaskId?: number
 	archived?: 1
+	order?: "recent"
 }) {
 	return http.get<{ items: CodeTaskListItem[]; total: number }>("/code/tasks", params)
 }

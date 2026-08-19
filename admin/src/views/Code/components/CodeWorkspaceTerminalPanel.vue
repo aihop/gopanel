@@ -99,8 +99,8 @@ function onTaskTabClick() {
 
     <!--
 			终端实例池：切任务、在「项目终端 / 任务终端」之间来回切，都只是换显示，
-			被切走的实例留在缓存里，WebSocket 不断、滚屏不丢，切回来是即时的。
-			只有超出 CODE_TERMINAL_POOL_SIZE 被 LRU 淘汰时才真正卸载并断连。
+			被切走的实例保留 xterm 和滚屏，但释放控制并断开 WebSocket；切回来按 sequence 增量接回。
+			只有超出 CODE_TERMINAL_POOL_SIZE 被 LRU 淘汰时才真正销毁 xterm。
 
 			KeepAlive 的插槽里只能有一个节点，注释也算一个，所以说明都写在外面。
 			项目终端用固定 key：换会话由内层 HostTerminalPanel 自己的 :key 处理，

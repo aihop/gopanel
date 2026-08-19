@@ -25,7 +25,7 @@ async function openTerminal(project: AIProject) {
 		emit("update:show", false)
 		emit("opened", session, project)
 	} catch (error) {
-		void 0
+		message.error(error instanceof Error ? error.message : t("mobile.projectTerminalOpenFailed"))
 	} finally {
 		openingProjectId.value = 0
 	}
@@ -52,11 +52,17 @@ async function openTerminal(project: AIProject) {
 				@click="openTerminal(project)"
 			>
 				<span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-white">
-					<Icon :name="openingProjectId === project.id ? 'mdi:loading' : 'mdi:console'" :size="19" :class="openingProjectId === project.id ? 'animate-spin' : ''" />
+					<Icon
+						:name="openingProjectId === project.id ? 'mdi:loading' : 'mdi:console'"
+						:size="19"
+						:class="openingProjectId === project.id ? 'animate-spin' : ''"
+					/>
 				</span>
 				<span class="min-w-0 flex-1">
 					<span class="block truncate text-sm font-semibold text-slate-800">{{ project.name }}</span>
-					<span class="mt-0.5 block truncate text-xs text-slate-500">{{ t("mobile.openProjectTerminal") }}</span>
+					<span class="mt-0.5 block truncate text-xs text-slate-500">
+						{{ t("mobile.openProjectTerminal") }}
+					</span>
 				</span>
 			</button>
 		</div>

@@ -15,6 +15,7 @@ const props = defineProps<{
 	selectedTaskId: number | null
 	archived: boolean
 	archivingTaskId: number | null
+	emptyLabel?: string
 }>()
 const emit = defineEmits<{
 	open: [task: CodeTaskListItem]
@@ -134,7 +135,7 @@ watch(() => props.selectedTaskId, () => {
       </div>
       <div
         data-project-drag-target
-        class="group/project relative flex h-10 items-center gap-1 overflow-hidden rounded-xl px-1 transition-colors duration-150"
+        class="group/project relative flex h-10 items-center gap-0.5 overflow-hidden rounded-xl px-1 transition-colors duration-150"
         :class="dropTarget?.projectId === group.id ? 'ring-1 ring-inset ring-[var(--n-primary-color)]' : ''"
       >
         <div
@@ -143,26 +144,19 @@ watch(() => props.selectedTaskId, () => {
           :class="dropTarget.position === 'before' ? 'top-0' : 'bottom-0'"
         />
         <button
-          v-if="group.available && projects.length > 1"
           type="button"
-          draggable="true"
-          class="hidden h-7 w-6 shrink-0 cursor-grab items-center justify-center rounded-md text-[var(--n-text-color-3)] hover:bg-[var(--n-color-embedded)] hover:text-[var(--n-text-color)] active:cursor-grabbing md:inline-flex"
-          :aria-label="t('code.project')"
-          @dragstart="handleDragStart($event, group.id)"
-          @dragend="handleDragEnd"
-        >
-          <Icon name="mdi:dots-vertical" :size="17" />
-        </button>
-        <button
-          type="button"
-          class="flex min-w-0 flex-1 items-center gap-2 rounded-xl pr-2 py-1.5 text-left text-sm text-[var(--n-text-color-2)] transition-colors hover:bg-[var(--n-color-embedded)] hover:text-[var(--n-text-color)]"
+          :draggable="group.available && projects.length > 1"
+          class="flex min-w-0 flex-1 items-center gap-1 rounded-xl pr-2 py-1.5 text-left text-sm text-[var(--n-text-color-3)] transition-colors hover:bg-[var(--n-color-embedded)] hover:text-[var(--n-text-color-2)]"
+          :class="group.available && projects.length > 1 ? 'md:cursor-grab md:active:cursor-grabbing' : ''"
           :aria-expanded="!isCollapsed(group.id)"
           @click="toggleProject(group.id)"
+          @dragstart="group.available && projects.length > 1 && handleDragStart($event, group.id)"
+          @dragend="handleDragEnd"
         >
           <Icon
             :name="isCollapsed(group.id) ? 'mdi:chevron-right' : 'mdi:chevron-down'"
-            :size="16"
-            class="shrink-0 text-[var(--n-text-color-3)]"
+            :size="14"
+            class="shrink-0 opacity-80"
           />
           <span
             class="min-w-0 flex-1 truncate font-medium"
@@ -175,12 +169,15 @@ watch(() => props.selectedTaskId, () => {
               quaternary
               circle
               size="tiny"
+              style="width: 24px; height: 24px"
+              text-color="var(--n-text-color-3)"
+              class="opacity-55 transition-opacity group-hover/project:opacity-80 hover:!opacity-100"
               @click.stop="emit('createTask', group.id)"
             >
               <template #icon>
                 <Icon
                   name="mdi:plus"
-                  :size="18"
+                  :size="14"
                 />
               </template>
             </n-button>
@@ -197,12 +194,15 @@ watch(() => props.selectedTaskId, () => {
             quaternary
             circle
             size="tiny"
+            style="width: 24px; height: 24px"
+            text-color="var(--n-text-color-3)"
+            class="opacity-55 transition-opacity group-hover/project:opacity-80 hover:!opacity-100"
             :title="t('code.project')"
           >
             <template #icon>
               <Icon
                 name="mdi:dots-horizontal"
-                :size="17"
+                :size="14"
               />
             </template>
           </n-button>
@@ -214,7 +214,7 @@ watch(() => props.selectedTaskId, () => {
           v-if="group.tasks.length === 0"
           class="px-10 py-2 text-xs text-gray-500"
         >
-          {{ t("code.dashboardNoProjectTasks") }}
+          {{ emptyLabel || t("code.dashboardNoProjectTasks") }}
         </div>
         <template v-else>
           <CodeDashboardTaskRow

@@ -80,7 +80,15 @@ const router = createRouter({
 					path: "project/:id",
 					name: "Code-Project",
 					component: () => import("@/views/Code/Workspace.vue"),
-					meta: { title: t("code.projectWorkspace"), titleKey: "code.projectWorkspace", auth: true, roles: "all" }
+					// 工作台里挂着任务终端。不缓存的话，回一趟任务列表再进来，
+					// 所有终端连同 WebSocket 全部重建——主机终端页早就是缓存的，这里对齐。
+					meta: {
+						title: t("code.projectWorkspace"),
+						titleKey: "code.projectWorkspace",
+						auth: true,
+						roles: "all",
+						keepAlive: true
+					}
 				}
 			]
 		},
