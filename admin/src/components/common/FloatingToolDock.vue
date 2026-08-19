@@ -10,45 +10,47 @@
 		<nav ref="dockRef" class="tool-dock" :style="dockStyle">
 			<n-tooltip placement="left">
 				<template #trigger>
-					<button class="tool-dock__handle" type="button" :aria-label="t('systemDiagnostic.drag')" @pointerdown="startDrag">
-						<Icon name="mdi:drag-vertical" :size="18" />
+					<button class="tool-dock__handle" type="button" :aria-label="collapsed ? t('systemDiagnostic.expand') : t('systemDiagnostic.drag')" @pointerdown="startDrag" @click="toggleCollapse">
+						<Icon :name="collapsed ? 'mdi:chevron-right' : 'mdi:drag-vertical'" :size="16" />
 					</button>
 				</template>
-				{{ t("systemDiagnostic.drag") }}
+				{{ collapsed ? t("systemDiagnostic.expand") : t("systemDiagnostic.drag") }}
 			</n-tooltip>
-			<n-tooltip v-if="canDiagnose" placement="left">
-				<template #trigger>
-					<button ref="diagnosticButtonRef" class="tool-dock__button is-diagnostic" :class="{ 'is-active': activeTool === 'diagnostic' }" type="button" @click="toggle('diagnostic')">
-						<Icon name="mdi:stethoscope" :size="22" />
-					</button>
-				</template>
-				{{ t("systemDiagnostic.open") }}
-			</n-tooltip>
-			<n-tooltip placement="left">
-				<template #trigger>
-					<button ref="noteButtonRef" class="tool-dock__button is-note" :class="{ 'is-active': activeTool === 'note' }" type="button" @click="toggle('note')">
-						<Icon name="mdi:notebook-edit-outline" :size="21" />
-					</button>
-				</template>
-				{{ t("floatingNote.open") }}
-			</n-tooltip>
-			<n-tooltip v-if="showCodeImmersive" placement="left">
-				<template #trigger>
-					<button
-						class="tool-dock__button is-code"
-						:class="{ 'is-active': codeImmersiveStore.isImmersive }"
-						type="button"
-						:aria-label="codeImmersiveLabel"
-						@click="codeImmersiveStore.toggleImmersive()"
-					>
-						<Icon
-							:name="codeImmersiveStore.isImmersive ? 'fluent:full-screen-minimize-24-regular' : 'fluent:full-screen-maximize-24-regular'"
-							:size="21"
-						/>
-					</button>
-				</template>
-				{{ codeImmersiveLabel }}
-			</n-tooltip>
+			<template v-if="!collapsed">
+				<n-tooltip v-if="canDiagnose" placement="left">
+					<template #trigger>
+						<button ref="diagnosticButtonRef" class="tool-dock__button is-diagnostic" :class="{ 'is-active': activeTool === 'diagnostic' }" type="button" @click="toggle('diagnostic')">
+							<Icon name="mdi:stethoscope" :size="18" />
+						</button>
+					</template>
+					{{ t("systemDiagnostic.open") }}
+				</n-tooltip>
+				<n-tooltip placement="left">
+					<template #trigger>
+						<button ref="noteButtonRef" class="tool-dock__button is-note" :class="{ 'is-active': activeTool === 'note' }" type="button" @click="toggle('note')">
+							<Icon name="mdi:notebook-edit-outline" :size="17" />
+						</button>
+					</template>
+					{{ t("floatingNote.open") }}
+				</n-tooltip>
+				<n-tooltip v-if="showCodeImmersive" placement="left">
+					<template #trigger>
+						<button
+							class="tool-dock__button is-code"
+							:class="{ 'is-active': codeImmersiveStore.isImmersive }"
+							type="button"
+							:aria-label="codeImmersiveLabel"
+							@click="codeImmersiveStore.toggleImmersive()"
+						>
+							<Icon
+								:name="codeImmersiveStore.isImmersive ? 'fluent:full-screen-minimize-24-regular' : 'fluent:full-screen-maximize-24-regular'"
+								:size="17"
+							/>
+						</button>
+					</template>
+					{{ codeImmersiveLabel }}
+				</n-tooltip>
+			</template>
 		</nav>
 	</div>
 </template>
@@ -70,6 +72,9 @@ import { useRoute } from "vue-router"
 type DockTool = "diagnostic" | "note"
 
 const SCREEN_GAP = 16
+const DOCK_WIDTH = 40
+const BUTTON_HEIGHT = 40
+const COLLAPSED_WIDTH = 32
 const authStore = useAuthStore()
 const codeImmersiveStore = useCodeImmersiveStore()
 const route = useRoute()
@@ -81,6 +86,7 @@ const { t } = useI18n({
 	}
 })
 const activeTool = ref<DockTool | null>(null)
+const collapsed = ref(false)
 const positionY = ref(120)
 const panelTop = ref(SCREEN_GAP)
 const panelRef = ref<HTMLElement | null>(null)
@@ -97,13 +103,19 @@ const codeImmersiveLabel = computed(() =>
 	t(codeImmersiveStore.isImmersive ? "codeImmersive.exit" : "codeImmersive.enter")
 )
 const storageKey = computed(() => `gopanel_floating_tool_dock_${authStore.user?.id || "default"}`)
-const dockStyle = computed(() => ({ transform: `translate3d(0, ${positionY.value}px, 0)` }))
-const panelStyle = computed(() => ({ top: `${panelTop.value}px` }))
+const dockStyle = computed(() => ({
+	transform: `translate3d(0, ${positionY.value}px, 0)`,
+	width: `${collapsed.value ? COLLAPSED_WIDTH : DOCK_WIDTH}px`
+}))
+const panelStyle = computed(() => ({
+	top: `${panelTop.value}px`,
+	right: `${collapsed.value ? COLLAPSED_WIDTH + 12 : DOCK_WIDTH + 12}px`
+}))
 
 function clampY(value: number) {
 	const fallback = 120
 	const safeValue = Number.isFinite(value) ? value : fallback
-	const dockHeight = dockRef.value?.offsetHeight ?? 144
+	const dockHeight = collapsed.value ? COLLAPSED_WIDTH + 32 : dockRef.value?.offsetHeight ?? (BUTTON_HEIGHT + 32)
 	return Math.min(Math.max(SCREEN_GAP, safeValue), Math.max(SCREEN_GAP, window.innerHeight - dockHeight - SCREEN_GAP))
 }
 
@@ -124,20 +136,36 @@ function updatePanelPosition() {
 }
 
 function persistPosition() {
-	localStorage.setItem(storageKey.value, String(positionY.value))
+	localStorage.setItem(storageKey.value, JSON.stringify({ y: positionY.value, collapsed: collapsed.value }))
 }
 
 function restorePosition() {
 	const saved = localStorage.getItem(storageKey.value)
-	positionY.value = saved === null ? 120 : clampY(Number(saved))
+	if (saved) {
+		try {
+			const data = JSON.parse(saved)
+			positionY.value = clampY(data.y ?? 120)
+			collapsed.value = !!data.collapsed
+		} catch {
+			positionY.value = 120
+		}
+	} else {
+		positionY.value = 120
+	}
 }
 
 function toggle(tool: DockTool) {
 	activeTool.value = activeTool.value === tool ? null : tool
 }
 
+function toggleCollapse() {
+	collapsed.value = !collapsed.value
+	if (collapsed.value) activeTool.value = null
+	persistPosition()
+}
+
 function startDrag(event: PointerEvent) {
-	if (event.button !== 0 || window.matchMedia("(max-width: 640px)").matches) return
+	if (event.button !== 0 || window.matchMedia("(max-width: 640px)").matches || collapsed.value) return
 	event.preventDefault()
 	dragOffsetY = event.clientY - positionY.value
 	window.addEventListener("pointermove", drag)
@@ -174,6 +202,10 @@ watch(
 	{ immediate: true }
 )
 
+watch(collapsed, (newVal) => {
+	if (newVal) activeTool.value = null
+})
+
 watch(showCodeImmersive, async () => {
 	await nextTick()
 	handleResize()
@@ -192,17 +224,18 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .tool-dock-layer { position: fixed; inset: 0; z-index: 1800; pointer-events: none; }
-.tool-dock { position: absolute; top: 0; right: 0; display: flex; width: 54px; flex-direction: column; align-items: stretch; overflow: hidden; pointer-events: auto; border: 1px solid rgb(148 163 184 / 28%); border-right: 0; border-radius: 14px 0 0 14px; background: var(--n-color, var(--bg-default-color)); box-shadow: 0 12px 30px rgb(15 23 42 / 18%); }
+.tool-dock { position: absolute; top: 0; right: 0; display: flex; flex-direction: column; align-items: stretch; overflow: hidden; pointer-events: auto; border: 1px solid rgb(148 163 184 / 28%); border-right: 0; border-radius: 10px 0 0 10px; background: var(--n-color, var(--bg-default-color)); box-shadow: 0 8px 20px rgb(15 23 42 / 15%); transition: width 0.2s ease; }
 .tool-dock__handle, .tool-dock__button { display: grid; width: 100%; place-items: center; border: 0; background: transparent; color: inherit; }
-.tool-dock__handle { height: 30px; cursor: ns-resize; touch-action: none; opacity: 0.42; }
-.tool-dock__button { height: 54px; cursor: pointer; border-top: 1px solid rgb(148 163 184 / 18%); transition: background 0.15s ease, color 0.15s ease; }
+.tool-dock__handle { height: 32px; cursor: ns-resize; touch-action: none; opacity: 0.5; transition: opacity 0.15s ease; }
+.tool-dock__handle:hover { opacity: 0.8; }
+.tool-dock__button { height: 40px; cursor: pointer; border-top: 1px solid rgb(148 163 184 / 18%); transition: background 0.15s ease, color 0.15s ease; }
 .tool-dock__button:hover, .tool-dock__button.is-active { background: rgb(59 130 246 / 10%); }
 .tool-dock__button.is-diagnostic { color: #2563eb; }
 .tool-dock__button.is-note { color: #d97706; }
 .tool-dock__button.is-code { color: #7c3aed; }
-.tool-dock-panel { position: absolute; right: 70px; pointer-events: auto; }
+.tool-dock-panel { position: absolute; pointer-events: auto; transition: right 0.2s ease; }
 @media (max-width: 640px) {
-	.tool-dock { top: auto; right: 12px; bottom: 12px; width: 52px; transform: none !important; border-right: 1px solid rgb(148 163 184 / 28%); border-radius: 14px; }
+	.tool-dock { top: auto; right: 12px; bottom: 12px; width: 36px !important; transform: none !important; border-right: 1px solid rgb(148 163 184 / 28%); border-radius: 10px; }
 	.tool-dock__handle { display: none; }
 	.tool-dock-panel { top: 16px !important; right: 16px; }
 }

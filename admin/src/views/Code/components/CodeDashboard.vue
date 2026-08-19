@@ -3,20 +3,27 @@ import { computed, onMounted, ref, watch } from "vue"
 import { useStorage } from "@vueuse/core"
 import { useMessage } from "naive-ui"
 import { useI18n } from "vue-i18n"
-import type { AIProject } from "@/api/interface/code"
+import type { AIProject, CodeSession } from "@/api/interface/code"
 import type { CodeTaskListItem } from "@/api/interface/codeTasks"
 import type { CodeProjectDropPosition } from "../codeProjectOrder"
-import { setAITaskArchived } from "@/api/modules/code"
+import { getAITasks, setAITaskArchived } from "@/api/modules/code"
 import Icon from "@/components/common/Icon.vue"
 import { codeProjectMessages } from "@/i18n/locales/codeProject"
-import { focusCodeDashboardTasks, sortCodeTasksStably } from "../codeDashboardBuckets"
+import { excludeRecentCodeDashboardTasks, mergeCodeDashboardTasks, recentCodeDashboardTasks, sortCodeTasksStably } from "../codeDashboardBuckets"
 import { useCodeTaskPolling } from "../useCodeTaskPolling"
 import CodeDashboardProjectList from "./CodeDashboardProjectList.vue"
 import CodeDashboardFocusTasks from "./CodeDashboardFocusTasks.vue"
+import CodeDashboardArchivedTasks from "./CodeDashboardArchivedTasks.vue"
 import SessionHistoryDrawer from "./SessionHistoryDrawer.vue"
 import CodeTaskDetailPane from "./CodeTaskDetailPane.vue"
 
-const props = defineProps<{ projects: AIProject[]; loading: boolean; loadError: boolean }>()
+const props = defineProps<{
+	projects: AIProject[]
+	loading: boolean
+	loadError: boolean
+	immersive?: boolean
+	pendingSession?: CodeSession | null
+}>()
 const emit = defineEmits<{
 	retry: []
 	createProject: []
@@ -24,16 +31,19 @@ const emit = defineEmits<{
 	projectAction: [action: string, projectId: number]
 	reorderProject: [projectId: number, targetProjectId: number, position: CodeProjectDropPosition]
 	openTask: [task: CodeTaskListItem]
+	sessionResolved: []
 }>()
 const { t } = useI18n({ messages: codeProjectMessages })
 const message = useMessage()
 
 const tasks = ref<CodeTaskListItem[]>([])
+const recentTaskCandidates = ref<CodeTaskListItem[]>([])
 const taskTotal = ref(0)
 const tasksInitialLoading = ref(true)
 const tasksLoadError = ref(false)
-const showArchived = ref(false)
 const selectedTaskId = ref<number | null>(null)
+const pendingRestoredTaskId = ref<number | null>(null)
+const pendingCreatedTaskId = ref<number | null>(null)
 const showHistoryDrawer = ref(false)
 // 折叠状态存起来：习惯用宽终端的人不该每次进页面都再折一次。
 const listCollapsed = useStorage("code-dashboard-list-collapsed", false)
@@ -53,23 +63,44 @@ const { fetchTasks, fetchTasksFast } = useCodeTaskPolling(
 		gitEveryPolls: 6,
 		limit: 50,
 		allProjects: true,
-		archived: showArchived,
 		idleIntervalMs: 20000,
 		selectedTaskId,
 	},
 )
 
+let recentRequest: Promise<void> | null = null
+const fetchRecentTasks = (silent = true) => {
+	if (recentRequest) return recentRequest
+	recentRequest = getAITasks({ page: 1, limit: 7, projectId: 0, includeGit: false, order: "recent" })
+		.then(response => {
+			if (response.code !== 0) throw new Error(response.message)
+			recentTaskCandidates.value = response.data.items || []
+		})
+		.catch(error => {
+			if (!silent) {
+				tasksLoadError.value = true
+				message.error(error instanceof Error ? error.message : t("code.dashboardTaskLoadFailed"))
+			}
+		})
+		.finally(() => {
+			recentRequest = null
+		})
+	return recentRequest
+}
+
 const refreshTasks = async (silent = true) => {
 	// 失败标记在每次显式刷新前清掉，成功后 onError 不会再置回来，横幅自己就消失了。
 	if (!silent) tasksLoadError.value = false
-	await fetchTasks(silent, "full")
+	await Promise.all([fetchTasks(silent, "full"), fetchRecentTasks(silent)])
 }
 
 onMounted(async () => {
 	tasksLoadError.value = false
-	await fetchTasksFast(false)
+	await Promise.all([fetchTasksFast(false), fetchRecentTasks(false)])
 	tasksInitialLoading.value = false
 })
+
+watch(tasks, () => void fetchRecentTasks(true))
 
 const initialLoading = computed(() => props.loading || tasksInitialLoading.value)
 
@@ -79,21 +110,47 @@ const projectNameById = computed(() => {
 	return map
 })
 
-const focusTasks = computed(() => (showArchived.value ? [] : focusCodeDashboardTasks(tasks.value)))
+const allTasks = computed(() => mergeCodeDashboardTasks(tasks.value, recentTaskCandidates.value))
+const recentTasks = computed(() => recentCodeDashboardTasks(recentTaskCandidates.value))
+const projectTasks = computed(() => excludeRecentCodeDashboardTasks(allTasks.value, recentTasks.value))
 
 // 仍按稳定规则排序，不按状态拆成多个区块。
 // 任务状态变化时只更新行内徽标，不会在“运行中/今日完成”之间跳来跳去。
 const visibleTasks = computed(() => {
-	return sortCodeTasksStably(tasks.value)
+	return sortCodeTasksStably(allTasks.value)
 })
 
 const selectedTask = computed(() => visibleTasks.value.find(task => task.id === selectedTaskId.value) || null)
+
+watch(
+	() => props.pendingSession?.id,
+	sessionId => {
+		if (sessionId) selectedTaskId.value = null
+	},
+)
 
 // 选中的任务被筛掉、归档或删掉时，落到当前可见的第一条，右边不会停在一个看不见的任务上。
 // 只在「没有选中」或「选中的已不可见」时才动，避免每轮轮询把用户的选择顶掉。
 watch(
 	visibleTasks,
 	list => {
+		if (pendingCreatedTaskId.value) {
+			const createdTask = list.find(task => task.id === pendingCreatedTaskId.value)
+			if (createdTask) {
+				selectedTaskId.value = createdTask.id
+				pendingCreatedTaskId.value = null
+				emit("sessionResolved")
+			}
+			return
+		}
+		if (props.pendingSession) return
+		if (pendingRestoredTaskId.value) {
+			if (list.some(task => task.id === pendingRestoredTaskId.value)) {
+				selectedTaskId.value = pendingRestoredTaskId.value
+				pendingRestoredTaskId.value = null
+			}
+			return
+		}
 		if (!list.length) {
 			selectedTaskId.value = null
 			return
@@ -104,15 +161,13 @@ watch(
 	{ immediate: true },
 )
 
-const selectFocusTask = (task: CodeTaskListItem) => {
+const selectRecentTask = (task: CodeTaskListItem) => {
 	selectedTaskId.value = task.id
 }
 
-// 切归档视图要立刻换列表，不能等下一轮轮询（最长 5 秒）才刷。
-const toggleArchivedView = () => {
-	showArchived.value = !showArchived.value
-	tasks.value = []
-	void refreshTasks(false)
+const renameTask = (taskId: number, title: string) => {
+	tasks.value = tasks.value.map(task => (task.id === taskId ? { ...task, title } : task))
+	recentTaskCandidates.value = recentTaskCandidates.value.map(task => (task.id === taskId ? { ...task, title } : task))
 }
 
 const archiving = ref<number | null>(null)
@@ -120,17 +175,26 @@ const archiving = ref<number | null>(null)
 const toggleArchived = async (task: CodeTaskListItem) => {
 	if (archiving.value) return
 	archiving.value = task.id
-	const nextArchived = !showArchived.value
 	try {
-		const response = await setAITaskArchived(task.id, nextArchived)
+		const response = await setAITaskArchived(task.id, true)
 		if (response.code !== 0) throw new Error(response.message)
-		message.success(t(nextArchived ? "code.taskArchived" : "code.taskUnarchived"))
+		message.success(t("code.taskArchived"))
 		await refreshTasks(true)
 	} catch (error) {
 		message.error(error instanceof Error ? error.message : t("code.taskArchiveFailed"))
 	} finally {
 		archiving.value = null
 	}
+}
+
+const restoreArchivedTask = async (task: CodeTaskListItem) => {
+	pendingRestoredTaskId.value = task.id
+	await refreshTasks(true)
+}
+
+const activateCreatedTask = async (taskId: number) => {
+	pendingCreatedTaskId.value = taskId
+	await refreshTasks(true)
 }
 </script>
 
@@ -151,25 +215,18 @@ const toggleArchived = async (task: CodeTaskListItem) => {
     </div>
     <template v-else>
     <!-- 标题后放视图工具，项目管理与新建项目靠右保持主操作层级。 -->
-    <div class="mb-4 flex flex-wrap items-center gap-2 px-5 md:px-7">
+    <div
+      class="flex flex-wrap items-center gap-2"
+      :class="immersive ? 'mb-2 px-3' : 'mb-4 px-5 md:px-7'"
+    >
       <span class="shrink-0 text-base font-semibold tracking-[-0.01em] text-[var(--n-text-color)]">
         {{ t("code.workspace") }}
       </span>
 
-      <n-button
-        size="small"
-        :secondary="showArchived"
-        :quaternary="!showArchived"
-        @click="toggleArchivedView()"
-      >
-        <template #icon>
-          <Icon
-            :name="showArchived ? 'mdi:arrow-left' : 'mdi:archive-outline'"
-            :size="15"
-          />
-        </template>
-        {{ showArchived ? t("code.dashboardBackToActive") : t("code.dashboardViewArchived") }}
-      </n-button>
+      <CodeDashboardArchivedTasks
+        :projects="projects"
+        @restored="restoreArchivedTask"
+      />
 
       <n-button
         quaternary
@@ -245,36 +302,37 @@ const toggleArchived = async (task: CodeTaskListItem) => {
     <!-- 主从：左边所有任务，右边选中任务的终端。切任务不跳页，只换右边。 -->
     <div
       class="dashboard-workbench grid min-h-0 flex-1 overflow-hidden border-t "
-      :class="
+      :class="[
         listCollapsed
           ? 'grid-cols-1 grid-rows-1'
-          : 'grid-cols-1 grid-rows-[minmax(220px,2fr)_minmax(260px,3fr)] xl:grid-cols-[330px_minmax(0,1fr)] xl:grid-rows-1'
-      "
+          : 'dashboard-workbench--split grid-cols-1 grid-rows-[minmax(220px,2fr)_minmax(260px,3fr)] xl:grid-rows-1',
+      ]"
+      :style="{ '--dashboard-sidebar-width': '280px' }"
     >
       <section
         v-if="!listCollapsed"
         class="dashboard-panel flex min-h-0 flex-col overflow-hidden"
       >
         <CodeDashboardFocusTasks
-          v-if="focusTasks.length"
+          v-if="recentTasks.length"
           :projects="projects"
-          :tasks="focusTasks"
+          :tasks="recentTasks"
           :selected-task-id="selectedTaskId"
-          @select="selectFocusTask"
+          @select="selectRecentTask"
+          @renamed="renameTask"
         />
         <n-scrollbar class="min-h-0 flex-1">
           <!-- 左列独立滚动，所以这里的密度不吃终端高度，可以给足 -->
           <div class="py-2">
             <div
-              v-if="!visibleTasks.length && (showArchived || !projects.length)"
+              v-if="!visibleTasks.length && !projects.length"
               class="flex min-h-[200px] items-center justify-center"
             >
               <n-empty
                 size="small"
-                :description="showArchived ? t('code.dashboardNoArchived') : t('code.dashboardNoTasks')"
+                :description="t('code.dashboardNoTasks')"
               >
                 <template
-                  v-if="!showArchived"
                   #extra
                 >
                   <n-button
@@ -290,9 +348,10 @@ const toggleArchived = async (task: CodeTaskListItem) => {
             <CodeDashboardProjectList
               v-else
               :projects="projects"
-              :tasks="visibleTasks"
+              :tasks="projectTasks"
+              :empty-label="recentTasks.length ? t('code.dashboardNoMoreProjectTasks') : t('code.dashboardNoProjectTasks')"
               :selected-task-id="selectedTaskId"
-              :archived="showArchived"
+              :archived="false"
               :archiving-task-id="archiving"
               @open="selectedTaskId = $event.id"
               @archive="toggleArchived"
@@ -311,12 +370,17 @@ const toggleArchived = async (task: CodeTaskListItem) => {
         展开时不显示 —— 那会和选中行的信息重复，也白吃终端高度。
       -->
       <CodeTaskDetailPane
-        :task="selectedTask"
-        :project-name="selectedTask ? projectNameById.get(selectedTask.projectId) || '' : ''"
+        :task="pendingSession ? null : selectedTask"
+        :session="pendingSession"
+        :project-name="pendingSession
+          ? projectNameById.get(pendingSession.projectId) || ''
+          : selectedTask
+            ? projectNameById.get(selectedTask.projectId) || ''
+            : ''"
         :show-header="listCollapsed"
         @open-workspace="emit('openTask', $event)"
         @open-history="showHistoryDrawer = true"
-        @task-created="refreshTasks(true)"
+        @task-created="activateCreatedTask"
       />
     </div>
 
@@ -335,6 +399,10 @@ const toggleArchived = async (task: CodeTaskListItem) => {
 	border-bottom: 1px solid var(--n-border-color);
 }
 @media (min-width: 1280px) {
+	.dashboard-workbench--split {
+		grid-template-columns: var(--dashboard-sidebar-width) minmax(0, 1fr);
+	}
+
 	.dashboard-panel {
 		border-right: 1px solid var(--n-border-color);
 		border-bottom: 0;

@@ -23,7 +23,8 @@ export const systemDiagnosticMessages = {
 			quickControlPlane: "检查 gpc 和 gp-agent 是否正常",
 			quickFailures: "汇总最近的系统失败并排序",
 			privacy: "不会向模型提供密码、Token、API Key 或数据库凭据；数据修正必须另行审批。",
-			drag: "上下拖动工具栏"
+			drag: "上下拖动工具栏",
+			expand: "展开工具栏"
 		}
 	},
 	en: {
@@ -50,7 +51,8 @@ export const systemDiagnosticMessages = {
 			quickControlPlane: "Check gpc and gp-agent health",
 			quickFailures: "Summarize and rank recent system failures",
 			privacy: "Passwords, tokens, API keys, and database credentials are never sent to the model. Data changes require separate approval.",
-			drag: "Drag the toolbar vertically"
+			drag: "Drag the toolbar vertically",
+			expand: "Expand toolbar"
 		}
 	}
 } as const
