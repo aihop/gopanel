@@ -1,6 +1,7 @@
 <template>
 	<n-modal
-		v-model:show="showModal"
+		:show="showModal"
+		@update:show="$emit('update:show-modal', $event)"
 		preset="dialog"
 		style="width: min(760px, 94vw)"
 		:title="editingProjectId ? t('code.editProject') : t('code.createProject')"
@@ -95,7 +96,7 @@
 						type="primary"
 						secondary
 						size="small"
-						@click="$emit('open-directory-picker')"
+						@click="$emit('update:show-directory-picker', true)"
 					>
 						{{ t("code.browseDirectory") }}
 					</n-button>
@@ -125,7 +126,7 @@
 			</div>
 		</div>
 		<template #action>
-			<n-button :disabled="creatingProject" @click="$emit('close')">
+			<n-button :disabled="creatingProject" @click="$emit('update:show-modal', false)">
 				{{ $t('commons.button.cancel') }}
 			</n-button>
 			<n-button type="primary" :loading="creatingProject" @click="$emit('submit')">
@@ -176,9 +177,9 @@ defineProps<{
 }>()
 
 defineEmits<{
-	close: []
+	"update:show-modal": [value: boolean]
+	"update:show-directory-picker": [value: boolean]
 	submit: []
-	"open-directory-picker": []
 	"remove-source-dir": [sourceDir: string]
 	"source-dirs-selected": [sourceDirs: string[]]
 }>()
