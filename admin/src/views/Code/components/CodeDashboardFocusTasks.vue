@@ -71,19 +71,6 @@ const saveTitle = async (task: CodeTaskListItem) => {
 
 <template>
   <section class="border-b border-slate-200/70 px-3 py-3 dark:border-white/10">
-    <div class="mb-2 flex items-center justify-between gap-2 px-1">
-      <div class="flex min-w-0 items-center gap-2 text-xs font-semibold text-[var(--n-text-color-2)]">
-        <Icon
-          name="mdi:history"
-          :size="15"
-          class="shrink-0 text-blue-500"
-        />
-        <span class="truncate">{{ t("code.dashboardRecentTitle") }}</span>
-        <span class="rounded-full bg-blue-500/10 px-1.5 py-0.5 text-[10px] text-blue-500">
-          {{ tasks.length }}
-        </span>
-      </div>
-    </div>
     <div class="max-h-60 space-y-1 overflow-y-auto">
       <div
         v-for="task in tasks"
@@ -144,13 +131,7 @@ const saveTitle = async (task: CodeTaskListItem) => {
 </template>
 
 <style scoped>
-/*
-	选中态原本用的是 hover 那个 --n-color-embedded，两者同色，等于没做。
-	这里换成主色的低透明度浅底：亮色主题下是一层淡蓝，暗色主题下也够分辨，
-	而且跟着 naive 的主题色走，换皮肤不用再改。
-	选中行不再叠 hover——底色本来就比 hover 重，再变一次只会闪。
-*/
 .recent-task--active {
-	background: color-mix(in srgb, var(--n-primary-color) 12%, transparent);
+	background: color-mix(in srgb, var(--primary-color) 12%, transparent);
 }
 </style>
