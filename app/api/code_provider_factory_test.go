@@ -46,6 +46,10 @@ func TestCodeExecutorFactoryConfigSchemas(t *testing.T) {
 			t.Fatalf("%s config schema is unavailable: %#v, %v", executorID, factory, err)
 		}
 	}
+	grokFactory, err := getCodeExecutorFactory("grok")
+	if err != nil || grokFactory.ConfigSchema() != nil || supportsCustomCodeProvider("grok") {
+		t.Fatalf("Grok should use its own login instead of a panel provider: %#v, %v", grokFactory, err)
+	}
 	if _, err := normalizeCodeProviderRequest("opencode", &codeProviderRequest{
 		BaseURL: "https://api.example.com/v1", APIKey: "key",
 	}); err == nil {

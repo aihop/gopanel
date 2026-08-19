@@ -73,6 +73,13 @@ func TestNormalizeWebsiteDiagnosticSetting(t *testing.T) {
 	}
 
 	setting = defaultWebsiteDiagnosticSetting(1)
+	setting.DefaultExecutorID = "grok"
+	setting.ApprovalPolicy = "safe_auto"
+	if err := normalizeWebsiteDiagnosticSetting(&setting); err != nil {
+		t.Fatalf("Grok diagnostic setting rejected: %v", err)
+	}
+
+	setting = defaultWebsiteDiagnosticSetting(1)
 	setting.DefaultExecutorID = "opencode"
 	setting.ApprovalPolicy = "manual"
 	if err := normalizeWebsiteDiagnosticSetting(&setting); err == nil {

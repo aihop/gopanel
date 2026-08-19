@@ -51,6 +51,7 @@ type codeExecutorFactory interface {
 }
 
 type codexExecutorFactory struct{}
+type grokExecutorFactory struct{}
 type claudeExecutorFactory struct{}
 type openCodeExecutorFactory struct{}
 type aiderExecutorFactory struct{}
@@ -65,6 +66,9 @@ func providerConfigSchema(modelRequired bool) *codeExecutorConfigSchema {
 
 func (codexExecutorFactory) ConfigSchema() *codeExecutorConfigSchema {
 	return providerConfigSchema(false)
+}
+func (grokExecutorFactory) ConfigSchema() *codeExecutorConfigSchema {
+	return nil
 }
 func (claudeExecutorFactory) ConfigSchema() *codeExecutorConfigSchema {
 	return providerConfigSchema(false)
@@ -90,6 +94,27 @@ func codexSandboxArgs(approvalPolicy string) []string {
 		"-c", codexDisableDocsMCP,
 		"--ask-for-approval", codexApprovalPolicy(approvalPolicy),
 		"--sandbox", "workspace-write",
+	}
+}
+
+func (grokExecutorFactory) BuildArgs(prompt, nativeSessionID string, _ uint, approvalPolicy string) ([]string, string, error) {
+	args := append([]string{"--no-auto-update"}, grokApprovalArgs(approvalPolicy)...)
+	args = append(args, "--output-format", "streaming-json")
+	if nativeSessionID != "" {
+		return append(args, "--resume", nativeSessionID, "-p", prompt), nativeSessionID, nil
+	}
+	nativeSessionID = uuid.NewString()
+	return append(args, "--session-id", nativeSessionID, "-p", prompt), nativeSessionID, nil
+}
+
+func grokApprovalArgs(approvalPolicy string) []string {
+	switch approvalPolicy {
+	case codeApprovalPolicyFullAuto:
+		return []string{"--always-approve"}
+	case codeApprovalPolicySafeAuto:
+		return []string{"--permission-mode", "auto"}
+	default:
+		return []string{"--permission-mode", "default"}
 	}
 }
 
@@ -230,6 +255,10 @@ func (codexExecutorFactory) ConfigureCommand(command *exec.Cmd, session *model.A
 	}
 	prependCommandArgs(command, providerArgs...)
 	configureProviderEnvironment(command, map[string]string{codexSessionAPIKeyEnv: config.APIKey})
+	return nil
+}
+
+func (grokExecutorFactory) ConfigureCommand(_ *exec.Cmd, _ *model.AIDevSession) error {
 	return nil
 }
 

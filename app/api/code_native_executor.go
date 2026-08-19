@@ -32,6 +32,17 @@ func buildNativeCodeCommand(session *model.AIDevSession) (*exec.Cmd, string, err
 	nativeSessionID := strings.TrimSpace(session.NativeSessionID)
 	args := make([]string, 0)
 	switch definition.ID {
+	case "grok":
+		args = append(args, "--no-auto-update")
+		args = append(args, grokApprovalArgs(session.ApprovalPolicy)...)
+		if nativeSessionID == "" || !nativeGrokSessionExists(nativeSessionID) {
+			if nativeSessionID == "" {
+				nativeSessionID = uuid.NewString()
+			}
+			args = append(args, "--session-id", nativeSessionID)
+		} else {
+			args = append(args, "--resume", nativeSessionID)
+		}
 	case "claude":
 		args = append(args, claudeApprovalArgs(session.ApprovalPolicy)...)
 		if nativeSessionID != "" && !nativeClaudeSessionExists(nativeSessionID, commandEnv) {

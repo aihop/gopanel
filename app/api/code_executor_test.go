@@ -90,11 +90,16 @@ func TestBuildCodeExecutorArgsPreservesPrompt(t *testing.T) {
 	prompt := `"; touch /tmp/PWNED; echo "`
 	tests := map[string][]string{
 		"codex":    {"-c", codexNetworkConfig, "-c", codexDisableDocsMCP, "--ask-for-approval", "on-request", "--sandbox", "workspace-write", "exec", "--json", "--skip-git-repo-check", prompt},
+		"grok":     {"--no-auto-update", "--permission-mode", "auto", "--output-format", "streaming-json", "--resume", "native-1", "-p", prompt},
 		"opencode": {"run", "--format", "json", "--dangerously-skip-permissions", prompt},
 	}
 	for executorID, expected := range tests {
 		t.Run(executorID, func(t *testing.T) {
-			args, _, err := buildCodeExecutorArgs(executorID, prompt, "", 42, codeApprovalPolicySafeAuto)
+			nativeSessionID := ""
+			if executorID == "grok" {
+				nativeSessionID = "native-1"
+			}
+			args, _, err := buildCodeExecutorArgs(executorID, prompt, nativeSessionID, 42, codeApprovalPolicySafeAuto)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -115,6 +120,7 @@ func TestBuildCodeExecutorArgsResumesNativeSession(t *testing.T) {
 	prompt := "continue"
 	tests := map[string][]string{
 		"codex":    {"-c", codexNetworkConfig, "-c", codexDisableDocsMCP, "--ask-for-approval", "on-request", "--sandbox", "workspace-write", "exec", "resume", "--json", "--skip-git-repo-check", "native-1", prompt},
+		"grok":     {"--no-auto-update", "--permission-mode", "auto", "--output-format", "streaming-json", "--resume", "native-1", "-p", prompt},
 		"claude":   {"--print", "--output-format", "json", "--permission-mode", "acceptEdits", "--resume", "native-1", prompt},
 		"opencode": {"run", "--format", "json", "--dangerously-skip-permissions", "--session", "native-1", prompt},
 	}
@@ -140,6 +146,9 @@ func TestBuildExecutorArgsMapsApprovalPolicies(t *testing.T) {
 		{executorID: "claude", policy: codeApprovalPolicyManual, expected: []string{"--permission-mode", "manual"}},
 		{executorID: "claude", policy: codeApprovalPolicySafeAuto, expected: []string{"--permission-mode", "acceptEdits"}},
 		{executorID: "claude", policy: codeApprovalPolicyFullAuto, expected: []string{"--dangerously-skip-permissions"}},
+		{executorID: "grok", policy: codeApprovalPolicyManual, expected: []string{"--permission-mode", "default"}},
+		{executorID: "grok", policy: codeApprovalPolicySafeAuto, expected: []string{"--permission-mode", "auto"}},
+		{executorID: "grok", policy: codeApprovalPolicyFullAuto, expected: []string{"--always-approve"}},
 		{executorID: "opencode", policy: codeApprovalPolicyFullAuto, expected: []string{"--dangerously-skip-permissions"}},
 	}
 	for _, test := range tests {
@@ -157,7 +166,7 @@ func TestBuildExecutorArgsMapsApprovalPolicies(t *testing.T) {
 }
 
 func TestExecutorCapabilitiesExposeNativeTerminalAndApprovals(t *testing.T) {
-	for _, executorID := range []string{"codex", "claude", "opencode", "aider"} {
+	for _, executorID := range []string{"codex", "grok", "claude", "opencode", "aider"} {
 		definition, err := getCodeExecutorDefinition(executorID)
 		if err != nil || !definition.NativeTerminal || len(definition.ApprovalPolicies) == 0 {
 			t.Fatalf("incomplete %s capabilities: %#v, %v", executorID, definition, err)

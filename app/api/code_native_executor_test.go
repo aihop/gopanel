@@ -15,7 +15,7 @@ import (
 
 func TestBuildNativeCodeCommandSupportsInstalledExecutors(t *testing.T) {
 	binDir := t.TempDir()
-	for _, name := range []string{"claude", "opencode", "aider"} {
+	for _, name := range []string{"grok", "claude", "opencode", "aider"} {
 		if err := os.WriteFile(filepath.Join(binDir, name), []byte("#!/bin/sh\n"), 0700); err != nil {
 			t.Fatal(err)
 		}
@@ -31,12 +31,20 @@ func TestBuildNativeCodeCommandSupportsInstalledExecutors(t *testing.T) {
 		t.Fatal(err)
 	}
 	workDir := t.TempDir()
+	grokSessionDir := filepath.Join(homeDir, ".grok", "sessions", "%2Fworkspace", "native-0")
+	if err := os.MkdirAll(grokSessionDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(grokSessionDir, "summary.json"), []byte("{}"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	tests := []struct {
 		executorID      string
 		nativeSessionID string
 		policy          string
 		expectedArgs    []string
 	}{
+		{executorID: "grok", nativeSessionID: "native-0", policy: codeApprovalPolicySafeAuto, expectedArgs: []string{"--no-auto-update", "--permission-mode", "auto", "--resume", "native-0"}},
 		{executorID: "claude", nativeSessionID: "native-1", policy: codeApprovalPolicySafeAuto, expectedArgs: []string{"--permission-mode", "acceptEdits", "--resume", "native-1"}},
 		{executorID: "opencode", nativeSessionID: "native-2", policy: codeApprovalPolicyFullAuto, expectedArgs: []string{"--session", "native-2"}},
 		{executorID: "aider", nativeSessionID: "native-3", policy: codeApprovalPolicyFullAuto},
@@ -69,6 +77,24 @@ func TestBuildNativeCodeCommandSupportsInstalledExecutors(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestBuildNativeGrokCommandRecreatesMissingSession(t *testing.T) {
+	binDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(binDir, "grok"), []byte("#!/bin/sh\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir)
+	t.Setenv("HOME", t.TempDir())
+	command, nativeSessionID, err := buildNativeCodeCommand(&model.AIDevSession{
+		ID: 8, AgentName: "grok", WorkDir: t.TempDir(), NativeSessionID: "missing-session",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if nativeSessionID != "missing-session" || !strings.Contains(strings.Join(command.Args, " "), "--session-id missing-session") {
+		t.Fatalf("missing Grok session should be recreated: %q %#v", nativeSessionID, command.Args)
 	}
 }
 

@@ -739,6 +739,7 @@ export default {
 		openingSession: "Opening Code session #{id}...",
 		executorDesc_terminal: "Use a standard terminal in an isolated workspace",
 		executorDesc_codex: "Run development tasks with OpenAI Codex",
+		executorDesc_grok: "Run development tasks with xAI Grok Build",
 		executorDesc_claude: "Run development tasks with Claude Code",
 		executorDesc_opencode: "Run development tasks with OpenCode",
 		executorDesc_aider: "Run development tasks with Aider",

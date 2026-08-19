@@ -72,6 +72,7 @@ func TestCodeExecutorSearchDirsIncludePackageManagerLocations(t *testing.T) {
 	dirs := codeExecutorSearchDirs()
 	for _, expected := range []string{
 		filepath.Join(homeDir, "sdk", "flutter", "bin"),
+		filepath.Join(homeDir, ".grok", "bin"),
 		filepath.Join(homeDir, ".npm-global", "bin"),
 		filepath.Join(homeDir, ".volta", "bin"),
 		"/opt/homebrew/bin",

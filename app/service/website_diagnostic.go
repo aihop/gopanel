@@ -72,7 +72,7 @@ func normalizeWebsiteDiagnosticSetting(setting *model.WebsiteDiagnosticSetting) 
 	if setting.DefaultExecutorID == "" {
 		setting.DefaultExecutorID = websiteDiagnosticDefaultExecutor
 	}
-	validExecutors := map[string]bool{"codex": true, "claude": true, "opencode": true, "aider": true}
+	validExecutors := map[string]bool{"codex": true, "grok": true, "claude": true, "opencode": true, "aider": true}
 	if !validExecutors[setting.DefaultExecutorID] {
 		return buserr.New("ErrWebsiteDiagnosticInvalidExecutor")
 	}
@@ -82,6 +82,7 @@ func normalizeWebsiteDiagnosticSetting(setting *model.WebsiteDiagnosticSetting) 
 	}
 	validPolicies := map[string]map[string]bool{
 		"codex":    {"manual": true, "safe_auto": true, "full_auto": true},
+		"grok":     {"manual": true, "safe_auto": true, "full_auto": true},
 		"claude":   {"manual": true, "safe_auto": true, "full_auto": true},
 		"opencode": {"full_auto": true},
 		"aider":    {"full_auto": true},

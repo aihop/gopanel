@@ -166,7 +166,7 @@ watch(
 
 watch(selectedExecutorId, value => {
 	const executor = executors.value.find(item => item.id === value)
-	providerMode.value = executor?.configured || executor?.id === "claude" ? "default" : "custom"
+	providerMode.value = executor?.configured || ["claude", "grok"].includes(executor?.id || "") ? "default" : "custom"
 	if (value && !approvalPolicies.value.includes(approvalPolicy.value)) {
 		approvalPolicy.value = approvalPolicies.value.includes("safe_auto")
 			? "safe_auto"
@@ -301,7 +301,7 @@ const submit = async () => {
 								</div>
 								<div v-if="executor.available && !executor.configured" class="mt-2 text-xs text-amber-600">
 									{{
-										t(executor.id === "claude" ? "code.executorConnectionUndetected" : "code.executorNeedsProvider")
+										t(["claude", "grok"].includes(executor.id) ? "code.executorConnectionUndetected" : "code.executorNeedsProvider")
 									}}
 								</div>
 								<div v-if="!executor.available" class="mt-2 text-xs text-amber-600">
@@ -321,7 +321,7 @@ const submit = async () => {
 									<n-space>
 										<n-radio
 											value="default"
-											:disabled="!selectedExecutor?.configured && selectedExecutor?.id !== 'claude'"
+											:disabled="!selectedExecutor?.configured && !['claude', 'grok'].includes(selectedExecutor?.id || '')"
 										>
 											{{ t("code.providerDefault") }}
 										</n-radio>

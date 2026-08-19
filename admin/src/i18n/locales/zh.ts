@@ -722,6 +722,7 @@ export default {
 		openingSession: "正在打开开发会话 #{id}...",
 		executorDesc_terminal: "在隔离工作区中使用普通终端",
 		executorDesc_codex: "使用 OpenAI Codex 执行开发任务",
+		executorDesc_grok: "使用 xAI Grok Build 执行开发任务",
 		executorDesc_claude: "使用 Claude Code 执行开发任务",
 		executorDesc_opencode: "使用 OpenCode 执行开发任务",
 		executorDesc_aider: "使用 Aider 执行开发任务",

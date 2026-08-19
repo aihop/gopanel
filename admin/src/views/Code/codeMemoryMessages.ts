@@ -24,7 +24,7 @@ export const codeMemoryMessages = {
 			memorySetting: "抽取设置",
 			memoryDisabledTitle: "记忆抽取未启用",
 			memoryDisabledHint:
-				"抽取需要一个 AI 账号。执行器（Codex/Claude）用的是它们自己的登录态，面板拿不到，需要在 系统设置 › AI 账号 里添加并授权",
+				"抽取需要一个 AI 账号。执行器（Codex/Grok/Claude）用的是它们自己的登录态，面板拿不到，需要在 系统设置 › AI 账号 里添加并授权",
 			memoryEnable: "启用抽取",
 			memoryAccountAuto: "自动（按优先级挑选）",
 			memoryAccountHint: "账号在 系统设置 › AI 账号 里统一管理",
@@ -110,7 +110,7 @@ export const codeMemoryMessages = {
 			memorySetting: "Extraction settings",
 			memoryDisabledTitle: "Memory extraction is off",
 			memoryDisabledHint:
-				"Extraction needs an AI account. The executors (Codex/Claude) use their own logins, which the panel cannot borrow — add and authorize one under Settings › AI Accounts.",
+				"Extraction needs an AI account. The executors (Codex/Grok/Claude) use their own logins, which the panel cannot borrow — add and authorize one under Settings › AI Accounts.",
 			memoryEnable: "Enable extraction",
 			memoryAccountAuto: "Automatic (by priority)",
 			memoryAccountHint: "Accounts are managed in Settings › AI Accounts",

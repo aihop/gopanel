@@ -12,6 +12,17 @@ func TestParseCodexOutput(t *testing.T) {
 	}
 }
 
+func TestParseGrokOutput(t *testing.T) {
+	raw := []byte("{\"type\":\"text\",\"data\":\"hello \"}\n" +
+		"{\"type\":\"thought\",\"data\":\"working\"}\n" +
+		"{\"type\":\"text\",\"data\":\"world\"}\n" +
+		"{\"type\":\"end\",\"sessionId\":\"grok-session\"}\n")
+	result := parseCodeExecutorOutput("grok", raw, "prepared-session")
+	if result.NativeSessionID != "grok-session" || result.Message != "hello world" || result.RawOutput != string(raw) {
+		t.Fatalf("unexpected result: %#v", result)
+	}
+}
+
 func TestParseClaudeOutput(t *testing.T) {
 	raw := []byte(`{"result":"finished","session_id":"session-1","model":"claude-sonnet","usage":{"input_tokens":20,"output_tokens":5,"cache_read_input_tokens":7}}`)
 	result := parseCodeExecutorOutput("claude", raw, "")

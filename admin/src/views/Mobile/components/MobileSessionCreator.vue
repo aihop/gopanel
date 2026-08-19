@@ -30,7 +30,7 @@ const capabilityLoading = ref(false)
 const projectOptions = computed(() => projects.value.map(project => ({ label: project.name, value: project.id })))
 const availableExecutors = computed(() =>
 	executors.value.filter(
-		executor => executor.available && (executor.configured || executor.id === "claude") && executor.id !== "terminal"
+		executor => executor.available && (executor.configured || ["claude", "grok"].includes(executor.id)) && executor.id !== "terminal"
 	)
 )
 const executorOptions = computed(() => availableExecutors.value.map(executor => ({

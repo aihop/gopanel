@@ -25,6 +25,8 @@ func parseCodeExecutorOutput(executorID string, rawOutput []byte, preparedSessio
 	switch executorID {
 	case "codex":
 		parseCodexOutput(rawOutput, &result)
+	case "grok":
+		parseGrokOutput(rawOutput, &result)
 	case "claude":
 		parseClaudeOutput(rawOutput, &result)
 	case "opencode":
@@ -39,6 +41,24 @@ func parseCodeExecutorOutput(executorID string, rawOutput []byte, preparedSessio
 		result.TotalTokens = result.InputTokens + result.OutputTokens
 	}
 	return result
+}
+
+func parseGrokOutput(rawOutput []byte, result *codeExecutorOutput) {
+	var messages []string
+	scanJSONLines(rawOutput, func(event map[string]any) {
+		applyCodeUsageMap(result, event)
+		switch eventType, _ := event["type"].(string); eventType {
+		case "text":
+			if text, ok := event["data"].(string); ok {
+				messages = append(messages, text)
+			}
+		case "end":
+			if sessionID, ok := firstCodeString(event, "sessionId", "session_id"); ok {
+				result.NativeSessionID = sessionID
+			}
+		}
+	})
+	result.Message = strings.Join(messages, "")
 }
 
 func parseCodexOutput(rawOutput []byte, result *codeExecutorOutput) {

@@ -94,6 +94,8 @@ func getCodeRuntimeState(session *model.AIDevSession, includeProgress bool) *cod
 	}
 	var state *codexRuntimeState
 	switch session.AgentName {
+	case "grok":
+		state = getNativeGrokRuntimeState(session)
 	case "claude":
 		state = getNativeClaudeRuntimeState(session)
 	case "opencode":

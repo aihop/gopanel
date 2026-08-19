@@ -30,7 +30,7 @@ export function useCodexRuntimeState(sessionId: () => number | null | undefined,
 				const sessionResponse = await getCodeSession(currentSessionId)
 				executorId.value = sessionResponse.data.session.agentName || ""
 			}
-			if (!["codex", "claude", "opencode"].includes(executorId.value)) {
+			if (!["codex", "grok", "claude", "opencode"].includes(executorId.value)) {
 				runtimeSupported.value = false
 				return
 			}

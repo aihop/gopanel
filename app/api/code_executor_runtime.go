@@ -55,6 +55,7 @@ func codeExecutorSearchDirs() []string {
 		"sdk/go/bin",
 		"sdk/flutter/bin",
 		".local/bin",
+		".grok/bin",
 		".npm-global/bin",
 		".n/bin",
 		".nodebrew/current/bin",

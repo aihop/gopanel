@@ -42,7 +42,7 @@ func recoverNativeCodeHistoryOnce(session *model.AIDevSession) {
 }
 
 func supportsNativeCodeHistory(executorID string) bool {
-	return executorID == "codex" || executorID == "claude" || executorID == "opencode"
+	return executorID == "codex" || executorID == "grok" || executorID == "claude" || executorID == "opencode"
 }
 
 // recoverNativeCodeHistory 把执行器留在磁盘上的原生对话补回数据库，并返回这批消息。
@@ -87,6 +87,8 @@ func getNativeCodeMessages(session *model.AIDevSession) ([]*model.AIMessage, err
 	switch session.AgentName {
 	case "codex":
 		return getNativeCodexMessages(session)
+	case "grok":
+		return getNativeGrokMessages(session)
 	case "claude":
 		return getNativeClaudeMessages(session)
 	case "opencode":
