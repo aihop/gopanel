@@ -29,7 +29,7 @@ if [[ "${2:-}" =~ ^[0-9]+$ ]]; then
 else
   VERSION_CODE="$(derive_version_code "${VERSION}")"
 fi
-APP_BRAND="${3:-GoPanel}"
+APP_BRAND="GoPanel"
 APP_NAME="gopanel"
 BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 GIT_COMMIT="$(git rev-parse --short HEAD 2>/dev/null || true)"
@@ -60,15 +60,7 @@ else
   TARGETS=("darwin/arm64" "darwin/amd64" "linux/amd64" "linux/arm64" "windows/amd64")
 fi
 
-if [ "${APP_BRAND}" = "consolex" ]; then
-  APP_BRAND="ConsoleX"
-fi
-
-if [ "${APP_BRAND}" = "ConsoleX" ]; then
-  OUTDIR="${PROJECT_ROOT}/dist/consolex/v${VERSION}"
-else 
-  OUTDIR="${PROJECT_ROOT}/dist/v${VERSION}"
-fi
+OUTDIR="${PROJECT_ROOT}/dist/v${VERSION}"
 MAIN_PKG="./main.go"
 GPC_ROOT="${PROJECT_ROOT}/gpc"
 GPC_MAIN_PKG="./main.go"
@@ -82,14 +74,10 @@ echo "==========================================="
 
 bash "${PROJECT_ROOT}/scripts/check-file-size.sh"
 
-# 前端构建逻辑 (保持不变)
+# 前端构建逻辑
 if [ -d "${PROJECT_ROOT}/admin" ]; then
   echo "Building frontend..."
-  if [ "${APP_BRAND}" = "ConsoleX" ]; then
-    (cd "${PROJECT_ROOT}/admin" && npm install && npm run build:consolex)
-  else
-    (cd "${PROJECT_ROOT}/admin" && npm install && npm run build)
-  fi
+  (cd "${PROJECT_ROOT}/admin" && npm install && npm run build)
   mkdir -p "${PROJECT_ROOT}/public"
   cp -r "${PROJECT_ROOT}/admin/dist/"* "${PROJECT_ROOT}/public/"
 fi

@@ -158,8 +158,7 @@ func describeNonJSONResponse(node model.Node) error {
 	}
 	brand = strings.TrimSpace(brand)
 	version = strings.TrimSpace(version)
-	// 不拿品牌当否决条件：AppBrand 是 ldflags 注入的（GoPanel / ConsoleX），
-	// 混品牌车队里两边不一致是正常的，把它当信息展示出来就好
+	// 不拿品牌当否决条件：AppBrand 是构建期注入的信息，仅用于展示。
 	if brand == "" && version == "" {
 		return fmt.Errorf("目标地址不是面板服务")
 	}

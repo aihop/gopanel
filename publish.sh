@@ -118,14 +118,10 @@ else
     TAG_NAME="v${VERSION}"
 fi
 
-# changelog 登记用：version_code（可用 VERSION_CODE 覆盖，否则从版本名推导）+ 品牌/slug 前缀
+# changelog 登记用：version_code（可用 VERSION_CODE 覆盖，否则从版本名推导）
 VERSION_CODE="${VERSION_CODE:-$(derive_version_code "${VERSION}")}"
-APP_BRAND="${APP_BRAND:-GoPanel}"
-if [ "${APP_BRAND}" = "ConsoleX" ] || [ "${APP_BRAND}" = "consolex" ]; then
-    SLUG_PREFIX="consolex"; BRAND_TITLE="ConsoleX"
-else
-    SLUG_PREFIX="gopanel"; BRAND_TITLE="GoPanel"
-fi
+SLUG_PREFIX="gopanel"
+BRAND_TITLE="GoPanel"
 
 # 仓库名称 (防止误传 VERSION_CODE，要求必须包含 / 才视为仓库名)
 if [ -n "${2:-}" ] && [[ "${2}" == */* ]]; then
