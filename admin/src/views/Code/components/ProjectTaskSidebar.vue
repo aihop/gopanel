@@ -90,7 +90,7 @@ const taskTime = (task: CodeTaskListItem) =>
               <CodeTaskFocusMarker :active="currentTaskId === task.id" />
               <div class="min-w-0 flex-1">
                 <div
-                  class="flex min-w-0 items-center gap-1.5 text-sm font-semibold text-slate-800"
+                  class="ai-workspace-task-title flex min-w-0 items-center gap-1.5 text-sm font-semibold text-slate-800"
                   :title="task.title"
                 >
                   <Icon
@@ -167,7 +167,12 @@ const taskTime = (task: CodeTaskListItem) =>
 	底色只是陪衬，主信号是那条竖线。
 */
 .ai-workspace-task-row--active {
-	background-color: color-mix(in srgb, var(--primary-color) 12%, transparent);
+	background-color: color-mix(in srgb, var(--primary-color) 16%, transparent);
+}
+
+.ai-workspace-task-row--active .ai-workspace-task-title {
+	color: var(--primary-color);
+	font-weight: 700;
 }
 
 /* 悬停时先给一条淡的，提示「点这里会选中」 */
@@ -189,7 +194,7 @@ const taskTime = (task: CodeTaskListItem) =>
 }
 
 :global(.theme-dark) .ai-workspace-task-row--active {
-	background-color: color-mix(in srgb, var(--primary-color) 16%, transparent) !important;
+	background-color: color-mix(in srgb, var(--primary-color) 20%, transparent) !important;
 }
 
 :global(.theme-dark) .ai-workspace-task-btn {
