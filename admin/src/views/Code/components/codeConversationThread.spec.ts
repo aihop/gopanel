@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
 	conversationMessageText,
+	conversationRunForMessage,
 	conversationRunRunning,
 	conversationSessionClosed,
 	conversationSessionInitializing,
@@ -35,5 +36,10 @@ describe("conversation session gates", () => {
 		expect(conversationRunRunning([{ status: "running" } as never])).toBe(true)
 		expect(conversationRunRunning([{ status: "queued" } as never])).toBe(true)
 		expect(conversationRunRunning([{ status: "completed" } as never])).toBe(false)
+	})
+
+	it("按 runId 挂上结构化执行结果", () => {
+		expect(conversationRunForMessage([{ id: 8, status: "completed" } as never], 8)?.status).toBe("completed")
+		expect(conversationRunForMessage([{ id: 8, status: "completed" } as never], 3)).toBeUndefined()
 	})
 })

@@ -761,7 +761,7 @@ export default {
 		stateLoadFailed: "Failed to load session state",
 		conversationEmpty: "Describe the development task you want completed",
 		promptPlaceholder: "Example: inspect the login API, fix the issue, then run related tests",
-		promptHint: "Press Ctrl/⌘ + Enter to send; only high-risk operations require approval",
+		promptHint: "Press Enter to send, Shift + Enter for a new line",
 		sendInstruction: "Send",
 		sendingInstruction: "Sending",
 		instructionQueued: "Task execution started",

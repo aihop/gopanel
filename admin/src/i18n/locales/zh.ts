@@ -743,7 +743,7 @@ export default {
 		stateLoadFailed: "会话状态加载失败",
 		conversationEmpty: "直接描述你要完成的开发任务",
 		promptPlaceholder: "例如：检查登录接口并修复异常，然后运行相关测试",
-		promptHint: "按 Ctrl/⌘ + Enter 发送；仅高风险操作需要审批",
+		promptHint: "Enter 发送，Shift + Enter 换行",
 		sendInstruction: "发送",
 		sendingInstruction: "发送中",
 		instructionQueued: "任务已开始执行",

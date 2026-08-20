@@ -67,7 +67,6 @@ export function useCodeConversation(sessionId: () => number | null, taskId: () =
 			const response = await createCodeInstruction(id, content)
 			if (response.code !== 0) throw new Error(response.message)
 			draft.value = ""
-			toast.success(t("code.instructionQueued"))
 			await loadHistory(true)
 			return response.data.task?.id || 0
 		} catch (error) {

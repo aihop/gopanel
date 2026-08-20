@@ -167,7 +167,7 @@ const openFile = (file: { path: string; extension: string }) => {
 
       <div
         v-show="workspaceMode === 'conversation'"
-        class="min-h-0 flex-1 bg-white"
+        class="min-h-0 flex-1"
       >
         <CodeConversationPanel
           v-if="sessionId"

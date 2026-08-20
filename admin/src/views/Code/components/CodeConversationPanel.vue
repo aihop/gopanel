@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from "vue"
-import { conversationMessageText, isLongConversationMessage } from "./codeConversationThread"
+import Icon from "@/components/common/Icon.vue"
+import { conversationRunForMessage } from "./codeConversationThread"
+import { isConversationSubmitKey } from "./codeConversationMarkdown"
+import CodeConversationMessage from "./CodeConversationMessage.vue"
 import { useCodeConversation } from "./useCodeConversation"
 
 const props = defineProps<{
@@ -19,7 +22,7 @@ const {
 	loadError,
 	draft,
 	messages,
-	expandedMessageIds,
+	runs,
 	closed,
 	initializing,
 	running,
@@ -27,7 +30,6 @@ const {
 	loadHistory,
 	sendInstruction,
 	stopExecution,
-	toggleMessageExpanded,
 } = useCodeConversation(
 	() => props.sessionId,
 	() => props.taskId,
@@ -42,7 +44,7 @@ const scrollToBottom = async () => {
 }
 
 watch(
-	() => messages.value.length,
+	() => [messages.value.length, messages.value.at(-1)?.content],
 	() => void scrollToBottom(),
 )
 
@@ -53,7 +55,7 @@ const submit = async () => {
 }
 
 const onComposerKeydown = (event: KeyboardEvent) => {
-	if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey) || event.isComposing) return
+	if (!isConversationSubmitKey(event)) return
 	event.preventDefault()
 	void submit()
 }
@@ -66,84 +68,74 @@ const composerDisabledHint = () => {
 </script>
 
 <template>
-  <section class="flex min-h-0 flex-1 flex-col overflow-hidden bg-transparent">
+  <section class="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-transparent">
     <n-spin :show="loading && messages.length === 0" class="flex min-h-0 flex-1 flex-col">
       <div
-        v-if="loadError && messages.length === 0"
-        class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-8"
-      >
-        <n-empty :description="t('code.historyLoadFailed')" />
-        <n-button size="small" @click="loadHistory()">{{ t("code.retry") }}</n-button>
-      </div>
-      <n-empty
-        v-else-if="!loading && messages.length === 0"
-        class="min-h-0 flex-1"
-        :description="t('code.conversationEmpty')"
-      />
-      <div
-        v-else
         ref="listRef"
-        class="min-h-0 flex-1 space-y-3 overflow-auto px-4 py-4"
+        class="min-h-0 flex-1 overflow-auto px-4 pb-36 pt-4"
       >
-        <article
-          v-for="item in messages"
-          :key="item.id"
-          class="rounded-xl border border-slate-200/70 p-3.5 dark:border-white/10"
-          :class="item.role === 'user' ? 'bg-slate-50/80 dark:bg-white/5' : ''"
+        <div
+          v-if="loadError && messages.length === 0"
+          class="flex min-h-full flex-col items-center justify-center gap-3"
         >
-          <div class="mb-2 flex items-center justify-between gap-3">
-            <n-tag size="small" :type="item.role === 'user' ? 'info' : 'success'" :bordered="false">
-              {{ item.role === "user" ? t("code.userMessage") : t("code.executorMessage") }}
-            </n-tag>
-            <span class="text-xs text-slate-400">{{ new Date(item.createdAt).toLocaleString() }}</span>
-          </div>
-          <pre class="whitespace-pre-wrap break-words font-sans text-[13px] leading-6 tracking-[0.01em] text-[var(--n-text-color-2)]">{{
-            conversationMessageText(item.content, expandedMessageIds.has(item.id))
-          }}</pre>
-          <n-button
-            v-if="isLongConversationMessage(item.content)"
-            text
-            type="primary"
-            size="small"
-            class="mt-2"
-            @click="toggleMessageExpanded(item.id)"
-          >
-            {{ expandedMessageIds.has(item.id) ? t("code.collapseMessage") : t("code.expandMessage") }}
-          </n-button>
-        </article>
+          <n-empty :description="t('code.historyLoadFailed')" />
+          <n-button size="small" @click="loadHistory()">{{ t("code.retry") }}</n-button>
+        </div>
+        <n-empty
+          v-else-if="!loading && messages.length === 0"
+          class="flex min-h-full items-center justify-center"
+          :description="t('code.conversationEmpty')"
+        />
+        <div
+          v-else
+          class="mx-auto flex min-h-full max-w-[46rem] flex-col justify-end gap-4"
+        >
+          <CodeConversationMessage
+            v-for="item in messages"
+            :key="item.id"
+            :message="item"
+            :run="conversationRunForMessage(runs, item.runId)"
+          />
+        </div>
       </div>
     </n-spin>
 
-    <footer class="shrink-0 border-t border-slate-200/70 p-3 dark:border-white/10">
-      <p class="mb-2 text-xs tracking-[0.01em] text-[var(--n-text-color-3)]">{{ composerDisabledHint() }}</p>
+    <footer class="conversation-composer absolute inset-x-3 bottom-3 z-10 rounded-2xl border border-slate-200/80 bg-white/95 p-2.5 shadow-[0_10px_30px_rgba(15,23,42,0.08)] backdrop-blur-md dark:border-white/10 dark:bg-[color-mix(in_srgb,var(--bg-default-color)_92%,transparent)]">
+      <p class="px-1 pb-1.5 text-xs tracking-[0.01em] text-[var(--n-text-color-3)]">{{ composerDisabledHint() }}</p>
       <div class="flex items-end gap-2">
         <n-input
           v-model:value="draft"
           type="textarea"
-          :autosize="{ minRows: 2, maxRows: 6 }"
+          :autosize="{ minRows: 1, maxRows: 6 }"
           :disabled="!canSend"
           :placeholder="t('code.promptPlaceholder')"
           @keydown="onComposerKeydown"
         />
-        <div class="flex shrink-0 flex-col gap-2">
-          <n-button
-            v-if="running"
-            size="small"
-            :loading="stopping"
-            @click="stopExecution"
-          >
-            {{ t("code.stopExecution") }}
-          </n-button>
-          <n-button
-            type="primary"
-            size="small"
-            :disabled="!canSend || !draft.trim()"
-            :loading="sending"
-            @click="submit"
-          >
-            {{ t(sending ? "code.sendingInstruction" : "code.sendInstruction") }}
-          </n-button>
-        </div>
+        <n-button
+          v-if="running"
+          circle
+          size="small"
+          :loading="stopping"
+          :title="t('code.stopExecution')"
+          @click="stopExecution"
+        >
+          <template #icon>
+            <Icon name="mdi:stop" :size="16" />
+          </template>
+        </n-button>
+        <n-button
+          type="primary"
+          circle
+          size="small"
+          :disabled="!canSend || !draft.trim()"
+          :loading="sending"
+          :title="t('code.sendInstruction')"
+          @click="submit"
+        >
+          <template #icon>
+            <Icon name="mdi:arrow-up" :size="16" />
+          </template>
+        </n-button>
       </div>
     </footer>
   </section>

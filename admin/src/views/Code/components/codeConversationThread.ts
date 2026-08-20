@@ -35,3 +35,12 @@ export function conversationRunRunning(runs: CodeExecutionRun[]) {
 export function visibleConversationMessages(messages: AIMessage[], hideExecutorMessages: boolean) {
 	return hideExecutorMessages ? messages.filter(item => item.role === "user") : messages
 }
+
+export function conversationRunForMessage(runs: CodeExecutionRun[], runId: number | undefined) {
+	if (!runId) return undefined
+	return runs.find(run => run.id === runId)
+}
+
+export function isUserConversationMessage(role: string) {
+	return role === "user"
+}
