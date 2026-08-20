@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue"
+import { computed, nextTick, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 import { useMessage } from "naive-ui"
 import { getCodeSessionFile } from "@/api/modules/codeEditor"
@@ -25,6 +25,7 @@ type SnippetEditor = {
 	} | null
 	setSelection?: (range: SnippetRange) => void
 	revealRangeInCenter?: (range: SnippetRange) => void
+	revealLineInCenter?: (line: number) => void
 	focus?: () => void
 }
 
@@ -32,6 +33,8 @@ const props = defineProps<{
 	sessionId: number
 	path: string
 	attachToChat?: boolean
+	initialQuery?: string
+	initialLine?: number
 }>()
 
 const emit = defineEmits<{
@@ -120,10 +123,24 @@ const insertSnippet = () => {
 
 watch(
 	() => [props.sessionId, props.path],
-	() => void loadFile(),
+	() => {
+		searchQuery.value = props.initialQuery || ""
+		void loadFile()
+	},
 	{ immediate: true },
 )
-watch(searchQuery, () => revealMatch(0))
+watch([searchQuery, loading], async () => {
+	if (loading.value) return
+	await nextTick()
+	revealMatch(0)
+})
+watch([loading, content], () => {
+	if (loading.value || searchQuery.value.trim() || !props.initialLine) return
+	const editor = editorRef.value?.editorRef
+	if (!editor) return
+	editor.revealLineInCenter?.(props.initialLine)
+	editor.setSelection?.({ startLineNumber: props.initialLine, endLineNumber: props.initialLine, startColumn: 1, endColumn: 1 })
+})
 </script>
 
 <template>

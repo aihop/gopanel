@@ -75,6 +75,7 @@ func CodeRouter(r fiber.Router) {
 		group.Post("/sessions/:id/instructions", api.CreateAISessionInstruction)
 		group.Get("/sessions/:id/state", api.GetAISessionState)
 		group.Get("/sessions/:id/structure", api.GetAISessionStructure)
+		group.Get("/sessions/:id/structure/search", api.GetAISessionStructureSearch)
 		group.Get("/sessions/:id/file", api.GetAISessionFile)
 		group.Get("/sessions/:id/file-preview", api.GetAISessionFilePreview)
 		group.Put("/sessions/:id/file", api.SaveAISessionFile)

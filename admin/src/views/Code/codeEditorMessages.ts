@@ -4,7 +4,7 @@ export const codeEditorMessages = {
 			projectStructure: "项目结构",
 			dragStructureToChat: "拖到输入框即可附加",
 			refreshStructure: "刷新项目结构",
-			filterStructure: "搜索文件或目录",
+			filterStructure: "搜索文件、目录或内容",
 			structureLoadFailed: "项目结构加载失败",
 			structureEmpty: "项目目录为空",
 			structureTruncated: "仅显示前 500 项",
@@ -32,7 +32,9 @@ export const codeEditorMessages = {
 			snippetSearchCount: "{current}/{total}",
 			snippetSearchPrev: "上一个",
 			snippetSearchNext: "下一个",
-			closeSnippet: "关闭"
+			closeSnippet: "关闭",
+			structureSearchEmpty: "没有匹配的文件",
+			structureSearchTruncated: "仅显示部分结果"
 		}
 	},
 	en: {
@@ -40,7 +42,7 @@ export const codeEditorMessages = {
 			projectStructure: "Project structure",
 			dragStructureToChat: "Drag a file onto the composer to attach it",
 			refreshStructure: "Refresh project structure",
-			filterStructure: "Search files or folders",
+			filterStructure: "Search files, folders, or contents",
 			structureLoadFailed: "Failed to load project structure",
 			structureEmpty: "The project directory is empty",
 			structureTruncated: "Showing the first 500 items only",
@@ -68,7 +70,9 @@ export const codeEditorMessages = {
 			snippetSearchCount: "{current}/{total}",
 			snippetSearchPrev: "Previous",
 			snippetSearchNext: "Next",
-			closeSnippet: "Close"
+			closeSnippet: "Close",
+			structureSearchEmpty: "No matching files",
+			structureSearchTruncated: "Showing partial results"
 		}
 	}
 } as const

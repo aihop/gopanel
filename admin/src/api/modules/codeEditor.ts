@@ -13,6 +13,22 @@ export interface CodeStructureResult {
 	truncated: boolean
 }
 
+export interface CodeStructureSearchHit {
+	name: string
+	path: string
+	isDir: boolean
+	extension: string
+	kind: "name" | "content"
+	line?: number
+	preview?: string
+}
+
+export interface CodeStructureSearchResult {
+	query: string
+	hits: CodeStructureSearchHit[]
+	truncated: boolean
+}
+
 export interface CodeSessionFile {
 	path: string
 	content: string
@@ -23,6 +39,10 @@ export interface CodeSessionFile {
 
 export function getCodeSessionStructure(sessionId: number, path = "") {
 	return http.get<CodeStructureResult>(`/code/sessions/${sessionId}/structure`, { path }, { timeout: 10000 })
+}
+
+export function searchCodeSessionStructure(sessionId: number, query: string) {
+	return http.get<CodeStructureSearchResult>(`/code/sessions/${sessionId}/structure/search`, { q: query }, { timeout: 15000 })
 }
 
 export function getCodeSessionFile(sessionId: number, path: string) {

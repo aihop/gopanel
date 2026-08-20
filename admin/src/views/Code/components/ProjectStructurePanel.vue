@@ -4,9 +4,10 @@ import type { TreeOption } from "naive-ui"
 import { NButton, NPopover, useMessage } from "naive-ui"
 import { useI18n } from "vue-i18n"
 import Icon from "@/components/common/Icon.vue"
-import { getCodeSessionStructure, type CodeStructureEntry } from "@/api/modules/codeEditor"
+import { getCodeSessionStructure, searchCodeSessionStructure, type CodeStructureEntry, type CodeStructureSearchHit } from "@/api/modules/codeEditor"
 import { codeEditorMessages } from "../codeEditorMessages"
 import { writeStructureDragData } from "./codeConversationAttachments"
+import CodeStructureSearchHits from "./CodeStructureSearchHits.vue"
 import CodeStructureSnippetPopover from "./CodeStructureSnippetPopover.vue"
 
 interface StructureTreeOption extends TreeOption {
@@ -41,6 +42,13 @@ const nodes = ref<StructureTreeOption[]>([])
 const expandedKeys = ref<Array<string | number>>([])
 const selectedKeys = ref<Array<string | number>>(props.selectedPath ? [props.selectedPath] : [])
 const snippetPath = ref("")
+const searchHits = ref<CodeStructureSearchHit[]>([])
+const searchLoading = ref(false)
+const searchTruncated = ref(false)
+const searchSnippetPath = ref("")
+const searchSnippetLine = ref(0)
+const searching = computed(() => pattern.value.trim().length >= 2)
+let searchTimer: ReturnType<typeof setTimeout> | null = null
 
 const normalizedChangedFiles = computed(() =>
 	props.changedFiles.map(file => file.replaceAll("\\", "/").replace(/^\.\//, "").replace(/^\//, ""))
@@ -167,6 +175,29 @@ const renderLabel = ({ option }: { option: TreeOption }) => {
 	])
 }
 
+const runStructureSearch = async (query: string) => {
+	searchLoading.value = true
+	try {
+		const response = await searchCodeSessionStructure(props.sessionId, query)
+		if (pattern.value.trim() !== query) return
+		searchHits.value = response.data.hits || []
+		searchTruncated.value = Boolean(response.data.truncated)
+	} catch {
+		if (pattern.value.trim() === query) searchHits.value = []
+	} finally {
+		if (pattern.value.trim() === query) searchLoading.value = false
+	}
+}
+
+const openSearchHit = (hit: CodeStructureSearchHit) => {
+	selectedKeys.value = [hit.path]
+	emit("select-file", { path: hit.path, extension: hit.extension || "", isDir: hit.isDir })
+	if (hit.isDir) return
+	searchSnippetPath.value = hit.path
+	searchSnippetLine.value = hit.line || 0
+	snippetPath.value = ""
+}
+
 const selectFile = (node: StructureTreeOption) => {
 	selectedKeys.value = [node.key]
 	emit("select-file", {
@@ -193,6 +224,19 @@ watch(
 	() => props.selectedPath,
 	path => {
 		if (path) selectedKeys.value = [path]
+	}
+)
+watch(
+	() => pattern.value.trim(),
+	query => {
+		if (searchTimer) clearTimeout(searchTimer)
+		if (query.length < 2) {
+			searchHits.value = []
+			searchTruncated.value = false
+			searchLoading.value = false
+			return
+		}
+		searchTimer = setTimeout(() => void runStructureSearch(query), 300)
 	}
 )
 </script>
@@ -236,7 +280,17 @@ watch(
 		</div>
 
 		<div class="relative min-h-0 flex-1 overflow-hidden">
-			<div class="structure-scroll absolute inset-0 overflow-auto px-2 py-3">
+			<CodeStructureSearchHits
+				v-if="searching"
+				:hits="searchHits"
+				:loading="searchLoading"
+				:truncated="searchTruncated"
+				@select="openSearchHit"
+			/>
+			<div
+				v-else
+				class="structure-scroll absolute inset-0 overflow-auto px-2 py-3"
+			>
 				<div
 					v-if="loadError"
 					class="flex h-full min-h-48 flex-col items-center justify-center gap-3 px-4 text-center"
@@ -255,8 +309,6 @@ watch(
 					block-line
 					:cancelable="false"
 					:data="nodes"
-					:pattern="pattern"
-					:show-irrelevant-nodes="false"
 					:expanded-keys="expandedKeys"
 					:on-load="loadChildren"
 					:render-prefix="renderPrefix"
@@ -267,11 +319,33 @@ watch(
 				/>
 			</div>
 			<div
-				v-if="loading"
+				v-if="loading && !searching"
 				class="absolute inset-0 z-10 flex items-center justify-center bg-white/70 backdrop-blur-[1px]"
 			>
 				<n-spin />
 			</div>
+			<n-popover
+				:show="Boolean(searchSnippetPath)"
+				trigger="manual"
+				placement="left"
+				to="body"
+				style="padding: 12px"
+				@update:show="show => { if (!show) searchSnippetPath = '' }"
+			>
+				<template #trigger>
+					<span class="pointer-events-none absolute right-2 top-2 h-px w-px" />
+				</template>
+				<CodeStructureSnippetPopover
+					v-if="searchSnippetPath"
+					:session-id="sessionId"
+					:path="searchSnippetPath"
+					:attach-to-chat="attachToChat"
+					:initial-query="pattern.trim()"
+					:initial-line="searchSnippetLine"
+					@insert="emit('insert-snippet', $event)"
+					@close="searchSnippetPath = ''"
+				/>
+			</n-popover>
 		</div>
 
 		<div v-if="truncated || changedFiles.length" class="border-t border-slate-200 px-3 py-2 text-xs text-slate-400">
