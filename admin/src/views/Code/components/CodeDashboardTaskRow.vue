@@ -4,7 +4,6 @@ import { useI18n } from "vue-i18n"
 import type { CodeTaskListItem } from "@/api/interface/codeTasks"
 import Icon from "@/components/common/Icon.vue"
 import { codeProjectMessages } from "@/i18n/locales/codeProject"
-import { codeTaskTimestamp } from "../codeDashboardBuckets"
 import TaskApprovalAction from "./TaskApprovalAction.vue"
 
 const props = defineProps<{
@@ -23,9 +22,6 @@ const emit = defineEmits<{
 }>()
 const { t } = useI18n({ messages: codeProjectMessages })
 
-const timeLabel = computed(() =>
-	new Date(codeTaskTimestamp(props.task)).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }),
-)
 const deliveryNeedsAttention = computed(() =>
 	["failed", "partial", "conflict"].includes(props.task.summary.deliveryStatus || ""),
 )
@@ -90,7 +86,6 @@ const deliveryNeedsAttention = computed(() =>
         />
       </template>
     </n-button>
-    <span class="w-10 shrink-0 text-right text-[11px] tabular-nums text-[var(--n-text-color-3)]">{{ timeLabel }}</span>
   </div>
 </template>
 
