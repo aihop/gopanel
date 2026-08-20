@@ -154,6 +154,7 @@
 
           <CodeConversationPanel
             v-if="workspaceMode === 'conversation' && currentSessionId !== null && !isProjectTerminalActive"
+            class="min-h-0 flex-1 overflow-hidden"
             :session-id="currentSessionId"
             :task-id="currentTaskId"
             @task-created="handleTaskCreated"

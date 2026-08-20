@@ -246,7 +246,13 @@ func nativeCodexMessageText(value json.RawMessage) string {
 func mergeCodeHistoryMessages(databaseMessages, nativeMessages []*model.AIMessage) []*model.AIMessage {
 	merged := append([]*model.AIMessage{}, databaseMessages...)
 	for _, nativeMessage := range nativeMessages {
-		if nativeMessage == nil || isDuplicateHistoryMessage(databaseMessages, nativeMessage) {
+		if nativeMessage == nil {
+			continue
+		}
+		if nativeMessage.Role == "user" && stripInjectedConversationPrompt(nativeMessage.Content) == "" {
+			continue
+		}
+		if isDuplicateHistoryMessage(databaseMessages, nativeMessage) {
 			continue
 		}
 		merged = append(merged, nativeMessage)
@@ -271,7 +277,10 @@ func mergeCodeHistoryMessages(databaseMessages, nativeMessages []*model.AIMessag
 
 func isDuplicateHistoryMessage(databaseMessages []*model.AIMessage, candidate *model.AIMessage) bool {
 	for _, message := range databaseMessages {
-		if message == nil || message.Role != candidate.Role || strings.TrimSpace(message.Content) != candidate.Content {
+		if message == nil || message.Role != candidate.Role {
+			continue
+		}
+		if stripInjectedConversationPrompt(message.Content) != stripInjectedConversationPrompt(candidate.Content) {
 			continue
 		}
 		if message.CreatedAt.IsZero() || candidate.CreatedAt.IsZero() {

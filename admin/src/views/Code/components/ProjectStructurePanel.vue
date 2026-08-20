@@ -36,6 +36,7 @@ const loadError = ref(false)
 const truncated = ref(false)
 const pattern = ref("")
 const nodes = ref<StructureTreeOption[]>([])
+const expandedKeys = ref<Array<string | number>>([])
 
 const normalizedChangedFiles = computed(() =>
 	props.changedFiles.map(file => file.replaceAll("\\", "/").replace(/^\.\//, "").replace(/^\//, ""))
@@ -62,8 +63,12 @@ const loadRoot = async () => {
 		const response = await getCodeSessionStructure(props.sessionId)
 		nodes.value = response.data.entries.map(toTreeOption)
 		truncated.value = response.data.truncated
+		const directories = nodes.value.filter(node => node.isDir).slice(0, 40)
+		await Promise.all(directories.map(node => loadChildren(node).catch(() => undefined)))
+		expandedKeys.value = directories.map(node => node.key)
 	} catch {
 		nodes.value = []
+		expandedKeys.value = []
 		loadError.value = true
 	} finally {
 		loading.value = false
@@ -133,7 +138,7 @@ watch(
 
 <template>
 	<div
-		class="structure-panel flex h-full min-h-0 flex-col"
+		class="structure-panel flex h-full min-h-0 flex-col overflow-hidden"
 		:class="attachToChat ? 'structure-panel--chat bg-transparent' : 'bg-white'"
 	>
 		<div class="border-b border-slate-200/70 px-3 py-3 dark:border-white/10">
@@ -191,10 +196,12 @@ watch(
 					:data="nodes"
 					:pattern="pattern"
 					:show-irrelevant-nodes="false"
+					:expanded-keys="expandedKeys"
 					:on-load="loadChildren"
 					:render-prefix="renderPrefix"
 					:render-label="renderLabel"
 					:selected-keys="selectedPath ? [selectedPath] : []"
+					@update:expanded-keys="expandedKeys = $event"
 					@update:selected-keys="handleSelectedKeys"
 				/>
 			</div>

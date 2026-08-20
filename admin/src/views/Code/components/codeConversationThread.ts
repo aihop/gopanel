@@ -36,6 +36,28 @@ export function visibleConversationMessages(messages: AIMessage[], hideExecutorM
 	return hideExecutorMessages ? messages.filter(item => item.role === "user") : messages
 }
 
+const injectedConversationMarkers = ["[GoPanel Git 交付约束]", "[GoPanel 长期记忆]"]
+
+export function stripInjectedConversationPrompt(content: string) {
+	let cut = -1
+	for (const marker of injectedConversationMarkers) {
+		const index = content.indexOf(marker)
+		if (index >= 0 && (cut < 0 || index < cut)) cut = index
+	}
+	return (cut >= 0 ? content.slice(0, cut) : content).trim()
+}
+
+export function visibleConversationThread(messages: AIMessage[]) {
+	return messages.flatMap(message => {
+		const role = message.role?.trim()
+		if (role === "system" || role === "developer") return []
+		if (role !== "user") return [message]
+		const content = stripInjectedConversationPrompt(message.content || "")
+		if (!content) return []
+		return [{ ...message, content }]
+	})
+}
+
 export function conversationRunForMessage(runs: CodeExecutionRun[], runId: number | undefined) {
 	if (!runId) return undefined
 	return runs.find(run => run.id === runId)

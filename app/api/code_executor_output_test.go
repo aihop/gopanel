@@ -2,6 +2,20 @@ package api
 
 import "testing"
 
+func TestConversationAssistantUpdate(t *testing.T) {
+	delta, replace := conversationAssistantUpdate("grok", map[string]any{"type": "text", "data": "hello"})
+	if delta != "hello" || replace {
+		t.Fatalf("grok delta = %q replace=%v", delta, replace)
+	}
+	text, replace := conversationAssistantUpdate("codex", map[string]any{
+		"type": "item.completed",
+		"item": map[string]any{"type": "agent_message", "text": "done"},
+	})
+	if text != "done" || !replace {
+		t.Fatalf("codex snapshot = %q replace=%v", text, replace)
+	}
+}
+
 func TestParseCodexOutput(t *testing.T) {
 	raw := []byte("{\"type\":\"thread.started\",\"thread_id\":\"thread-1\"}\n" +
 		"{\"type\":\"turn.completed\",\"model\":\"gpt-5\",\"usage\":{\"input_tokens\":120,\"cached_input_tokens\":80,\"output_tokens\":30,\"reasoning_output_tokens\":10}}\n" +

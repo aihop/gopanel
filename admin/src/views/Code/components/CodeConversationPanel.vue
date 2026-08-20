@@ -31,7 +31,7 @@ const {
 	loadError,
 	draft,
 	attachments,
-	messages,
+	displayMessages,
 	runs,
 	closed,
 	initializing,
@@ -59,7 +59,7 @@ const scrollToBottom = async () => {
 }
 
 watch(
-	() => [messages.value.length, messages.value.at(-1)?.content],
+	() => [displayMessages.value.length, displayMessages.value.at(-1)?.content],
 	() => void scrollToBottom(),
 )
 
@@ -138,7 +138,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section class="flex min-h-0 flex-1 overflow-hidden bg-transparent">
+  <section class="flex h-full min-h-0 min-w-0 flex-1 overflow-hidden bg-transparent">
     <div
       class="conversation-drop-target relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
       :class="dropping ? 'conversation-drop-target--active' : ''"
@@ -148,15 +148,16 @@ onBeforeUnmount(() => {
       @paste="onPaste"
     >
       <n-spin
-        :show="loading && messages.length === 0"
+        :show="loading && displayMessages.length === 0"
         class="flex min-h-0 flex-1 flex-col"
+        content-class="flex min-h-0 flex-1 flex-col"
       >
         <div
           ref="listRef"
           class="min-h-0 flex-1 overflow-auto px-4 pb-40 pt-4"
         >
           <div
-            v-if="loadError && messages.length === 0"
+            v-if="loadError && displayMessages.length === 0"
             class="flex min-h-full flex-col items-center justify-center gap-3"
           >
             <n-empty :description="t('code.historyLoadFailed')" />
@@ -168,7 +169,7 @@ onBeforeUnmount(() => {
             </n-button>
           </div>
           <n-empty
-            v-else-if="!loading && messages.length === 0"
+            v-else-if="!loading && displayMessages.length === 0"
             class="flex min-h-full items-center justify-center"
             :description="t('code.conversationEmpty')"
           />
@@ -177,7 +178,7 @@ onBeforeUnmount(() => {
             class="mx-auto flex min-h-full max-w-[46rem] flex-col justify-end gap-4"
           >
             <CodeConversationMessage
-              v-for="item in messages"
+              v-for="item in displayMessages"
               :key="item.id"
               :message="item"
               :run="conversationRunForMessage(runs, item.runId)"
@@ -245,10 +246,11 @@ onBeforeUnmount(() => {
 
     <aside
       v-if="sessionId"
-      class="hidden h-full w-64 shrink-0 border-l border-slate-200/70 lg:flex lg:flex-col dark:border-white/10"
+      class="hidden min-h-0 w-72 shrink-0 self-stretch overflow-hidden border-l border-slate-200/70 lg:flex lg:flex-col dark:border-white/10"
     >
       <ProjectStructurePanel
         :key="sessionId"
+        class="h-full min-h-0"
         attach-to-chat
         :session-id="sessionId"
         @select-file="attachStructureFile"

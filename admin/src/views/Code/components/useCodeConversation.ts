@@ -6,10 +6,12 @@ import type { AIMessage, CodeExecutionRun, CodeSession } from "@/api/interface/c
 import { codeWorkspaceMessages } from "../codeWorkspaceMessages"
 import type { ComposerAttachment } from "./codeConversationAttachments"
 import { serializeInstructionContent } from "./codeConversationAttachments"
+import { streamCodeConversation, type ConversationStreamPayload } from "./codeConversationStream"
 import {
 	conversationRunRunning,
 	conversationSessionClosed,
 	conversationSessionInitializing,
+	visibleConversationThread,
 } from "./codeConversationThread"
 
 const conversationPollMs = 3000
@@ -27,7 +29,9 @@ export function useCodeConversation(sessionId: () => number | null, taskId: () =
 	const runs = ref<CodeExecutionRun[]>([])
 	const session = ref<CodeSession | null>(null)
 	const expandedMessageIds = ref(new Set<number>())
+	const streaming = ref<ConversationStreamPayload | null>(null)
 	let pollTimer: ReturnType<typeof setInterval> | null = null
+	let streamAbort: AbortController | null = null
 	let requestVersion = 0
 
 	const closed = computed(() => conversationSessionClosed(session.value?.status))
@@ -36,6 +40,24 @@ export function useCodeConversation(sessionId: () => number | null, taskId: () =
 	const canSend = computed(() => Boolean(sessionId()) && !closed.value && !initializing.value && !sending.value)
 	const hasComposerContent = computed(() => Boolean(draft.value.trim() || attachments.value.length))
 	const workDir = computed(() => session.value?.workDir || "")
+	const displayMessages = computed(() => {
+		const items = visibleConversationThread(messages.value)
+		const live = streaming.value
+		if (!live?.content) return items
+		if (items.some(item => item.role !== "user" && live.runId && item.runId === live.runId)) return items
+		return [
+			...items,
+			{
+				id: -1,
+				createdAt: "",
+				sessionId: sessionId() || 0,
+				taskId: taskId() || 0,
+				runId: live.runId || 0,
+				role: "agent",
+				content: live.content,
+			},
+		]
+	})
 
 	const revokeAttachmentPreview = (item: ComposerAttachment) => {
 		if (item.previewUrl?.startsWith("blob:")) URL.revokeObjectURL(item.previewUrl)
@@ -141,6 +163,53 @@ export function useCodeConversation(sessionId: () => number | null, taskId: () =
 		pollTimer = null
 	}
 
+	const stopStream = () => {
+		streamAbort?.abort()
+		streamAbort = null
+		streaming.value = null
+	}
+
+	const applyStreamPayload = (payload: ConversationStreamPayload, append = false) => {
+		const current = streaming.value
+		const nextContent = append
+			? `${current?.content || ""}${payload.content || ""}`
+			: payload.content !== undefined
+				? payload.content
+				: current?.content || ""
+		streaming.value = {
+			...current,
+			...payload,
+			content: nextContent,
+		}
+	}
+
+	const startStream = () => {
+		stopStream()
+		const id = sessionId()
+		if (!id) return
+		const abort = new AbortController()
+		streamAbort = abort
+		void streamCodeConversation(
+			id,
+			{
+				onSnapshot: payload => applyStreamPayload(payload),
+				onDelta: payload => applyStreamPayload(payload, true),
+				onDone: payload => {
+					applyStreamPayload(payload)
+					void loadHistory(true)
+				},
+			},
+			abort.signal,
+		)
+			.then(() => {
+				if (!abort.signal.aborted) startPolling()
+			})
+			.catch(() => {
+				if (abort.signal.aborted) return
+				startPolling()
+			})
+	}
+
 	const startPolling = () => {
 		stopPolling()
 		pollTimer = setInterval(() => void loadHistory(true), conversationPollMs)
@@ -152,13 +221,15 @@ export function useCodeConversation(sessionId: () => number | null, taskId: () =
 			expandedMessageIds.value = new Set()
 			clearAttachments()
 			void loadHistory()
-			if (sessionId()) startPolling()
-			else stopPolling()
+			stopPolling()
+			if (sessionId()) startStream()
+			else stopStream()
 		},
 		{ immediate: true },
 	)
 	onBeforeUnmount(() => {
 		stopPolling()
+		stopStream()
 		clearAttachments()
 	})
 
@@ -171,6 +242,8 @@ export function useCodeConversation(sessionId: () => number | null, taskId: () =
 		draft,
 		attachments,
 		messages,
+		displayMessages,
+		streaming,
 		runs,
 		session,
 		expandedMessageIds,

@@ -41,6 +41,20 @@ func TestGetNativeCodexMessagesRequiresBoundNativeSession(t *testing.T) {
 	}
 }
 
+func TestMergeCodeHistoryMessagesSkipsInjectedNativeUserPrompt(t *testing.T) {
+	now := time.Now()
+	merged := mergeCodeHistoryMessages(
+		[]*model.AIMessage{{ID: 1, CreatedAt: now, Role: "user", Content: "修登录"}},
+		[]*model.AIMessage{
+			{CreatedAt: now.Add(time.Second), Role: "user", Content: "修登录\n\n[GoPanel Git 交付约束]\n不要 push"},
+			{CreatedAt: now.Add(2 * time.Second), Role: "agent", Content: "好了"},
+		},
+	)
+	if len(merged) != 2 || merged[0].Content != "修登录" || merged[1].Role != "agent" {
+		t.Fatalf("unexpected merged messages: %#v", merged)
+	}
+}
+
 func TestMergeCodeHistoryMessagesDeduplicatesNearbyDatabaseMessage(t *testing.T) {
 	now := time.Now()
 	databaseMessages := []*model.AIMessage{{ID: 4, CreatedAt: now, Role: "user", Content: "继续"}}

@@ -48,6 +48,7 @@ func GetCodeSessionHistory(c fiber.Ctx) error {
 			messages = mergeCodeHistoryMessages(messages, nativeMessages)
 		}
 	}
+	messages = conversationHistoryMessages(messages)
 	runs, total, err := repo.NewAIDevSessionRepo().GetExecutionRunsBySessionID(session.ID, page, limit)
 	if err != nil {
 		return c.JSON(e.Fail(err))

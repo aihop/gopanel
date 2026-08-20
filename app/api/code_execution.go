@@ -77,12 +77,16 @@ func executeCodeAgentRun(
 	if preparedSessionID != "" {
 		run.NativeSessionID = preparedSessionID
 	}
+	if sessionID != 0 {
+		codeConversationStreams.Begin(sessionID, run.ID)
+	}
 	rawOutput := []byte{}
 	execErr := buildErr
 	if execErr == nil {
 		output := &boundedCodeOutput{}
-		command.Stdout = output
-		command.Stderr = output
+		writer := &conversationOutputWriter{inner: output, executorID: executorID, sessionID: sessionID}
+		command.Stdout = writer
+		command.Stderr = writer
 		execErr = command.Run()
 		rawOutput = output.Bytes()
 	}
@@ -142,6 +146,9 @@ func executeCodeAgentRun(
 	}
 	// 一次执行结束就顺手沉淀一次。放在这里而不是交付时：多数会话最终并不
 	// 走到交付（实测 58 个会话只有 1 个到达终态），等交付再抽就几乎什么都留不下。
+	if sessionID != 0 {
+		codeConversationStreams.Finish(sessionID, run.Status, run.Output)
+	}
 	if execErr == nil {
 		enqueueCodeMemoryExtraction(sessionID, codeMemoryTriggerAutomatic, false)
 	}

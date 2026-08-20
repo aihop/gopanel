@@ -20,6 +20,33 @@ type codeExecutorOutput struct {
 	TokenUsageReported bool
 }
 
+func conversationAssistantUpdate(executorID string, event map[string]any) (text string, replace bool) {
+	switch executorID {
+	case "grok":
+		if event["type"] == "text" {
+			text, _ = event["data"].(string)
+		}
+	case "codex":
+		item, _ := event["item"].(map[string]any)
+		if item["type"] != "agent_message" {
+			return "", false
+		}
+		text, _ = item["text"].(string)
+		eventType, _ := event["type"].(string)
+		return text, eventType == "item.completed" || eventType == "item.updated"
+	case "claude":
+		text, _ = event["result"].(string)
+		return text, text != ""
+	case "opencode":
+		if event["type"] != "text" {
+			return "", false
+		}
+		part, _ := event["part"].(map[string]any)
+		text, _ = part["text"].(string)
+	}
+	return text, false
+}
+
 func parseCodeExecutorOutput(executorID string, rawOutput []byte, preparedSessionID string) codeExecutorOutput {
 	result := codeExecutorOutput{RawOutput: string(rawOutput), NativeSessionID: preparedSessionID}
 	switch executorID {
