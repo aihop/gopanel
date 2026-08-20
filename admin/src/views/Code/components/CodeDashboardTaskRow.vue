@@ -45,24 +45,6 @@ const deliveryNeedsAttention = computed(() =>
       class="dashboard-task-row__marker absolute left-1.5 top-1.5 bottom-1.5 w-0.5 rounded-full"
       :class="selected ? 'bg-[var(--n-text-color-3)]' : 'bg-transparent'"
     />
-    <div class="min-w-0 flex-1">
-      <div class="flex min-w-0 items-center gap-1.5">
-        <span
-          v-if="showProject !== false"
-          class="max-w-[88px] shrink-0 truncate text-[11px] text-[var(--n-text-color-3)]"
-          :title="projectName"
-        >
-          {{ projectName }}
-        </span>
-        <span
-          class="min-w-0 truncate text-[13px] tracking-[0.01em]"
-          :class="selected ? 'font-medium text-[var(--n-text-color)]' : 'font-normal text-[var(--n-text-color-2)]'"
-          :title="task.title"
-        >
-          {{ task.title }}
-        </span>
-      </div>
-    </div>
     <TaskApprovalAction
       class="shrink-0"
       :task="task"
@@ -70,6 +52,20 @@ const deliveryNeedsAttention = computed(() =>
       @click.stop
       @approved="emit('refresh')"
     />
+    <span
+      v-if="showProject !== false"
+      class="max-w-[88px] shrink-0 truncate text-[11px] text-[var(--n-text-color-3)]"
+      :title="projectName"
+    >
+      {{ projectName }}
+    </span>
+    <span
+      class="min-w-0 flex-1 truncate text-[13px] tracking-[0.01em]"
+      :class="selected ? 'font-medium text-[var(--n-text-color)]' : 'font-normal text-[var(--n-text-color-2)]'"
+      :title="task.title"
+    >
+      {{ task.title }}
+    </span>
     <Icon
       v-if="deliveryNeedsAttention"
       name="mdi:alert-circle-outline"
