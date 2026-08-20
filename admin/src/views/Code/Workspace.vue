@@ -91,6 +91,7 @@
             :session-id="currentSessionId"
             :has-context="hasWorkspaceContext"
             :is-terminal-session="isTerminalSession"
+            :show-conversation="structuredTurn"
             :workspace-mode="workspaceMode"
             :embedded="embedded"
             :fullscreen-enabled="isDesktop"
@@ -151,6 +152,12 @@
             </aside>
           </div>
 
+          <CodeConversationPanel
+            v-if="workspaceMode === 'conversation' && currentSessionId !== null && !isProjectTerminalActive"
+            :session-id="currentSessionId"
+            :task-id="currentTaskId"
+            @task-created="handleTaskCreated"
+          />
           <CodeWorkspaceTerminalPanel
             :active="workspaceMode === 'terminal' && terminalMounted"
             :is-project-terminal-active="isProjectTerminalActive"
@@ -163,6 +170,7 @@
             :task-work-dir="currentTask?.workDir || ''"
             :session-work-dir="currentSessionWorkDir"
             :terminal-takeover-requested="terminalTakeoverRequested"
+            :mount-task-terminal="terminalMounted"
             :terminal-identity="terminalIdentity"
             @open-project-terminal="openProjectTerminal"
             @reopen-project-terminal="openProjectTerminal"
@@ -233,6 +241,7 @@
 <script setup lang="ts">
 import Icon from "@/components/common/Icon.vue"
 import CodeProjectIdentity from "./components/CodeProjectIdentity.vue"
+import CodeConversationPanel from "./components/CodeConversationPanel.vue"
 import CodeWorkspaceTerminalPanel from "./components/CodeWorkspaceTerminalPanel.vue"
 import NewSessionModal from "./components/NewSessionModal.vue"
 import CodeWorkspaceToolbar from "./components/CodeWorkspaceToolbar.vue"
@@ -293,6 +302,7 @@ const {
 	selectedFile,
 	sessionLabel,
 	sessionSubtitle,
+	structuredTurn,
 	selectTask,
 	taskActionOptions,
 	showHistoryDrawer,

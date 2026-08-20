@@ -177,6 +177,33 @@ func TestExecutorCapabilitiesExposeNativeTerminalAndApprovals(t *testing.T) {
 	}
 }
 
+func TestExecutorStructuredTurnCapability(t *testing.T) {
+	want := map[string]bool{
+		"codex":    true,
+		"grok":     true,
+		"claude":   true,
+		"opencode": true,
+		"aider":    false,
+		"terminal": false,
+	}
+	for executorID, expected := range want {
+		definition, err := getCodeExecutorDefinition(executorID)
+		if err != nil {
+			t.Fatalf("%s: %v", executorID, err)
+		}
+		hasStructuredTurn := false
+		for _, capability := range definition.Capabilities {
+			if capability == codeExecutorCapabilityStructuredTurn {
+				hasStructuredTurn = true
+				break
+			}
+		}
+		if hasStructuredTurn != expected {
+			t.Fatalf("%s structured_turn = %v, want %v", executorID, hasStructuredTurn, expected)
+		}
+	}
+}
+
 func TestBuildAiderExecutorArgsUsesSessionHistory(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	args, nativeSessionID, err := buildCodeExecutorArgs("aider", "continue", "", 42, codeApprovalPolicySafeAuto)

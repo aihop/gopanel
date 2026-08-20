@@ -20,6 +20,7 @@ const props = defineProps<{
 	sessionWorkDir: string
 	terminalTakeoverRequested: boolean
 	terminalIdentity: string
+	mountTaskTerminal?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -33,6 +34,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n({ messages: codeWorkspaceMessages })
 
+const mountTaskTerminal = computed(() => props.mountTaskTerminal === true)
 const canTaskTerminal = computed(() => props.sessionId !== null || props.taskId !== null)
 const taskTerminalLabel = computed(() =>
 	props.taskId ? t("code.taskTerminal") : props.sessionId ? t("code.sessionTerminal") : t("code.terminalSession"),
@@ -117,7 +119,7 @@ function onTaskTabClick() {
           @reopen="emit('reopenProjectTerminal')"
         />
         <CodeTerminal
-          v-else-if="canTaskTerminal"
+          v-else-if="canTaskTerminal && mountTaskTerminal"
           :key="terminalIdentity"
           :task-id="taskId"
           :session-id="sessionId"

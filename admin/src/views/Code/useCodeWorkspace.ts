@@ -6,11 +6,12 @@ import { useAuthStore } from "@/store/auth"
 import { useHideLayoutFooter } from "@/composables/useHideLayoutFooter"
 import { useCodeTaskPolling } from "./useCodeTaskPolling"
 import { useProjectTerminal } from "./useProjectTerminal"
-import { deleteAITask, getAIProjects, getCodeSession, updateAITask } from "@/api/modules/code"
-import type { AIProject, AITask, CodeSession } from "@/api/interface/code"
+import { deleteAITask, getAIProjects, getCodeExecutors, getCodeSession, updateAITask } from "@/api/modules/code"
+import type { AIProject, AITask, CodeExecutor, CodeSession } from "@/api/interface/code"
 import type { CodeTaskListItem } from "@/api/interface/codeTasks"
 import type { HostTerminalSession } from "@/api/interface/hostTerminal"
 import { sortCodeTasksStably } from "./codeDashboardBuckets"
+import { defaultCodeWorkspaceView, executorSupportsStructuredTurn, findExecutorById } from "./codeStructuredTurn"
 import { codeWorkspaceMessages } from "./codeWorkspaceMessages"
 import { codeTerminalIdentity } from "./components/codeTerminalSession"
 import type { CodeWorkspaceMode } from "./components/WorkspaceModeSwitch.vue"
@@ -42,6 +43,8 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 	const workspaceMode = ref<CodeWorkspaceMode>("terminal")
 	const terminalMounted = ref(false)
 	const terminalTakeoverRequested = ref(false)
+	const executors = ref<CodeExecutor[]>([])
+	const currentExecutorId = ref("")
 	const isProjectTerminalActive = ref(false)
 	const projectTerminalSessionId = ref<number | null>(null)
 	const projectTerminalWorkDir = ref("")
@@ -62,6 +65,30 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 		() => isProjectTerminalActive.value || currentSessionId.value !== null || currentTaskId.value !== null,
 	)
 	const isTerminalSession = computed(() => isProjectTerminalActive.value)
+	const structuredTurn = computed(() =>
+		executorSupportsStructuredTurn(findExecutorById(executors.value, currentExecutorId.value)),
+	)
+
+	const ensureExecutors = async () => {
+		if (executors.value.length) return
+		try {
+			const response = await getCodeExecutors()
+			if (response.code === 0) executors.value = response.data || []
+		} catch {
+			void 0
+		}
+	}
+
+	const applySessionView = (executorId: string, isProjectTerminal = false) => {
+		currentExecutorId.value = executorId
+		const view = defaultCodeWorkspaceView({
+			isProjectTerminal,
+			structuredTurn: executorSupportsStructuredTurn(findExecutorById(executors.value, executorId)),
+		})
+		workspaceMode.value = view.mode
+		terminalMounted.value = view.terminalMounted
+		if (view.mode !== "terminal") terminalTakeoverRequested.value = false
+	}
 	const sessionLabel = computed(() =>
 		isProjectTerminalActive.value
 			? t("code.projectTerminal")
@@ -142,6 +169,7 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 			projectTerminalSessionId.value = null
 			projectTerminalWorkDir.value = ""
 			terminalTakeoverRequested.value = false
+			currentExecutorId.value = ""
 			workspaceMode.value = "terminal"
 			terminalMounted.value = false
 			resetSelectedFile()
@@ -155,14 +183,17 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 		})
 
 	const handleSessionCreated = (session: CodeSession) => {
-		resetSelectedFile()
+		void activateCreatedSession(session)
+	}
+
+	const activateCreatedSession = async (session: CodeSession) => {
 		currentTaskId.value = null
 		currentSessionId.value = session.id
+		await ensureExecutors()
+		resetSelectedFile()
 		currentSessionWorkDir.value = session.workDir
 		isProjectTerminalActive.value = false
-		terminalTakeoverRequested.value = false
-		workspaceMode.value = "terminal"
-		terminalMounted.value = true
+		applySessionView(session.agentName)
 		syncSessionQuery(session.id)
 		void fetchTasks()
 	}
@@ -206,21 +237,20 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 	const syncTaskQuery = (taskId: number | null) => syncWorkspaceQuery(taskId, null)
 	const syncSessionQuery = (sessionId: number) => syncWorkspaceQuery(null, sessionId)
 
-	const activateTask = (task: AITask) => {
-		resetSelectedFile()
+	const activateTask = async (task: AITask) => {
 		currentTaskId.value = task.id
 		currentSessionId.value = task.sessionId || null
+		await ensureExecutors()
+		resetSelectedFile()
 		currentSessionWorkDir.value = task.workDir || currentSessionWorkDir.value
 		isProjectTerminalActive.value = false
-		terminalTakeoverRequested.value = false
-		workspaceMode.value = "terminal"
-		terminalMounted.value = true
+		applySessionView(task.agentName)
 		syncTaskQuery(task.id)
 	}
 
 	const selectTask = (task: AITask) => {
 		if (currentTaskId.value === task.id && currentSessionId.value === task.sessionId) return
-		confirmDiscardEditorChanges(() => activateTask(task))
+		confirmDiscardEditorChanges(() => void activateTask(task))
 	}
 
 	const activateProjectTerminal = (session: HostTerminalSession) => {
@@ -268,7 +298,11 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 
 	const switchWorkspaceMode = (mode: CodeWorkspaceMode) => {
 		workspaceMode.value = mode
-		if (mode === "terminal") terminalMounted.value = true
+		if (mode === "terminal") {
+			terminalMounted.value = true
+			return
+		}
+		if (mode === "conversation") terminalTakeoverRequested.value = false
 	}
 
 	const handleTaskCreated = (taskId: number) => {
@@ -298,6 +332,7 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 					if (currentTaskId.value === task.id) {
 						currentTaskId.value = null
 						currentSessionId.value = null
+						currentExecutorId.value = ""
 						workspaceMode.value = "terminal"
 						terminalMounted.value = false
 						resetSelectedFile()
@@ -338,6 +373,7 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 		showNewSessionModal.value = false
 		showHistoryDrawer.value = false
 		showProjectStructure.value = false
+		currentExecutorId.value = ""
 		workspaceMode.value = "terminal"
 		terminalMounted.value = false
 		resetSelectedFile()
@@ -355,6 +391,7 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 	})
 
 	onMounted(() => {
+		void ensureExecutors()
 		void fetchProjectInfo()
 		void fetchTasksFast()
 	})
@@ -399,6 +436,7 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 		isTerminalSession,
 		sessionLabel,
 		sessionSubtitle,
+		structuredTurn,
 		taskActionOptions,
 		fetchProjectInfo,
 		fetchTasks,

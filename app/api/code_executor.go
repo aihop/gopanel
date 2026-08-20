@@ -32,6 +32,8 @@ type codeExecutorDefinition struct {
 	Factory             codeExecutorFactory
 }
 
+const codeExecutorCapabilityStructuredTurn = "structured_turn"
+
 type codeExecutorStatus struct {
 	ID                         string                    `json:"id"`
 	Name                       string                    `json:"name"`
@@ -51,10 +53,10 @@ type codeExecutorStatus struct {
 
 var codeExecutorDefinitions = []codeExecutorDefinition{
 	{ID: "terminal", Name: "Terminal", Description: "在隔离工作区中使用普通终端", Capabilities: []string{"shell"}, ApprovalPolicies: []string{codeApprovalPolicyFullAuto}, AutomationSupported: true},
-	{ID: "codex", Name: "Codex", Description: "使用 OpenAI Codex 执行开发任务", Command: "codex", VersionArgs: []string{"--version"}, ConfigPaths: []string{".codex"}, Capabilities: []string{"code", "automation", "interactive", "resume"}, ApprovalPolicies: allCodeApprovalPolicies(), NativeTerminal: true, AutomationSupported: true, Factory: codexExecutorFactory{}},
-	{ID: "grok", Name: "Grok Build", Description: "使用 xAI Grok Build 执行开发任务", Command: "grok", VersionArgs: []string{"--version"}, ConfigPaths: []string{".grok/auth.json"}, Capabilities: []string{"code", "automation", "interactive", "resume"}, ApprovalPolicies: allCodeApprovalPolicies(), NativeTerminal: true, AutomationSupported: true, Factory: grokExecutorFactory{}},
-	{ID: "claude", Name: "Claude Code", Description: "使用 Claude Code 执行开发任务", Command: "claude", VersionArgs: []string{"--version"}, ConfigPaths: []string{".claude", ".claude.json"}, Capabilities: []string{"code", "automation", "interactive", "resume"}, ApprovalPolicies: allCodeApprovalPolicies(), NativeTerminal: true, AutomationSupported: true, Factory: claudeExecutorFactory{}},
-	{ID: "opencode", Name: "OpenCode", Description: "使用 OpenCode 执行开发任务", Command: "opencode", VersionArgs: []string{"--version"}, ConfigPaths: []string{".config/opencode", ".local/share/opencode"}, Capabilities: []string{"code", "automation", "interactive", "resume"}, ApprovalPolicies: []string{codeApprovalPolicyFullAuto}, NativeTerminal: true, AutomationSupported: true, Factory: openCodeExecutorFactory{}},
+	{ID: "codex", Name: "Codex", Description: "使用 OpenAI Codex 执行开发任务", Command: "codex", VersionArgs: []string{"--version"}, ConfigPaths: []string{".codex"}, Capabilities: []string{"code", "automation", "interactive", "resume", codeExecutorCapabilityStructuredTurn}, ApprovalPolicies: allCodeApprovalPolicies(), NativeTerminal: true, AutomationSupported: true, Factory: codexExecutorFactory{}},
+	{ID: "grok", Name: "Grok Build", Description: "使用 xAI Grok Build 执行开发任务", Command: "grok", VersionArgs: []string{"--version"}, ConfigPaths: []string{".grok/auth.json"}, Capabilities: []string{"code", "automation", "interactive", "resume", codeExecutorCapabilityStructuredTurn}, ApprovalPolicies: allCodeApprovalPolicies(), NativeTerminal: true, AutomationSupported: true, Factory: grokExecutorFactory{}},
+	{ID: "claude", Name: "Claude Code", Description: "使用 Claude Code 执行开发任务", Command: "claude", VersionArgs: []string{"--version"}, ConfigPaths: []string{".claude", ".claude.json"}, Capabilities: []string{"code", "automation", "interactive", "resume", codeExecutorCapabilityStructuredTurn}, ApprovalPolicies: allCodeApprovalPolicies(), NativeTerminal: true, AutomationSupported: true, Factory: claudeExecutorFactory{}},
+	{ID: "opencode", Name: "OpenCode", Description: "使用 OpenCode 执行开发任务", Command: "opencode", VersionArgs: []string{"--version"}, ConfigPaths: []string{".config/opencode", ".local/share/opencode"}, Capabilities: []string{"code", "automation", "interactive", "resume", codeExecutorCapabilityStructuredTurn}, ApprovalPolicies: []string{codeApprovalPolicyFullAuto}, NativeTerminal: true, AutomationSupported: true, Factory: openCodeExecutorFactory{}},
 	{ID: "aider", Name: "Aider", Description: "使用 Aider 执行开发任务", Command: "aider", VersionArgs: []string{"--version"}, ConfigPaths: []string{".aider.conf.yml", ".aider"}, Capabilities: []string{"code", "automation", "interactive", "resume"}, ApprovalPolicies: []string{codeApprovalPolicyFullAuto}, NativeTerminal: true, AutomationSupported: true, Factory: aiderExecutorFactory{}},
 }
 

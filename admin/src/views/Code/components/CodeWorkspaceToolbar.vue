@@ -18,6 +18,7 @@ const props = defineProps<{
 	hasContext: boolean
 	isTerminalSession: boolean
 	workspaceMode: CodeWorkspaceMode
+	showConversation?: boolean
 	embedded: boolean
 	fullscreenEnabled: boolean
 	fullscreenLabel: string
@@ -90,6 +91,7 @@ async function openMemory() {
       >
         <WorkspaceModeSwitch
           :value="workspaceMode"
+          :show-conversation="showConversation"
           @update:value="emit('updateMode', $event)"
         />
       </div>

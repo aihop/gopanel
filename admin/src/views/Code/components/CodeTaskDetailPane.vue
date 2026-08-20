@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { computed } from "vue"
+import { computed, onMounted, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
-import type { CodeSession } from "@/api/interface/code"
+import type { CodeExecutor, CodeSession } from "@/api/interface/code"
 import type { CodeTaskListItem } from "@/api/interface/codeTasks"
+import { getCodeExecutors } from "@/api/modules/code"
 import Icon from "@/components/common/Icon.vue"
 import { codeProjectMessages } from "@/i18n/locales/codeProject"
+import { executorSupportsStructuredTurn, findExecutorById } from "../codeStructuredTurn"
 import { useCodeWorkspaceFullscreen } from "../useCodeWorkspaceFullscreen"
+import CodeConversationPanel from "./CodeConversationPanel.vue"
 import CodeProjectIdentity from "./CodeProjectIdentity.vue"
 import CodeTerminal from "./CodeTerminal.vue"
 import TaskStatusBadge from "./TaskStatusBadge.vue"
@@ -33,6 +36,31 @@ const { isWorkspaceFullscreen, fullscreenLabel, toggleWorkspaceFullscreen } = us
 const terminalIdentity = computed(() =>
 	codeTerminalIdentity(props.session?.id || props.task?.sessionId || null, props.task?.id || null),
 )
+const sessionId = computed(() => props.session?.id || props.task?.sessionId || null)
+const executorId = computed(() => props.session?.agentName || props.task?.agentName || "")
+const executors = ref<CodeExecutor[]>([])
+const showNativeCli = ref(false)
+const structuredTurn = computed(() =>
+	executorSupportsStructuredTurn(findExecutorById(executors.value, executorId.value)),
+)
+const showConversation = computed(() => {
+	if (showNativeCli.value || !executorId.value) return false
+	// 执行器列表还没回来时先不挂 PTY，避免 Grok 详情一打开就拉起它自己的 TUI。
+	if (!executors.value.length) return executorId.value !== "terminal"
+	return structuredTurn.value
+})
+
+watch(executorId, () => {
+	showNativeCli.value = false
+})
+onMounted(async () => {
+	try {
+		const response = await getCodeExecutors()
+		if (response.code === 0) executors.value = response.data || []
+	} catch {
+		void 0
+	}
+})
 </script>
 
 <template>
@@ -88,9 +116,30 @@ const terminalIdentity = computed(() =>
         />
       </header>
 
-      <div class="relative min-h-0 flex-1 bg-[#1e1e1e]">
-        <!-- 对话和全屏都属于当前执行任务，浮在终端上避免占用输出高度。 -->
-        <div class="detail-pane__floating absolute right-3 top-2 z-[2] flex items-center gap-1">
+      <div
+        class="relative min-h-0 flex-1"
+        :class="showConversation ? 'bg-white' : 'bg-[#1e1e1e]'"
+      >
+        <!-- 对话和全屏都属于当前执行任务，浮在内容上避免占用高度。 -->
+        <div
+          class="detail-pane__floating absolute right-3 top-2 z-[2] flex items-center gap-1"
+          :class="{ 'detail-pane__floating--light': showConversation }"
+        >
+          <n-button
+            v-if="structuredTurn"
+            quaternary
+            circle
+            size="tiny"
+            :title="t(showNativeCli ? 'code.conversationMode' : 'code.advancedTerminal')"
+            @click="showNativeCli = !showNativeCli"
+          >
+            <template #icon>
+              <Icon
+                :name="showNativeCli ? 'mdi:message-outline' : 'mdi:console-line'"
+                :size="16"
+              />
+            </template>
+          </n-button>
           <n-button
             v-if="task && task.agentName !== 'terminal'"
             quaternary
@@ -122,11 +171,17 @@ const terminalIdentity = computed(() =>
           </n-button>
         </div>
 
-        <KeepAlive :max="CODE_TERMINAL_POOL_SIZE">
+        <CodeConversationPanel
+          v-if="showConversation && sessionId"
+          :session-id="sessionId"
+          :task-id="task?.id || null"
+          @task-created="emit('taskCreated', $event)"
+        />
+        <KeepAlive v-else :max="CODE_TERMINAL_POOL_SIZE">
           <CodeTerminal
             :key="terminalIdentity"
             :task-id="task?.id || null"
-            :session-id="session?.id || task?.sessionId || null"
+            :session-id="sessionId"
             reserve-top-right-actions
             @task-created="emit('taskCreated', $event)"
             @new-session="task && emit('openWorkspace', task)"
@@ -163,5 +218,15 @@ const terminalIdentity = computed(() =>
 .detail-pane__floating :deep(.n-button:hover) {
 	color: #fff;
 	background: rgb(51 65 85 / 92%);
+}
+
+.detail-pane__floating--light :deep(.n-button) {
+	color: rgb(51 65 85);
+	background: rgb(255 255 255 / 86%);
+}
+
+.detail-pane__floating--light :deep(.n-button:hover) {
+	color: rgb(15 23 42);
+	background: #fff;
 }
 </style>
