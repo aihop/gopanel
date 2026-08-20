@@ -12,10 +12,21 @@ export const CODE_TERMINAL_POOL_SIZE = 8
 export function codeTerminalOptions() {
 	return {
 		cursorBlink: true,
+		cursorStyle: "block" as const,
 		fontSize: 14,
 		fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+		lineHeight: 1,
+		letterSpacing: 0,
+		scrollback: 5000,
+		tabStopWidth: 4,
 		theme: { background: "#1e1e1e", foreground: "#d4d4d4" },
 	}
+}
+
+export function terminalWheelScrollLines(deltaY: number, deltaMode: number, rows: number) {
+	if (!Number.isFinite(deltaY) || deltaY === 0) return 0
+	const distance = deltaMode === 1 ? deltaY : deltaMode === 2 ? deltaY * rows : deltaY / 40
+	return Math.sign(distance) * Math.max(1, Math.round(Math.abs(distance)))
 }
 
 export function terminalSizeData(cols: number, rows: number) {

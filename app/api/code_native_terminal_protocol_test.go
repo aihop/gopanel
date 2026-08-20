@@ -74,6 +74,28 @@ func TestNativeTerminalProtocolResyncsAfterSequenceGap(t *testing.T) {
 	terminal.unsubscribe(subscription)
 }
 
+func TestNativeTerminalProtocolHeartbeatRenewsControlLease(t *testing.T) {
+	terminal := newNativeTerminalProtocolTestSubject()
+	subscription, _ := terminal.subscribe(0, false)
+	terminal.mu.Lock()
+	expiresBefore := terminal.controlExpiresAt
+	terminal.mu.Unlock()
+	if expiresBefore.IsZero() {
+		t.Fatal("subscription did not acquire initial control")
+	}
+	time.Sleep(time.Millisecond)
+	if !terminal.renewControlLease(subscription.ID) {
+		t.Fatal("heartbeat renewal should preserve control")
+	}
+	terminal.mu.Lock()
+	expiresAfter := terminal.controlExpiresAt
+	terminal.mu.Unlock()
+	if !expiresAfter.After(expiresBefore) {
+		t.Fatalf("control lease was not renewed: before=%v after=%v", expiresBefore, expiresAfter)
+	}
+	terminal.unsubscribe(subscription)
+}
+
 func TestNativeTerminalProtocolSignalsSubscriberOverflow(t *testing.T) {
 	terminal := newNativeTerminalProtocolTestSubject()
 	subscription, _ := terminal.subscribe(0, false)

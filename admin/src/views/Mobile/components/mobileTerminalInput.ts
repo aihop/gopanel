@@ -1,3 +1,38 @@
+export function applyMobileTerminalCtrlModifier(ctrlActive: boolean, data: string) {
+	if (!ctrlActive || data.length !== 1) return data
+	if (data === "?") return "\x7f"
+	const code = data.toUpperCase().charCodeAt(0)
+	return code >= 64 && code <= 95 ? String.fromCharCode(code & 31) : data
+}
+
+export function mobileTerminalViewportHeight() {
+	return Math.round(window.visualViewport?.height || window.innerHeight)
+}
+
+export function mobileTerminalShellStyle(height: number) {
+	return height > 0 ? { height: `${height}px` } : undefined
+}
+
+export function mobileTerminalSocketUrl(options: {
+	mode: "ai" | "native"
+	sessionId: number
+	cols: number
+	rows: number
+	host: string
+	protocol: string
+	afterSequence?: number
+}) {
+	const ws = options.protocol === "https:" ? "wss:" : "ws:"
+	let url =
+		options.mode === "native"
+			? `${ws}//${options.host}/api/mobile/app/project-terminal/${options.sessionId}/ws`
+			: `${ws}//${options.host}/api/mobile/app/terminal?session_id=${options.sessionId}`
+	url += `${url.includes("?") ? "&" : "?"}cols=${options.cols}&rows=${options.rows}`
+	if (options.mode === "ai") url += "&read_only=1&take_control=1"
+	if (options.afterSequence) url += `&after_sequence=${options.afterSequence}`
+	return url
+}
+
 export function insertTerminalSymbol(draft: string, symbol: string, start: number, end: number) {
 	const selectionStart = Math.max(0, Math.min(start, draft.length))
 	const selectionEnd = Math.max(selectionStart, Math.min(end, draft.length))

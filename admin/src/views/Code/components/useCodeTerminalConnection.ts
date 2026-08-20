@@ -29,6 +29,7 @@ interface UseCodeTerminalConnectionOptions {
 	onWriteTerminalData: (data: string, forceBottom?: boolean) => void
 	onSyncScrollAnchor: () => void
 	onJumpToTerminalBottom: () => void
+	onTerminalReady?: (terminal: Terminal) => void
 }
 
 export function useCodeTerminalConnection(options: UseCodeTerminalConnectionOptions) {
@@ -360,6 +361,7 @@ export function useCodeTerminalConnection(options: UseCodeTerminalConnectionOpti
 		term.loadAddon(fitAddon)
 		term.open(terminalRef.value)
 		term.onScroll(options.onSyncScrollAnchor)
+		options.onTerminalReady?.(term)
 		if (term.textarea) {
 			inputFallback = new CodeTerminalInputFallback()
 			term.textarea.addEventListener("compositionstart", () => inputFallback?.startComposition())

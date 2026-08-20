@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -127,6 +128,9 @@ func (manager *nativeCodeTerminalManager) attach(
 		return nil, false, err
 	}
 	configureNativeTerminalEnvironment(command)
+	if session.AgentName == "grok" {
+		configureNativeGrokTerminalEnvironment(command)
+	}
 	ptmx, err := startNativeTerminal(command, cols, rows)
 	if err != nil {
 		lease.Release()
@@ -187,8 +191,24 @@ func configureNativeTerminalEnvironment(command *exec.Cmd) {
 	if len(commandEnv) == 0 {
 		commandEnv = os.Environ()
 	}
+	commandEnv = withoutEnvironment(commandEnv, "NO_COLOR")
 	commandEnv = upsertEnvironment(commandEnv, "TERM", "xterm-256color")
 	command.Env = upsertEnvironment(commandEnv, "COLORTERM", "truecolor")
+}
+
+func configureNativeGrokTerminalEnvironment(command *exec.Cmd) {
+	command.Env = upsertEnvironment(command.Env, "TERM_PROGRAM", "vscode")
+}
+
+func withoutEnvironment(env []string, key string) []string {
+	prefix := key + "="
+	filtered := env[:0]
+	for _, item := range env {
+		if !strings.HasPrefix(item, prefix) {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
 }
 
 func (terminal *nativeCodeTerminal) readOutput() {
@@ -459,6 +479,7 @@ func serveNativeCodeTerminal(
 				_ = terminal.resize(subscription.ID, size.Cols, size.Rows)
 			}
 		case "ping":
+			terminal.renewControlLease(subscription.ID)
 			writeMu.Lock()
 			_ = wsConn.WriteMessage(websocket.TextMessage, []byte(`{"type":"pong"}`))
 			writeMu.Unlock()

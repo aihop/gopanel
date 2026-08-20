@@ -1,5 +1,34 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { insertTerminalSymbol, MobileTerminalInputFallback } from "./mobileTerminalInput"
+import {
+	applyMobileTerminalCtrlModifier,
+	insertTerminalSymbol,
+	mobileTerminalSocketUrl,
+	MobileTerminalInputFallback,
+} from "./mobileTerminalInput"
+
+describe("applyMobileTerminalCtrlModifier", () => {
+	it("把 Ctrl 组合键换成控制字符", () => {
+		expect(applyMobileTerminalCtrlModifier(false, "c")).toBe("c")
+		expect(applyMobileTerminalCtrlModifier(true, "c")).toBe("\u0003")
+		expect(applyMobileTerminalCtrlModifier(true, "?")).toBe("\x7f")
+	})
+})
+
+describe("mobileTerminalSocketUrl", () => {
+	it("拼出 AI 只读接管地址", () => {
+		expect(
+			mobileTerminalSocketUrl({
+				mode: "ai",
+				sessionId: 9,
+				cols: 80,
+				rows: 24,
+				host: "panel.local",
+				protocol: "https:",
+				afterSequence: 4,
+			}),
+		).toBe("wss://panel.local/api/mobile/app/terminal?session_id=9&cols=80&rows=24&read_only=1&take_control=1&after_sequence=4")
+	})
+})
 
 describe("insertTerminalSymbol", () => {
 	it("inserts a slash at the cursor", () => {

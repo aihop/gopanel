@@ -9,6 +9,7 @@ import CodeTerminalScrollToBottom from "./CodeTerminalScrollToBottom.vue"
 import CodeTerminalDeliveredNotice from "./CodeTerminalDeliveredNotice.vue"
 import { useCodeTerminalConnection } from "./useCodeTerminalConnection"
 import { useCodeTerminalScrollAnchor } from "./useCodeTerminalScrollAnchor"
+import { terminalWheelScrollLines } from "./codeTerminalSession"
 
 const props = defineProps<{
 	taskId: number | null
@@ -51,6 +52,16 @@ const terminalConnection = useCodeTerminalConnection({
 	},
 	onSyncScrollAnchor: syncScrollAnchor,
 	onJumpToTerminalBottom: jumpToTerminalBottom,
+	onTerminalReady: terminal => {
+		terminal.attachCustomWheelEventHandler(event => {
+			if (executorId.value !== "grok" || event.deltaY === 0 || event.shiftKey) return true
+			terminal.scrollLines(terminalWheelScrollLines(event.deltaY, event.deltaMode, terminal.rows))
+			event.preventDefault()
+			event.stopPropagation()
+			syncScrollAnchor()
+			return false
+		})
+	},
 })
 
 const {
@@ -166,6 +177,7 @@ onBeforeUnmount(() => {
 }
 
 :deep(.xterm) {
+	box-sizing: border-box;
 	padding: 16px 18px;
 }
 

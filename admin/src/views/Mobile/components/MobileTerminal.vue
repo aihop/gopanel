@@ -1,20 +1,33 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, ref, watch } from "vue"
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 import { useMessage } from "naive-ui"
 import { FitAddon } from "@xterm/addon-fit"
 import { Terminal } from "@xterm/xterm"
 import useClipboard from "vue-clipboard3"
-import { updateMobileSessionTitle } from "@/api/modules/mobile"
 import Icon from "@/components/common/Icon.vue"
 import { mobileMessages } from "@/i18n/locales/mobile"
 import { mobileTerminalMessages } from "../mobileTerminalMessages"
 import MobileTerminalHeader from "./MobileTerminalHeader.vue"
 import MobileTerminalInput from "./MobileTerminalInput.vue"
+import MobileTerminalRenameModal from "./MobileTerminalRenameModal.vue"
 import { terminalBufferText } from "./mobileTerminalClipboard"
-import { MobileTerminalInputFallback } from "./mobileTerminalInput"
+import {
+	applyMobileTerminalCtrlModifier,
+	mobileTerminalShellStyle,
+	mobileTerminalSocketUrl,
+	mobileTerminalViewportHeight,
+	MobileTerminalInputFallback,
+} from "./mobileTerminalInput"
 import { MobileTerminalOutputQueue } from "./mobileTerminalOutputQueue"
-import { terminalSizeData, terminalTakeControlMessage } from "@/views/Code/components/codeTerminalSession"
+import {
+	authoritativeTerminalSize,
+	codeTerminalOptions,
+	keepingTerminalBottom,
+	shouldAutoAcquireTerminalControl,
+	terminalSizeData,
+	terminalTakeControlMessage,
+} from "@/views/Code/components/codeTerminalSession"
 import "./mobileTerminal.css"
 import "@xterm/xterm/css/xterm.css"
 
@@ -25,12 +38,12 @@ const props = withDefaults(
 		projectName: string
 		mode?: "ai" | "native"
 	}>(),
-	{ mode: "ai" }
+	{ mode: "ai" },
 )
 const emit = defineEmits<{ back: []; openFiles: []; openStatus: []; renamed: [] }>()
 const terminalMessages = {
 	zh: { mobile: { ...mobileMessages.zh.mobile, ...mobileTerminalMessages.zh.mobile } },
-	en: { mobile: { ...mobileMessages.en.mobile, ...mobileTerminalMessages.en.mobile } }
+	en: { mobile: { ...mobileMessages.en.mobile, ...mobileTerminalMessages.en.mobile } },
 }
 const { t } = useI18n({ messages: terminalMessages })
 const message = useMessage()
@@ -41,10 +54,10 @@ const connecting = ref(true)
 const reconnecting = ref(false)
 const hasControl = ref(false)
 const ctrlActive = ref(false)
-const showRenameModal = ref(false)
-const renameTitle = ref("")
-const renameLoading = ref(false)
 const hasTerminalSelection = ref(false)
+const renameModal = ref<{ open: () => void } | null>(null)
+const viewportHeight = ref(0)
+const terminalShellStyle = computed(() => mobileTerminalShellStyle(viewportHeight.value))
 let terminal: Terminal | null = null
 let fitAddon: FitAddon | null = null
 let inputFallback: MobileTerminalInputFallback | null = null
@@ -61,6 +74,11 @@ let renderedSequence = 0
 let resyncRequest = 0
 let pendingResyncId = ""
 let closing = false
+
+function syncViewportHeight() {
+	viewportHeight.value = mobileTerminalViewportHeight()
+	nextTick(scheduleFit)
+}
 
 function sendAck(sequence: number) {
 	if (props.mode === "ai" && socket?.readyState === WebSocket.OPEN && sequence > 0) {
@@ -81,14 +99,16 @@ function requestResync() {
 	socket.send(
 		JSON.stringify({
 			type: "resync",
-			data: JSON.stringify({ sequence: renderedSequence, requestId: pendingResyncId })
-		})
+			data: JSON.stringify({ sequence: renderedSequence, requestId: pendingResyncId }),
+		}),
 	)
 }
 
 function fit() {
 	try {
-		if (!connected.value || hasControl.value) fitAddon?.fit()
+		if ((!connected.value || hasControl.value) && terminal && fitAddon) {
+			keepingTerminalBottom(terminal, () => fitAddon?.fit())
+		}
 		if (
 			socket?.readyState === WebSocket.OPEN &&
 			hasControl.value &&
@@ -98,8 +118,8 @@ function fit() {
 			socket.send(
 				JSON.stringify({
 					type: "resize",
-					data: terminalSizeData(terminal.cols, terminal.rows)
-				})
+					data: terminalSizeData(terminal.cols, terminal.rows),
+				}),
 			)
 			reportedCols = terminal.cols
 			reportedRows = terminal.rows
@@ -121,19 +141,9 @@ function updateControl(value: boolean) {
 }
 
 function applyAuthoritativeSize(cols: unknown, rows: unknown) {
-	const authoritativeCols = Number(cols)
-	const authoritativeRows = Number(rows)
-	if (
-		!terminal ||
-		!Number.isInteger(authoritativeCols) ||
-		!Number.isInteger(authoritativeRows) ||
-		authoritativeCols <= 0 ||
-		authoritativeRows <= 0
-	)
-		return
-	if (terminal.cols !== authoritativeCols || terminal.rows !== authoritativeRows) {
-		terminal.resize(authoritativeCols, authoritativeRows)
-	}
+	const size = authoritativeTerminalSize(cols, rows)
+	if (!terminal || !size || (terminal.cols === size.cols && terminal.rows === size.rows)) return
+	keepingTerminalBottom(terminal, () => terminal?.resize(size.cols, size.rows))
 }
 
 function sendTerminalInput(data: string) {
@@ -143,7 +153,7 @@ function sendTerminalInput(data: string) {
 
 function queueTerminalData(
 	data: string,
-	options: { sequence?: number; forceBottom?: boolean; resetBefore?: boolean } = {}
+	options: { sequence?: number; forceBottom?: boolean; resetBefore?: boolean } = {},
 ) {
 	return outputQueue?.enqueue({ data, ...options }) ?? false
 }
@@ -151,10 +161,7 @@ function queueTerminalData(
 function applyCtrlModifier(data: string) {
 	if (!ctrlActive.value) return data
 	ctrlActive.value = false
-	if (data.length !== 1) return data
-	if (data === "?") return "\x7f"
-	const code = data.toUpperCase().charCodeAt(0)
-	return code >= 64 && code <= 95 ? String.fromCharCode(code & 31) : data
+	return applyMobileTerminalCtrlModifier(true, data)
 }
 
 function sendShortcut(data: string) {
@@ -198,15 +205,17 @@ function scheduleFit() {
 function connect() {
 	if (!terminal || !props.sessionId) return
 	connecting.value = true
-	const protocol = window.location.protocol === "https:" ? "wss:" : "ws:"
-	let url =
-		props.mode === "native"
-			? `${protocol}//${window.location.host}/api/mobile/app/project-terminal/${props.sessionId}/ws`
-			: `${protocol}//${window.location.host}/api/mobile/app/terminal?session_id=${props.sessionId}`
-	url += `${url.includes("?") ? "&" : "?"}cols=${terminal.cols}&rows=${terminal.rows}`
-	if (props.mode === "ai") url += "&read_only=1"
-	if (renderedSequence) url += `&after_sequence=${renderedSequence}`
-	const currentSocket = new WebSocket(url)
+	const currentSocket = new WebSocket(
+		mobileTerminalSocketUrl({
+			mode: props.mode,
+			sessionId: props.sessionId,
+			cols: terminal.cols,
+			rows: terminal.rows,
+			host: window.location.host,
+			protocol: window.location.protocol,
+			afterSequence: renderedSequence,
+		}),
+	)
 	socket = currentSocket
 	currentSocket.onopen = () => {
 		if (socket !== currentSocket) return
@@ -231,14 +240,20 @@ function connect() {
 					!queueTerminalData(message.data || "", {
 						sequence: isLastChunk ? sequence : undefined,
 						forceBottom: isLastChunk,
-						resetBefore: replaceHistory
+						resetBefore: replaceHistory,
 					})
 				)
 					return
 				if (isLastChunk) {
 					receivedSequence = sequence
 					pendingResyncId = ""
-					updateControl(Boolean(message.hasControl))
+					const gainedControl = Boolean(message.hasControl)
+					updateControl(gainedControl)
+					if (
+						props.mode === "ai" &&
+						shouldAutoAcquireTerminalControl(gainedControl, message.controlReason, message.leaseExpiresAt)
+					)
+						void nextTick(takeControl)
 				}
 			} else if (message.type === "output") {
 				const sequence = Number(message.sequence) || 0
@@ -253,7 +268,13 @@ function connect() {
 				requestResync()
 			} else if (message.type === "control") {
 				if (props.mode === "ai") applyAuthoritativeSize(message.cols, message.rows)
-				updateControl(Boolean(message.hasControl))
+				const gainedControl = Boolean(message.hasControl)
+				updateControl(gainedControl)
+				if (
+					props.mode === "ai" &&
+					shouldAutoAcquireTerminalControl(gainedControl, message.controlReason, message.leaseExpiresAt)
+				)
+					void nextTick(takeControl)
 				if (message.controlReason || message.data)
 					queueTerminalData(`\r\n\x1b[33m[GoPanel] ${t("mobile.terminalControlBusy")}\x1b[0m\r\n`)
 			} else if (message.type === "closed") {
@@ -301,6 +322,7 @@ function openTerminal() {
 	reportedCols = 0
 	reportedRows = 0
 	terminal = new Terminal({
+		...codeTerminalOptions(),
 		disableStdin: true,
 		screenReaderMode: true,
 		cursorBlink: false,
@@ -311,8 +333,11 @@ function openTerminal() {
 		scrollSensitivity: 1,
 		fastScrollSensitivity: 3,
 		smoothScrollDuration: 0,
-		theme: { background: "#0b1020", foreground: "#d4d4d8", cursor: "#60a5fa" }
+		theme: { background: "#0b1020", foreground: "#d4d4d8", cursor: "#60a5fa" },
 	})
+	syncViewportHeight()
+	window.visualViewport?.addEventListener("resize", syncViewportHeight)
+	window.visualViewport?.addEventListener("scroll", syncViewportHeight)
 	fitAddon = new FitAddon()
 	terminal.loadAddon(fitAddon)
 	terminal.open(terminalElement.value)
@@ -321,7 +346,7 @@ function openTerminal() {
 			renderedSequence = Math.max(renderedSequence, sequence)
 			sendAck(renderedSequence)
 		},
-		onOverflow: requestResync
+		onOverflow: requestResync,
 	})
 	const viewport = terminalElement.value.querySelector<HTMLElement>(".xterm-viewport")
 	if (viewport) outputQueue.bindTouchScrolling(viewport)
@@ -371,6 +396,8 @@ function closeTerminal() {
 	fitFrame = null
 	resizeObserver?.disconnect()
 	resizeObserver = null
+	window.visualViewport?.removeEventListener("resize", syncViewportHeight)
+	window.visualViewport?.removeEventListener("scroll", syncViewportHeight)
 	outputQueue?.dispose()
 	outputQueue = null
 	inputFallback?.dispose()
@@ -395,41 +422,23 @@ function releaseControl() {
 	socket.send(JSON.stringify({ type: "release_control", data: "" }))
 }
 
-function openRenameModal() {
-	renameTitle.value = props.taskName
-	showRenameModal.value = true
-}
-
-async function renameSession() {
-	const title = renameTitle.value.trim()
-	if (!title || renameLoading.value) return
-	renameLoading.value = true
-	try {
-		await updateMobileSessionTitle(props.sessionId, title)
-		showRenameModal.value = false
-		message.success(t("mobile.sessionRenameSuccess"))
-		emit("renamed")
-	} catch (error) {
-		void 0
-	} finally {
-		renameLoading.value = false
-	}
-}
-
 watch(
 	() => props.sessionId,
 	() => {
 		closeTerminal()
 		nextTick(openTerminal)
 	},
-	{ immediate: true }
+	{ immediate: true },
 )
 
 onBeforeUnmount(closeTerminal)
 </script>
 
 <template>
-	<section class="flex h-dvh w-full flex-col overflow-hidden bg-[#0b1020] text-white">
+	<section
+		class="flex h-dvh w-full flex-col overflow-hidden bg-[#0b1020] text-white"
+		:style="terminalShellStyle"
+	>
 		<MobileTerminalHeader
 			:task-name="taskName"
 			:project-name="projectName"
@@ -440,7 +449,7 @@ onBeforeUnmount(closeTerminal)
 			@back="emit('back')"
 			@open-files="emit('openFiles')"
 			@open-status="emit('openStatus')"
-			@open-rename="openRenameModal"
+			@open-rename="renameModal?.open()"
 			@copy-selection="copyTerminalContent(true)"
 			@copy-output="copyTerminalContent(false)"
 		/>
@@ -467,33 +476,11 @@ onBeforeUnmount(closeTerminal)
 			@toggle-ctrl="toggleCtrl"
 		/>
 		<div class="h-[max(8px,env(safe-area-inset-bottom))] shrink-0 bg-slate-950" aria-hidden="true" />
-		<n-modal
-			v-model:show="showRenameModal"
-			preset="card"
-			style="width: min(92vw, 420px)"
-			:title="t('mobile.renameSession')"
-		>
-			<n-input
-				v-model:value="renameTitle"
-				maxlength="255"
-				show-count
-				autofocus
-				:placeholder="t('mobile.sessionNamePlaceholder')"
-				@keydown.enter.prevent="renameSession"
-			/>
-			<template #footer>
-				<div class="flex justify-end gap-2">
-					<n-button @click="showRenameModal = false">{{ t("mobile.cancel") }}</n-button>
-					<n-button
-						type="primary"
-						:loading="renameLoading"
-						:disabled="!renameTitle.trim()"
-						@click="renameSession"
-					>
-						{{ t("mobile.renameSession") }}
-					</n-button>
-				</div>
-			</template>
-		</n-modal>
+		<MobileTerminalRenameModal
+			ref="renameModal"
+			:session-id="sessionId"
+			:task-name="taskName"
+			@renamed="emit('renamed')"
+		/>
 	</section>
 </template>

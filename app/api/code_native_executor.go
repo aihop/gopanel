@@ -33,7 +33,7 @@ func buildNativeCodeCommand(session *model.AIDevSession) (*exec.Cmd, string, err
 	args := make([]string, 0)
 	switch definition.ID {
 	case "grok":
-		args = append(args, "--no-auto-update")
+		args = append(args, "--no-auto-update", "--minimal", "--no-alt-screen")
 		args = append(args, grokApprovalArgs(session.ApprovalPolicy)...)
 		if nativeSessionID == "" || !nativeGrokSessionExists(nativeSessionID) {
 			if nativeSessionID == "" {

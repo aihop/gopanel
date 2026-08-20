@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
+	authoritativeTerminalSize,
 	CodeTerminalInputFallback,
 	codeTerminalIdentity,
 	isDeliveredCodeSession,
@@ -9,10 +10,34 @@ import {
 	shouldAttachOnlyToTerminal,
 	terminalInputIntent,
 	terminalReleaseControlMessage,
+	terminalWheelScrollLines,
 	terminalWebSocketUrl,
 	terminalSizeData,
 	terminalTakeControlMessage,
 } from "./codeTerminalSession"
+
+describe("authoritativeTerminalSize", () => {
+	it("桌面端和移动端只接受有效的服务端终端尺寸", () => {
+		expect(authoritativeTerminalSize("120", 36)).toEqual({ cols: 120, rows: 36 })
+		expect(authoritativeTerminalSize(0, 36)).toBeNull()
+		expect(authoritativeTerminalSize(120.5, 36)).toBeNull()
+		expect(authoritativeTerminalSize(undefined, undefined)).toBeNull()
+	})
+})
+
+describe("terminalWheelScrollLines", () => {
+	it("把鼠标滚轮和触控板位移换算成终端行数", () => {
+		expect(terminalWheelScrollLines(-120, 0, 30)).toBe(-3)
+		expect(terminalWheelScrollLines(80, 0, 30)).toBe(2)
+		expect(terminalWheelScrollLines(-3, 1, 30)).toBe(-3)
+	})
+
+	it("页面滚动按终端高度换算并过滤无效位移", () => {
+		expect(terminalWheelScrollLines(1, 2, 30)).toBe(30)
+		expect(terminalWheelScrollLines(0, 0, 30)).toBe(0)
+		expect(terminalWheelScrollLines(Number.NaN, 0, 30)).toBe(0)
+	})
+})
 
 describe("isDeliveredCodeSession", () => {
 	it("识别已完成统一交付的终态会话", () => {
@@ -50,7 +75,7 @@ describe("terminal control protocol", () => {
 	it("接管时携带当前终端尺寸", () => {
 		expect(JSON.parse(terminalTakeControlMessage(120, 36))).toEqual({
 			type: "take_control",
-			data: terminalSizeData(120, 36)
+			data: terminalSizeData(120, 36),
 		})
 		expect(JSON.parse(terminalSizeData(120, 36))).toEqual({ cols: 120, rows: 36 })
 	})
@@ -202,8 +227,8 @@ describe("keepingTerminalBottom", () => {
 			calls,
 			terminal: {
 				buffer: { active: { baseY, viewportY } },
-				scrollToBottom: () => calls.push("scrollToBottom")
-			}
+				scrollToBottom: () => calls.push("scrollToBottom"),
+			},
 		}
 	}
 
@@ -231,7 +256,7 @@ describe("keepingTerminalBottom", () => {
 			{ buffer, scrollToBottom: () => calls.push("scrollToBottom") },
 			() => {
 				buffer.active.viewportY = 3
-			}
+			},
 		)
 		expect(calls).toEqual(["scrollToBottom"])
 	})

@@ -22,6 +22,7 @@ func TestConfigureNativeTerminalEnvironmentPreservesSessionProvider(t *testing.T
 		"PATH=/managed/bin",
 		codexSessionAPIKeyEnv + "=session-secret",
 		"TERM=dumb",
+		"NO_COLOR=1",
 	}
 	configureNativeTerminalEnvironment(command)
 	if got := environmentValue(command.Env, codexSessionAPIKeyEnv); got != "session-secret" {
@@ -35,6 +36,18 @@ func TestConfigureNativeTerminalEnvironmentPreservesSessionProvider(t *testing.T
 	}
 	if got := environmentValue(command.Env, "COLORTERM"); got != "truecolor" {
 		t.Fatalf("COLORTERM = %q", got)
+	}
+	if got := environmentValue(command.Env, "NO_COLOR"); got != "" {
+		t.Fatalf("NO_COLOR should be removed for interactive terminals: %q", got)
+	}
+}
+
+func TestConfigureNativeGrokTerminalEnvironmentUsesXtermCompatibility(t *testing.T) {
+	command := exec.Command("grok")
+	command.Env = []string{"TERM_PROGRAM=unknown"}
+	configureNativeGrokTerminalEnvironment(command)
+	if got := environmentValue(command.Env, "TERM_PROGRAM"); got != "vscode" {
+		t.Fatalf("TERM_PROGRAM = %q", got)
 	}
 }
 
