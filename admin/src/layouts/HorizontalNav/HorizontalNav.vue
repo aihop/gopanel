@@ -2,7 +2,7 @@
 	<div class="layout flex flex-col">
 		<HeaderBar />
 		<Sidebar />
-		<div class="flex grow overflow-hidden">
+		<div class="min-h-0 min-w-0 flex grow overflow-hidden">
 			<MainContainer class="grow">
 				<slot />
 			</MainContainer>
@@ -24,9 +24,11 @@ window.$message = useMessage()
 
 <style lang="scss" scoped>
 .layout {
-	width: 100vw;
-	height: 100vh;
+	width: 100%;
+	height: 100%;
 	height: 100svh;
+	min-width: 0;
+	min-height: 0;
 	overflow: hidden;
 	perspective: 1000px;
 }

@@ -1,7 +1,7 @@
 <template>
 	<div
 		id="app-main"
-		class="main min-h-screen bg-slate-50/80"
+		class="main min-h-0 min-w-0 bg-slate-50/80"
 		:class="{ 'sidebar-collapsed': sidebarCollapsed, 'sidebar-opened': !sidebarCollapsed }"
 	>
 		<n-scrollbar
@@ -82,6 +82,10 @@ onMounted(() => {
 
 .main {
 	width: 100%;
+	height: 100%;
+	flex: 1 1 auto;
+	min-width: 0;
+	min-height: 0;
 	position: relative;
 	padding-left: var(--sidebar-open-width);
 	background:

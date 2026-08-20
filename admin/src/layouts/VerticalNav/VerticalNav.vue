@@ -20,9 +20,11 @@ window.$message = useMessage()
 
 <style lang="scss" scoped>
 .layout {
-	width: 100vw;
-	height: 100vh;
+	width: 100%;
+	height: 100%;
 	height: 100svh;
+	min-width: 0;
+	min-height: 0;
 	overflow: hidden;
 	perspective: 1000px;
 }
