@@ -5,6 +5,7 @@ import type { CodeTaskListItem } from "@/api/interface/codeTasks"
 import Icon from "@/components/common/Icon.vue"
 import { codeProjectMessages } from "@/i18n/locales/codeProject"
 import TaskApprovalAction from "./TaskApprovalAction.vue"
+import TaskStatusBadge from "./TaskStatusBadge.vue"
 
 const props = defineProps<{
 	task: CodeTaskListItem
@@ -41,12 +42,10 @@ const deliveryNeedsAttention = computed(() =>
       class="dashboard-task-row__marker absolute left-1.5 top-1.5 bottom-1.5 w-0.5 rounded-full"
       :class="selected ? 'bg-[var(--n-text-color-3)]' : 'bg-transparent'"
     />
-    <TaskApprovalAction
+    <TaskStatusBadge
       class="shrink-0"
-      :task="task"
+      :status="task.status"
       compact
-      @click.stop
-      @approved="emit('refresh')"
     />
     <span
       v-if="showProject !== false"
@@ -62,13 +61,6 @@ const deliveryNeedsAttention = computed(() =>
     >
       {{ task.title }}
     </span>
-    <Icon
-      v-if="deliveryNeedsAttention"
-      name="mdi:alert-circle-outline"
-      :size="14"
-      class="shrink-0 text-amber-500"
-      :title="t('code.dashboardDeliveryAttention')"
-    />
     <n-button
       quaternary
       circle
@@ -86,6 +78,21 @@ const deliveryNeedsAttention = computed(() =>
         />
       </template>
     </n-button>
+    <TaskApprovalAction
+      class="shrink-0"
+      :task="task"
+      compact
+      hide-status
+      @click.stop
+      @approved="emit('refresh')"
+    />
+    <Icon
+      v-if="deliveryNeedsAttention"
+      name="mdi:alert-circle-outline"
+      :size="14"
+      class="shrink-0 text-amber-500"
+      :title="t('code.dashboardDeliveryAttention')"
+    />
   </div>
 </template>
 

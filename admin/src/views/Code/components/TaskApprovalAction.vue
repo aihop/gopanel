@@ -8,7 +8,7 @@ import { useI18n } from "vue-i18n"
 import { codeWorkspaceMessages } from "../codeWorkspaceMessages"
 import TaskStatusBadge from "./TaskStatusBadge.vue"
 
-const props = defineProps<{ task: AITask; compact?: boolean }>()
+const props = defineProps<{ task: AITask; compact?: boolean; hideStatus?: boolean }>()
 const emit = defineEmits<{ approved: [] }>()
 const { t } = useI18n({ messages: codeWorkspaceMessages })
 const message = useMessage()
@@ -52,8 +52,15 @@ watch(() => `${props.task.status}:${props.task.sessionId}:${props.task.id}`, () 
 </script>
 
 <template>
-	<div class="flex items-center gap-1.5">
-		<TaskStatusBadge :status="task.status" :compact="compact" />
+	<div
+		v-if="!hideStatus || approval || loadError || loading"
+		class="flex items-center gap-1.5"
+	>
+		<TaskStatusBadge
+			v-if="!hideStatus"
+			:status="task.status"
+			:compact="compact"
+		/>
 		<n-tooltip v-if="approval" placement="top" style="max-width: min(420px, 80vw)">
 			<template #trigger>
 				<n-button text type="warning" size="tiny" :loading="approving" @click.stop="approve">
