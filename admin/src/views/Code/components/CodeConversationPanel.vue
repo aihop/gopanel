@@ -88,8 +88,8 @@ const composerDisabledHint = () => {
         <article
           v-for="item in messages"
           :key="item.id"
-          class="rounded-xl border border-[color-mix(in_srgb,var(--n-border-color)_70%,transparent)] p-3.5"
-          :class="item.role === 'user' ? 'bg-[color-mix(in_srgb,var(--n-color-embedded)_80%,transparent)]' : ''"
+          class="rounded-xl border border-slate-200/70 p-3.5 dark:border-white/10"
+          :class="item.role === 'user' ? 'bg-slate-50/80 dark:bg-white/5' : ''"
         >
           <div class="mb-2 flex items-center justify-between gap-3">
             <n-tag size="small" :type="item.role === 'user' ? 'info' : 'success'" :bordered="false">
@@ -114,7 +114,7 @@ const composerDisabledHint = () => {
       </div>
     </n-spin>
 
-    <footer class="shrink-0 border-t border-[color-mix(in_srgb,var(--n-border-color)_65%,transparent)] p-3">
+    <footer class="shrink-0 border-t border-slate-200/70 p-3 dark:border-white/10">
       <p class="mb-2 text-xs tracking-[0.01em] text-[var(--n-text-color-3)]">{{ composerDisabledHint() }}</p>
       <div class="flex items-end gap-2">
         <n-input

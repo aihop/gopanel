@@ -289,7 +289,7 @@ const activateCreatedTask = async (taskId: number) => {
 
     <!-- 主从：左边会话轨，右边就是工作台。切任务不跳页。 -->
     <div
-      class="dashboard-workbench grid min-h-0 flex-1 overflow-hidden border-t border-[color-mix(in_srgb,var(--n-border-color)_70%,transparent)]"
+      class="dashboard-workbench grid min-h-0 flex-1 overflow-hidden border-t border-slate-200/70 dark:border-white/10"
       :class="[
         listCollapsed
           ? 'grid-cols-1 grid-rows-1'
@@ -369,7 +369,7 @@ const activateCreatedTask = async (taskId: number) => {
 <style scoped>
 .dashboard-panel {
 	background: transparent;
-	border-bottom: 1px solid color-mix(in srgb, var(--n-border-color) 70%, transparent);
+	border-bottom: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
 }
 @media (min-width: 1024px) {
 	.dashboard-workbench--split {
@@ -377,7 +377,7 @@ const activateCreatedTask = async (taskId: number) => {
 	}
 
 	.dashboard-panel {
-		border-right: 1px solid var(--n-border-color);
+		border-right: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
 		border-bottom: 0;
 	}
 }

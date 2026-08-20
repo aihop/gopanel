@@ -236,11 +236,11 @@ const openFile = (file: { path: string; extension: string }) => {
 
 <style scoped>
 .detail-pane {
-	background: color-mix(in srgb, var(--n-color) 97%, transparent);
+	background: var(--bg-accent-color, var(--bg-default-color));
 }
 
 .detail-pane__header {
-	border-bottom: 1px solid color-mix(in srgb, var(--n-border-color) 65%, transparent);
+	border-bottom: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
 }
 
 .detail-pane--fullscreen {
@@ -249,5 +249,6 @@ const openFile = (file: { path: string; extension: string }) => {
 	border-radius: 0;
 	box-shadow: none;
 	inset: 0;
+	background: var(--bg-accent-color, var(--bg-default-color));
 }
 </style>

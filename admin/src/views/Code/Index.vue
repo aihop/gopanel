@@ -5,7 +5,7 @@
     flex 链就没有可分配的高度，终端只能被最小高度撑着，怎么调间距都不管用。
   -->
   <div
-    class="page page-wrapped page-mobile-full page-without-footer relative flex w-full flex-col overflow-hidden rounded-2xl border border-[var(--n-border-color)] bg-[var(--n-color)]"
+    class="page page-wrapped page-mobile-full page-without-footer bg-base-accent border-base-accent relative flex w-full flex-col overflow-hidden rounded-2xl"
     :class="{ 'code-index--immersive': isCodeImmersive }"
   >
     <!-- 整页不滚：右侧是工作台，滚动交给左右两栏各自处理。 -->
@@ -481,6 +481,7 @@ const openQuickPanel = (project: AIProject) => quickPanelsRef.value?.open(projec
   min-height: 100dvh !important;
   margin: 0;
   border-radius: 0;
+  background: var(--bg-accent-color);
 }
 
 .code-index--immersive .project-lobby {
