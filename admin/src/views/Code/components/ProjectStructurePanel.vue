@@ -7,6 +7,7 @@ import Icon from "@/components/common/Icon.vue"
 import { getCodeSessionStructure, searchCodeSessionStructure, type CodeStructureEntry, type CodeStructureSearchHit } from "@/api/modules/codeEditor"
 import { codeEditorMessages } from "../codeEditorMessages"
 import { writeStructureDragData } from "./codeConversationAttachments"
+import { codeFileIcon } from "./codeFileIcon"
 import CodeStructureSearchHits from "./CodeStructureSearchHits.vue"
 import CodeStructureSnippetPopover from "./CodeStructureSnippetPopover.vue"
 
@@ -101,10 +102,11 @@ const loadChildren = async (option: TreeOption) => {
 
 const renderPrefix = ({ option }: { option: TreeOption }) => {
 	const node = option as StructureTreeOption
+	const icon = codeFileIcon(node.key, node.isDir)
 	return h(Icon, {
-		name: node.isDir ? "mdi:folder-outline" : "mdi:file-code-outline",
+		name: icon.name,
 		size: 17,
-		color: isChangedPath(node.key, node.isDir) ? "#2563eb" : undefined
+		color: isChangedPath(node.key, node.isDir) ? "#2563eb" : icon.color
 	})
 }
 

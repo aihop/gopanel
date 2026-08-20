@@ -3,6 +3,7 @@ import { useI18n } from "vue-i18n"
 import Icon from "@/components/common/Icon.vue"
 import type { CodeStructureSearchHit } from "@/api/modules/codeEditor"
 import { codeEditorMessages } from "../codeEditorMessages"
+import { codeFileIcon } from "./codeFileIcon"
 
 defineProps<{
 	hits: CodeStructureSearchHit[]
@@ -38,7 +39,7 @@ const { t } = useI18n({ messages: codeEditorMessages })
       >
         <div class="flex min-w-0 items-center gap-1.5 text-xs text-slate-700 dark:text-[var(--n-text-color)]">
           <Icon
-            :name="hit.isDir ? 'mdi:folder-outline' : hit.kind === 'content' ? 'mdi:file-search-outline' : 'mdi:file-code-outline'"
+            v-bind="codeFileIcon(hit.path, hit.isDir)"
             :size="15"
           />
           <span class="min-w-0 truncate" :title="hit.path">{{ hit.path }}</span>
