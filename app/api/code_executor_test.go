@@ -121,7 +121,7 @@ func TestBuildCodeExecutorArgsResumesNativeSession(t *testing.T) {
 	tests := map[string][]string{
 		"codex":    {"-c", codexNetworkConfig, "-c", codexDisableDocsMCP, "--ask-for-approval", "on-request", "--sandbox", "workspace-write", "exec", "resume", "--json", "--skip-git-repo-check", "native-1", prompt},
 		"grok":     {"--no-auto-update", "--permission-mode", "auto", "--output-format", "streaming-json", "--resume", "native-1", "-p", prompt},
-		"claude":   {"--print", "--output-format", "json", "--permission-mode", "acceptEdits", "--resume", "native-1", prompt},
+		"claude":   {"--print", "--output-format", "stream-json", "--include-partial-messages", "--permission-mode", "acceptEdits", "--resume", "native-1", prompt},
 		"opencode": {"run", "--format", "json", "--dangerously-skip-permissions", "--session", "native-1", prompt},
 	}
 	for executorID, expected := range tests {

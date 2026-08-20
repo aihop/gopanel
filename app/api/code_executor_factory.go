@@ -119,7 +119,7 @@ func grokApprovalArgs(approvalPolicy string) []string {
 }
 
 func (claudeExecutorFactory) BuildArgs(prompt, nativeSessionID string, _ uint, approvalPolicy string) ([]string, string, error) {
-	prefix := []string{"--print", "--output-format", "json"}
+	prefix := []string{"--print", "--output-format", "stream-json", "--include-partial-messages"}
 	prefix = append(prefix, claudeApprovalArgs(approvalPolicy)...)
 	if nativeSessionID != "" {
 		return append(prefix, "--resume", nativeSessionID, prompt), nativeSessionID, nil

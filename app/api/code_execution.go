@@ -86,7 +86,7 @@ func executeCodeAgentRun(
 		output := &boundedCodeOutput{}
 		writer := &conversationOutputWriter{inner: output, executorID: executorID, sessionID: sessionID}
 		command.Stdout = writer
-		command.Stderr = writer
+		command.Stderr = output
 		execErr = command.Run()
 		rawOutput = output.Bytes()
 	}

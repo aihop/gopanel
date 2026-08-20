@@ -47,16 +47,12 @@ export function useCodeConversation(sessionId: () => number | null, taskId: () =
 		const activeRun = runs.value.find(run => run.status === "running" || run.status === "queued")
 		const liveRunId = live?.runId || activeRun?.id || 0
 		if (!liveContent && !activeRun) return items
-		if (
-			items.some(item => {
-				if (item.role === "user") return false
-				if (liveRunId && item.runId === liveRunId) return true
-				if (!liveContent) return false
-				const content = item.content || ""
-				return content === liveContent || content.startsWith(liveContent) || liveContent.startsWith(content)
-			})
-		) {
-			return items
+		const index = items.findLastIndex(item => item.role !== "user" && Boolean(liveRunId) && item.runId === liveRunId)
+		if (index >= 0) {
+			if (!liveContent || (items[index].content || "").length >= liveContent.length) return items
+			const next = items.slice()
+			next[index] = { ...next[index], content: liveContent }
+			return next
 		}
 		return [
 			...items,
@@ -215,11 +211,22 @@ export function useCodeConversation(sessionId: () => number | null, taskId: () =
 			abort.signal,
 		)
 			.then(() => {
-				if (!abort.signal.aborted) startPolling()
+				if (abort.signal.aborted) return
+				if (conversationRunRunning(runs.value)) {
+					window.setTimeout(() => {
+						if (streamAbort === abort) startStream()
+					}, 400)
+					return
+				}
+				startPolling()
 			})
 			.catch(() => {
 				if (abort.signal.aborted) return
 				startPolling()
+				if (!conversationRunRunning(runs.value)) return
+				window.setTimeout(() => {
+					if (streamAbort === abort) startStream()
+				}, 800)
 			})
 	}
 

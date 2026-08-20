@@ -65,7 +65,7 @@ func (hub *conversationStreamHub) snapshot(sessionID uint) conversationStreamPay
 
 func (hub *conversationStreamHub) Subscribe(sessionID uint) (conversationStreamPayload, <-chan conversationStreamPayload, func()) {
 	current := hub.session(sessionID)
-	events := make(chan conversationStreamPayload, 16)
+	events := make(chan conversationStreamPayload, 256)
 	current.mu.Lock()
 	current.subs[events] = struct{}{}
 	current.mu.Unlock()
@@ -122,12 +122,19 @@ func (hub *conversationStreamHub) Finish(sessionID uint, status, content string)
 func (hub *conversationStreamHub) broadcast(sessionID uint, payload conversationStreamPayload) {
 	current := hub.session(sessionID)
 	current.mu.Lock()
-	defer current.mu.Unlock()
+	subscribers := make([]chan conversationStreamPayload, 0, len(current.subs))
 	for subscriber := range current.subs {
-		select {
-		case subscriber <- payload:
-		default:
-		}
+		subscribers = append(subscribers, subscriber)
+	}
+	current.mu.Unlock()
+	for _, subscriber := range subscribers {
+		func() {
+			defer func() { _ = recover() }()
+			select {
+			case subscriber <- payload:
+			case <-time.After(2 * time.Second):
+			}
+		}()
 	}
 }
 
@@ -207,6 +214,7 @@ func StreamCodeConversation(c fiber.Ctx) error {
 	c.Set("Cache-Control", "no-cache")
 	c.Set("Connection", "keep-alive")
 	c.Set("X-Accel-Buffering", "no")
+	c.Status(fiber.StatusOK)
 	snapshot, events, cancel := codeConversationStreams.Subscribe(session.ID)
 	c.RequestCtx().SetBodyStreamWriter(func(writer *bufio.Writer) {
 		defer cancel()

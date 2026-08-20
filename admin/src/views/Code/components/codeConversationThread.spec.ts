@@ -19,8 +19,9 @@ describe("conversation message preview", () => {
 		expect(isLongConversationMessage(long)).toBe(true)
 		expect(conversationMessageText(long, false).endsWith("…")).toBe(true)
 		expect(conversationMessageText(long, true)).toBe(long)
-		expect(conversationMessageText(long, false, true).split("\n").length).toBeLessThanOrEqual(5)
-		expect(conversationMessageText(long, true, true)).toBe(long)
+		const running = `${"line\n".repeat(20)}${"x".repeat(40)}`
+		expect(conversationMessageText(running, false, true).startsWith("…")).toBe(true)
+		expect(conversationMessageText(running, true, true)).toBe(running)
 	})
 })
 

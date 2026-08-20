@@ -20,19 +20,36 @@ type codeExecutorOutput struct {
 	TokenUsageReported bool
 }
 
+func codeEventMap(value any) map[string]any {
+	event, _ := value.(map[string]any)
+	return event
+}
+
 func conversationAssistantUpdate(executorID string, event map[string]any) (text string, replace bool) {
+	if event == nil {
+		return "", false
+	}
+	if text, replace, handled := conversationAssistantStreamEvent(event); handled {
+		return text, replace
+	}
 	switch executorID {
 	case "grok":
 		if event["type"] == "text" {
 			text, _ = event["data"].(string)
 		}
 	case "codex":
-		item, _ := event["item"].(map[string]any)
+		eventType, _ := event["type"].(string)
+		if eventType == "item.delta" {
+			if delta, ok := event["delta"].(string); ok {
+				return delta, false
+			}
+			return firstCodeStringOrEmpty(codeEventMap(event["delta"]), "text"), false
+		}
+		item := codeEventMap(event["item"])
 		if item["type"] != "agent_message" {
 			return "", false
 		}
 		text, _ = item["text"].(string)
-		eventType, _ := event["type"].(string)
 		return text, eventType == "item.completed" || eventType == "item.updated"
 	case "claude":
 		text, _ = event["result"].(string)
@@ -41,10 +58,66 @@ func conversationAssistantUpdate(executorID string, event map[string]any) (text 
 		if event["type"] != "text" {
 			return "", false
 		}
-		part, _ := event["part"].(map[string]any)
-		text, _ = part["text"].(string)
+		text, _ = codeEventMap(event["part"])["text"].(string)
 	}
 	return text, false
+}
+
+func conversationAssistantStreamEvent(event map[string]any) (string, bool, bool) {
+	method, _ := event["method"].(string)
+	if method == "session/update" || strings.HasSuffix(method, "/session/update") {
+		update := codeEventMap(codeEventMap(event["params"])["update"])
+		if firstCodeStringOrEmpty(update, "sessionUpdate") != "agent_message_chunk" {
+			return "", false, true
+		}
+		return firstCodeStringOrEmpty(codeEventMap(update["content"]), "text"), false, true
+	}
+	switch event["type"] {
+	case "content_block_delta":
+		return firstCodeStringOrEmpty(codeEventMap(event["delta"]), "text"), false, true
+	case "stream_event":
+		nested := codeEventMap(event["event"])
+		if nested == nil {
+			nested = codeEventMap(event["data"])
+		}
+		if nested == nil {
+			return "", false, true
+		}
+		if text, replace, handled := conversationAssistantStreamEvent(nested); handled {
+			return text, replace, true
+		}
+		text, replace := conversationAssistantUpdate("", nested)
+		return text, replace, true
+	case "assistant":
+		text := claudeAssistantMessageText(event)
+		return text, true, text != ""
+	case "item.delta":
+		if delta, ok := event["delta"].(string); ok {
+			return delta, false, true
+		}
+		return firstCodeStringOrEmpty(codeEventMap(event["delta"]), "text"), false, true
+	default:
+		return "", false, false
+	}
+}
+
+func claudeAssistantMessageText(event map[string]any) string {
+	message := codeEventMap(event["message"])
+	parts, _ := message["content"].([]any)
+	var builder strings.Builder
+	for _, part := range parts {
+		item := codeEventMap(part)
+		if firstCodeStringOrEmpty(item, "type") != "text" {
+			continue
+		}
+		builder.WriteString(firstCodeStringOrEmpty(item, "text"))
+	}
+	return builder.String()
+}
+
+func firstCodeStringOrEmpty(payload map[string]any, keys ...string) string {
+	value, _ := firstCodeString(payload, keys...)
+	return value
 }
 
 func parseCodeExecutorOutput(executorID string, rawOutput []byte, preparedSessionID string) codeExecutorOutput {
@@ -74,12 +147,22 @@ func parseGrokOutput(rawOutput []byte, result *codeExecutorOutput) {
 	var messages []string
 	scanJSONLines(rawOutput, func(event map[string]any) {
 		applyCodeUsageMap(result, event)
-		switch eventType, _ := event["type"].(string); eventType {
-		case "text":
-			if text, ok := event["data"].(string); ok {
+		params := codeEventMap(event["params"])
+		if sessionID, ok := firstCodeString(params, "sessionId", "session_id"); ok {
+			result.NativeSessionID = sessionID
+		}
+		update := codeEventMap(params["update"])
+		applyCodeUsageMap(result, update)
+		applyCodeUsageMap(result, codeEventMap(update["usage"]))
+		text, replace := conversationAssistantUpdate("grok", event)
+		if text != "" {
+			if replace {
+				messages = []string{text}
+			} else {
 				messages = append(messages, text)
 			}
-		case "end":
+		}
+		if eventType, _ := event["type"].(string); eventType == "end" {
 			if sessionID, ok := firstCodeString(event, "sessionId", "session_id"); ok {
 				result.NativeSessionID = sessionID
 			}
@@ -111,6 +194,39 @@ func parseCodexOutput(rawOutput []byte, result *codeExecutorOutput) {
 }
 
 func parseClaudeOutput(rawOutput []byte, result *codeExecutorOutput) {
+	assembled := ""
+	foundResult := false
+	scanJSONLines(rawOutput, func(event map[string]any) {
+		applyCodeUsageMap(result, event)
+		applyCodeUsageMap(result, codeEventMap(event["usage"]))
+		if sessionID, ok := firstCodeString(event, "session_id", "sessionId"); ok {
+			result.NativeSessionID = sessionID
+		}
+		if model, ok := firstCodeString(event, "model"); ok {
+			result.Model = model
+		}
+		text, replace := conversationAssistantUpdate("claude", event)
+		if eventType, _ := event["type"].(string); eventType == "result" && text != "" {
+			result.Message = text
+			foundResult = true
+			return
+		}
+		if foundResult || text == "" {
+			return
+		}
+		if replace {
+			assembled = text
+		} else {
+			assembled += text
+		}
+	})
+	if foundResult {
+		return
+	}
+	if assembled != "" {
+		result.Message = assembled
+		return
+	}
 	var payload struct {
 		Result    string         `json:"result"`
 		SessionID string         `json:"session_id"`
