@@ -110,13 +110,21 @@ func (manager *nativeCodeTerminalManager) attach(
 	manager.mu.Lock()
 	if terminal := manager.sessions[session.ID]; terminal != nil {
 		manager.mu.Unlock()
+		backgroundCodeRunner.setInteractive(session.ID, true)
 		return terminal, false, nil
 	}
 	manager.mu.Unlock()
 	if err := validateCodeTokenBudget(session); err != nil {
 		return nil, false, err
 	}
-	acquireContext, cancelAcquire := context.WithTimeout(context.Background(), 5*time.Second)
+	backgroundCodeRunner.setInteractive(session.ID, true)
+	handoverCommitted := false
+	defer func() {
+		if !handoverCommitted {
+			backgroundCodeRunner.setInteractive(session.ID, false)
+		}
+	}()
+	acquireContext, cancelAcquire := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancelAcquire()
 	lease, err := codeExecutions.acquireInteractiveSession(acquireContext, session)
 	if err != nil {
@@ -183,6 +191,7 @@ func (manager *nativeCodeTerminalManager) attach(
 		go discoverNativeOpenCodeSession(session, command.Path, command.Env, time.Now(), terminal.done)
 	}
 	go watchNativeCodeNotifications(session.ID, terminal.done)
+	handoverCommitted = true
 	return terminal, true, nil
 }
 
@@ -325,6 +334,7 @@ func (terminal *nativeCodeTerminal) wait(manager *nativeCodeTerminalManager) {
 	manager.mu.Lock()
 	delete(manager.sessions, terminal.sessionID)
 	manager.mu.Unlock()
+	backgroundCodeRunner.setInteractive(terminal.sessionID, false)
 	close(terminal.done)
 	terminal.lease.Release()
 	_ = global.DB.Model(&model.AIDevSession{}).

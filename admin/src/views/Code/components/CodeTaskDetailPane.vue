@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
+import { useMessage } from "naive-ui"
 import type { CodeExecutor, CodeSession } from "@/api/interface/code"
 import type { CodeTaskListItem } from "@/api/interface/codeTasks"
-import { getCodeExecutors } from "@/api/modules/code"
+import { getCodeExecutors, handoverCodeSessionToConversation } from "@/api/modules/code"
 import Icon from "@/components/common/Icon.vue"
 import { codeProjectMessages } from "@/i18n/locales/codeProject"
 import { defaultDashboardWorkbenchMode, executorSupportsStructuredTurn, findExecutorById } from "../codeStructuredTurn"
@@ -30,6 +31,7 @@ const emit = defineEmits<{
 	taskCreated: [taskId: number]
 }>()
 const { t } = useI18n({ messages: codeProjectMessages })
+const message = useMessage()
 const { isWorkspaceFullscreen, fullscreenLabel, toggleWorkspaceFullscreen } = useCodeWorkspaceFullscreen(t)
 
 const terminalIdentity = computed(() =>
@@ -76,6 +78,18 @@ const openFile = (file: { path: string; extension: string; isDir?: boolean }) =>
 	if (file.isDir) return
 	workspaceMode.value = "editor"
 	selectedFile.value = file
+}
+
+const switchWorkspaceMode = async (mode: CodeWorkspaceMode) => {
+	workspaceMode.value = mode
+	if (mode !== "conversation" || sessionId.value === null) return
+	try {
+		const response = await handoverCodeSessionToConversation(sessionId.value)
+		if (response.code !== 0) throw new Error(response.message)
+	} catch (error) {
+		workspaceMode.value = "terminal"
+		message.error(error instanceof Error && error.message ? error.message : t("code.handoverConversationFailed"))
+	}
 }
 </script>
 
@@ -132,7 +146,7 @@ const openFile = (file: { path: string; extension: string; isDir?: boolean }) =>
           <WorkspaceModeSwitch
             :value="workspaceMode"
             :show-conversation="structuredTurn || defaultMode === 'conversation'"
-            @update:value="workspaceMode = $event"
+            @update:value="switchWorkspaceMode"
           />
           <n-button
             v-if="task && task.agentName !== 'terminal'"

@@ -5,7 +5,7 @@ const terminalMessages = {
 		terminalSessionInactive: "该会话已停止运行。历史对话在上方可以查看；在此输入任意内容即可恢复会话。",
 		terminalResumingByInput: "正在恢复会话…",
 		terminalJumpToBottom: "回到最新输出",
-		terminalWorkspaceBusy: "当前工作区已有其他任务在执行；原任务不会停止，如需并行请启用 Git Worktree 隔离",
+		terminalWorkspaceBusy: "当前工作区正由另一任务占用；如需并行执行，请为不同任务启用 Git Worktree 隔离",
 		terminalStartFailed: "启动原生会话失败，请稍后重试",
 		terminalWebSocketFailed: "终端连接失败，请检查 GoPanel 服务状态",
 		terminalDisconnected: "终端连接已断开",
@@ -25,7 +25,7 @@ const terminalMessages = {
 		terminalResumingByInput: "Resuming session…",
 		terminalJumpToBottom: "Jump to latest output",
 		terminalWorkspaceBusy:
-			"Another task is running in this workspace. It will not be stopped; enable Git Worktree isolation to run in parallel.",
+			"Another task owns this workspace. Enable Git Worktree isolation to run a separate task in parallel.",
 		terminalStartFailed: "Failed to start the native session. Try again later.",
 		terminalWebSocketFailed: "Terminal connection failed. Check the GoPanel service.",
 		terminalDisconnected: "Terminal connection closed.",

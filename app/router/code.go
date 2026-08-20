@@ -106,6 +106,7 @@ func CodeRouter(r fiber.Router) {
 		group.Get("/sessions/:id/quality-checks", api.GetCodeQualityChecks)
 		group.Post("/sessions/:id/quality-checks/run", api.RunCodeQualityCheck)
 		group.Post("/sessions/:id/stop", api.StopCodeSessionExecution)
+		group.Post("/sessions/:id/handover/conversation", api.HandoverCodeSessionToConversation)
 		group.Post("/instructions/:id/retry", api.RetryCodeInstruction)
 		group.Get("/approvals", api.GetAIApprovals)
 		group.Post("/approvals/:id/approve", api.ApproveAIApproval)

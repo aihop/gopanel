@@ -143,6 +143,64 @@ func TestCodeExecutionCoordinatorDoesNotHandoverBusyDirectInstruction(t *testing
 	}
 }
 
+func TestCodeExecutionCoordinatorHandsOverSameSessionInstruction(t *testing.T) {
+	coordinator := newCodeExecutionCoordinator(2, 2)
+	instruction, err := coordinator.acquireOwned(
+		context.Background(), 21, []string{"/workspace/shared"}, codeExecutionInstruction, false,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	instruction.SetCancel(func() { instruction.Release() })
+	interactive, err := coordinator.acquireInteractiveSession(
+		context.Background(), &model.AIDevSession{ID: 21, WorkDir: "/workspace/shared"},
+	)
+	if err != nil {
+		t.Fatalf("same-session handover failed: %v", err)
+	}
+	defer interactive.Release()
+	if coordinator.hasSessionKind(21, codeExecutionInstruction) {
+		t.Fatal("instruction lease survived same-session handover")
+	}
+}
+
+func TestCodeExecutionCoordinatorKeepsSameSessionQualityBusy(t *testing.T) {
+	coordinator := newCodeExecutionCoordinator(2, 2)
+	quality, err := coordinator.acquireOwned(
+		context.Background(), 21, []string{"/workspace/shared"}, codeExecutionQuality, false,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer quality.Release()
+	var cancelled atomic.Bool
+	quality.SetCancel(func() { cancelled.Store(true) })
+	if _, err := coordinator.acquireInteractiveSession(
+		context.Background(), &model.AIDevSession{ID: 21, WorkDir: "/workspace/shared"},
+	); !errors.Is(err, errCodeExecutionBusy) {
+		t.Fatalf("same-session quality check should stay busy, got %v", err)
+	}
+	if cancelled.Load() {
+		t.Fatal("same-session quality check was cancelled by terminal handover")
+	}
+}
+
+func TestCodeExecutionCoordinatorKeepsOtherSessionInstructionBusy(t *testing.T) {
+	coordinator := newCodeExecutionCoordinator(2, 2)
+	instruction, err := coordinator.acquireOwned(
+		context.Background(), 21, []string{"/workspace/shared"}, codeExecutionInstruction, false,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer instruction.Release()
+	if _, err := coordinator.acquireInteractiveSession(
+		context.Background(), &model.AIDevSession{ID: 22, WorkDir: "/workspace/shared"},
+	); !errors.Is(err, errCodeExecutionBusy) {
+		t.Fatalf("other-session instruction should stay busy, got %v", err)
+	}
+}
+
 func TestCodeExecutionCoordinatorDoesNotInterruptLegacyDirectSession(t *testing.T) {
 	database := withCodeGovernanceDB(t)
 	project := &model.AIProject{ID: 7, CreatorID: 1, SourceDirs: []string{"/workspace/shared"}}

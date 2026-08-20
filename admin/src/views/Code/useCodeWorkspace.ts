@@ -6,7 +6,7 @@ import { useAuthStore } from "@/store/auth"
 import { useHideLayoutFooter } from "@/composables/useHideLayoutFooter"
 import { useCodeTaskPolling } from "./useCodeTaskPolling"
 import { useProjectTerminal } from "./useProjectTerminal"
-import { deleteAITask, getAIProjects, getCodeExecutors, getCodeSession, updateAITask } from "@/api/modules/code"
+import { deleteAITask, getAIProjects, getCodeExecutors, getCodeSession, handoverCodeSessionToConversation, updateAITask } from "@/api/modules/code"
 import type { AIProject, AITask, CodeExecutor, CodeSession } from "@/api/interface/code"
 import type { CodeTaskListItem } from "@/api/interface/codeTasks"
 import type { HostTerminalSession } from "@/api/interface/hostTerminal"
@@ -297,13 +297,26 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 		terminalMounted.value = true
 	}
 
-	const switchWorkspaceMode = (mode: CodeWorkspaceMode) => {
+	const switchWorkspaceMode = async (mode: CodeWorkspaceMode) => {
 		workspaceMode.value = mode
 		if (mode === "terminal") {
+			terminalTakeoverRequested.value = true
 			terminalMounted.value = true
 			return
 		}
-		if (mode === "conversation") terminalTakeoverRequested.value = false
+		if (mode === "conversation") {
+			terminalTakeoverRequested.value = false
+			if (currentSessionId.value !== null) {
+				try {
+					const response = await handoverCodeSessionToConversation(currentSessionId.value)
+					if (response.code !== 0) throw new Error(response.message)
+				} catch (error) {
+					workspaceMode.value = "terminal"
+					terminalTakeoverRequested.value = true
+					message.error(error instanceof Error && error.message ? error.message : t("code.handoverConversationFailed"))
+				}
+			}
+		}
 	}
 
 	const handleTaskCreated = (taskId: number) => {

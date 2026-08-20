@@ -38,7 +38,7 @@ import type {
 	CodeMemoryExtractResult,
 	CodeMemoryExtractionStatus,
 	CodeMemoryList,
-	CodeMemorySetting
+	CodeMemorySetting,
 } from "../interface/codeMemories"
 import type { CodeResidueCleanupOutcome, CodeWorktreeResidueSummary } from "../interface/codeResidues"
 import type { CodeTaskListItem } from "../interface/codeTasks"
@@ -190,7 +190,7 @@ export function getCodeExecutors(force = false) {
 		error => {
 			codeExecutorsPending = null
 			throw error
-		}
+		},
 	)
 	return codeExecutorsPending
 }
@@ -328,6 +328,10 @@ export function rejectCodeInstruction(approvalId: number) {
 
 export function stopCodeSession(sessionId: number) {
 	return http.post(`/code/sessions/${sessionId}/stop`, {})
+}
+
+export function handoverCodeSessionToConversation(sessionId: number) {
+	return http.post(`/code/sessions/${sessionId}/handover/conversation`, {})
 }
 
 export function retryCodeInstruction(instructionId: number) {

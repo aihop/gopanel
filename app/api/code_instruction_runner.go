@@ -18,16 +18,18 @@ import (
 )
 
 type codeSessionRunner struct {
-	mu      sync.Mutex
-	locks   map[uint]*sync.Mutex
-	cancels map[uint]context.CancelFunc
-	queued  map[uint]struct{}
+	mu          sync.Mutex
+	locks       map[uint]*sync.Mutex
+	cancels     map[uint]context.CancelFunc
+	queued      map[uint]struct{}
+	interactive map[uint]chan struct{}
 }
 
 var backgroundCodeRunner = &codeSessionRunner{
-	locks:   make(map[uint]*sync.Mutex),
-	cancels: make(map[uint]context.CancelFunc),
-	queued:  make(map[uint]struct{}),
+	locks:       make(map[uint]*sync.Mutex),
+	cancels:     make(map[uint]context.CancelFunc),
+	queued:      make(map[uint]struct{}),
+	interactive: make(map[uint]chan struct{}),
 }
 
 func (r *codeSessionRunner) sessionLock(sessionID uint) *sync.Mutex {
@@ -106,6 +108,7 @@ func (r *codeSessionRunner) run(instructionID uint) {
 	defer lock.Unlock()
 
 	for {
+		r.waitForConversation(instruction.SessionID)
 		pending, err := sessionRepo.GetPendingInstructionsBySessionID(instruction.SessionID)
 		if err != nil || len(pending) == 0 {
 			return
@@ -140,6 +143,33 @@ func (r *codeSessionRunner) run(instructionID uint) {
 		if result.Err != nil {
 			global.LOG.Errorf("Code instruction %d failed: %v", current.ID, result.Err)
 		}
+	}
+}
+
+func (r *codeSessionRunner) setInteractive(sessionID uint, interactive bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if interactive {
+		if r.interactive == nil {
+			r.interactive = make(map[uint]chan struct{})
+		}
+		if r.interactive[sessionID] == nil {
+			r.interactive[sessionID] = make(chan struct{})
+		}
+		return
+	}
+	if wait := r.interactive[sessionID]; wait != nil {
+		close(wait)
+	}
+	delete(r.interactive, sessionID)
+}
+
+func (r *codeSessionRunner) waitForConversation(sessionID uint) {
+	r.mu.Lock()
+	wait := r.interactive[sessionID]
+	r.mu.Unlock()
+	if wait != nil {
+		<-wait
 	}
 }
 
@@ -225,6 +255,37 @@ func StopCodeSessionExecution(c fiber.Ctx) error {
 		"stoppingRunning": stoppingRunning || stoppingWorkspace,
 		"cancelledQueued": cancelledQueued,
 	}))
+}
+
+func HandoverCodeSessionToConversation(c fiber.Ctx) error {
+	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
+	sessionID, _ := strconv.Atoi(c.Params("id"))
+	session, err := getAISessionWithPermission(uint(sessionID), claims)
+	if err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	unlockLifecycle := codeSessionLifecycles.lock(session.ID)
+	defer unlockLifecycle()
+	stopContext, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if err := handoverCodeSessionToConversation(stopContext, session.ID); err != nil {
+		return c.JSON(e.Fail(err))
+	}
+	resumeQueuedCodeSessionInstructions(session.ID)
+	return c.JSON(e.Succ(fiber.Map{"sessionId": sessionID, "mode": codeExecutionInstruction}))
+}
+
+func resumeQueuedCodeSessionInstructions(sessionID uint) {
+	instructions, err := repo.NewAIDevSessionRepo().GetPendingInstructionsBySessionID(sessionID)
+	if err != nil {
+		global.LOG.Errorf("Load queued Code instructions for session %d failed: %v", sessionID, err)
+		return
+	}
+	for _, instruction := range instructions {
+		if instruction != nil && instruction.Status == "queued" {
+			enqueueCodeInstruction(instruction.ID)
+		}
+	}
 }
 
 func RetryCodeInstruction(c fiber.Ctx) error {

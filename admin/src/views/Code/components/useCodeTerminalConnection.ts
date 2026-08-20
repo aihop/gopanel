@@ -18,7 +18,7 @@ import {
 	terminalInputIntent,
 	terminalReleaseControlMessage,
 	terminalSizeData,
-	terminalTakeControlMessage
+	terminalTakeControlMessage,
 } from "./codeTerminalSession"
 
 interface UseCodeTerminalConnectionOptions {
@@ -49,7 +49,7 @@ export function useCodeTerminalConnection(options: UseCodeTerminalConnectionOpti
 	let pendingResyncId = ""
 	let receivedServerMessage = false
 	let initialReconnectAttempts = 0
-	let autoTakeControlPending = false
+	let autoTakeControlPending = options.autoTakeControl.value
 	let forceStart = false
 	let connectionErrorObserved = false
 	let inputFallback: CodeTerminalInputFallback | null = null
@@ -120,8 +120,8 @@ export function useCodeTerminalConnection(options: UseCodeTerminalConnectionOpti
 		ws.send(
 			JSON.stringify({
 				type: "resync",
-				data: JSON.stringify({ sequence: lastSequence, requestId: pendingResyncId })
-			})
+				data: JSON.stringify({ sequence: lastSequence, requestId: pendingResyncId }),
+			}),
 		)
 	}
 
@@ -142,7 +142,10 @@ export function useCodeTerminalConnection(options: UseCodeTerminalConnectionOpti
 				rows: term.rows,
 				sessionId: options.sessionId.value,
 				taskId: options.taskId.value,
-				attachOnly: shouldAttachOnlyToTerminal(options.taskId.value, forceStart),
+				attachOnly: shouldAttachOnlyToTerminal(
+					options.taskId.value,
+					forceStart || options.autoTakeControl.value,
+				),
 				afterSequence: lastSequence,
 				takeControl: autoTakeControlPending,
 			}),
@@ -216,6 +219,7 @@ export function useCodeTerminalConnection(options: UseCodeTerminalConnectionOpti
 					if (msg.controlReason) term.writeln(`\r\n\x1b[33m[GoPanel] ${t("code.terminalControlBusy")}\x1b[0m`)
 				} else if (msg.type === "closed") {
 					intentionalClose = true
+					terminalInactive.value = true
 					hasTerminalControl.value = false
 					lastSequence = 0
 				} else if (msg.type === "inactive") {
@@ -407,6 +411,10 @@ export function useCodeTerminalConnection(options: UseCodeTerminalConnectionOpti
 	const updateAutoTakeControl = (requested: boolean) => {
 		autoTakeControlPending = requested
 		if (!requested || sessionDelivered.value) return
+		if (terminalInactive.value) {
+			resumeTerminal()
+			return
+		}
 		if (ws?.readyState === WebSocket.OPEN) takeTerminalControl()
 	}
 
