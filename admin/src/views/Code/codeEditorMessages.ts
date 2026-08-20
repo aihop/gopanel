@@ -26,7 +26,12 @@ export const codeEditorMessages = {
 			snippetCopied: "已复制行号",
 			snippetCopyFailed: "复制失败",
 			snippetLoadFailed: "文件无法预览",
-			snippetSelectHint: "在编辑器中选中要改的行，复制后只粘贴路径和行号"
+			snippetSelectHint: "在编辑器中选中要改的行，复制后只粘贴路径和行号",
+			snippetSearchPlaceholder: "搜索代码片段",
+			snippetSearchEmpty: "未找到",
+			snippetSearchCount: "{current}/{total}",
+			snippetSearchPrev: "上一个",
+			snippetSearchNext: "下一个"
 		}
 	},
 	en: {
@@ -56,7 +61,12 @@ export const codeEditorMessages = {
 			snippetCopied: "Line range copied",
 			snippetCopyFailed: "Failed to copy",
 			snippetLoadFailed: "This file cannot be previewed",
-			snippetSelectHint: "Select the lines to change. Copying pastes only the path and line numbers"
+			snippetSelectHint: "Select the lines to change. Copying pastes only the path and line numbers",
+			snippetSearchPlaceholder: "Search in this file",
+			snippetSearchEmpty: "No matches",
+			snippetSearchCount: "{current}/{total}",
+			snippetSearchPrev: "Previous",
+			snippetSearchNext: "Next"
 		}
 	}
 } as const

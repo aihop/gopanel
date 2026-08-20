@@ -276,15 +276,18 @@ watch(
 	background-color: transparent;
 }
 
-.structure-edit {
+:deep(.structure-edit) {
 	opacity: 0;
+	pointer-events: none;
 	transition: opacity 0.12s ease;
 }
 
-.structure-label:hover .structure-edit,
-.structure-label:focus-within .structure-edit,
-:deep(.n-tree-node:hover) .structure-edit {
+:deep(.n-tree-node:hover .structure-edit),
+:deep(.n-tree-node-content:hover .structure-edit),
+:deep(.structure-label:hover .structure-edit),
+:deep(.structure-label:focus-within .structure-edit) {
 	opacity: 1;
+	pointer-events: auto;
 }
 
 .structure-scroll {

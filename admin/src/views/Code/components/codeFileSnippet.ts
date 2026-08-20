@@ -20,3 +20,8 @@ export function selectionLineRange(selection?: { startLineNumber?: number; endLi
 	const end = selection?.endLineNumber || start
 	return clampLineRange(start, end)
 }
+
+export function nextMatchIndex(current: number, total: number, step: number) {
+	if (total <= 0) return 0
+	return (current + step + total) % total
+}

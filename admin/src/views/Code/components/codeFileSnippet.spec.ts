@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { parseAttachTarget } from "./codeConversationAttachments"
-import { clampLineRange, formatFileLineRef, selectionLineRange } from "./codeFileSnippet"
+import { clampLineRange, formatFileLineRef, nextMatchIndex, selectionLineRange } from "./codeFileSnippet"
 
 describe("file snippet", () => {
 	it("只生成路径和行号，不带代码正文", () => {
@@ -17,5 +17,12 @@ describe("file snippet", () => {
 			endLine: 40,
 		})
 		expect(parseAttachTarget("src/main.go").path).toBe("src/main.go")
+	})
+
+	it("搜索结果循环跳转", () => {
+		expect(nextMatchIndex(0, 3, 1)).toBe(1)
+		expect(nextMatchIndex(2, 3, 1)).toBe(0)
+		expect(nextMatchIndex(0, 3, -1)).toBe(2)
+		expect(nextMatchIndex(0, 0, 1)).toBe(0)
 	})
 })
