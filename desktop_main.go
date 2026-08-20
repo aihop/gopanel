@@ -74,6 +74,9 @@ func main() {
 			Handler:    app.gateway,
 			Middleware: app.desktopMiddleware(),
 		},
+		DragAndDrop: &options.DragAndDrop{
+			EnableFileDrop: true,
+		},
 		OnStartup:  app.startup,
 		OnShutdown: app.shutdown,
 		SingleInstanceLock: &options.SingleInstanceLock{

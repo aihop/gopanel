@@ -1,17 +1,20 @@
 <script setup lang="ts">
-import { defineAsyncComponent } from "vue"
+import { computed, defineAsyncComponent } from "vue"
 import { useI18n } from "vue-i18n"
 import type { AIMessage, CodeExecutionRun } from "@/api/interface/code"
 import { codeWorkspaceMessages } from "../codeWorkspaceMessages"
+import { parseConversationAttachments } from "./codeConversationAttachments"
 import { sanitizeConversationMarkdown } from "./codeConversationMarkdown"
 import { isUserConversationMessage } from "./codeConversationThread"
+import CodeConversationAttachments from "./CodeConversationAttachments.vue"
 
-defineProps<{
+const props = defineProps<{
 	message: AIMessage
 	run?: CodeExecutionRun
 }>()
 
 const { t } = useI18n({ messages: codeWorkspaceMessages })
+const parsed = computed(() => parseConversationAttachments(props.message.content || ""))
 const MdPreview = defineAsyncComponent(async () => {
 	const [module] = await Promise.all([import("md-editor-v3"), import("md-editor-v3/lib/preview.css")])
 	return module.MdPreview
@@ -35,9 +38,16 @@ const MdPreview = defineAsyncComponent(async () => {
         <span v-if="run.durationMs">{{ t("code.runDuration", { duration: run.durationMs }) }}</span>
         <span v-if="run.totalTokens">{{ t("code.taskTokens", { count: run.totalTokens }) }}</span>
       </div>
+      <CodeConversationAttachments
+        v-if="parsed.attachments.length"
+        class="mb-2"
+        :attachments="parsed.attachments"
+        :session-id="message.sessionId"
+      />
       <MdPreview
+        v-if="parsed.text"
         :editor-id="`code-conversation-${message.sessionId}-${message.id}`"
-        :model-value="message.content"
+        :model-value="parsed.text"
         :sanitize="sanitizeConversationMarkdown"
         no-mermaid
         no-echarts

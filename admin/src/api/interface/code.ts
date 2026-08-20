@@ -416,3 +416,10 @@ export interface CodeSessionFile {
 	size: number
 	version: string
 }
+
+export interface CodeSessionImagePreview {
+	path: string
+	contentType: string
+	content: string
+	size: number
+}

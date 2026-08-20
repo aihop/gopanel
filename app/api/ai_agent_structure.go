@@ -103,32 +103,40 @@ func resolveAIStructurePath(workDir, relativePath string, sourceDirs []string) (
 	return filepath.Clean(resolvedTarget), cleanRelative, roots, nil
 }
 
-func resolveAISessionFilePath(workDir, relativePath string, sourceDirs []string) (string, string, error) {
+func resolveAISessionRegularFile(workDir, relativePath string, sourceDirs []string) (string, string, os.FileInfo, error) {
 	roots, err := aiStructureRoots(workDir, sourceDirs)
 	if err != nil {
-		return "", "", err
+		return "", "", nil, err
 	}
 	relativePath = strings.ReplaceAll(strings.TrimSpace(relativePath), "\\", "/")
 	cleanRelative := path.Clean(relativePath)
 	if cleanRelative == "." || path.IsAbs(cleanRelative) || cleanRelative == ".." || strings.HasPrefix(cleanRelative, "../") {
-		return "", "", errors.New("文件路径无效")
+		return "", "", nil, errors.New("文件路径无效")
 	}
 	root, err := filepath.Abs(filepath.Clean(strings.TrimSpace(workDir)))
 	if err != nil {
-		return "", "", errors.New("项目工作目录无效")
+		return "", "", nil, errors.New("项目工作目录无效")
 	}
 	resolvedTarget, err := filepath.EvalSymlinks(filepath.Join(root, filepath.FromSlash(cleanRelative)))
 	if err != nil || !isPathWithinAnyRoot(filepath.Clean(resolvedTarget), roots) {
-		return "", "", errors.New("文件不存在或超出当前项目范围")
+		return "", "", nil, errors.New("文件不存在或超出当前项目范围")
 	}
 	info, err := os.Stat(resolvedTarget)
 	if err != nil || !info.Mode().IsRegular() {
-		return "", "", errors.New("请求路径不是普通文件")
+		return "", "", nil, errors.New("请求路径不是普通文件")
+	}
+	return filepath.Clean(resolvedTarget), cleanRelative, info, nil
+}
+
+func resolveAISessionFilePath(workDir, relativePath string, sourceDirs []string) (string, string, error) {
+	target, cleanRelative, info, err := resolveAISessionRegularFile(workDir, relativePath, sourceDirs)
+	if err != nil {
+		return "", "", err
 	}
 	if info.Size() > maxAISessionFileSize {
 		return "", "", errors.New("文件超过 2 MB，无法在代码编辑器中打开")
 	}
-	return filepath.Clean(resolvedTarget), cleanRelative, nil
+	return target, cleanRelative, nil
 }
 
 func getAISessionSourceDirs(sessionProjectID uint, claims *token.CustomClaims) ([]string, error) {

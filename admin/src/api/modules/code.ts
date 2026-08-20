@@ -22,6 +22,7 @@ import type {
 	CodeSession,
 	CodeSessionFile,
 	CodeSessionHistory,
+	CodeSessionImagePreview,
 	CodeSessionState,
 	CodeStructureResult,
 	CodexRuntimeState,
@@ -267,6 +268,10 @@ export function getCodeSessionStructure(sessionId: number, path = "") {
 
 export function getCodeSessionFile(sessionId: number, path: string) {
 	return http.get<CodeSessionFile>(`/code/sessions/${sessionId}/file`, { path }, { timeout: 10000 })
+}
+
+export function getCodeSessionImagePreview(sessionId: number, path: string) {
+	return http.get<CodeSessionImagePreview>(`/code/sessions/${sessionId}/file-preview`, { path }, { timeout: 20000 })
 }
 
 export function saveCodeSessionFile(sessionId: number, path: string, content: string, baseVersion: string) {

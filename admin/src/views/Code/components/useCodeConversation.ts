@@ -4,6 +4,8 @@ import { useMessage } from "naive-ui"
 import { createCodeInstruction, getCodeSessionHistory, stopCodeSession } from "@/api/modules/code"
 import type { AIMessage, CodeExecutionRun, CodeSession } from "@/api/interface/code"
 import { codeWorkspaceMessages } from "../codeWorkspaceMessages"
+import type { ComposerAttachment } from "./codeConversationAttachments"
+import { serializeInstructionContent } from "./codeConversationAttachments"
 import {
 	conversationRunRunning,
 	conversationSessionClosed,
@@ -20,6 +22,7 @@ export function useCodeConversation(sessionId: () => number | null, taskId: () =
 	const stopping = ref(false)
 	const loadError = ref(false)
 	const draft = ref("")
+	const attachments = ref<ComposerAttachment[]>([])
 	const messages = ref<AIMessage[]>([])
 	const runs = ref<CodeExecutionRun[]>([])
 	const session = ref<CodeSession | null>(null)
@@ -31,6 +34,38 @@ export function useCodeConversation(sessionId: () => number | null, taskId: () =
 	const initializing = computed(() => conversationSessionInitializing(session.value?.status))
 	const running = computed(() => conversationRunRunning(runs.value))
 	const canSend = computed(() => Boolean(sessionId()) && !closed.value && !initializing.value && !sending.value)
+	const hasComposerContent = computed(() => Boolean(draft.value.trim() || attachments.value.length))
+	const workDir = computed(() => session.value?.workDir || "")
+
+	const revokeAttachmentPreview = (item: ComposerAttachment) => {
+		if (item.previewUrl?.startsWith("blob:")) URL.revokeObjectURL(item.previewUrl)
+	}
+
+	const clearAttachments = () => {
+		attachments.value.forEach(revokeAttachmentPreview)
+		attachments.value = []
+	}
+
+	const addAttachments = (items: ComposerAttachment[]) => {
+		if (!items.length) return
+		const next = [...attachments.value]
+		for (const item of items) {
+			if (next.some(existing => existing.path === item.path)) {
+				revokeAttachmentPreview(item)
+				continue
+			}
+			next.push(item)
+		}
+		attachments.value = next
+	}
+
+	const removeAttachment = (path: string) => {
+		attachments.value = attachments.value.filter(item => {
+			if (item.path !== path) return true
+			revokeAttachmentPreview(item)
+			return false
+		})
+	}
 
 	const loadHistory = async (silent = false) => {
 		const id = sessionId()
@@ -60,13 +95,14 @@ export function useCodeConversation(sessionId: () => number | null, taskId: () =
 
 	const sendInstruction = async () => {
 		const id = sessionId()
-		const content = draft.value.trim()
+		const content = serializeInstructionContent(draft.value, attachments.value)
 		if (!id || !content || !canSend.value) return
 		sending.value = true
 		try {
 			const response = await createCodeInstruction(id, content)
 			if (response.code !== 0) throw new Error(response.message)
 			draft.value = ""
+			clearAttachments()
 			await loadHistory(true)
 			return response.data.task?.id || 0
 		} catch (error) {
@@ -114,13 +150,17 @@ export function useCodeConversation(sessionId: () => number | null, taskId: () =
 		[sessionId, taskId],
 		() => {
 			expandedMessageIds.value = new Set()
+			clearAttachments()
 			void loadHistory()
 			if (sessionId()) startPolling()
 			else stopPolling()
 		},
 		{ immediate: true },
 	)
-	onBeforeUnmount(stopPolling)
+	onBeforeUnmount(() => {
+		stopPolling()
+		clearAttachments()
+	})
 
 	return {
 		t,
@@ -129,6 +169,7 @@ export function useCodeConversation(sessionId: () => number | null, taskId: () =
 		stopping,
 		loadError,
 		draft,
+		attachments,
 		messages,
 		runs,
 		session,
@@ -137,7 +178,11 @@ export function useCodeConversation(sessionId: () => number | null, taskId: () =
 		initializing,
 		running,
 		canSend,
+		hasComposerContent,
+		workDir,
 		loadHistory,
+		addAttachments,
+		removeAttachment,
 		sendInstruction,
 		stopExecution,
 		toggleMessageExpanded,

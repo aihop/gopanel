@@ -6,6 +6,7 @@ import { useMessage } from "naive-ui"
 import Icon from "@/components/common/Icon.vue"
 import { getCodeSessionStructure, type CodeStructureEntry } from "@/api/modules/codeEditor"
 import { codeEditorMessages } from "../codeEditorMessages"
+import { writeStructureDragData } from "./codeConversationAttachments"
 
 interface StructureTreeOption extends TreeOption {
 	key: string
@@ -19,8 +20,9 @@ const props = withDefaults(
 		sessionId: number
 		changedFiles?: string[]
 		selectedPath?: string
+		attachToChat?: boolean
 	}>(),
-	{ changedFiles: () => [], selectedPath: "" }
+	{ changedFiles: () => [], selectedPath: "", attachToChat: false }
 )
 
 const emit = defineEmits<{
@@ -93,8 +95,17 @@ const renderLabel = ({ option }: { option: TreeOption }) => {
 	return h(
 		"span",
 		{
-			class: isChangedPath(node.key, node.isDir) ? "font-semibold text-blue-600" : "text-[var(--n-text-color)]",
-			title: node.key
+			class: [
+				isChangedPath(node.key, node.isDir) ? "font-semibold text-blue-600" : "text-[var(--n-text-color)]",
+				!node.isDir && props.attachToChat ? "cursor-grab" : "",
+			],
+			title: node.key,
+			draggable: !node.isDir,
+			onDragstart: (event: DragEvent) => {
+				if (node.isDir || !event.dataTransfer) return
+				event.stopPropagation()
+				writeStructureDragData(event.dataTransfer, node.key)
+			},
 		},
 		node.label
 	)
@@ -121,12 +132,20 @@ watch(
 </script>
 
 <template>
-	<div class="structure-panel flex h-full min-h-0 flex-col bg-white">
-		<div class="border-b border-slate-200 px-3 py-3">
+	<div
+		class="structure-panel flex h-full min-h-0 flex-col"
+		:class="attachToChat ? 'structure-panel--chat bg-transparent' : 'bg-white'"
+	>
+		<div class="border-b border-slate-200/70 px-3 py-3 dark:border-white/10">
 			<div class="flex items-center justify-between gap-2">
 				<div class="flex min-w-0 items-center gap-2">
 					<Icon name="mdi:file-tree-outline" :size="19" />
-					<div class="truncate text-sm font-semibold text-slate-700">{{ t("code.projectStructure") }}</div>
+					<div class="min-w-0">
+						<div class="truncate text-sm font-semibold text-slate-700 dark:text-[var(--n-text-color)]">{{ t("code.projectStructure") }}</div>
+						<div v-if="attachToChat" class="truncate text-[11px] tracking-[0.01em] text-[var(--n-text-color-3)]">
+							{{ t("code.dragStructureToChat") }}
+						</div>
+					</div>
 				</div>
 				<n-button
 					quaternary
@@ -197,6 +216,10 @@ watch(
 <style scoped>
 .theme-dark .structure-panel {
 	background-color: var(--bg-default-color);
+}
+
+.theme-dark .structure-panel--chat {
+	background-color: transparent;
 }
 
 .structure-scroll {
