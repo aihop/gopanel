@@ -19,7 +19,15 @@ export const codeEditorMessages = {
 			unsavedChangesHint: "是否保存修改后再关闭编辑器？",
 			saveAndClose: "保存并关闭",
 			discardChanges: "放弃修改",
-			retry: "重试"
+			retry: "重试",
+			editFileSnippet: "查看并复制片段",
+			snippetFromLine: "起始行",
+			snippetToLine: "结束行",
+			copySnippet: "复制",
+			insertSnippet: "插入输入框",
+			snippetCopied: "已复制到剪贴板",
+			snippetCopyFailed: "复制失败",
+			snippetLoadFailed: "文件无法预览"
 		}
 	},
 	en: {
@@ -42,7 +50,15 @@ export const codeEditorMessages = {
 			unsavedChangesHint: "Save your changes before closing the editor?",
 			saveAndClose: "Save and close",
 			discardChanges: "Discard changes",
-			retry: "Retry"
+			retry: "Retry",
+			editFileSnippet: "View and copy a snippet",
+			snippetFromLine: "From",
+			snippetToLine: "To",
+			copySnippet: "Copy",
+			insertSnippet: "Insert into chat",
+			snippetCopied: "Copied to the clipboard",
+			snippetCopyFailed: "Failed to copy",
+			snippetLoadFailed: "This file cannot be previewed"
 		}
 	}
 } as const

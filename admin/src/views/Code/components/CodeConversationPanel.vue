@@ -42,6 +42,7 @@ const {
 	loadHistory,
 	addAttachments,
 	removeAttachment,
+	insertDraftText,
 	sendInstruction,
 	stopExecution,
 } = useCodeConversation(
@@ -120,6 +121,10 @@ const onPaste = (event: ClipboardEvent) => {
 const attachStructureFile = (file: { path: string }) => {
 	const item = conversationAttachmentFromPath(file.path, workDir.value)
 	if (item) addAttachments([item])
+}
+
+const insertStructureSnippet = (snippet: string) => {
+	insertDraftText(snippet)
 }
 
 type WailsRuntime = {
@@ -254,6 +259,7 @@ onBeforeUnmount(() => {
         attach-to-chat
         :session-id="sessionId"
         @select-file="attachStructureFile"
+        @insert-snippet="insertStructureSnippet"
       />
     </aside>
   </section>

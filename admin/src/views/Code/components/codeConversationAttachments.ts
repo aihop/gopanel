@@ -6,6 +6,8 @@ export interface ConversationAttachment {
 	path: string
 	name: string
 	kind: ConversationAttachmentKind
+	startLine?: number
+	endLine?: number
 }
 
 export interface ComposerAttachment extends ConversationAttachment {
@@ -25,6 +27,21 @@ export function fileExtension(path: string) {
 	const name = fileNameFromPath(path)
 	const index = name.lastIndexOf(".")
 	return index > 0 ? name.slice(index + 1).toLowerCase() : ""
+}
+
+export function parseAttachTarget(raw: string) {
+	const value = raw.trim()
+	const match = value.match(/^(.*):(\d+)-(\d+)$/)
+	if (!match) return { path: value, name: fileNameFromPath(value) }
+	const path = match[1]
+	const startLine = Number(match[2])
+	const endLine = Number(match[3])
+	return {
+		path,
+		name: `${fileNameFromPath(path)}:${startLine}-${endLine}`,
+		startLine,
+		endLine,
+	}
 }
 
 export function conversationAttachmentKind(path: string, mime = ""): ConversationAttachmentKind {
@@ -86,12 +103,15 @@ export function parseConversationAttachments(content: string) {
 			textLines.push(line)
 			continue
 		}
-		const path = normalizeConversationPath(match[1])
-		if (!path || attachments.some(item => item.path === path)) continue
+		const raw = normalizeConversationPath(match[1])
+		const target = parseAttachTarget(raw)
+		if (!target.path || attachments.some(item => item.path === target.path && item.startLine === target.startLine && item.endLine === target.endLine)) continue
 		attachments.push({
-			path,
-			name: fileNameFromPath(path),
-			kind: conversationAttachmentKind(path),
+			path: target.path,
+			name: target.name,
+			kind: conversationAttachmentKind(target.path),
+			startLine: target.startLine,
+			endLine: target.endLine,
 		})
 	}
 	return {
@@ -106,7 +126,8 @@ export function serializeInstructionContent(text: string, attachments: Conversat
 	for (const item of attachments) {
 		const path = normalizeConversationPath(item.path)
 		if (!path) continue
-		const line = `@attach ${path}`
+		const target = item.startLine && item.endLine ? `${path}:${item.startLine}-${item.endLine}` : path
+		const line = `@attach ${target}`
 		if (!lines.includes(line)) lines.push(line)
 	}
 	if (!lines.length) return body

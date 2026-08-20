@@ -132,7 +132,8 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 		activeFilePath.value = ""
 	}
 
-	const openFile = async (file: { path: string; extension: string }) => {
+	const openFile = async (file: { path: string; extension: string; isDir?: boolean }) => {
+		if (file.isDir) return
 		workspaceMode.value = "editor"
 		if (selectedFile.value.path === file.path) {
 			selectedFile.value = { path: "", extension: "" }

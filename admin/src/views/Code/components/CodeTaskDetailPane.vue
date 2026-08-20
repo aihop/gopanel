@@ -72,7 +72,8 @@ onMounted(async () => {
 	applyDefaultMode()
 })
 
-const openFile = (file: { path: string; extension: string }) => {
+const openFile = (file: { path: string; extension: string; isDir?: boolean }) => {
+	if (file.isDir) return
 	workspaceMode.value = "editor"
 	selectedFile.value = file
 }

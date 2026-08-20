@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, h, ref, watch } from "vue"
 import type { TreeOption } from "naive-ui"
+import { NButton, NPopover, useMessage } from "naive-ui"
 import { useI18n } from "vue-i18n"
-import { useMessage } from "naive-ui"
 import Icon from "@/components/common/Icon.vue"
 import { getCodeSessionStructure, type CodeStructureEntry } from "@/api/modules/codeEditor"
 import { codeEditorMessages } from "../codeEditorMessages"
 import { writeStructureDragData } from "./codeConversationAttachments"
+import CodeStructureSnippetPopover from "./CodeStructureSnippetPopover.vue"
 
 interface StructureTreeOption extends TreeOption {
 	key: string
@@ -26,7 +27,8 @@ const props = withDefaults(
 )
 
 const emit = defineEmits<{
-	(event: "select-file", file: { path: string; extension: string }): void
+	(event: "select-file", file: { path: string; extension: string; isDir?: boolean }): void
+	(event: "insert-snippet", snippet: string): void
 }>()
 
 const { t } = useI18n({ messages: codeEditorMessages })
@@ -37,6 +39,7 @@ const truncated = ref(false)
 const pattern = ref("")
 const nodes = ref<StructureTreeOption[]>([])
 const expandedKeys = ref<Array<string | number>>([])
+const selectedKeys = ref<Array<string | number>>(props.selectedPath ? [props.selectedPath] : [])
 
 const normalizedChangedFiles = computed(() =>
 	props.changedFiles.map(file => file.replaceAll("\\", "/").replace(/^\.\//, "").replace(/^\//, ""))
@@ -97,28 +100,65 @@ const renderPrefix = ({ option }: { option: TreeOption }) => {
 
 const renderLabel = ({ option }: { option: TreeOption }) => {
 	const node = option as StructureTreeOption
-	return h(
+	const label = h(
 		"span",
 		{
 			class: [
+				"min-w-0 flex-1 truncate",
 				isChangedPath(node.key, node.isDir) ? "font-semibold text-blue-600" : "text-[var(--n-text-color)]",
-				!node.isDir && props.attachToChat ? "cursor-grab" : "",
+				props.attachToChat ? "cursor-grab" : "",
 			],
 			title: node.key,
-			draggable: !node.isDir,
+			draggable: true,
 			onDragstart: (event: DragEvent) => {
-				if (node.isDir || !event.dataTransfer) return
+				if (!event.dataTransfer) return
 				event.stopPropagation()
 				writeStructureDragData(event.dataTransfer, node.key)
 			},
 		},
-		node.label
+		node.label,
 	)
+	if (node.isDir) {
+		return h("span", { class: "structure-label flex min-w-0 items-center gap-1" }, [label])
+	}
+	return h("span", { class: "structure-label flex min-w-0 items-center gap-1" }, [
+		label,
+		h(
+			NPopover,
+			{ trigger: "click", placement: "left", showArrow: true, style: "padding: 12px;" },
+			{
+				trigger: () =>
+					h(
+						NButton,
+						{
+							quaternary: true,
+							circle: true,
+							size: "tiny",
+							class: "structure-edit",
+							title: t("code.editFileSnippet"),
+							onClick: (event: MouseEvent) => event.stopPropagation(),
+						},
+						{ icon: () => h(Icon, { name: "mdi:pencil-outline", size: 14 }) },
+					),
+				default: () =>
+					h(CodeStructureSnippetPopover, {
+						sessionId: props.sessionId,
+						path: node.key,
+						attachToChat: props.attachToChat,
+						onInsert: (snippet: string) => emit("insert-snippet", snippet),
+					}),
+			},
+		),
+	])
 }
 
 const selectFile = (node: StructureTreeOption) => {
-	if (node.isDir) return
-	emit("select-file", { path: node.key, extension: node.label.split(".").pop() || "" })
+	selectedKeys.value = [node.key]
+	emit("select-file", {
+		path: node.key,
+		extension: node.isDir ? "" : node.label.split(".").pop() || "",
+		isDir: node.isDir,
+	})
 }
 
 const handleSelectedKeys = (
@@ -133,6 +173,12 @@ watch(
 	() => props.sessionId,
 	() => void loadRoot(),
 	{ immediate: true }
+)
+watch(
+	() => props.selectedPath,
+	path => {
+		if (path) selectedKeys.value = [path]
+	}
 )
 </script>
 
@@ -200,7 +246,7 @@ watch(
 					:on-load="loadChildren"
 					:render-prefix="renderPrefix"
 					:render-label="renderLabel"
-					:selected-keys="selectedPath ? [selectedPath] : []"
+					:selected-keys="selectedKeys"
 					@update:expanded-keys="expandedKeys = $event"
 					@update:selected-keys="handleSelectedKeys"
 				/>
@@ -227,6 +273,15 @@ watch(
 
 .theme-dark .structure-panel--chat {
 	background-color: transparent;
+}
+
+.structure-label :deep(.structure-edit) {
+	opacity: 0;
+}
+
+:deep(.n-tree-node:hover) .structure-edit,
+.structure-edit:focus-visible {
+	opacity: 1;
 }
 
 .structure-scroll {
