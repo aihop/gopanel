@@ -174,6 +174,7 @@ const openFile = (file: { path: string; extension: string; isDir?: boolean }) =>
           v-if="sessionId"
           :session-id="sessionId"
           :task-id="task?.id || null"
+          :active="workspaceMode === 'conversation'"
           @task-created="emit('taskCreated', $event)"
         />
       </div>

@@ -22,6 +22,7 @@ type LocateTarget = { path: string; line?: number; query?: string }
 const props = defineProps<{
 	sessionId: number | null
 	taskId: number | null
+	active?: boolean
 }>()
 const emit = defineEmits<{
 	taskCreated: [taskId: number]
@@ -69,6 +70,15 @@ const scrollToBottom = async () => {
 watch(
 	() => [displayMessages.value.length, displayMessages.value.at(-1)?.content],
 	() => void scrollToBottom(),
+)
+
+watch(
+	() => [props.sessionId, props.taskId, props.active, loading.value],
+	([sessionId, _taskId, active, isLoading]) => {
+		if (!sessionId || active === false || isLoading) return
+		void scrollToBottom()
+	},
+	{ flush: "post" },
 )
 
 const submit = async () => {
