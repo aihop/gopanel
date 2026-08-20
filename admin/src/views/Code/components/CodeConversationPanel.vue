@@ -13,6 +13,7 @@ import {
 import CodeConversationAttachments from "./CodeConversationAttachments.vue"
 import CodeConversationContextBar from "./CodeConversationContextBar.vue"
 import CodeConversationMessage from "./CodeConversationMessage.vue"
+import CodeConversationModelBadge from "./CodeConversationModelBadge.vue"
 import CodeStructureSnippetPopover from "./CodeStructureSnippetPopover.vue"
 import ProjectStructurePanel from "./ProjectStructurePanel.vue"
 import { useCodeConversation } from "./useCodeConversation"
@@ -269,14 +270,21 @@ onBeforeUnmount(() => {
           @remove="removeAttachment"
         />
         <div class="flex items-end gap-2">
-          <n-input
-            v-model:value="draft"
-            type="textarea"
-            :autosize="{ minRows: 1, maxRows: 6 }"
-            :disabled="!canSend"
-            :placeholder="t('code.promptPlaceholder')"
-            @keydown="onComposerKeydown"
-          />
+          <div class="conversation-input relative min-w-0 flex-1">
+            <n-input
+              v-model:value="draft"
+              type="textarea"
+              :autosize="{ minRows: 1, maxRows: 6 }"
+              :disabled="!canSend"
+              :placeholder="t('code.promptPlaceholder')"
+              @keydown="onComposerKeydown"
+            />
+            <CodeConversationModelBadge
+              :session-id="sessionId"
+              :session="session"
+              :runs="runs"
+            />
+          </div>
           <n-button
             v-if="running"
             circle
@@ -369,6 +377,10 @@ onBeforeUnmount(() => {
 .conversation-composer :deep(textarea) {
 	scrollbar-width: thin;
 	scrollbar-color: rgb(148 163 184 / 0.28) transparent;
+}
+
+.conversation-input :deep(textarea) {
+	padding-bottom: 24px;
 }
 
 .conversation-scroll::-webkit-scrollbar,

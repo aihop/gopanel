@@ -28,6 +28,7 @@ type codexRuntimeState struct {
 	NeedsInput           bool                 `json:"needsInput"`
 	AwaitingApproval     bool                 `json:"awaitingApproval"`
 	Model                string               `json:"model"`
+	ReasoningEffort      string               `json:"reasoningEffort"`
 	InputTokens          int64                `json:"inputTokens"`
 	OutputTokens         int64                `json:"outputTokens"`
 	CachedInputTokens    int64                `json:"cachedInputTokens"`
@@ -48,6 +49,7 @@ type codexRuntimeEvent struct {
 		Role           string          `json:"role"`
 		Phase          string          `json:"phase"`
 		Model          string          `json:"model"`
+		Effort         string          `json:"effort"`
 		ApprovalPolicy string          `json:"approval_policy"`
 		Name           string          `json:"name"`
 		Input          json.RawMessage `json:"input"`
@@ -206,6 +208,9 @@ func parseCodexRuntime(reader io.Reader, now time.Time) (*codexRuntimeState, err
 		case "turn_context":
 			if event.Payload.Model != "" {
 				state.Model = event.Payload.Model
+			}
+			if event.Payload.Effort != "" {
+				state.ReasoningEffort = event.Payload.Effort
 			}
 			if event.Payload.ApprovalPolicy != "" {
 				approvalPolicy = event.Payload.ApprovalPolicy

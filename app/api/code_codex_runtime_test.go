@@ -9,7 +9,7 @@ import (
 func TestParseCodexRuntimeCompletedTurn(t *testing.T) {
 	transcript := strings.Join([]string{
 		`{"timestamp":"2026-07-29T10:00:00Z","type":"event_msg","payload":{"type":"task_started","started_at":1785319200}}`,
-		`{"timestamp":"2026-07-29T10:00:01Z","type":"turn_context","payload":{"model":"gpt-5.6-sol","approval_policy":"on-request"}}`,
+		`{"timestamp":"2026-07-29T10:00:01Z","type":"turn_context","payload":{"model":"gpt-5.6-sol","effort":"high","approval_policy":"on-request"}}`,
 		`{"timestamp":"2026-07-29T10:00:02Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":120,"cached_input_tokens":80,"output_tokens":30,"reasoning_output_tokens":10,"total_tokens":150}}}}`,
 		`{"timestamp":"2026-07-29T10:00:03Z","type":"event_msg","payload":{"type":"agent_message","phase":"final_answer","message":"修复完成"}}`,
 		`{"timestamp":"2026-07-29T10:00:04Z","type":"event_msg","payload":{"type":"task_complete","completed_at":1785319204}}`,
@@ -21,7 +21,7 @@ func TestParseCodexRuntimeCompletedTurn(t *testing.T) {
 	if state.ResponseState != "completed" || !state.NeedsInput || state.AwaitingApproval {
 		t.Fatalf("unexpected completed state: %#v", state)
 	}
-	if state.Model != "gpt-5.6-sol" || state.TotalTokens != 150 || state.CachedInputTokens != 80 {
+	if state.Model != "gpt-5.6-sol" || state.ReasoningEffort != "high" || state.TotalTokens != 150 || state.CachedInputTokens != 80 {
 		t.Fatalf("unexpected runtime metadata: %#v", state)
 	}
 	if state.LastAssistantPreview != "修复完成" {

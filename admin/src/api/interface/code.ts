@@ -308,6 +308,7 @@ export interface CodexRuntimeState {
 	needsInput: boolean
 	awaitingApproval: boolean
 	model: string
+	reasoningEffort?: string
 	inputTokens: number
 	outputTokens: number
 	cachedInputTokens: number
