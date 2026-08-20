@@ -30,7 +30,7 @@ const deliveryNeedsAttention = computed(() =>
 
 <template>
   <div
-    class="dashboard-task-row group/row relative mb-0.5 flex cursor-pointer items-center gap-2 rounded-md py-1.5 pl-5 pr-2.5 transition-colors"
+    class="dashboard-task-row group/row relative mb-0.5 flex cursor-pointer items-center gap-2 rounded-md py-1.5 pl-3 pr-2.5 transition-colors"
     :class="selected ? 'dashboard-task-row--selected' : ''"
     role="button"
     tabindex="0"
