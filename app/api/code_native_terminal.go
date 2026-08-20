@@ -393,29 +393,7 @@ func serveNativeCodeTerminal(
 	writeEvent := func(event nativeTerminalEvent) error {
 		writeMu.Lock()
 		defer writeMu.Unlock()
-		chunks := splitNativeTerminalBaseline(event)
-		for index, chunk := range chunks {
-			payload, _ := json.Marshal(struct {
-				Type           string `json:"type"`
-				Sequence       uint64 `json:"sequence"`
-				StartSequence  uint64 `json:"startSequence,omitempty"`
-				RequestID      string `json:"requestId,omitempty"`
-				Data           string `json:"data,omitempty"`
-				HasControl     bool   `json:"hasControl"`
-				ControlReason  string `json:"controlReason,omitempty"`
-				LeaseExpiresAt int64  `json:"leaseExpiresAt,omitempty"`
-				Cols           uint16 `json:"cols,omitempty"`
-				Rows           uint16 `json:"rows,omitempty"`
-				Truncated      bool   `json:"truncated,omitempty"`
-				ChunkIndex     int    `json:"chunkIndex,omitempty"`
-				ChunkCount     int    `json:"chunkCount,omitempty"`
-			}{
-				Type: chunk.Type, Sequence: chunk.Sequence, StartSequence: chunk.StartSequence,
-				RequestID: chunk.RequestID, Data: string(chunk.Data), HasControl: chunk.HasControl,
-				ControlReason: chunk.ControlReason, LeaseExpiresAt: chunk.LeaseExpiresAt,
-				Cols: chunk.Cols, Rows: chunk.Rows,
-				Truncated: chunk.Truncated && index == 0, ChunkIndex: index, ChunkCount: len(chunks),
-			})
+		for _, payload := range marshalNativeTerminalEvent(event) {
 			if err := wsConn.WriteMessage(websocket.TextMessage, payload); err != nil {
 				return err
 			}
@@ -430,6 +408,12 @@ func serveNativeCodeTerminal(
 				return
 			}
 		}
+		// 事件通道被关闭只发生在终端结束时（wait 里统一收尾）。
+		// 那里的 closed 事件是非阻塞投递：通道满时会被直接丢掉——
+		// 比如对话夺权 kill 掉 CLI，进程退出前刷的那批输出正好把通道占满。
+		// 客户端于是只看到连接凭空断开，报「终端连接失败」，而实际上是正常结束。
+		// 这里兜底补发一次：重复收到 closed 对客户端无害，收不到才是问题。
+		_ = writeEvent(nativeTerminalEvent{Type: "closed"})
 		_ = wsConn.Close()
 	}()
 	for {

@@ -411,11 +411,14 @@ export function useCodeTerminalConnection(options: UseCodeTerminalConnectionOpti
 	const updateAutoTakeControl = (requested: boolean) => {
 		autoTakeControlPending = requested
 		if (!requested || sessionDelivered.value) return
-		if (terminalInactive.value) {
+		// 会话已停、或连接已经不在了，都得先把终端重新拉起来再谈控制权。
+		// 切到对话时后端会 kill 掉 CLI 进程，切回来时命中的正是「连接已断」这条：
+		// 原先这里直接什么都不做，于是界面卡在一条死连接上，看着就是连接失败。
+		if (terminalInactive.value || ws?.readyState !== WebSocket.OPEN) {
 			resumeTerminal()
 			return
 		}
-		if (ws?.readyState === WebSocket.OPEN) takeTerminalControl()
+		takeTerminalControl()
 	}
 
 	const activate = () => {

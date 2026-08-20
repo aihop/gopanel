@@ -357,3 +357,40 @@ func drainNativeTerminalEvents(events chan nativeTerminalEvent) {
 		}
 	}
 }
+
+// nativeTerminalEventPayload 是一条终端事件的线上表示。
+// 放在协议文件里：连接处理只管什么时候发，字段长什么样归这里管。
+type nativeTerminalEventPayload struct {
+	Type           string `json:"type"`
+	Sequence       uint64 `json:"sequence"`
+	StartSequence  uint64 `json:"startSequence,omitempty"`
+	RequestID      string `json:"requestId,omitempty"`
+	Data           string `json:"data,omitempty"`
+	HasControl     bool   `json:"hasControl"`
+	ControlReason  string `json:"controlReason,omitempty"`
+	LeaseExpiresAt int64  `json:"leaseExpiresAt,omitempty"`
+	Cols           uint16 `json:"cols,omitempty"`
+	Rows           uint16 `json:"rows,omitempty"`
+	Truncated      bool   `json:"truncated,omitempty"`
+	ChunkIndex     int    `json:"chunkIndex,omitempty"`
+	ChunkCount     int    `json:"chunkCount,omitempty"`
+}
+
+// marshalNativeTerminalEvent 把一条事件切成若干分片，逐片序列化。
+// truncated 只标在第一片上：客户端据此决定要不要先 reset 终端，
+// 每片都标的话后面几片会把刚写进去的内容又清掉。
+func marshalNativeTerminalEvent(event nativeTerminalEvent) [][]byte {
+	chunks := splitNativeTerminalBaseline(event)
+	payloads := make([][]byte, 0, len(chunks))
+	for index, chunk := range chunks {
+		payload, _ := json.Marshal(nativeTerminalEventPayload{
+			Type: chunk.Type, Sequence: chunk.Sequence, StartSequence: chunk.StartSequence,
+			RequestID: chunk.RequestID, Data: string(chunk.Data), HasControl: chunk.HasControl,
+			ControlReason: chunk.ControlReason, LeaseExpiresAt: chunk.LeaseExpiresAt,
+			Cols: chunk.Cols, Rows: chunk.Rows,
+			Truncated: chunk.Truncated && index == 0, ChunkIndex: index, ChunkCount: len(chunks),
+		})
+		payloads = append(payloads, payload)
+	}
+	return payloads
+}

@@ -13,6 +13,29 @@ var injectedConversationMarkers = []string{
 	"[GoPanel 长期记忆]",
 }
 
+// Codex CLI 会往用户轮次里塞自己的上下文块（工作区根目录、权限档案等）。
+// 那是给模型看的脚手架，不是用户说过的话——原样显示出来，用户会以为自己发了一堆 XML。
+// 这里按标签名整块剔除，加新标签只需往这个列表里补一行。
+var injectedConversationTags = []string{"environment_context"}
+
+// stripTagBlock 剔除 content 里所有 <tag>…</tag> 整块，包括跨行的。
+func stripTagBlock(content, tag string) string {
+	openTag, closeTag := "<"+tag+">", "</"+tag+">"
+	for {
+		start := strings.Index(content, openTag)
+		if start < 0 {
+			return content
+		}
+		offset := strings.Index(content[start:], closeTag)
+		if offset < 0 {
+			// 只有开标签没有闭标签（内容被截断）：从开标签起全部丢掉。
+			// 宁可少显示一段，也不要把脚手架漏给用户看。
+			return content[:start]
+		}
+		content = content[:start] + content[start+offset+len(closeTag):]
+	}
+}
+
 func stripInjectedConversationPrompt(content string) string {
 	cut := -1
 	for _, marker := range injectedConversationMarkers {
@@ -23,6 +46,9 @@ func stripInjectedConversationPrompt(content string) string {
 	}
 	if cut >= 0 {
 		content = content[:cut]
+	}
+	for _, tag := range injectedConversationTags {
+		content = stripTagBlock(content, tag)
 	}
 	return strings.TrimSpace(content)
 }
