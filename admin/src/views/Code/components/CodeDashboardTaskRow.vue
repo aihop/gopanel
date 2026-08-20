@@ -40,7 +40,7 @@ const deliveryNeedsAttention = computed(() =>
   >
     <span
       class="dashboard-task-row__marker absolute left-1.5 top-1.5 bottom-1.5 w-0.5 rounded-full"
-      :class="selected ? 'bg-[var(--n-text-color-3)]' : 'bg-transparent'"
+      :class="selected ? 'dashboard-task-row__marker--selected' : 'bg-transparent'"
     />
     <TaskStatusBadge
       class="shrink-0"
@@ -56,7 +56,7 @@ const deliveryNeedsAttention = computed(() =>
     </span>
     <span
       class="min-w-0 flex-1 truncate text-[13px] tracking-[0.01em]"
-      :class="selected ? 'font-medium text-[var(--n-text-color)]' : 'font-normal text-[var(--n-text-color-2)]'"
+      :class="selected ? 'font-semibold text-[var(--primary-color)]' : 'font-normal text-[var(--n-text-color-2)]'"
       :title="task.title"
     >
       {{ task.title }}
@@ -98,10 +98,19 @@ const deliveryNeedsAttention = computed(() =>
 
 <style scoped>
 .dashboard-task-row--selected {
-	background: color-mix(in srgb, var(--n-text-color) 4%, transparent);
+	background: color-mix(in srgb, var(--primary-color) 14%, transparent);
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary-color) 24%, transparent);
+}
+
+.dashboard-task-row__marker--selected {
+	background: var(--primary-color);
 }
 
 .dashboard-task-row:not(.dashboard-task-row--selected):hover {
 	background: color-mix(in srgb, var(--n-text-color) 3%, transparent);
+}
+
+:global(.theme-dark) .dashboard-task-row--selected {
+	background: color-mix(in srgb, var(--primary-color) 18%, transparent);
 }
 </style>
