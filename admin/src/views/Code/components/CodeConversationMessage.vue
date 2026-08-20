@@ -29,8 +29,8 @@ const MdPreview = defineAsyncComponent(async () => {
     :class="isUser ? 'flex-row-reverse' : 'flex-row'"
   >
     <div
-      class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white"
-      :class="isUser ? 'bg-blue-500' : 'bg-slate-400 dark:bg-slate-500'"
+      class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
+      :class="isUser ? 'bg-blue-50 text-blue-500 dark:bg-blue-500/15 dark:text-blue-300' : 'bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-slate-300'"
       :title="isUser ? t('code.userMessage') : t('code.executorMessage')"
     >
       <Icon
@@ -53,7 +53,7 @@ const MdPreview = defineAsyncComponent(async () => {
       <div
         class="conversation-bubble px-3.5 py-2.5 text-[13px] leading-relaxed tracking-[0.01em]"
         :class="isUser
-          ? 'conversation-bubble--user rounded-[18px] rounded-br-md bg-blue-500 text-white'
+          ? 'conversation-bubble--user rounded-[18px] rounded-br-md bg-blue-50 text-slate-700 dark:bg-blue-500/15 dark:text-[var(--n-text-color)]'
           : 'conversation-bubble--agent rounded-[18px] rounded-bl-md bg-white text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/80 dark:bg-white/10 dark:text-[var(--n-text-color)] dark:ring-white/10'"
       >
         <CodeConversationAttachments
@@ -101,16 +101,6 @@ const MdPreview = defineAsyncComponent(async () => {
 	border-radius: 0.75rem;
 	padding: 0.75rem 1rem;
 	background: rgb(15 23 42 / 0.06);
-}
-
-.conversation-bubble--user .conversation-markdown :deep(pre),
-.conversation-bubble--user .conversation-markdown :deep(code) {
-	background: rgb(255 255 255 / 0.16);
-	color: inherit;
-}
-
-.conversation-bubble--user .conversation-markdown :deep(a) {
-	color: rgb(219 234 254);
 }
 
 .conversation-markdown :deep(code) {
