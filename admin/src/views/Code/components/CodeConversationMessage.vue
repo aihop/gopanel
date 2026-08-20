@@ -17,6 +17,8 @@ const props = defineProps<{
 const { t } = useI18n({ messages: codeWorkspaceMessages })
 const isUser = computed(() => isUserConversationMessage(props.message.role))
 const parsed = computed(() => parseConversationAttachments(props.message.content || ""))
+const isRunActive = computed(() => props.run?.status === "running" || props.run?.status === "queued")
+const hasBubble = computed(() => Boolean(parsed.value.attachments.length || parsed.value.text))
 const MdPreview = defineAsyncComponent(async () => {
 	const [module] = await Promise.all([import("md-editor-v3"), import("md-editor-v3/lib/preview.css")])
 	return module.MdPreview
@@ -46,11 +48,20 @@ const MdPreview = defineAsyncComponent(async () => {
         v-if="run && !isUser"
         class="mb-1 flex flex-wrap items-center gap-2 px-1 text-[11px] tracking-[0.01em] text-[var(--n-text-color-3)]"
       >
+        <span
+          v-if="isRunActive"
+          class="relative inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center"
+          aria-hidden="true"
+        >
+          <span class="absolute inset-0 animate-spin rounded-full border border-current border-r-transparent motion-reduce:animate-none" />
+          <span class="h-1.5 w-1.5 rounded-full bg-current animate-pulse motion-reduce:animate-none" />
+        </span>
         <span>{{ t(`code.runStatus_${run.status}`) }}</span>
         <span v-if="run.durationMs">{{ t("code.runDuration", { duration: run.durationMs }) }}</span>
         <span v-if="run.totalTokens">{{ t("code.taskTokens", { count: run.totalTokens }) }}</span>
       </div>
       <div
+        v-if="hasBubble"
         class="conversation-bubble px-3.5 py-2.5 text-[13px] leading-relaxed tracking-[0.01em]"
         :class="isUser
           ? 'conversation-bubble--user rounded-[18px] rounded-br-md bg-blue-50 text-slate-700 dark:bg-blue-500/15 dark:text-[var(--n-text-color)]'

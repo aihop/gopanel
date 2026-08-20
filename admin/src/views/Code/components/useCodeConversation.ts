@@ -43,13 +43,17 @@ export function useCodeConversation(sessionId: () => number | null, taskId: () =
 	const displayMessages = computed(() => {
 		const items = visibleConversationThread(messages.value)
 		const live = streaming.value
-		if (!live?.content) return items
+		const liveContent = live?.content || ""
+		const activeRun = runs.value.find(run => run.status === "running" || run.status === "queued")
+		const liveRunId = live?.runId || activeRun?.id || 0
+		if (!liveContent && !activeRun) return items
 		if (
 			items.some(item => {
 				if (item.role === "user") return false
-				if (live.runId && item.runId === live.runId) return true
+				if (liveRunId && item.runId === liveRunId) return true
+				if (!liveContent) return false
 				const content = item.content || ""
-				return content === live.content || content.startsWith(live.content) || live.content.startsWith(content)
+				return content === liveContent || content.startsWith(liveContent) || liveContent.startsWith(content)
 			})
 		) {
 			return items
@@ -61,9 +65,9 @@ export function useCodeConversation(sessionId: () => number | null, taskId: () =
 				createdAt: "",
 				sessionId: sessionId() || 0,
 				taskId: taskId() || 0,
-				runId: live.runId || 0,
+				runId: liveRunId,
 				role: "agent",
-				content: live.content,
+				content: liveContent,
 			},
 		]
 	})
