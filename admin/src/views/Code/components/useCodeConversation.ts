@@ -128,12 +128,6 @@ export function useCodeConversation(sessionId: () => number | null, taskId: () =
 		}
 	}
 
-	const insertDraftText = (text: string) => {
-		const snippet = text.trim()
-		if (!snippet) return
-		draft.value = draft.value.trim() ? `${draft.value.trimEnd()}\n\n${snippet}` : snippet
-	}
-
 	const sendInstruction = async () => {
 		const id = sessionId()
 		const content = serializeInstructionContent(draft.value, attachments.value)
@@ -275,7 +269,6 @@ export function useCodeConversation(sessionId: () => number | null, taskId: () =
 		loadHistory,
 		addAttachments,
 		removeAttachment,
-		insertDraftText,
 		sendInstruction,
 		stopExecution,
 		toggleMessageExpanded,

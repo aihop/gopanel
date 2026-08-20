@@ -20,14 +20,13 @@ export const codeEditorMessages = {
 			saveAndClose: "保存并关闭",
 			discardChanges: "放弃修改",
 			retry: "重试",
-			editFileSnippet: "查看并复制片段",
-			snippetFromLine: "起始行",
-			snippetToLine: "结束行",
-			copySnippet: "复制",
+			editFileSnippet: "在编辑器中选择行号",
+			copySnippet: "复制行号",
 			insertSnippet: "插入输入框",
-			snippetCopied: "已复制到剪贴板",
+			snippetCopied: "已复制行号",
 			snippetCopyFailed: "复制失败",
-			snippetLoadFailed: "文件无法预览"
+			snippetLoadFailed: "文件无法预览",
+			snippetSelectHint: "在编辑器中选中要改的行，复制后只粘贴路径和行号"
 		}
 	},
 	en: {
@@ -51,14 +50,13 @@ export const codeEditorMessages = {
 			saveAndClose: "Save and close",
 			discardChanges: "Discard changes",
 			retry: "Retry",
-			editFileSnippet: "View and copy a snippet",
-			snippetFromLine: "From",
-			snippetToLine: "To",
-			copySnippet: "Copy",
+			editFileSnippet: "Select lines in the editor",
+			copySnippet: "Copy line range",
 			insertSnippet: "Insert into chat",
-			snippetCopied: "Copied to the clipboard",
+			snippetCopied: "Line range copied",
 			snippetCopyFailed: "Failed to copy",
-			snippetLoadFailed: "This file cannot be previewed"
+			snippetLoadFailed: "This file cannot be previewed",
+			snippetSelectHint: "Select the lines to change. Copying pastes only the path and line numbers"
 		}
 	}
 } as const

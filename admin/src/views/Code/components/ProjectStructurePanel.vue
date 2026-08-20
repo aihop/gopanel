@@ -28,7 +28,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
 	(event: "select-file", file: { path: string; extension: string; isDir?: boolean }): void
-	(event: "insert-snippet", snippet: string): void
+	(event: "insert-snippet", snippet: { path: string; startLine: number; endLine: number }): void
 }>()
 
 const { t } = useI18n({ messages: codeEditorMessages })
@@ -123,32 +123,33 @@ const renderLabel = ({ option }: { option: TreeOption }) => {
 	}
 	return h("span", { class: "structure-label flex min-w-0 items-center gap-1" }, [
 		label,
-		h(
-			NPopover,
-			{ trigger: "click", placement: "left", showArrow: true, style: "padding: 12px;" },
-			{
-				trigger: () =>
-					h(
-						NButton,
-						{
-							quaternary: true,
-							circle: true,
-							size: "tiny",
-							class: "structure-edit",
-							title: t("code.editFileSnippet"),
-							onClick: (event: MouseEvent) => event.stopPropagation(),
-						},
-						{ icon: () => h(Icon, { name: "mdi:pencil-outline", size: 14 }) },
-					),
-				default: () =>
-					h(CodeStructureSnippetPopover, {
-						sessionId: props.sessionId,
-						path: node.key,
-						attachToChat: props.attachToChat,
-						onInsert: (snippet: string) => emit("insert-snippet", snippet),
-					}),
-			},
-		),
+		h("span", { class: "structure-edit shrink-0" }, [
+			h(
+				NPopover,
+				{ trigger: "click", placement: "left", showArrow: true, to: "body", style: "padding: 12px;" },
+				{
+					trigger: () =>
+						h(
+							NButton,
+							{
+								quaternary: true,
+								circle: true,
+								size: "tiny",
+								title: t("code.editFileSnippet"),
+								onClick: (event: MouseEvent) => event.stopPropagation(),
+							},
+							{ icon: () => h(Icon, { name: "mdi:pencil-outline", size: 14 }) },
+						),
+					default: () =>
+						h(CodeStructureSnippetPopover, {
+							sessionId: props.sessionId,
+							path: node.key,
+							attachToChat: props.attachToChat,
+							onInsert: (snippet: { path: string; startLine: number; endLine: number }) => emit("insert-snippet", snippet),
+						}),
+				},
+			),
+		]),
 	])
 }
 
@@ -275,12 +276,14 @@ watch(
 	background-color: transparent;
 }
 
-.structure-label :deep(.structure-edit) {
+.structure-edit {
 	opacity: 0;
+	transition: opacity 0.12s ease;
 }
 
-:deep(.n-tree-node:hover) .structure-edit,
-.structure-edit:focus-visible {
+.structure-label:hover .structure-edit,
+.structure-label:focus-within .structure-edit,
+:deep(.n-tree-node:hover) .structure-edit {
 	opacity: 1;
 }
 

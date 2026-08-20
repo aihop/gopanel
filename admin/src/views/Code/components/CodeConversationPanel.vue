@@ -42,7 +42,6 @@ const {
 	loadHistory,
 	addAttachments,
 	removeAttachment,
-	insertDraftText,
 	sendInstruction,
 	stopExecution,
 } = useCodeConversation(
@@ -123,8 +122,18 @@ const attachStructureFile = (file: { path: string }) => {
 	if (item) addAttachments([item])
 }
 
-const insertStructureSnippet = (snippet: string) => {
-	insertDraftText(snippet)
+const insertStructureSnippet = (snippet: { path: string; startLine: number; endLine: number }) => {
+	const item = conversationAttachmentFromPath(snippet.path, workDir.value)
+	if (!item) return
+	addAttachments([
+		{
+			...item,
+			id: `${item.path}:${snippet.startLine}-${snippet.endLine}`,
+			name: `${item.name}:${snippet.startLine}-${snippet.endLine}`,
+			startLine: snippet.startLine,
+			endLine: snippet.endLine,
+		},
+	])
 }
 
 type WailsRuntime = {

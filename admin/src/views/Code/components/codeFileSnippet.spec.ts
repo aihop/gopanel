@@ -1,15 +1,12 @@
 import { describe, expect, it } from "vitest"
 import { parseAttachTarget } from "./codeConversationAttachments"
-import { clampLineRange, extractFileLines, formatFileSnippet } from "./codeFileSnippet"
+import { clampLineRange, formatFileLineRef, selectionLineRange } from "./codeFileSnippet"
 
 describe("file snippet", () => {
-	it("截取行范围并带上路径定位", () => {
-		const content = "a\nb\nc\nd"
+	it("只生成路径和行号，不带代码正文", () => {
 		expect(clampLineRange(3, 1, 4)).toEqual({ start: 1, end: 3 })
-		expect(extractFileLines(content, 2, 3)).toEqual(["b", "c"])
-		expect(formatFileSnippet("src/main.go", content, 2, 3)).toBe(
-			"@attach src/main.go:2-3\n\n```go\n2| b\n3| c\n```",
-		)
+		expect(formatFileLineRef("src/main.go", 2, 3)).toBe("@attach src/main.go:2-3")
+		expect(selectionLineRange({ startLineNumber: 12, endLineNumber: 40 })).toEqual({ start: 12, end: 40 })
 	})
 
 	it("解析带行号的附件路径", () => {
