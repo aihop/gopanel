@@ -25,3 +25,14 @@ export function nextMatchIndex(current: number, total: number, step: number) {
 	if (total <= 0) return 0
 	return (current + step + total) % total
 }
+
+export function structureAncestorDirs(filePath: string) {
+	const parts = filePath.replaceAll("\\", "/").split("/").filter(Boolean)
+	const dirs: string[] = []
+	let current = ""
+	for (const part of parts.slice(0, -1)) {
+		current = current ? `${current}/${part}` : part
+		dirs.push(current)
+	}
+	return dirs
+}

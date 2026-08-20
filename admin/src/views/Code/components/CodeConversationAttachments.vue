@@ -72,7 +72,7 @@ onBeforeUnmount(() => {
   >
     <li
       v-for="item in items"
-      :key="item.path"
+      :key="item.path + ':' + (item.startLine || '') + '-' + (item.endLine || '')"
       class="relative"
     >
       <figure
@@ -103,7 +103,7 @@ onBeforeUnmount(() => {
         type="button"
         class="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-slate-700 text-white"
         :title="t('code.attachmentRemove')"
-        @click.stop="emit('remove', item.path)"
+        @click.stop="emit('remove', item.startLine && item.endLine ? `${item.path}:${item.startLine}-${item.endLine}` : item.path)"
       >
         <Icon
           name="mdi:close"

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { useMessage } from "naive-ui"
 import Icon from "@/components/common/Icon.vue"
 import { conversationRunForMessage } from "./codeConversationThread"
@@ -8,11 +8,15 @@ import {
 	attachmentsFromPaths,
 	conversationAttachmentFromPath,
 	extractDroppedAttachments,
+	parsePastedLineRefs,
 } from "./codeConversationAttachments"
 import CodeConversationAttachments from "./CodeConversationAttachments.vue"
 import CodeConversationMessage from "./CodeConversationMessage.vue"
+import CodeStructureSnippetPopover from "./CodeStructureSnippetPopover.vue"
 import ProjectStructurePanel from "./ProjectStructurePanel.vue"
 import { useCodeConversation } from "./useCodeConversation"
+
+type LocateTarget = { path: string; line?: number; query?: string }
 
 const props = defineProps<{
 	sessionId: number | null
@@ -51,6 +55,8 @@ const {
 
 const listRef = ref<HTMLElement | null>(null)
 const dropping = ref(false)
+const structureOpen = ref(true)
+const locateTarget = ref<LocateTarget | null>(null)
 
 const scrollToBottom = async () => {
 	await nextTick()
@@ -78,8 +84,11 @@ const onComposerKeydown = (event: KeyboardEvent) => {
 const composerDisabledHint = () => {
 	if (closed.value) return t("code.conversationClosed")
 	if (initializing.value) return t("code.conversationInitializing")
+	if (dropping.value) return t("code.attachmentDropActive")
 	return t("code.promptHint")
 }
+
+const showComposerHint = computed(() => dropping.value || closed.value || initializing.value || displayMessages.value.length === 0)
 
 const wailsRuntime = () => (window as Window & { runtime?: WailsRuntime }).runtime
 
@@ -113,13 +122,25 @@ const onDrop = (event: DragEvent) => {
 
 const onPaste = (event: ClipboardEvent) => {
 	const data = event.clipboardData
-	if (!data?.files.length && !data?.getData("text/uri-list")) return
-	if (acceptDroppedAttachments(data)) event.preventDefault()
+	if (!data) return
+	if (data.files.length || data.getData("text/uri-list")) {
+		if (acceptDroppedAttachments(data)) event.preventDefault()
+		return
+	}
+	const parsed = parsePastedLineRefs(data.getData("text/plain"), workDir.value)
+	if (!parsed.attachments.length) return
+	event.preventDefault()
+	addAttachments(parsed.attachments)
+	if (parsed.rest) draft.value = draft.value.trim() ? `${draft.value.trimEnd()}\n${parsed.rest}` : parsed.rest
 }
 
 const attachStructureFile = (file: { path: string }) => {
 	const item = conversationAttachmentFromPath(file.path, workDir.value)
 	if (item) addAttachments([item])
+}
+
+const locateStructureFile = (target: LocateTarget) => {
+	locateTarget.value = target
 }
 
 const insertStructureSnippet = (snippet: { path: string; startLine: number; endLine: number }) => {
@@ -152,7 +173,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section class="flex h-full min-h-0 min-w-0 flex-1 overflow-hidden bg-transparent">
+  <section class="relative flex h-full min-h-0 min-w-0 flex-1 overflow-hidden bg-transparent">
     <div
       class="conversation-drop-target relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
       :class="dropping ? 'conversation-drop-target--active' : ''"
@@ -201,9 +222,25 @@ onBeforeUnmount(() => {
         </div>
       </n-spin>
 
+      <n-button
+        class="absolute right-3 top-3 z-[25]"
+        quaternary
+        circle
+        size="tiny"
+        :title="structureOpen ? t('code.hideProjectStructure') : t('code.showProjectStructure')"
+        @click="structureOpen = !structureOpen"
+      >
+        <template #icon>
+          <Icon :name="structureOpen ? 'mdi:file-tree' : 'mdi:file-tree-outline'" :size="16" />
+        </template>
+      </n-button>
+
       <footer class="conversation-composer absolute inset-x-3 bottom-3 z-10 rounded-2xl border border-slate-200/80 bg-white/95 p-2.5 shadow-[0_10px_30px_rgba(15,23,42,0.08)] backdrop-blur-md dark:border-white/10 dark:bg-[color-mix(in_srgb,var(--bg-default-color)_92%,transparent)]">
-        <p class="px-1 pb-1.5 text-xs tracking-[0.01em] text-[var(--n-text-color-3)]">
-          {{ dropping ? t("code.attachmentDropActive") : composerDisabledHint() }}
+        <p
+          v-if="showComposerHint"
+          class="px-1 pb-1.5 text-xs tracking-[0.01em] text-[var(--n-text-color-3)]"
+        >
+          {{ composerDisabledHint() }}
         </p>
         <CodeConversationAttachments
           v-if="attachments.length"
@@ -258,17 +295,43 @@ onBeforeUnmount(() => {
       </footer>
     </div>
 
+    <div
+      v-if="sessionId && structureOpen"
+      class="hidden max-lg:absolute max-lg:inset-0 max-lg:z-10 max-lg:block max-lg:bg-slate-900/25"
+      @click="structureOpen = false"
+    />
+
     <aside
-      v-if="sessionId"
-      class="hidden min-h-0 w-72 shrink-0 self-stretch overflow-hidden border-l border-slate-200/70 lg:flex lg:flex-col dark:border-white/10"
+      v-if="sessionId && locateTarget"
+      class="flex min-h-0 w-[28rem] max-w-[50%] shrink-0 flex-col overflow-hidden border-l border-slate-200/70 bg-[var(--bg-accent-color,var(--bg-default-color))] dark:border-white/10 max-lg:absolute max-lg:inset-y-0 max-lg:right-0 max-lg:z-30 max-lg:w-[min(32rem,100%)] max-lg:max-w-none max-lg:shadow-xl"
+    >
+      <CodeStructureSnippetPopover
+        class="min-h-0 flex-1 p-3"
+        docked
+        attach-to-chat
+        :session-id="sessionId"
+        :path="locateTarget.path"
+        :initial-line="locateTarget.line"
+        :initial-query="locateTarget.query"
+        @insert="insertStructureSnippet"
+        @close="locateTarget = null"
+      />
+    </aside>
+
+    <aside
+      v-if="sessionId && structureOpen"
+      class="flex min-h-0 w-72 shrink-0 flex-col overflow-hidden border-l border-slate-200/70 bg-[var(--bg-accent-color,var(--bg-default-color))] dark:border-white/10 max-lg:absolute max-lg:inset-y-0 max-lg:right-0 max-lg:z-20 max-lg:shadow-xl"
     >
       <ProjectStructurePanel
         :key="sessionId"
         class="h-full min-h-0"
         attach-to-chat
+        closable
         :session-id="sessionId"
-        @select-file="attachStructureFile"
-        @insert-snippet="insertStructureSnippet"
+        :selected-path="locateTarget?.path || ''"
+        @attach-file="attachStructureFile"
+        @locate-file="locateStructureFile"
+        @close="structureOpen = false"
       />
     </aside>
   </section>

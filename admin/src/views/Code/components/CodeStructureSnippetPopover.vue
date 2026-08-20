@@ -35,6 +35,7 @@ const props = defineProps<{
 	attachToChat?: boolean
 	initialQuery?: string
 	initialLine?: number
+	docked?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -144,7 +145,7 @@ watch([loading, content], () => {
 </script>
 
 <template>
-  <div class="w-[520px] max-w-[82vw]">
+  <div class="flex min-h-0 flex-col" :class="docked ? 'h-full w-full' : 'w-[520px] max-w-[82vw]'">
     <div class="mb-2 flex items-start gap-2">
       <div class="min-w-0 flex-1 truncate text-xs font-medium text-slate-600 dark:text-[var(--n-text-color)]" :title="path">
         {{ path }}
@@ -201,9 +202,9 @@ watch([loading, content], () => {
       <FtEditor
         ref="editorRef"
         v-model="content"
-        class="overflow-hidden rounded-lg"
+        class="min-h-0 flex-1 overflow-hidden rounded-lg"
         :language="language"
-        height="280px"
+        :height="docked ? '100%' : '280px'"
         :show-toolbar="false"
         readonly
       />

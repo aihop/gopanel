@@ -13,8 +13,17 @@ export function conversationMessagePreview(content: string) {
 	return `${lines.slice(0, messagePreviewMaxCharacters).trimEnd()}\n…`
 }
 
-export function conversationMessageText(content: string, expanded: boolean) {
-	if (expanded || !isLongConversationMessage(content)) return content
+const runningPreviewMaxCharacters = 320
+const runningPreviewMaxLines = 4
+
+export function conversationMessageText(content: string, expanded: boolean, compact = false) {
+	if (expanded) return content
+	if (compact) {
+		const lines = content.split("\n")
+		if (content.length <= runningPreviewMaxCharacters && lines.length <= runningPreviewMaxLines) return content
+		return `${lines.slice(0, runningPreviewMaxLines).join("\n").slice(0, runningPreviewMaxCharacters).trimEnd()}\n…`
+	}
+	if (!isLongConversationMessage(content)) return content
 	return conversationMessagePreview(content)
 }
 

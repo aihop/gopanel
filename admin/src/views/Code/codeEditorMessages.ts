@@ -2,7 +2,7 @@ export const codeEditorMessages = {
 	zh: {
 		code: {
 			projectStructure: "项目结构",
-			dragStructureToChat: "拖到输入框即可附加",
+			dragStructureToChat: "拖入或点回形针附加",
 			refreshStructure: "刷新项目结构",
 			filterStructure: "搜索文件、目录或内容",
 			structureLoadFailed: "项目结构加载失败",
@@ -20,7 +20,8 @@ export const codeEditorMessages = {
 			saveAndClose: "保存并关闭",
 			discardChanges: "放弃修改",
 			retry: "重试",
-			editFileSnippet: "在编辑器中选择行号",
+			editFileSnippet: "选择行号",
+			attachStructureFile: "附加到对话",
 			copySnippet: "复制行号",
 			insertSnippet: "插入输入框",
 			snippetCopied: "已复制行号",
@@ -33,6 +34,7 @@ export const codeEditorMessages = {
 			snippetSearchPrev: "上一个",
 			snippetSearchNext: "下一个",
 			closeSnippet: "关闭",
+			hideProjectStructure: "隐藏项目结构",
 			structureSearchEmpty: "没有匹配的文件",
 			structureSearchTruncated: "仅显示部分结果"
 		}
@@ -40,7 +42,7 @@ export const codeEditorMessages = {
 	en: {
 		code: {
 			projectStructure: "Project structure",
-			dragStructureToChat: "Drag a file onto the composer to attach it",
+			dragStructureToChat: "Drag in, or use the paperclip to attach",
 			refreshStructure: "Refresh project structure",
 			filterStructure: "Search files, folders, or contents",
 			structureLoadFailed: "Failed to load project structure",
@@ -58,7 +60,8 @@ export const codeEditorMessages = {
 			saveAndClose: "Save and close",
 			discardChanges: "Discard changes",
 			retry: "Retry",
-			editFileSnippet: "Select lines in the editor",
+			editFileSnippet: "Select lines",
+			attachStructureFile: "Attach to chat",
 			copySnippet: "Copy line range",
 			insertSnippet: "Insert into chat",
 			snippetCopied: "Line range copied",
@@ -71,6 +74,7 @@ export const codeEditorMessages = {
 			snippetSearchPrev: "Previous",
 			snippetSearchNext: "Next",
 			closeSnippet: "Close",
+			hideProjectStructure: "Hide project structure",
 			structureSearchEmpty: "No matching files",
 			structureSearchTruncated: "Showing partial results"
 		}

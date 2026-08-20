@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent } from "vue"
+import { computed, defineAsyncComponent, ref } from "vue"
 import { useI18n } from "vue-i18n"
 import type { AIMessage, CodeExecutionRun } from "@/api/interface/code"
 import Icon from "@/components/common/Icon.vue"
 import { codeWorkspaceMessages } from "../codeWorkspaceMessages"
 import { parseConversationAttachments } from "./codeConversationAttachments"
 import { sanitizeConversationMarkdown } from "./codeConversationMarkdown"
-import { isUserConversationMessage } from "./codeConversationThread"
+import { conversationMessageText, isUserConversationMessage } from "./codeConversationThread"
 import CodeConversationAttachments from "./CodeConversationAttachments.vue"
 
 const props = defineProps<{
@@ -18,6 +18,11 @@ const { t } = useI18n({ messages: codeWorkspaceMessages })
 const isUser = computed(() => isUserConversationMessage(props.message.role))
 const parsed = computed(() => parseConversationAttachments(props.message.content || ""))
 const isRunActive = computed(() => props.run?.status === "running" || props.run?.status === "queued")
+const expanded = ref(false)
+const previewText = computed(() => conversationMessageText(parsed.value.text, expanded.value, isRunActive.value))
+const canExpand = computed(
+	() => conversationMessageText(parsed.value.text, false, isRunActive.value) !== parsed.value.text,
+)
 const hasBubble = computed(() => Boolean(parsed.value.attachments.length || parsed.value.text))
 const MdPreview = defineAsyncComponent(async () => {
 	const [module] = await Promise.all([import("md-editor-v3"), import("md-editor-v3/lib/preview.css")])
@@ -57,8 +62,8 @@ const MdPreview = defineAsyncComponent(async () => {
           <span class="h-1.5 w-1.5 rounded-full bg-current animate-pulse motion-reduce:animate-none" />
         </span>
         <span>{{ t(`code.runStatus_${run.status}`) }}</span>
-        <span v-if="run.durationMs">{{ t("code.runDuration", { duration: run.durationMs }) }}</span>
-        <span v-if="run.totalTokens">{{ t("code.taskTokens", { count: run.totalTokens }) }}</span>
+        <span v-if="!isRunActive && run.durationMs">{{ t("code.runDuration", { duration: run.durationMs }) }}</span>
+        <span v-if="!isRunActive && run.totalTokens">{{ t("code.taskTokens", { count: run.totalTokens }) }}</span>
       </div>
       <div
         v-if="hasBubble"
@@ -74,15 +79,23 @@ const MdPreview = defineAsyncComponent(async () => {
           :session-id="message.sessionId"
         />
         <MdPreview
-          v-if="parsed.text"
+          v-if="previewText"
           :editor-id="`code-conversation-${message.sessionId}-${message.id}`"
-          :model-value="parsed.text"
+          :model-value="previewText"
           :sanitize="sanitizeConversationMarkdown"
           no-mermaid
           no-echarts
           no-katex
           class="conversation-markdown"
         />
+        <button
+          v-if="canExpand"
+          type="button"
+          class="mt-1 text-[11px] text-slate-400"
+          @click="expanded = !expanded"
+        >
+          {{ expanded ? t("code.collapseMessage") : isRunActive ? t("code.expandRunningOutput") : t("code.expandMessage") }}
+        </button>
       </div>
     </div>
   </article>

@@ -1,15 +1,15 @@
 <script setup lang="ts">
 import { computed, h, ref, watch } from "vue"
 import type { TreeOption } from "naive-ui"
-import { NButton, NPopover, useMessage } from "naive-ui"
+import { NButton, useMessage } from "naive-ui"
 import { useI18n } from "vue-i18n"
 import Icon from "@/components/common/Icon.vue"
 import { getCodeSessionStructure, searchCodeSessionStructure, type CodeStructureEntry, type CodeStructureSearchHit } from "@/api/modules/codeEditor"
 import { codeEditorMessages } from "../codeEditorMessages"
 import { writeStructureDragData } from "./codeConversationAttachments"
 import { codeFileIcon } from "./codeFileIcon"
+import { structureAncestorDirs } from "./codeFileSnippet"
 import CodeStructureSearchHits from "./CodeStructureSearchHits.vue"
-import CodeStructureSnippetPopover from "./CodeStructureSnippetPopover.vue"
 
 interface StructureTreeOption extends TreeOption {
 	key: string
@@ -24,13 +24,16 @@ const props = withDefaults(
 		changedFiles?: string[]
 		selectedPath?: string
 		attachToChat?: boolean
+		closable?: boolean
 	}>(),
-	{ changedFiles: () => [], selectedPath: "", attachToChat: false }
+	{ changedFiles: () => [], selectedPath: "", attachToChat: false, closable: false }
 )
 
 const emit = defineEmits<{
 	(event: "select-file", file: { path: string; extension: string; isDir?: boolean }): void
-	(event: "insert-snippet", snippet: { path: string; startLine: number; endLine: number }): void
+	(event: "attach-file", file: { path: string; extension: string; isDir?: boolean }): void
+	(event: "locate-file", target: { path: string; line?: number; query?: string }): void
+	(event: "close"): void
 }>()
 
 const { t } = useI18n({ messages: codeEditorMessages })
@@ -42,14 +45,12 @@ const pattern = ref("")
 const nodes = ref<StructureTreeOption[]>([])
 const expandedKeys = ref<Array<string | number>>([])
 const selectedKeys = ref<Array<string | number>>(props.selectedPath ? [props.selectedPath] : [])
-const snippetPath = ref("")
 const searchHits = ref<CodeStructureSearchHit[]>([])
 const searchLoading = ref(false)
 const searchTruncated = ref(false)
-const searchSnippetPath = ref("")
-const searchSnippetLine = ref(0)
 const searchRoot = ref("")
 const searching = computed(() => pattern.value.trim().length >= 2)
+const searchHitPaths = computed(() => new Set(searchHits.value.map(hit => hit.path)))
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 
 const normalizedChangedFiles = computed(() =>
@@ -112,12 +113,17 @@ const renderPrefix = ({ option }: { option: TreeOption }) => {
 
 const renderLabel = ({ option }: { option: TreeOption }) => {
 	const node = option as StructureTreeOption
+	const hit = searchHitPaths.value.has(node.key)
 	const label = h(
 		"span",
 		{
 			class: [
 				"min-w-0 flex-1 truncate",
-				isChangedPath(node.key, node.isDir) ? "font-semibold text-blue-600" : "text-[var(--n-text-color)]",
+				isChangedPath(node.key, node.isDir)
+					? "font-semibold text-blue-600"
+					: hit
+						? "font-medium text-amber-700 dark:text-amber-300"
+						: "text-[var(--n-text-color)]",
 				props.attachToChat ? "cursor-grab" : "",
 			],
 			title: node.key,
@@ -130,52 +136,78 @@ const renderLabel = ({ option }: { option: TreeOption }) => {
 		},
 		node.label,
 	)
-	if (node.isDir) {
-		return h("span", { class: "structure-label flex min-w-0 items-center gap-1" }, [label])
+	const actions = []
+	if (props.attachToChat) {
+		actions.push(
+			h(
+				NButton,
+				{
+					quaternary: true,
+					circle: true,
+					size: "tiny",
+					title: t("code.attachStructureFile"),
+					onClick: (event: MouseEvent) => {
+						event.stopPropagation()
+						emit("attach-file", {
+							path: node.key,
+							extension: node.isDir ? "" : node.label.split(".").pop() || "",
+							isDir: node.isDir,
+						})
+					},
+				},
+				{ icon: () => h(Icon, { name: "mdi:paperclip", size: 14 }) },
+			),
+		)
+	}
+	if (!node.isDir) {
+		actions.push(
+			h(
+				NButton,
+				{
+					quaternary: true,
+					circle: true,
+					size: "tiny",
+					title: t("code.editFileSnippet"),
+					onClick: (event: MouseEvent) => {
+						event.stopPropagation()
+						emit("locate-file", { path: node.key })
+					},
+				},
+				{ icon: () => h(Icon, { name: "mdi:code-braces", size: 14 }) },
+			),
+		)
 	}
 	return h("span", { class: "structure-label flex min-w-0 items-center gap-1" }, [
 		label,
-		h("span", { class: "structure-edit shrink-0" }, [
-			h(
-				NPopover,
-				{
-					show: snippetPath.value === node.key,
-					trigger: "click",
-					placement: "left",
-					showArrow: true,
-					to: "body",
-					style: "padding: 12px;",
-					onUpdateShow: (show: boolean) => {
-						snippetPath.value = show ? node.key : snippetPath.value === node.key ? "" : snippetPath.value
-					},
-				},
-				{
-					trigger: () =>
-						h(
-							NButton,
-							{
-								quaternary: true,
-								circle: true,
-								size: "tiny",
-								title: t("code.editFileSnippet"),
-								onClick: (event: MouseEvent) => event.stopPropagation(),
-							},
-							{ icon: () => h(Icon, { name: "mdi:pencil-outline", size: 14 }) },
-						),
-					default: () =>
-						h(CodeStructureSnippetPopover, {
-							sessionId: props.sessionId,
-							path: node.key,
-							attachToChat: props.attachToChat,
-							onInsert: (snippet: { path: string; startLine: number; endLine: number }) => emit("insert-snippet", snippet),
-							onClose: () => {
-								snippetPath.value = ""
-							},
-						}),
-				},
-			),
-		]),
+		actions.length ? h("span", { class: "structure-edit flex shrink-0 items-center" }, actions) : null,
 	])
+}
+
+const findStructureNode = (list: StructureTreeOption[], key: string): StructureTreeOption | null => {
+	for (const node of list) {
+		if (node.key === key) return node
+		if (node.children?.length) {
+			const found = findStructureNode(node.children, key)
+			if (found) return found
+		}
+	}
+	return null
+}
+
+const expandAncestors = async (filePath: string) => {
+	const dirs = structureAncestorDirs(filePath)
+	const expanded = new Set(expandedKeys.value.map(String))
+	for (const dir of dirs) {
+		expanded.add(dir)
+		const node = findStructureNode(nodes.value, dir)
+		if (node && !node.children) await loadChildren(node).catch(() => undefined)
+	}
+	expandedKeys.value = [...expanded]
+}
+
+const revealPath = async (filePath: string) => {
+	await expandAncestors(filePath)
+	selectedKeys.value = [filePath]
 }
 
 const runStructureSearch = async (query: string) => {
@@ -185,6 +217,8 @@ const runStructureSearch = async (query: string) => {
 		if (pattern.value.trim() !== query) return
 		searchHits.value = response.data.hits || []
 		searchTruncated.value = Boolean(response.data.truncated)
+		const unique = [...new Set(searchHits.value.map(hit => hit.path))].slice(0, 8)
+		for (const path of unique) await expandAncestors(path)
 	} catch {
 		if (pattern.value.trim() === query) searchHits.value = []
 	} finally {
@@ -192,16 +226,11 @@ const runStructureSearch = async (query: string) => {
 	}
 }
 
-const openSearchHit = (hit: CodeStructureSearchHit) => {
-	selectedKeys.value = [hit.path]
+const openSearchHit = async (hit: CodeStructureSearchHit) => {
+	await revealPath(hit.path)
+	if (hit.isDir) searchRoot.value = hit.path
 	emit("select-file", { path: hit.path, extension: hit.extension || "", isDir: hit.isDir })
-	if (hit.isDir) {
-		searchRoot.value = hit.path
-		return
-	}
-	searchSnippetPath.value = hit.path
-	searchSnippetLine.value = hit.line || 0
-	snippetPath.value = ""
+	if (!hit.isDir) emit("locate-file", { path: hit.path, line: hit.line, query: pattern.value.trim() })
 }
 
 const selectFile = (node: StructureTreeOption) => {
@@ -264,16 +293,28 @@ watch(
 						</div>
 					</div>
 				</div>
-				<n-button
-					quaternary
-					circle
-					size="small"
-					:loading="loading"
-					:title="t('code.refreshStructure')"
-					@click="loadRoot"
-				>
-					<template #icon><Icon name="mdi:refresh" :size="17" /></template>
-				</n-button>
+				<div class="flex shrink-0 items-center">
+					<n-button
+						quaternary
+						circle
+						size="small"
+						:loading="loading"
+						:title="t('code.refreshStructure')"
+						@click="loadRoot"
+					>
+						<template #icon><Icon name="mdi:refresh" :size="17" /></template>
+					</n-button>
+					<n-button
+						v-if="closable"
+						quaternary
+						circle
+						size="small"
+						:title="t('code.hideProjectStructure')"
+						@click="emit('close')"
+					>
+						<template #icon><Icon name="mdi:close" :size="17" /></template>
+					</n-button>
+				</div>
 			</div>
 			<n-input
 				v-model:value="pattern"
@@ -286,17 +327,18 @@ watch(
 			</n-input>
 		</div>
 
-		<div class="relative min-h-0 flex-1 overflow-hidden">
-			<CodeStructureSearchHits
-				v-if="searching"
-				:hits="searchHits"
-				:loading="searchLoading"
-				:truncated="searchTruncated"
-				@select="openSearchHit"
-			/>
+		<div class="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+			<div v-if="searching" class="max-h-40 shrink-0 border-b border-slate-200/70 dark:border-white/10">
+				<CodeStructureSearchHits
+					class="max-h-40"
+					:hits="searchHits"
+					:loading="searchLoading"
+					:truncated="searchTruncated"
+					@select="openSearchHit"
+				/>
+			</div>
 			<div
-				v-else
-				class="structure-scroll absolute inset-0 overflow-auto px-2 py-3"
+				class="structure-scroll relative min-h-0 flex-1 overflow-auto px-2 py-3"
 			>
 				<div
 					v-if="loadError"
@@ -326,33 +368,11 @@ watch(
 				/>
 			</div>
 			<div
-				v-if="loading && !searching"
+				v-if="loading"
 				class="absolute inset-0 z-10 flex items-center justify-center bg-white/70 backdrop-blur-[1px]"
 			>
 				<n-spin />
 			</div>
-			<n-popover
-				:show="Boolean(searchSnippetPath)"
-				trigger="manual"
-				placement="left"
-				to="body"
-				style="padding: 12px"
-				@update:show="show => { if (!show) searchSnippetPath = '' }"
-			>
-				<template #trigger>
-					<span class="pointer-events-none absolute right-2 top-2 h-px w-px" />
-				</template>
-				<CodeStructureSnippetPopover
-					v-if="searchSnippetPath"
-					:session-id="sessionId"
-					:path="searchSnippetPath"
-					:attach-to-chat="attachToChat"
-					:initial-query="pattern.trim()"
-					:initial-line="searchSnippetLine"
-					@insert="emit('insert-snippet', $event)"
-					@close="searchSnippetPath = ''"
-				/>
-			</n-popover>
 		</div>
 
 		<div v-if="truncated || changedFiles.length" class="border-t border-slate-200 px-3 py-2 text-xs text-slate-400">

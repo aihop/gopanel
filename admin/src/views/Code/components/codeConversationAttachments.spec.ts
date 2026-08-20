@@ -10,6 +10,7 @@ import {
 	serializeInstructionContent,
 	toWorkspaceRelativePath,
 	writeStructureDragData,
+	parsePastedLineRefs,
 } from "./codeConversationAttachments"
 
 class FakeTransfer {
@@ -78,6 +79,32 @@ describe("conversation attachment paths", () => {
 			attachments: [],
 			missingPath: true,
 		})
+	})
+
+	it("粘贴行号引用变成附件而不是正文", () => {
+		expect(parsePastedLineRefs("@attach src/main.go:12-40\n请改这里", "/tmp/app")).toEqual({
+			attachments: [
+				{
+					id: "src/main.go:12-40",
+					path: "src/main.go",
+					name: "main.go:12-40",
+					kind: "file",
+					startLine: 12,
+					endLine: 40,
+				},
+			],
+			rest: "请改这里",
+		})
+		expect(parsePastedLineRefs("src/main.go:12-40", "/tmp/app").attachments).toEqual([
+			{
+				id: "src/main.go:12-40",
+				path: "src/main.go",
+				name: "main.go:12-40",
+				kind: "file",
+				startLine: 12,
+				endLine: 40,
+			},
+		])
 	})
 
 	it("绝对路径列表转成工作区相对路径", () => {

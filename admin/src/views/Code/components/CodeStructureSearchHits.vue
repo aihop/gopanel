@@ -19,17 +19,17 @@ const { t } = useI18n({ messages: codeEditorMessages })
 </script>
 
 <template>
-  <div class="flex min-h-0 flex-1 flex-col">
-    <div v-if="loading" class="flex flex-1 items-center justify-center py-10">
+  <div class="flex min-h-0 flex-col">
+    <div v-if="loading" class="flex items-center justify-center py-3">
       <n-spin size="small" />
     </div>
     <n-empty
       v-else-if="!hits.length"
       size="small"
-      class="py-16"
+      class="py-3"
       :description="t('code.structureSearchEmpty')"
     />
-    <div v-else class="min-h-0 flex-1 overflow-auto px-1 py-1">
+    <div v-else class="min-h-0 overflow-auto px-1 py-1">
       <button
         v-for="hit in hits"
         :key="`${hit.kind}:${hit.path}:${hit.line || 0}`"

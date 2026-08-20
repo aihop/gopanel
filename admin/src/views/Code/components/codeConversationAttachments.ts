@@ -94,6 +94,38 @@ export function looksLikeFilePath(value: string) {
 	return cleaned.includes("/") && Boolean(fileExtension(cleaned))
 }
 
+export function attachmentIdentity(item: { path: string; startLine?: number; endLine?: number }) {
+	return item.startLine && item.endLine ? `${item.path}:${item.startLine}-${item.endLine}` : item.path
+}
+
+export function parsePastedLineRefs(text: string, workDir = "") {
+	const attachments: ComposerAttachment[] = []
+	const rest: string[] = []
+	for (const line of text.split("\n")) {
+		const attach = line.match(/^@attach\s+(.+?)\s*$/)
+		const raw = (attach ? attach[1] : line).trim()
+		const target = parseAttachTarget(raw)
+		const isLineRef = Boolean(target.startLine && target.endLine && (attach || looksLikeFilePath(target.path)))
+		if (!isLineRef) {
+			rest.push(line)
+			continue
+		}
+		const item = conversationAttachmentFromPath(target.path, workDir)
+		if (!item) {
+			rest.push(line)
+			continue
+		}
+		attachments.push({
+			...item,
+			id: `${item.path}:${target.startLine}-${target.endLine}`,
+			name: `${item.name}:${target.startLine}-${target.endLine}`,
+			startLine: target.startLine,
+			endLine: target.endLine,
+		})
+	}
+	return { attachments, rest: rest.join("\n").replace(/^\n+|\n+$/g, "") }
+}
+
 export function parseConversationAttachments(content: string) {
 	const attachments: ConversationAttachment[] = []
 	const textLines: string[] = []

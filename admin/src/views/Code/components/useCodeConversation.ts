@@ -5,7 +5,7 @@ import { createCodeInstruction, getCodeSessionHistory, stopCodeSession } from "@
 import type { AIMessage, CodeExecutionRun, CodeSession } from "@/api/interface/code"
 import { codeWorkspaceMessages } from "../codeWorkspaceMessages"
 import type { ComposerAttachment } from "./codeConversationAttachments"
-import { serializeInstructionContent } from "./codeConversationAttachments"
+import { attachmentIdentity, serializeInstructionContent } from "./codeConversationAttachments"
 import { streamCodeConversation, type ConversationStreamPayload } from "./codeConversationStream"
 import {
 	conversationRunRunning,
@@ -85,7 +85,7 @@ export function useCodeConversation(sessionId: () => number | null, taskId: () =
 		if (!items.length) return
 		const next = [...attachments.value]
 		for (const item of items) {
-			if (next.some(existing => existing.path === item.path)) {
+			if (next.some(existing => attachmentIdentity(existing) === attachmentIdentity(item))) {
 				revokeAttachmentPreview(item)
 				continue
 			}
@@ -96,7 +96,7 @@ export function useCodeConversation(sessionId: () => number | null, taskId: () =
 
 	const removeAttachment = (path: string) => {
 		attachments.value = attachments.value.filter(item => {
-			if (item.path !== path) return true
+			if (attachmentIdentity(item) !== path && item.path !== path) return true
 			revokeAttachmentPreview(item)
 			return false
 		})
