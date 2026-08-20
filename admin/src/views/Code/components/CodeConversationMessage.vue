@@ -2,6 +2,7 @@
 import { computed, defineAsyncComponent } from "vue"
 import { useI18n } from "vue-i18n"
 import type { AIMessage, CodeExecutionRun } from "@/api/interface/code"
+import Icon from "@/components/common/Icon.vue"
 import { codeWorkspaceMessages } from "../codeWorkspaceMessages"
 import { parseConversationAttachments } from "./codeConversationAttachments"
 import { sanitizeConversationMarkdown } from "./codeConversationMarkdown"
@@ -24,54 +25,73 @@ const MdPreview = defineAsyncComponent(async () => {
 
 <template>
   <article
-    class="flex w-full"
-    :class="isUser ? 'justify-end' : 'justify-start'"
+    class="flex w-full items-end gap-2"
+    :class="isUser ? 'flex-row-reverse' : 'flex-row'"
   >
     <div
-      :class="isUser
-        ? 'ml-auto w-fit max-w-[min(80%,28rem)] rounded-2xl rounded-br-md bg-slate-100 px-3.5 py-2.5 dark:bg-white/10'
-        : 'mr-auto w-full max-w-[min(100%,40rem)] px-1'"
+      class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white"
+      :class="isUser ? 'bg-blue-500' : 'bg-slate-400 dark:bg-slate-500'"
+      :title="isUser ? t('code.userMessage') : t('code.executorMessage')"
+    >
+      <Icon
+        :name="isUser ? 'mdi:account' : 'mdi:robot-outline'"
+        :size="16"
+      />
+    </div>
+    <div
+      class="min-w-0"
+      :class="isUser ? 'max-w-[min(78%,28rem)]' : 'max-w-[min(86%,38rem)]'"
     >
       <div
         v-if="run && !isUser"
-        class="mb-1.5 flex flex-wrap items-center gap-2 text-[11px] tracking-[0.01em] text-[var(--n-text-color-3)]"
+        class="mb-1 flex flex-wrap items-center gap-2 px-1 text-[11px] tracking-[0.01em] text-[var(--n-text-color-3)]"
       >
         <span>{{ t(`code.runStatus_${run.status}`) }}</span>
         <span v-if="run.durationMs">{{ t("code.runDuration", { duration: run.durationMs }) }}</span>
         <span v-if="run.totalTokens">{{ t("code.taskTokens", { count: run.totalTokens }) }}</span>
       </div>
-      <CodeConversationAttachments
-        v-if="parsed.attachments.length"
-        class="mb-2"
-        :attachments="parsed.attachments"
-        :session-id="message.sessionId"
-      />
-      <MdPreview
-        v-if="parsed.text"
-        :editor-id="`code-conversation-${message.sessionId}-${message.id}`"
-        :model-value="parsed.text"
-        :sanitize="sanitizeConversationMarkdown"
-        no-mermaid
-        no-echarts
-        no-katex
-        class="conversation-markdown"
-      />
+      <div
+        class="conversation-bubble px-3.5 py-2.5 text-[13px] leading-relaxed tracking-[0.01em]"
+        :class="isUser
+          ? 'conversation-bubble--user rounded-[18px] rounded-br-md bg-blue-500 text-white'
+          : 'conversation-bubble--agent rounded-[18px] rounded-bl-md bg-white text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/80 dark:bg-white/10 dark:text-[var(--n-text-color)] dark:ring-white/10'"
+      >
+        <CodeConversationAttachments
+          v-if="parsed.attachments.length"
+          :class="parsed.text ? 'mb-2' : ''"
+          :attachments="parsed.attachments"
+          :session-id="message.sessionId"
+        />
+        <MdPreview
+          v-if="parsed.text"
+          :editor-id="`code-conversation-${message.sessionId}-${message.id}`"
+          :model-value="parsed.text"
+          :sanitize="sanitizeConversationMarkdown"
+          no-mermaid
+          no-echarts
+          no-katex
+          class="conversation-markdown"
+        />
+      </div>
     </div>
   </article>
 </template>
 
 <style scoped>
 .conversation-markdown :deep(.md-editor-preview) {
+	padding: 0;
 	font-size: 13px;
 	line-height: 1.65;
 	letter-spacing: 0.01em;
-	color: var(--fg-default-color, inherit);
+	color: inherit;
 	background: transparent;
 }
 
 .conversation-markdown :deep(.md-editor) {
 	width: auto;
 	max-width: 100%;
+	border: none;
+	box-shadow: none;
 	background: transparent;
 }
 
@@ -80,7 +100,17 @@ const MdPreview = defineAsyncComponent(async () => {
 	overflow: auto;
 	border-radius: 0.75rem;
 	padding: 0.75rem 1rem;
-	background: color-mix(in srgb, var(--border-color) 18%, transparent);
+	background: rgb(15 23 42 / 0.06);
+}
+
+.conversation-bubble--user .conversation-markdown :deep(pre),
+.conversation-bubble--user .conversation-markdown :deep(code) {
+	background: rgb(255 255 255 / 0.16);
+	color: inherit;
+}
+
+.conversation-bubble--user .conversation-markdown :deep(a) {
+	color: rgb(219 234 254);
 }
 
 .conversation-markdown :deep(code) {
@@ -89,6 +119,14 @@ const MdPreview = defineAsyncComponent(async () => {
 
 .conversation-markdown :deep(p) {
 	margin: 0.35em 0;
+}
+
+.conversation-markdown :deep(p:first-child) {
+	margin-top: 0;
+}
+
+.conversation-markdown :deep(p:last-child) {
+	margin-bottom: 0;
 }
 
 .conversation-markdown :deep(h1),
