@@ -116,11 +116,11 @@ watch(() => props.selectedTaskId, () => {
 </script>
 
 <template>
-  <div class="space-y-2 p-2">
+  <div class="space-y-1 px-1 py-1">
     <section
       v-for="group in groups"
       :key="group.id"
-      class="relative rounded-2xl transition-opacity duration-150"
+      class="relative rounded-lg transition-opacity duration-150"
       :class="draggingProjectId === group.id ? 'opacity-40' : ''"
       @dragover="group.available && handleDragOver($event, group.id)"
       @drop="group.available && handleDrop($event, group.id)"
@@ -135,7 +135,7 @@ watch(() => props.selectedTaskId, () => {
       </div>
       <div
         data-project-drag-target
-        class="group/project relative flex h-10 items-center gap-0.5 overflow-hidden rounded-xl px-1 transition-colors duration-150"
+        class="group/project relative flex h-9 items-center gap-0.5 overflow-hidden rounded-lg px-1 transition-colors duration-150"
         :class="dropTarget?.projectId === group.id ? 'ring-1 ring-inset ring-[var(--n-primary-color)]' : ''"
       >
         <div
@@ -146,22 +146,22 @@ watch(() => props.selectedTaskId, () => {
         <button
           type="button"
           :draggable="group.available && projects.length > 1"
-          class="flex min-w-0 flex-1 items-center gap-1 rounded-xl pr-2 py-1.5 text-left text-sm text-[var(--n-text-color-3)] transition-colors hover:bg-[var(--n-color-embedded)] hover:text-[var(--n-text-color-2)]"
+          class="flex min-w-0 flex-1 items-center gap-0.5 rounded-lg px-2 py-1.5 text-left text-[13px] font-normal tracking-[0.01em] text-[var(--n-text-color-3)] transition-colors hover:bg-[var(--n-color-embedded)] hover:text-[var(--n-text-color-2)]"
           :class="group.available && projects.length > 1 ? 'md:cursor-grab md:active:cursor-grabbing' : ''"
           :aria-expanded="!isCollapsed(group.id)"
           @click="toggleProject(group.id)"
           @dragstart="group.available && projects.length > 1 && handleDragStart($event, group.id)"
           @dragend="handleDragEnd"
         >
+          <span
+            class="min-w-0 truncate"
+            :title="group.name"
+          >{{ group.name }}</span>
           <Icon
             :name="isCollapsed(group.id) ? 'mdi:chevron-right' : 'mdi:chevron-down'"
             :size="14"
-            class="shrink-0 opacity-80"
+            class="shrink-0 opacity-40"
           />
-          <span
-            class="min-w-0 flex-1 truncate font-medium"
-            :title="group.name"
-          >{{ group.name }}</span>
         </button>
         <n-tooltip v-if="group.available && !archived">
           <template #trigger>
@@ -212,7 +212,7 @@ watch(() => props.selectedTaskId, () => {
       <div v-if="!isCollapsed(group.id)">
         <div
           v-if="group.tasks.length === 0"
-          class="px-10 py-2 text-xs text-gray-500"
+          class="px-3 py-1.5 text-xs tracking-[0.01em] text-[var(--n-text-color-3)]"
         >
           {{ emptyLabel || t("code.dashboardNoProjectTasks") }}
         </div>

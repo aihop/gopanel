@@ -204,32 +204,32 @@ const activateCreatedTask = async (taskId: number) => {
     <template v-else>
     <!-- 标题后放视图工具，项目管理与新建项目靠右保持主操作层级。 -->
     <div
-      class="flex flex-wrap items-center gap-2"
-      :class="immersive ? 'mb-2 px-3' : 'mb-4 px-5 md:px-7'"
+      class="flex flex-wrap items-center gap-1.5"
+      :class="immersive ? 'mb-2 px-3' : 'mb-3 px-4 md:px-5'"
     >
-      <span class="shrink-0 text-base font-semibold tracking-[-0.01em] text-[var(--n-text-color)]">
+      <span class="shrink-0 text-sm font-medium tracking-[0.01em] text-[var(--n-text-color-2)]">
         {{ t("code.workspace") }}
       </span>
-
-      <CodeDashboardArchivedTasks
-        :projects="projects"
-        @restored="restoreArchivedTask"
-      />
-
       <n-button
         quaternary
         circle
-        size="small"
+        size="tiny"
         :title="listCollapsed ? t('code.dashboardExpandList') : t('code.dashboardCollapseList')"
         @click="listCollapsed = !listCollapsed"
       >
         <template #icon>
           <Icon
-            :name="listCollapsed ? 'mdi:arrow-expand-right' : 'mdi:arrow-collapse-left'"
+            :name="listCollapsed ? 'mdi:chevron-right' : 'mdi:chevron-left'"
             :size="16"
+            class="opacity-50"
           />
         </template>
       </n-button>
+
+      <CodeDashboardArchivedTasks
+        :projects="projects"
+        @restored="restoreArchivedTask"
+      />
 
       <n-button
         quaternary
@@ -289,7 +289,7 @@ const activateCreatedTask = async (taskId: number) => {
 
     <!-- 主从：左边会话轨，右边就是工作台。切任务不跳页。 -->
     <div
-      class="dashboard-workbench grid min-h-0 flex-1 overflow-hidden border-t "
+      class="dashboard-workbench grid min-h-0 flex-1 overflow-hidden border-t border-[color-mix(in_srgb,var(--n-border-color)_70%,transparent)]"
       :class="[
         listCollapsed
           ? 'grid-cols-1 grid-rows-1'
@@ -368,8 +368,8 @@ const activateCreatedTask = async (taskId: number) => {
 
 <style scoped>
 .dashboard-panel {
-	background: color-mix(in srgb, var(--n-color) 97%, transparent);
-	border-bottom: 1px solid var(--n-border-color);
+	background: transparent;
+	border-bottom: 1px solid color-mix(in srgb, var(--n-border-color) 70%, transparent);
 }
 @media (min-width: 1024px) {
 	.dashboard-workbench--split {

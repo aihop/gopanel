@@ -5,12 +5,12 @@
     flex 链就没有可分配的高度，终端只能被最小高度撑着，怎么调间距都不管用。
   -->
   <div
-    class="page page-wrapped page-mobile-full page-without-footer bg-base-accent border-base-accent relative flex w-full flex-col overflow-hidden rounded-[24px]"
+    class="page page-wrapped page-mobile-full page-without-footer relative flex w-full flex-col overflow-hidden rounded-2xl border border-[var(--n-border-color)] bg-[var(--n-color)]"
     :class="{ 'code-index--immersive': isCodeImmersive }"
   >
     <!-- 整页不滚：右侧是工作台，滚动交给左右两栏各自处理。 -->
     <div
-      class="project-lobby flex min-h-0 flex-1 flex-col overflow-hidden rounded-[24px]"
+      class="project-lobby flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl"
       :class="isCodeImmersive ? 'pt-2' : 'pt-4 md:pt-5'"
     >
       <CodeDashboard

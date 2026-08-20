@@ -66,7 +66,7 @@ const composerDisabledHint = () => {
 </script>
 
 <template>
-  <section class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white">
+  <section class="flex min-h-0 flex-1 flex-col overflow-hidden bg-transparent">
     <n-spin :show="loading && messages.length === 0" class="flex min-h-0 flex-1 flex-col">
       <div
         v-if="loadError && messages.length === 0"
@@ -88,8 +88,8 @@ const composerDisabledHint = () => {
         <article
           v-for="item in messages"
           :key="item.id"
-          class="rounded-2xl border border-slate-200 p-4"
-          :class="item.role === 'user' ? 'bg-blue-50' : 'bg-slate-50'"
+          class="rounded-xl border border-[color-mix(in_srgb,var(--n-border-color)_70%,transparent)] p-3.5"
+          :class="item.role === 'user' ? 'bg-[color-mix(in_srgb,var(--n-color-embedded)_80%,transparent)]' : ''"
         >
           <div class="mb-2 flex items-center justify-between gap-3">
             <n-tag size="small" :type="item.role === 'user' ? 'info' : 'success'" :bordered="false">
@@ -97,7 +97,7 @@ const composerDisabledHint = () => {
             </n-tag>
             <span class="text-xs text-slate-400">{{ new Date(item.createdAt).toLocaleString() }}</span>
           </div>
-          <pre class="whitespace-pre-wrap break-words font-sans text-sm leading-6 text-slate-700">{{
+          <pre class="whitespace-pre-wrap break-words font-sans text-[13px] leading-6 tracking-[0.01em] text-[var(--n-text-color-2)]">{{
             conversationMessageText(item.content, expandedMessageIds.has(item.id))
           }}</pre>
           <n-button
@@ -114,8 +114,8 @@ const composerDisabledHint = () => {
       </div>
     </n-spin>
 
-    <footer class="shrink-0 border-t border-slate-200 p-3">
-      <p class="mb-2 text-xs text-slate-500">{{ composerDisabledHint() }}</p>
+    <footer class="shrink-0 border-t border-[color-mix(in_srgb,var(--n-border-color)_65%,transparent)] p-3">
+      <p class="mb-2 text-xs tracking-[0.01em] text-[var(--n-text-color-3)]">{{ composerDisabledHint() }}</p>
       <div class="flex items-end gap-2">
         <n-input
           v-model:value="draft"

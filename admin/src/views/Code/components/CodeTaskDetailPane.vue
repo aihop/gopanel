@@ -104,7 +104,7 @@ const openFile = (file: { path: string; extension: string }) => {
             :name="projectName"
           />
           <span
-            class="min-w-0 truncate text-sm font-semibold text-[var(--n-text-color)]"
+            class="min-w-0 truncate text-sm font-medium tracking-[0.01em] text-[var(--n-text-color)]"
             :title="task?.title || session?.title"
           >
             {{ task?.title || session?.title }}
@@ -240,7 +240,7 @@ const openFile = (file: { path: string; extension: string }) => {
 }
 
 .detail-pane__header {
-	border-bottom: 1px solid color-mix(in srgb, var(--n-border-color) 82%, transparent);
+	border-bottom: 1px solid color-mix(in srgb, var(--n-border-color) 65%, transparent);
 }
 
 .detail-pane--fullscreen {

@@ -33,7 +33,7 @@ const deliveryNeedsAttention = computed(() =>
 
 <template>
   <div
-    class="dashboard-task-row group/row relative mb-0.5 flex cursor-pointer items-center gap-2 rounded-lg py-1.5 pl-5 pr-2.5 transition-colors"
+    class="dashboard-task-row group/row relative mb-0.5 flex cursor-pointer items-center gap-2 rounded-md py-1.5 pl-5 pr-2.5 transition-colors"
     :class="selected ? 'dashboard-task-row--selected' : ''"
     role="button"
     tabindex="0"
@@ -43,7 +43,7 @@ const deliveryNeedsAttention = computed(() =>
   >
     <span
       class="dashboard-task-row__marker absolute left-1.5 top-1.5 bottom-1.5 w-0.5 rounded-full"
-      :class="selected ? 'bg-[var(--n-primary-color)]' : 'bg-transparent'"
+      :class="selected ? 'bg-[var(--n-text-color-3)]' : 'bg-transparent'"
     />
     <div class="min-w-0 flex-1">
       <div class="flex min-w-0 items-center gap-1.5">
@@ -55,8 +55,8 @@ const deliveryNeedsAttention = computed(() =>
           {{ projectName }}
         </span>
         <span
-          class="min-w-0 truncate text-sm"
-          :class="selected ? 'font-semibold text-[var(--n-text-color)]' : 'text-[var(--n-text-color)]'"
+          class="min-w-0 truncate text-[13px] tracking-[0.01em]"
+          :class="selected ? 'font-medium text-[var(--n-text-color)]' : 'font-normal text-[var(--n-text-color-2)]'"
           :title="task.title"
         >
           {{ task.title }}
@@ -100,10 +100,10 @@ const deliveryNeedsAttention = computed(() =>
 
 <style scoped>
 .dashboard-task-row--selected {
-	background: color-mix(in srgb, var(--primary-color) 10%, transparent);
+	background: color-mix(in srgb, var(--n-text-color) 4%, transparent);
 }
 
 .dashboard-task-row:not(.dashboard-task-row--selected):hover {
-	background: color-mix(in srgb, var(--primary-color) 7%, transparent);
+	background: color-mix(in srgb, var(--n-text-color) 3%, transparent);
 }
 </style>
