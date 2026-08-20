@@ -194,6 +194,12 @@ func (terminal *nativeCodeTerminal) takeControl(subscriptionID string, cols, row
 		terminal.restoreSubscriptionReadOnlyLocked(terminal.controllerID)
 	}
 	changed := terminal.controllerID != subscriptionID
+	if changed {
+		// 换了控制者，心跳统计重新起算，否则过期时看到的是上一任的数字。
+		terminal.controlAcquiredAt = now
+		terminal.controlHeartbeats = 0
+		terminal.controlLastHeartbeat = time.Time{}
+	}
 	terminal.controllerID = subscriptionID
 	subscription.ReadOnly = false
 	terminal.renewControlLeaseLocked(now)
@@ -250,10 +256,13 @@ func (terminal *nativeCodeTerminal) broadcastControlLocked() {
 func (terminal *nativeCodeTerminal) renewControlLease(subscriptionID string) bool {
 	terminal.mu.Lock()
 	defer terminal.mu.Unlock()
-	if terminal.controllerID != subscriptionID || terminal.controlExpiredLocked(time.Now()) {
+	now := time.Now()
+	if terminal.controllerID != subscriptionID || terminal.controlExpiredLocked(now) {
 		return false
 	}
-	terminal.renewControlLeaseLocked(time.Now())
+	terminal.controlHeartbeats++
+	terminal.controlLastHeartbeat = now
+	terminal.renewControlLeaseLocked(now)
 	return true
 }
 
@@ -301,12 +310,35 @@ func (terminal *nativeCodeTerminal) expireControl(expectedController string) {
 		return
 	}
 	subscription := terminal.subscribers[expectedController]
+	telemetry := terminal.controlTelemetryLocked(time.Now())
 	terminal.clearExpiredControlLocked()
 	terminal.mu.Unlock()
 	if subscription != nil {
-		recordCodeAudit(subscription.UserID, terminal.projectID, terminal.sessionID, "terminal_control_expire", "success", subscription.ID, "终端控制租约因空闲自动过期", subscription.IP, time.Now(), codeAuditMeta{"deviceId": subscription.DeviceID, "automatic": true})
+		meta := codeAuditMeta{"deviceId": subscription.DeviceID, "automatic": true}
+		for key, value := range telemetry {
+			meta[key] = value
+		}
+		recordCodeAudit(subscription.UserID, terminal.projectID, terminal.sessionID, "terminal_control_expire", "success", subscription.ID, "终端控制租约因空闲自动过期", subscription.IP, time.Now(), meta)
 	}
 	terminal.broadcastControl()
+}
+
+// controlTelemetryLocked 汇总一次租约过期的诊断数据，用来回答
+// 「客户端每 15 秒发一次 ping，租约为什么还会因空闲 60 秒过期」。
+//
+// heartbeats == 0：心跳一次都没到——连接早断了，或者 ping 根本没走到续租那条路。
+// heartbeats > 0 且 sinceLastHeartbeatMs 接近租约时长：心跳来过又突然停了，
+// 典型是浏览器把后台标签页的定时器节流到分钟级，正好和租约赛跑。
+func (terminal *nativeCodeTerminal) controlTelemetryLocked(now time.Time) codeAuditMeta {
+	meta := codeAuditMeta{"heartbeats": terminal.controlHeartbeats}
+	if !terminal.controlAcquiredAt.IsZero() {
+		meta["heldMs"] = now.Sub(terminal.controlAcquiredAt).Milliseconds()
+	}
+	if terminal.controlLastHeartbeat.IsZero() {
+		return meta
+	}
+	meta["sinceLastHeartbeatMs"] = now.Sub(terminal.controlLastHeartbeat).Milliseconds()
+	return meta
 }
 
 func (terminal *nativeCodeTerminal) acknowledge(subscriptionID string, sequence uint64) {

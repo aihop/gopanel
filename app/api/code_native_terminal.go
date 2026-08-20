@@ -40,11 +40,18 @@ type nativeCodeTerminal struct {
 	controllerID     string
 	controlExpiresAt time.Time
 	controlTimer     *time.Timer
-	cols             uint16
-	rows             uint16
-	done             chan struct{}
-	lease            *codeExecutionLease
-	executorName     string
+	// 控制权续租的观测量：只统计心跳带来的续租，不含获取控制权那一次。
+	// 租约实测大量「空闲 60 秒自动过期」，但客户端每 15 秒就发一次 ping，
+	// 两者对不上。过期时把这几个值写进审计，用来区分是心跳压根没到，
+	// 还是到了之后突然停了（后台标签页被浏览器节流是头号嫌疑）。
+	controlAcquiredAt    time.Time
+	controlHeartbeats    int
+	controlLastHeartbeat time.Time
+	cols                 uint16
+	rows                 uint16
+	done                 chan struct{}
+	lease                *codeExecutionLease
+	executorName         string
 }
 
 type nativeCodeTerminalManager struct {
