@@ -40,6 +40,7 @@ const pattern = ref("")
 const nodes = ref<StructureTreeOption[]>([])
 const expandedKeys = ref<Array<string | number>>([])
 const selectedKeys = ref<Array<string | number>>(props.selectedPath ? [props.selectedPath] : [])
+const snippetPath = ref("")
 
 const normalizedChangedFiles = computed(() =>
 	props.changedFiles.map(file => file.replaceAll("\\", "/").replace(/^\.\//, "").replace(/^\//, ""))
@@ -126,7 +127,17 @@ const renderLabel = ({ option }: { option: TreeOption }) => {
 		h("span", { class: "structure-edit shrink-0" }, [
 			h(
 				NPopover,
-				{ trigger: "click", placement: "left", showArrow: true, to: "body", style: "padding: 12px;" },
+				{
+					show: snippetPath.value === node.key,
+					trigger: "click",
+					placement: "left",
+					showArrow: true,
+					to: "body",
+					style: "padding: 12px;",
+					onUpdateShow: (show: boolean) => {
+						snippetPath.value = show ? node.key : snippetPath.value === node.key ? "" : snippetPath.value
+					},
+				},
 				{
 					trigger: () =>
 						h(
@@ -146,6 +157,9 @@ const renderLabel = ({ option }: { option: TreeOption }) => {
 							path: node.key,
 							attachToChat: props.attachToChat,
 							onInsert: (snippet: { path: string; startLine: number; endLine: number }) => emit("insert-snippet", snippet),
+							onClose: () => {
+								snippetPath.value = ""
+							},
 						}),
 				},
 			),

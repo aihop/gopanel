@@ -31,7 +31,8 @@ export const codeEditorMessages = {
 			snippetSearchEmpty: "未找到",
 			snippetSearchCount: "{current}/{total}",
 			snippetSearchPrev: "上一个",
-			snippetSearchNext: "下一个"
+			snippetSearchNext: "下一个",
+			closeSnippet: "关闭"
 		}
 	},
 	en: {
@@ -66,7 +67,8 @@ export const codeEditorMessages = {
 			snippetSearchEmpty: "No matches",
 			snippetSearchCount: "{current}/{total}",
 			snippetSearchPrev: "Previous",
-			snippetSearchNext: "Next"
+			snippetSearchNext: "Next",
+			closeSnippet: "Close"
 		}
 	}
 } as const

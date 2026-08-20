@@ -36,6 +36,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
 	insert: [snippet: { path: string; startLine: number; endLine: number }]
+	close: []
 }>()
 
 const { t } = useI18n({ messages: codeEditorMessages })
@@ -127,8 +128,22 @@ watch(searchQuery, () => revealMatch(0))
 
 <template>
   <div class="w-[520px] max-w-[82vw]">
-    <div class="mb-2 truncate text-xs font-medium text-slate-600 dark:text-[var(--n-text-color)]" :title="path">
-      {{ path }}
+    <div class="mb-2 flex items-start gap-2">
+      <div class="min-w-0 flex-1 truncate text-xs font-medium text-slate-600 dark:text-[var(--n-text-color)]" :title="path">
+        {{ path }}
+      </div>
+      <n-button
+        quaternary
+        circle
+        size="tiny"
+        class="shrink-0"
+        :title="t('code.closeSnippet')"
+        @click="emit('close')"
+      >
+        <template #icon>
+          <Icon name="mdi:close" :size="16" />
+        </template>
+      </n-button>
     </div>
     <p class="mb-2 text-[11px] tracking-[0.01em] text-[var(--n-text-color-3)]">
       {{ t("code.snippetSelectHint") }}
