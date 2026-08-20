@@ -52,6 +52,17 @@ describe("conversation session gates", () => {
 		).toEqual(["看图", "好的"])
 	})
 
+	it("连续相同内容的消息只显示一条", () => {
+		expect(
+			visibleConversationThread([
+				{ id: 1, role: "user", content: "修登录", sessionId: 1, taskId: 1, runId: 0, createdAt: "" },
+				{ id: 2, role: "user", content: "修登录", sessionId: 1, taskId: 1, runId: 0, createdAt: "" },
+				{ id: 3, role: "agent", content: "好了", sessionId: 1, taskId: 1, runId: 1, createdAt: "" },
+				{ id: 4, role: "agent", content: "好了", sessionId: 1, taskId: 1, runId: 1, createdAt: "" },
+			]).map(item => item.id),
+		).toEqual([1, 3])
+	})
+
 	it("用户消息靠右，执行结果靠左", () => {
 		expect(isUserConversationMessage("user")).toBe(true)
 		expect(isUserConversationMessage("User")).toBe(true)

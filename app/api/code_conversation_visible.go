@@ -46,5 +46,74 @@ func conversationHistoryMessages(messages []*model.AIMessage) []*model.AIMessage
 		}
 		visible = append(visible, &stored)
 	}
-	return visible
+	return collapseConversationDuplicates(visible)
+}
+
+func collapseConversationDuplicates(messages []*model.AIMessage) []*model.AIMessage {
+	runBacked := make([]*model.AIMessage, 0, len(messages))
+	for _, message := range messages {
+		if message != nil && message.Role != "user" && message.RunID != 0 {
+			runBacked = append(runBacked, message)
+		}
+	}
+	collapsed := make([]*model.AIMessage, 0, len(messages))
+	for _, message := range messages {
+		if shouldDropConversationDuplicate(message, collapsed, runBacked) {
+			continue
+		}
+		collapsed = append(collapsed, message)
+	}
+	return collapsed
+}
+
+func shouldDropConversationDuplicate(message *model.AIMessage, seen, runBacked []*model.AIMessage) bool {
+	content := strings.TrimSpace(message.Content)
+	if message.Role == "user" {
+		for _, existing := range seen {
+			if existing.Role == "user" && strings.TrimSpace(existing.Content) == content && conversationTimesClose(existing, message) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, existing := range runBacked {
+		if existing == message || (existing.ID != 0 && existing.ID == message.ID) {
+			continue
+		}
+		target := strings.TrimSpace(existing.Content)
+		if content == target {
+			return message.RunID == 0 || message.NativeID != ""
+		}
+		if message.RunID == 0 && isConversationFragment(content, target) {
+			return true
+		}
+	}
+	if len(seen) > 0 {
+		last := seen[len(seen)-1]
+		if last.Role != "user" && strings.TrimSpace(last.Content) == content {
+			return true
+		}
+	}
+	return false
+}
+
+func isConversationFragment(fragment, complete string) bool {
+	if fragment == "" || complete == "" || fragment == complete {
+		return fragment == complete
+	}
+	if strings.HasPrefix(complete, fragment) {
+		return true
+	}
+	return len(fragment) >= 24 && strings.Contains(complete, fragment)
+}
+
+func conversationTimesClose(left, right *model.AIMessage) bool {
+	if left.CreatedAt.IsZero() || right.CreatedAt.IsZero() {
+		return true
+	}
+	difference := left.CreatedAt.Sub(right.CreatedAt)
+	if difference < 0 {
+		difference = -difference
+	}
+	return difference <= nativeHistoryDuplicateWindow
 }

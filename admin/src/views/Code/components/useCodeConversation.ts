@@ -44,7 +44,16 @@ export function useCodeConversation(sessionId: () => number | null, taskId: () =
 		const items = visibleConversationThread(messages.value)
 		const live = streaming.value
 		if (!live?.content) return items
-		if (items.some(item => item.role !== "user" && live.runId && item.runId === live.runId)) return items
+		if (
+			items.some(item => {
+				if (item.role === "user") return false
+				if (live.runId && item.runId === live.runId) return true
+				const content = item.content || ""
+				return content === live.content || content.startsWith(live.content) || live.content.startsWith(content)
+			})
+		) {
+			return items
+		}
 		return [
 			...items,
 			{

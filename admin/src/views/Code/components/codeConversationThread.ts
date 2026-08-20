@@ -48,14 +48,18 @@ export function stripInjectedConversationPrompt(content: string) {
 }
 
 export function visibleConversationThread(messages: AIMessage[]) {
-	return messages.flatMap(message => {
+	const visible: AIMessage[] = []
+	for (const message of messages) {
 		const role = message.role?.trim()
-		if (role === "system" || role === "developer") return []
-		if (role !== "user") return [message]
-		const content = stripInjectedConversationPrompt(message.content || "")
-		if (!content) return []
-		return [{ ...message, content }]
-	})
+		if (role === "system" || role === "developer") continue
+		const content = role === "user" ? stripInjectedConversationPrompt(message.content || "") : message.content || ""
+		if (!content) continue
+		const item = role === "user" ? { ...message, content } : message
+		const last = visible[visible.length - 1]
+		if (last && last.role === item.role && (last.content || "") === content) continue
+		visible.push(item)
+	}
+	return visible
 }
 
 export function conversationRunForMessage(runs: CodeExecutionRun[], runId: number | undefined) {

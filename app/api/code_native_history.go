@@ -206,11 +206,15 @@ func persistNativeCodexMessages(sessionID uint, messages []*model.AIMessage) err
 	if sessionID == 0 || len(messages) == 0 || global.DB == nil {
 		return nil
 	}
-	var existingIDs []string
-	if err := global.DB.Model(&model.AIMessage{}).
-		Where("session_id = ? AND native_id <> ''", sessionID).
-		Pluck("native_id", &existingIDs).Error; err != nil {
+	var existingMessages []*model.AIMessage
+	if err := global.DB.Where("session_id = ?", sessionID).Find(&existingMessages).Error; err != nil {
 		return err
+	}
+	existingIDs := make([]string, 0, len(existingMessages))
+	for _, existing := range existingMessages {
+		if existing != nil && strings.TrimSpace(existing.NativeID) != "" {
+			existingIDs = append(existingIDs, existing.NativeID)
+		}
 	}
 	known := make(map[string]struct{}, len(existingIDs))
 	for _, id := range existingIDs {
@@ -224,10 +228,14 @@ func persistNativeCodexMessages(sessionID uint, messages []*model.AIMessage) err
 		if _, exists := known[message.NativeID]; exists {
 			continue
 		}
+		if isDuplicateHistoryMessage(existingMessages, message) {
+			continue
+		}
 		known[message.NativeID] = struct{}{}
 		stored := *message
 		stored.ID = 0
 		pending = append(pending, &stored)
+		existingMessages = append(existingMessages, &stored)
 	}
 	if len(pending) == 0 {
 		return nil
@@ -282,6 +290,9 @@ func isDuplicateHistoryMessage(databaseMessages []*model.AIMessage, candidate *m
 		}
 		if stripInjectedConversationPrompt(message.Content) != stripInjectedConversationPrompt(candidate.Content) {
 			continue
+		}
+		if message.Role != "user" {
+			return true
 		}
 		if message.CreatedAt.IsZero() || candidate.CreatedAt.IsZero() {
 			return true
