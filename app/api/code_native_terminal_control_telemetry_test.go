@@ -66,3 +66,50 @@ func TestTakeControlResetsHeartbeatTelemetry(t *testing.T) {
 		t.Fatal("换控制者后上次心跳时间应清空")
 	}
 }
+
+// 租约必须扛得住浏览器把后台标签页定时器节流到分钟级：15 秒的 ping 被拉到约
+// 60 秒时仍要能续上。定成 60 秒时实测就是在这里被掐掉的，改动这个常量前先看
+// 上面那段注释里的实测数据。
+func TestControlLeaseSurvivesThrottledHeartbeat(t *testing.T) {
+	const throttledHeartbeatGap = 60 * time.Second
+	if nativeTerminalControlLease <= throttledHeartbeatGap {
+		t.Fatalf("租约 %v 必须大于被节流后的心跳间隔 %v，否则心跳永远追不上",
+			nativeTerminalControlLease, throttledHeartbeatGap)
+	}
+
+	// 光是「大于」还不够，要留出余量：节流后的间隔本身会抖动。
+	if nativeTerminalControlLease < 2*throttledHeartbeatGap {
+		t.Fatalf("租约 %v 至少要留出两倍余量（%v），否则抖动一下还是会掉",
+			nativeTerminalControlLease, 2*throttledHeartbeatGap)
+	}
+
+	// 另一头也要卡住：租约越长，控制方硬断线后别人等得越久。
+	if nativeTerminalControlLease > 5*time.Minute {
+		t.Fatalf("租约 %v 过长，控制方硬断线后接管等待不可接受", nativeTerminalControlLease)
+	}
+}
+
+// 续租必须真的把过期时间往后推，而不是只重排计时器。
+func TestRenewControlLeaseExtendsExpiry(t *testing.T) {
+	terminal := &nativeCodeTerminal{
+		subscribers:  map[string]*nativeTerminalSubscription{"a": {}},
+		controllerID: "a",
+	}
+	terminal.controlExpiresAt = time.Now().Add(10 * time.Second)
+	before := terminal.controlExpiresAt
+
+	if !terminal.renewControlLease("a") {
+		t.Fatal("控制方续租应当成功")
+	}
+	if !terminal.controlExpiresAt.After(before) {
+		t.Fatal("续租后过期时间必须往后推")
+	}
+	if terminal.controlHeartbeats != 1 {
+		t.Fatalf("心跳计数应为 1，实际 %d", terminal.controlHeartbeats)
+	}
+
+	// 非控制方的 ping 不能续租，否则只读连接能把控制权钉死在别人手上。
+	if terminal.renewControlLease("b") {
+		t.Fatal("非控制方不该能续租")
+	}
+}

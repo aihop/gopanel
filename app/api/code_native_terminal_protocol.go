@@ -22,7 +22,17 @@ func nativeTerminalConnectionErrorPayload(err error) []byte {
 	return payload
 }
 
-const nativeTerminalControlLease = 60 * time.Second
+// 控制租约时长。客户端每 15 秒发一次 ping 续租，正常情况下远远够用。
+//
+// 定成 60 秒时实测大量「空闲自动过期」：审计里能看到续租正常走三分钟后
+// 突然中断整整 60 秒才过期，随即客户端在 0 秒内重新夺回——说明连接一直活着，
+// 只是心跳没送到。浏览器会把后台标签页的定时器节流到分钟级，15 秒的 ping
+// 被拉长到约 60 秒，刚好和租约赛跑。
+//
+// 缩短心跳没有用：被节流后 5 秒和 15 秒一样会被拉到约 60 秒。只能放宽租约去
+// 吸收这个间隔。代价是控制方硬断线（没走正常断开流程）时，别人要多等一会儿
+// 才能接管；正常断开会在 unsubscribe 里立刻清掉控制权，不受影响。
+const nativeTerminalControlLease = 3 * time.Minute
 
 type nativeTerminalChunk struct {
 	Sequence uint64
