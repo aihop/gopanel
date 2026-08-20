@@ -22,3 +22,14 @@ export function defaultCodeWorkspaceView(options: { isProjectTerminal: boolean; 
 	}
 	return { mode: "conversation", terminalMounted: false }
 }
+
+/** 首页工作台默认模式：名单没回来前也不要先挂 PTY。 */
+export function defaultDashboardWorkbenchMode(options: {
+	executorId: string
+	structuredTurn: boolean
+	executorsLoaded: boolean
+}): CodeWorkspaceMode {
+	if (options.executorId.trim() === "terminal") return "terminal"
+	if (!options.executorsLoaded || options.structuredTurn) return "conversation"
+	return "terminal"
+}

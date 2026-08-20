@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
 	CODE_STRUCTURED_TURN_CAPABILITY,
 	defaultCodeWorkspaceView,
+	defaultDashboardWorkbenchMode,
 	executorSupportsStructuredTurn,
 	findExecutorById,
 } from "./codeStructuredTurn"
@@ -45,5 +46,25 @@ describe("defaultCodeWorkspaceView", () => {
 			mode: "terminal",
 			terminalMounted: true,
 		})
+	})
+})
+
+describe("defaultDashboardWorkbenchMode", () => {
+	it("普通终端会话仍打开 CLI", () => {
+		expect(
+			defaultDashboardWorkbenchMode({ executorId: "terminal", structuredTurn: false, executorsLoaded: true }),
+		).toBe("terminal")
+	})
+
+	it("执行器列表未返回时先走对话，避免 Grok TUI 抢先启动", () => {
+		expect(
+			defaultDashboardWorkbenchMode({ executorId: "grok", structuredTurn: false, executorsLoaded: false }),
+		).toBe("conversation")
+	})
+
+	it("有 structured_turn 时默认对话", () => {
+		expect(
+			defaultDashboardWorkbenchMode({ executorId: "codex", structuredTurn: true, executorsLoaded: true }),
+		).toBe("conversation")
 	})
 })

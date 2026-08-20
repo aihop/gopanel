@@ -9,10 +9,9 @@ import type { CodeProjectDropPosition } from "../codeProjectOrder"
 import { getAITasks, setAITaskArchived } from "@/api/modules/code"
 import Icon from "@/components/common/Icon.vue"
 import { codeProjectMessages } from "@/i18n/locales/codeProject"
-import { excludeRecentCodeDashboardTasks, mergeCodeDashboardTasks, recentCodeDashboardTasks, sortCodeTasksStably } from "../codeDashboardBuckets"
+import { mergeCodeDashboardTasks, sortCodeTasksStably } from "../codeDashboardBuckets"
 import { useCodeTaskPolling } from "../useCodeTaskPolling"
 import CodeDashboardProjectList from "./CodeDashboardProjectList.vue"
-import CodeDashboardFocusTasks from "./CodeDashboardFocusTasks.vue"
 import CodeDashboardArchivedTasks from "./CodeDashboardArchivedTasks.vue"
 import SessionHistoryDrawer from "./SessionHistoryDrawer.vue"
 import CodeTaskDetailPane from "./CodeTaskDetailPane.vue"
@@ -111,8 +110,6 @@ const projectNameById = computed(() => {
 })
 
 const allTasks = computed(() => mergeCodeDashboardTasks(tasks.value, recentTaskCandidates.value))
-const recentTasks = computed(() => recentCodeDashboardTasks(recentTaskCandidates.value))
-const projectTasks = computed(() => excludeRecentCodeDashboardTasks(allTasks.value, recentTasks.value))
 
 // 仍按稳定规则排序，不按状态拆成多个区块。
 // 任务状态变化时只更新行内徽标，不会在“运行中/今日完成”之间跳来跳去。
@@ -160,15 +157,6 @@ watch(
 	},
 	{ immediate: true },
 )
-
-const selectRecentTask = (task: CodeTaskListItem) => {
-	selectedTaskId.value = task.id
-}
-
-const renameTask = (taskId: number, title: string) => {
-	tasks.value = tasks.value.map(task => (task.id === taskId ? { ...task, title } : task))
-	recentTaskCandidates.value = recentTaskCandidates.value.map(task => (task.id === taskId ? { ...task, title } : task))
-}
 
 const archiving = ref<number | null>(null)
 
@@ -299,31 +287,22 @@ const activateCreatedTask = async (taskId: number) => {
       </div>
     </n-alert>
 
-    <!-- 主从：左边所有任务，右边选中任务的终端。切任务不跳页，只换右边。 -->
+    <!-- 主从：左边会话轨，右边就是工作台。切任务不跳页。 -->
     <div
       class="dashboard-workbench grid min-h-0 flex-1 overflow-hidden border-t "
       :class="[
         listCollapsed
           ? 'grid-cols-1 grid-rows-1'
-          : 'dashboard-workbench--split grid-cols-1 grid-rows-[minmax(220px,2fr)_minmax(260px,3fr)] xl:grid-rows-1',
+          : 'dashboard-workbench--split grid-cols-1 grid-rows-[minmax(180px,1fr)_minmax(320px,2fr)] lg:grid-rows-1',
       ]"
-      :style="{ '--dashboard-sidebar-width': '280px' }"
+      :style="{ '--dashboard-sidebar-width': '260px' }"
     >
       <section
         v-if="!listCollapsed"
         class="dashboard-panel flex min-h-0 flex-col overflow-hidden"
       >
-        <CodeDashboardFocusTasks
-          v-if="recentTasks.length"
-          :projects="projects"
-          :tasks="recentTasks"
-          :selected-task-id="selectedTaskId"
-          @select="selectRecentTask"
-          @renamed="renameTask"
-        />
         <n-scrollbar class="min-h-0 flex-1">
-          <!-- 左列独立滚动，所以这里的密度不吃终端高度，可以给足 -->
-          <div class="py-2">
+          <div class="py-1">
             <div
               v-if="!visibleTasks.length && !projects.length"
               class="flex min-h-[200px] items-center justify-center"
@@ -348,8 +327,8 @@ const activateCreatedTask = async (taskId: number) => {
             <CodeDashboardProjectList
               v-else
               :projects="projects"
-              :tasks="projectTasks"
-              :empty-label="recentTasks.length ? t('code.dashboardNoMoreProjectTasks') : t('code.dashboardNoProjectTasks')"
+              :tasks="visibleTasks"
+              :empty-label="t('code.dashboardNoProjectTasks')"
               :selected-task-id="selectedTaskId"
               :archived="false"
               :archiving-task-id="archiving"
@@ -365,10 +344,6 @@ const activateCreatedTask = async (taskId: number) => {
         </n-scrollbar>
       </section>
 
-      <!--
-        列表折叠后左边就没有「现在看的是哪条」了，这时才让详情区补一条紧凑的头。
-        展开时不显示 —— 那会和选中行的信息重复，也白吃终端高度。
-      -->
       <CodeTaskDetailPane
         :task="pendingSession ? null : selectedTask"
         :session="pendingSession"
@@ -377,8 +352,6 @@ const activateCreatedTask = async (taskId: number) => {
           : selectedTask
             ? projectNameById.get(selectedTask.projectId) || ''
             : ''"
-        :show-header="listCollapsed"
-        @open-workspace="emit('openTask', $event)"
         @open-history="showHistoryDrawer = true"
         @task-created="activateCreatedTask"
       />
@@ -398,7 +371,7 @@ const activateCreatedTask = async (taskId: number) => {
 	background: color-mix(in srgb, var(--n-color) 97%, transparent);
 	border-bottom: 1px solid var(--n-border-color);
 }
-@media (min-width: 1280px) {
+@media (min-width: 1024px) {
 	.dashboard-workbench--split {
 		grid-template-columns: var(--dashboard-sidebar-width) minmax(0, 1fr);
 	}

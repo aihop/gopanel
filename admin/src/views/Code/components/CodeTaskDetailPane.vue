@@ -6,53 +6,62 @@ import type { CodeTaskListItem } from "@/api/interface/codeTasks"
 import { getCodeExecutors } from "@/api/modules/code"
 import Icon from "@/components/common/Icon.vue"
 import { codeProjectMessages } from "@/i18n/locales/codeProject"
-import { executorSupportsStructuredTurn, findExecutorById } from "../codeStructuredTurn"
+import { defaultDashboardWorkbenchMode, executorSupportsStructuredTurn, findExecutorById } from "../codeStructuredTurn"
+import type { CodeWorkspaceMode } from "../codeStructuredTurn"
 import { useCodeWorkspaceFullscreen } from "../useCodeWorkspaceFullscreen"
 import CodeConversationPanel from "./CodeConversationPanel.vue"
+import CodeGitReview from "./CodeGitReview.vue"
 import CodeProjectIdentity from "./CodeProjectIdentity.vue"
+import CodeTaskDeliveryButton from "./CodeTaskDeliveryButton.vue"
 import CodeTerminal from "./CodeTerminal.vue"
+import ProjectStructurePanel from "./ProjectStructurePanel.vue"
+import SessionFileEditor from "./SessionFileEditor.vue"
 import TaskStatusBadge from "./TaskStatusBadge.vue"
+import WorkspaceModeSwitch from "./WorkspaceModeSwitch.vue"
 import { CODE_TERMINAL_POOL_SIZE, codeTerminalIdentity } from "./codeTerminalSession"
 
 const props = defineProps<{
 	task: CodeTaskListItem | null
 	session?: CodeSession | null
 	projectName?: string
-	showHeader?: boolean
 }>()
 const emit = defineEmits<{
-	openWorkspace: [task: CodeTaskListItem]
 	openHistory: [task: CodeTaskListItem]
 	taskCreated: [taskId: number]
 }>()
 const { t } = useI18n({ messages: codeProjectMessages })
-
-// 复用工作台那套全屏（含 Escape 退出），不另写一份。
 const { isWorkspaceFullscreen, fullscreenLabel, toggleWorkspaceFullscreen } = useCodeWorkspaceFullscreen(t)
 
-// 和工作台用同一套身份算法，但两边各有各的 KeepAlive 树——key 相同也不共享实例，
-// 面板和工作台各有自己的 xterm 缓存；隐藏实例会释放控制并断开，重新显示时增量接回，
-// 避免两棵 KeepAlive 树同时占着同一个 PTY 的控制权。
 const terminalIdentity = computed(() =>
 	codeTerminalIdentity(props.session?.id || props.task?.sessionId || null, props.task?.id || null),
 )
 const sessionId = computed(() => props.session?.id || props.task?.sessionId || null)
 const executorId = computed(() => props.session?.agentName || props.task?.agentName || "")
 const executors = ref<CodeExecutor[]>([])
-const showNativeCli = ref(false)
+const workspaceMode = ref<CodeWorkspaceMode>("conversation")
+const selectedFile = ref({ path: "", extension: "" })
+const activeFilePath = ref("")
 const structuredTurn = computed(() =>
 	executorSupportsStructuredTurn(findExecutorById(executors.value, executorId.value)),
 )
-const showConversation = computed(() => {
-	if (showNativeCli.value || !executorId.value) return false
-	// 执行器列表还没回来时先不挂 PTY，避免 Grok 详情一打开就拉起它自己的 TUI。
-	if (!executors.value.length) return executorId.value !== "terminal"
-	return structuredTurn.value
-})
+const defaultMode = computed(() =>
+	defaultDashboardWorkbenchMode({
+		executorId: executorId.value,
+		structuredTurn: structuredTurn.value,
+		executorsLoaded: executors.value.length > 0,
+	}),
+)
+const executorLabel = computed(() =>
+	[props.task?.summary.executor || executorId.value, props.task?.summary.model].filter(Boolean).join(" · "),
+)
 
-watch(executorId, () => {
-	showNativeCli.value = false
-})
+const applyDefaultMode = () => {
+	workspaceMode.value = defaultMode.value
+	selectedFile.value = { path: "", extension: "" }
+	activeFilePath.value = ""
+}
+
+watch(sessionId, applyDefaultMode)
 onMounted(async () => {
 	try {
 		const response = await getCodeExecutors()
@@ -60,17 +69,16 @@ onMounted(async () => {
 	} catch {
 		void 0
 	}
+	applyDefaultMode()
 })
+
+const openFile = (file: { path: string; extension: string }) => {
+	workspaceMode.value = "editor"
+	selectedFile.value = file
+}
 </script>
 
 <template>
-  <!--
-		展开状态下刻意没有头部。任务标题、项目、状态、token、diff 在左边选中的那一行上全都有，
-		在终端上面再摆一条只是把同样的信息讲第二遍，还要吃掉 ~64px 的终端高度。
-		只有左边列表被折叠起来、看不到选中行时，才补一条紧凑的单行头。
-		终端自己的工具条（codex 状态 / 接管终端 / 重连）保留 —— 那些是操作，不是重复的状态。
-		全屏按钮浮在右上角，不占垂直空间。
-	-->
   <section
     class="detail-pane flex min-h-0 flex-col overflow-hidden"
     :class="isWorkspaceFullscreen ? 'detail-pane--fullscreen' : ''"
@@ -87,59 +95,44 @@ onMounted(async () => {
     </div>
 
     <template v-else>
-      <header
-        v-if="showHeader"
-        class="detail-pane__header flex shrink-0 items-center gap-2 px-4 py-2"
-      >
-        <Icon
-          v-if="task?.agentName === 'terminal'"
-          name="mdi:console-line"
-          :size="14"
-          class="shrink-0 text-slate-400"
-        />
-        <span
-          class="truncate text-sm font-semibold text-[var(--n-text-color)]"
-          :title="task?.title || session?.title"
-        >
-          {{ task?.title || session?.title }}
-        </span>
-        <TaskStatusBadge
-          v-if="task"
-          :status="task.status"
-          class="shrink-0"
-        />
-        <CodeProjectIdentity
-          v-if="projectName"
-          class="shrink-0 text-[11px] text-[var(--n-text-color-3)]"
-          :project-id="task?.projectId || session?.projectId || 0"
-          :name="projectName"
-        />
-      </header>
-
-      <div
-        class="relative min-h-0 flex-1"
-        :class="showConversation ? 'bg-white' : 'bg-[#1e1e1e]'"
-      >
-        <!-- 对话和全屏都属于当前执行任务，浮在内容上避免占用高度。 -->
-        <div
-          class="detail-pane__floating absolute right-3 top-2 z-[2] flex items-center gap-1"
-          :class="{ 'detail-pane__floating--light': showConversation }"
-        >
-          <n-button
-            v-if="structuredTurn"
-            quaternary
-            circle
-            size="tiny"
-            :title="t(showNativeCli ? 'code.conversationMode' : 'code.advancedTerminal')"
-            @click="showNativeCli = !showNativeCli"
+      <header class="detail-pane__header flex shrink-0 flex-wrap items-center gap-2 px-3 py-2">
+        <div class="flex min-w-0 flex-1 items-center gap-2">
+          <CodeProjectIdentity
+            v-if="projectName"
+            class="shrink-0 text-[11px] text-[var(--n-text-color-3)]"
+            :project-id="task?.projectId || session?.projectId || 0"
+            :name="projectName"
+          />
+          <span
+            class="min-w-0 truncate text-sm font-semibold text-[var(--n-text-color)]"
+            :title="task?.title || session?.title"
           >
-            <template #icon>
-              <Icon
-                :name="showNativeCli ? 'mdi:message-outline' : 'mdi:console-line'"
-                :size="16"
-              />
-            </template>
-          </n-button>
+            {{ task?.title || session?.title }}
+          </span>
+          <TaskStatusBadge
+            v-if="task"
+            :status="task.status"
+            class="shrink-0"
+          />
+          <span
+            v-if="executorLabel"
+            class="hidden min-w-0 truncate text-[11px] text-[var(--n-text-color-3)] lg:inline"
+            :title="executorLabel"
+          >
+            {{ executorLabel }}
+          </span>
+        </div>
+        <div class="flex min-w-0 flex-wrap items-center gap-2">
+          <CodeTaskDeliveryButton
+            v-if="sessionId && executorId !== 'terminal'"
+            :session-id="sessionId"
+            compact
+          />
+          <WorkspaceModeSwitch
+            :value="workspaceMode"
+            :show-conversation="structuredTurn || defaultMode === 'conversation'"
+            @update:value="workspaceMode = $event"
+          />
           <n-button
             v-if="task && task.agentName !== 'terminal'"
             quaternary
@@ -170,23 +163,72 @@ onMounted(async () => {
             </template>
           </n-button>
         </div>
+      </header>
 
+      <div
+        v-show="workspaceMode === 'conversation'"
+        class="min-h-0 flex-1 bg-white"
+      >
         <CodeConversationPanel
-          v-if="showConversation && sessionId"
+          v-if="sessionId"
           :session-id="sessionId"
           :task-id="task?.id || null"
           @task-created="emit('taskCreated', $event)"
         />
-        <KeepAlive v-else :max="CODE_TERMINAL_POOL_SIZE">
+      </div>
+
+      <div
+        v-show="workspaceMode === 'terminal'"
+        class="min-h-0 flex-1 bg-[#1e1e1e]"
+      >
+        <KeepAlive :max="CODE_TERMINAL_POOL_SIZE">
           <CodeTerminal
+            v-if="workspaceMode === 'terminal'"
             :key="terminalIdentity"
             :task-id="task?.id || null"
             :session-id="sessionId"
-            reserve-top-right-actions
+            auto-take-control
             @task-created="emit('taskCreated', $event)"
-            @new-session="task && emit('openWorkspace', task)"
           />
         </KeepAlive>
+      </div>
+
+      <div
+        v-show="workspaceMode === 'editor'"
+        class="flex min-h-0 flex-1 overflow-hidden bg-white"
+      >
+        <div class="min-w-0 flex-1">
+          <SessionFileEditor
+            v-if="sessionId"
+            :session-id="sessionId"
+            :path="selectedFile.path"
+            :extension="selectedFile.extension"
+            @active-path="activeFilePath = $event"
+          />
+        </div>
+        <aside
+          v-if="sessionId"
+          class="hidden h-full w-72 shrink-0 border-l border-slate-200 lg:block"
+        >
+          <ProjectStructurePanel
+            :key="sessionId"
+            :session-id="sessionId"
+            :selected-path="activeFilePath"
+            @select-file="openFile"
+          />
+        </aside>
+      </div>
+
+      <div
+        v-show="workspaceMode === 'changes'"
+        class="min-h-0 flex-1 overflow-hidden bg-white"
+      >
+        <CodeGitReview
+          v-if="sessionId"
+          :session-id="sessionId"
+          :active="workspaceMode === 'changes'"
+          @open-file="openFile"
+        />
       </div>
     </template>
   </section>
@@ -207,26 +249,5 @@ onMounted(async () => {
 	border-radius: 0;
 	box-shadow: none;
 	inset: 0;
-}
-
-/* 浮在终端上，所以要自己有底色才看得清，否则压在深色输出上 */
-.detail-pane__floating :deep(.n-button) {
-	color: rgb(203 213 225);
-	background: rgb(30 41 59 / 72%);
-}
-
-.detail-pane__floating :deep(.n-button:hover) {
-	color: #fff;
-	background: rgb(51 65 85 / 92%);
-}
-
-.detail-pane__floating--light :deep(.n-button) {
-	color: rgb(51 65 85);
-	background: rgb(255 255 255 / 86%);
-}
-
-.detail-pane__floating--light :deep(.n-button:hover) {
-	color: rgb(15 23 42);
-	background: #fff;
 }
 </style>
