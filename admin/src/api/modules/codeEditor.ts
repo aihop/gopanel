@@ -41,8 +41,8 @@ export function getCodeSessionStructure(sessionId: number, path = "") {
 	return http.get<CodeStructureResult>(`/code/sessions/${sessionId}/structure`, { path }, { timeout: 10000 })
 }
 
-export function searchCodeSessionStructure(sessionId: number, query: string) {
-	return http.get<CodeStructureSearchResult>(`/code/sessions/${sessionId}/structure/search`, { q: query }, { timeout: 15000 })
+export function searchCodeSessionStructure(sessionId: number, query: string, path = "") {
+	return http.get<CodeStructureSearchResult>(`/code/sessions/${sessionId}/structure/search`, { q: query, path }, { timeout: 20000 })
 }
 
 export function getCodeSessionFile(sessionId: number, path: string) {

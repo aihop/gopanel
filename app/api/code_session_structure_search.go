@@ -14,17 +14,21 @@ import (
 )
 
 const (
-	maxAIStructureSearchHits     = 40
-	maxAIStructureSearchFiles    = 1500
+	maxAIStructureSearchHits     = 80
+	maxAIStructureSearchFiles    = 8000
 	maxAIStructureSearchFileSize = 256 * 1024
 	minAIStructureSearchRunes    = 2
 )
 
 var generatedAIStructureDirNames = map[string]struct{}{
-	".git": {}, ".cache": {}, ".gradle": {}, ".next": {}, ".nuxt": {}, ".output": {},
+	".cache": {}, ".gradle": {}, ".next": {}, ".nuxt": {}, ".output": {},
 	".parcel-cache": {}, ".pnpm-store": {}, ".svelte-kit": {}, ".turbo": {}, ".venv": {},
 	".vite": {}, "__pycache__": {}, "build": {}, "coverage": {}, "dist": {},
 	"node_modules": {}, "out": {}, "Pods": {}, "target": {}, "tmp": {}, "vendor": {},
+}
+
+func skipAIStructureGitMetadata(name string) bool {
+	return name == ".git"
 }
 
 var generatedAIStructureFileNames = map[string]struct{}{
@@ -60,8 +64,10 @@ type codeStructureSearchResult struct {
 }
 
 func skipGeneratedAIStructureDir(name string) bool {
-	_, ignored := ignoredAIStructureNames[name]
-	if ignored {
+	if skipAIStructureGitMetadata(name) {
+		return true
+	}
+	if name == ".gopanel-project.json" {
 		return true
 	}
 	_, generated := generatedAIStructureDirNames[name]
@@ -100,15 +106,18 @@ func structureSearchPreview(content, query string) (int, string) {
 	return 1 + strings.Count(content[:at], "\n"), preview
 }
 
-func searchAISessionStructure(workDir, query string, sourceDirs []string) (codeStructureSearchResult, error) {
+func searchAISessionStructure(workDir, query, relativePath string, sourceDirs []string) (codeStructureSearchResult, error) {
 	query = strings.TrimSpace(query)
 	result := codeStructureSearchResult{Query: query, Hits: []codeStructureSearchHit{}}
 	if utf8.RuneCountInString(query) < minAIStructureSearchRunes {
 		return result, nil
 	}
-	root, _, roots, err := resolveAIStructurePath(workDir, "", sourceDirs)
+	root, startRel, roots, err := resolveAIStructurePath(workDir, relativePath, sourceDirs)
 	if err != nil {
 		return result, err
+	}
+	if startRel == "." {
+		startRel = ""
 	}
 	scanned := 0
 	var walk func(dir, rel string) error
@@ -126,6 +135,9 @@ func searchAISessionStructure(workDir, query string, sourceDirs []string) (codeS
 			childRel := name
 			if rel != "" {
 				childRel = path.Join(rel, name)
+			}
+			if skipAIStructureGitMetadata(name) {
+				continue
 			}
 			if skipGeneratedAIStructureDir(name) {
 				continue
@@ -186,7 +198,7 @@ func searchAISessionStructure(workDir, query string, sourceDirs []string) (codeS
 		}
 		return nil
 	}
-	if err := walk(root, ""); err != nil && err != fs.SkipAll {
+	if err := walk(root, startRel); err != nil && err != fs.SkipAll {
 		return result, err
 	}
 	sort.SliceStable(result.Hits, func(left, right int) bool {
@@ -203,7 +215,7 @@ func GetAISessionStructureSearch(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	result, err := searchAISessionStructure(workDir, c.Query("q"), sourceDirs)
+	result, err := searchAISessionStructure(workDir, c.Query("q"), c.Query("path"), sourceDirs)
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}

@@ -30,7 +30,7 @@ func TestSearchAISessionStructureFindsNameAndContent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result, err := searchAISessionStructure(workDir, "Login", nil)
+	result, err := searchAISessionStructure(workDir, "Login", "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +38,7 @@ func TestSearchAISessionStructureFindsNameAndContent(t *testing.T) {
 		t.Fatalf("hits = %#v", result.Hits)
 	}
 
-	contentHits, err := searchAISessionStructure(workDir, "func Login", nil)
+	contentHits, err := searchAISessionStructure(workDir, "func Login", "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,9 +48,53 @@ func TestSearchAISessionStructureFindsNameAndContent(t *testing.T) {
 }
 
 func TestSearchAISessionStructureSkipsShortQuery(t *testing.T) {
-	result, err := searchAISessionStructure(t.TempDir(), "a", nil)
+	result, err := searchAISessionStructure(t.TempDir(), "a", "", nil)
 	if err != nil || len(result.Hits) != 0 {
 		t.Fatalf("short query should not search: %#v %v", result, err)
+	}
+}
+
+func TestSearchAISessionStructureWalksNestedGitRepos(t *testing.T) {
+	workDir := t.TempDir()
+	nested := filepath.Join(workDir, "libs", "sdk")
+	if err := os.MkdirAll(filepath.Join(nested, ".git"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(nested, ".git", "HEAD"), []byte("ref: refs/heads/main\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(nested, "client.go"), []byte("package sdk\nfunc NestedUniqueToken() {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	result, err := searchAISessionStructure(workDir, "NestedUniqueToken", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Hits) != 1 || result.Hits[0].Path != "libs/sdk/client.go" || result.Hits[0].Kind != "content" {
+		t.Fatalf("nested git working tree should still be searched: %#v", result.Hits)
+	}
+}
+
+func TestSearchAISessionStructureCanStartFromSelectedDirectory(t *testing.T) {
+	workDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(workDir, "a"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(workDir, "b"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workDir, "a", "one.go"), []byte("package a\nfunc ScopeToken() {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workDir, "b", "two.go"), []byte("package b\nfunc ScopeToken() {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	result, err := searchAISessionStructure(workDir, "ScopeToken", "b", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Hits) != 1 || result.Hits[0].Path != "b/two.go" {
+		t.Fatalf("search should stay under the selected directory: %#v", result.Hits)
 	}
 }
 

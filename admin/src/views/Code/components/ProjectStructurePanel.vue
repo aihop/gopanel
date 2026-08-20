@@ -47,6 +47,7 @@ const searchLoading = ref(false)
 const searchTruncated = ref(false)
 const searchSnippetPath = ref("")
 const searchSnippetLine = ref(0)
+const searchRoot = ref("")
 const searching = computed(() => pattern.value.trim().length >= 2)
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -178,7 +179,7 @@ const renderLabel = ({ option }: { option: TreeOption }) => {
 const runStructureSearch = async (query: string) => {
 	searchLoading.value = true
 	try {
-		const response = await searchCodeSessionStructure(props.sessionId, query)
+		const response = await searchCodeSessionStructure(props.sessionId, query, searchRoot.value)
 		if (pattern.value.trim() !== query) return
 		searchHits.value = response.data.hits || []
 		searchTruncated.value = Boolean(response.data.truncated)
@@ -192,7 +193,10 @@ const runStructureSearch = async (query: string) => {
 const openSearchHit = (hit: CodeStructureSearchHit) => {
 	selectedKeys.value = [hit.path]
 	emit("select-file", { path: hit.path, extension: hit.extension || "", isDir: hit.isDir })
-	if (hit.isDir) return
+	if (hit.isDir) {
+		searchRoot.value = hit.path
+		return
+	}
 	searchSnippetPath.value = hit.path
 	searchSnippetLine.value = hit.line || 0
 	snippetPath.value = ""
@@ -200,6 +204,7 @@ const openSearchHit = (hit: CodeStructureSearchHit) => {
 
 const selectFile = (node: StructureTreeOption) => {
 	selectedKeys.value = [node.key]
+	searchRoot.value = node.isDir ? node.key : ""
 	emit("select-file", {
 		path: node.key,
 		extension: node.isDir ? "" : node.label.split(".").pop() || "",
@@ -227,8 +232,8 @@ watch(
 	}
 )
 watch(
-	() => pattern.value.trim(),
-	query => {
+	[() => pattern.value.trim(), searchRoot],
+	([query]) => {
 		if (searchTimer) clearTimeout(searchTimer)
 		if (query.length < 2) {
 			searchHits.value = []
