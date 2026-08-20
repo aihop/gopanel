@@ -32,25 +32,16 @@ func conversationAssistantUpdate(executorID string, event map[string]any) (text 
 	if text, replace, handled := conversationAssistantStreamEvent(event); handled {
 		return text, replace
 	}
+	if text, replace, handled := conversationCodexAssistantUpdate(event); handled {
+		return text, replace
+	}
 	switch executorID {
 	case "grok":
 		if event["type"] == "text" {
 			text, _ = event["data"].(string)
 		}
 	case "codex":
-		eventType, _ := event["type"].(string)
-		if eventType == "item.delta" {
-			if delta, ok := event["delta"].(string); ok {
-				return delta, false
-			}
-			return firstCodeStringOrEmpty(codeEventMap(event["delta"]), "text"), false
-		}
-		item := codeEventMap(event["item"])
-		if item["type"] != "agent_message" {
-			return "", false
-		}
-		text, _ = item["text"].(string)
-		return text, eventType == "item.completed" || eventType == "item.updated"
+		return "", false
 	case "claude":
 		text, _ = event["result"].(string)
 		return text, text != ""
@@ -98,6 +89,65 @@ func conversationAssistantStreamEvent(event map[string]any) (string, bool, bool)
 		return firstCodeStringOrEmpty(codeEventMap(event["delta"]), "text"), false, true
 	default:
 		return "", false, false
+	}
+}
+
+func conversationCodexAssistantUpdate(event map[string]any) (string, bool, bool) {
+	eventType, _ := event["type"].(string)
+	item := codeEventMap(event["item"])
+	if firstCodeStringOrEmpty(item, "type") == "agent_message" {
+		text := firstCodeStringOrEmpty(item, "text")
+		if text == "" {
+			text = assistantContentList(item["content"])
+		}
+		if text == "" {
+			return "", false, eventType == "item.started" || eventType == "item.updated" || eventType == "item.completed"
+		}
+		return text, eventType != "item.started", true
+	}
+	payload := codeEventMap(event["payload"])
+	payloadType := firstCodeStringOrEmpty(payload, "type")
+	if eventType == "event_msg" && payloadType == "agent_message" {
+		return anyEventString(payload["message"]), true, true
+	}
+	if (eventType == "event_msg" && payloadType == "agent_message_content_delta") || eventType == "agent_message_content_delta" {
+		text := firstCodeStringOrEmpty(payload, "delta", "text")
+		if text == "" {
+			text = anyEventString(event["delta"])
+		}
+		return text, false, true
+	}
+	if eventType == "response_item" && payloadType == "message" && firstCodeStringOrEmpty(payload, "role") == "assistant" {
+		return assistantContentList(payload["content"]), true, true
+	}
+	return "", false, false
+}
+
+func assistantContentList(value any) string {
+	parts, ok := value.([]any)
+	if !ok {
+		return ""
+	}
+	var builder strings.Builder
+	for _, part := range parts {
+		item := codeEventMap(part)
+		kind := firstCodeStringOrEmpty(item, "type")
+		if kind != "" && kind != "text" && kind != "output_text" {
+			continue
+		}
+		builder.WriteString(firstCodeStringOrEmpty(item, "text"))
+	}
+	return builder.String()
+}
+
+func anyEventString(value any) string {
+	switch typed := value.(type) {
+	case string:
+		return typed
+	case map[string]any:
+		return firstCodeStringOrEmpty(typed, "text", "message", "delta")
+	default:
+		return ""
 	}
 }
 
@@ -180,16 +230,19 @@ func parseCodexOutput(rawOutput []byte, result *codeExecutorOutput) {
 			}
 		}
 		applyCodeUsageMap(result, event)
-		if eventType != "item.completed" {
+		text, replace := conversationAssistantUpdate("codex", event)
+		if text == "" {
 			return
 		}
-		item, _ := event["item"].(map[string]any)
-		if item["type"] != "agent_message" {
-			return
-		}
-		if text, ok := item["text"].(string); ok {
+		if eventType == "item.completed" || replace {
 			result.Message = text
+			return
 		}
+		if result.Message == "" {
+			result.Message = text
+			return
+		}
+		result.Message += text
 	})
 }
 

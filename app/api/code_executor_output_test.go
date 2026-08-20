@@ -33,6 +33,30 @@ func TestConversationAssistantUpdate(t *testing.T) {
 	if text != "done" || !replace {
 		t.Fatalf("codex snapshot = %q replace=%v", text, replace)
 	}
+	text, replace = conversationAssistantUpdate("codex", map[string]any{
+		"type": "event_msg",
+		"payload": map[string]any{
+			"type":    "agent_message",
+			"phase":   "commentary",
+			"message": "我先定位对话页",
+		},
+	})
+	if text != "我先定位对话页" || !replace {
+		t.Fatalf("codex commentary = %q replace=%v", text, replace)
+	}
+	text, replace = conversationAssistantUpdate("codex", map[string]any{
+		"type": "response_item",
+		"payload": map[string]any{
+			"type": "message",
+			"role": "assistant",
+			"content": []any{
+				map[string]any{"type": "output_text", "text": "你好！"},
+			},
+		},
+	})
+	if text != "你好！" || !replace {
+		t.Fatalf("codex response_item = %q replace=%v", text, replace)
+	}
 }
 
 func TestParseCodexOutput(t *testing.T) {

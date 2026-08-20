@@ -83,6 +83,11 @@ func executeCodeAgentRun(
 	rawOutput := []byte{}
 	execErr := buildErr
 	if execErr == nil {
+		runCtx, stopFollow := context.WithCancel(ctx)
+		defer stopFollow()
+		if executorID == "codex" && session != nil && sessionID != 0 {
+			go followCodexConversationRollout(runCtx, session, sessionID, run.NativeSessionID, startedAt)
+		}
 		output := &boundedCodeOutput{}
 		writer := &conversationOutputWriter{inner: output, executorID: executorID, sessionID: sessionID}
 		command.Stdout = writer
