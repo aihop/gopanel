@@ -6,6 +6,7 @@ import {
 	conversationSessionClosed,
 	conversationSessionInitializing,
 	isLongConversationMessage,
+	isUserConversationMessage,
 	stripInjectedConversationPrompt,
 	visibleConversationThread,
 } from "./codeConversationThread"
@@ -49,6 +50,13 @@ describe("conversation session gates", () => {
 				{ id: 3, role: "agent", content: "好的", sessionId: 1, taskId: 1, runId: 1, createdAt: "" },
 			]).map(item => item.content),
 		).toEqual(["看图", "好的"])
+	})
+
+	it("用户消息靠右，执行结果靠左", () => {
+		expect(isUserConversationMessage("user")).toBe(true)
+		expect(isUserConversationMessage("User")).toBe(true)
+		expect(isUserConversationMessage("agent")).toBe(false)
+		expect(isUserConversationMessage("assistant")).toBe(false)
 	})
 
 	it("按 runId 挂上结构化执行结果", () => {

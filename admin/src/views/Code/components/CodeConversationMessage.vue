@@ -14,6 +14,7 @@ const props = defineProps<{
 }>()
 
 const { t } = useI18n({ messages: codeWorkspaceMessages })
+const isUser = computed(() => isUserConversationMessage(props.message.role))
 const parsed = computed(() => parseConversationAttachments(props.message.content || ""))
 const MdPreview = defineAsyncComponent(async () => {
 	const [module] = await Promise.all([import("md-editor-v3"), import("md-editor-v3/lib/preview.css")])
@@ -24,14 +25,15 @@ const MdPreview = defineAsyncComponent(async () => {
 <template>
   <article
     class="flex w-full"
-    :class="isUserConversationMessage(message.role) ? 'justify-end' : 'justify-start'"
+    :class="isUser ? 'justify-end' : 'justify-start'"
   >
     <div
-      class="max-w-[min(100%,42rem)]"
-      :class="isUserConversationMessage(message.role) ? 'rounded-2xl bg-slate-100 px-3.5 py-2.5 dark:bg-white/10' : 'px-1'"
+      :class="isUser
+        ? 'ml-auto w-fit max-w-[min(80%,28rem)] rounded-2xl rounded-br-md bg-slate-100 px-3.5 py-2.5 dark:bg-white/10'
+        : 'mr-auto w-full max-w-[min(100%,40rem)] px-1'"
     >
       <div
-        v-if="run && !isUserConversationMessage(message.role)"
+        v-if="run && !isUser"
         class="mb-1.5 flex flex-wrap items-center gap-2 text-[11px] tracking-[0.01em] text-[var(--n-text-color-3)]"
       >
         <span>{{ t(`code.runStatus_${run.status}`) }}</span>
@@ -68,6 +70,8 @@ const MdPreview = defineAsyncComponent(async () => {
 }
 
 .conversation-markdown :deep(.md-editor) {
+	width: auto;
+	max-width: 100%;
 	background: transparent;
 }
 

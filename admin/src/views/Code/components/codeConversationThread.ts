@@ -64,5 +64,5 @@ export function conversationRunForMessage(runs: CodeExecutionRun[], runId: numbe
 }
 
 export function isUserConversationMessage(role: string) {
-	return role === "user"
+	return role?.trim().toLowerCase() === "user"
 }
