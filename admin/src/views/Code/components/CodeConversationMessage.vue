@@ -40,7 +40,7 @@ const MdPreview = defineAsyncComponent(async () => {
     </div>
     <div
       class="min-w-0"
-      :class="isUser ? 'max-w-[min(78%,28rem)]' : 'max-w-[min(86%,38rem)]'"
+      :class="isUser ? 'max-w-[80%]' : 'max-w-[90%]'"
     >
       <div
         v-if="run && !isUser"

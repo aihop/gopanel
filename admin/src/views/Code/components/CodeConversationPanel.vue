@@ -175,7 +175,7 @@ onBeforeUnmount(() => {
           />
           <div
             v-else
-            class="mx-auto flex min-h-full max-w-[46rem] flex-col justify-end gap-3"
+            class="flex min-h-full w-full flex-col justify-end gap-3"
           >
             <CodeConversationMessage
               v-for="item in displayMessages"
