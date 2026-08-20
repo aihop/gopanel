@@ -11,6 +11,7 @@ import {
 	parsePastedLineRefs,
 } from "./codeConversationAttachments"
 import CodeConversationAttachments from "./CodeConversationAttachments.vue"
+import CodeConversationContextBar from "./CodeConversationContextBar.vue"
 import CodeConversationMessage from "./CodeConversationMessage.vue"
 import CodeStructureSnippetPopover from "./CodeStructureSnippetPopover.vue"
 import ProjectStructurePanel from "./ProjectStructurePanel.vue"
@@ -37,6 +38,7 @@ const {
 	attachments,
 	displayMessages,
 	runs,
+	session,
 	closed,
 	initializing,
 	running,
@@ -236,6 +238,11 @@ onBeforeUnmount(() => {
       </n-button>
 
       <footer class="conversation-composer absolute inset-x-3 bottom-3 z-10 rounded-2xl border border-slate-200/80 bg-white/95 p-2.5 shadow-[0_10px_30px_rgba(15,23,42,0.08)] backdrop-blur-md dark:border-white/10 dark:bg-[color-mix(in_srgb,var(--bg-default-color)_92%,transparent)]">
+        <CodeConversationContextBar
+          :session-id="sessionId"
+          :work-dir="workDir"
+          :fallback-branch="session?.worktreeBranch || session?.targetBranch || ''"
+        />
         <p
           v-if="showComposerHint"
           class="px-1 pb-1.5 text-xs tracking-[0.01em] text-[var(--n-text-color-3)]"
