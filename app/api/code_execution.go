@@ -72,7 +72,7 @@ func executeCodeAgentRun(
 	if err := ensureCodeManagedPushGuards(session); err != nil {
 		return failCodeExecutionRun(sessionRepo, run, startedAt, err)
 	}
-	executionPrompt := codeMemoryPrompt(session, codeManagedDeliveryPrompt(session, prompt))
+	executionPrompt := codeMemoryPrompt(session, codeWorkspacePathsPrompt(session, codeManagedDeliveryPrompt(session, prompt)))
 	command, preparedSessionID, buildErr := buildCodeExecutorCommand(ctx, executorID, workDir, executionPrompt, nativeSessionID, executorSessionKey, session)
 	if preparedSessionID != "" {
 		run.NativeSessionID = preparedSessionID

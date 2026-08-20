@@ -9,8 +9,10 @@ import (
 var injectedConversationMarkers = []string{
 	"\n[GoPanel Git 交付约束]",
 	"\n[GoPanel 长期记忆]",
+	"\n[GoPanel 工作区路径]",
 	"[GoPanel Git 交付约束]",
 	"[GoPanel 长期记忆]",
+	"[GoPanel 工作区路径]",
 }
 
 // Codex CLI 会往用户轮次里塞自己的上下文块（工作区根目录、权限档案等）。
