@@ -125,6 +125,22 @@ const MdPreview = defineAsyncComponent(async () => {
 	border-radius: 0.75rem;
 	padding: 0.75rem 1rem;
 	background: rgb(15 23 42 / 0.06);
+	scrollbar-width: thin;
+	scrollbar-color: rgb(148 163 184 / 0.28) transparent;
+}
+
+.conversation-markdown :deep(pre::-webkit-scrollbar) {
+	width: 5px;
+	height: 5px;
+}
+
+.conversation-markdown :deep(pre::-webkit-scrollbar-track) {
+	background: transparent;
+}
+
+.conversation-markdown :deep(pre::-webkit-scrollbar-thumb) {
+	border-radius: 999px;
+	background: rgb(148 163 184 / 0.28);
 }
 
 .conversation-markdown :deep(code) {

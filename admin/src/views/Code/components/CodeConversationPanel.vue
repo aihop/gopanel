@@ -189,7 +189,7 @@ onBeforeUnmount(() => {
       >
         <div
           ref="listRef"
-          class="min-h-0 flex-1 overflow-auto px-4 pb-40 pt-4"
+          class="conversation-scroll min-h-0 flex-1 overflow-auto px-4 pb-40 pt-4"
         >
           <div
             v-if="loadError && displayMessages.length === 0"
@@ -346,5 +346,38 @@ onBeforeUnmount(() => {
 .conversation-drop-target :deep(.wails-drop-target-active) .conversation-composer {
 	border-color: rgb(59 130 246 / 0.55);
 	box-shadow: 0 10px 30px rgb(37 99 235 / 0.12);
+}
+
+.conversation-scroll,
+.conversation-composer :deep(textarea) {
+	scrollbar-width: thin;
+	scrollbar-color: rgb(148 163 184 / 0.28) transparent;
+}
+
+.conversation-scroll::-webkit-scrollbar,
+.conversation-composer :deep(textarea::-webkit-scrollbar) {
+	width: 5px;
+	height: 5px;
+}
+
+.conversation-scroll::-webkit-scrollbar-track,
+.conversation-composer :deep(textarea::-webkit-scrollbar-track) {
+	background: transparent;
+}
+
+.conversation-scroll::-webkit-scrollbar-thumb,
+.conversation-composer :deep(textarea::-webkit-scrollbar-thumb) {
+	border-radius: 999px;
+	background: rgb(148 163 184 / 0.28);
+}
+
+.conversation-scroll::-webkit-scrollbar-thumb:hover,
+.conversation-composer :deep(textarea::-webkit-scrollbar-thumb:hover) {
+	background: rgb(148 163 184 / 0.42);
+}
+
+.conversation-scroll::-webkit-scrollbar-corner,
+.conversation-composer :deep(textarea::-webkit-scrollbar-corner) {
+	background: transparent;
 }
 </style>

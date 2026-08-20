@@ -29,7 +29,7 @@ const { t } = useI18n({ messages: codeEditorMessages })
       class="py-3"
       :description="t('code.structureSearchEmpty')"
     />
-    <div v-else class="min-h-0 overflow-auto px-1 py-1">
+    <div v-else class="structure-search-scroll min-h-0 overflow-auto px-1 py-1">
       <button
         v-for="hit in hits"
         :key="`${hit.kind}:${hit.path}:${hit.line || 0}`"
