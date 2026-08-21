@@ -5,6 +5,27 @@ import { getAITasks } from "@/api/modules/code"
 import type { CodeTaskListItem } from "@/api/interface/codeTasks"
 
 const ACTIVE_TASK_STATUSES = ["active", "running", "queued", "pending_approval", "delivering"]
+
+/**
+ * 已有请求在飞时，这一次调用能不能直接丢掉。
+ *
+ * 丢弃的前提是「结果完全一样」：同样的 gitMode，live 模式下还要同一条选中任务。
+ * 但用户主动刷新（silent=false）永远不丢——后台轮询几乎总有请求在飞，
+ * 原先按参数去重就把点击一并丢了，连补跑都不排，刷新按钮因此成了间歇性摆设。
+ * 多发一次请求的代价，远小于「点了没反应」。
+ */
+export function shouldDropDuplicateTaskFetch(options: {
+	silent: boolean
+	gitMode: CodeTaskGitMode
+	activeGitMode: CodeTaskGitMode
+	selectedTaskId: number
+	activeSelectedTaskId: number
+}) {
+	if (!options.silent) return false
+	if (options.gitMode !== options.activeGitMode) return false
+	if (options.gitMode !== "live") return true
+	return options.selectedTaskId === options.activeSelectedTaskId
+}
 type CodeTaskGitMode = "none" | "live" | "full"
 
 export interface CodeTaskPollingOptions {
@@ -58,7 +79,15 @@ export function useCodeTaskPolling(
 		if (!allProjects && !projectId.value) return
 		const requestedSelectedTaskId = selectedTaskId?.value || 0
 		if (requestPending) {
-			if (gitMode === activeGitMode && (gitMode !== "live" || requestedSelectedTaskId === activeSelectedTaskId))
+			if (
+				shouldDropDuplicateTaskFetch({
+					silent,
+					gitMode,
+					activeGitMode,
+					selectedTaskId: requestedSelectedTaskId,
+					activeSelectedTaskId,
+				})
+			)
 				return
 			pendingGitMode = strongerGitMode(pendingGitMode, gitMode)
 			return

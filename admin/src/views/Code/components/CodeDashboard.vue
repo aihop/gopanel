@@ -31,6 +31,8 @@ const emit = defineEmits<{
 	projectAction: [action: string, projectId: number]
 	reorderProject: [projectId: number, targetProjectId: number, position: CodeProjectDropPosition]
 	openTask: [task: CodeTaskListItem]
+	/** 刷新按钮要连项目列表一起刷：项目是 Index 传下来的 prop，这里刷不到。 */
+	refreshProjects: []
 	sessionResolved: []
 }>()
 const { t } = useI18n({ messages: codeProjectMessages })
@@ -93,6 +95,9 @@ const fetchRecentTasks = (silent = true) => {
 const refreshTasks = async (silent = true) => {
 	// 失败标记在每次显式刷新前清掉，成功后 onError 不会再置回来，横幅自己就消失了。
 	if (!silent) tasksLoadError.value = false
+	// 手动刷新要覆盖用户眼里的「整页」：项目列表是 Index 传下来的 prop，
+	// 只刷任务的话，新建/改名过的项目不会更新，看着就像刷新没生效。
+	if (!silent) emit("refreshProjects")
 	await Promise.all([fetchTasks(silent, "full"), fetchRecentTasks(silent)])
 }
 

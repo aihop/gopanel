@@ -20,6 +20,7 @@
         :immersive="isCodeImmersive"
         :pending-session="pendingSession"
         @retry="fetchProjects()"
+        @refresh-projects="fetchProjects(true)"
         @create-project="openCreateProjectModal"
         @create-task="openNewProjectTask"
         @project-action="handleProjectAction"
