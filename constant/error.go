@@ -389,3 +389,25 @@ var (
 	ErrAppsResourceInsufficientDisk   = "ErrAppsResourceInsufficientDisk"
 	ErrAppsResourceInsufficientHint   = "ErrAppsResourceInsufficientHint"
 )
+
+// pipeline / flow
+var (
+	ErrPipelinePermissionDenied        = "ErrPipelinePermissionDenied"
+	ErrPipelineInvalidReleaseID        = "ErrPipelineInvalidReleaseID"
+	ErrPipelineLogFoldedNote           = "ErrPipelineLogFoldedNote"
+	ErrPipelineStreamFoldedNote        = "ErrPipelineStreamFoldedNote"
+	ErrFlowDeliveryNoCommit            = "ErrFlowDeliveryNoCommit"
+	ErrFlowDeliveryInvalidCommit       = "ErrFlowDeliveryInvalidCommit"
+	ErrFlowDeliveryDuplicateMapping    = "ErrFlowDeliveryDuplicateMapping"
+	ErrFlowDeliveryBaselineUnavailable = "ErrFlowDeliveryBaselineUnavailable"
+	ErrFlowDeliveryOutsideSource       = "ErrFlowDeliveryOutsideSource"
+	ErrFlowRuntimeUnavailable          = "ErrFlowRuntimeUnavailable"
+	ErrFlowRunnerEmpty                 = "ErrFlowRunnerEmpty"
+	ErrFlowProjectNoSource             = "ErrFlowProjectNoSource"
+	ErrFlowProjectRepoHeadInvalid      = "ErrFlowProjectRepoHeadInvalid"
+	ErrFlowProjectRepoDuplicate        = "ErrFlowProjectRepoDuplicate"
+	ErrFlowProjectNoGitRepo            = "ErrFlowProjectNoGitRepo"
+	ErrFlowProjectSourceInaccessible   = "ErrFlowProjectSourceInaccessible"
+	ErrFlowProjectGitRepoExceeded      = "ErrFlowProjectGitRepoExceeded"
+	ErrFlowGitOperationFailed          = "ErrFlowGitOperationFailed"
+)

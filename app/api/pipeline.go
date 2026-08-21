@@ -3,7 +3,6 @@ package api
 import (
 	"bufio"
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -17,6 +16,7 @@ import (
 	"github.com/aihop/gopanel/buserr"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
+	"github.com/aihop/gopanel/i18n"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -26,7 +26,7 @@ func requirePipelineManagePermission(c fiber.Ctx) error {
 		return err
 	}
 	if claims.Role != constant.UserRoleAdmin && claims.Role != constant.UserRoleSuper {
-		return errors.New("permission denied")
+		return buserr.New(constant.ErrPipelinePermissionDenied)
 	}
 	return nil
 }
@@ -133,7 +133,7 @@ func validatePipelineCodeProjectAccess(c fiber.Ctx, sourceType string, projectID
 		return buserr.New(constant.ErrPipelineCodeProjectNotFound)
 	}
 	if claims.Role != constant.UserRoleSuper && project.CreatorID != claims.UserId {
-		return errors.New("permission denied")
+		return buserr.New(constant.ErrPipelinePermissionDenied)
 	}
 	return nil
 }
@@ -231,7 +231,7 @@ func PipelineReleasePage(c fiber.Ctx) error {
 func PipelineReleaseGet(c fiber.Ctx) error {
 	id, _ := strconv.Atoi(c.Query("id"))
 	if id <= 0 {
-		return c.JSON(e.Fail(fmt.Errorf("无效的 release id")))
+		return c.JSON(e.Fail(buserr.New(constant.ErrPipelineInvalidReleaseID)))
 	}
 
 	appSvc := service.NewPipelineApplication(global.DB)
@@ -295,7 +295,7 @@ func PipelineLogs(c fiber.Ctx) error {
 			if err == nil {
 				// 对于历史日志，如果行数超过 3000 行，截取最后 2000 行，防止前端瞬间卡死
 				if len(logs) > 3000 {
-					_ = writePipelineSSEData(w, fmt.Sprintf("... 之前的日志已折叠，总计 %d 行，这里只显示最新 2000 行 ...", len(logs)))
+					_ = writePipelineSSEData(w, i18n.GetMsgWithMap(constant.ErrPipelineLogFoldedNote, map[string]interface{}{"total": len(logs)}))
 					logs = logs[len(logs)-2000:]
 				}
 				for _, log := range logs {
@@ -308,7 +308,7 @@ func PipelineLogs(c fiber.Ctx) error {
 		}
 		defer logger.Unsubscribe(ch)
 		if len(logs) > 3000 {
-			_ = writePipelineSSEData(w, fmt.Sprintf("... 之前的实时日志已折叠，总计 %d 行，这里只显示最新 2000 行 ...", len(logs)))
+			_ = writePipelineSSEData(w, i18n.GetMsgWithMap(constant.ErrPipelineStreamFoldedNote, map[string]interface{}{"total": len(logs)}))
 			logs = logs[len(logs)-2000:]
 		}
 		for _, log := range logs {

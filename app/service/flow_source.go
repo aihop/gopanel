@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -126,7 +125,7 @@ func (s *FlowRunApplicationService) resolveFlowCodeDelivery(jobID, projectID uin
 func (s *FlowRunApplicationService) resolveFlowCodeDeliveryManifest(project *model.AIProject, job *model.AICodeDeliveryJob) (flowSourceManifest, string, error) {
 	repositories, err := s.loadFlowDeliveryRepositories(job)
 	if err != nil || len(repositories) == 0 {
-		return flowSourceManifest{}, "", errors.New("Code 交付没有可用的仓库提交")
+		return flowSourceManifest{}, "", buserr.New(constant.ErrFlowDeliveryNoCommit)
 	}
 	var task model.AITask
 	if job.TaskID > 0 {
@@ -141,14 +140,14 @@ func (s *FlowRunApplicationService) resolveFlowCodeDeliveryManifest(project *mod
 	for _, repository := range repositories {
 		commit, err := normalizePipelineExpectedCommit(repository.Commit)
 		if err != nil || commit == "" || strings.TrimSpace(repository.RepositoryPath) == "" {
-			return flowSourceManifest{}, "", errors.New("Code 交付仓库提交无效")
+			return flowSourceManifest{}, "", buserr.New(constant.ErrFlowDeliveryInvalidCommit)
 		}
 		sourceDir, workspacePath, err := flowRepositoryWorkspacePath(project.SourceDirs, repository.RepositoryPath)
 		if err != nil {
 			return flowSourceManifest{}, "", err
 		}
 		if _, exists := usedPaths[workspacePath]; exists {
-			return flowSourceManifest{}, "", errors.New("Code 交付仓库映射重复")
+			return flowSourceManifest{}, "", buserr.New(constant.ErrFlowDeliveryDuplicateMapping)
 		}
 		usedPaths[workspacePath] = struct{}{}
 		if !flowGitCommitExists(sourceDir, commit) {
@@ -183,7 +182,7 @@ func (s *FlowRunApplicationService) loadFlowDeliveryRepositories(job *model.AICo
 			}
 			storedRepository, exists := storedByPath[filepath.Clean(repositories[index].RepositoryPath)]
 			if !exists {
-				return nil, errors.New("Code 交付仓库基准提交不可用")
+				return nil, buserr.New(constant.ErrFlowDeliveryBaselineUnavailable)
 			}
 			repositories[index].Commit = firstFlowCommit(
 				storedRepository.MergeCommit, storedRepository.WorktreeCommit, storedRepository.BaseCommit,
@@ -251,7 +250,7 @@ func flowRepositoryWorkspacePath(sourceDirs []string, repositoryPath string) (st
 		}
 		return resolvedRepository, workspacePath, nil
 	}
-	return "", "", errors.New("Code 交付仓库不在项目源目录中")
+	return "", "", buserr.New(constant.ErrFlowDeliveryOutsideSource)
 }
 
 func flowGitCommitExists(repository, commit string) bool {

@@ -1,8 +1,6 @@
 package service
 
 import (
-	"errors"
-	"fmt"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -82,7 +80,7 @@ func (s *FlowRunApplicationService) resolveFlowProjectBaseline(projectID uint) (
 
 func resolveFlowProjectBaselineManifest(project *model.AIProject) (flowSourceManifest, string, bool, error) {
 	if project == nil || len(project.SourceDirs) == 0 {
-		return flowSourceManifest{}, "", false, errors.New("Code 项目没有源目录")
+		return flowSourceManifest{}, "", false, buserr.New(constant.ErrFlowProjectNoSource)
 	}
 	repositories, err := discoverFlowGitRepositories(project.SourceDirs)
 	if err != nil {
@@ -105,7 +103,7 @@ func resolveFlowProjectBaselineManifest(project *model.AIProject) (flowSourceMan
 		}
 		commit, err = normalizePipelineExpectedCommit(commit)
 		if err != nil || commit == "" {
-			return flowSourceManifest{}, "", false, errors.New("项目仓库 HEAD 无效")
+			return flowSourceManifest{}, "", false, buserr.New(constant.ErrFlowProjectRepoHeadInvalid)
 		}
 		branch, _ := flowGitCommand(repository, "branch", "--show-current")
 		_, workspacePath, err := flowRepositoryWorkspacePath(project.SourceDirs, repository)
@@ -113,7 +111,7 @@ func resolveFlowProjectBaselineManifest(project *model.AIProject) (flowSourceMan
 			return flowSourceManifest{}, "", false, err
 		}
 		if _, exists := usedPaths[workspacePath]; exists {
-			return flowSourceManifest{}, "", false, errors.New("项目仓库映射重复")
+			return flowSourceManifest{}, "", false, buserr.New(constant.ErrFlowProjectRepoDuplicate)
 		}
 		usedPaths[workspacePath] = struct{}{}
 		status, statusErr := flowGitCommand(repository, "status", "--porcelain", "--ignore-submodules=dirty")
@@ -127,7 +125,7 @@ func resolveFlowProjectBaselineManifest(project *model.AIProject) (flowSourceMan
 		})
 	}
 	if len(manifest.Repositories) == 0 {
-		return flowSourceManifest{}, "", false, errors.New("Code 项目没有可用的 Git 仓库")
+		return flowSourceManifest{}, "", false, buserr.New(constant.ErrFlowProjectNoGitRepo)
 	}
 	sort.Slice(manifest.Repositories, func(left, right int) bool {
 		return manifest.Repositories[left].WorkspacePath < manifest.Repositories[right].WorkspacePath
@@ -146,7 +144,7 @@ func discoverFlowGitRepositories(sourceDirs []string) ([]string, error) {
 		}
 		info, err := os.Stat(boundary)
 		if err != nil || !info.IsDir() {
-			return nil, errors.New("Code 项目源目录不可访问")
+			return nil, buserr.New(constant.ErrFlowProjectSourceInaccessible)
 		}
 		if root, ordinary := flowOrdinaryGitRoot(boundary); ordinary && root == boundary {
 			if err := appendFlowGitRepository(root, &repositories, seen); err != nil {
@@ -192,7 +190,7 @@ func appendFlowGitRepository(root string, repositories *[]string, seen map[strin
 	seen[root] = struct{}{}
 	*repositories = append(*repositories, root)
 	if len(*repositories) > maxFlowBaselineRepositories {
-		return fmt.Errorf("Code 项目 Git 仓库超过 %d 个", maxFlowBaselineRepositories)
+		return buserr.WithMap(constant.ErrFlowProjectGitRepoExceeded, map[string]interface{}{"max": maxFlowBaselineRepositories})
 	}
 	entries, err := flowGitCommand(root, "ls-files", "-s", "-z")
 	if err != nil {
@@ -256,7 +254,7 @@ func flowGitCommand(repository string, args ...string) (string, error) {
 	command.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
 	output, err := command.CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("Git 操作失败: %s", strings.TrimSpace(string(output)))
+		return "", buserr.WithDetail(constant.ErrFlowGitOperationFailed, strings.TrimSpace(string(output)))
 	}
 	return strings.TrimSpace(string(output)), nil
 }

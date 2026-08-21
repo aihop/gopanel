@@ -2,13 +2,13 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
+	"github.com/aihop/gopanel/buserr"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/utils/docker"
@@ -216,7 +216,7 @@ func preparePreviousFlowContainer(ctx context.Context, oldContainerID, newContai
 		return false, err
 	}
 	if cli == nil {
-		return false, errors.New("当前容器运行时不可用")
+		return false, buserr.New(constant.ErrFlowRuntimeUnavailable)
 	}
 	defer cli.Close()
 	inspect, err := cli.ContainerInspect(ctx, oldContainerID)
@@ -240,14 +240,14 @@ func preparePreviousFlowContainer(ctx context.Context, oldContainerID, newContai
 func prepareFlowTargetContainer(ctx context.Context, oldContainerID, newContainerID string) error {
 	newContainerID = strings.TrimSpace(newContainerID)
 	if newContainerID == "" {
-		return errors.New("Runner 容器为空")
+		return buserr.New(constant.ErrFlowRunnerEmpty)
 	}
 	cli, err := docker.NewDockerClient()
 	if err != nil {
 		return err
 	}
 	if cli == nil {
-		return errors.New("当前容器运行时不可用")
+		return buserr.New(constant.ErrFlowRuntimeUnavailable)
 	}
 	defer cli.Close()
 	inspect, err := cli.ContainerInspect(ctx, newContainerID)
