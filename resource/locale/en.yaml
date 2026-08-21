@@ -293,6 +293,13 @@ ErrSettingEntranceConflicts: "entrance '{{ .entrance }}' conflicts with an exist
 ErrSettingUpdateInfoUnavailable: "Failed to retrieve update information"
 ErrNotifyTestEmailSent: "Test email sent, please check your inbox"
 ErrNotifyAlertRoundExecuted: "One round of alert evaluation executed"
+
+# mobile / daemon / dashboard
+ErrMobilePairingTooFrequent: "Pairing attempts are too frequent, please try again later"
+ErrMobileDeviceParamsInvalid: "Invalid mobile device parameters"
+ErrMobileContainerListFormat: "Invalid container list format"
+ErrMobileContainerParamsInvalid: "Invalid container parameters"
+ErrMobileContainerActionForbidden: "This container action is not allowed on the mobile client"
 ErrHostMemGoPanelRecycledLinuxNoDrop: "GoPanel process memory has been reclaimed, but the system does not support drop_caches"
 ErrHostMemRootRequiredLinux: "Permission denied: clearing kernel caches requires root privileges (use sudo or run the systemd service as root)"
 ErrHostMemCacheCleanedLinux: "Kernel cache cleared via drop_caches"

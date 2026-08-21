@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"errors"
 	"sort"
 	"strconv"
 	"strings"
@@ -11,6 +10,7 @@ import (
 	"github.com/aihop/gopanel/app/dto"
 	"github.com/aihop/gopanel/app/e"
 	"github.com/aihop/gopanel/app/service"
+	"github.com/aihop/gopanel/buserr"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/pkg/gormx"
 	"github.com/gofiber/fiber/v3"
@@ -68,7 +68,7 @@ func loadMobileContainerList(containerManager mobileContainerListReader) (fiber.
 	}
 	containers, ok := result.([]dto.ContainerInfo)
 	if !ok {
-		return nil, errors.New("容器列表格式无效")
+		return nil, buserr.New(constant.ErrMobileContainerListFormat)
 	}
 	stats, _ := containerManager.ContainerListStats()
 	statsByID := make(map[string]dto.ContainerListStats, len(stats))
@@ -117,10 +117,10 @@ func OperateMobileContainer(c fiber.Ctx) error {
 	req.ContainerID = strings.TrimSpace(req.ContainerID)
 	req.Operation = strings.TrimSpace(req.Operation)
 	if req.ContainerID == "" {
-		return c.JSON(e.Fail(errors.New("容器参数无效")))
+		return c.JSON(e.Fail(buserr.New(constant.ErrMobileContainerParamsInvalid)))
 	}
 	if !isMobileContainerOperationAllowed(req.Operation) {
-		return c.JSON(e.Fail(errors.New("手机端不允许执行该容器操作")))
+		return c.JSON(e.Fail(buserr.New(constant.ErrMobileContainerActionForbidden)))
 	}
 	if err := service.NewIContainerService().ContainerOperation(&dto.ContainerOperation{
 		Names:     []string{req.ContainerID},
@@ -134,7 +134,7 @@ func OperateMobileContainer(c fiber.Ctx) error {
 func GetMobileContainerPublishOptions(c fiber.Ctx) error {
 	containerID := strings.TrimSpace(c.Params("id"))
 	if containerID == "" {
-		return c.JSON(e.Fail(errors.New("容器参数无效")))
+		return c.JSON(e.Fail(buserr.New(constant.ErrMobileContainerParamsInvalid)))
 	}
 	container, err := service.NewIContainerService().ContainerInfo(&dto.OperationWithName{
 		Name:        containerID,

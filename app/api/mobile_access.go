@@ -1,7 +1,6 @@
 package api
 
 import (
-	"errors"
 	"strconv"
 	"strings"
 	"sync"
@@ -63,7 +62,7 @@ func IssueMobilePairing(c fiber.Ctx) error {
 
 func ExchangeMobilePairing(c fiber.Ctx) error {
 	if !allowMobilePairingAttempt(c.IP(), time.Now()) {
-		return c.JSON(e.Fail(errors.New("配对尝试过于频繁，请稍后再试")))
+		return c.JSON(e.Fail(buserr.New(constant.ErrMobilePairingTooFrequent)))
 	}
 	var req struct {
 		Code       string `json:"code"`
@@ -112,7 +111,7 @@ func LoginMobileDevice(c fiber.Ctx) error {
 			loginLog.Status = constant.StatusFailed
 			loginLog.Message = "mobile login captcha verification required"
 			_ = logService.CreateLoginLog(loginLog)
-			return c.JSON(e.RetError(constant.StatusCodeFullFail, "请先完成滑块验证"))
+			return c.JSON(e.Fail(buserr.New(constant.ErrCaptchaRequired)))
 		}
 	}
 
@@ -210,7 +209,7 @@ func RevokeMobileDevice(c fiber.Ctx) error {
 	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
 	deviceID, err := strconv.ParseUint(c.Params("id"), 10, 64)
 	if err != nil || deviceID == 0 {
-		return c.JSON(e.Fail(errors.New("手机设备参数无效")))
+		return c.JSON(e.Fail(buserr.New(constant.ErrMobileDeviceParamsInvalid)))
 	}
 	if err := repo.NewMobileAccessRepo().RevokeDevice(uint(deviceID), claims.UserId); err != nil {
 		return c.JSON(e.Fail(err))

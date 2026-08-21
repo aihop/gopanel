@@ -475,3 +475,12 @@ var (
 	ErrNotifyTestEmailSent          = "ErrNotifyTestEmailSent"
 	ErrNotifyAlertRoundExecuted     = "ErrNotifyAlertRoundExecuted"
 )
+
+// mobile / daemon / dashboard
+var (
+	ErrMobilePairingTooFrequent       = "ErrMobilePairingTooFrequent"
+	ErrMobileDeviceParamsInvalid      = "ErrMobileDeviceParamsInvalid"
+	ErrMobileContainerListFormat      = "ErrMobileContainerListFormat"
+	ErrMobileContainerParamsInvalid   = "ErrMobileContainerParamsInvalid"
+	ErrMobileContainerActionForbidden = "ErrMobileContainerActionForbidden"
+)

@@ -293,6 +293,13 @@ ErrSettingEntranceConflicts: "entrance '{{ .entrance }}' conflicts with an exist
 ErrSettingUpdateInfoUnavailable: "failed to retrieve update information"
 ErrNotifyTestEmailSent: "测试邮件已发送，请查收"
 ErrNotifyAlertRoundExecuted: "已执行一轮告警评估"
+
+# mobile / daemon / dashboard
+ErrMobilePairingTooFrequent: "配对尝试过于频繁，请稍后再试"
+ErrMobileDeviceParamsInvalid: "手机设备参数无效"
+ErrMobileContainerListFormat: "容器列表格式无效"
+ErrMobileContainerParamsInvalid: "容器参数无效"
+ErrMobileContainerActionForbidden: "手机端不允许执行该容器操作"
 ErrHostMemGoPanelRecycledLinuxNoDrop: "已执行 GoPanel 进程内存回收，但系统不支持 drop_caches"
 ErrHostMemRootRequiredLinux: "权限不足：清理内核缓存需要 root 权限（请用 sudo 或让 systemd 服务以 root 运行）"
 ErrHostMemCacheCleanedLinux: "已执行清理内核缓存（drop_caches）"
