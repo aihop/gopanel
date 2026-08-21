@@ -15,6 +15,7 @@ import (
 	"github.com/aihop/gopanel/buserr"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
+	"github.com/aihop/gopanel/i18n"
 	"github.com/aihop/gopanel/utils/files"
 	"github.com/gofiber/fiber/v3"
 )
@@ -107,7 +108,7 @@ func InsertDBManagerRecord(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	return c.JSON(e.Succ("插入成功"))
+	return c.JSON(e.Succ(i18n.GetMsgFromCtx(c, constant.ErrDatabaseInsertSuccess)))
 }
 
 // @Tags DBManager
@@ -128,7 +129,7 @@ func UpdateDBManagerRecord(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	return c.JSON(e.Succ("更新成功"))
+	return c.JSON(e.Succ(i18n.GetMsgFromCtx(c, constant.ErrDatabaseUpdateSuccess)))
 }
 
 // @Tags DBManager
@@ -149,7 +150,7 @@ func DeleteDBManagerRecord(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	return c.JSON(e.Succ("删除成功"))
+	return c.JSON(e.Succ(i18n.GetMsgFromCtx(c, constant.ErrDatabaseDeleteSuccess)))
 }
 
 // ExportDBManagerTable exports table data as CSV or SQL dump
@@ -340,7 +341,7 @@ func CreateDBManagerDatabase(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	return c.JSON(e.Succ("创建成功"))
+	return c.JSON(e.Succ(i18n.GetMsgFromCtx(c, constant.ErrDatabaseCreateSuccess)))
 }
 
 // DropDBManagerDatabase 删除数据库
@@ -354,7 +355,7 @@ func DropDBManagerDatabase(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	return c.JSON(e.Succ("删除成功"))
+	return c.JSON(e.Succ(i18n.GetMsgFromCtx(c, constant.ErrDatabaseDeleteSuccess)))
 }
 
 // GetDBManagerTableInfo 获取表结构信息（SHOW CREATE TABLE）
@@ -396,7 +397,7 @@ func CopyDBManagerTable(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	return c.JSON(e.Succ("复制成功"))
+	return c.JSON(e.Succ(i18n.GetMsgFromCtx(c, constant.ErrDatabaseCopySuccess)))
 }
 
 // CreateDBManagerTable 创建表
@@ -410,7 +411,7 @@ func CreateDBManagerTable(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	return c.JSON(e.Succ("创建成功"))
+	return c.JSON(e.Succ(i18n.GetMsgFromCtx(c, constant.ErrDatabaseCreateSuccess)))
 }
 
 // ChangeDBManagerTableOwner 修改表的所有者（仅 PostgreSQL）
@@ -424,5 +425,5 @@ func ChangeDBManagerTableOwner(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	return c.JSON(e.Succ("修改成功"))
+	return c.JSON(e.Succ(i18n.GetMsgFromCtx(c, constant.ErrDatabaseModifySuccess)))
 }

@@ -1,12 +1,13 @@
 package service
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/aihop/gopanel/app/dto/request"
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
+	"github.com/aihop/gopanel/buserr"
+	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/init/db"
 	"github.com/aihop/gopanel/pkg/gormx"
 )
@@ -29,13 +30,13 @@ func (s *DatabaseService) List(ctx *gormx.Contextx) (res *model.DatabaseListResu
 func (s DatabaseService) Create(req *request.DatabaseCreate) error {
 	server, err := NewDatabaseServer().Get(req.ServerID)
 	if err != nil {
-		return errors.New("获取数据库服务器失败: " + err.Error())
+		return buserr.WithDetail(constant.ErrDatabaseGetServerFailed, err.Error())
 	}
 	switch server.Type {
 	case model.DatabaseTypeMysql:
 		mysql, err := db.NewMySQL(server.Username, server.Password, fmt.Sprintf("%s:%d", server.Host, server.Port))
 		if err != nil {
-			return errors.New("获取数据库服务器失败: " + err.Error())
+			return buserr.WithDetail(constant.ErrDatabaseGetServerFailed, err.Error())
 		}
 		defer func(mysql *db.MySQL) {
 			_ = mysql.Close()
@@ -50,21 +51,21 @@ func (s DatabaseService) Create(req *request.DatabaseCreate) error {
 					req.Name,
 				},
 			}); err != nil {
-				return errors.New("创建用户失败: " + err.Error())
+				return buserr.WithDetail(constant.ErrDatabaseCreateUserFailed, err.Error())
 			}
 		}
 		if err = mysql.DatabaseCreate(req.Name); err != nil {
-			return errors.New("创建数据库失败: " + err.Error())
+			return buserr.WithDetail(constant.ErrDatabaseCreateDBFailed, err.Error())
 		}
 		if req.Username != "" && !req.CreateUser {
 			if err = mysql.PrivilegesGrant(req.Username, req.Name, req.Host); err != nil {
-				return errors.New("授权用户失败: " + err.Error())
+				return buserr.WithDetail(constant.ErrDatabaseGrantUserFailed, err.Error())
 			}
 		}
 	case model.DatabaseTypePostgresql:
 		postgres, err := db.NewPostgres(server.Username, server.Password, server.Host, server.Port)
 		if err != nil {
-			return errors.New("获取数据库服务器失败: " + err.Error())
+			return buserr.WithDetail(constant.ErrDatabaseGetServerFailed, err.Error())
 		}
 		defer func(postgres *db.Postgres) {
 			_ = postgres.Close()
@@ -79,11 +80,11 @@ func (s DatabaseService) Create(req *request.DatabaseCreate) error {
 					req.Name,
 				},
 			}); err != nil {
-				return errors.New("创建用户失败: " + err.Error())
+				return buserr.WithDetail(constant.ErrDatabaseCreateUserFailed, err.Error())
 			}
 		}
 		if err = postgres.DatabaseCreate(req.Name); err != nil {
-			return errors.New("创建数据库失败: " + err.Error())
+			return buserr.WithDetail(constant.ErrDatabaseCreateDBFailed, err.Error())
 		}
 		if req.Username != "" {
 			if err = postgres.PrivilegesGrant(req.Username, req.Name); err != nil {
@@ -98,7 +99,7 @@ func (s DatabaseService) Create(req *request.DatabaseCreate) error {
 		// 这里可以验证一下路径是否有效
 		sqliteDb, err := db.NewSQLite(req.Host)
 		if err != nil {
-			return errors.New("无法访问 SQLite 数据库文件: " + err.Error())
+			return buserr.WithDetail(constant.ErrDatabaseSQLiteInaccessible, err.Error())
 		}
 		_ = sqliteDb.Close()
 	}
@@ -143,7 +144,7 @@ func (r DatabaseService) Comment(req *request.DatabaseComment) error {
 
 	switch server.Type {
 	case model.DatabaseTypeMysql:
-		return errors.New("mysql not support database comment")
+		return buserr.New("ErrDatabaseCommentUnsupported")
 	case model.DatabaseTypePostgresql:
 		postgres, err := db.NewPostgres(server.Username, server.Password, server.Host, server.Port)
 		if err != nil {

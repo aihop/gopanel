@@ -334,3 +334,18 @@ var (
 	ErrWebsitePrimaryDomainError        = "ErrWebsitePrimaryDomainError"
 	ErrWebsiteOtherDomainsError         = "ErrWebsiteOtherDomainsError"
 )
+
+// database
+var (
+	ErrDatabaseGetServerFailed    = "ErrDatabaseGetServerFailed"
+	ErrDatabaseCreateUserFailed   = "ErrDatabaseCreateUserFailed"
+	ErrDatabaseCreateDBFailed     = "ErrDatabaseCreateDBFailed"
+	ErrDatabaseGrantUserFailed    = "ErrDatabaseGrantUserFailed"
+	ErrDatabaseSQLiteInaccessible = "ErrDatabaseSQLiteInaccessible"
+	ErrDatabaseInsertSuccess      = "ErrDatabaseInsertSuccess"
+	ErrDatabaseUpdateSuccess      = "ErrDatabaseUpdateSuccess"
+	ErrDatabaseDeleteSuccess      = "ErrDatabaseDeleteSuccess"
+	ErrDatabaseCreateSuccess      = "ErrDatabaseCreateSuccess"
+	ErrDatabaseCopySuccess        = "ErrDatabaseCopySuccess"
+	ErrDatabaseModifySuccess      = "ErrDatabaseModifySuccess"
+)
