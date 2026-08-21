@@ -1,7 +1,6 @@
 package service
 
 import (
-	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -11,6 +10,7 @@ import (
 	"github.com/aihop/gopanel/app/dto/request"
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
+	"github.com/aihop/gopanel/buserr"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/pkg/gormx"
@@ -31,23 +31,23 @@ func validateCronjobTypeFields(jobType, script, dbType, dbName, logType string, 
 	switch jobType {
 	case "shell":
 		if strings.TrimSpace(script) == "" {
-			return errors.New("脚本内容不能为空")
+			return buserr.New(constant.ErrCronjobScriptEmpty)
 		}
 	case "db_backup":
 		if serverID == 0 {
-			return errors.New("请选择数据库服务器")
+			return buserr.New(constant.ErrCronjobDBServerRequired)
 		}
 		if dbType == "" || dbName == "" {
-			return errors.New("请选择数据库类型和数据库")
+			return buserr.New(constant.ErrCronjobDBTypeAndDBRequired)
 		}
 	case "log_clean":
 		if logType == "" {
-			return errors.New("请选择要清理的日志类型")
+			return buserr.New(constant.ErrCronjobLogTypeRequired)
 		}
 	case "ssl_renew":
 		// 不需要额外字段
 	default:
-		return fmt.Errorf("不支持的任务类型: %s", jobType)
+		return buserr.WithMap(constant.ErrCronjobUnknownType, map[string]interface{}{"type": jobType})
 	}
 	return nil
 }
@@ -58,7 +58,7 @@ func scheduleJob(job *model.Cronjob) (int, error) {
 		return 0, nil
 	}
 	if global.Cron == nil {
-		return 0, errors.New("调度器尚未初始化")
+		return 0, buserr.New(constant.ErrCronjobSchedulerUninitialized)
 	}
 	entryID, err := global.Cron.AddFunc(job.Spec, func() {
 		NewCronjobService().Run(job.ID)

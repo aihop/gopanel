@@ -435,3 +435,29 @@ var (
 	ErrCodeGitMetadataPathNotAbs            = "ErrCodeGitMetadataPathNotAbs"
 	ErrCodeGitMetadataPathNotDir            = "ErrCodeGitMetadataPathNotDir"
 )
+
+// cronjob / backup / monitor / logs
+var (
+	ErrCronjobScriptEmpty              = "ErrCronjobScriptEmpty"
+	ErrCronjobDBServerRequired         = "ErrCronjobDBServerRequired"
+	ErrCronjobDBTypeAndDBRequired      = "ErrCronjobDBTypeAndDBRequired"
+	ErrCronjobLogTypeRequired          = "ErrCronjobLogTypeRequired"
+	ErrCronjobUnknownType              = "ErrCronjobUnknownType"
+	ErrCronjobSchedulerUninitialized   = "ErrCronjobSchedulerUninitialized"
+	ErrCronjobGetDBServerFailed        = "ErrCronjobGetDBServerFailed"
+	ErrCronjobUnsupportedDBType        = "ErrCronjobUnsupportedDBType"
+	ErrCronjobCleanOpLogFailed         = "ErrCronjobCleanOpLogFailed"
+	ErrCronjobCleanLoginLogFailed      = "ErrCronjobCleanLoginLogFailed"
+	ErrCronjobCertAutoRenewQueryFailed = "ErrCronjobCertAutoRenewQueryFailed"
+	ErrCronjobOpLogCleaned             = "ErrCronjobOpLogCleaned"
+	ErrCronjobLoginLogCleaned          = "ErrCronjobLoginLogCleaned"
+	ErrCronjobCertRenewFailed          = "ErrCronjobCertRenewFailed"
+	ErrCronjobCertRenewed              = "ErrCronjobCertRenewed"
+	ErrCronjobNoCertsToRenew           = "ErrCronjobNoCertsToRenew"
+	ErrBackupPrepare                   = "ErrBackupPrepare"
+	ErrBackupFileSaved                 = "ErrBackupFileSaved"
+	ErrBackupRecordSaveFailed          = "ErrBackupRecordSaveFailed"
+	ErrBackupRestoreFromUpload         = "ErrBackupRestoreFromUpload"
+	ErrLogSshLoginUnsupported          = "ErrLogSshLoginUnsupported"
+	ErrMonitorLoadFailed               = "ErrMonitorLoadFailed"
+)

@@ -12,7 +12,9 @@ import (
 	"github.com/aihop/gopanel/app/dto"
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
+	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
+	"github.com/aihop/gopanel/i18n"
 	"github.com/aihop/gopanel/utils/gpc"
 	"github.com/jinzhu/copier"
 )
@@ -143,7 +145,7 @@ func (u *LogService) PageSSHLoginLog(req dto.SearchSSHLogWithPage) (*dto.SSHLogi
 		if strings.Contains(strings.ToLower(err.Error()), "unsupported platform") {
 			return &dto.SSHLoginLogResult{
 				Supported: false,
-				Warning:   "当前平台暂不支持 SSH 登录日志采集",
+				Warning:   i18n.GetMsg(constant.ErrLogSshLoginUnsupported),
 				Items:     []dto.SSHLoginLog{},
 			}, nil
 		}
