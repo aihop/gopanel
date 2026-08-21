@@ -1,9 +1,9 @@
 package api
 
 import (
-	"errors"
 	"github.com/aihop/gopanel/app/dto/request"
 	"github.com/aihop/gopanel/app/e"
+	"github.com/aihop/gopanel/buserr"
 	"github.com/aihop/gopanel/constant"
 	"github.com/gofiber/fiber/v3"
 )
@@ -41,7 +41,7 @@ func ReadFileByLine(c fiber.Ctx) error {
 		return c.JSON(e.RetError(constant.CodeErrBadRequest, err.Error()))
 	}
 	if _, scoped := fileBaseDir(c); scoped {
-		return c.JSON(e.Fail(errors.New("sub_admin cannot access global service logs")))
+		return c.JSON(e.Fail(buserr.New("ErrSubAdminCannotAccessServiceLog")))
 	}
 	res, err := fileService.ReadLogByLine(*req)
 	if err != nil {

@@ -349,3 +349,25 @@ var (
 	ErrDatabaseCopySuccess        = "ErrDatabaseCopySuccess"
 	ErrDatabaseModifySuccess      = "ErrDatabaseModifySuccess"
 )
+
+// file
+var (
+	ErrFileAccessDenied          = "ErrFileAccessDenied"
+	ErrFileSubAdminNoBaseDir     = "ErrFileSubAdminNoBaseDir"
+	ErrFileKeyRequired           = "ErrFileKeyRequired"
+	ErrFileUnauthorized          = "ErrFileUnauthorized"
+	ErrFileInvalidTaskKey        = "ErrFileInvalidTaskKey"
+	ErrFilePermissionDenied      = "ErrFilePermissionDenied"
+	ErrFileCompressTaskSubmitted = "ErrFileCompressTaskSubmitted"
+	ErrFileCompressStart         = "ErrFileCompressStart"
+	ErrFileCompressFileCount     = "ErrFileCompressFileCount"
+	ErrFileCompressFailed        = "ErrFileCompressFailed"
+	ErrFileCompressCompleted     = "ErrFileCompressCompleted"
+	ErrFileWgetStart             = "ErrFileWgetStart"
+	ErrFileWgetSavePath          = "ErrFileWgetSavePath"
+	ErrFileWgetSSLIgnored        = "ErrFileWgetSSLIgnored"
+	ErrFileWgetCancelled         = "ErrFileWgetCancelled"
+	ErrFileWgetFailed            = "ErrFileWgetFailed"
+	ErrFileWgetCompleted         = "ErrFileWgetCompleted"
+	ErrFileWgetTaskSubmitted     = "ErrFileWgetTaskSubmitted"
+)

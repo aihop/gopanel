@@ -1,13 +1,13 @@
 package api
 
 import (
-	"errors"
 	"fmt"
 	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/aihop/gopanel/app/service"
+	"github.com/aihop/gopanel/buserr"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/utils/common"
 	"github.com/aihop/gopanel/utils/token"
@@ -17,7 +17,7 @@ import (
 func requireFileAccess(c fiber.Ctx, paths ...string) error {
 	claims, ok := c.Locals(constant.AppAuthName).(*token.CustomClaims)
 	if !ok || claims == nil {
-		return errors.New("unauthorized")
+		return buserr.New(constant.ErrFileUnauthorized)
 	}
 	if claims.Role != constant.UserRoleSubAdmin {
 		return nil
@@ -33,7 +33,7 @@ func requireFileAccess(c fiber.Ctx, paths ...string) error {
 func newFileTaskKey(c fiber.Ctx, prefix string) (string, error) {
 	claims, ok := c.Locals(constant.AppAuthName).(*token.CustomClaims)
 	if !ok || claims == nil {
-		return "", errors.New("unauthorized")
+		return "", buserr.New(constant.ErrFileUnauthorized)
 	}
 	return fmt.Sprintf("%s%d_%s", prefix, claims.UserId, common.RandStrAndNum(20)), nil
 }
@@ -41,15 +41,15 @@ func newFileTaskKey(c fiber.Ctx, prefix string) (string, error) {
 func requireFileTaskAccess(c fiber.Ctx, key, prefix string) error {
 	claims, ok := c.Locals(constant.AppAuthName).(*token.CustomClaims)
 	if !ok || claims == nil {
-		return errors.New("unauthorized")
+		return buserr.New(constant.ErrFileUnauthorized)
 	}
 	if !validFileTaskKey(key, prefix) {
-		return errors.New("invalid task key")
+		return buserr.New(constant.ErrFileInvalidTaskKey)
 	}
 	if claims.Role == constant.UserRoleSubAdmin {
 		ownerPrefix := prefix + strconv.FormatUint(uint64(claims.UserId), 10) + "_"
 		if !strings.HasPrefix(key, ownerPrefix) {
-			return errors.New("permission denied")
+			return buserr.New(constant.ErrFilePermissionDenied)
 		}
 	}
 	return nil

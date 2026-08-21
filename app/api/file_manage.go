@@ -2,7 +2,6 @@ package api
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -13,6 +12,7 @@ import (
 	"github.com/aihop/gopanel/app/service"
 	"github.com/aihop/gopanel/buserr"
 	"github.com/aihop/gopanel/constant"
+	"github.com/aihop/gopanel/i18n"
 	"github.com/aihop/gopanel/utils/files"
 	"github.com/gofiber/fiber/v3"
 )
@@ -24,7 +24,7 @@ func ListFiles(c fiber.Ctx) error {
 	}
 	if baseDir, scoped := fileBaseDir(c); scoped {
 		if baseDir == "" {
-			return c.JSON(e.Fail(errors.New("sub_admin account is not configured with a valid base directory")))
+			return c.JSON(e.Fail(buserr.New(constant.ErrFileSubAdminNoBaseDir)))
 		}
 		if req.Path == "" || req.Path == "/" || strings.HasSuffix(req.Path, "pipelines") {
 			req.Path = baseDir
@@ -128,7 +128,7 @@ func CompressFile(c fiber.Ctx) error {
 		return c.JSON(e.Fail(err))
 	}
 	logger := service.GetFileCompressLogger(key)
-	logger.Appendf("已提交压缩任务：类型=%s，目标=%s/%s，文件数=%d", req.Type, req.Dst, req.Name, len(req.Files))
+	logger.Appendf(i18n.GetMsgFromCtx(c, constant.ErrFileCompressTaskSubmitted), req.Type, req.Dst, req.Name, len(req.Files))
 
 	go func() {
 		defer func() {
@@ -145,7 +145,7 @@ func CompressFile(c fiber.Ctx) error {
 func FileCompressLogs(c fiber.Ctx) error {
 	key := strings.TrimSpace(c.Query("key"))
 	if key == "" {
-		return c.JSON(e.Fail(errors.New("key is required")))
+		return c.JSON(e.Fail(buserr.New(constant.ErrFileKeyRequired)))
 	}
 	if err := requireFileTaskAccess(c, key, "compress_"); err != nil {
 		return c.JSON(e.Fail(err))

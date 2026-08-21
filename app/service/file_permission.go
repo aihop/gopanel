@@ -1,13 +1,15 @@
 package service
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/aihop/gopanel/buserr"
+	"github.com/aihop/gopanel/constant"
 )
 
-var errFileAccessDenied = errors.New("permission denied: you can only access your designated workspace")
+var errFileAccessDenied = buserr.New(constant.ErrFileAccessDenied)
 
 // ValidatePathWithinBase checks both directory boundaries and symlink targets.
 // Non-existent paths are resolved from their nearest existing ancestor.

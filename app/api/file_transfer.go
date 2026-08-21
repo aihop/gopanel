@@ -16,7 +16,9 @@ import (
 	"github.com/aihop/gopanel/app/dto/response"
 	"github.com/aihop/gopanel/app/e"
 	"github.com/aihop/gopanel/app/service"
+	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
+	"github.com/aihop/gopanel/i18n"
 	"github.com/aihop/gopanel/pkg/websocket"
 	"github.com/aihop/gopanel/utils/files"
 	websocket2 "github.com/aihop/gopanel/utils/websocket"
@@ -81,7 +83,7 @@ func WgetFileStream(c fiber.Ctx) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	downloadCancelFuncs.Store(key, cancel)
 	logger := service.GetDownloadLogger(key)
-	logger.Appendf("已提交远程下载任务：URL=%s，保存路径=%s/%s", req.Url, req.Path, req.Name)
+	logger.Appendf(i18n.GetMsgFromCtx(c, constant.ErrFileWgetTaskSubmitted), req.Url, req.Path, req.Name)
 
 	go func() {
 		defer func() {

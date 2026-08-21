@@ -17,6 +17,7 @@ import (
 	"github.com/aihop/gopanel/buserr"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
+	"github.com/aihop/gopanel/i18n"
 	"github.com/aihop/gopanel/utils/common"
 	"github.com/aihop/gopanel/utils/files"
 )
@@ -243,8 +244,8 @@ func (f *FileService) CompressStream(c request.FileCompress, logger *FileCompres
 		return buserr.New(constant.ErrFileIsExist)
 	}
 
-	logger.Appendf("开始打包，类型：%s，目标：%s/%s", c.Type, c.Dst, c.Name)
-	logger.Appendf("待打包文件：%d 个", len(c.Files))
+	logger.Appendf(i18n.GetMsg(constant.ErrFileCompressStart), c.Type, c.Dst, c.Name)
+	logger.Appendf(i18n.GetMsg(constant.ErrFileCompressFileCount), len(c.Files))
 
 	progressFn := func(msg string) {
 		logger.AppendLine(msg)
@@ -252,12 +253,12 @@ func (f *FileService) CompressStream(c request.FileCompress, logger *FileCompres
 
 	err := fo.CompressWithCallback(c.Files, c.Dst, c.Name, files.CompressType(c.Type), c.Secret, progressFn)
 	if err != nil {
-		logger.Appendf("打包失败：%v", err)
+		logger.Appendf(i18n.GetMsg(constant.ErrFileCompressFailed), err)
 		logger.SetStatus("failed")
 		return err
 	}
 
-	logger.AppendLine("打包完成")
+	logger.AppendLine(i18n.GetMsg(constant.ErrFileCompressCompleted))
 	logger.SetStatus("success")
 	return nil
 }
@@ -286,10 +287,10 @@ func (f *FileService) Wget(w request.FileWget) (string, error) {
 func (f *FileService) WgetStream(ctx context.Context, w request.FileWget, logger *DownloadFileLogger) error {
 	dstPath := filepath.Join(w.Path, w.Name)
 
-	logger.Appendf("开始下载远程文件：%s", w.Url)
-	logger.Appendf("保存路径：%s", dstPath)
+	logger.Appendf(i18n.GetMsg(constant.ErrFileWgetStart), w.Url)
+	logger.Appendf(i18n.GetMsg(constant.ErrFileWgetSavePath), dstPath)
 	if w.IgnoreCertificate {
-		logger.AppendLine("已忽略 SSL 证书验证")
+		logger.AppendLine(i18n.GetMsg(constant.ErrFileWgetSSLIgnored))
 	}
 
 	progressFn := func(written, total uint64) {
@@ -299,16 +300,16 @@ func (f *FileService) WgetStream(ctx context.Context, w request.FileWget, logger
 	err := files.DownloadFileWithCallbackSafe(ctx, w.Url, dstPath, w.IgnoreCertificate, progressFn)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
-			logger.AppendLine("下载已取消")
+			logger.AppendLine(i18n.GetMsg(constant.ErrFileWgetCancelled))
 			logger.SetStatus("cancelled")
 			return err
 		}
-		logger.Appendf("下载失败：%v", err)
+		logger.Appendf(i18n.GetMsg(constant.ErrFileWgetFailed), err)
 		logger.SetStatus("failed")
 		return err
 	}
 
-	logger.AppendLine("下载完成")
+	logger.AppendLine(i18n.GetMsg(constant.ErrFileWgetCompleted))
 	logger.SetStatus("success")
 	return nil
 }
