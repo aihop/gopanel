@@ -10,6 +10,7 @@ import (
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/service"
 	"github.com/aihop/gopanel/buserr"
+	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/init/db"
 	"github.com/aihop/gopanel/pkg/gormx"
 	"github.com/gofiber/fiber/v3"
@@ -62,9 +63,13 @@ func DatabaseUserDelete(c fiber.Ctx) error {
 		return c.JSON(e.Fail(errors.New("id or serverId is empty")))
 	}
 	if R.ID > 0 {
-		if err = service.NewDatabaseUser().Delete(R.ID); err != nil {
-			return c.JSON(e.Fail(buserr.Err(err)))
+		stored, getErr := service.NewDatabaseUser().Get(R.ID)
+		if getErr != nil {
+			return c.JSON(e.Fail(buserr.Err(getErr)))
 		}
+		R.ServerId = stored.ServerID
+		R.Username = stored.Username
+		R.Host = stored.Host
 	}
 	if R.ServerId > 0 && R.Username != "" {
 		server, err := service.NewDatabaseServer().Get(R.ServerId)
@@ -73,21 +78,16 @@ func DatabaseUserDelete(c fiber.Ctx) error {
 		}
 		switch server.Type {
 		case model.DatabaseTypeMysql:
+			if R.Host == "" {
+				return c.JSON(e.Fail(buserr.New(constant.ErrDatabaseUserHostRequired)))
+			}
 			mysql, err := db.NewMySQL(server.Username, server.Password, fmt.Sprintf("%s:%d", server.Host, server.Port))
 			if err != nil {
 				return c.JSON(e.Fail(buserr.Err(err)))
 			}
 			defer func() { _ = mysql.Close() }()
-			users, err := mysql.Users()
-			if err != nil {
+			if err = mysql.UserDrop(R.Username, R.Host); err != nil {
 				return c.JSON(e.Fail(buserr.Err(err)))
-			}
-			for _, user := range users {
-				if user.User == R.Username {
-					if err = mysql.UserDrop(user.User, user.Host); err != nil {
-						return c.JSON(e.Fail(buserr.Err(err)))
-					}
-				}
 			}
 		case model.DatabaseTypePostgresql:
 			postgres, err := db.NewPostgres(server.Username, server.Password, server.Host, server.Port)
@@ -102,7 +102,25 @@ func DatabaseUserDelete(c fiber.Ctx) error {
 			return c.JSON(e.Fail(errors.New("unsupported database server type")))
 		}
 	}
+	if R.ID > 0 {
+		if err = service.NewDatabaseUser().Delete(R.ID); err != nil {
+			return c.JSON(e.Fail(buserr.Err(err)))
+		}
+	}
 	return c.JSON(e.Succ())
+}
+
+func DatabaseUserPassword(c fiber.Ctx) error {
+	R, err := e.BodyToStruct[request.DatabaseUserGet](c.Body())
+	if err != nil {
+		return c.JSON(e.Fail(buserr.Err(err)))
+	}
+	password, managed, err := service.NewDatabaseUser().GetStoredPassword(R)
+	if err != nil {
+		return c.JSON(e.Fail(buserr.Err(err)))
+	}
+	c.Set("Cache-Control", "no-store")
+	return c.JSON(e.Succ(fiber.Map{"password": password, "managed": managed}))
 }
 
 func DatabaseUserGet(c fiber.Ctx) error {

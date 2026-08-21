@@ -106,6 +106,10 @@ export const databaseUserDeleteAPI = (params: any) => {
 	return http.post(`/database/user/delete`, params)
 }
 
+export const databaseUserPasswordAPI = (params: any) => {
+	return http.post<{ password: string; managed: boolean }>(`/database/user/password`, params)
+}
+
 // DB Manager API
 export const getDBManagerTablesAPI = (data: { serverId: number; databaseName: string }) => {
 	return http.post<string[]>(`/database/manager/tables`, data)

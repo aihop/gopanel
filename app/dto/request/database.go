@@ -65,6 +65,7 @@ type DatabaseUserDelete struct {
 	ID       uint   `json:"id"`
 	ServerId uint   `json:"serverId"`
 	Username string `json:"username"`
+	Host     string `json:"host"`
 }
 
 type DatabaseUserGet struct {

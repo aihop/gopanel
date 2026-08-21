@@ -69,21 +69,33 @@ type DatabaseServer struct {
 type DatabaseUserStatus uint
 
 const (
+	DatabaseUserStatusUnknown DatabaseUserStatus = 0
 	DatabaseUserStatusValid   DatabaseUserStatus = 20
 	DatabaseUserStatusInvalid DatabaseUserStatus = 10
 )
 
+type DatabaseUserAccessScope string
+
+const (
+	DatabaseUserAccessScopeUnknown  DatabaseUserAccessScope = "unknown"
+	DatabaseUserAccessScopeLocal    DatabaseUserAccessScope = "local"
+	DatabaseUserAccessScopeSpecific DatabaseUserAccessScope = "specific"
+	DatabaseUserAccessScopeAll      DatabaseUserAccessScope = "all"
+)
+
 type DatabaseUser struct {
-	ID         uint               `gorm:"primaryKey" json:"id"`
-	ServerID   uint               `gorm:"not null;default:0" json:"serverId"`
-	Username   string             `gorm:"not null;default:''" json:"username"`
-	Password   string             `gorm:"not null;default:''" json:"-"`
-	Host       string             `gorm:"not null;default:''" json:"host"` // 仅 mysql
-	Status     DatabaseUserStatus `gorm:"-:all" json:"status"`             // 仅显示
-	Privileges []string           `gorm:"-:all" json:"privileges"`         // 仅显示
-	Remark     string             `gorm:"not null;default:''" json:"remark"`
-	CreatedAt  time.Time          `json:"createdAt"`
-	UpdatedAt  time.Time          `json:"updatedAt"`
+	ID              uint                    `gorm:"primaryKey" json:"id"`
+	ServerID        uint                    `gorm:"not null;default:0" json:"serverId"`
+	Username        string                  `gorm:"not null;default:''" json:"username"`
+	Password        string                  `gorm:"not null;default:''" json:"-"`
+	Host            string                  `gorm:"not null;default:''" json:"host"` // 仅 mysql
+	Status          DatabaseUserStatus      `gorm:"-:all" json:"status"`             // 仅显示
+	AccessScope     DatabaseUserAccessScope `gorm:"-:all" json:"accessScope"`        // 仅显示
+	PasswordManaged bool                    `gorm:"-:all" json:"passwordManaged"`    // 仅显示
+	Privileges      []string                `gorm:"-:all" json:"privileges"`         // 仅显示
+	Remark          string                  `gorm:"not null;default:''" json:"remark"`
+	CreatedAt       time.Time               `json:"createdAt"`
+	UpdatedAt       time.Time               `json:"updatedAt"`
 
 	Server *DatabaseServer `gorm:"foreignKey:ServerID;references:ID" json:"server"`
 }

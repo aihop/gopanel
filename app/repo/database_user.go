@@ -169,6 +169,7 @@ func (r *DatabaseUserRepo) List(ctx *gormx.Contextx) (res []*model.DatabaseUser,
 			u.Remark = local.Remark
 			u.CreatedAt = local.CreatedAt
 			u.UpdatedAt = local.UpdatedAt
+			u.PasswordManaged = local.Password != ""
 		}
 	}
 

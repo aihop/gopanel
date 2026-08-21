@@ -9,6 +9,8 @@ import (
 	"github.com/aihop/gopanel/app/dto/request"
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
+	"github.com/aihop/gopanel/buserr"
+	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/init/db"
 	"github.com/aihop/gopanel/pkg/gormx"
 )
@@ -102,6 +104,22 @@ func normalizeDatabaseUserHost(serverType model.DatabaseType, host string) strin
 		return host
 	}
 	return ""
+}
+
+func databaseUserAccessScope(serverType model.DatabaseType, host string) model.DatabaseUserAccessScope {
+	if serverType != model.DatabaseTypeMysql {
+		return model.DatabaseUserAccessScopeUnknown
+	}
+	switch strings.ToLower(strings.TrimSpace(host)) {
+	case "%":
+		return model.DatabaseUserAccessScopeAll
+	case "localhost", "127.0.0.1", "::1":
+		return model.DatabaseUserAccessScopeLocal
+	case "":
+		return model.DatabaseUserAccessScopeUnknown
+	default:
+		return model.DatabaseUserAccessScopeSpecific
+	}
 }
 
 func firstNonEmptyNonBlank(values ...string) string {
@@ -281,9 +299,29 @@ func (s DatabaseUserService) GetByIdentity(serverID uint, username, host string)
 	return res, nil
 }
 
+func (s *DatabaseUserService) GetStoredPassword(req *request.DatabaseUserGet) (string, bool, error) {
+	var user *model.DatabaseUser
+	var err error
+	if req.ID > 0 {
+		user, err = s.repo.Get(req.ID)
+	} else {
+		if req.ServerID == 0 || strings.TrimSpace(req.Username) == "" {
+			return "", false, buserr.New(constant.ErrDatabaseUserIdentityRequired)
+		}
+		user = &model.DatabaseUser{ServerID: req.ServerID, Username: req.Username, Host: req.Host}
+		err = s.repo.FirstOrInit(user, user)
+	}
+	if err != nil {
+		return "", false, err
+	}
+	password := user.Password
+	return password, password != "", nil
+}
+
 func (r DatabaseUserService) fillUser(user *model.DatabaseUser) {
 	server, err := NewDatabaseServer().Get(user.ServerID)
 	if err == nil {
+		user.AccessScope = databaseUserAccessScope(server.Type, user.Host)
 		switch server.Type {
 		case model.DatabaseTypeMysql:
 			mysql, err := db.NewMySQL(server.Username, server.Password, fmt.Sprintf("%s:%d", server.Host, server.Port))
@@ -294,7 +332,9 @@ func (r DatabaseUserService) fillUser(user *model.DatabaseUser) {
 				privileges, _ := mysql.UserPrivileges(user.Username, user.Host)
 				user.Privileges = privileges
 			}
-			if mysql2, err := db.NewMySQL(user.Username, user.Password, fmt.Sprintf("%s:%d", server.Host, server.Port)); err == nil {
+			if user.Password == "" {
+				user.Status = model.DatabaseUserStatusUnknown
+			} else if mysql2, err := db.NewMySQL(user.Username, user.Password, fmt.Sprintf("%s:%d", server.Host, server.Port)); err == nil {
 				_ = mysql2.Close()
 				user.Status = model.DatabaseUserStatusValid
 			} else {
@@ -309,7 +349,9 @@ func (r DatabaseUserService) fillUser(user *model.DatabaseUser) {
 				privileges, _ := postgres.UserPrivileges(user.Username)
 				user.Privileges = privileges
 			}
-			if postgres2, err := db.NewPostgres(user.Username, user.Password, server.Host, server.Port); err == nil {
+			if user.Password == "" {
+				user.Status = model.DatabaseUserStatusUnknown
+			} else if postgres2, err := db.NewPostgres(user.Username, user.Password, server.Host, server.Port); err == nil {
 				_ = postgres2.Close()
 				user.Status = model.DatabaseUserStatusValid
 			} else {
@@ -317,6 +359,7 @@ func (r DatabaseUserService) fillUser(user *model.DatabaseUser) {
 			}
 		}
 	}
+	user.PasswordManaged = user.Password != ""
 	// 初始化，防止 nil
 	if user.Privileges == nil {
 		user.Privileges = make([]string, 0)

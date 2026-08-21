@@ -2,6 +2,7 @@
 import { NButton, NFlex, NInput, NPopconfirm, NTag } from "naive-ui"
 
 import { formatTime } from "@/utils/date"
+import DatabaseUserPasswordCell from "./DatabaseUserPasswordCell.vue"
 import UpdateUserModal from "./UpdateUserModal.vue"
 import { useI18n } from "vue-i18n"
 import { ref, h, reactive, onMounted, onUnmounted, inject, Ref, watch } from "vue"
@@ -15,7 +16,6 @@ import {
 import { useTable } from "@/composables/useTable"
 import { MsgSuccess } from "@/utils/message"
 import { isSucc } from "@/utils/is"
-import { useMessage } from "naive-ui"
 
 const { t } = useI18n()
 
@@ -25,6 +25,35 @@ const updateServerId = ref(0)
 const updateUsername = ref("")
 const updateHost = ref("")
 const page = ref(1)
+
+const rowIdentity = (row: any) => `${row.serverId || 0}|${row.username || ""}|${row.host || ""}`
+
+const accessScopeLabel = (row: any) => {
+	switch (row.accessScope) {
+		case "all":
+			return t("database.remoteAccess")
+		case "local":
+			return t("database.localOnly")
+		case "specific":
+			return t("database.specificHost")
+		default:
+			return t("database.notApplicable")
+	}
+}
+
+const accessScopeTagType = (row: any) => {
+	switch (row.accessScope) {
+		case "all":
+			return "success"
+		case "local":
+			return "warning"
+		case "specific":
+			return "info"
+		default:
+			return "default"
+	}
+}
+
 const columns: any = [
 	{
 		title: t("database.type"),
@@ -62,10 +91,27 @@ const columns: any = [
 	{
 		title: t("database.host"),
 		key: "host",
-		width: 150,
+		width: 190,
 		render(row: any) {
-			return h(NTag, null, {
-				default: () => row.host || t("None")
+			return h(NFlex, { align: "center", size: 6 }, {
+				default: () => [
+					h(NTag, null, { default: () => row.host || t("None") }),
+					h(NTag, { type: accessScopeTagType(row) }, { default: () => accessScopeLabel(row) })
+				]
+			})
+		}
+	},
+	{
+		title: t("database.password"),
+		key: "password",
+		width: 230,
+		render(row: any) {
+			return h(DatabaseUserPasswordCell, {
+				id: row.id || 0,
+				serverId: row.serverId,
+				username: row.username,
+				host: row.host || "",
+				managed: !!row.passwordManaged
 			})
 		}
 	},
@@ -114,14 +160,17 @@ const columns: any = [
 		}
 	},
 	{
-		title: t("database.status"),
+		title: t("database.passwordStatus"),
 		key: "status",
-		width: 100,
+		width: 120,
 		render(row: any) {
+			if (row.status === 0) {
+				return h(NTag, { type: "warning" }, { default: () => t("database.passwordUnverified") })
+			}
 			return h(
 				NTag,
 				{ type: row.status === 20 ? "success" : "error" },
-				{ default: () => (row.status === 20 ? t("database.valid") : t("database.invalid")) }
+				{ default: () => (row.status === 20 ? t("database.passwordVerified") : t("database.passwordVerificationFailed")) }
 			)
 		}
 	},
@@ -162,7 +211,7 @@ const columns: any = [
 				h(
 					NPopconfirm,
 					{
-						onPositiveClick: () => handleDelete(row.id,row.serverId,row.username)
+						onPositiveClick: () => handleDelete(row.id, row.serverId, row.username, row.host)
 					},
 					{
 						default: () => {
@@ -235,8 +284,8 @@ watch(() => globalSelectedServerId?.value, (newVal) => {
 	getData()
 }, { immediate: true })
 
-const handleDelete = (id: number,serverId: number,username: string) => {
-	databaseUserDeleteAPI({ id,serverId,username: username }).then((res: any) => {
+const handleDelete = (id: number, serverId: number, username: string, host: string) => {
+	databaseUserDeleteAPI({ id, serverId, username, host }).then((res: any) => {
 		if (isSucc(res.code)) {
 			getData()
 			MsgSuccess(res.msg)
@@ -267,14 +316,20 @@ onUnmounted(() => {
 </script>
 
 <template>
+  <n-alert
+    type="info"
+    class="mb-3"
+  >
+    {{ $t("database.mysqlAccountIdentityTips") }}
+  </n-alert>
   <n-data-table
     striped
     remote
-    :scroll-x="1800"
+    :scroll-x="2200"
     :loading="loading"
     :columns="columns"
     :data="list"
-    :row-key="(row) => row.name"
+    :row-key="rowIdentity"
     v-model:page="page"
     v-model:pageSize="pageSize"
     :pagination="{

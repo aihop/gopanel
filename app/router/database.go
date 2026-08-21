@@ -28,6 +28,7 @@ func DatabaseRouter(r fiber.Router) {
 		databaseRouter.Post("/user/update", api.DatabaseUserUpdate)
 		databaseRouter.Post("/user/delete", api.DatabaseUserDelete)
 		databaseRouter.Post("/user/get", api.DatabaseUserGet)
+		databaseRouter.Post("/user/password", api.DatabaseUserPassword)
 
 		// 新增数据库管理器接口 (Manager)
 		managerGroup := databaseRouter.Group("/manager")
