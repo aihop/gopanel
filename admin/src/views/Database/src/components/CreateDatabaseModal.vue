@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { NModal, NInput, NSelect, NButton, useMessage, NIcon } from 'naive-ui'
 import { renderIcon } from '@/utils'
+import { useI18n } from 'vue-i18n'
 import { createDBManagerDatabaseAPI } from '@/api/modules/database'
 
 const props = defineProps<{
@@ -14,6 +15,7 @@ const emit = defineEmits<{
 }>()
 
 const message = useMessage()
+const { t } = useI18n()
 const show = defineModel<boolean>('show', { default: false })
 
 const databaseName = ref('')
@@ -22,7 +24,7 @@ const collation = ref('utf8mb4_unicode_ci')
 const submitting = ref(false)
 
 const charsetOptions = [
-  { label: 'utf8mb4 (推荐)', value: 'utf8mb4' },
+  { label: t('databaseManager.createDatabase.charset.utf8mb4Recommended'), value: 'utf8mb4' },
   { label: 'utf8', value: 'utf8' },
   { label: 'utf16', value: 'utf16' },
   { label: 'latin1', value: 'latin1' },
@@ -42,17 +44,17 @@ const collationOptions = [
 
 const handleSubmit = async () => {
   if (!props.serverId) {
-    message.warning('请先选择服务器')
+    message.warning(t('databaseManager.createDatabase.selectServerFirst'))
     return
   }
   const name = databaseName.value.trim()
   if (!name) {
-    message.warning('请输入数据库名称')
+    message.warning(t('databaseManager.createDatabase.nameRequired'))
     return
   }
   // 基本校验：只允许字母数字下划线
   if (!/^[a-zA-Z_][a-zA-Z0-9_\-$]*$/.test(name)) {
-    message.warning('数据库名称格式不正确，请使用字母、数字或下划线')
+    message.warning(t('databaseManager.createDatabase.nameFormatInvalid'))
     return
   }
 
@@ -68,12 +70,12 @@ const handleSubmit = async () => {
     }
     const res = await createDBManagerDatabaseAPI(payload)
     if (res.code === 0) {
-      message.success(`数据库 ${name} 创建成功`)
+      message.success(t('databaseManager.createDatabase.success', { name }))
       show.value = false
       databaseName.value = ''
       emit('success')
     } else {
-      message.error(res.message || '创建失败')
+      message.error(res.message || t('databaseManager.createDatabase.failed'))
     }
   } catch (error: any) {
     void 0
@@ -94,15 +96,15 @@ const handleReset = () => {
     v-model:show="show"
     preset="card"
     style="width: 480px"
-    title="创建数据库"
+    :title="t('databaseManager.createDatabase.title')"
     @after-leave="handleReset"
   >
     <div class="flex flex-col gap-4 text-sm">
       <div class="flex items-center gap-2">
-        <span class="w-20 text-right text-slate-600">数据库名:</span>
+        <span class="w-20 text-right text-slate-600">{{ t('databaseManager.createDatabase.nameLabel') }}</span>
         <n-input
           v-model:value="databaseName"
-          placeholder="例如: my_app_db"
+          :placeholder="t('databaseManager.createDatabase.namePlaceholder')"
           size="small"
           class="flex-1"
           clearable

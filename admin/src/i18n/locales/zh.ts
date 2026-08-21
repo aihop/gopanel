@@ -760,7 +760,7 @@ export default {
 		runStatus_running: "运行中",
 		runStatus_completed: "已完成",
 		runStatus_failed: "执行失败",
-		runDuration: "耗时 {duration} 毫秒",
+		runDuration: "耗时 {duration}",
 		conversationMode: "对话任务",
 		advancedTerminal: "原生 CLI",
 		stateLoadFailed: "会话状态加载失败",
@@ -3315,5 +3315,66 @@ export default {
 			scanTaskMissing: "扫描任务不存在或已过期",
 			noFileSelected: "未选择要处理的文件"
 		}
+	},
+	databaseManager: {
+		importSqlite: {
+			title: "导入本地 SQLite 数据库",
+			aliasLabel: "数据库别名",
+			aliasPlaceholder: "例如：本地业务数据库",
+			pathLabel: "服务器本地 .db 文件绝对路径",
+			pathPlaceholder: "例如：/var/www/shoply/data.db",
+			commentLabel: "备注说明",
+			commentPlaceholder: "选填",
+			hint: "注意：这里的路径指的是 GoPanel 所在服务器上的本地绝对路径。导入后即可直接在工作台执行 SQL 管理数据。",
+			confirm: "确认导入",
+			aliasRequired: "请输入数据库别名",
+			pathRequired: "请指定 SQLite 数据库文件路径",
+			success: "SQLite 数据库导入成功"
+		},
+		createDatabase: {
+			title: "创建数据库",
+			nameLabel: "数据库名:",
+			namePlaceholder: "例如: my_app_db",
+			selectServerFirst: "请先选择服务器",
+			nameRequired: "请输入数据库名称",
+			nameFormatInvalid: "数据库名称格式不正确，请使用字母、数字或下划线",
+			charset: {
+				utf8mb4Recommended: "utf8mb4 (推荐)"
+			},
+			success: "数据库 ${name} 创建成功",
+			failed: "创建失败"
+		},
+		hostLabel: "主机",
+		sqliteAbsolutePath: "数据库文件绝对路径",
+		pathPlaceholderHint: "例如：/var/www/shoply/data.db",
+		inputHint: "请输入{0}",
+		context: {
+			managed: "数据库管理",
+			tables: "张表",
+			contextSynced: "当前表上下文已同步",
+			dataTable: "数据表",
+			selectedDatabaseFmt: "{0} · 数据表",
+			selectedTableFmt: "{0} · {1}",
+			selectedDatabaseSqlFmt: "{0} · SQL"
+		},
+		createTable: {
+			title: "创建表",
+			selectServerAndDbFirst: "请先选择服务器和数据库",
+			tableNameRequired: "请输入表名",
+			tableNameFormatInvalid: "表名格式不正确",
+			addFieldFirst: "请至少添加一个字段",
+			fieldNameRequired: "字段名不能为空",
+			fieldTypeRequired: "字段 {name} 的类型不能为空",
+			success: "表 {name} 创建成功",
+			failed: "创建失败",
+			tableNameLabel: "表名:",
+			tableNamePlaceholder: "例如: users",
+			commentLabel: "备注:",
+			commentPlaceholder: "可选",
+			engineRecommended: "InnoDB (推荐)",
+			charsetRecommended: "utf8mb4 (推荐)",
+			collationRecommended: "utf8mb4_unicode_ci (推荐)"
+		},
+		typeLabel: "数据库文件绝对路径"
 	}
 }

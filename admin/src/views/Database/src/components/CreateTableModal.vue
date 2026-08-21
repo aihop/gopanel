@@ -2,6 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import { NModal, NInput, NSelect, NButton, NIcon, NSwitch, NInputNumber, useMessage } from 'naive-ui'
 import { renderIcon } from '@/utils'
+import { useI18n } from 'vue-i18n'
 import { createDBManagerTableAPI } from '@/api/modules/database'
 
 const props = defineProps<{
@@ -15,6 +16,7 @@ const emit = defineEmits<{
 }>()
 
 const message = useMessage()
+const { t } = useI18n()
 const show = defineModel<boolean>('show', { default: false })
 
 const tableName = ref('')
@@ -40,20 +42,20 @@ let columnKeyCounter = 0
 const columns = ref<ColumnRow[]>([])
 
 const engineOptions = [
-  { label: 'InnoDB (推荐)', value: 'InnoDB' },
+  { label: t('databaseManager.createTable.engineRecommended'), value: 'InnoDB' },
   { label: 'MyISAM', value: 'MyISAM' },
   { label: 'MEMORY', value: 'MEMORY' },
 ]
 
 const charsetOptions = [
-  { label: 'utf8mb4 (推荐)', value: 'utf8mb4' },
+  { label: t('databaseManager.createTable.charsetRecommended'), value: 'utf8mb4' },
   { label: 'utf8', value: 'utf8' },
   { label: 'latin1', value: 'latin1' },
   { label: 'gbk', value: 'gbk' },
 ]
 
 const collationOptions = [
-  { label: 'utf8mb4_unicode_ci (推荐)', value: 'utf8mb4_unicode_ci' },
+  { label: t('databaseManager.createTable.collationRecommended'), value: 'utf8mb4_unicode_ci' },
   { label: 'utf8mb4_general_ci', value: 'utf8mb4_general_ci' },
   { label: 'utf8mb4_bin', value: 'utf8mb4_bin' },
   { label: 'utf8_general_ci', value: 'utf8_general_ci' },
@@ -133,32 +135,32 @@ const handleReset = () => {
 
 const handleSubmit = async () => {
   if (!props.serverId || !props.databaseName) {
-    message.warning('请先选择服务器和数据库')
+    message.warning(t('databaseManager.createTable.selectServerAndDbFirst'))
     return
   }
 
   const name = tableName.value.trim()
   if (!name) {
-    message.warning('请输入表名')
+    message.warning(t('databaseManager.createTable.tableNameRequired'))
     return
   }
   if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) {
-    message.warning('表名格式不正确')
+    message.warning(t('databaseManager.createTable.tableNameFormatInvalid'))
     return
   }
 
   if (columns.value.length === 0) {
-    message.warning('请至少添加一个字段')
+    message.warning(t('databaseManager.createTable.addFieldFirst'))
     return
   }
 
   for (const col of columns.value) {
     if (!col.name.trim()) {
-      message.warning('字段名不能为空')
+      message.warning(t('databaseManager.createTable.fieldNameRequired'))
       return
     }
     if (!col.type.trim()) {
-      message.warning(`字段 ${col.name} 的类型不能为空`)
+      message.warning(t('databaseManager.createTable.fieldTypeRequired', { name: col.name }))
       return
     }
   }
@@ -189,11 +191,11 @@ const handleSubmit = async () => {
 
     const res = await createDBManagerTableAPI(payload)
     if (res.code === 0) {
-      message.success(`表 ${name} 创建成功`)
+      message.success(t('databaseManager.createTable.success', { name }))
       show.value = false
       emit('success')
     } else {
-      message.error(res.message || '创建失败')
+      message.error(res.message || t('databaseManager.createTable.failed'))
     }
   } catch (error: any) {
     void 0
@@ -213,26 +215,26 @@ watch(show, (val) => {
     v-model:show="show"
     preset="card"
     style="width: 900px; max-height: 85vh;"
-    title="创建表"
+    :title="t('databaseManager.createTable.title')"
     :mask-closable="false"
   >
     <div class="flex flex-col gap-4 text-sm max-h-[65vh] overflow-y-auto pr-1">
       <!-- 基本信息 -->
       <div class="grid grid-cols-2 gap-4">
         <div class="flex items-center gap-2">
-          <span class="w-20 text-right text-slate-600 shrink-0">表名:</span>
+          <span class="w-20 text-right text-slate-600 shrink-0">{{ t('databaseManager.createTable.tableNameLabel') }}</span>
           <n-input
             v-model:value="tableName"
-            placeholder="例如: users"
+            :placeholder="t('databaseManager.createTable.tableNamePlaceholder')"
             size="small"
             clearable
           />
         </div>
         <div class="flex items-center gap-2">
-          <span class="w-20 text-right text-slate-600 shrink-0">备注:</span>
+          <span class="w-20 text-right text-slate-600 shrink-0">{{ t('databaseManager.createTable.commentLabel') }}</span>
           <n-input
             v-model:value="tableComment"
-            placeholder="可选"
+            :placeholder="t('databaseManager.createTable.commentPlaceholder')"
             size="small"
             clearable
           />

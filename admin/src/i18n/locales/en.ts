@@ -786,7 +786,7 @@ export default {
 		runStatus_running: "Running",
 		runStatus_completed: "Completed",
 		runStatus_failed: "Failed",
-		runDuration: "{duration} ms",
+		runDuration: "took {duration}",
 		conversationMode: "Tasks",
 		advancedTerminal: "Native CLI",
 		stateLoadFailed: "Failed to load session state",
@@ -3489,5 +3489,66 @@ export default {
 			scanTaskMissing: "Scan task does not exist or has expired",
 			noFileSelected: "No file selected for processing"
 		}
+	},
+	databaseManager: {
+		importSqlite: {
+			title: "Import local SQLite database",
+			aliasLabel: "Database alias",
+			aliasPlaceholder: "e.g. local business database",
+			pathLabel: "Absolute path of .db file on the server",
+			pathPlaceholder: "e.g. /var/www/shoply/data.db",
+			commentLabel: "Comment",
+			commentPlaceholder: "optional",
+			hint: "Note: the path is the absolute path on the server where GoPanel is running. After import you can run SQL directly in the workspace to manage data.",
+			confirm: "Confirm import",
+			aliasRequired: "Please enter a database alias",
+			pathRequired: "Please specify the SQLite database file path",
+			success: "SQLite database imported"
+		},
+		createDatabase: {
+			title: "Create database",
+			nameLabel: "Database name:",
+			namePlaceholder: "e.g. my_app_db",
+			selectServerFirst: "Please select a server first",
+			nameRequired: "Please enter a database name",
+			nameFormatInvalid: "Database name format invalid; use letters, digits or underscores only",
+			charset: {
+				utf8mb4Recommended: "utf8mb4 (recommended)"
+			},
+			success: "Database ${name} created",
+			failed: "Create failed"
+		},
+		hostLabel: "Host",
+		sqliteAbsolutePath: "Absolute path of the database file",
+		pathPlaceholderHint: "e.g. /var/www/shoply/data.db",
+		inputHint: "Please enter {0}",
+		context: {
+			managed: "Database manager",
+			tables: "tables",
+			contextSynced: "Current table context synced",
+			dataTable: "Data table",
+			selectedDatabaseFmt: "{0} · Data table",
+			selectedTableFmt: "{0} · {1}",
+			selectedDatabaseSqlFmt: "{0} · SQL"
+		},
+		createTable: {
+			title: "Create table",
+			selectServerAndDbFirst: "Please select a server and database first",
+			tableNameRequired: "Please enter a table name",
+			tableNameFormatInvalid: "Invalid table name format",
+			addFieldFirst: "Please add at least one field",
+			fieldNameRequired: "Field name cannot be empty",
+			fieldTypeRequired: "Field {name} type cannot be empty",
+			success: "Table {name} created",
+			failed: "Create failed",
+			tableNameLabel: "Table name:",
+			tableNamePlaceholder: "e.g. users",
+			commentLabel: "Comment:",
+			commentPlaceholder: "optional",
+			engineRecommended: "InnoDB (recommended)",
+			charsetRecommended: "utf8mb4 (recommended)",
+			collationRecommended: "utf8mb4_unicode_ci (recommended)"
+		},
+		typeLabel: "Absolute path of the database file"
 	}
 }

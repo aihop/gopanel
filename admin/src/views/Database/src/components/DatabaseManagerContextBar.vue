@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { NButton, NIcon } from 'naive-ui'
 import { renderIcon } from '@/utils'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   selectedServerLabel: string
@@ -35,16 +38,24 @@ const emit = defineEmits<{
       </div>
       <div class="flex items-center gap-2 flex-wrap">
         <div class="text-sm font-semibold text-slate-800">
-          {{ databaseSqlMode ? `${selectedDatabase} · SQL` : selectedTable ? `${selectedTable} · ${activeTabLabel}` : selectedDatabase ? `${selectedDatabase} · 数据表` : '数据库管理' }}
+          {{
+            databaseSqlMode
+              ? t('databaseManager.context.selectedDatabaseSqlFmt', [selectedDatabase])
+              : selectedTable
+                ? t('databaseManager.context.selectedTableFmt', [selectedTable, activeTabLabel])
+                : selectedDatabase
+                  ? t('databaseManager.context.selectedDatabaseFmt', [selectedDatabase])
+                  : t('databaseManager.context.managed')
+          }}
         </div>
         <div class="px-2 py-0.5 rounded-full bg-slate-100 text-[11px] text-slate-600">
-          {{ tableCount }} 张表
+          {{ tableCount }} {{ t('databaseManager.context.tables') }}
         </div>
         <div
           v-if="selectedTable"
           class="px-2 py-0.5 rounded-full bg-blue-50 text-[11px] text-blue-600"
         >
-          当前表上下文已同步
+          {{ t('databaseManager.context.contextSynced') }}
         </div>
       </div>
     </div>

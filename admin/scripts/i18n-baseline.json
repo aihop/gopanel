@@ -9036,78 +9036,6 @@
     "chars": 4
   },
   {
-    "file": "src/views/Database/src/ImportSqliteModal.vue",
-    "line": 23,
-    "text": "message.error(\"请输入数据库别名\")",
-    "chars": 8
-  },
-  {
-    "file": "src/views/Database/src/ImportSqliteModal.vue",
-    "line": 27,
-    "text": "message.error(\"请指定 SQLite 数据库文件路径\")",
-    "chars": 10
-  },
-  {
-    "file": "src/views/Database/src/ImportSqliteModal.vue",
-    "line": 33,
-    "text": "message.success(\"SQLite 数据库导入成功\")",
-    "chars": 7
-  },
-  {
-    "file": "src/views/Database/src/ImportSqliteModal.vue",
-    "line": 44,
-    "text": "title=\"导入本地 SQLite 数据库\"",
-    "chars": 7
-  },
-  {
-    "file": "src/views/Database/src/ImportSqliteModal.vue",
-    "line": 54,
-    "text": "label=\"数据库别名\"",
-    "chars": 5
-  },
-  {
-    "file": "src/views/Database/src/ImportSqliteModal.vue",
-    "line": 60,
-    "text": "placeholder=\"例如：本地业务数据库\"",
-    "chars": 9
-  },
-  {
-    "file": "src/views/Database/src/ImportSqliteModal.vue",
-    "line": 66,
-    "text": "label=\"服务器本地 .db 文件绝对路径\"",
-    "chars": 11
-  },
-  {
-    "file": "src/views/Database/src/ImportSqliteModal.vue",
-    "line": 72,
-    "text": "placeholder=\"例如：/var/www/shoply/data.db\"",
-    "chars": 2
-  },
-  {
-    "file": "src/views/Database/src/ImportSqliteModal.vue",
-    "line": 78,
-    "text": "label=\"备注说明\"",
-    "chars": 4
-  },
-  {
-    "file": "src/views/Database/src/ImportSqliteModal.vue",
-    "line": 84,
-    "text": "placeholder=\"选填\"",
-    "chars": 2
-  },
-  {
-    "file": "src/views/Database/src/ImportSqliteModal.vue",
-    "line": 93,
-    "text": "注意：这里的路径指的是 GoPanel 所在服务器上的本地绝对路径。导入后即可直接在工作台执行 SQL 管理数据。",
-    "chars": 40
-  },
-  {
-    "file": "src/views/Database/src/ImportSqliteModal.vue",
-    "line": 100,
-    "text": ">确认导入</n-button>",
-    "chars": 4
-  },
-  {
     "file": "src/views/Database/src/UpdateServerModal.vue",
     "line": 77,
     "text": ":label=\"updateModel.type === 'sqlite' ? '数据库文件绝对路径' : $t('database.host')\"",
@@ -9157,295 +9085,145 @@
   },
   {
     "file": "src/views/Database/src/components/CreateDatabaseModal.vue",
-    "line": 25,
-    "text": "{ label: 'utf8mb4 (推荐)', value: 'utf8mb4' },",
-    "chars": 2
-  },
-  {
-    "file": "src/views/Database/src/components/CreateDatabaseModal.vue",
-    "line": 45,
-    "text": "message.warning('请先选择服务器')",
-    "chars": 7
-  },
-  {
-    "file": "src/views/Database/src/components/CreateDatabaseModal.vue",
-    "line": 50,
-    "text": "message.warning('请输入数据库名称')",
-    "chars": 8
-  },
-  {
-    "file": "src/views/Database/src/components/CreateDatabaseModal.vue",
-    "line": 55,
-    "text": "message.warning('数据库名称格式不正确，请使用字母、数字或下划线')",
-    "chars": 21
-  },
-  {
-    "file": "src/views/Database/src/components/CreateDatabaseModal.vue",
-    "line": 71,
-    "text": "message.success(`数据库 ${name} 创建成功`)",
-    "chars": 7
-  },
-  {
-    "file": "src/views/Database/src/components/CreateDatabaseModal.vue",
-    "line": 76,
-    "text": "message.error(res.message || '创建失败')",
-    "chars": 4
-  },
-  {
-    "file": "src/views/Database/src/components/CreateDatabaseModal.vue",
-    "line": 97,
-    "text": "title=\"创建数据库\"",
-    "chars": 5
-  },
-  {
-    "file": "src/views/Database/src/components/CreateDatabaseModal.vue",
-    "line": 102,
-    "text": "<span class=\"w-20 text-right text-slate-600\">数据库名:</span>",
-    "chars": 4
-  },
-  {
-    "file": "src/views/Database/src/components/CreateDatabaseModal.vue",
-    "line": 105,
-    "text": "placeholder=\"例如: my_app_db\"",
-    "chars": 2
-  },
-  {
-    "file": "src/views/Database/src/components/CreateDatabaseModal.vue",
-    "line": 114,
+    "line": 116,
     "text": "<span class=\"w-20 text-right text-slate-600\">字符集:</span>",
     "chars": 3
   },
   {
     "file": "src/views/Database/src/components/CreateDatabaseModal.vue",
-    "line": 123,
+    "line": 125,
     "text": "<span class=\"w-20 text-right text-slate-600\">排序规则:</span>",
     "chars": 4
   },
   {
     "file": "src/views/Database/src/components/CreateDatabaseModal.vue",
-    "line": 135,
+    "line": 137,
     "text": "数据库名称只能包含字母、数字、下划线，不能以数字开头",
     "chars": 23
   },
   {
     "file": "src/views/Database/src/components/CreateDatabaseModal.vue",
-    "line": 141,
+    "line": 143,
     "text": "<n-button size=\"small\" @click=\"show = false\">取消</n-button>",
     "chars": 2
   },
   {
     "file": "src/views/Database/src/components/CreateDatabaseModal.vue",
-    "line": 147,
+    "line": 149,
     "text": ">创建</n-button>",
     "chars": 2
   },
   {
     "file": "src/views/Database/src/components/CreateTableModal.vue",
-    "line": 43,
-    "text": "{ label: 'InnoDB (推荐)', value: 'InnoDB' },",
-    "chars": 2
-  },
-  {
-    "file": "src/views/Database/src/components/CreateTableModal.vue",
-    "line": 49,
-    "text": "{ label: 'utf8mb4 (推荐)', value: 'utf8mb4' },",
-    "chars": 2
-  },
-  {
-    "file": "src/views/Database/src/components/CreateTableModal.vue",
-    "line": 56,
-    "text": "{ label: 'utf8mb4_unicode_ci (推荐)', value: 'utf8mb4_unicode_ci' },",
-    "chars": 2
-  },
-  {
-    "file": "src/views/Database/src/components/CreateTableModal.vue",
-    "line": 136,
-    "text": "message.warning('请先选择服务器和数据库')",
-    "chars": 11
-  },
-  {
-    "file": "src/views/Database/src/components/CreateTableModal.vue",
-    "line": 142,
-    "text": "message.warning('请输入表名')",
-    "chars": 5
-  },
-  {
-    "file": "src/views/Database/src/components/CreateTableModal.vue",
-    "line": 146,
-    "text": "message.warning('表名格式不正确')",
-    "chars": 7
-  },
-  {
-    "file": "src/views/Database/src/components/CreateTableModal.vue",
-    "line": 151,
-    "text": "message.warning('请至少添加一个字段')",
-    "chars": 9
-  },
-  {
-    "file": "src/views/Database/src/components/CreateTableModal.vue",
-    "line": 157,
-    "text": "message.warning('字段名不能为空')",
-    "chars": 7
-  },
-  {
-    "file": "src/views/Database/src/components/CreateTableModal.vue",
-    "line": 161,
-    "text": "message.warning(`字段 ${col.name} 的类型不能为空`)",
-    "chars": 9
-  },
-  {
-    "file": "src/views/Database/src/components/CreateTableModal.vue",
-    "line": 192,
-    "text": "message.success(`表 ${name} 创建成功`)",
-    "chars": 5
-  },
-  {
-    "file": "src/views/Database/src/components/CreateTableModal.vue",
-    "line": 196,
-    "text": "message.error(res.message || '创建失败')",
-    "chars": 4
-  },
-  {
-    "file": "src/views/Database/src/components/CreateTableModal.vue",
-    "line": 216,
-    "text": "title=\"创建表\"",
-    "chars": 3
-  },
-  {
-    "file": "src/views/Database/src/components/CreateTableModal.vue",
-    "line": 223,
-    "text": "<span class=\"w-20 text-right text-slate-600 shrink-0\">表名:</span>",
-    "chars": 2
-  },
-  {
-    "file": "src/views/Database/src/components/CreateTableModal.vue",
-    "line": 226,
-    "text": "placeholder=\"例如: users\"",
-    "chars": 2
-  },
-  {
-    "file": "src/views/Database/src/components/CreateTableModal.vue",
-    "line": 232,
-    "text": "<span class=\"w-20 text-right text-slate-600 shrink-0\">备注:</span>",
-    "chars": 2
-  },
-  {
-    "file": "src/views/Database/src/components/CreateTableModal.vue",
-    "line": 235,
-    "text": "placeholder=\"可选\"",
-    "chars": 2
-  },
-  {
-    "file": "src/views/Database/src/components/CreateTableModal.vue",
-    "line": 242,
+    "line": 244,
     "text": "<span class=\"w-20 text-right text-slate-600 shrink-0\">引擎:</span>",
     "chars": 2
   },
   {
     "file": "src/views/Database/src/components/CreateTableModal.vue",
-    "line": 246,
+    "line": 248,
     "text": "<span class=\"w-20 text-right text-slate-600 shrink-0\">字符集:</span>",
     "chars": 3
   },
   {
     "file": "src/views/Database/src/components/CreateTableModal.vue",
-    "line": 256,
+    "line": 258,
     "text": "<span>字段定义</span>",
     "chars": 4
   },
   {
     "file": "src/views/Database/src/components/CreateTableModal.vue",
-    "line": 257,
+    "line": 259,
     "text": "<span class=\"text-slate-400 font-normal\">({{ columns.length }} 个字段)</span>",
     "chars": 3
   },
   {
     "file": "src/views/Database/src/components/CreateTableModal.vue",
-    "line": 264,
+    "line": 266,
     "text": "<div class=\"w-28 shrink-0\">字段名</div>",
     "chars": 3
   },
   {
     "file": "src/views/Database/src/components/CreateTableModal.vue",
-    "line": 265,
+    "line": 267,
     "text": "<div class=\"w-40 shrink-0\">类型</div>",
     "chars": 2
   },
   {
     "file": "src/views/Database/src/components/CreateTableModal.vue",
-    "line": 266,
+    "line": 268,
     "text": "<div class=\"w-14 shrink-0 text-center\">长度</div>",
     "chars": 2
   },
   {
     "file": "src/views/Database/src/components/CreateTableModal.vue",
-    "line": 267,
+    "line": 269,
     "text": "<div class=\"w-14 shrink-0 text-center\">可空</div>",
     "chars": 2
   },
   {
     "file": "src/views/Database/src/components/CreateTableModal.vue",
-    "line": 268,
+    "line": 270,
     "text": "<div class=\"w-14 shrink-0 text-center\">自增</div>",
     "chars": 2
   },
   {
     "file": "src/views/Database/src/components/CreateTableModal.vue",
-    "line": 269,
+    "line": 271,
     "text": "<div class=\"w-14 shrink-0 text-center\">主键</div>",
     "chars": 2
   },
   {
     "file": "src/views/Database/src/components/CreateTableModal.vue",
-    "line": 270,
+    "line": 272,
     "text": "<div class=\"w-28 shrink-0\">默认值</div>",
     "chars": 3
   },
   {
     "file": "src/views/Database/src/components/CreateTableModal.vue",
-    "line": 271,
+    "line": 273,
     "text": "<div class=\"flex-1 min-w-0\">备注</div>",
     "chars": 2
   },
   {
     "file": "src/views/Database/src/components/CreateTableModal.vue",
-    "line": 290,
+    "line": 292,
     "text": "<n-input v-model:value=\"col.name\" placeholder=\"字段名\" size=\"tiny\" />",
     "chars": 3
   },
   {
     "file": "src/views/Database/src/components/CreateTableModal.vue",
-    "line": 324,
+    "line": 326,
     "text": "<n-input v-model:value=\"col.comment\" placeholder=\"备注\" size=\"tiny\" class=\"flex-1\" />",
     "chars": 2
   },
   {
     "file": "src/views/Database/src/components/CreateTableModal.vue",
-    "line": 334,
+    "line": 336,
     "text": "添加字段",
     "chars": 4
   },
   {
     "file": "src/views/Database/src/components/CreateTableModal.vue",
-    "line": 339,
+    "line": 341,
     "text": "建议为表设置主键字段",
     "chars": 10
   },
   {
     "file": "src/views/Database/src/components/CreateTableModal.vue",
-    "line": 346,
+    "line": 348,
     "text": "共 {{ columns.length }} 个字段",
     "chars": 4
   },
   {
     "file": "src/views/Database/src/components/CreateTableModal.vue",
-    "line": 349,
+    "line": 351,
     "text": "<n-button size=\"small\" @click=\"show = false\">取消</n-button>",
     "chars": 2
   },
   {
     "file": "src/views/Database/src/components/CreateTableModal.vue",
-    "line": 355,
+    "line": 357,
     "text": ">创建表</n-button>",
     "chars": 3
   },
@@ -9706,24 +9484,6 @@
     "line": 468,
     "text": "<n-button size=\"small\" @click=\"showDetailModal = false\">关闭</n-button>",
     "chars": 2
-  },
-  {
-    "file": "src/views/Database/src/components/DatabaseManagerContextBar.vue",
-    "line": 38,
-    "text": "{{ databaseSqlMode ? `${selectedDatabase} · SQL` : selectedTable ? `${selectedTable} · ${activeTabLabel}` : selectedDatabase ? `${selectedDatabase} · 数据表` : '数据库管理' }}",
-    "chars": 8
-  },
-  {
-    "file": "src/views/Database/src/components/DatabaseManagerContextBar.vue",
-    "line": 41,
-    "text": "{{ tableCount }} 张表",
-    "chars": 2
-  },
-  {
-    "file": "src/views/Database/src/components/DatabaseManagerContextBar.vue",
-    "line": 47,
-    "text": "当前表上下文已同步",
-    "chars": 9
   },
   {
     "file": "src/views/Database/src/components/DatabaseManagerSidebar.vue",
@@ -14323,37 +14083,37 @@
   },
   {
     "file": "src/views/Code/Index.vue",
-    "line": 31,
+    "line": 32,
     "text": "项目管理入口。刻意不做成任务列表的筛选器：",
     "chars": 19
   },
   {
     "file": "src/views/Code/Index.vue",
-    "line": 32,
+    "line": 33,
     "text": "首页列的是「所有在做的任务」，按项目切会把这个口径打散。",
     "chars": 24
   },
   {
     "file": "src/views/Code/Index.vue",
-    "line": 33,
+    "line": 34,
     "text": "这里只负责进入 / 浮窗 / 编辑，不影响下面的列表。",
     "chars": 19
   },
   {
     "file": "src/views/Code/Index.vue",
-    "line": 112,
+    "line": 113,
     "text": "复用已经发现到的仓库列表：项目目录本身是仓库、里面又嵌了子仓库时",
     "chars": 30
   },
   {
     "file": "src/views/Code/Index.vue",
-    "line": 113,
+    "line": 114,
     "text": "（如 app/themes/*），发现逻辑会沿 gitlink 递归全部带进来。",
     "chars": 14
   },
   {
     "file": "src/views/Code/Index.vue",
-    "line": 114,
+    "line": 115,
     "text": "这里让用户把不参与开发的摘掉，主交付仓库不允许排除。",
     "chars": 24
   },
@@ -17960,192 +17720,222 @@
   {
     "file": "src/views/Code/codeWorkspaceMessages.ts",
     "line": 186,
-    "text": "runStatus_queued: \"排队中\",",
-    "chars": 3
-  },
-  {
-    "file": "src/views/Code/codeWorkspaceMessages.ts",
-    "line": 187,
-    "text": "runStatus_completed: \"已完成\",",
-    "chars": 3
-  },
-  {
-    "file": "src/views/Code/codeWorkspaceMessages.ts",
-    "line": 188,
-    "text": "runStatus_failed: \"执行失败\",",
+    "text": "activity_command: \"正在执行\",",
     "chars": 4
   },
   {
     "file": "src/views/Code/codeWorkspaceMessages.ts",
+    "line": 187,
+    "text": "activity_file: \"正在修改\",",
+    "chars": 4
+  },
+  {
+    "file": "src/views/Code/codeWorkspaceMessages.ts",
+    "line": 188,
+    "text": "activity_tool: \"正在调用工具\",",
+    "chars": 6
+  },
+  {
+    "file": "src/views/Code/codeWorkspaceMessages.ts",
     "line": 189,
-    "text": "runStatus_cancelled: \"已停止\",",
-    "chars": 3
+    "text": "activity_search: \"正在检索\",",
+    "chars": 4
   },
   {
     "file": "src/views/Code/codeWorkspaceMessages.ts",
     "line": 190,
-    "text": "runDuration: \"耗时 {duration} 毫秒\",",
+    "text": "activity_thinking: \"正在思考\",",
     "chars": 4
   },
   {
     "file": "src/views/Code/codeWorkspaceMessages.ts",
     "line": 191,
-    "text": "sendingInstruction: \"发送中\",",
+    "text": "runStatus_queued: \"排队中\",",
     "chars": 3
   },
   {
     "file": "src/views/Code/codeWorkspaceMessages.ts",
     "line": 192,
+    "text": "runStatus_completed: \"已完成\",",
+    "chars": 3
+  },
+  {
+    "file": "src/views/Code/codeWorkspaceMessages.ts",
+    "line": 193,
+    "text": "runStatus_failed: \"执行失败\",",
+    "chars": 4
+  },
+  {
+    "file": "src/views/Code/codeWorkspaceMessages.ts",
+    "line": 194,
+    "text": "runStatus_cancelled: \"已停止\",",
+    "chars": 3
+  },
+  {
+    "file": "src/views/Code/codeWorkspaceMessages.ts",
+    "line": 195,
+    "text": "runDuration: \"耗时 {duration}\",",
+    "chars": 2
+  },
+  {
+    "file": "src/views/Code/codeWorkspaceMessages.ts",
+    "line": 196,
+    "text": "sendingInstruction: \"发送中\",",
+    "chars": 3
+  },
+  {
+    "file": "src/views/Code/codeWorkspaceMessages.ts",
+    "line": 197,
     "text": "instructionQueued: \"任务已开始执行\",",
     "chars": 7
   },
   {
     "file": "src/views/Code/codeWorkspaceMessages.ts",
-    "line": 193,
+    "line": 198,
     "text": "instructionSubmitFailed: \"任务提交失败\",",
     "chars": 6
   },
   {
     "file": "src/views/Code/codeWorkspaceMessages.ts",
-    "line": 194,
+    "line": 199,
     "text": "stopExecution: \"停止\",",
     "chars": 2
   },
   {
     "file": "src/views/Code/codeWorkspaceMessages.ts",
-    "line": 195,
+    "line": 200,
     "text": "stopRequested: \"正在停止任务\",",
     "chars": 6
   },
   {
     "file": "src/views/Code/codeWorkspaceMessages.ts",
-    "line": 196,
+    "line": 201,
     "text": "stopFailed: \"停止任务失败\",",
     "chars": 6
   },
   {
     "file": "src/views/Code/codeWorkspaceMessages.ts",
-    "line": 197,
+    "line": 202,
     "text": "conversationClosed: \"当前会话已结束，不能继续发送指令\",",
     "chars": 15
   },
   {
     "file": "src/views/Code/codeWorkspaceMessages.ts",
-    "line": 198,
+    "line": 203,
     "text": "conversationInitializing: \"会话正在初始化，请稍后再发送\",",
     "chars": 13
   },
   {
     "file": "src/views/Code/codeWorkspaceMessages.ts",
-    "line": 199,
+    "line": 204,
     "text": "projectStructure: \"项目结构\",",
     "chars": 4
   },
   {
     "file": "src/views/Code/codeWorkspaceMessages.ts",
-    "line": 200,
+    "line": 205,
     "text": "conversationHistory: \"完整对话\",",
     "chars": 4
   },
   {
     "file": "src/views/Code/codeWorkspaceMessages.ts",
-    "line": 201,
+    "line": 206,
     "text": "noConversationHistory: \"暂无对话历史\",",
     "chars": 6
   },
   {
     "file": "src/views/Code/codeWorkspaceMessages.ts",
-    "line": 202,
+    "line": 207,
     "text": "userMessage: \"用户\",",
     "chars": 2
   },
   {
     "file": "src/views/Code/codeWorkspaceMessages.ts",
-    "line": 203,
+    "line": 208,
     "text": "executorMessage: \"执行器\",",
     "chars": 3
   },
   {
     "file": "src/views/Code/codeWorkspaceMessages.ts",
-    "line": 204,
+    "line": 209,
     "text": "historyLoadFailed: \"对话历史加载失败\",",
     "chars": 8
   },
   {
     "file": "src/views/Code/codeWorkspaceMessages.ts",
-    "line": 205,
+    "line": 210,
     "text": "rawOutputLoadFailed: \"原始运行日志加载失败\",",
     "chars": 10
   },
   {
     "file": "src/views/Code/codeWorkspaceMessages.ts",
-    "line": 206,
+    "line": 211,
     "text": "hideExecutorMessages: \"隐藏执行器消息\",",
     "chars": 7
   },
   {
     "file": "src/views/Code/codeWorkspaceMessages.ts",
-    "line": 207,
+    "line": 212,
     "text": "noUserInstructions: \"暂无用户指令\",",
     "chars": 6
   },
   {
     "file": "src/views/Code/codeWorkspaceMessages.ts",
-    "line": 208,
+    "line": 213,
     "text": "expandMessage: \"展开全文\",",
     "chars": 4
   },
   {
     "file": "src/views/Code/codeWorkspaceMessages.ts",
-    "line": 209,
+    "line": 214,
     "text": "collapseMessage: \"收起\",",
     "chars": 2
   },
   {
     "file": "src/views/Code/codeWorkspaceMessages.ts",
-    "line": 210,
+    "line": 215,
     "text": "selectFileToEdit: \"从右侧项目结构中选择文件\",",
     "chars": 12
   },
   {
     "file": "src/views/Code/codeWorkspaceMessages.ts",
-    "line": 211,
+    "line": 216,
     "text": "enterWorkspaceFullscreen: \"进入沉浸模式\",",
     "chars": 6
   },
   {
     "file": "src/views/Code/codeWorkspaceMessages.ts",
-    "line": 212,
+    "line": 217,
     "text": "exitWorkspaceFullscreen: \"返回标准模式\",",
     "chars": 6
   },
   {
     "file": "src/views/Code/codeWorkspaceMessages.ts",
-    "line": 213,
+    "line": 218,
     "text": "cancel: \"取消\",",
     "chars": 2
   },
   {
     "file": "src/views/Code/codeWorkspaceMessages.ts",
-    "line": 214,
+    "line": 219,
     "text": "saveChanges: \"保存修改\",",
     "chars": 4
   },
   {
     "file": "src/views/Code/codeWorkspaceMessages.ts",
-    "line": 215,
+    "line": 220,
     "text": "unsavedChanges: \"未保存的修改\",",
     "chars": 6
   },
   {
     "file": "src/views/Code/codeWorkspaceMessages.ts",
-    "line": 216,
+    "line": 221,
     "text": "switchSessionUnsavedHint: \"当前会话有未保存的文件，继续后这些修改会丢失。\",",
     "chars": 21
   },
   {
     "file": "src/views/Code/codeWorkspaceMessages.ts",
-    "line": 217,
+    "line": 222,
     "text": "discardAndContinue: \"放弃并继续\",",
     "chars": 5
   },
@@ -18906,20 +18696,32 @@
     "chars": 12
   },
   {
+    "file": "src/views/Code/components/CodeConversationMessage.vue",
+    "line": 70,
+    "text": "执行中优先显示「正在执行 go test ./...」这类具体动作。",
+    "chars": 17
+  },
+  {
+    "file": "src/views/Code/components/CodeConversationMessage.vue",
+    "line": 71,
+    "text": "只有一个转圈的「运行中」时，用户既不知道 AI 在做什么，也判断不了该不该继续等。",
+    "chars": 32
+  },
+  {
     "file": "src/views/Code/components/CodeDashboard.vue",
-    "line": 334,
+    "line": 340,
     "text": "新建任务不再抢走右侧详情：建完就留在当前页，新任务由列表就地插入。",
     "chars": 30
   },
   {
     "file": "src/views/Code/components/CodeDashboard.vue",
-    "line": 335,
+    "line": 341,
     "text": "原先这里会切成「新会话」视图，用户刚点完新建就被弹到另一屏，",
     "chars": 26
   },
   {
     "file": "src/views/Code/components/CodeDashboard.vue",
-    "line": 336,
+    "line": 342,
     "text": "反而看不到自己刚建的东西落在哪个项目下。",
     "chars": 19
   },
@@ -19129,7 +18931,7 @@
   },
   {
     "file": "src/views/Code/components/codeConversationThread.ts",
-    "line": 50,
+    "line": 48,
     "text": "const injectedConversationMarkers = [\"[GoPanel Git 交付约束]\", \"[GoPanel 长期记忆]\"]",
     "chars": 8
   },
