@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
-import { useMessage } from "naive-ui"
 import type { CodeExecutor, CodeSession } from "@/api/interface/code"
 import type { CodeTaskListItem } from "@/api/interface/codeTasks"
-import { getCodeExecutors, handoverCodeSessionToConversation } from "@/api/modules/code"
+import { getCodeExecutors } from "@/api/modules/code"
 import Icon from "@/components/common/Icon.vue"
 import { codeProjectMessages } from "@/i18n/locales/codeProject"
 import { defaultDashboardWorkbenchMode, executorSupportsStructuredTurn, findExecutorById } from "../codeStructuredTurn"
@@ -31,7 +30,6 @@ const emit = defineEmits<{
 	taskCreated: [taskId: number]
 }>()
 const { t } = useI18n({ messages: codeProjectMessages })
-const message = useMessage()
 const { isWorkspaceFullscreen, fullscreenLabel, toggleWorkspaceFullscreen } = useCodeWorkspaceFullscreen(t)
 
 const terminalIdentity = computed(() =>
@@ -80,16 +78,11 @@ const openFile = (file: { path: string; extension: string; isDir?: boolean }) =>
 	selectedFile.value = file
 }
 
-const switchWorkspaceMode = async (mode: CodeWorkspaceMode) => {
+// 切到对话只是换个视图看，不抢占会话。原先这里会立刻请求接管，
+// 而那条链路最终执行的是 Process.Kill()——切过去就把终端里正在跑的任务杀掉。
+// 接管推迟到在对话里点发送时，由后端 acquireCodeInstructionSession 完成。
+const switchWorkspaceMode = (mode: CodeWorkspaceMode) => {
 	workspaceMode.value = mode
-	if (mode !== "conversation" || sessionId.value === null) return
-	try {
-		const response = await handoverCodeSessionToConversation(sessionId.value)
-		if (response.code !== 0) throw new Error(response.message)
-	} catch (error) {
-		workspaceMode.value = "terminal"
-		message.error(error instanceof Error && error.message ? error.message : t("code.handoverConversationFailed"))
-	}
 }
 </script>
 

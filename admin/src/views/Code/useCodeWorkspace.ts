@@ -6,7 +6,7 @@ import { useAuthStore } from "@/store/auth"
 import { useHideLayoutFooter } from "@/composables/useHideLayoutFooter"
 import { useCodeTaskPolling } from "./useCodeTaskPolling"
 import { useProjectTerminal } from "./useProjectTerminal"
-import { deleteAITask, getAIProjects, getCodeExecutors, getCodeSession, handoverCodeSessionToConversation, updateAITask } from "@/api/modules/code"
+import { deleteAITask, getAIProjects, getCodeExecutors, getCodeSession, updateAITask } from "@/api/modules/code"
 import type { AIProject, AITask, CodeExecutor, CodeSession } from "@/api/interface/code"
 import type { CodeTaskListItem } from "@/api/interface/codeTasks"
 import type { HostTerminalSession } from "@/api/interface/hostTerminal"
@@ -297,26 +297,18 @@ export function useCodeWorkspace(props: UseCodeWorkspaceProps, emit: (event: "cl
 		terminalMounted.value = true
 	}
 
-	const switchWorkspaceMode = async (mode: CodeWorkspaceMode) => {
+	// 切到对话只是换个视图看，不再抢占会话。
+	//
+	// 原先这里会立刻调 handoverCodeSessionToConversation，那条链路最终执行的是
+	// Process.Kill()——切过去就把终端里正在跑的任务连同上下文一起杀掉，而且毫无提示。
+	// 但互斥真正要防的是「两边同时往同一棵工作树写」，单纯浏览对话根本不写。
+	//
+	// 接管推迟到真正要写的那一刻：在对话里点发送时，后端的
+	// acquireCodeInstructionSession 本来就会先完成 handover，语义不变。
+	const switchWorkspaceMode = (mode: CodeWorkspaceMode) => {
 		workspaceMode.value = mode
-		if (mode === "terminal") {
-			terminalTakeoverRequested.value = true
-			terminalMounted.value = true
-			return
-		}
-		if (mode === "conversation") {
-			terminalTakeoverRequested.value = false
-			if (currentSessionId.value !== null) {
-				try {
-					const response = await handoverCodeSessionToConversation(currentSessionId.value)
-					if (response.code !== 0) throw new Error(response.message)
-				} catch (error) {
-					workspaceMode.value = "terminal"
-					terminalTakeoverRequested.value = true
-					message.error(error instanceof Error && error.message ? error.message : t("code.handoverConversationFailed"))
-				}
-			}
-		}
+		terminalTakeoverRequested.value = mode === "terminal"
+		if (mode === "terminal") terminalMounted.value = true
 	}
 
 	const handleTaskCreated = (taskId: number) => {
