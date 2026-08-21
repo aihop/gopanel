@@ -1,65 +1,65 @@
 <template>
 	<n-drawer v-model:show="drawerVisible" :width="600" placement="right">
-		<n-drawer-content title="创建存储卷" closable>
+		<n-drawer-content :title="t('container.createVolume')" closable>
 			<template #header>
 				<div class="flex items-center">
 					<div class="flex cursor-pointer items-center gap-2 text-gray-500" @click="handleClose">
 						<Icon name="mdi:arrow-left" />
-						返回
+						{{ t('commons.button.back') }}
 					</div>
 					<n-divider vertical />
-					创建存储卷
+					{{ t('container.createVolume') }}
 				</div>
 			</template>
 
 			<n-form ref="formRef" :model="form" :rules="rules" label-placement="left" label-width="100" class="py-4">
-				<n-form-item label="名称" path="name">
-					<n-input v-model:value="form.name" placeholder="请输入存储卷名称" clearable />
+				<n-form-item :label="t('container.volumeName')" path="name">
+					<n-input v-model:value="form.name" :placeholder="t('container.createVolumeNamePlaceholder')" clearable />
 				</n-form-item>
 
-				<n-form-item label="驱动" path="driver">
+				<n-form-item :label="t('container.driver')" path="driver">
 					<n-tag type="success">local</n-tag>
 				</n-form-item>
 
-				<n-form-item label="启用 NFS" path="nfsStatus">
+				<n-form-item :label="t('container.nfsEnable')" path="nfsStatus">
 					<n-switch v-model:value="form.nfsStatus" />
 				</n-form-item>
 
 				<template v-if="form.nfsStatus">
-					<n-form-item label="NFS 地址" path="nfsAddress">
-						<n-input v-model:value="form.nfsAddress" placeholder="请输入 NFS 服务器地址" clearable />
+					<n-form-item :label="t('container.nfsAddress')" path="nfsAddress">
+						<n-input v-model:value="form.nfsAddress" :placeholder="t('container.createNfsAddressPlaceholder')" clearable />
 					</n-form-item>
 
-					<n-form-item label="NFS 版本" path="nfsVersion">
+					<n-form-item :label="t('container.nfsVersion')" path="nfsVersion">
 						<n-radio-group v-model:value="form.nfsVersion">
 							<n-radio-button value="v3">NFS</n-radio-button>
 							<n-radio-button value="v4">NFS4</n-radio-button>
 						</n-radio-group>
 					</n-form-item>
 
-					<n-form-item label="挂载点" path="nfsMount">
-						<n-input v-model:value="form.nfsMount" placeholder="请输入挂载点" clearable />
+					<n-form-item :label="t('container.mountpoint')" path="nfsMount">
+						<n-input v-model:value="form.nfsMount" :placeholder="t('container.createMountpointPlaceholder')" clearable />
 					</n-form-item>
 
-					<n-form-item label="NFS 选项" path="nfsOption">
-						<n-input v-model:value="form.nfsOption" placeholder="请输入 NFS 选项" clearable />
+					<n-form-item :label="t('container.nfsOptions')" path="nfsOption">
+						<n-input v-model:value="form.nfsOption" :placeholder="t('container.createNfsOptionsPlaceholder')" clearable />
 					</n-form-item>
 				</template>
 
-				<n-form-item label="选项" path="optionStr">
+				<n-form-item :label="t('container.options')" path="optionStr">
 					<n-input
 						type="textarea"
 						v-model:value="form.optionStr"
-						placeholder="一行一个选项"
+						:placeholder="t('container.onePerLine')"
 						:autosize="{ minRows: 3, maxRows: 5 }"
 					/>
 				</n-form-item>
 
-				<n-form-item label="标签" path="labelStr">
+				<n-form-item :label="t('container.label')" path="labelStr">
 					<n-input
 						type="textarea"
 						v-model:value="form.labelStr"
-						placeholder="一行一个标签"
+						:placeholder="t('container.onePerLine')"
 						:autosize="{ minRows: 3, maxRows: 5 }"
 					/>
 				</n-form-item>
@@ -67,8 +67,8 @@
 
 			<template #footer>
 				<n-space>
-					<n-button @click="handleClose">取消</n-button>
-					<n-button type="primary" :loading="loading" @click="handleSubmit">确认</n-button>
+					<n-button @click="handleClose">{{ t('commons.button.cancel') }}</n-button>
+					<n-button type="primary" :loading="loading" @click="handleSubmit">{{ t('commons.button.confirm') }}</n-button>
 				</n-space>
 			</template>
 		</n-drawer-content>
@@ -78,6 +78,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from "vue"
 import { useMessage } from "naive-ui"
+import { useI18n } from "vue-i18n"
 import type { FormInst, FormRules } from "naive-ui"
 import { createVolume } from "@/api/modules/container"
 import type { Container } from "@/api/interface/container"
@@ -92,6 +93,7 @@ const emit = defineEmits<{
 }>()
 
 const message = useMessage()
+const { t } = useI18n()
 const loading = ref(false)
 const formRef = ref<FormInst | null>(null)
 
@@ -115,17 +117,17 @@ const form = reactive({
 const rules: FormRules = {
 	name: {
 		required: true,
-		message: "请输入存储卷名称",
+		message: t("container.createVolumeNameRequired"),
 		trigger: "blur"
 	},
 	nfsAddress: {
 		required: true,
-		message: "请输入 NFS 服务器地址",
+		message: t("container.createNfsAddressRequired"),
 		trigger: "blur"
 	},
 	nfsMount: {
 		required: true,
-		message: "请输入挂载点",
+		message: t("container.createMountpointRequired"),
 		trigger: "blur"
 	}
 }
@@ -155,11 +157,12 @@ const handleSubmit = () => {
 				}
 
 				await createVolume(params)
-				message.success("创建成功")
+				message.success(t("commons.operate.createSuccess"))
 				handleClose()
 				emit("success")
 			} catch (error) {
-				console.error("创建失败:", error)
+				console.error(t("commons.operate.createFailed"), error)
+				message.error(t("commons.operate.createFailed"))
 			} finally {
 				loading.value = false
 			}

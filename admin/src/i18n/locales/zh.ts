@@ -456,6 +456,8 @@ export default {
 			millisecondUnit: "毫秒"
 		},
 		operate: {
+			createSuccess: "创建成功",
+			createFailed: "创建失败",
 			down: "停止",
 			up: "启动",
 			restart: "重启",
@@ -1180,6 +1182,19 @@ export default {
 		mountpointNFSHelper: "例：/nfs, /nfs-share",
 		options: "可选参数",
 		createVolume: "创建存储卷",
+		volumeName: "名称",
+		volumeDriver: "驱动",
+		nfsVersion: "NFS 版本",
+		nfsOptions: "NFS 选项",
+		onePerLine: "一行一个选项",
+		volumeLabel: "标签",
+		createVolumeNamePlaceholder: "请输入存储卷名称",
+		createNfsAddressPlaceholder: "请输入 NFS 服务器地址",
+		createMountpointPlaceholder: "请输入挂载点",
+		createNfsOptionsPlaceholder: "请输入 NFS 选项",
+		createVolumeNameRequired: "请输入存储卷名称",
+		createNfsAddressRequired: "请输入 NFS 服务器地址",
+		createMountpointRequired: "请输入挂载点",
 
 		repo: "仓库",
 		createRepo: "添加仓库",
