@@ -2,6 +2,8 @@ import { computed, ref, nextTick, type Ref } from "vue"
 import { Terminal } from "@xterm/xterm"
 import { FitAddon } from "@xterm/addon-fit"
 import { useAuthStore } from "@/store/auth"
+import GlobalStore from "@/store/modules/global"
+import { enc } from "crypto-js"
 import { useI18n } from "vue-i18n"
 import { getCodeSession } from "@/api/modules/code"
 import { codeTerminalMessages } from "../codeTerminalMessages"
@@ -34,6 +36,7 @@ interface UseCodeTerminalConnectionOptions {
 
 export function useCodeTerminalConnection(options: UseCodeTerminalConnectionOptions) {
 	const authStore = useAuthStore()
+	const globalStore = GlobalStore()
 	const { t } = useI18n({ messages: codeTerminalMessages })
 
 	let term: Terminal
@@ -138,6 +141,10 @@ export function useCodeTerminalConnection(options: UseCodeTerminalConnectionOpti
 				host: window.location.host,
 				secure: window.location.protocol === "https:",
 				token: authStore.auth || "",
+				// 和对话 SSE 的 EntranceCode 请求头等价：WebSocket 设不了自定义头，只能走查询参数。
+				entrance: globalStore.entrance
+					? enc.Base64.stringify(enc.Utf8.parse(globalStore.entrance))
+					: "",
 				cols: term.cols,
 				rows: term.rows,
 				sessionId: options.sessionId.value,

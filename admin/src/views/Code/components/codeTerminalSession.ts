@@ -107,12 +107,22 @@ export interface TerminalSocketParams {
 	attachOnly: boolean
 	afterSequence: number
 	takeControl: boolean
+	/** 安全入口，需已 base64 编码；未开启入口时为空。 */
+	entrance?: string
 }
 
-/** 拼终端 WebSocket 地址。参数组合较多，抽出来才能逐条验。 */
+/**
+ * 拼终端 WebSocket 地址。参数组合较多，抽出来才能逐条验。
+ *
+ * entrance 必须拼进 URL：面板开启安全入口后，服务端认「EntranceCode 请求头 /
+ * entrance 查询参数 / Cookie」三者之一，而浏览器不允许给 WebSocket 设自定义请求头。
+ * 只靠 Cookie 的话，那个 Cookie 24 小时就过期——过期后 HTTP 和对话 SSE 靠请求头照常
+ * 工作，唯独终端握手被 403 挡下，表现为「终端连接失败」。
+ */
 export function terminalWebSocketUrl(params: TerminalSocketParams) {
 	const protocol = params.secure ? "wss:" : "ws:"
 	let url = `${protocol}//${params.host}/api/code/terminal?token=${params.token}&cols=${params.cols}&rows=${params.rows}`
+	if (params.entrance) url += `&entrance=${encodeURIComponent(params.entrance)}`
 	if (params.sessionId) {
 		url += `&session_id=${params.sessionId}`
 		if (params.attachOnly) url += "&attach_only=1"

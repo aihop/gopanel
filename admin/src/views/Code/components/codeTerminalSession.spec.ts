@@ -261,3 +261,39 @@ describe("keepingTerminalBottom", () => {
 		expect(calls).toEqual(["scrollToBottom"])
 	})
 })
+
+// 面板开启安全入口后，服务端认「EntranceCode 请求头 / entrance 查询参数 / Cookie」
+// 三者之一。浏览器不允许给 WebSocket 设自定义请求头，Cookie 又只有 24 小时寿命——
+// 一过期，HTTP 和对话 SSE 靠请求头照常工作，唯独终端握手被 403 挡下，
+// 表现就是「终端连接失败，请检查 GoPanel 服务状态」。所以必须拼进 URL。
+describe("终端 WebSocket 的安全入口", () => {
+	const base = {
+		host: "127.0.0.1:15470",
+		secure: false,
+		token: "t",
+		cols: 80,
+		rows: 24,
+		taskId: null,
+		attachOnly: false,
+		afterSequence: 0,
+		takeControl: false,
+	}
+
+	it("带上 entrance 查询参数", () => {
+		const url = terminalWebSocketUrl({ ...base, sessionId: 1, entrance: "ZGVmYXVsdA==" })
+		expect(url).toContain("entrance=")
+		expect(url).toContain(encodeURIComponent("ZGVmYXVsdA=="))
+	})
+
+	// 未开启入口时不要拼空参数，免得服务端拿到空值去比对。
+	it("没有 entrance 时不拼该参数", () => {
+		expect(terminalWebSocketUrl({ ...base, sessionId: 1 })).not.toContain("entrance=")
+		expect(terminalWebSocketUrl({ ...base, sessionId: 1, entrance: "" })).not.toContain("entrance=")
+	})
+
+	// base64 里的 + / = 必须转义，否则服务端解出来的是另一个串。
+	it("对 base64 做 URL 转义", () => {
+		const url = terminalWebSocketUrl({ ...base, sessionId: 1, entrance: "a+b/c==" })
+		expect(url).toContain("entrance=a%2Bb%2Fc%3D%3D")
+	})
+})
