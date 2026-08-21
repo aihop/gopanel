@@ -206,3 +206,25 @@ func TestCodeGitUnstagesUnbornRepository(t *testing.T) {
 		t.Fatalf("unexpected unstaged status: %#v, %v", status, err)
 	}
 }
+
+func TestCodeGitStatusCountsUntrackedFileAdditions(t *testing.T) {
+	repositoryDir := t.TempDir()
+	if _, err := runCodeGit(repositoryDir, "init"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repositoryDir, "new.txt"), []byte("one\ntwo\nthree\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	repository, ok := inspectCodeGitRepository("session", "test", repositoryDir, "")
+	if !ok {
+		t.Fatal("repository not detected")
+	}
+	status, err := loadCodeGitRepositoryStatus(repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// git diff --numstat 看不见未跟踪文件，新建文件必须单独计入，否则新写的文件在 +/- 上是 0。
+	if status.Additions != 3 {
+		t.Fatalf("unexpected untracked additions: %#v", status)
+	}
+}

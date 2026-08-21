@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { computed } from "vue"
+import { computed, nextTick, ref } from "vue"
 import { useI18n } from "vue-i18n"
+import { useMessage } from "naive-ui"
 import type { CodeTaskListItem } from "@/api/interface/codeTasks"
+import { updateAITask } from "@/api/modules/code"
 import Icon from "@/components/common/Icon.vue"
 import { codeProjectMessages } from "@/i18n/locales/codeProject"
 import TaskApprovalAction from "./TaskApprovalAction.vue"
@@ -19,13 +21,59 @@ const emit = defineEmits<{
 	open: [task: CodeTaskListItem]
 	archive: [task: CodeTaskListItem]
 	openWorkspace: [task: CodeTaskListItem]
+	renamed: [taskId: number, title: string]
 	refresh: []
 }>()
 const { t } = useI18n({ messages: codeProjectMessages })
+const message = useMessage()
 
 const deliveryNeedsAttention = computed(() =>
 	["failed", "partial", "conflict"].includes(props.task.summary.deliveryStatus || "")
 )
+
+// 改名就地进行：任务名是这一行唯一的身份标识，弹窗改名会把它从上下文里摘出来，
+// 反而看不清自己在改哪一条。
+const editing = ref(false)
+const editingTitle = ref("")
+const saving = ref(false)
+const titleInput = ref<HTMLInputElement | null>(null)
+
+const startEditing = async () => {
+	if (saving.value) return
+	editing.value = true
+	editingTitle.value = props.task.title
+	await nextTick()
+	titleInput.value?.focus()
+	titleInput.value?.select()
+}
+
+const cancelEditing = () => {
+	if (saving.value) return
+	editing.value = false
+	editingTitle.value = ""
+}
+
+const saveTitle = async () => {
+	if (!editing.value || saving.value) return
+	const title = editingTitle.value.trim()
+	// 空标题和原样提交都按取消处理：清空标题只会让列表里多出一行没有名字的任务。
+	if (!title || title === props.task.title) {
+		cancelEditing()
+		return
+	}
+	saving.value = true
+	try {
+		const response = await updateAITask(props.task.id, title)
+		if (response.code !== 0) throw new Error(response.message)
+		emit("renamed", props.task.id, title)
+		editing.value = false
+		editingTitle.value = ""
+	} catch (error) {
+		message.error(error instanceof Error ? error.message : t("code.taskRenameFailed"))
+	} finally {
+		saving.value = false
+	}
+}
 </script>
 
 <template>
@@ -50,14 +98,42 @@ const deliveryNeedsAttention = computed(() =>
 		>
 			{{ projectName }}
 		</span>
+		<input
+			v-if="editing"
+			ref="titleInput"
+			v-model="editingTitle"
+			type="text"
+			class="min-w-0 flex-1 rounded border border-[var(--primary-color)] bg-transparent px-1 py-0.5 text-[13px] tracking-[0.01em] text-[var(--n-text-color)] outline-none"
+			:disabled="saving"
+			@click.stop
+			@keydown.stop.enter.prevent="saveTitle"
+			@keydown.stop.esc.prevent="cancelEditing"
+			@blur="saveTitle"
+		/>
 		<span
+			v-else
 			class="min-w-0 flex-1 truncate text-[13px] tracking-[0.01em]"
 			:class="selected ? 'font-semibold text-[var(--primary-color)]' : 'font-normal text-[var(--n-text-color-2)]'"
 			:title="task.title"
+			@dblclick.stop="startEditing"
 		>
 			{{ task.title }}
 		</span>
 		<n-button
+			v-if="!editing"
+			quaternary
+			circle
+			size="tiny"
+			:title="t('code.taskRename')"
+			class="shrink-0 opacity-0 transition-opacity group-hover/row:opacity-100"
+			@click.stop="startEditing"
+		>
+			<template #icon>
+				<Icon name="mdi:pencil-outline" :size="14" />
+			</template>
+		</n-button>
+		<n-button
+			v-if="!editing"
 			quaternary
 			circle
 			size="tiny"

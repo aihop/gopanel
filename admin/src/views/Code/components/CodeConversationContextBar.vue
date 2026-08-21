@@ -11,6 +11,8 @@ const props = defineProps<{
 	sessionId: number | null
 	workDir: string
 	fallbackBranch: string
+	/** 会话是否正在执行。执行中才是变更量真正在变的时候，刷新频率跟着它走。 */
+	running?: boolean
 }>()
 
 const { t } = useI18n({ messages: codeWorkspaceMessages })
@@ -95,10 +97,18 @@ const loadBranches = async (sessionId: number | null, silent = false) => {
 	}
 }
 
+// 执行中 3 秒一轮：AI 正在写文件，+/- 停在十秒前的数字等于没显示。
+// 空闲时退回 10 秒，免得对着不动的工作区一直跑 git。
+const restartTimer = (sessionId: number | null) => {
+	if (refreshTimer) clearInterval(refreshTimer)
+	refreshTimer = sessionId
+		? setInterval(() => void loadBranches(sessionId, true), props.running ? 3000 : 10000)
+		: null
+}
+
 watch(
 	() => props.sessionId,
 	sessionId => {
-		if (refreshTimer) clearInterval(refreshTimer)
 		loading.value = false
 		branches.value = []
 		additions.value = 0
@@ -106,9 +116,19 @@ watch(
 		changedFiles.value = []
 		loadFailed.value = false
 		void loadBranches(sessionId)
-		refreshTimer = sessionId ? setInterval(() => void loadBranches(sessionId, true), 10000) : null
+		restartTimer(sessionId)
 	},
 	{ immediate: true },
+)
+
+// 一轮执行刚起步和刚收尾都立刻补一次：收尾这一刻正是用户盯着变更量看的时候，
+// 让它等下一个轮询周期才跳数就成了「写完了但没反应」。
+watch(
+	() => props.running,
+	() => {
+		restartTimer(props.sessionId)
+		void loadBranches(props.sessionId, true)
+	},
 )
 onBeforeUnmount(() => {
 	if (refreshTimer) clearInterval(refreshTimer)

@@ -5,7 +5,7 @@ import { codeWorkspaceMessages } from "./codeWorkspaceMessages"
 // 任务行的元信息格式化。工作台侧栏和开发面板都要渲染同一套
 // 「时长 · token · git 状态 · diff」，逻辑放这里共用，避免两处各写一份走偏。
 export function useCodeTaskMeta() {
-	const { t } = useI18n({ messages: codeWorkspaceMessages })
+	const { t, locale } = useI18n({ messages: codeWorkspaceMessages })
 
 	const formatTaskDuration = (durationMs: number) => {
 		const seconds = Math.max(1, Math.round(durationMs / 1000))
@@ -23,7 +23,14 @@ export function useCodeTaskMeta() {
 			: t("code.taskDurationHours", { count: hours })
 	}
 
-	const formatTaskTokens = (tokens: number) => new Intl.NumberFormat().format(tokens)
+	const formatTaskTokens = (tokens: number) => new Intl.NumberFormat(locale.value).format(tokens)
+
+	// 百万级的 token 原样铺开就是一串没人会去数的数字。超过一万折成 "183.4万 / 1.8M"，
+	// 精确值留给 title，行内只负责让人一眼有量级概念。
+	const formatTaskTokensCompact = (tokens: number) =>
+		tokens < 10000
+			? formatTaskTokens(tokens)
+			: new Intl.NumberFormat(locale.value, { notation: "compact", maximumFractionDigits: 1 }).format(tokens)
 
 	const taskTokenStatus = (task: CodeTaskListItem) => {
 		switch (task.summary.tokenUsageStatus) {
@@ -107,6 +114,7 @@ export function useCodeTaskMeta() {
 		t,
 		formatTaskDuration,
 		formatTaskTokens,
+		formatTaskTokensCompact,
 		taskTokenStatus,
 		taskGitMeta,
 		taskDeliveryMeta,

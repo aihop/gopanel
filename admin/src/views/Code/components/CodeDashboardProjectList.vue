@@ -23,6 +23,7 @@ const emit = defineEmits<{
 	open: [task: CodeTaskListItem]
 	archive: [task: CodeTaskListItem]
 	openWorkspace: [task: CodeTaskListItem]
+	renamed: [taskId: number, title: string]
 	createTask: [projectId: number]
 	projectAction: [action: string, projectId: number]
 	reorderProject: [projectId: number, targetProjectId: number, position: CodeProjectDropPosition]
@@ -239,6 +240,7 @@ watch(
 						@open="emit('open', $event)"
 						@archive="emit('archive', $event)"
 						@open-workspace="emit('openWorkspace', $event)"
+						@renamed="(taskId, title) => emit('renamed', taskId, title)"
 						@refresh="emit('refresh')"
 					/>
 				</template>

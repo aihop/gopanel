@@ -322,6 +322,7 @@ const activateCreatedTask = async (taskId: number) => {
 								:archiving-task-id="archiving"
 								@open="selectRecentTask"
 								@archive="toggleArchived"
+								@renamed="renameTask"
 								@open-workspace="emit('openTask', $event)"
 								@create-task="emit('createTask', $event)"
 								@project-action="(action, projectId) => emit('projectAction', action, projectId)"

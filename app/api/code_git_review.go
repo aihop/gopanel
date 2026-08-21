@@ -240,6 +240,13 @@ func loadCodeGitRepositoryStatus(repository codeGitRepository) (codeGitRepositor
 	stagedStats, _, _ := runCodeGitReviewCommand(repository.root, false, codeGitDiffOutputLimit, "diff", "--cached", "--numstat", "--no-ext-diff")
 	repository.Additions, repository.Deletions = parseCodeGitNumstat(workingStats)
 	repository.StagedAdditions, repository.StagedDeletions = parseCodeGitNumstat(stagedStats)
+	// git diff 只认已跟踪文件，新建文件在 numstat 里一行都不算。
+	// 不补这一笔，AI 刚写出来的整个新文件在 +/- 上就等于不存在。
+	for _, file := range repository.Files {
+		if file.Untracked {
+			repository.Additions += countCodeTaskUntrackedLines(filepath.Join(repository.root, file.Path))
+		}
+	}
 	return repository, nil
 }
 

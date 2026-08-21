@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue"
-import { useI18n } from "vue-i18n"
 import { useMessage } from "naive-ui"
 import { getAITaskMessages, getCodeExecutionRun, getCodeSessionHistory } from "@/api/modules/code"
 import type { AIMessage, CodeExecutionRun } from "@/api/interface/code"
-import { codeWorkspaceMessages } from "../codeWorkspaceMessages"
+import { useCodeTaskMeta } from "../useCodeTaskMeta"
 
 const props = defineProps<{
 	show: boolean
@@ -16,7 +15,7 @@ const emit = defineEmits<{
 	(event: "update:show", value: boolean): void
 }>()
 
-const { t } = useI18n({ messages: codeWorkspaceMessages })
+const { t, formatTaskDuration } = useCodeTaskMeta()
 const message = useMessage()
 const loading = ref(false)
 const detailLoading = ref(false)
@@ -149,7 +148,7 @@ const runStatusLabel = (status: string) => t(`code.runStatus_${status}`)
 								{{ runStatusLabel(runForMessage(item.runId)?.status || "failed") }}
 							</n-tag>
 							<span class="text-xs text-slate-400">
-								{{ t("code.runDuration", { duration: runForMessage(item.runId)?.durationMs || 0 }) }}
+								{{ t("code.runDuration", { duration: formatTaskDuration(runForMessage(item.runId)?.durationMs || 0) }) }}
 							</span>
 							<n-button text type="primary" size="small" @click="showRunRawOutput(item.runId)">
 								{{ t("code.viewRawOutput") }}
