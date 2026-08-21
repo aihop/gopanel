@@ -2,6 +2,7 @@ package i18n
 
 import (
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/gofiber/fiber/v3"
@@ -85,15 +86,41 @@ func defaultLangHandler(c fiber.Ctx, defaultLang string) string {
 	}
 	var lang string
 	lang = utils.CopyString(c.Query("lang"))
+	if lang == "" {
+		lang = utils.CopyString(c.Get("Accept-Language"))
+	}
 	if lang != "" {
+		lang = normalizeLangTag(lang)
+	}
+	if lang == "" {
+		return defaultLang
+	}
+	if lang == "zh" || lang == "en" {
 		return lang
 	}
-	lang = utils.CopyString(c.Get("Accept-Language"))
-	if lang != "" {
-		return lang
+	// 命中 AcceptLanguages 的前缀匹配，避免空 localizer
+	for _, tag := range []string{"en", "zh"} {
+		if strings.HasPrefix(lang, tag) {
+			return tag
+		}
 	}
-
 	return defaultLang
+}
+
+// DefaultLangHandler 导出包内默认 LangHandler，供其他包复用或测试使用。
+var DefaultLangHandler = defaultLangHandler
+
+// normalizeLangTag 从 Accept-Language 中抽取第一个语言子标签并转为小写。
+// 例："en-US,en;q=0.9" -> "en-us"，"zh-CN,zh;q=0.9" -> "zh-cn"。
+func normalizeLangTag(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	if idx := strings.IndexAny(raw, ",;"); idx >= 0 {
+		raw = raw[:idx]
+	}
+	return strings.ToLower(strings.TrimSpace(raw))
 }
 
 func configDefault(config ...*Config) *Config {

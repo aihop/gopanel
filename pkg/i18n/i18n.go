@@ -12,7 +12,11 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
-const localsKey = "i18n"
+const (
+	localsKey = "i18n"
+	// LangKey 是 Fiber locals 中存放客户端语言的 key。
+	LangKey = "i18n.lang"
+)
 
 var (
 	defaultCfgMu sync.RWMutex
@@ -40,8 +44,28 @@ func New(config ...*Config) fiber.Handler {
 			return c.Next()
 		}
 		c.Locals(localsKey, cfg)
+		lang := cfg.LangHandler(c, cfg.DefaultLanguage.String())
+		if lang == "" {
+			lang = cfg.DefaultLanguage.String()
+		}
+		c.Locals(LangKey, lang)
 		return c.Next()
 	}
+}
+
+// GetLang 从 fiber.Ctx 中取出由本中间件写入的语言；ctx 为 nil 时返回空字符串。
+func GetLang(c fiber.Ctx) string {
+	if c == nil {
+		return ""
+	}
+	v := c.Locals(LangKey)
+	if v == nil {
+		return ""
+	}
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return ""
 }
 
 func getDefaultConfig() *Config {
@@ -72,14 +96,19 @@ func (c *Config) loadMessages() *Config {
 func (c *Config) initLocalizerMap() {
 	localizerMap := &sync.Map{}
 
+	defaultLang := c.DefaultLanguage.String()
 	for _, lang := range c.AcceptLanguages {
 		s := lang.String()
-		localizerMap.Store(s, i18n.NewLocalizer(c.bundle, s))
+		// 构建回退链：当前语言命中失败时降级到默认语言（中文）
+		if s == defaultLang {
+			localizerMap.Store(s, i18n.NewLocalizer(c.bundle, s))
+		} else {
+			localizerMap.Store(s, i18n.NewLocalizer(c.bundle, s, defaultLang))
+		}
 	}
 
-	lang := c.DefaultLanguage.String()
-	if _, ok := localizerMap.Load(lang); !ok {
-		localizerMap.Store(lang, i18n.NewLocalizer(c.bundle, lang))
+	if _, ok := localizerMap.Load(defaultLang); !ok {
+		localizerMap.Store(defaultLang, i18n.NewLocalizer(c.bundle, defaultLang))
 	}
 	c.mu.Lock()
 	c.localizerMap = localizerMap
@@ -125,6 +154,11 @@ func Localize(params interface{}, lang string) (string, error) {
 	}
 	message, err := localizer.Localize(localizeConfig)
 	if err != nil {
+		// go-i18n 在 fallback 命中时会同时返回 message 和 MessageNotFoundErr，
+		// 此时 message 已可用，不应再冒泡错误。
+		if message != "" {
+			return message, nil
+		}
 		log.Errorf("i18n.Localize error: %v", err)
 		return "", fmt.Errorf("i18n.Localize error: %v", err)
 	}
