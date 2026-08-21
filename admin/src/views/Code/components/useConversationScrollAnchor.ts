@@ -21,6 +21,22 @@ export function isConversationAtBottom(scrollHeight: number, scrollTop: number, 
 }
 
 /**
+ * 这次 scroll 事件是不是程序化贴底自己的回声。
+ *
+ * 贴底会设 scrollTop，浏览器随后异步派发一个 scroll 事件。等它跑起来时，异步 Markdown
+ * 往往又把内容撑高了，于是回调拿到的是「新的 scrollHeight + 旧的 scrollTop」，
+ * 算出一个很大的距底距离，把跟随误判成「用户翻上去了」——此后再也不贴底。
+ *
+ * 实测就是这么停在半路的：内容已经长到 31757px，滚动却卡在 10608px 不动了。
+ *
+ * 判据是位置有没有被真正移动过：内容长高不会改变 scrollTop，所以位置和上次贴底
+ * 落点一致就说明这是自己的回声；用户真去拖滚动条，位置必然改变。
+ */
+export function isProgrammaticScrollEcho(scrollTop: number, lastPinnedTop: number | null) {
+	return lastPinnedTop !== null && Math.abs(scrollTop - lastPinnedTop) <= 1
+}
+
+/**
  * 列表底部要留多少空白。输入框是绝对定位浮在列表上的，原先用写死的 pb-40 让位，
  * 但输入框会随输入内容长高——超过那个固定值时最后一条消息就被压在下面，
  * 即使真的滚到底也像是没到底。
@@ -47,12 +63,17 @@ export function useConversationScrollAnchor(
 ) {
 	const followBottom = ref(true)
 	const composerHeight = ref(0)
+	// 上一次程序化贴底的落点，用来把自己触发的 scroll 事件和用户操作区分开。
+	let lastPinnedTop: number | null = null
 	let contentObserver: ResizeObserver | null = null
 	let composerObserver: ResizeObserver | null = null
 
 	const pinToBottom = () => {
 		const list = listRef.value
-		if (list) list.scrollTop = list.scrollHeight
+		if (!list) return
+		list.scrollTop = list.scrollHeight
+		// 读回浏览器钳制后的真实值：写进去的是 scrollHeight，实际停在 scrollHeight - clientHeight。
+		lastPinnedTop = list.scrollTop
 	}
 
 	/** 强制贴底：打开会话、自己发出消息这类「理应看最新」的时刻用。 */
@@ -69,6 +90,8 @@ export function useConversationScrollAnchor(
 	const handleScroll = () => {
 		const list = listRef.value
 		if (!list) return
+		if (isProgrammaticScrollEcho(list.scrollTop, lastPinnedTop)) return
+		lastPinnedTop = null
 		followBottom.value = isConversationAtBottom(list.scrollHeight, list.scrollTop, list.clientHeight)
 	}
 
