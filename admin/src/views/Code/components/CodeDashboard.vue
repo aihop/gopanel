@@ -9,9 +9,15 @@ import type { CodeProjectDropPosition } from "../codeProjectOrder"
 import { getAITasks, setAITaskArchived } from "@/api/modules/code"
 import Icon from "@/components/common/Icon.vue"
 import { codeProjectMessages } from "@/i18n/locales/codeProject"
-import { mergeCodeDashboardTasks, sortCodeTasksStably } from "../codeDashboardBuckets"
+import {
+	excludeRecentCodeDashboardTasks,
+	mergeCodeDashboardTasks,
+	recentCodeDashboardTasks,
+	sortCodeTasksStably
+} from "../codeDashboardBuckets"
 import { useCodeTaskPolling } from "../useCodeTaskPolling"
 import CodeDashboardProjectList from "./CodeDashboardProjectList.vue"
+import CodeDashboardFocusTasks from "./CodeDashboardFocusTasks.vue"
 import CodeDashboardArchivedTasks from "./CodeDashboardArchivedTasks.vue"
 import SessionHistoryDrawer from "./SessionHistoryDrawer.vue"
 import CodeTaskDetailPane from "./CodeTaskDetailPane.vue"
@@ -63,8 +69,8 @@ const { fetchTasks, fetchTasksFast } = useCodeTaskPolling(
 		limit: 50,
 		allProjects: true,
 		idleIntervalMs: 20000,
-		selectedTaskId,
-	},
+		selectedTaskId
+	}
 )
 
 let recentRequest: Promise<void> | null = null
@@ -110,6 +116,8 @@ const projectNameById = computed(() => {
 })
 
 const allTasks = computed(() => mergeCodeDashboardTasks(tasks.value, recentTaskCandidates.value))
+const recentTasks = computed(() => recentCodeDashboardTasks(recentTaskCandidates.value))
+const projectTasks = computed(() => excludeRecentCodeDashboardTasks(allTasks.value, recentTasks.value))
 
 // 仍按稳定规则排序，不按状态拆成多个区块。
 // 任务状态变化时只更新行内徽标，不会在“运行中/今日完成”之间跳来跳去。
@@ -119,11 +127,22 @@ const visibleTasks = computed(() => {
 
 const selectedTask = computed(() => visibleTasks.value.find(task => task.id === selectedTaskId.value) || null)
 
+const selectRecentTask = (task: CodeTaskListItem) => {
+	selectedTaskId.value = task.id
+}
+
+const renameTask = (taskId: number, title: string) => {
+	tasks.value = tasks.value.map(task => (task.id === taskId ? { ...task, title } : task))
+	recentTaskCandidates.value = recentTaskCandidates.value.map(task =>
+		task.id === taskId ? { ...task, title } : task
+	)
+}
+
 watch(
 	() => props.pendingSession?.id,
 	sessionId => {
 		if (sessionId) selectedTaskId.value = null
-	},
+	}
 )
 
 // 选中的任务被筛掉、归档或删掉时，落到当前可见的第一条，右边不会停在一个看不见的任务上。
@@ -155,7 +174,7 @@ watch(
 		if (list.some(task => task.id === selectedTaskId.value)) return
 		selectedTaskId.value = list[0].id
 	},
-	{ immediate: true },
+	{ immediate: true }
 )
 
 const archiving = ref<number | null>(null)
@@ -187,183 +206,149 @@ const activateCreatedTask = async (taskId: number) => {
 </script>
 
 <template>
-  <div
-    class="relative flex min-h-0 flex-1 flex-col"
-    :aria-busy="initialLoading"
-  >
-    <div
-      v-if="initialLoading"
-      class="flex min-h-0 flex-1 items-center justify-center"
-      aria-hidden="true"
-    >
-      <n-spin
-        size="small"
-        :delay="150"
-      />
-    </div>
-    <template v-else>
-    <!-- 标题后放视图工具，项目管理与新建项目靠右保持主操作层级。 -->
-    <div
-      class="flex flex-wrap items-center gap-1.5"
-      :class="immersive ? 'mb-2 px-3' : 'mb-3 px-4 md:px-5'"
-    >
-      <span class="shrink-0 text-sm font-medium tracking-[0.01em] text-[var(--n-text-color-2)]">
-        {{ t("code.workspace") }}
-      </span>
-      <n-button
-        quaternary
-        circle
-        size="tiny"
-        :title="listCollapsed ? t('code.dashboardExpandList') : t('code.dashboardCollapseList')"
-        @click="listCollapsed = !listCollapsed"
-      >
-        <template #icon>
-          <Icon
-            :name="listCollapsed ? 'mdi:chevron-right' : 'mdi:chevron-left'"
-            :size="16"
-            class="opacity-50"
-          />
-        </template>
-      </n-button>
+	<div class="relative flex min-h-0 flex-1 flex-col" :aria-busy="initialLoading">
+		<div v-if="initialLoading" class="flex min-h-0 flex-1 items-center justify-center" aria-hidden="true">
+			<n-spin size="small" :delay="150" />
+		</div>
+		<template v-else>
+			<!-- 标题后放视图工具，项目管理与新建项目靠右保持主操作层级。 -->
+			<div class="flex flex-wrap items-center gap-1.5" :class="immersive ? 'mb-2 px-3' : 'mb-3 px-4 md:px-5'">
+				<span class="shrink-0 text-sm font-medium tracking-[0.01em] text-[var(--n-text-color-2)]">
+					{{ t("code.workspace") }}
+				</span>
+				<n-button
+					quaternary
+					circle
+					size="tiny"
+					:title="listCollapsed ? t('code.dashboardExpandList') : t('code.dashboardCollapseList')"
+					@click="listCollapsed = !listCollapsed"
+				>
+					<template #icon>
+						<Icon
+							:name="listCollapsed ? 'mdi:chevron-right' : 'mdi:chevron-left'"
+							:size="16"
+							class="opacity-50"
+						/>
+					</template>
+				</n-button>
 
-      <CodeDashboardArchivedTasks
-        :projects="projects"
-        @restored="restoreArchivedTask"
-      />
+				<CodeDashboardArchivedTasks :projects="projects" @restored="restoreArchivedTask" />
 
-      <n-button
-        quaternary
-        circle
-        size="small"
-        :title="t('code.refresh')"
-        @click="refreshTasks(false)"
-      >
-        <template #icon>
-          <Icon
-            name="mdi:refresh"
-            :size="16"
-          />
-        </template>
-      </n-button>
+				<n-button quaternary circle size="small" :title="t('code.refresh')" @click="refreshTasks(false)">
+					<template #icon>
+						<Icon name="mdi:refresh" :size="16" />
+					</template>
+				</n-button>
 
-      <div class="ml-auto flex items-center gap-2">
-        <!-- 项目管理和新建项目由 Index 注入：它们属于项目，不属于任务列表 -->
-        <slot name="toolbar" />
-      </div>
-    </div>
+				<div class="ml-auto flex items-center gap-2">
+					<!-- 项目管理和新建项目由 Index 注入：它们属于项目，不属于任务列表 -->
+					<slot name="toolbar" />
+				</div>
+			</div>
 
-    <n-alert
-      v-if="loadError"
-      type="error"
-      :show-icon="false"
-      class="mx-5 mb-3 md:mx-7"
-    >
-      <div class="flex items-center justify-between gap-3">
-        <span>{{ t("code.projectLoadFailed") }}</span>
-        <n-button
-          text
-          type="primary"
-          @click="emit('retry')"
-        >
-          {{ t("code.retry") }}
-        </n-button>
-      </div>
-    </n-alert>
-    <n-alert
-      v-else-if="tasksLoadError"
-      type="error"
-      :show-icon="false"
-      class="mx-5 mb-3 md:mx-7"
-    >
-      <div class="flex items-center justify-between gap-3">
-        <span>{{ t("code.dashboardTaskLoadFailed") }}</span>
-        <n-button
-          text
-          type="primary"
-          @click="refreshTasks(false)"
-        >
-          {{ t("code.retry") }}
-        </n-button>
-      </div>
-    </n-alert>
+			<n-alert v-if="loadError" type="error" :show-icon="false" class="mx-5 mb-3 md:mx-7">
+				<div class="flex items-center justify-between gap-3">
+					<span>{{ t("code.projectLoadFailed") }}</span>
+					<n-button text type="primary" @click="emit('retry')">
+						{{ t("code.retry") }}
+					</n-button>
+				</div>
+			</n-alert>
+			<n-alert v-else-if="tasksLoadError" type="error" :show-icon="false" class="mx-5 mb-3 md:mx-7">
+				<div class="flex items-center justify-between gap-3">
+					<span>{{ t("code.dashboardTaskLoadFailed") }}</span>
+					<n-button text type="primary" @click="refreshTasks(false)">
+						{{ t("code.retry") }}
+					</n-button>
+				</div>
+			</n-alert>
 
-    <!-- 主从：左边会话轨，右边就是工作台。切任务不跳页。 -->
-    <div
-      class="dashboard-workbench grid min-h-0 flex-1 overflow-hidden border-t border-slate-200/70 dark:border-white/10"
-      :class="[
-        listCollapsed
-          ? 'grid-cols-1 grid-rows-1'
-          : 'dashboard-workbench--split grid-cols-1 grid-rows-[minmax(180px,1fr)_minmax(320px,2fr)] lg:grid-rows-1',
-      ]"
-      :style="{ '--dashboard-sidebar-width': '260px' }"
-    >
-      <section
-        v-if="!listCollapsed"
-        class="dashboard-panel flex min-h-0 flex-col overflow-hidden"
-      >
-        <n-scrollbar class="min-h-0 flex-1">
-          <div class="py-1">
-            <div
-              v-if="!visibleTasks.length && !projects.length"
-              class="flex min-h-[200px] items-center justify-center"
-            >
-              <n-empty
-                size="small"
-                :description="t('code.dashboardNoTasks')"
-              >
-                <template
-                  #extra
-                >
-                  <n-button
-                    size="tiny"
-                    type="primary"
-                    @click="emit('createProject')"
-                  >
-                    {{ projects.length ? t("code.dashboardNoTasksHint") : t("code.createProject") }}
-                  </n-button>
-                </template>
-              </n-empty>
-            </div>
-            <CodeDashboardProjectList
-              v-else
-              :projects="projects"
-              :tasks="visibleTasks"
-              :empty-label="t('code.dashboardNoProjectTasks')"
-              :selected-task-id="selectedTaskId"
-              :archived="false"
-              :archiving-task-id="archiving"
-              @open="selectedTaskId = $event.id"
-              @archive="toggleArchived"
-              @open-workspace="emit('openTask', $event)"
-              @create-task="emit('createTask', $event)"
-              @project-action="(action, projectId) => emit('projectAction', action, projectId)"
-              @reorder-project="(projectId, targetProjectId, position) => emit('reorderProject', projectId, targetProjectId, position)"
-              @refresh="refreshTasks(true)"
-            />
-          </div>
-        </n-scrollbar>
-      </section>
+			<!-- 主从：左边会话轨，右边就是工作台。切任务不跳页。 -->
+			<div
+				class="dashboard-workbench grid min-h-0 flex-1 overflow-hidden border-t border-slate-200/70 dark:border-white/10"
+				:class="[
+					listCollapsed
+						? 'grid-cols-1 grid-rows-1'
+						: 'dashboard-workbench--split grid-cols-1 grid-rows-[minmax(180px,1fr)_minmax(320px,2fr)] lg:grid-rows-1'
+				]"
+				:style="{ '--dashboard-sidebar-width': '288px' }"
+			>
+				<section v-if="!listCollapsed" class="dashboard-panel flex min-h-0 flex-col overflow-hidden">
+					<CodeDashboardFocusTasks
+						v-if="recentTasks.length"
+						:projects="projects"
+						:tasks="recentTasks"
+						:selected-task-id="selectedTaskId"
+						@select="selectRecentTask"
+						@renamed="renameTask"
+					/>
+					<n-scrollbar class="min-h-0 flex-1">
+						<div class="py-1">
+							<div
+								v-if="!visibleTasks.length && !projects.length"
+								class="flex min-h-[200px] items-center justify-center"
+							>
+								<n-empty size="small" :description="t('code.dashboardNoTasks')">
+									<template #extra>
+										<n-button size="tiny" type="primary" @click="emit('createProject')">
+											{{
+												projects.length
+													? t("code.dashboardNoTasksHint")
+													: t("code.createProject")
+											}}
+										</n-button>
+									</template>
+								</n-empty>
+							</div>
+							<CodeDashboardProjectList
+								v-else
+								:projects="projects"
+								:tasks="projectTasks"
+								:empty-label="
+									recentTasks.length
+										? t('code.dashboardNoMoreProjectTasks')
+										: t('code.dashboardNoProjectTasks')
+								"
+								:selected-task-id="selectedTaskId"
+								:archived="false"
+								:archiving-task-id="archiving"
+								@open="selectedTaskId = $event.id"
+								@archive="toggleArchived"
+								@open-workspace="emit('openTask', $event)"
+								@create-task="emit('createTask', $event)"
+								@project-action="(action, projectId) => emit('projectAction', action, projectId)"
+								@reorder-project="
+									(projectId, targetProjectId, position) =>
+										emit('reorderProject', projectId, targetProjectId, position)
+								"
+								@refresh="refreshTasks(true)"
+							/>
+						</div>
+					</n-scrollbar>
+				</section>
 
-      <CodeTaskDetailPane
-        :task="pendingSession ? null : selectedTask"
-        :session="pendingSession"
-        :project-name="pendingSession
-          ? projectNameById.get(pendingSession.projectId) || ''
-          : selectedTask
-            ? projectNameById.get(selectedTask.projectId) || ''
-            : ''"
-        @open-history="showHistoryDrawer = true"
-        @task-created="activateCreatedTask"
-      />
-    </div>
+				<CodeTaskDetailPane
+					:task="pendingSession ? null : selectedTask"
+					:session="pendingSession"
+					:project-name="
+						pendingSession
+							? projectNameById.get(pendingSession.projectId) || ''
+							: selectedTask
+								? projectNameById.get(selectedTask.projectId) || ''
+								: ''
+					"
+					@open-history="showHistoryDrawer = true"
+					@task-created="activateCreatedTask"
+				/>
+			</div>
 
-    <SessionHistoryDrawer
-      v-model:show="showHistoryDrawer"
-      :session-id="selectedTask?.sessionId || null"
-      :task-id="selectedTask?.id || null"
-    />
-    </template>
-  </div>
+			<SessionHistoryDrawer
+				v-model:show="showHistoryDrawer"
+				:session-id="selectedTask?.sessionId || null"
+				:task-id="selectedTask?.id || null"
+			/>
+		</template>
+	</div>
 </template>
 
 <style scoped>

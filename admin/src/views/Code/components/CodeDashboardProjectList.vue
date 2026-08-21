@@ -43,7 +43,7 @@ const groups = computed(() => {
 		id: project.id,
 		name: project.name,
 		available: true,
-		tasks: tasksByProject.get(project.id) || [],
+		tasks: tasksByProject.get(project.id) || []
 	}))
 	const unavailableGroups = [...tasksByProject.entries()]
 		.filter(([projectId]) => !knownProjectIds.has(projectId))
@@ -51,7 +51,7 @@ const groups = computed(() => {
 			id: projectId,
 			name: t("code.dashboardUnavailableProject", { id: projectId }),
 			available: false,
-			tasks,
+			tasks
 		}))
 	return [...knownGroups, ...unavailableGroups]
 })
@@ -61,7 +61,7 @@ const isCollapsed = (projectId: number) => collapsedProjects.value[String(projec
 const toggleProject = (projectId: number) => {
 	collapsedProjects.value = {
 		...collapsedProjects.value,
-		[String(projectId)]: !isCollapsed(projectId),
+		[String(projectId)]: !isCollapsed(projectId)
 	}
 }
 
@@ -103,136 +103,137 @@ const handleDragEnd = () => {
 const projectActionOptions = computed(() => [
 	{ label: t("code.enterProject"), key: "enter" },
 	{ label: t("code.quickPanel"), key: "panel" },
-	{ label: t("code.editProject"), key: "edit" },
+	{ label: t("code.editProject"), key: "edit" }
 ])
 
-watch(() => props.selectedTaskId, () => {
-	const projectId = selectedProjectId.value
-	if (!projectId || collapsedProjects.value[String(projectId)] !== true) return
-	const next = { ...collapsedProjects.value }
-	delete next[String(projectId)]
-	collapsedProjects.value = next
-})
+watch(
+	() => props.selectedTaskId,
+	() => {
+		const projectId = selectedProjectId.value
+		if (!projectId || collapsedProjects.value[String(projectId)] !== true) return
+		const next = { ...collapsedProjects.value }
+		delete next[String(projectId)]
+		collapsedProjects.value = next
+	}
+)
 </script>
 
 <template>
-  <div class="space-y-1 px-1 py-1">
-    <section
-      v-for="group in groups"
-      :key="group.id"
-      class="relative rounded-lg transition-opacity duration-150"
-      :class="draggingProjectId === group.id ? 'opacity-40' : ''"
-      @dragover="group.available && handleDragOver($event, group.id)"
-      @drop="group.available && handleDrop($event, group.id)"
-    >
-      <div
-        v-if="dropTarget?.projectId === group.id"
-        class="pointer-events-none absolute inset-x-1 z-20 h-1 rounded-full bg-[var(--n-primary-color)] shadow-[0_0_8px_var(--n-primary-color)]"
-        :class="dropTarget.position === 'before' ? 'top-0' : 'bottom-0'"
-      >
-        <span class="absolute -left-1 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-[var(--n-primary-color)]" />
-        <span class="absolute -right-1 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-[var(--n-primary-color)]" />
-      </div>
-      <div
-        data-project-drag-target
-        class="group/project relative flex h-9 items-center gap-0.5 overflow-hidden rounded-lg px-1 transition-colors duration-150"
-        :class="dropTarget?.projectId === group.id ? 'ring-1 ring-inset ring-[var(--n-primary-color)]' : ''"
-      >
-        <div
-          v-if="dropTarget?.projectId === group.id"
-          class="pointer-events-none absolute inset-x-0 h-1/2 bg-[var(--n-primary-color)] opacity-15"
-          :class="dropTarget.position === 'before' ? 'top-0' : 'bottom-0'"
-        />
-        <button
-          type="button"
-          :draggable="group.available && projects.length > 1"
-          class="flex min-w-0 flex-1 items-center gap-0.5 rounded-lg px-2 py-1.5 text-left text-[13px] font-normal tracking-[0.01em] text-[var(--n-text-color-3)] transition-colors hover:bg-[var(--n-color-embedded)] hover:text-[var(--n-text-color-2)]"
-          :class="group.available && projects.length > 1 ? 'md:cursor-grab md:active:cursor-grabbing' : ''"
-          :aria-expanded="!isCollapsed(group.id)"
-          @click="toggleProject(group.id)"
-          @dragstart="group.available && projects.length > 1 && handleDragStart($event, group.id)"
-          @dragend="handleDragEnd"
-        >
-          <span
-            class="min-w-0 truncate"
-            :title="group.name"
-          >{{ group.name }}</span>
-          <Icon
-            :name="isCollapsed(group.id) ? 'mdi:chevron-right' : 'mdi:chevron-down'"
-            :size="14"
-            class="shrink-0 opacity-40"
-          />
-        </button>
-        <n-tooltip v-if="group.available && !archived">
-          <template #trigger>
-            <n-button
-              quaternary
-              circle
-              size="tiny"
-              style="width: 24px; height: 24px"
-              text-color="var(--n-text-color-3)"
-              class="opacity-55 transition-opacity group-hover/project:opacity-80 hover:!opacity-100"
-              @click.stop="emit('createTask', group.id)"
-            >
-              <template #icon>
-                <Icon
-                  name="mdi:plus"
-                  :size="14"
-                />
-              </template>
-            </n-button>
-          </template>
-          {{ t("code.dashboardCreateProjectTask", { name: group.name }) }}
-        </n-tooltip>
-        <n-dropdown
-          v-if="group.available"
-          trigger="click"
-          :options="projectActionOptions"
-          @select="action => emit('projectAction', String(action), group.id)"
-        >
-          <n-button
-            quaternary
-            circle
-            size="tiny"
-            style="width: 24px; height: 24px"
-            text-color="var(--n-text-color-3)"
-            class="opacity-55 transition-opacity group-hover/project:opacity-80 hover:!opacity-100"
-            :title="t('code.project')"
-          >
-            <template #icon>
-              <Icon
-                name="mdi:dots-horizontal"
-                :size="14"
-              />
-            </template>
-          </n-button>
-        </n-dropdown>
-      </div>
+	<div class="space-y-2 px-2 py-3">
+		<section
+			v-for="group in groups"
+			:key="group.id"
+			class="relative rounded-lg transition-opacity duration-150"
+			:class="draggingProjectId === group.id ? 'opacity-40' : ''"
+			@dragover="group.available && handleDragOver($event, group.id)"
+			@drop="group.available && handleDrop($event, group.id)"
+		>
+			<div
+				v-if="dropTarget?.projectId === group.id"
+				class="pointer-events-none absolute inset-x-1 z-20 h-1 rounded-full bg-[var(--n-primary-color)] shadow-[0_0_8px_var(--n-primary-color)]"
+				:class="dropTarget.position === 'before' ? 'top-0' : 'bottom-0'"
+			>
+				<span
+					class="absolute -left-1 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-[var(--n-primary-color)]"
+				/>
+				<span
+					class="absolute -right-1 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-[var(--n-primary-color)]"
+				/>
+			</div>
+			<div
+				data-project-drag-target
+				class="group/project relative flex h-9 items-center gap-0.5 overflow-hidden rounded-lg px-1 transition-colors duration-150"
+				:class="[
+					dropTarget?.projectId === group.id ? 'ring-1 ring-inset ring-[var(--n-primary-color)]' : '',
+					selectedProjectId === group.id ? 'bg-[var(--n-color-embedded)]' : ''
+				]"
+			>
+				<div
+					v-if="dropTarget?.projectId === group.id"
+					class="pointer-events-none absolute inset-x-0 h-1/2 bg-[var(--n-primary-color)] opacity-15"
+					:class="dropTarget.position === 'before' ? 'top-0' : 'bottom-0'"
+				/>
+				<button
+					type="button"
+					:draggable="group.available && projects.length > 1"
+					class="flex min-w-0 flex-1 items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-xs font-normal tracking-[0.01em] text-[var(--n-text-color-3)] transition-colors hover:text-[var(--n-text-color-2)]"
+					:class="group.available && projects.length > 1 ? 'md:cursor-grab md:active:cursor-grabbing' : ''"
+					:aria-expanded="!isCollapsed(group.id)"
+					@click="toggleProject(group.id)"
+					@dragstart="group.available && projects.length > 1 && handleDragStart($event, group.id)"
+					@dragend="handleDragEnd"
+				>
+					<Icon
+						:name="isCollapsed(group.id) ? 'mdi:chevron-right' : 'mdi:chevron-down'"
+						:size="14"
+						class="shrink-0 opacity-55"
+					/>
+					<span class="min-w-0 flex-1 truncate" :title="group.name">{{ group.name }}</span>
+				</button>
+				<n-tooltip v-if="group.available && !archived">
+					<template #trigger>
+						<n-button
+							quaternary
+							circle
+							size="tiny"
+							style="width: 24px; height: 24px"
+							text-color="var(--n-text-color-3)"
+							class="opacity-70 transition-opacity hover:!opacity-100 group-hover/project:opacity-100"
+							@click.stop="emit('createTask', group.id)"
+						>
+							<template #icon>
+								<Icon name="mdi:plus" :size="14" />
+							</template>
+						</n-button>
+					</template>
+					{{ t("code.dashboardCreateProjectTask", { name: group.name }) }}
+				</n-tooltip>
+				<n-dropdown
+					v-if="group.available"
+					trigger="click"
+					:options="projectActionOptions"
+					@select="action => emit('projectAction', String(action), group.id)"
+				>
+					<n-button
+						quaternary
+						circle
+						size="tiny"
+						style="width: 24px; height: 24px"
+						text-color="var(--n-text-color-3)"
+						class="opacity-40 transition-opacity hover:!opacity-100 group-hover/project:opacity-100"
+						:title="t('code.project')"
+					>
+						<template #icon>
+							<Icon name="mdi:dots-horizontal" :size="14" />
+						</template>
+					</n-button>
+				</n-dropdown>
+			</div>
 
-      <div v-if="!isCollapsed(group.id)">
-        <div
-          v-if="group.tasks.length === 0"
-          class="px-3 py-1.5 text-xs tracking-[0.01em] text-[var(--n-text-color-3)]"
-        >
-          {{ emptyLabel || t("code.dashboardNoProjectTasks") }}
-        </div>
-        <template v-else>
-          <CodeDashboardTaskRow
-            v-for="task in group.tasks"
-            :key="task.id"
-            :task="task"
-            :project-name="group.name"
-            :show-project="false"
-            :selected="task.id === selectedTaskId"
-            :archived="archived"
-            :archiving="archivingTaskId === task.id"
-            @open="emit('open', $event)"
-            @archive="emit('archive', $event)"
-            @open-workspace="emit('openWorkspace', $event)"
-            @refresh="emit('refresh')"
-          />
-        </template>
-      </div>
-    </section>
-  </div>
+			<div v-if="!isCollapsed(group.id)" class="ml-4 border-l border-slate-200/70 pl-1.5 dark:border-white/10">
+				<div
+					v-if="group.tasks.length === 0"
+					class="px-2 py-1.5 text-xs tracking-[0.01em] text-[var(--n-text-color-3)]"
+				>
+					{{ emptyLabel || t("code.dashboardNoProjectTasks") }}
+				</div>
+				<template v-else>
+					<CodeDashboardTaskRow
+						v-for="task in group.tasks"
+						:key="task.id"
+						:task="task"
+						:project-name="group.name"
+						:show-project="false"
+						:selected="task.id === selectedTaskId"
+						:archived="archived"
+						:archiving="archivingTaskId === task.id"
+						@open="emit('open', $event)"
+						@archive="emit('archive', $event)"
+						@open-workspace="emit('openWorkspace', $event)"
+						@refresh="emit('refresh')"
+					/>
+				</template>
+			</div>
+		</section>
+	</div>
 </template>
