@@ -68,6 +68,8 @@ var (
 	ErrNotInstall                    = "ErrNotInstall"
 	ErrPortInOtherApp                = "ErrPortInOtherApp"
 	ErrDbUserNotValid                = "ErrDbUserNotValid"
+	ErrDatabaseUserIdentityRequired  = "ErrDatabaseUserIdentityRequired"
+	ErrDatabaseUserHostRequired      = "ErrDatabaseUserHostRequired"
 	ErrUpdateBuWebsite               = "ErrUpdateBuWebsite"
 	ErrGoPanelNetworkFailed          = "ErrGoPanelNetworkFailed"
 	ErrCmdTimeout                    = "ErrCmdTimeout"

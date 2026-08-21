@@ -846,7 +846,7 @@ export default {
 		passwordVerified: "已验证",
 		passwordVerificationFailed: "验证失败",
 		passwordUnverified: "未托管",
-		mysqlAccountIdentityTips: "MySQL 使用“用户名@Host”识别账户：同名用户的 localhost 与 % 是两个独立账户，前者仅限本机，后者允许远程连接。",
+		mysqlAccountIdentityTips: "MySQL 使用“用户名@Host”识别账户：同名用户的 localhost 与 % 是两个独立账户，前者仅限本机来源，后者允许远程来源（仍需数据库监听、端口和防火墙放行）。“密码未托管”表示 MySQL 无法反查原密码，请通过“修改”设置一次新密码后由面板托管。",
 		addServer: "添加服务器",
 		type: "类型",
 		copy: "复制",

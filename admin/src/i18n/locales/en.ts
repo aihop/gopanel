@@ -865,7 +865,7 @@ export default {
 		passwordVerified: "Verified",
 		passwordVerificationFailed: "Verification failed",
 		passwordUnverified: "Not managed",
-		mysqlAccountIdentityTips: "MySQL identifies accounts as username@Host. The same username at localhost and % represents two independent accounts: localhost is local-only, while % allows remote connections.",
+		mysqlAccountIdentityTips: "MySQL identifies accounts as username@Host. The same username at localhost and % represents two independent accounts: localhost accepts local sources only, while % accepts remote sources (database listening, port exposure, and firewall access are still required). “Password not managed” means MySQL cannot reveal the original password; use Modify to set a new password and let the panel manage it.",
 		addServer: "Add server",
 		type: "Type",
 		copy: "Copy",
