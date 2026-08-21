@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { useMessage } from "naive-ui"
 import Icon from "@/components/common/Icon.vue"
 import { conversationRunForMessage } from "./codeConversationThread"
@@ -17,6 +17,7 @@ import CodeConversationModelBadge from "./CodeConversationModelBadge.vue"
 import CodeStructureSnippetPopover from "./CodeStructureSnippetPopover.vue"
 import ProjectStructurePanel from "./ProjectStructurePanel.vue"
 import { useCodeConversation } from "./useCodeConversation"
+import { useConversationScrollAnchor } from "./useConversationScrollAnchor"
 
 type LocateTarget = { path: string; line?: number; query?: string }
 
@@ -63,15 +64,15 @@ const dropping = ref(false)
 const structureOpen = ref(true)
 const locateTarget = ref<LocateTarget | null>(null)
 
-const scrollToBottom = async () => {
-	await nextTick()
-	const list = listRef.value
-	if (list) list.scrollTop = list.scrollHeight
-}
-
-watch(
-	() => [displayMessages.value.length, displayMessages.value.at(-1)?.content],
-	() => void scrollToBottom(),
+const contentRef = ref<HTMLElement | null>(null)
+const composerRef = ref<HTMLElement | null>(null)
+// 内容高度变化时自动贴底（异步 Markdown、流式增量都靠它兜住），
+// 用户主动往上翻则停止跟随。所以这里不再对消息变化单独滚一次——
+// 那样会在别人读历史时把人拽回底部。
+const { scrollToBottom, handleScroll, listPaddingBottom } = useConversationScrollAnchor(
+	listRef,
+	contentRef,
+	composerRef,
 )
 
 watch(
@@ -203,7 +204,9 @@ onBeforeUnmount(() => {
       >
         <div
           ref="listRef"
-          class="conversation-scroll min-h-0 flex-1 overflow-auto px-4 pb-40 pt-4"
+          class="conversation-scroll min-h-0 flex-1 overflow-auto px-4 pt-4"
+          :style="{ paddingBottom: listPaddingBottom }"
+          @scroll.passive="handleScroll"
         >
           <div
             v-if="loadError && displayMessages.length === 0"
@@ -224,6 +227,7 @@ onBeforeUnmount(() => {
           />
           <div
             v-else
+            ref="contentRef"
             class="flex min-h-full w-full flex-col justify-end gap-3"
           >
             <CodeConversationMessage
@@ -250,7 +254,7 @@ onBeforeUnmount(() => {
         </template>
       </n-button>
 
-      <footer class="conversation-composer absolute inset-x-3 bottom-3 z-10 rounded-2xl border border-slate-200/80 bg-white/95 p-2.5 shadow-[0_10px_30px_rgba(15,23,42,0.08)] backdrop-blur-md dark:border-white/10 dark:bg-[color-mix(in_srgb,var(--bg-default-color)_92%,transparent)]">
+      <footer ref="composerRef" class="conversation-composer absolute inset-x-3 bottom-3 z-10 rounded-2xl border border-slate-200/80 bg-white/95 p-2.5 shadow-[0_10px_30px_rgba(15,23,42,0.08)] backdrop-blur-md dark:border-white/10 dark:bg-[color-mix(in_srgb,var(--bg-default-color)_92%,transparent)]">
         <CodeConversationContextBar
           :session-id="sessionId"
           :work-dir="workDir"
