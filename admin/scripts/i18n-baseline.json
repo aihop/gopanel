@@ -7495,164 +7495,20 @@
   },
   {
     "file": "src/views/Host/components/processColumns.ts",
-    "line": 81,
-    "text": "{ title: \"名称\", key: \"name\", sorter: true },",
-    "chars": 2
-  },
-  {
-    "file": "src/views/Host/components/processColumns.ts",
-    "line": 82,
-    "text": "{ title: \"父进程ID\", key: \"PPID\", sorter: true },",
-    "chars": 3
-  },
-  {
-    "file": "src/views/Host/components/processColumns.ts",
-    "line": 83,
-    "text": "{ title: \"线程\", key: \"numThreads\" },",
-    "chars": 2
-  },
-  {
-    "file": "src/views/Host/components/processColumns.ts",
-    "line": 84,
+    "line": 87,
     "text": "{ title: \"用户\", key: \"username\" },",
     "chars": 2
   },
   {
     "file": "src/views/Host/components/processColumns.ts",
-    "line": 86,
-    "text": "{ title: \"内存\", key: \"rss\", sorter: (row1: ProcessData, row2: ProcessData) => row1.rssValue - row2.rssValue },",
-    "chars": 2
-  },
-  {
-    "file": "src/views/Host/components/processColumns.ts",
-    "line": 87,
-    "text": "{ title: \"连接\", key: \"numConnections\" },",
-    "chars": 2
-  },
-  {
-    "file": "src/views/Host/components/processColumns.ts",
-    "line": 89,
-    "text": "title: \"状态\",",
-    "chars": 2
-  },
-  {
-    "file": "src/views/Host/components/processColumns.ts",
-    "line": 94,
-    "text": "{ label: \"运行中\", value: \"running\" },",
-    "chars": 3
-  },
-  {
-    "file": "src/views/Host/components/processColumns.ts",
-    "line": 95,
-    "text": "{ label: \"睡眠\", value: \"sleep\" },",
-    "chars": 2
-  },
-  {
-    "file": "src/views/Host/components/processColumns.ts",
-    "line": 96,
-    "text": "{ label: \"停止\", value: \"stop\" },",
-    "chars": 2
-  },
-  {
-    "file": "src/views/Host/components/processColumns.ts",
-    "line": 97,
-    "text": "{ label: \"空闲\", value: \"idle\" },",
-    "chars": 2
-  },
-  {
-    "file": "src/views/Host/components/processColumns.ts",
-    "line": 98,
-    "text": "{ label: \"等待\", value: \"wait\" },",
-    "chars": 2
-  },
-  {
-    "file": "src/views/Host/components/processColumns.ts",
-    "line": 99,
-    "text": "{ label: \"锁定\", value: \"lock\" },",
-    "chars": 2
-  },
-  {
-    "file": "src/views/Host/components/processColumns.ts",
-    "line": 100,
-    "text": "{ label: \"僵尸\", value: \"zombie\" }",
-    "chars": 2
-  },
-  {
-    "file": "src/views/Host/components/processColumns.ts",
-    "line": 103,
-    "text": "{ title: \"启动时间\", key: \"startTime\" },",
-    "chars": 4
-  },
-  {
-    "file": "src/views/Host/components/processColumns.ts",
-    "line": 105,
+    "line": 108,
     "text": "title: \"操作\",",
     "chars": 2
   },
   {
     "file": "src/views/Host/components/processColumns.ts",
-    "line": 115,
-    "text": "{ default: () => \"详情\" }",
-    "chars": 2
-  },
-  {
-    "file": "src/views/Host/components/processColumns.ts",
-    "line": 120,
-    "text": "{ default: () => \"结束\" }",
-    "chars": 2
-  },
-  {
-    "file": "src/views/Host/components/processColumns.ts",
-    "line": 128,
+    "line": 131,
     "text": "{ title: \"类型\", key: \"type\", sorter: true },",
-    "chars": 2
-  },
-  {
-    "file": "src/views/Host/components/processColumns.ts",
-    "line": 130,
-    "text": "{ title: \"进程名称\", key: \"name\", sorter: true },",
-    "chars": 4
-  },
-  {
-    "file": "src/views/Host/components/processColumns.ts",
-    "line": 132,
-    "text": "title: \"本地地址/端口\",",
-    "chars": 6
-  },
-  {
-    "file": "src/views/Host/components/processColumns.ts",
-    "line": 137,
-    "text": "title: \"远程地址/端口\",",
-    "chars": 6
-  },
-  {
-    "file": "src/views/Host/components/processColumns.ts",
-    "line": 142,
-    "text": "title: \"状态\",",
-    "chars": 2
-  },
-  {
-    "file": "src/views/Host/components/processColumns.ts",
-    "line": 150,
-    "text": "{ title: \"文件\", key: \"path\" },",
-    "chars": 2
-  },
-  {
-    "file": "src/views/Host/components/processColumns.ts",
-    "line": 156,
-    "text": "title: \"本地地址/端口\",",
-    "chars": 6
-  },
-  {
-    "file": "src/views/Host/components/processColumns.ts",
-    "line": 161,
-    "text": "title: \"远程地址/端口\",",
-    "chars": 6
-  },
-  {
-    "file": "src/views/Host/components/processColumns.ts",
-    "line": 166,
-    "text": "title: \"状态\",",
     "chars": 2
   },
   {
@@ -19252,6 +19108,24 @@
     "line": 21,
     "text": "branchDeleteBlocked_task: \"分支仍与当前项目任务绑定\"",
     "chars": 12
+  },
+  {
+    "file": "src/views/Code/components/CodeDashboard.vue",
+    "line": 334,
+    "text": "新建任务不再抢走右侧详情：建完就留在当前页，新任务由列表就地插入。",
+    "chars": 30
+  },
+  {
+    "file": "src/views/Code/components/CodeDashboard.vue",
+    "line": 335,
+    "text": "原先这里会切成「新会话」视图，用户刚点完新建就被弹到另一屏，",
+    "chars": 26
+  },
+  {
+    "file": "src/views/Code/components/CodeDashboard.vue",
+    "line": 336,
+    "text": "反而看不到自己刚建的东西落在哪个项目下。",
+    "chars": 19
   },
   {
     "file": "src/views/Code/components/CodeMemoryDrawer.vue",

@@ -1,6 +1,9 @@
 import type { DataTableColumns } from "naive-ui"
 import { h } from "vue"
 import { NButton, NSpace, NTag } from "naive-ui"
+import { useI18n } from "vue-i18n"
+
+const { t: $t } = useI18n()
 
 export type ProcessStatusTagType = "success" | "default" | "primary" | "info" | "warning" | "error"
 
@@ -78,29 +81,29 @@ export const createProcessColumns = (
   handleStopProcess: (row: ProcessData) => void
 ): DataTableColumns<ProcessData> => [
   { title: "PID", key: "PID", sorter: true },
-  { title: "名称", key: "name", sorter: true },
-  { title: "父进程ID", key: "PPID", sorter: true },
-  { title: "线程", key: "numThreads" },
+  { title: () => $t("process.pid"), key: "name", sorter: true },
+  { title: () => $t("process.ppid"), key: "PPID", sorter: true },
+  { title: () => $t("process.numThreads"), key: "numThreads" },
   { title: "用户", key: "username" },
   { title: "CPU", key: "cpuPercent", sorter: (row1: ProcessData, row2: ProcessData) => row1.cpuValue - row2.cpuValue },
-  { title: "内存", key: "rss", sorter: (row1: ProcessData, row2: ProcessData) => row1.rssValue - row2.rssValue },
-  { title: "连接", key: "numConnections" },
+  { title: () => $t("process.memory"), key: "rss", sorter: (row1: ProcessData, row2: ProcessData) => row1.rssValue - row2.rssValue },
+  { title: () => $t("process.numConnections"), key: "numConnections" },
   {
-    title: "状态",
+    title: () => $t("process.status"),
     key: "status",
     render: (row: ProcessData) => h(NTag, { type: getStatusType(row.status) }, { default: () => row.status }),
     filter: true,
     filterOptions: [
-      { label: "运行中", value: "running" },
-      { label: "睡眠", value: "sleep" },
-      { label: "停止", value: "stop" },
-      { label: "空闲", value: "idle" },
-      { label: "等待", value: "wait" },
-      { label: "锁定", value: "lock" },
-      { label: "僵尸", value: "zombie" }
+      { label: $t("process.running"), value: "running" },
+      { label: $t("process.sleep"), value: "sleep" },
+      { label: $t("process.stop"), value: "stop" },
+      { label: $t("process.idle"), value: "idle" },
+      { label: $t("process.wait"), value: "wait" },
+      { label: $t("process.lock"), value: "lock" },
+      { label: $t("process.zombie"), value: "zombie" }
     ]
   },
-  { title: "启动时间", key: "startTime" },
+  { title: () => $t("process.startTime"), key: "startTime" },
   {
     title: "操作",
     key: "actions",
@@ -112,12 +115,12 @@ export const createProcessColumns = (
           h(
             NButton,
             { strong: true, tertiary: true, type: "primary", ghost: true, size: "small", onClick: () => openDetailDrawer(row) },
-            { default: () => "详情" }
+            { default: () => $t("process.viewDetails") }
           ),
           h(
             NButton,
             { strong: true, tertiary: true, type: "error", size: "small", onClick: () => handleStopProcess(row) },
-            { default: () => "结束" }
+            { default: () => $t("process.stopProcess") }
           )
         ]
       })
@@ -127,19 +130,19 @@ export const createProcessColumns = (
 export const createNetworkColumns = (getStatusType: (status: string | undefined) => ProcessStatusTagType): DataTableColumns<ProcessConnection> => [
   { title: "类型", key: "type", sorter: true },
   { title: "PID", key: "PID", sorter: true },
-  { title: "进程名称", key: "name", sorter: true },
+  { title: () => $t("process.processName"), key: "name", sorter: true },
   {
-    title: "本地地址/端口",
+    title: () => $t("process.laddr"),
     key: "localaddr",
     render: (row: ProcessConnection) => (row.localaddr && row.localaddr.port ? `${row.localaddr.ip}:${row.localaddr.port}` : row.localaddr?.ip || "")
   },
   {
-    title: "远程地址/端口",
+    title: () => $t("process.raddr"),
     key: "remoteaddr",
     render: (row: ProcessConnection) => (row.remoteaddr && row.remoteaddr.port ? `${row.remoteaddr.ip}:${row.remoteaddr.port}` : row.remoteaddr?.ip || "")
   },
   {
-    title: "状态",
+    title: () => $t("process.status"),
     key: "status",
     sorter: true,
     render: (row: ProcessConnection) => h(NTag, { type: getStatusType(row.status) }, { default: () => row.status })
@@ -147,23 +150,23 @@ export const createNetworkColumns = (getStatusType: (status: string | undefined)
 ]
 
 export const openFilesColumns = [
-  { title: "文件", key: "path" },
+  { title: () => $t("process.file"), key: "path" },
   { title: "fd", key: "fd", width: 60 }
 ]
 
 export const createDrawerNetworkConnectionsColumns = (getStatusType: (status: string | undefined) => ProcessStatusTagType): DataTableColumns<ProcessConnection> => [
   {
-    title: "本地地址/端口",
+    title: () => $t("process.laddr"),
     key: "localaddr",
     render: (row: ProcessConnection) => (row.localaddr.port ? `${row.localaddr.ip}:${row.localaddr.port}` : row.localaddr.ip)
   },
   {
-    title: "远程地址/端口",
+    title: () => $t("process.raddr"),
     key: "remoteaddr",
     render: (row: ProcessConnection) => (row.remoteaddr.port ? `${row.remoteaddr.ip}:${row.remoteaddr.port}` : row.remoteaddr.ip)
   },
   {
-    title: "状态",
+    title: () => $t("process.status"),
     key: "status",
     width: 100,
     render: (row: ProcessConnection) => h(NTag, { type: getStatusType(row.status), size: "small" }, { default: () => row.status })
