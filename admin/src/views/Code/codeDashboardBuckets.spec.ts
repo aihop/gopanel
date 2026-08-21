@@ -178,3 +178,22 @@ describe("isDeliveringTask", () => {
 		expect(isDeliveringTask(task({ summary: summary({ deliveryStatus: "completed" }) }))).toBe(false)
 	})
 })
+
+// 在工作台首页新建任务后，用户要留在当前页并看到它就地插进来。
+// 「最近任务」按创建时间倒序，所以新建的必须落在第一条——这是「看得见」的前提。
+describe("新建任务后的就地插入", () => {
+	it("排在最近任务的第一条", () => {
+		const recent = recentCodeDashboardTasks([
+			task({ id: 1, projectId: 7, createdAt: "2026-08-11T10:00:00" }),
+			task({ id: 2, projectId: 9, createdAt: "2026-08-11T12:00:00" }),
+			task({ id: 3, projectId: 7, createdAt: "2026-08-11T14:59:00" }),
+		])
+		expect(recent[0].id).toBe(3)
+	})
+
+	// 新建的是空任务，没有任何执行痕迹和 Git 变更，不能因此被排序或筛选漏掉。
+	it("没有执行记录的新任务照常参与排序", () => {
+		const created = task({ id: 3, projectId: 7, createdAt: "2026-08-11T14:59:00" })
+		expect(sortCodeTasksStably([task({ id: 1 }), created])[0].id).toBe(3)
+	})
+})

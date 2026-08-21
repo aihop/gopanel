@@ -13,6 +13,8 @@ const props = defineProps<{
 	projects: AIProject[]
 	tasks: CodeTaskListItem[]
 	selectedTaskId: number | null
+	/** 需要展开的项目：新建任务后要保证它插进来的位置是看得见的。 */
+	revealProjectId?: number | null
 	archived: boolean
 	archivingTaskId: number | null
 	emptyLabel?: string
@@ -106,15 +108,22 @@ const projectActionOptions = computed(() => [
 	{ label: t("code.editProject"), key: "edit" }
 ])
 
+// 折叠状态存在 localStorage 里，会跨会话保留。选中一条任务、或新建任务插进某个项目时，
+// 如果那个项目正好是收起的，内容就藏在里面看不见——这里统一把它展开。
+const expandProject = (projectId: number | null) => {
+	if (!projectId || collapsedProjects.value[String(projectId)] !== true) return
+	const next = { ...collapsedProjects.value }
+	delete next[String(projectId)]
+	collapsedProjects.value = next
+}
+
+watch(() => props.selectedTaskId, () => expandProject(selectedProjectId.value))
+
+// 新建任务后展开它所属的项目。不改选中态：用户要的是留在当前页看到它插进来，
+// 而不是被切到新任务上去。
 watch(
-	() => props.selectedTaskId,
-	() => {
-		const projectId = selectedProjectId.value
-		if (!projectId || collapsedProjects.value[String(projectId)] !== true) return
-		const next = { ...collapsedProjects.value }
-		delete next[String(projectId)]
-		collapsedProjects.value = next
-	}
+	() => props.revealProjectId,
+	projectId => expandProject(projectId ?? null),
 )
 </script>
 

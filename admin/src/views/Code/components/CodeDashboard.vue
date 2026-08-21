@@ -126,7 +126,6 @@ const selectedTask = computed(() => visibleTasks.value.find(task => task.id === 
 
 const selectRecentTask = (task: CodeTaskListItem) => {
 	selectedTaskId.value = task.id
-	if (props.pendingSession) emit("sessionResolved")
 }
 
 const renameTask = (taskId: number, title: string) => {
@@ -136,10 +135,20 @@ const renameTask = (taskId: number, title: string) => {
 	)
 }
 
+// 新建会话后：刷新列表让新任务就地出现，并展开它所属的项目分组，
+// 但不动当前选中——用户要的是「留在这一页看到它插进来」，不是被切走。
+//
+// 展开是必要的：项目分组的折叠状态存在 localStorage 里，如果那个项目正好是收起的，
+// 新任务插进去了也看不见，效果和没插一样。
+const revealProjectId = ref<number | null>(null)
+
 watch(
 	() => props.pendingSession?.id,
-	sessionId => {
-		if (sessionId) selectedTaskId.value = null
+	async (sessionId, previousId) => {
+		if (!sessionId || sessionId === previousId) return
+		revealProjectId.value = props.pendingSession?.projectId ?? null
+		await refreshTasks(true)
+		emit("sessionResolved")
 	}
 )
 
@@ -157,7 +166,6 @@ watch(
 			}
 			return
 		}
-		if (props.pendingSession) return
 		if (pendingRestoredTaskId.value) {
 			if (list.some(task => task.id === pendingRestoredTaskId.value)) {
 				selectedTaskId.value = pendingRestoredTaskId.value
@@ -304,6 +312,7 @@ const activateCreatedTask = async (taskId: number) => {
 								:tasks="projectTasks"
 								:empty-label="t('code.dashboardNoProjectTasks')"
 								:selected-task-id="selectedTaskId"
+								:reveal-project-id="revealProjectId"
 								:archived="false"
 								:archiving-task-id="archiving"
 								@open="selectRecentTask"
@@ -321,16 +330,14 @@ const activateCreatedTask = async (taskId: number) => {
 					</n-scrollbar>
 				</section>
 
+				<!--
+					新建任务不再抢走右侧详情：建完就留在当前页，新任务由列表就地插入。
+					原先这里会切成「新会话」视图，用户刚点完新建就被弹到另一屏，
+					反而看不到自己刚建的东西落在哪个项目下。
+				-->
 				<CodeTaskDetailPane
-					:task="pendingSession ? null : selectedTask"
-					:session="pendingSession"
-					:project-name="
-						pendingSession
-							? projectNameById.get(pendingSession.projectId) || ''
-							: selectedTask
-								? projectNameById.get(selectedTask.projectId) || ''
-								: ''
-					"
+					:task="selectedTask"
+					:project-name="selectedTask ? projectNameById.get(selectedTask.projectId) || '' : ''"
 					@open-history="showHistoryDrawer = true"
 					@task-created="activateCreatedTask"
 				/>
