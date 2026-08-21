@@ -73,7 +73,12 @@ func executeCodeAgentRun(
 		return failCodeExecutionRun(sessionRepo, run, startedAt, err)
 	}
 	executionPrompt := codeMemoryPrompt(session, codeWorkspacePathsPrompt(session, codeManagedDeliveryPrompt(session, prompt)))
-	command, preparedSessionID, buildErr := buildCodeExecutorCommand(ctx, executorID, workDir, executionPrompt, nativeSessionID, executorSessionKey, session)
+	var command *exec.Cmd
+	preparedSessionID := nativeSessionID
+	var buildErr error
+	if executorID != "codex" {
+		command, preparedSessionID, buildErr = buildCodeExecutorCommand(ctx, executorID, workDir, executionPrompt, nativeSessionID, executorSessionKey, session)
+	}
 	if preparedSessionID != "" {
 		run.NativeSessionID = preparedSessionID
 	}
@@ -82,20 +87,33 @@ func executeCodeAgentRun(
 	}
 	rawOutput := []byte{}
 	execErr := buildErr
+	var appServerResult *codeExecutorOutput
 	if execErr == nil {
 		runCtx, stopFollow := context.WithCancel(ctx)
 		defer stopFollow()
-		if executorID == "codex" && session != nil && sessionID != 0 {
-			go followCodexConversationRollout(runCtx, session, sessionID, run.NativeSessionID, startedAt)
+		if executorID == "codex" {
+			var parsed codeExecutorOutput
+			appServerCommand, appServerErr := buildCodexAppServerCommand(runCtx, workDir, session)
+			if appServerErr == nil {
+				parsed, execErr = executeCodexAppServer(runCtx, appServerCommand, sessionID, run.NativeSessionID, executionPrompt)
+				rawOutput = []byte(parsed.RawOutput)
+				appServerResult = &parsed
+			} else {
+				execErr = appServerErr
+			}
+		} else {
+			output := &boundedCodeOutput{}
+			writer := &conversationOutputWriter{inner: output, executorID: executorID, sessionID: sessionID}
+			command.Stdout = writer
+			command.Stderr = output
+			execErr = command.Run()
+			rawOutput = output.Bytes()
 		}
-		output := &boundedCodeOutput{}
-		writer := &conversationOutputWriter{inner: output, executorID: executorID, sessionID: sessionID}
-		command.Stdout = writer
-		command.Stderr = output
-		execErr = command.Run()
-		rawOutput = output.Bytes()
 	}
 	parsed := parseCodeExecutorOutput(executorID, rawOutput, run.NativeSessionID)
+	if appServerResult != nil {
+		parsed = *appServerResult
+	}
 	completedAt := time.Now()
 	run.CompletedAt = &completedAt
 	run.DurationMS = completedAt.Sub(startedAt).Milliseconds()

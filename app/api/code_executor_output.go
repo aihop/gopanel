@@ -56,6 +56,9 @@ func conversationAssistantUpdate(executorID string, event map[string]any) (text 
 
 func conversationAssistantStreamEvent(event map[string]any) (string, bool, bool) {
 	method, _ := event["method"].(string)
+	if method == "item/agentMessage/delta" {
+		return firstCodeStringOrEmpty(eventParams(event), "delta"), false, true
+	}
 	if method == "session/update" || strings.HasSuffix(method, "/session/update") {
 		update := codeEventMap(codeEventMap(event["params"])["update"])
 		if firstCodeStringOrEmpty(update, "sessionUpdate") != "agent_message_chunk" {
@@ -90,6 +93,10 @@ func conversationAssistantStreamEvent(event map[string]any) (string, bool, bool)
 	default:
 		return "", false, false
 	}
+}
+
+func eventParams(event map[string]any) map[string]any {
+	return codeEventMap(event["params"])
 }
 
 func conversationCodexAssistantUpdate(event map[string]any) (string, bool, bool) {

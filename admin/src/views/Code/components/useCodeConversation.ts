@@ -47,7 +47,14 @@ export function useCodeConversation(sessionId: () => number | null, taskId: () =
 		const activeRun = runs.value.find(run => run.status === "running" || run.status === "queued")
 		const liveRunId = live?.runId || activeRun?.id || 0
 		if (!liveContent && !activeRun) return items
-		const index = items.findLastIndex(item => item.role !== "user" && Boolean(liveRunId) && item.runId === liveRunId)
+		let index = -1
+		for (let currentIndex = items.length - 1; currentIndex >= 0; currentIndex--) {
+			const item = items[currentIndex]
+			if (item.role !== "user" && liveRunId && item.runId === liveRunId) {
+				index = currentIndex
+				break
+			}
+		}
 		if (index >= 0) {
 			if (!liveContent || (items[index].content || "").length >= liveContent.length) return items
 			const next = items.slice()

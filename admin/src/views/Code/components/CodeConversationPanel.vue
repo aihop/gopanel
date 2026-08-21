@@ -39,6 +39,7 @@ const {
 	draft,
 	attachments,
 	displayMessages,
+	streaming,
 	runs,
 	session,
 	closed,
@@ -230,6 +231,7 @@ onBeforeUnmount(() => {
               :key="item.id"
               :message="item"
               :run="conversationRunForMessage(runs, item.runId)"
+              :streaming="streaming?.status === 'running' && streaming.runId === item.runId"
             />
           </div>
         </div>

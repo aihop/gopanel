@@ -12,12 +12,13 @@ import CodeConversationAttachments from "./CodeConversationAttachments.vue"
 const props = defineProps<{
 	message: AIMessage
 	run?: CodeExecutionRun
+	streaming?: boolean
 }>()
 
 const { t } = useI18n({ messages: codeWorkspaceMessages })
 const isUser = computed(() => isUserConversationMessage(props.message.role))
 const parsed = computed(() => parseConversationAttachments(props.message.content || ""))
-const isRunActive = computed(() => props.run?.status === "running" || props.run?.status === "queued")
+const isRunActive = computed(() => props.streaming || props.run?.status === "running" || props.run?.status === "queued")
 const expanded = ref(false)
 const previewText = computed(() => conversationMessageText(parsed.value.text, expanded.value, isRunActive.value))
 const canExpand = computed(
@@ -78,8 +79,14 @@ const MdPreview = defineAsyncComponent(async () => {
           :attachments="parsed.attachments"
           :session-id="message.sessionId"
         />
+        <div
+          v-if="previewText && isRunActive"
+          class="whitespace-pre-wrap break-words"
+        >
+          {{ previewText }}
+        </div>
         <MdPreview
-          v-if="previewText"
+          v-else-if="previewText"
           :editor-id="`code-conversation-${message.sessionId}-${message.id}`"
           :model-value="previewText"
           :sanitize="sanitizeConversationMarkdown"

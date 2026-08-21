@@ -218,7 +218,7 @@ func addCodexWritableDirArgs(args, writableDirs []string) []string {
 	}
 	insertionIndex := len(args)
 	for index, arg := range args {
-		if arg == "exec" || arg == "resume" {
+		if arg == "exec" || arg == "resume" || arg == "app-server" {
 			insertionIndex = index
 			break
 		}
