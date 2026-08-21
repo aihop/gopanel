@@ -2,12 +2,12 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
+	"github.com/aihop/gopanel/buserr"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
 )
@@ -21,19 +21,19 @@ func (s WebsiteService) UpdateDomainBindings(
 ) error {
 	website, err := s.repo.GetFirst(commonRepo.WithByID(websiteID))
 	if err != nil {
-		return errors.New("网站不存在")
+		return buserr.New(constant.ErrWebsiteNotFound)
 	}
 
 	primaryDomain, otherDomains = normalizeWebsiteBindingInput(primaryDomain, otherDomains)
 	if primaryDomain == "" {
-		return errors.New("主域名不能为空")
+		return buserr.New(constant.ErrWebsiteDomainPrimaryRequired)
 	}
 	domains, _, _, err := getWebsiteDomains(strings.Join(nonEmptyStrings(primaryDomain, otherDomains), "\n"), 80, website.ID)
 	if err != nil {
 		return err
 	}
 	if len(domains) == 0 {
-		return errors.New("至少需要一个有效域名")
+		return buserr.New(constant.ErrWebsiteDomainAtLeastOne)
 	}
 
 	website.PrimaryDomain = formatWebsiteBindingDomain(domains[0])

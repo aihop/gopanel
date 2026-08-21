@@ -317,3 +317,20 @@ var (
 	ErrContainerPodmanSocketStillUnavailable      = "ErrContainerPodmanSocketStillUnavailable"
 	ErrContainerPodmanSocketLingerHint            = "ErrContainerPodmanSocketLingerHint"
 )
+
+// website
+var (
+	ErrWebsiteNotFound                  = "ErrWebsiteNotFound"
+	ErrWebsitePipelineDeprecated        = "ErrWebsitePipelineDeprecated"
+	ErrWebsitePathAliasExist            = "ErrWebsitePathAliasExist"
+	ErrWebsiteDomainPrimaryRequired     = "ErrWebsiteDomainPrimaryRequired"
+	ErrWebsiteDomainAtLeastOne          = "ErrWebsiteDomainAtLeastOne"
+	ErrWebsiteDomainHTTPPrefix          = "ErrWebsiteDomainHTTPPrefix"
+	ErrWebsiteUpstreamAtLeastOne        = "ErrWebsiteUpstreamAtLeastOne"
+	ErrWebsiteUpstreamAtLeastOneEnabled = "ErrWebsiteUpstreamAtLeastOneEnabled"
+	ErrWebsiteAliasEmpty                = "ErrWebsiteAliasEmpty"
+	ErrWebsiteStaticPathEmpty           = "ErrWebsiteStaticPathEmpty"
+	ErrWebsiteIDNotFound                = "ErrWebsiteIDNotFound"
+	ErrWebsitePrimaryDomainError        = "ErrWebsitePrimaryDomainError"
+	ErrWebsiteOtherDomainsError         = "ErrWebsiteOtherDomainsError"
+)

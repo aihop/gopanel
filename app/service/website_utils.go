@@ -68,12 +68,12 @@ func getWebsiteDomains(domains string, defaultPort int, websiteID uint) (domainM
 			continue
 		}
 		if strings.HasPrefix(domain, "https://") {
-			err = errors.New("域名仅支持 http:// 前缀，不支持 https:// 前缀")
+			err = buserr.New(constant.ErrWebsiteDomainHTTPPrefix)
 			return
 		}
 		domain = strings.TrimPrefix(domain, "http://")
 		if !common.IsValidDomain(domain) {
-			err = errors.New("ErrDomainFormat" + domain)
+			err = buserr.New("ErrDomainFormat" + domain)
 			return
 		}
 		var domainModel model.WebsiteDomain

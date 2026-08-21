@@ -1,11 +1,11 @@
 package service
 
 import (
-	"errors"
 	"net"
 	"path"
 	"strings"
 
+	"github.com/aihop/gopanel/buserr"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/utils/files"
 )
@@ -38,7 +38,7 @@ func ensureStaticWebsiteIndex(siteRoot string) error {
 	fileOp := files.NewFileOp()
 	siteRoot = strings.TrimSpace(siteRoot)
 	if siteRoot == "" {
-		return errors.New("静态网站目录不能为空")
+		return buserr.New(constant.ErrWebsiteStaticPathEmpty)
 	}
 	if err := fileOp.CreateDir(siteRoot, 0755); err != nil {
 		return err

@@ -3,7 +3,6 @@ package service
 import (
 	"bufio"
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -14,6 +13,7 @@ import (
 
 	"github.com/aihop/gopanel/app/dto/request"
 	"github.com/aihop/gopanel/app/dto/response"
+	"github.com/aihop/gopanel/buserr"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/utils/files"
@@ -60,7 +60,7 @@ func websiteErrorLogPath(alias string) string {
 func ensureWebsiteLogDir(alias string) error {
 	dir := websiteLogDir(alias)
 	if dir == "" {
-		return errors.New("网站别名不能为空")
+		return buserr.New(constant.ErrWebsiteAliasEmpty)
 	}
 	return files.NewFileOp().CreateDir(dir, 0755)
 }

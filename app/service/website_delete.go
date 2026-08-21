@@ -2,10 +2,10 @@ package service
 
 import (
 	"context"
-	"errors"
 	"strings"
 
 	"github.com/aihop/gopanel/app/repo"
+	"github.com/aihop/gopanel/buserr"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/utils/docker"
@@ -14,7 +14,7 @@ import (
 func (s WebsiteService) Delete(ctx context.Context, id uint) error {
 	website, err := s.repo.GetFirst(commonRepo.WithByID(id))
 	if err != nil {
-		return errors.New("网站不存在")
+		return buserr.New(constant.ErrWebsiteNotFound)
 	}
 	tx := global.DB.Begin()
 	defer func() {

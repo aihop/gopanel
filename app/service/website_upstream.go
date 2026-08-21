@@ -1,13 +1,14 @@
 package service
 
 import (
-	"fmt"
 	"net/url"
 	"strings"
 
 	"github.com/aihop/gopanel/app/dto/request"
 	"github.com/aihop/gopanel/app/dto/response"
 	"github.com/aihop/gopanel/app/model"
+	"github.com/aihop/gopanel/buserr"
+	"github.com/aihop/gopanel/constant"
 )
 
 func normalizeWebsiteUpstreamScheme(value string) string {
@@ -95,16 +96,16 @@ func ensureWebsiteProxyUpstreams(items []request.WebsiteUpstream, legacyProxy st
 		return nil, err
 	}
 	if len(upstreams) == 0 {
-		return nil, fmt.Errorf("至少需要一个后端节点")
+		return nil, buserr.New(constant.ErrWebsiteUpstreamAtLeastOne)
 	}
 	for _, item := range upstreams {
 		if item.Enabled {
 			return upstreams, nil
 		}
 	}
-	return nil, fmt.Errorf("至少启用一个后端节点")
-}
 
+	return nil, buserr.New(constant.ErrWebsiteUpstreamAtLeastOneEnabled)
+}
 func buildWebsiteUpstreamDial(item model.WebsiteUpstream) string {
 	address := strings.TrimSpace(item.Address)
 	if address == "" {

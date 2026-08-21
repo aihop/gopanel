@@ -2,13 +2,13 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/aihop/gopanel/app/dto/request"
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
+	"github.com/aihop/gopanel/buserr"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
 )
@@ -20,7 +20,7 @@ import (
 func (s WebsiteService) Update(ctx context.Context, req *request.WebsiteUpdate) error {
 	website, err := s.repo.GetFirst(commonRepo.WithByID(req.ID))
 	if err != nil {
-		return errors.New("网站不存在")
+		return buserr.New(constant.ErrWebsiteNotFound)
 	}
 	originalDomains := website.Domains
 	var upstreams []model.WebsiteUpstream

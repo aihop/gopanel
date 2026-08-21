@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/aihop/gopanel/app/dto"
@@ -11,6 +10,7 @@ import (
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/service"
 	"github.com/aihop/gopanel/buserr"
+	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/pkg/gormx"
 	"github.com/aihop/gopanel/utils/convertor"
 	"github.com/gofiber/fiber/v3"
@@ -48,7 +48,7 @@ func WebsiteCreate(c fiber.Ctx) error {
 func WebsiteUpdate(c fiber.Ctx) error {
 	id := c.Params("id")
 	if id == "" {
-		return c.JSON(e.Fail(errors.New("ID not found")))
+		return c.JSON(e.Fail(buserr.New(constant.ErrWebsiteIDNotFound)))
 	}
 	R, err := e.BodyToStruct[request.WebsiteUpdate](c.Body())
 	if err != nil {
@@ -65,7 +65,7 @@ func WebsiteUpdate(c fiber.Ctx) error {
 func WebsiteDelete(c fiber.Ctx) error {
 	id := c.Params("id")
 	if id == "" {
-		return c.JSON(e.Fail(errors.New("ID not found")))
+		return c.JSON(e.Fail(buserr.New(constant.ErrWebsiteIDNotFound)))
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

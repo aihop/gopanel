@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -39,7 +38,7 @@ func normalizeWebsiteProtocol(protocol string) string {
 
 func (s WebsiteService) Create(ctx context.Context, req *request.WebsiteCreate, mode model.DatabaseMode) (err error) {
 	if req.CodeSource == "pipeline" {
-		return errors.New("网站不再直接关联流水线，请先启动容器，再从容器列表发布到网站")
+		return buserr.New(constant.ErrWebsitePipelineDeprecated)
 	}
 	alias := req.Alias
 	if alias == "default" {
@@ -53,7 +52,7 @@ func (s WebsiteService) Create(ctx context.Context, req *request.WebsiteCreate, 
 	}
 	websiteRepo := repo.NewWebsite()
 	if exist, _ := websiteRepo.GetBy(websiteRepo.WithAlias(alias)); len(exist) > 0 {
-		return errors.New("网站目录、别名已存在")
+		return buserr.New(constant.ErrWebsitePathAliasExist)
 	}
 	defaultHttpPort := 80
 	var (
@@ -75,11 +74,11 @@ func (s WebsiteService) Create(ctx context.Context, req *request.WebsiteCreate, 
 
 	domains, _, _, err = getWebsiteDomains(req.PrimaryDomain, defaultHttpPort, 0)
 	if err != nil {
-		return errors.New("primary domain error: " + err.Error())
+		return buserr.WithDetail(constant.ErrWebsitePrimaryDomainError, err.Error())
 	}
 	otherDomains, _, _, err = getWebsiteDomains(req.OtherDomains, defaultHttpPort, 0)
 	if err != nil {
-		return errors.New("other domains error: " + err.Error())
+		return buserr.WithDetail(constant.ErrWebsiteOtherDomainsError, err.Error())
 	}
 	domains = append(domains, otherDomains...)
 	if req.Protocol == "" {
