@@ -288,9 +288,6 @@ watch(
 					<Icon name="mdi:file-tree-outline" :size="19" />
 					<div class="min-w-0">
 						<div class="truncate text-sm font-semibold text-slate-700 dark:text-[var(--n-text-color)]">{{ t("code.projectStructure") }}</div>
-						<div v-if="attachToChat" class="truncate text-[11px] tracking-[0.01em] text-[var(--n-text-color-3)]">
-							{{ t("code.dragStructureToChat") }}
-						</div>
 					</div>
 				</div>
 				<div class="flex shrink-0 items-center">

@@ -2,7 +2,6 @@ export const codeEditorMessages = {
 	zh: {
 		code: {
 			projectStructure: "项目结构",
-			dragStructureToChat: "拖入或点回形针附加",
 			refreshStructure: "刷新项目结构",
 			filterStructure: "搜索文件、目录或内容",
 			structureLoadFailed: "项目结构加载失败",
@@ -42,7 +41,6 @@ export const codeEditorMessages = {
 	en: {
 		code: {
 			projectStructure: "Project structure",
-			dragStructureToChat: "Drag in, or use the paperclip to attach",
 			refreshStructure: "Refresh project structure",
 			filterStructure: "Search files, folders, or contents",
 			structureLoadFailed: "Failed to load project structure",
