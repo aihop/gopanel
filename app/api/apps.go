@@ -1,11 +1,12 @@
 package api
 
 import (
-	"errors"
 	"strconv"
 
 	"github.com/aihop/gopanel/app/dto/request"
 	"github.com/aihop/gopanel/app/e"
+	"github.com/aihop/gopanel/buserr"
+	"github.com/aihop/gopanel/constant"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -40,7 +41,7 @@ func AppsList(c fiber.Ctx) error {
 func AppsGet(c fiber.Ctx) error {
 	key := c.Params("key")
 	if key == "" {
-		return c.JSON(e.Result(errors.New("key is required")))
+		return c.JSON(e.Result(buserr.New(constant.ErrAppsKeyRequired)))
 	}
 	res, err := appService.GetApp(c, key)
 	if err != nil {
@@ -62,7 +63,7 @@ func AppDetailGet(c fiber.Ctx) error {
 	idStr := c.Params("id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil || id <= 0 {
-		return c.JSON(e.Fail(errors.New("invalid app id")))
+		return c.JSON(e.Fail(buserr.New(constant.ErrAppsInvalidID)))
 	}
 	version := c.Query("version")
 	res, err := appService.GetAppDetail(c, uint(id), version)

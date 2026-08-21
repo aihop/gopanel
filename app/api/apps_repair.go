@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -14,6 +13,9 @@ import (
 	"github.com/aihop/gopanel/app/e"
 	"github.com/aihop/gopanel/app/repo"
 	"github.com/aihop/gopanel/app/service"
+	"github.com/aihop/gopanel/buserr"
+	"github.com/aihop/gopanel/constant"
+	"github.com/aihop/gopanel/i18n"
 	"github.com/aihop/gopanel/utils/env"
 	"github.com/aihop/gopanel/utils/gpc"
 	"github.com/gofiber/fiber/v3"
@@ -40,29 +42,29 @@ func AppsValidate(c fiber.Ctx) error {
 
 	if availableMemMB < 300 {
 		isWarning = true
-		messages = append(messages, fmt.Sprintf("当前系统可用内存仅剩 %d MB", availableMemMB))
+		messages = append(messages, i18n.GetMsgWithMap(constant.ErrAppsResourceInsufficientMemory, map[string]interface{}{"available": availableMemMB}))
 	}
 
 	if freeDiskGB < 1 {
 		isWarning = true
-		messages = append(messages, fmt.Sprintf("当前系统可用磁盘空间仅剩 %d GB", freeDiskGB))
+		messages = append(messages, i18n.GetMsgWithMap(constant.ErrAppsResourceInsufficientDisk, map[string]interface{}{"available": freeDiskGB}))
 	}
 
 	return c.JSON(e.Succ(map[string]interface{}{
 		"isWarning": isWarning,
-		"message":   strings.Join(messages, "，") + "，继续安装可能导致应用无法启动或服务器卡死，强烈建议您清理资源后再试。",
+		"message":   strings.Join(messages, "，") + i18n.GetMsg(constant.ErrAppsResourceInsufficientHint),
 	}))
 }
 
 func RepairCompose(c fiber.Ctx) error {
 	if runtime.GOOS != "linux" {
-		return c.JSON(e.Error(errors.New("unsupported platform")))
+		return c.JSON(e.Error(buserr.New(constant.ErrAppsUnsupportedPlatform)))
 	}
 	resp, err := gpc.Do(context.Background(), "COMPOSE_INSTALL", map[string]interface{}{})
 	if err != nil {
 		msg := strings.ToLower(err.Error())
 		if strings.Contains(msg, "unknown action") {
-			return c.JSON(e.Error(errors.New("gpc helper 版本过旧，缺少 COMPOSE_INSTALL 动作；请更新服务器上的 gpc 并重启 gpc.service 后再试")))
+			return c.JSON(e.Error(buserr.New(constant.ErrAppsGpcOutdatedComposeInstall)))
 		}
 		return c.JSON(e.Error(err))
 	}
@@ -73,7 +75,7 @@ func RepairCompose(c fiber.Ctx) error {
 
 func RepairPodmanSubuid(c fiber.Ctx) error {
 	if runtime.GOOS != "linux" {
-		return c.JSON(e.Error(errors.New("unsupported platform")))
+		return c.JSON(e.Error(buserr.New(constant.ErrAppsUnsupportedPlatform)))
 	}
 
 	// Default to gopanel user or get from process env
@@ -82,7 +84,7 @@ func RepairPodmanSubuid(c fiber.Ctx) error {
 		username = "gopanel"
 	}
 	if username == "root" {
-		return c.JSON(e.Error(errors.New("subuid repair is not needed for root user")))
+		return c.JSON(e.Error(buserr.New(constant.ErrAppsSubUIDRepairUnnecessary)))
 	}
 
 	resp, err := gpc.Do(context.Background(), "REPAIR_PODMAN_SUBUID", map[string]interface{}{
@@ -92,7 +94,7 @@ func RepairPodmanSubuid(c fiber.Ctx) error {
 	if err != nil {
 		msg := strings.ToLower(err.Error())
 		if strings.Contains(msg, "unknown action") {
-			return c.JSON(e.Error(errors.New("gpc helper 版本过旧，缺少 REPAIR_PODMAN_SUBUID 动作；请更新服务器上的 gpc 并重启 gpc.service 后再试")))
+			return c.JSON(e.Error(buserr.New(constant.ErrAppsGpcOutdatedPodmanSubUID)))
 		}
 		return c.JSON(e.Error(err))
 	}
@@ -166,7 +168,7 @@ func RepairPortConflict(c fiber.Ctx) error {
 	}
 
 	if !changed {
-		return c.JSON(e.Error(errors.New("未检测到任何冲突的端口，或端口已被释放")))
+		return c.JSON(e.Error(buserr.New(constant.ErrAppsNoPortConflict)))
 	}
 
 	envBytes, _ := json.Marshal(envMap)
@@ -191,11 +193,11 @@ func RepairPortConflict(c fiber.Ctx) error {
 	}
 
 	if err := env.Write(envStringMap, install.GetEnvPath()); err != nil {
-		return c.JSON(e.Error(fmt.Errorf("更新 .env 文件失败: %v", err)))
+		return c.JSON(e.Error(buserr.WithDetail(constant.ErrAppsEnvUpdateFailed, err.Error())))
 	}
 
 	return c.JSON(e.Succ(map[string]interface{}{
-		"msg": "端口冲突已解决，请重新尝试安装",
+		"msg": i18n.GetMsg(constant.ErrAppsPortConflictResolved),
 	}))
 }
 
@@ -210,13 +212,13 @@ func RepairPodmanShortName(c fiber.Ctx) error {
 		}))
 	}
 	if runtime.GOOS != "linux" {
-		return c.JSON(e.Error(errors.New("unsupported platform")))
+		return c.JSON(e.Error(buserr.New(constant.ErrAppsUnsupportedPlatform)))
 	}
 	resp, err := gpc.Do(context.Background(), "REPAIR_PODMAN_SHORT_NAME", map[string]interface{}{})
 	if err != nil {
 		msg := strings.ToLower(err.Error())
 		if strings.Contains(msg, "unknown action") {
-			return c.JSON(e.Error(errors.New("gpc helper 版本过旧，缺少 REPAIR_PODMAN_SHORT_NAME 动作；请更新服务器上的 gpc 并重启 gpc.service 后再试")))
+			return c.JSON(e.Error(buserr.New(constant.ErrAppsGpcOutdatedPodmanShortName)))
 		}
 		return c.JSON(e.Error(err))
 	}

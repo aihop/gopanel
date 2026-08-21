@@ -371,3 +371,21 @@ var (
 	ErrFileWgetCompleted         = "ErrFileWgetCompleted"
 	ErrFileWgetTaskSubmitted     = "ErrFileWgetTaskSubmitted"
 )
+
+// apps / app / install / repair
+var (
+	ErrAppsKeyRequired                = "ErrAppsKeyRequired"
+	ErrAppsInvalidID                  = "ErrAppsInvalidID"
+	ErrAppsUnsupportedPlatform        = "ErrAppsUnsupportedPlatform"
+	ErrAppsGpcOutdatedComposeInstall  = "ErrAppsGpcOutdatedComposeInstall"
+	ErrAppsGpcOutdatedPodmanSubUID    = "ErrAppsGpcOutdatedPodmanSubUID"
+	ErrAppsGpcOutdatedPodmanShortName = "ErrAppsGpcOutdatedPodmanShortName"
+	ErrAppsSubUIDRepairUnnecessary    = "ErrAppsSubUIDRepairUnnecessary"
+	ErrAppsNoPortConflict             = "ErrAppsNoPortConflict"
+	ErrAppsEnvUpdateFailed            = "ErrAppsEnvUpdateFailed"
+	ErrAppsPortConflictResolved       = "ErrAppsPortConflictResolved"
+	ErrAppsResourceInsufficientTitle  = "ErrAppsResourceInsufficientTitle"
+	ErrAppsResourceInsufficientMemory = "ErrAppsResourceInsufficientMemory"
+	ErrAppsResourceInsufficientDisk   = "ErrAppsResourceInsufficientDisk"
+	ErrAppsResourceInsufficientHint   = "ErrAppsResourceInsufficientHint"
+)
