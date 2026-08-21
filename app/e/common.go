@@ -2,10 +2,10 @@ package e
 
 import (
 	"encoding/json"
-	"errors"
 	"reflect"
 	"strings"
 
+	"github.com/aihop/gopanel/buserr"
 	"github.com/aihop/gopanel/constant"
 
 	"github.com/aihop/gopanel/app/dto"
@@ -99,12 +99,12 @@ func BodyToStruct[M any](body []byte) (_ *M, err error) {
 	var obj M
 	ref := reflect.TypeOf(&obj).Elem()
 	if err = BodyParser(body, &obj); err != nil {
-		return nil, errors.New("parameter failed：" + err.Error())
+		return nil, buserr.WithDetail("ErrInvalidParams", err.Error())
 	}
 	if err := validator.New().Struct(&obj); err != nil {
 		invalid, ok := err.(*validator.InvalidValidationError)
 		if ok {
-			return nil, errors.New("parameter failed：" + invalid.Error())
+			return nil, buserr.WithDetail("ErrInvalidParams", invalid.Error())
 		}
 		validationErrs := err.(validator.ValidationErrors) // 断言是ValidationErrors
 		var errorMessages []string
@@ -121,7 +121,7 @@ func BodyToStruct[M any](body []byte) (_ *M, err error) {
 			errorMessages = append(errorMessages, fieldName+" error")
 		}
 		if len(errorMessages) > 0 {
-			return nil, errors.New(strings.Join(errorMessages, "; "))
+			return nil, buserr.WithDetail("ErrInvalidParams", strings.Join(errorMessages, "; "))
 		}
 	}
 	return &obj, nil
