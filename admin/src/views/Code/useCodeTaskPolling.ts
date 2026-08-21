@@ -13,6 +13,8 @@ export interface CodeTaskPollingOptions {
 	/** 每隔几轮带一次 git 汇总。git 汇总要按会话读工作区算 diff，不能每轮都拉。 */
 	gitEveryPolls?: number
 	limit?: number
+	allPages?: boolean
+	order?: "recent"
 	/**
 	 * 跨项目模式：projectId 传 0，后端按当前用户列出全部任务。
 	 * 不开这个开关时 projectId 为 0 表示「项目还没选好」，直接跳过请求。
@@ -34,9 +36,19 @@ export function useCodeTaskPolling(
 	tasks: Ref<CodeTaskListItem[]>,
 	taskTotal: Ref<number>,
 	onError: (error: unknown) => void,
-	options: CodeTaskPollingOptions = {},
+	options: CodeTaskPollingOptions = {}
 ) {
-	const { intervalMs = 3000, gitEveryPolls = 10, limit = 50, allProjects = false, archived, idleIntervalMs = 0, selectedTaskId } = options
+	const {
+		intervalMs = 3000,
+		gitEveryPolls = 10,
+		limit = 50,
+		allPages = false,
+		order,
+		allProjects = false,
+		archived,
+		idleIntervalMs = 0,
+		selectedTaskId
+	} = options
 	let requestPending = false
 	let activeGitMode: CodeTaskGitMode = "none"
 	let activeSelectedTaskId = 0
@@ -46,7 +58,8 @@ export function useCodeTaskPolling(
 		if (!allProjects && !projectId.value) return
 		const requestedSelectedTaskId = selectedTaskId?.value || 0
 		if (requestPending) {
-			if (gitMode === activeGitMode && (gitMode !== "live" || requestedSelectedTaskId === activeSelectedTaskId)) return
+			if (gitMode === activeGitMode && (gitMode !== "live" || requestedSelectedTaskId === activeSelectedTaskId))
+				return
 			pendingGitMode = strongerGitMode(pendingGitMode, gitMode)
 			return
 		}
@@ -56,25 +69,49 @@ export function useCodeTaskPolling(
 		activeGitMode = gitMode
 		activeSelectedTaskId = requestedSelectedTaskId
 		try {
-			const response = await getAITasks({
-				page: 1,
+			const loaded = await fetchCodeTaskPages(
+				async page => {
+					const pageGitMode = page === 1 || gitMode === "none" ? gitMode : "live"
+					const response = await getAITasks({
+						page,
+						limit,
+						projectId: requestedProjectId,
+						includeGit: pageGitMode !== "none",
+						...(pageGitMode === "live"
+							? { gitScope: "live" as const, selectedTaskId: requestedSelectedTaskId }
+							: {}),
+						...(requestedArchived ? { archived: 1 as const } : {}),
+						...(order ? { order } : {})
+					})
+					if (response.code !== 0) throw new Error(response.message)
+					return { items: response.data.items || [], total: response.data.total || 0, gitMode: pageGitMode }
+				},
 				limit,
-				projectId: requestedProjectId,
-				includeGit: gitMode !== "none",
-				...(gitMode === "live" ? { gitScope: "live" as const, selectedTaskId: requestedSelectedTaskId } : {}),
-				...(requestedArchived ? { archived: 1 as const } : {}),
-			})
-			if (response.code !== 0) throw new Error(response.message)
+				allPages
+			)
 			if (!allProjects && projectId.value !== requestedProjectId) return
 			// 归档视图切换时会有一个在途请求，回来晚了会把新列表覆盖成旧的那一份。
 			if (requestedArchived !== (archived?.value === true)) return
 			const previousTasks = new Map(tasks.value.map(task => [task.id, task]))
-			tasks.value = (response.data.items || []).map(task => {
-				if (gitMode === "full" || (gitMode === "live" && taskNeedsLiveGitSummary(task, requestedSelectedTaskId))) return task
+			const freshGitTaskIds = new Set<number>()
+			const loadedTasks = new Map<number, CodeTaskListItem>()
+			for (const page of loaded.pages) {
+				for (const task of page.items) {
+					if (!loadedTasks.has(task.id)) loadedTasks.set(task.id, task)
+					if (
+						page.gitMode === "full" ||
+						(page.gitMode === "live" && taskNeedsLiveGitSummary(task, requestedSelectedTaskId))
+					) {
+						freshGitTaskIds.add(task.id)
+					}
+				}
+			}
+			tasks.value = [...loadedTasks.values()].map(task => {
+				if (freshGitTaskIds.has(task.id)) return task
 				const previous = previousTasks.get(task.id)
 				return previous ? { ...task, summary: { ...task.summary, ...pickCodeTaskGitSummary(previous) } } : task
 			})
-			taskTotal.value = response.data.total || 0
+			taskTotal.value = loaded.total
 		} catch (error) {
 			if (!silent) onError(error)
 		} finally {
@@ -124,6 +161,26 @@ export function useCodeTaskPolling(
 	return { fetchTasks, fetchTasksFast }
 }
 
+interface CodeTaskPage<T> {
+	items: T[]
+	total: number
+	gitMode: CodeTaskGitMode
+}
+
+export async function fetchCodeTaskPages<T>(
+	loadPage: (page: number) => Promise<CodeTaskPage<T>>,
+	limit: number,
+	allPages: boolean
+) {
+	const firstPage = await loadPage(1)
+	if (!allPages || firstPage.total <= firstPage.items.length) {
+		return { pages: [firstPage], total: firstPage.total }
+	}
+	const pageCount = Math.ceil(firstPage.total / limit)
+	const remainingPages = await Promise.all(Array.from({ length: pageCount - 1 }, (_, index) => loadPage(index + 2)))
+	return { pages: [firstPage, ...remainingPages], total: firstPage.total }
+}
+
 function strongerGitMode(current: CodeTaskGitMode, requested: CodeTaskGitMode): CodeTaskGitMode {
 	const priority = { none: 0, live: 1, full: 2 }
 	return priority[requested] > priority[current] ? requested : current
@@ -146,6 +203,6 @@ function pickCodeTaskGitSummary(task: CodeTaskListItem) {
 		unsavedAdditions: task.summary.unsavedAdditions,
 		unsavedDeletions: task.summary.unsavedDeletions,
 		unsavedFiles: task.summary.unsavedFiles,
-		hasUnsavedChanges: task.summary.hasUnsavedChanges,
+		hasUnsavedChanges: task.summary.hasUnsavedChanges
 	}
 }

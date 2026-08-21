@@ -9,12 +9,7 @@ import type { CodeProjectDropPosition } from "../codeProjectOrder"
 import { getAITasks, setAITaskArchived } from "@/api/modules/code"
 import Icon from "@/components/common/Icon.vue"
 import { codeProjectMessages } from "@/i18n/locales/codeProject"
-import {
-	excludeRecentCodeDashboardTasks,
-	mergeCodeDashboardTasks,
-	recentCodeDashboardTasks,
-	sortCodeTasksStably
-} from "../codeDashboardBuckets"
+import { mergeCodeDashboardTasks, recentCodeDashboardTasks, sortCodeTasksStably } from "../codeDashboardBuckets"
 import { useCodeTaskPolling } from "../useCodeTaskPolling"
 import CodeDashboardProjectList from "./CodeDashboardProjectList.vue"
 import CodeDashboardFocusTasks from "./CodeDashboardFocusTasks.vue"
@@ -66,7 +61,9 @@ const { fetchTasks, fetchTasksFast } = useCodeTaskPolling(
 	{
 		intervalMs: 5000,
 		gitEveryPolls: 6,
-		limit: 50,
+		limit: 100,
+		allPages: true,
+		order: "recent",
 		allProjects: true,
 		idleIntervalMs: 20000,
 		selectedTaskId
@@ -117,7 +114,7 @@ const projectNameById = computed(() => {
 
 const allTasks = computed(() => mergeCodeDashboardTasks(tasks.value, recentTaskCandidates.value))
 const recentTasks = computed(() => recentCodeDashboardTasks(recentTaskCandidates.value))
-const projectTasks = computed(() => excludeRecentCodeDashboardTasks(allTasks.value, recentTasks.value))
+const projectTasks = computed(() => sortCodeTasksStably(allTasks.value))
 
 // 仍按稳定规则排序，不按状态拆成多个区块。
 // 任务状态变化时只更新行内徽标，不会在“运行中/今日完成”之间跳来跳去。
@@ -129,6 +126,7 @@ const selectedTask = computed(() => visibleTasks.value.find(task => task.id === 
 
 const selectRecentTask = (task: CodeTaskListItem) => {
 	selectedTaskId.value = task.id
+	if (props.pendingSession) emit("sessionResolved")
 }
 
 const renameTask = (taskId: number, title: string) => {
@@ -304,15 +302,11 @@ const activateCreatedTask = async (taskId: number) => {
 								v-else
 								:projects="projects"
 								:tasks="projectTasks"
-								:empty-label="
-									recentTasks.length
-										? t('code.dashboardNoMoreProjectTasks')
-										: t('code.dashboardNoProjectTasks')
-								"
+								:empty-label="t('code.dashboardNoProjectTasks')"
 								:selected-task-id="selectedTaskId"
 								:archived="false"
 								:archiving-task-id="archiving"
-								@open="selectedTaskId = $event.id"
+								@open="selectRecentTask"
 								@archive="toggleArchived"
 								@open-workspace="emit('openTask', $event)"
 								@create-task="emit('createTask', $event)"

@@ -18,12 +18,14 @@
         :loading="projectsLoading"
         :load-error="projectsLoadError"
         :immersive="isCodeImmersive"
+        :pending-session="pendingSession"
         @retry="fetchProjects()"
         @create-project="openCreateProjectModal"
         @create-task="openNewProjectTask"
         @project-action="handleProjectAction"
         @reorder-project="reorderProject"
         @open-task="openTask"
+        @session-resolved="pendingSession = null"
       >
         <!--
           项目管理入口。刻意不做成任务列表的筛选器：
@@ -217,6 +219,7 @@
         @select="handleSourceDirsSelected"
       />
       <ProjectQuickPanels ref="quickPanelsRef" />
+      <NewSessionModal v-model:show="showNewSessionModal" :project-id="newTaskProjectId" @created="handleSessionCreated" />
     </div>
   </div>
 </template>
@@ -228,11 +231,12 @@ import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import { useAuthStore } from '@/store/auth'
 import { getAIProjects, createAIProject, discoverCodeProjectRepositories, updateAIProject } from '@/api/modules/code'
-import type { AIProject, CodeProjectQualityCheck } from '@/api/interface/code'
+import type { AIProject, CodeProjectQualityCheck, CodeSession } from '@/api/interface/code'
 import type { CodeTaskListItem } from '@/api/interface/codeTasks'
 import Icon from '@/components/common/Icon.vue'
 import CodeProjectIdentity from './components/CodeProjectIdentity.vue'
 import CodeDashboard from './components/CodeDashboard.vue'
+import NewSessionModal from './components/NewSessionModal.vue'
 import ProjectDirectoryPicker from './components/ProjectDirectoryPicker.vue'
 import ProjectGitCredentialSelect from './components/ProjectGitCredentialSelect.vue'
 import ProjectQuickPanels from './components/ProjectQuickPanels.vue'
@@ -260,6 +264,7 @@ const { isImmersive: isCodeImmersive } = useCodeImmersiveMode()
 const { t } = useI18n({ messages: codeProjectMessages })
 
 const showCreateProjectModal = ref(false)
+const showNewSessionModal = ref(false), newTaskProjectId = ref(0), pendingSession = ref<CodeSession | null>(null)
 const showDirectoryPicker = ref(false)
 const creatingProject = ref(false)
 const repositoriesLoading = ref(false)
@@ -429,8 +434,11 @@ const openTask = (task: CodeTaskListItem) => {
 }
 
 const openNewProjectTask = (projectId: number) => {
-  router.push({ path: `/code/project/${projectId}`, query: { newTask: '1' } })
+  newTaskProjectId.value = projectId
+  showNewSessionModal.value = true
 }
+
+const handleSessionCreated = (session: CodeSession) => { pendingSession.value = session }
 
 const projectMenuOptions = computed(() =>
   projects.value.map(project => ({
