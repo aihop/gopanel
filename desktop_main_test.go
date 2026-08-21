@@ -60,6 +60,9 @@ func TestBootstrapMiddlewareInjectsWebSocketTarget(t *testing.T) {
 	if !strings.Contains(body, "wails.localhost") {
 		t.Fatalf("expected Windows WebView host support: %s", body)
 	}
+	if !strings.Contains(body, "gopanel-desktop-context-menu") || !strings.Contains(body, "刷新页面") || !strings.Contains(body, "返回首页") || !strings.Contains(body, "打开连接中心") {
+		t.Fatalf("expected desktop context menu bootstrap: %s", body)
+	}
 }
 
 func TestDesktopMiddlewareShowsLauncherWhenDisconnected(t *testing.T) {

@@ -209,7 +209,8 @@ func (gateway *desktopGateway) bootstrapHTML() string {
 	// 补丁在构造每一条 WebSocket 时才去读 __GOPANEL_DESKTOP_WS__，
 	// 而不是把地址编译进闭包：切换服务器后网关会推一份新的全局进来，
 	// 已经打开的页面无需重新加载也能连对地方。
-	return fmt.Sprintf(`<style>*{scrollbar-width:none!important}*::-webkit-scrollbar{display:none!important;width:0!important;height:0!important}</style><script>(()=>{window.__GOPANEL_DESKTOP_MOBILE_URL__=%s;%sconst N=window.WebSocket;window.WebSocket=class extends N{constructor(u,p){const c=window.__GOPANEL_DESKTOP_WS__;const x=new URL(u,window.location.href);if(c&&c.host&&(x.protocol==="wails:"||x.hostname==="wails"||x.hostname==="wails.localhost"||x.hostname.endsWith(".wails"))){x.protocol=c.scheme;x.host=c.host;if(c.token)x.searchParams.set("desktop_token",c.token);if(c.entrance)x.searchParams.set("entrance",c.entrance)}super(x.toString(),p)}}})();</script>`,
+	return fmt.Sprintf(`<style>*{scrollbar-width:none!important}*::-webkit-scrollbar{display:none!important;width:0!important;height:0!important}</style>%s<script>(()=>{window.__GOPANEL_DESKTOP_MOBILE_URL__=%s;%sconst N=window.WebSocket;window.WebSocket=class extends N{constructor(u,p){const c=window.__GOPANEL_DESKTOP_WS__;const x=new URL(u,window.location.href);if(c&&c.host&&(x.protocol==="wails:"||x.hostname==="wails"||x.hostname==="wails.localhost"||x.hostname.endsWith(".wails"))){x.protocol=c.scheme;x.host=c.host;if(c.token)x.searchParams.set("desktop_token",c.token);if(c.entrance)x.searchParams.set("entrance",c.entrance)}super(x.toString(),p)}}})();</script>`,
+		desktopContextMenuHTML(),
 		strconv.Quote(mobileURL), gateway.webSocketConfigScript())
 }
 

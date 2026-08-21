@@ -61,14 +61,15 @@ func main() {
 	}
 
 	err = wails.Run(&options.App{
-		Title:             "GoPanel",
-		Width:             1280,
-		Height:            800,
-		MinWidth:          900,
-		MinHeight:         600,
-		HideWindowOnClose: runtime.GOOS == "darwin",
-		BackgroundColour:  options.NewRGB(15, 23, 42),
-		Menu:              app.applicationMenu(),
+		Title:                    "GoPanel",
+		Width:                    1280,
+		Height:                   800,
+		MinWidth:                 900,
+		MinHeight:                600,
+		HideWindowOnClose:        runtime.GOOS == "darwin",
+		EnableDefaultContextMenu: true,
+		BackgroundColour:         options.NewRGB(15, 23, 42),
+		Menu:                     app.applicationMenu(),
 		AssetServer: &assetserver.Options{
 			Assets:     frontend,
 			Handler:    app.gateway,
