@@ -484,3 +484,15 @@ var (
 	ErrMobileContainerParamsInvalid   = "ErrMobileContainerParamsInvalid"
 	ErrMobileContainerActionForbidden = "ErrMobileContainerActionForbidden"
 )
+
+// gp-agent / gpc
+var (
+	ErrAgentCaddyConfigNotFound         = "ErrAgentCaddyConfigNotFound"
+	ErrAgentHTTPServicePortOccupied     = "ErrAgentHTTPServicePortOccupied"
+	ErrAgentHTTPServicePermissionDenied = "ErrAgentHTTPServicePermissionDenied"
+	ErrAgentHTTPServiceStartFailed      = "ErrAgentHTTPServiceStartFailed"
+	ErrAgentHTTPServiceStopFailed       = "ErrAgentHTTPServiceStopFailed"
+	ErrAgentCaddyAdapterNotFound        = "ErrAgentCaddyAdapterNotFound"
+	ErrAgentRegistriesConfExists        = "ErrAgentRegistriesConfExists"
+	ErrAgentSSHLogSourceNotFound        = "ErrAgentSSHLogSourceNotFound"
+)
