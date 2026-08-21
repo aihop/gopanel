@@ -41,6 +41,7 @@ const {
 	attachments,
 	displayMessages,
 	streaming,
+	activity,
 	runs,
 	session,
 	closed,
@@ -236,6 +237,7 @@ onBeforeUnmount(() => {
               :message="item"
               :run="conversationRunForMessage(runs, item.runId)"
               :streaming="streaming?.status === 'running' && streaming.runId === item.runId"
+              :activity="activity"
             />
           </div>
         </div>
@@ -259,6 +261,7 @@ onBeforeUnmount(() => {
           :session-id="sessionId"
           :work-dir="workDir"
           :fallback-branch="session?.worktreeBranch || session?.targetBranch || ''"
+          :running="running || Boolean(streaming)"
         />
         <p
           v-if="showComposerHint"

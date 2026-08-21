@@ -13,18 +13,16 @@ export function conversationMessagePreview(content: string) {
 	return `${lines.slice(0, messagePreviewMaxCharacters).trimEnd()}\n…`
 }
 
-const runningPreviewMaxCharacters = 720
-const runningPreviewMaxLines = 12
 
-export function conversationMessageText(content: string, expanded: boolean, compact = false) {
+/**
+ * 消息在气泡里显示成什么样。
+ *
+ * 执行中的消息不再压成尾部预览：正在跑的那条就是用户盯着看的东西，
+ * 收起来只会让人不停去点展开，而且「…」开头会让人以为前面的内容丢了。
+ * 视口停在最新一行由滚动跟随保证，不需要靠截断内容来实现。
+ */
+export function conversationMessageText(content: string, expanded: boolean) {
 	if (expanded) return content
-	if (compact) {
-		const lines = content.split("\n")
-		if (content.length <= runningPreviewMaxCharacters && lines.length <= runningPreviewMaxLines) return content
-		let tail = lines.slice(-runningPreviewMaxLines).join("\n")
-		if (tail.length > runningPreviewMaxCharacters) tail = tail.slice(-runningPreviewMaxCharacters)
-		return `…\n${tail.trimStart()}`
-	}
 	if (!isLongConversationMessage(content)) return content
 	return conversationMessagePreview(content)
 }

@@ -30,6 +30,14 @@ export function useCodeConversation(sessionId: () => number | null, taskId: () =
 	const session = ref<CodeSession | null>(null)
 	const expandedMessageIds = ref(new Set<number>())
 	const streaming = ref<ConversationStreamPayload | null>(null)
+	// 「此刻在干什么」。执行结束由 done 事件清空，否则会一直挂着最后那句。
+	const activity = computed(() => {
+		const live = streaming.value
+		// 用流自己的状态判断，不依赖 runs：终端驱动的会话没有 run 记录，
+		// 靠 runs 判断会让活动状态永远不显示。
+		if (!live || live.status !== "running" || !live.activityKind) return null
+		return { kind: live.activityKind, detail: live.activity || "" }
+	})
 	let pollTimer: ReturnType<typeof setInterval> | null = null
 	let streamAbort: AbortController | null = null
 	let requestVersion = 0
@@ -271,6 +279,7 @@ export function useCodeConversation(sessionId: () => number | null, taskId: () =
 		messages,
 		displayMessages,
 		streaming,
+		activity,
 		runs,
 		session,
 		expandedMessageIds,

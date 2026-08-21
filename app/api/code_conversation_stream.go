@@ -21,14 +21,22 @@ type conversationStreamPayload struct {
 	Content string `json:"content"`
 	Status  string `json:"status,omitempty"`
 	Message string `json:"message,omitempty"`
+	// 执行期间对话里原先只有一个转圈的「运行中」，用户不知道 AI 在做什么，
+	// 也判断不了要不要等下去。这两个字段回答「此刻在干什么」：
+	// Kind 是活动种类（command/file/tool/search/thinking），文案由前端 i18n 决定；
+	// Activity 是细节，比如正在执行的命令或正在改的文件。
+	ActivityKind string `json:"activityKind,omitempty"`
+	Activity     string `json:"activity,omitempty"`
 }
 
 type conversationStreamSession struct {
-	mu     sync.Mutex
-	runID  uint
-	text   string
-	status string
-	subs   map[chan conversationStreamPayload]struct{}
+	mu           sync.Mutex
+	runID        uint
+	text         string
+	status       string
+	activityKind string
+	activity     string
+	subs         map[chan conversationStreamPayload]struct{}
 }
 
 type conversationStreamHub struct {
@@ -60,7 +68,10 @@ func (hub *conversationStreamHub) snapshot(sessionID uint) conversationStreamPay
 	current := hub.session(sessionID)
 	current.mu.Lock()
 	defer current.mu.Unlock()
-	return conversationStreamPayload{Type: "snapshot", RunID: current.runID, Content: current.text, Status: current.status}
+	return conversationStreamPayload{
+		Type: "snapshot", RunID: current.runID, Content: current.text,
+		Status: current.status, ActivityKind: current.activityKind, Activity: current.activity,
+	}
 }
 
 func (hub *conversationStreamHub) Subscribe(sessionID uint) (conversationStreamPayload, <-chan conversationStreamPayload, func()) {
@@ -83,6 +94,9 @@ func (hub *conversationStreamHub) Begin(sessionID, runID uint) {
 	current.runID = runID
 	current.text = ""
 	current.status = "running"
+	// 新一轮开始，上一轮残留的活动状态要清掉。
+	current.activityKind = ""
+	current.activity = ""
 	current.mu.Unlock()
 	hub.broadcast(sessionID, conversationStreamPayload{Type: "snapshot", RunID: runID, Status: "running"})
 }
@@ -96,12 +110,42 @@ func (hub *conversationStreamHub) SetText(sessionID uint, text string, delta str
 	}
 	runID := current.runID
 	status := current.status
+	activityKind := current.activityKind
+	activity := current.activity
 	current.mu.Unlock()
 	if delta != "" {
-		hub.broadcast(sessionID, conversationStreamPayload{Type: "delta", RunID: runID, Content: delta, Status: status})
+		hub.broadcast(sessionID, conversationStreamPayload{
+			Type: "delta", RunID: runID, Content: delta, Status: status,
+			ActivityKind: activityKind, Activity: activity,
+		})
 		return
 	}
-	hub.broadcast(sessionID, conversationStreamPayload{Type: "snapshot", RunID: runID, Content: text, Status: status})
+	hub.broadcast(sessionID, conversationStreamPayload{
+		Type: "snapshot", RunID: runID, Content: text, Status: status,
+		ActivityKind: activityKind, Activity: activity,
+	})
+}
+
+// SetActivity 更新「此刻在干什么」。用单独的事件类型推送，不动正文：
+// 进度是过程信息，混进 text 会被当成对话内容一起落库。
+func (hub *conversationStreamHub) SetActivity(sessionID uint, kind, activity string) {
+	current := hub.session(sessionID)
+	current.mu.Lock()
+	if current.activityKind == kind && current.activity == activity {
+		current.mu.Unlock()
+		return
+	}
+	current.activityKind = kind
+	current.activity = activity
+	if current.status == "" || current.status == "idle" {
+		current.status = "running"
+	}
+	runID := current.runID
+	status := current.status
+	current.mu.Unlock()
+	hub.broadcast(sessionID, conversationStreamPayload{
+		Type: "activity", RunID: runID, Status: status, ActivityKind: kind, Activity: activity,
+	})
 }
 
 func (hub *conversationStreamHub) Finish(sessionID uint, status, content string) {
@@ -114,6 +158,9 @@ func (hub *conversationStreamHub) Finish(sessionID uint, status, content string)
 		status = "completed"
 	}
 	current.status = status
+	// 收尾时清掉活动状态，否则界面会一直挂着最后那句「正在执行…」。
+	current.activityKind = ""
+	current.activity = ""
 	payload := conversationStreamPayload{Type: "done", RunID: current.runID, Content: current.text, Status: status}
 	current.mu.Unlock()
 	hub.broadcast(sessionID, payload)

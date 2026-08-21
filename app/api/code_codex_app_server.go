@@ -270,6 +270,11 @@ func (client *codexAppServerClient) parseLine(line []byte) (codexAppServerMessag
 }
 
 func (client *codexAppServerClient) handleNotification(method string, params json.RawMessage) error {
+	// 先把「此刻在干什么」推出去。命令执行、文件改动这些事件原先一律丢弃，
+	// 于是执行期间对话里只剩一个转圈的「运行中」。这里只更新活动状态，不动正文。
+	if kind, detail := codexActivityFromNotification(method, params); kind != "" {
+		codeConversationStreams.SetActivity(client.sessionID, kind, detail)
+	}
 	switch method {
 	case "item/agentMessage/delta":
 		var payload struct {

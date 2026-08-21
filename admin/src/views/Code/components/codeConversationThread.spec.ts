@@ -20,8 +20,9 @@ describe("conversation message preview", () => {
 		expect(conversationMessageText(long, false).endsWith("…")).toBe(true)
 		expect(conversationMessageText(long, true)).toBe(long)
 		const running = `${"line\n".repeat(20)}${"x".repeat(40)}`
-		expect(conversationMessageText(running, false, true).startsWith("…")).toBe(true)
-		expect(conversationMessageText(running, true, true)).toBe(running)
+		// 执行中的消息不再压成尾部预览——那条正在跑的就是用户盯着看的内容，
+		// 收起来只会让人不停点展开，「…」开头还会让人以为前面的内容丢了。
+		expect(conversationMessageText(running, true)).toBe(running)
 	})
 })
 

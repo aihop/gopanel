@@ -8,6 +8,10 @@ export interface ConversationStreamPayload {
 	content?: string
 	status?: string
 	message?: string
+	/** 活动种类：command / file / tool / search / thinking，文案由前端 i18n 决定。 */
+	activityKind?: string
+	/** 活动细节，比如正在执行的命令或正在改的文件。 */
+	activity?: string
 }
 
 export interface ConversationStreamCallbacks {
@@ -69,7 +73,9 @@ function handleConversationStreamFrame(frame: string, callbacks: ConversationStr
 	}
 	if (!data.length) return
 	const payload = JSON.parse(data.join("\n")) as ConversationStreamPayload
-	if (event === "snapshot") callbacks.onSnapshot?.(payload)
+	// activity 只带活动状态、不带正文，复用快照回调即可——
+	// applyStreamPayload 在 content 缺省时会保留已有正文。
+	if (event === "snapshot" || event === "activity") callbacks.onSnapshot?.(payload)
 	if (event === "delta") callbacks.onDelta?.(payload)
 	if (event === "done") callbacks.onDone?.(payload)
 }

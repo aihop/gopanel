@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, ref } from "vue"
-import { useI18n } from "vue-i18n"
 import type { AIMessage, CodeExecutionRun } from "@/api/interface/code"
 import Icon from "@/components/common/Icon.vue"
-import { codeWorkspaceMessages } from "../codeWorkspaceMessages"
+import { useCodeTaskMeta } from "../useCodeTaskMeta"
 import { parseConversationAttachments } from "./codeConversationAttachments"
 import { sanitizeConversationMarkdown } from "./codeConversationMarkdown"
 import { conversationMessageText, isUserConversationMessage } from "./codeConversationThread"
@@ -13,16 +12,21 @@ const props = defineProps<{
 	message: AIMessage
 	run?: CodeExecutionRun
 	streaming?: boolean
+	/** 此刻在干什么。只在执行中有值，用来替换干巴巴的「运行中」。 */
+	activity?: { kind: string; detail: string } | null
 }>()
 
-const { t } = useI18n({ messages: codeWorkspaceMessages })
+const { t, formatTaskDuration, formatTaskTokens, formatTaskTokensCompact } = useCodeTaskMeta()
 const isUser = computed(() => isUserConversationMessage(props.message.role))
 const parsed = computed(() => parseConversationAttachments(props.message.content || ""))
 const isRunActive = computed(() => props.streaming || props.run?.status === "running" || props.run?.status === "queued")
 const expanded = ref(false)
-const previewText = computed(() => conversationMessageText(parsed.value.text, expanded.value, isRunActive.value))
+// 执行中的消息整段显示，不折叠也不截断——那正是用户此刻要看的内容。
+const previewText = computed(() =>
+	isRunActive.value ? parsed.value.text : conversationMessageText(parsed.value.text, expanded.value),
+)
 const canExpand = computed(
-	() => conversationMessageText(parsed.value.text, false, isRunActive.value) !== parsed.value.text,
+	() => !isRunActive.value && conversationMessageText(parsed.value.text, false) !== parsed.value.text,
 )
 const hasBubble = computed(() => Boolean(parsed.value.attachments.length || parsed.value.text))
 const MdPreview = defineAsyncComponent(async () => {
@@ -62,9 +66,27 @@ const MdPreview = defineAsyncComponent(async () => {
           <span class="absolute inset-0 animate-spin rounded-full border border-current border-r-transparent motion-reduce:animate-none" />
           <span class="h-1.5 w-1.5 rounded-full bg-current animate-pulse motion-reduce:animate-none" />
         </span>
-        <span>{{ t(`code.runStatus_${run.status}`) }}</span>
-        <span v-if="!isRunActive && run.durationMs">{{ t("code.runDuration", { duration: run.durationMs }) }}</span>
-        <span v-if="!isRunActive && run.totalTokens">{{ t("code.taskTokens", { count: run.totalTokens }) }}</span>
+        <!--
+					执行中优先显示「正在执行 go test ./...」这类具体动作。
+					只有一个转圈的「运行中」时，用户既不知道 AI 在做什么，也判断不了该不该继续等。
+				-->
+        <span v-if="isRunActive && activity">{{ t(`code.activity_${activity.kind}`) }}</span>
+        <span
+          v-if="isRunActive && activity?.detail"
+          class="min-w-0 truncate font-mono text-[10px] opacity-80"
+          :title="activity.detail"
+        >{{ activity.detail }}</span>
+        <span v-if="!isRunActive || !activity">{{ t(`code.runStatus_${run.status}`) }}</span>
+        <template v-if="!isRunActive && run.durationMs">
+          <span class="text-slate-300 dark:text-white/25">·</span>
+          <span>{{ t("code.runDuration", { duration: formatTaskDuration(run.durationMs) }) }}</span>
+        </template>
+        <template v-if="!isRunActive && run.totalTokens">
+          <span class="text-slate-300 dark:text-white/25">·</span>
+          <span :title="t('code.taskTokens', { count: formatTaskTokens(run.totalTokens) })">
+            {{ t("code.taskTokens", { count: formatTaskTokensCompact(run.totalTokens) }) }}
+          </span>
+        </template>
       </div>
       <div
         v-if="hasBubble"
