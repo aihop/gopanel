@@ -47,6 +47,7 @@ import type { Dashboard } from "@/api/interface/dashboard"
 import { useRouter } from "vue-router"
 import { computed, onMounted, onUnmounted, ref } from "vue"
 import { useMessage } from "naive-ui"
+import { useI18n } from "vue-i18n"
 import DashboardInfoStrip from "./DashboardInfoStrip.vue"
 import DashboardAIControl from "./DashboardAIControl.vue"
 import DashboardResourceCards from "./DashboardResourceCards.vue"
@@ -57,6 +58,7 @@ import { parseUtil } from "./dashboardStatusHelpers"
 
 const router = useRouter()
 const message = useMessage()
+const { t } = useI18n()
 
 const diskExpanded = ref(false)
 const acceleratorExpanded = ref(false)
@@ -239,13 +241,14 @@ async function handleMemoryClean() {
 		const res: any = await clearMemoryCaches({ mode: 3 })
 		const data = res?.data || {}
 		if (data.needPrivilege) {
-			message.warning(data.message || "权限不足：需要管理员权限执行清理内核缓存")
+			message.warning(data.message || t("home.memoryCleanPrivilegeRequired"))
 		} else if (data.message) {
 			message.success(data.message)
 		} else {
-			message.success("已触发清理内存")
+			message.success(t("home.memoryCleanTriggered"))
 		}
 	} catch (err: any) {
+		message.error(err?.message || t("home.memoryCleanFailed"))
 	} finally {
 		memoryCleaning.value = false
 	}
@@ -260,8 +263,9 @@ async function handleCpuRelieve() {
 		}
 		const res: any = await relieveCPU({ level: 10 })
 		const data = res?.data || {}
-		message.success(data.message || "已释放 CPU（降低刷新频率 + 降低进程优先级）")
+		message.success(data.message || t("home.cpuRelieved"))
 	} catch (err: any) {
+		message.error(err?.message || t("home.cpuRelieveFailed"))
 	} finally {
 		cpuRelieving.value = false
 	}

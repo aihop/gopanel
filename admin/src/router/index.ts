@@ -32,7 +32,12 @@ const router = createRouter({
 					path: "index",
 					name: "Dashboard-Index",
 					component: () => import("@/views/Dashboard/Index.vue"),
-					meta: { title: t("menu.dashboardHelper"), titleKey: "menu.dashboardHelper", auth: true, roles: "all" }
+					meta: {
+						title: t("menu.dashboardHelper"),
+						titleKey: "menu.dashboardHelper",
+						auth: true,
+						roles: "all"
+					}
 				}
 			]
 		},
@@ -96,13 +101,13 @@ const router = createRouter({
 			path: "/pipeline",
 			name: "Pipeline",
 			redirect: "/pipeline/index",
-			meta: { title: "流水线", titleKey: "menu.pipeline", auth: true, roles: "all" },
+			meta: { title: t("menu.pipeline"), titleKey: "menu.pipeline", auth: true, roles: "all" },
 			children: [
 				{
 					path: "index",
 					name: "Pipeline-Index",
 					component: () => import("@/views/Pipeline/Index.vue"),
-					meta: { title: "CI/CD 流水线", titleKey: "pipeline.workspace", auth: true, roles: "all" }
+					meta: { title: t("pipeline.workspace"), titleKey: "pipeline.workspace", auth: true, roles: "all" }
 				}
 			]
 		},
@@ -124,13 +129,13 @@ const router = createRouter({
 			path: "/database",
 			name: "Database",
 			redirect: "/database/index",
-			meta: { title: "数据库", titleKey: "menu.database", auth: true, roles: "all" },
+			meta: { title: t("menu.database"), titleKey: "menu.database", auth: true, roles: "all" },
 			children: [
 				{
 					path: "index",
 					name: "Database-Index",
 					component: () => import("@/views/Database/Index.vue"),
-					meta: { title: "数据库列表", titleKey: "database.listPage", auth: true, roles: "all" }
+					meta: { title: t("database.listPage"), titleKey: "database.listPage", auth: true, roles: "all" }
 				}
 			]
 		},
@@ -160,7 +165,7 @@ const router = createRouter({
 			path: "/apps",
 			name: "Apps",
 			redirect: "/apps/index",
-			meta: { title: "网站", titleKey: "menu.website", auth: true, roles: "all" },
+			meta: { title: t("menu.apps"), titleKey: "menu.apps", auth: true, roles: "all" },
 			children: [
 				{
 					path: "index",
@@ -236,7 +241,8 @@ const router = createRouter({
 			name: "Host",
 			redirect: "/host/process",
 			meta: {
-				title: "主机",
+				title: t("menu.host"),
+				titleKey: "menu.host",
 				auth: true,
 				roles: "all"
 			},
@@ -245,55 +251,61 @@ const router = createRouter({
 					path: "terminal",
 					name: "Host-Terminal",
 					component: () => import("@/views/Host/terminal/index.vue"),
-					meta: { title: t("menu.terminal"), titleKey: "menu.terminal", auth: true, roles: "all", keepAlive: true }
+					meta: {
+						title: t("menu.terminal"),
+						titleKey: "menu.terminal",
+						auth: true,
+						roles: "all",
+						keepAlive: true
+					}
 				},
 				{
 					path: "monitor",
 					name: "Host-Monitor",
 					component: () => import("@/views/Host/monitor.vue"),
-					meta: { title: "监控", auth: true, roles: "all" }
+					meta: { title: t("menu.monitor"), titleKey: "menu.monitor", auth: true, roles: "all" }
 				},
 				{
 					path: "files",
 					name: "Host-Files",
 					component: () => import("@/views/Host/files.vue"),
-					meta: { title: "文件", auth: true, roles: "all" }
+					meta: { title: t("menu.files"), titleKey: "menu.files", auth: true, roles: "all" }
 				},
 				{
 					path: "disk",
 					name: "Host-Disk",
 					component: () => import("@/views/Host/disk.vue"),
-					meta: { title: "磁盘管理", auth: true, roles: "all" }
+					meta: { title: t("menu.disk"), titleKey: "menu.disk", auth: true, roles: "all" }
 				},
 				{
 					path: "firewall",
 					name: "Host-Firewall",
 					component: () => import("@/views/Host/firewall.vue"),
-					meta: { title: "防火墙", auth: true, roles: "all" }
+					meta: { title: t("menu.firewall"), titleKey: "menu.firewall", auth: true, roles: "all" }
 				},
 				{
 					path: "process",
 					name: "Host-Process",
 					component: () => import("@/views/Host/process.vue"),
-					meta: { title: "进程管理", auth: true, roles: "all" }
+					meta: { title: t("menu.processManage"), titleKey: "menu.processManage", auth: true, roles: "all" }
 				},
 				{
 					path: "security",
 					name: "Host-Security",
 					component: () => import("@/views/Host/security.vue"),
-					meta: { title: "安全体检", auth: true, roles: "all" }
+					meta: { title: t("menu.security"), titleKey: "menu.security", auth: true, roles: "all" }
 				},
 				{
 					path: "daemon",
 					name: "Toolbox-Daemon",
 					component: () => import("@/views/Host/Toolbox/Daemon.vue"),
-					meta: { title: "进程守护", auth: false, roles: "all" }
+					meta: { title: t("menu.daemon"), titleKey: "menu.daemon", auth: false, roles: "all" }
 				},
 				{
 					path: "cronjob",
 					name: "Cronjob-Index",
 					component: () => import("@/views/Cronjob/Index.vue"),
-					meta: { title: "计划任务", titleKey: "menu.cronjob", auth: true, roles: "all" }
+					meta: { title: t("menu.cronjob"), titleKey: "menu.cronjob", auth: true, roles: "all" }
 				}
 			]
 		},
@@ -302,7 +314,8 @@ const router = createRouter({
 			name: "Setting",
 			component: () => import("@/views/Setting/Setting.vue"),
 			meta: {
-				title: "系统设置",
+				title: t("menu.settings"),
+				titleKey: "menu.settings",
 				auth: true,
 				roles: "all"
 			}
@@ -312,7 +325,8 @@ const router = createRouter({
 			name: "Logs",
 			component: () => import("@/views/Log/index.vue"),
 			meta: {
-				title: "日志中心",
+				title: t("menu.logs"),
+				titleKey: "menu.logs",
 				auth: true,
 				roles: "all"
 			}
@@ -391,13 +405,15 @@ const router = createRouter({
 })
 
 const viewportMeta = document.querySelector<HTMLMetaElement>('meta[name="viewport"]')
-const defaultViewport = viewportMeta?.content || "initial-scale=1, minimum-scale=1, width=device-width, height=device-height"
+const defaultViewport =
+	viewportMeta?.content || "initial-scale=1, minimum-scale=1, width=device-width, height=device-height"
 
 router.afterEach(route => {
 	if (!viewportMeta) return
-	viewportMeta.content = route.path === "/mobile" || route.path.startsWith("/mobile/")
-		? "width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
-		: defaultViewport
+	viewportMeta.content =
+		route.path === "/mobile" || route.path.startsWith("/mobile/")
+			? "width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+			: defaultViewport
 })
 
 checkAuth(router)

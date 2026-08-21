@@ -8,7 +8,7 @@
 						<template #icon>
 							<Icon name="mdi:arrow-left" />
 						</template>
-						返回
+						{{ $t("commons.button.back") }}
 					</n-button>
 					<n-divider vertical />
 					<div>{{ title }}</div>
@@ -16,42 +16,34 @@
 			</template>
 
 			<n-form ref="formRef" :model="form" :rules="rules" require-mark-placement="right-hanging">
-				<n-form-item label="应用类型" path="type">
+				<n-form-item :label="$t('website.appType')" path="type">
 					<n-select
 						v-model:value="form.type"
 						:disabled="actionType === 'update'"
 						:options="[
-							{ label: '📦 静态网站 (HTML/Vue/React)', value: 'static' },
-							{ label: '🚀 容器化应用 (需容器镜像)', value: 'web_app' },
-							{ label: '🔌 纯反向代理 (不托管代码)', value: 'proxy' },
-							{ label: '🔗 URL 重定向 (301/302)', value: 'redirect' }
+							{ label: $t('website.staticSiteOption'), value: 'static' },
+							{ label: $t('website.containerAppOption'), value: 'web_app' },
+							{ label: $t('website.proxyOption'), value: 'proxy' },
+							{ label: $t('website.redirectOption'), value: 'redirect' }
 						]"
-						placeholder="请选择类型"
+						:placeholder="$t('website.selectTypePlaceholder')"
 					/>
 				</n-form-item>
 				<n-form-item :label="$t('website.primaryDomain')" path="primaryDomain">
-					<n-input
-						v-model:value="form.primaryDomain"
-						:disabled="actionType === 'update'"
-						placeholder="请输入域名，例如 console.cn"
-					/>
+					<n-input v-model:value="form.primaryDomain" :disabled="actionType === 'update'" :placeholder="$t('website.primaryDomainPlaceholder')" />
 				</n-form-item>
-				<n-form-item label="其他域名" path="otherDomains">
-					<n-input type="textarea" v-model:value="form.otherDomains" placeholder="一行一个域名，支持IP地址" />
+				<n-form-item :label="$t('website.otherDomains')" path="otherDomains">
+					<n-input type="textarea" v-model:value="form.otherDomains" :placeholder="$t('website.otherDomainsPlaceholder')" />
 				</n-form-item>
 
 				<n-checkbox class="mb-2" v-model:checked="form.redirectDomainsToPrimary" :disabled="!form.otherDomains">
-					其他域名自动 301 跳转到主域名
+					{{ $t("website.redirectDomainsToPrimary") }}
 				</n-checkbox>
 
-				<n-checkbox class="mb-6" v-model:checked="form.IPV6">监听IPV6</n-checkbox>
+				<n-checkbox class="mb-6" v-model:checked="form.IPV6">{{ $t("website.ipv6") }}</n-checkbox>
 
-				<n-form-item label="网站目录" path="alias">
-					<n-input
-						v-model:value="form.alias"
-						:disabled="actionType === 'update'"
-						placeholder="网站目录、代号"
-					/>
+				<n-form-item :label="$t('website.siteDirectory')" path="alias">
+					<n-input v-model:value="form.alias" :disabled="actionType === 'update'" :placeholder="$t('website.siteDirPlaceholder')" />
 				</n-form-item>
 
 				<template v-if="form.type === 'web_app' || form.type === 'static'">
@@ -61,76 +53,52 @@
 					>
 						{{ bindingRuntimeSummary }}
 					</div>
-					<n-form-item label="代码来源 / 部署方式" path="codeSource">
+					<n-form-item :label="$t('website.codeSource')" path="codeSource">
 						<n-radio-group v-model:value="form.codeSource">
 							<n-space>
-								<n-radio value="upload" v-if="form.type === 'static'">稍后上传 / 本地目录</n-radio>
-								<n-radio value="git">自定义镜像部署</n-radio>
-								<n-radio value="app_store">应用商店</n-radio>
+								<n-radio value="upload" v-if="form.type === 'static'">
+									{{ $t("website.uploadLater") }}
+								</n-radio>
+								<n-radio value="git">{{ $t("website.customImageDeploy") }}</n-radio>
+								<n-radio value="app_store">{{ $t("website.appStore") }}</n-radio>
 							</n-space>
 						</n-radio-group>
 					</n-form-item>
 
-					<n-form-item
-						label="容器镜像地址"
-						path="dockerImage"
-						v-if="form.codeSource === 'git' || form.codeSource === 'docker'"
-					>
+					<n-form-item :label="$t('website.dockerImageAddress')" path="dockerImage" v-if="form.codeSource === 'git' || form.codeSource === 'docker'">
 						<n-auto-complete
 							v-model:value="form.dockerImage"
 							:options="localImageOptions"
-							placeholder="例：nginx:latest 或 my-harbor/app:v1"
+							:placeholder="$t('website.dockerImagePlaceholder')"
 							:get-show="() => true"
 							clearable
 						/>
 					</n-form-item>
 
-					<n-form-item label="本地代码路径 (可选)" path="codeDir" v-if="form.codeSource === 'upload'">
-						<n-input v-model:value="form.codeDir" placeholder="默认：/opt/gopanel/www/{代号}/releases" />
+					<n-form-item :label="$t('website.localCodePath')" path="codeDir" v-if="form.codeSource === 'upload'">
+						<n-input v-model:value="form.codeDir" :placeholder="$t('website.localCodePathPlaceholder')" />
 					</n-form-item>
 
-					<div
-						v-if="form.codeSource === 'upload'"
-						class="mb-6 rounded border bg-slate-50 p-3 text-sm text-slate-500"
-					>
-						创建完成后，您可以在网站列表点击
-						<b>[部署管理] -> [发布新版本]</b>
-						来上传代码压缩包。或者直接将代码放入上方目录。
+					<div v-if="form.codeSource === 'upload'" class="mb-6 rounded border bg-slate-50 p-3 text-sm text-slate-500">
+						{{ $t("website.uploadHint") }}
 					</div>
 				</template>
 
 				<template v-if="form.type === 'proxy'">
 					<n-form-item :label="$t('website.upstreams')" path="upstreams">
 						<div class="w-full space-y-3">
-							<div
-								v-for="(item, index) in form.upstreams"
-								:key="item.formKey"
-								class="rounded-2xl border border-slate-200 bg-slate-50 p-3"
-							>
+							<div v-for="(item, index) in form.upstreams" :key="item.formKey" class="rounded-2xl border border-slate-200 bg-slate-50 p-3">
 								<div class="flex items-center justify-between gap-3">
 									<div class="text-xs font-medium text-slate-500">
 										{{ `${$t("website.node")} ${index + 1}` }}
 									</div>
-									<n-button
-										quaternary
-										size="small"
-										:disabled="form.upstreams.length === 1"
-										@click="removeUpstream(index)"
-									>
+									<n-button quaternary size="small" :disabled="form.upstreams.length === 1" @click="removeUpstream(index)">
 										{{ $t("commons.button.delete") }}
 									</n-button>
 								</div>
 								<div class="mt-3 flex flex-col gap-3 lg:flex-row">
-									<n-select
-										v-model:value="item.scheme"
-                    style="width: 120px;"
-										:options="upstreamSchemeOptions"
-									/>
-									<n-input
-										v-model:value="item.address"
-										class="flex-1"
-										:placeholder="$t('website.upstreamAddressPlaceholder')"
-									/>
+									<n-select v-model:value="item.scheme" style="width: 120px" :options="upstreamSchemeOptions" />
+									<n-input v-model:value="item.address" class="flex-1" :placeholder="$t('website.upstreamAddressPlaceholder')" />
 								</div>
 								<div class="mt-3">
 									<n-checkbox v-model:checked="item.enabled">
@@ -147,10 +115,7 @@
 					<n-form-item :label="$t('website.healthCheck')">
 						<n-grid cols="1 s:3" responsive="screen" :x-gap="12" :y-gap="12">
 							<n-gi>
-								<n-input
-									v-model:value="form.upstreamHealthUri"
-									:placeholder="$t('website.healthUriPlaceholder')"
-								/>
+								<n-input v-model:value="form.upstreamHealthUri" :placeholder="$t('website.healthUriPlaceholder')" />
 							</n-gi>
 							<n-gi>
 								<n-input v-model:value="form.upstreamHealthInterval" placeholder="10s" />
@@ -169,27 +134,27 @@
 				</n-form-item>
 
 				<template v-if="form.type === 'redirect'">
-					<n-form-item label="重定向目标 URL" path="proxy">
-						<n-input v-model:value="form.proxy" placeholder="例：https://newdomain.com" />
+					<n-form-item :label="$t('website.redirectTargetUrl')" path="proxy">
+						<n-input v-model:value="form.proxy" :placeholder="$t('website.redirectTargetPlaceholder')" />
 					</n-form-item>
-					<n-form-item label="重定向类型">
+					<n-form-item :label="$t('website.redirectType')">
 						<n-radio-group v-model:value="form.redirectCode">
 							<n-space>
-								<n-radio :value="301">301 永久重定向</n-radio>
-								<n-radio :value="302">302 临时重定向</n-radio>
-								<n-radio :value="307">307 临时重定向 (保持请求方法)</n-radio>
-								<n-radio :value="308">308 永久重定向 (保持请求方法)</n-radio>
+								<n-radio :value="301">{{ $t("website.redirect301") }}</n-radio>
+								<n-radio :value="302">{{ $t("website.redirect302") }}</n-radio>
+								<n-radio :value="307">{{ $t("website.redirect307") }}</n-radio>
+								<n-radio :value="308">{{ $t("website.redirect308") }}</n-radio>
 							</n-space>
 						</n-radio-group>
 					</n-form-item>
 				</template>
 
-				<n-form-item label="选择已安装应用" path="appInstallId" v-if="form.codeSource === 'app_store'">
+				<n-form-item :label="$t('website.selectInstalledApp')" path="appInstallId" v-if="form.codeSource === 'app_store'">
 					<div class="w-full">
 						<n-select
 							v-model:value="form.appInstallId"
 							:options="appInstallOptions"
-							placeholder="请选择已安装的容器应用"
+							:placeholder="$t('website.selectInstalledAppPlaceholder')"
 							@update:value="handleAppSelect"
 						/>
 						<div v-if="selectedAppRuntimeText" class="mt-2 text-xs text-slate-500">
@@ -198,26 +163,28 @@
 					</div>
 				</n-form-item>
 
-				<n-divider class="!my-6 text-slate-400">安全防护</n-divider>
+				<n-divider class="!my-6 text-slate-400">{{ $t("website.securityProtection") }}</n-divider>
 
 				<div class="mb-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
 					<div class="flex items-start justify-between gap-4">
 						<div class="space-y-2">
-							<div class="text-sm font-semibold text-slate-700">轻量安全策略</div>
+							<div class="text-sm font-semibold text-slate-700">
+								{{ $t("website.lightSecurityPolicy") }}
+							</div>
 							<div class="text-xs leading-6 text-slate-500">
-								添加/修改网站时只保留预设策略，细粒度开关请在网站列表中的“安全防护”入口里集中维护。
+								{{ $t("website.securityPolicyHint") }}
 							</div>
 						</div>
-						<n-tag round :bordered="false" type="info">推荐抽离</n-tag>
+						<n-tag round :bordered="false" type="info">{{ $t("website.recommendedExtract") }}</n-tag>
 					</div>
 				</div>
 
-				<n-form-item label="安全策略">
+				<n-form-item :label="$t('website.securityPolicy')">
 					<n-radio-group v-model:value="securityPreset" @update:value="handleSecurityPresetChange">
 						<n-space vertical>
-							<n-radio value="off">关闭防护</n-radio>
-							<n-radio value="recommended">推荐策略</n-radio>
-							<n-radio value="strict">严格策略</n-radio>
+							<n-radio value="off">{{ $t("website.protectionOff") }}</n-radio>
+							<n-radio value="recommended">{{ $t("website.recommendedPolicy") }}</n-radio>
+							<n-radio value="strict">{{ $t("website.strictPolicy") }}</n-radio>
 						</n-space>
 					</n-radio-group>
 				</n-form-item>
@@ -227,23 +194,20 @@
 						{{ item }}
 					</n-tag>
 					<span v-if="securitySummary.length === 0" class="text-xs text-slate-400">
-						当前预设不会启用网站级安全防护
+						{{ $t("website.noSecurityEnabled") }}
 					</span>
 				</div>
 
 				<n-divider class="!my-4" />
 
 				<details class="mb-4 rounded-2xl border border-slate-200">
-					<summary
-						class="cursor-pointer select-none px-4 py-3 text-sm font-medium text-slate-600 hover:text-slate-800"
-					>
-						自定义 Caddy 配置
-						<span class="ml-2 text-xs text-slate-400">（可选）</span>
+					<summary class="cursor-pointer select-none px-4 py-3 text-sm font-medium text-slate-600 hover:text-slate-800">
+						{{ $t("website.customCaddyConfig") }}
+						<span class="ml-2 text-xs text-slate-400">{{ $t("website.optional") }}</span>
 					</summary>
 					<div class="border-t border-slate-100 px-4 py-3">
 						<n-alert type="info" :show-icon="true" class="mb-3 text-xs">
-							追加到该站点的 Caddy server block 末尾，修改面板参数不会覆盖此处内容。
-							修改后需重新"应用配置"才能生效。
+							{{ $t("website.caddyConfigHint") }}
 						</n-alert>
 						<div class="h-[240px] w-full overflow-hidden rounded-lg border border-slate-200">
 							<vue-monaco-editor
@@ -265,15 +229,17 @@
 					</div>
 				</details>
 
-				<n-form-item label="备注" path="remark">
-					<n-input type="textarea" v-model:value="form.remark" placeholder="请输入备注信息" />
+				<n-form-item :label="$t('website.remark')" path="remark">
+					<n-input type="textarea" v-model:value="form.remark" :placeholder="$t('website.remarkPlaceholder')" />
 				</n-form-item>
 			</n-form>
 
 			<template #footer>
 				<div class="flex justify-end gap-4">
-					<n-button @click="close">取消</n-button>
-					<n-button type="primary" @click="onConfirm" :loading="loading">确定</n-button>
+					<n-button @click="close">{{ $t("commons.button.cancel") }}</n-button>
+					<n-button type="primary" @click="onConfirm" :loading="loading">
+						{{ $t("commons.button.confirm") }}
+					</n-button>
 				</div>
 			</template>
 		</n-drawer-content>
@@ -289,11 +255,7 @@ import { websiteCreateAPI, websiteUpdateAPI } from "@/api/modules/website"
 import { VueMonacoEditor } from "@guolao/vue-monaco-editor"
 import { ListAppInstalled } from "@/api/modules/apps"
 import { listAllImage } from "@/api/modules/container"
-import {
-	buildRuntimeBadgeText,
-	buildRuntimeDetailText as formatRuntimeDetailText,
-	getRunUserLabel
-} from "@/utils/runtime"
+import { buildRuntimeBadgeText, buildRuntimeDetailText as formatRuntimeDetailText, getRunUserLabel } from "@/utils/runtime"
 import { getWebsiteIpv6Value, normalizeWebsiteProtocol as normalizeWebsiteProtocolValue } from "@/utils/websiteRuntime"
 import { t } from "@/i18n"
 
@@ -360,7 +322,12 @@ type WebsiteFormRecord = Website.WebsiteDTO & {
 
 let upstreamFormKey = 0
 function createDefaultUpstream(values: Partial<Omit<WebsiteFormUpstream, "formKey">> = {}): WebsiteFormUpstream {
-	return { formKey: ++upstreamFormKey, address: values.address || "", scheme: values.scheme || "http", enabled: values.enabled !== false }
+	return {
+		formKey: ++upstreamFormKey,
+		address: values.address || "",
+		scheme: values.scheme || "http",
+		enabled: values.enabled !== false
+	}
 }
 
 function buildProxyFromUpstream(item?: { address?: string; scheme?: string } | null): string {
@@ -372,11 +339,13 @@ function buildProxyFromUpstream(item?: { address?: string; scheme?: string } | n
 
 function normalizeUpstreamForm(record?: Website.WebsiteUpstream[] | null, proxy?: string): WebsiteFormUpstream[] {
 	if (record && record.length > 0) {
-		return record.map(item => createDefaultUpstream({
-			address: item.address || "",
-			scheme: item.scheme || "http",
-			enabled: item.enabled !== false
-		}))
+		return record.map(item =>
+			createDefaultUpstream({
+				address: item.address || "",
+				scheme: item.scheme || "http",
+				enabled: item.enabled !== false
+			})
+		)
 	}
 	const fallback = String(proxy || "").trim()
 	if (!fallback) {
@@ -443,7 +412,7 @@ function sanitizeOtherDomains(raw: string, primary: string): string {
 		.join("\n")
 }
 
-const title = ref("添加域名")
+const title = ref(t("website.addDomainTitle"))
 const securityPreset = ref<SecurityPreset>("recommended")
 const bindingRuntimeSummary = ref("")
 
@@ -460,24 +429,24 @@ const selectedAppRuntimeText = computed(() => {
 	const item = rawAppList.value.find(app => app.id === form.value.appInstallId)
 	if (!item) return ""
 	return formatRuntimeDetailText(item, {
-		prefix: item.containerName ? `容器：${item.containerName}` : "",
+		prefix: item.containerName ? `${t("website.containerPrefix")}${item.containerName}` : "",
 		kindFallback: "Runtime",
-		userFallback: "镜像默认",
-		runtimePrefix: "运行时：",
-		runUserPrefix: "用户："
+		userFallback: t("website.imageDefault"),
+		runtimePrefix: t("website.runtimePrefix"),
+		runUserPrefix: t("website.userPrefix")
 	})
 })
 
 const securitySummary = computed(() => {
 	const list: string[] = []
-	if (form.value.antiCrawler) list.push("防爬虫")
-	if (form.value.antiLeech) list.push("防盗链")
-	if (form.value.rateLimitMode === "normal") list.push("常规限流")
-	if (form.value.rateLimitMode === "strict") list.push("严格限流")
-	if (form.value.wafEnable) list.push("轻量 WAF")
-	if (form.value.blockSensitive) list.push("敏感文件保护")
-	if (form.value.securityHeader) list.push("安全响应头")
-	if (form.value.hstsEnabled) list.push("HSTS")
+	if (form.value.antiCrawler) list.push(t("website.secAntiCrawler"))
+	if (form.value.antiLeech) list.push(t("website.secAntiLeech"))
+	if (form.value.rateLimitMode === "normal") list.push(t("website.secRateLimitNormal"))
+	if (form.value.rateLimitMode === "strict") list.push(t("website.secRateLimitStrict"))
+	if (form.value.wafEnable) list.push(t("website.secLightweightWaf"))
+	if (form.value.blockSensitive) list.push(t("website.secSensitiveFileProtection"))
+	if (form.value.securityHeader) list.push(t("website.secSecurityHeaders"))
+	if (form.value.hstsEnabled) list.push(t("website.secHsts"))
 	return list
 })
 
@@ -597,10 +566,7 @@ function buildCreatePayload(): Website.WebSiteCreateReq {
 		protocol: normalizeWebsiteProtocolValue(form.value.protocol) || "HTTPS",
 		alias: form.value.alias,
 		otherDomains: sanitizeOtherDomains(form.value.otherDomains, form.value.primaryDomain),
-		proxy:
-			form.value.type === "proxy"
-				? buildProxyFromUpstream(upstreams?.find(item => item.enabled !== false))
-				: form.value.proxy,
+		proxy: form.value.type === "proxy" ? buildProxyFromUpstream(upstreams?.find(item => item.enabled !== false)) : form.value.proxy,
 		IPV6: form.value.IPV6,
 		appInstallId: source === "app_store" ? form.value.appInstallId : undefined,
 		remark: form.value.remark,
@@ -631,10 +597,7 @@ function buildUpdatePayload(): Website.WebSiteUpdateReq {
 		primaryDomain: form.value.primaryDomain,
 		protocol: normalizeWebsiteProtocolValue(form.value.protocol),
 		otherDomains: sanitizeOtherDomains(form.value.otherDomains, form.value.primaryDomain),
-		proxy:
-			form.value.type === "proxy"
-				? buildProxyFromUpstream(upstreams?.find(item => item.enabled !== false))
-				: form.value.proxy,
+		proxy: form.value.type === "proxy" ? buildProxyFromUpstream(upstreams?.find(item => item.enabled !== false)) : form.value.proxy,
 		codeSource: source,
 		IPV6: form.value.IPV6,
 		remark: form.value.remark,
@@ -696,8 +659,8 @@ const handleAppSelect = (val: number) => {
 }
 
 function buildAppOptionLabel(app: App.AppInstalledInfo) {
-	const port = app.httpPort ? `端口:${app.httpPort}` : app.httpsPort ? `HTTPS:${app.httpsPort}` : "无端口"
-	return `${app.name} · ${port} · ${buildRuntimeBadgeText(app, { kindFallback: "Runtime" })} · 用户:${getRunUserLabel(app, { userFallback: "镜像默认" })}`
+	const port = app.httpPort ? `${t("website.portLabel")}${app.httpPort}` : app.httpsPort ? `HTTPS:${app.httpsPort}` : t("website.noPort")
+	return `${app.name} · ${port} · ${buildRuntimeBadgeText(app, { kindFallback: "Runtime" })} · ${t("website.userPrefix")}${getRunUserLabel(app, { userFallback: t("website.imageDefault") })}`
 }
 
 onMounted(() => {
@@ -813,7 +776,7 @@ const open = (record?: WebsiteFormRecord, action: "add" | "update" = "add") => {
 	visible.value = true
 	if (action === "add") {
 		actionType.value = "add"
-		title.value = "添加网站"
+		title.value = t("website.addWebsite")
 		bindingRuntimeSummary.value = ""
 		form.value = {
 			...createDefaultForm(),
@@ -829,7 +792,7 @@ const open = (record?: WebsiteFormRecord, action: "add" | "update" = "add") => {
 	} else {
 		if (!record) return
 		actionType.value = "update"
-		title.value = "更新网站"
+		title.value = t("website.updateWebsite")
 		bindingRuntimeSummary.value = record.runtimeBindingSummary || ""
 		const editableRecord: WebsiteFormRecord = { ...record }
 		if (editableRecord.domains && editableRecord.domains.length > 0) {

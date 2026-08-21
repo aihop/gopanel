@@ -15,11 +15,11 @@
 							class="h-2.5 w-2.5 rounded-full"
 							:class="httpServerStatus ? 'bg-emerald-500' : 'bg-rose-500'"
 						></span>
-						{{ httpServerStatus ? "HTTP服务 运行中" : "HTTP服务 未启动" }}
+						{{ httpServerStatus ? $t("website.httpServiceRunning") : $t("website.httpServiceStopped") }}
 						{{ statusStartErrorText }}
 					</div>
 					<div class="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-500">
-						当前共管理 {{ total }} 个网站
+						{{ $t("website.managedWebsitesCount", { count: total }) }}
 					</div>
 				</div>
 			</div>
@@ -35,14 +35,16 @@
 			v-if="!agentStatus.online"
 			type="warning"
 			:show-icon="true"
-			title="Agent 未初始化"
+			:title="$t('website.agentNotInitialized')"
 			class="bg-base-100 rounded-[28px] border border-blue-100/80 p-6 shadow-[0_18px_48px_rgba(15,23,42,0.08)]"
 		>
 			<div class="text-sm leading-7 text-slate-600">
-				<div>gp-agent 未启动或未安装，网站功能暂不可用。</div>
+				<div>{{ $t("website.agentNotRunning") }}</div>
 				<div v-if="agentStatus.error" class="mt-1 text-slate-500">{{ agentStatus.error }}</div>
 				<n-space class="mt-4">
-					<n-button type="primary" :loading="ensuringAgent" @click="ensureAgent">一键初始化</n-button>
+					<n-button type="primary" :loading="ensuringAgent" @click="ensureAgent">
+						{{ $t("website.oneClickInit") }}
+					</n-button>
 				</n-space>
 			</div>
 		</n-alert>
@@ -53,14 +55,10 @@
 				<div class="space-y-2">
 					<div class="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">Website Workspace</div>
 					<div class="fg-base-100 text-2xl font-semibold">
-						{{ activeTab === "list" ? $t("website.websiteList") : "配置文件" }}
+						{{ activeTab === "list" ? $t("website.websiteList") : $t("website.config") }}
 					</div>
 					<div class="text-sm leading-7 text-slate-500">
-						{{
-							activeTab === "list"
-								? "集中管理域名、站点类型与更新时间，快速进入日常维护"
-								: "查看内置 HTTP 服务配置文件，便于排查与调整站点设置"
-						}}
+						{{ activeTab === "list" ? $t("website.websiteListHelper") : $t("website.configHelper") }}
 					</div>
 				</div>
 				<div class="flex flex-wrap gap-3">
@@ -88,8 +86,12 @@
 							{{ $t("website.config") }}
 						</button>
 					</div>
-					<n-button v-if="activeTab === 'list'" ghost @click="fetchData">刷新列表</n-button>
-					<n-button v-if="activeTab === 'list'" type="primary" @click="handleAdd">创建网站</n-button>
+					<n-button v-if="activeTab === 'list'" ghost @click="fetchData">
+						{{ $t("website.refreshList") }}
+					</n-button>
+					<n-button v-if="activeTab === 'list'" type="primary" @click="handleAdd">
+						{{ $t("website.createWebsite") }}
+					</n-button>
 				</div>
 			</div>
 
@@ -104,17 +106,17 @@
 					>
 						<template #empty>
 							<div class="flex flex-col items-center justify-center py-14">
-								<n-empty description="暂无网站" class="mb-3" />
-								<n-button type="primary" ghost class="mt-6" @click="handleAdd">立即创建</n-button>
+								<n-empty :description="$t('website.noWebsite')" class="mb-3" />
+								<n-button type="primary" ghost class="mt-6" @click="handleAdd">
+									{{ $t("website.createNow") }}
+								</n-button>
 							</div>
 						</template>
 					</n-data-table>
 				</div>
 
 				<div v-else class="overflow-hidden rounded-3xl border border-slate-100 bg-slate-50/70">
-					<HttpConfigFile
-						scope-summary="这里编辑的是全局 HTTP 服务配置，作用于代理层本身，不对应某一个网站的应用运行时。具体网站绑定的是 Docker/Podman、rootless/rootful 与运行用户，请在网站列表、部署管理或安全/日志入口查看。"
-					/>
+					<HttpConfigFile :scope-summary="$t('website.httpConfigScopeSummary')" />
 				</div>
 			</div>
 		</div>
@@ -173,6 +175,7 @@ const accessLogDrawerRef = ref<InstanceType<typeof AccessLogDrawer> | null>(null
 const securityDrawerRef = ref<InstanceType<typeof SecurityDrawer> | null>(null)
 const diagnosticDrawerRef = ref<InstanceType<typeof WebsiteDiagnosticDrawer> | null>(null)
 const { t: diagnosticT } = useI18n({ messages: websiteDiagnosticMessages })
+const { t } = useI18n()
 
 const httpServerStatus = ref(false)
 const statusStartErrorText = ref("")
@@ -189,7 +192,7 @@ const fetchAgentStatus = async () => {
 			error: res?.data?.error
 		}
 	} catch (error) {
-		agentStatus.value = { online: false, error: getErrorMessage(error, "获取 Agent 状态失败") }
+		agentStatus.value = { online: false, error: getErrorMessage(error, t("website.getAgentStatusFailed")) }
 	}
 }
 
@@ -202,7 +205,7 @@ const ensureAgent = async () => {
 		const token = authStore.getAuth() || authStore.auth || ""
 		if (log) {
 			opDialogRef.value?.acceptParams({
-				title: "初始化 Agent",
+				title: t("website.initAgent"),
 				sseUrl: `/api/agent/ensure/logs?log=${encodeURIComponent(log)}&token=${encodeURIComponent(token)}`
 			})
 		}
@@ -219,7 +222,7 @@ const handleEnsureFinished = () => {
 			.then(res => {
 				httpServerStatus.value = res.data.running || res.data.status
 				if (res.code !== 0) {
-					statusStartErrorText.value = res.msg || "获取HTTP服务状态失败"
+					statusStartErrorText.value = res.msg || t("website.getHttpStatusFailed")
 				}
 			})
 			.catch(err => {
@@ -286,14 +289,14 @@ async function fetchBindingMeta() {
 
 async function handleDelete(row: WebsiteTableRow) {
 	dialog.info({
-		title: "提示",
-		content: `确定要删除 ${row.primaryDomain} 吗？`,
-		positiveText: "确定",
-		negativeText: "取消",
+		title: t("commons.msg.infoTitle"),
+		content: t("website.deleteWebsiteConfirm", { domain: row.primaryDomain }),
+		positiveText: t("commons.button.confirm"),
+		negativeText: t("commons.button.cancel"),
 		onPositiveClick: async () => {
 			try {
 				await websiteDeleteAPI({ id: row.id, deleteApp: false, deleteBackup: false, forceDelete: false })
-				message.success("删除成功")
+				message.success(t("commons.msg.deleteSuccess"))
 				fetchData()
 			} catch (error) {
 				console.error(error)
@@ -345,7 +348,7 @@ function postConfirm() {
 async function handleReload() {
 	try {
 		await httpDefaultReloadAPI()
-		message.success("重新加载成功")
+		message.success(t("website.reloadSuccess"))
 
 		let statusData = await httpDefaultStatusAPI()
 		console.log(statusData)
@@ -360,7 +363,7 @@ async function handleStop() {
 	try {
 		await httpDefaultStopAPI()
 		httpServerStatus.value = false
-		message.success("HTTP服务 已停止")
+		message.success(t("website.httpServiceStoppedMsg"))
 	} catch (error) {
 		console.error(error)
 		httpDefaultStatusAPI()
@@ -387,7 +390,7 @@ onMounted(() => {
 			.then(res => {
 				httpServerStatus.value = res.data.running || res.data.status
 				if (res.code !== 0) {
-					statusStartErrorText.value = res.msg || "获取HTTP服务状态失败"
+					statusStartErrorText.value = res.msg || t("website.getHttpStatusFailed")
 				}
 			})
 			.catch(err => {
