@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -14,6 +13,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/aihop/gopanel/buserr"
+	"github.com/aihop/gopanel/constant"
+	"github.com/aihop/gopanel/i18n"
 	"github.com/aihop/gopanel/utils/files"
 	"github.com/aihop/gopanel/utils/gpc"
 )
@@ -41,13 +43,13 @@ var runtimeInstallManager = &containerRuntimeInstallManager{tasks: make(map[stri
 func StartContainerRuntimeInstall(runtimeKind string) (*ContainerRuntimeInstallTask, error) {
 	runtimeKind = strings.ToLower(strings.TrimSpace(runtimeKind))
 	if runtimeKind != "docker" && runtimeKind != "podman" {
-		return nil, errors.New("runtime must be docker or podman")
+		return nil, buserr.New(constant.ErrContainerRuntimeInstallRuntimeRequired)
 	}
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
-		return nil, errors.New("container runtime installation is not supported on this platform")
+		return nil, buserr.New(constant.ErrContainerRuntimeInstallUnsupportedPlatform)
 	}
 	if commandAvailable("docker") || commandAvailable("podman") {
-		return nil, errors.New("a container runtime is already installed")
+		return nil, buserr.New(constant.ErrContainerRuntimeInstallAlreadyInstalled)
 	}
 
 	runtimeInstallManager.mu.Lock()
@@ -59,7 +61,7 @@ func StartContainerRuntimeInstall(runtimeKind string) (*ContainerRuntimeInstallT
 	}
 	if current := runtimeInstallManager.tasks[runtimeInstallManager.current]; current != nil && current.Status == "running" {
 		if current.Runtime != runtimeKind {
-			return nil, fmt.Errorf("%s installation is already running", current.Runtime)
+			return nil, buserr.WithMap(constant.ErrContainerRuntimeInstallInProgress, map[string]interface{}{"runtime": current.Runtime})
 		}
 		return cloneRuntimeInstallTask(current), nil
 	}
@@ -77,7 +79,7 @@ func GetContainerRuntimeInstallTask(id string) (*ContainerRuntimeInstallTask, er
 	defer runtimeInstallManager.mu.RUnlock()
 	task := runtimeInstallManager.tasks[strings.TrimSpace(id)]
 	if task == nil {
-		return nil, errors.New("runtime install task not found")
+		return nil, buserr.New(constant.ErrContainerRuntimeInstallTaskNotFound)
 	}
 	return cloneRuntimeInstallTask(task), nil
 }
@@ -129,7 +131,7 @@ func runtimeInstallFailure(err error, output string) (string, string, string) {
 	message := strings.TrimSpace(err.Error())
 	needsAction := ""
 	if strings.Contains(strings.ToLower(message), "unknown action") {
-		message = "GPC 高权限服务版本过旧，请更新 GoPanel 或重新运行官方安装脚本以更新 GPC，然后重试"
+		message = i18n.GetMsg(constant.ErrContainerRuntimeInstallGpcOutdated)
 		needsAction = "updateGpc"
 	}
 	return message, needsAction, strings.TrimSpace(output)

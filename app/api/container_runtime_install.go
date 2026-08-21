@@ -1,11 +1,12 @@
 package api
 
 import (
-	"errors"
 	"strings"
 
 	"github.com/aihop/gopanel/app/e"
 	"github.com/aihop/gopanel/app/service"
+	"github.com/aihop/gopanel/buserr"
+	"github.com/aihop/gopanel/constant"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -29,7 +30,7 @@ func ContainerRuntimeInstall(c fiber.Ctx) error {
 func ContainerRuntimeInstallStatus(c fiber.Ctx) error {
 	taskID := strings.TrimSpace(c.Params("id"))
 	if taskID == "" {
-		return c.JSON(e.Error(errors.New("runtime install task id is required")))
+		return c.JSON(e.Error(buserr.New(constant.ErrContainerRuntimeInstallIDRequired)))
 	}
 	task, err := service.GetContainerRuntimeInstallTask(taskID)
 	if err != nil {

@@ -3,10 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"github.com/aihop/gopanel/app/dto"
-	"github.com/aihop/gopanel/utils/gpc"
 	"os"
 	"os/exec"
 	"os/user"
@@ -14,6 +11,11 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/aihop/gopanel/app/dto"
+	"github.com/aihop/gopanel/buserr"
+	"github.com/aihop/gopanel/constant"
+	"github.com/aihop/gopanel/utils/gpc"
 )
 
 func fetchPodmanJournalLogsViaGPC(meta podmanContainerLogMeta, since, tail, runtimeHost, afterCursor string) (gpcJournalLogBatch, error) {
@@ -58,7 +60,7 @@ func inspectPodmanContainerLogMeta(containerID string, runtimeHost string) (podm
 	if err := json.Unmarshal([]byte(raw), &single); err == nil {
 		return parse(single), nil
 	}
-	return podmanContainerLogMeta{}, errors.New("failed to parse podman inspect output for log metadata")
+	return podmanContainerLogMeta{}, buserr.New("ErrContainerLogMetadataParse")
 }
 func buildJournaldContainerLogCommand(ctx context.Context, meta podmanContainerLogMeta, since, tail, runtimeHost string, follow bool) (*exec.Cmd, bool, error) {
 	if runtime.GOOS != "linux" {
@@ -206,9 +208,9 @@ func isJournalPermissionError(output string, err error) bool {
 }
 func buildJournalPermissionDeniedError(runtimeHost string) error {
 	if uid := rootlessPodmanUID(runtimeHost); uid != "" {
-		return fmt.Errorf("当前 GoPanel 进程无权读取 rootless Podman 用户 %s 的 journald 日志；请让面板进程具备 `sudo -n -u '#%s' journalctl --user` 权限，或将面板用户加入 `adm/systemd-journal`，否则建议继续使用 k8s-file 日志驱动", uid, uid)
+		return buserr.WithMap(constant.ErrContainerJournalUserPermission, map[string]interface{}{"uid": uid})
 	}
-	return errors.New("当前 GoPanel 进程无权读取 journald 日志；请将面板用户加入 `adm/systemd-journal`，或改用 k8s-file 日志驱动")
+	return buserr.New(constant.ErrContainerJournalPermission)
 }
 func podmanContainerLogPath(ctx context.Context, containerName string, runtimeHost string) (string, error) {
 	_ = ctx
@@ -239,9 +241,9 @@ func podmanContainerLogPath(ctx context.Context, containerName string, runtimeHo
 			return path, nil
 		}
 		if strings.EqualFold(strings.TrimSpace(item.HostConfig.LogConfig.Type), "journald") {
-			return "", errors.New("podman container is using journald log driver; log files cannot be truncated directly, please restart/recreate the container to clear logs")
+			return "", buserr.New("ErrContainerLogJournaldDriver")
 		}
-		return "", errors.New("container log path is empty")
+		return "", buserr.New(constant.ErrContainerLogPathEmpty)
 	}
 	var list []podmanContainerInspect
 	if err := json.Unmarshal([]byte(raw), &list); err == nil && len(list) > 0 {
@@ -251,7 +253,7 @@ func podmanContainerLogPath(ctx context.Context, containerName string, runtimeHo
 	if err := json.Unmarshal([]byte(raw), &single); err == nil {
 		return resolve(single)
 	}
-	return "", errors.New("failed to parse podman inspect output for log path")
+	return "", buserr.New("ErrContainerLogPathParse")
 }
 func truncateContainerLogFiles(logPath string) error {
 	file, err := os.OpenFile(logPath, os.O_WRONLY, 0)

@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -13,6 +12,7 @@ import (
 	"github.com/aihop/gopanel/app/dto"
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
+	"github.com/aihop/gopanel/buserr"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
 	containertypes "github.com/docker/docker/api/types"
@@ -32,7 +32,7 @@ type containerWebsiteTarget struct {
 
 func (u *ContainerService) BindWebsite(ctx context.Context, req *dto.ContainerWebsiteBind) error {
 	if req == nil {
-		return errors.New("绑定参数不能为空")
+		return buserr.New(constant.ErrContainerWebsiteBindEmpty)
 	}
 	target, err := resolveContainerWebsiteTarget(ctx, req)
 	if err != nil {
@@ -44,17 +44,17 @@ func (u *ContainerService) BindWebsite(ctx context.Context, req *dto.ContainerWe
 func resolveContainerWebsiteTarget(ctx context.Context, req *dto.ContainerWebsiteBind) (containerWebsiteTarget, error) {
 	lookup, err := newContainerRuntimeLookup(ctx)
 	if err != nil {
-		return containerWebsiteTarget{}, fmt.Errorf("读取容器运行时失败: %w", err)
+		return containerWebsiteTarget{}, buserr.WithDetail(constant.ErrContainerWebsiteRuntimeLoadFailed, err.Error())
 	}
 	defer lookup.Close()
 
 	containerID := strings.TrimSpace(req.ContainerID)
 	item, ok := lookup.containersByID[containerID]
 	if !ok {
-		return containerWebsiteTarget{}, errors.New("容器不存在或不属于当前运行时")
+		return containerWebsiteTarget{}, buserr.New(constant.ErrContainerWebsiteNotFound)
 	}
 	if !strings.EqualFold(strings.TrimSpace(item.State), "running") {
-		return containerWebsiteTarget{}, errors.New("只能发布运行中的容器")
+		return containerWebsiteTarget{}, buserr.New(constant.ErrContainerWebsiteNotRunning)
 	}
 
 	runtimeHost := strings.TrimSpace(lookup.sourceByID[item.ID])
@@ -63,7 +63,7 @@ func resolveContainerWebsiteTarget(ctx context.Context, req *dto.ContainerWebsit
 	}
 	requestedHost := strings.TrimSpace(req.RuntimeHost)
 	if requestedHost != "" && runtimeHost != requestedHost {
-		return containerWebsiteTarget{}, errors.New("容器运行时已变化，请刷新列表后重试")
+		return containerWebsiteTarget{}, buserr.New(constant.ErrContainerWebsiteStale)
 	}
 
 	address, err := publishedContainerAddress(item.Ports, req.HostPort)
@@ -109,7 +109,7 @@ func publishedContainerAddress(ports []containertypes.Port, hostPort int) (strin
 	if fallback != "" {
 		return fallback, nil
 	}
-	return "", errors.New("所选 TCP 宿主端口不属于该容器")
+	return "", buserr.New(constant.ErrContainerWebsitePortMismatch)
 }
 
 func checkContainerWebsiteEndpoint(ctx context.Context, scheme, address string) error {
@@ -124,11 +124,19 @@ func checkContainerWebsiteEndpoint(ctx context.Context, scheme, address string) 
 	}
 	response, err := client.Do(request)
 	if err != nil {
-		return fmt.Errorf("容器上游 %s://%s 当前不可访问: %w", scheme, address, err)
+		return buserr.WithMap(constant.ErrContainerWebsiteUpstreamUnreachable, map[string]interface{}{
+			"scheme":  scheme,
+			"address": address,
+			"detail":  err.Error(),
+		})
 	}
 	closeErr := response.Body.Close()
 	if response.StatusCode >= http.StatusInternalServerError {
-		return fmt.Errorf("容器上游 %s://%s 返回异常状态码: %d", scheme, address, response.StatusCode)
+		return buserr.WithMap(constant.ErrContainerWebsiteUpstreamBadStatus, map[string]interface{}{
+			"scheme":  scheme,
+			"address": address,
+			"status":  response.StatusCode,
+		})
 	}
 	return closeErr
 }
@@ -137,13 +145,13 @@ func bindContainerTargetToWebsite(ctx context.Context, target containerWebsiteTa
 	websiteRepo := repo.NewWebsite()
 	website, err := websiteRepo.GetFirst(websiteRepo.WithID(target.WebsiteID))
 	if err != nil {
-		return errors.New("网站不存在")
+		return buserr.New(constant.ErrContainerWebsiteMissing)
 	}
 	if website.Type != constant.Proxy {
-		return errors.New("只能发布到反向代理类型的网站")
+		return buserr.New(constant.ErrContainerWebsiteNotReverseProxy)
 	}
 	if website.AppInstallID > 0 {
-		return errors.New("应用商店托管的网站不能改绑容器，请新建纯反向代理网站")
+		return buserr.New(constant.ErrContainerWebsiteAppStoreForbidden)
 	}
 
 	upstream := model.WebsiteUpstream{
@@ -191,7 +199,7 @@ func bindContainerTargetToWebsite(ctx context.Context, target containerWebsiteTa
 		return err
 	}
 	if err := applyContainerWebsiteCaddy(txCtx); err != nil {
-		return fmt.Errorf("应用网站反向代理失败: %w", err)
+		return buserr.WithDetail(constant.ErrContainerWebsiteApplyFailed, err.Error())
 	}
 	return tx.Commit().Error
 }

@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/aihop/gopanel/app/repo"
+	"github.com/aihop/gopanel/buserr"
+	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/utils/cmd"
 	"github.com/aihop/gopanel/utils/docker"
 	"github.com/aihop/gopanel/utils/gpc"
@@ -96,7 +98,7 @@ func (u *DockerService) operatePodman(operation string) error {
 			return nil
 		}
 		if operation == "start" || operation == "restart" {
-			return errors.New("podman 已安装但无法自动启动（缺少 systemctl）；请先手动启动 podman 的服务/Socket")
+			return buserr.New(constant.ErrContainerPodmanAutoStartFailed)
 		}
 		return nil
 	}

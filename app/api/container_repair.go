@@ -10,6 +10,8 @@ import (
 
 	"github.com/aihop/gopanel/app/e"
 	"github.com/aihop/gopanel/app/service"
+	"github.com/aihop/gopanel/buserr"
+	"github.com/aihop/gopanel/constant"
 	udocker "github.com/aihop/gopanel/utils/docker"
 	"github.com/aihop/gopanel/utils/files"
 	"github.com/aihop/gopanel/utils/gpc"
@@ -22,7 +24,7 @@ type repairPodmanSocketReq struct {
 
 func ContainerRepairPodmanSocket(c fiber.Ctx) error {
 	if runtime.GOOS != "linux" {
-		return c.JSON(e.Error(errors.New("unsupported platform")))
+		return c.JSON(e.Error(buserr.New(constant.ErrContainerUnsupportedPlatform)))
 	}
 	req, err := e.BodyToStruct[repairPodmanSocketReq](c.Body())
 	if err != nil {
@@ -57,7 +59,7 @@ func ContainerRepairPodmanSocket(c fiber.Ctx) error {
 	if err != nil {
 		msg := err.Error()
 		if strings.Contains(strings.ToLower(msg), "unknown action") {
-			return c.JSON(e.Error(errors.New("gpc helper 版本过旧，缺少 PODMAN_SOCKET_REPAIR 动作；请更新服务器上的 gpc 并重启 gpc.service 后再试")))
+			return c.JSON(e.Error(buserr.New(constant.ErrContainerGpcOutdatedPodmanSocket)))
 		}
 		return c.JSON(e.Error(err))
 	}
@@ -73,7 +75,7 @@ func ContainerRepairPodmanSocket(c fiber.Ctx) error {
 
 func ContainerRepairSystemdLinger(c fiber.Ctx) error {
 	if runtime.GOOS != "linux" {
-		return c.JSON(e.Error(errors.New("unsupported platform")))
+		return c.JSON(e.Error(buserr.New(constant.ErrContainerUnsupportedPlatform)))
 	}
 	uid := os.Getuid()
 	if uid == 0 {
@@ -88,7 +90,7 @@ func ContainerRepairSystemdLinger(c fiber.Ctx) error {
 	if err != nil {
 		msg := err.Error()
 		if strings.Contains(strings.ToLower(msg), "unknown action") {
-			return c.JSON(e.Error(errors.New("gpc helper 版本过旧，缺少 SYSTEMD_ENABLE_LINGER 动作；请更新服务器上的 gpc 并重启 gpc.service 后再试")))
+			return c.JSON(e.Error(buserr.New(constant.ErrContainerGpcOutdatedLinger)))
 		}
 		return c.JSON(e.Error(err))
 	}
