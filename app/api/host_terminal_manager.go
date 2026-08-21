@@ -14,7 +14,10 @@ import (
 	"time"
 
 	"github.com/aihop/gopanel/app/model"
+	"github.com/aihop/gopanel/buserr"
+	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
+	"github.com/aihop/gopanel/i18n"
 )
 
 type hostTerminal struct {
@@ -119,14 +122,14 @@ func (manager *hostTerminalManager) createResolved(req createHostTerminalRequest
 func (manager *hostTerminalManager) resume(id uint) (*model.HostTerminalSession, error) {
 	session := manager.get(id)
 	if session == nil {
-		return nil, errors.New("终端进程已结束或服务已重启")
+		return nil, buserr.New(constant.ErrHostTerminalProcessEnded)
 	}
 	session.mu.Lock()
 	record := *session.record
 	finished := session.finished
 	session.mu.Unlock()
 	if finished {
-		return nil, errors.New("终端进程已结束或服务已重启")
+		return nil, buserr.New(constant.ErrHostTerminalProcessEnded)
 	}
 	return &record, nil
 }
@@ -142,14 +145,14 @@ func resolveHostTerminalWorkDir(requested string) (string, error) {
 	}
 	requested, err := filepath.Abs(filepath.Clean(requested))
 	if err != nil {
-		return "", errors.New("终端工作目录无效")
+		return "", buserr.New(constant.ErrHostTerminalWorkDirInvalid)
 	}
 	if resolvedPath, resolveErr := filepath.EvalSymlinks(requested); resolveErr == nil {
 		requested = resolvedPath
 	}
 	resolved, err := os.Stat(requested)
 	if err != nil || !resolved.IsDir() {
-		return "", errors.New("终端工作目录不存在或不可访问")
+		return "", buserr.New(constant.ErrHostTerminalWorkDirInaccessible)
 	}
 	return requested, nil
 }
@@ -340,11 +343,11 @@ func (session *hostTerminal) takeControl(subscriberID string) (bool, string) {
 	now := time.Now()
 	if session.subscribers[subscriberID] == nil {
 		session.mu.Unlock()
-		return false, "连接不存在"
+		return false, i18n.GetMsg(constant.ErrHostTerminalSubscriberMissing)
 	}
 	if session.controllerID != "" && session.controllerID != subscriberID && now.Before(session.controlExpiresAt) {
 		session.mu.Unlock()
-		return false, "其他设备正在控制终端"
+		return false, i18n.GetMsg(constant.ErrHostTerminalControlledByOther)
 	}
 	session.controllerID = subscriberID
 	session.renewControlLocked(now)
@@ -374,7 +377,7 @@ func (session *hostTerminal) write(subscriberID string, data []byte) error {
 	session.mu.Lock()
 	defer session.mu.Unlock()
 	if session.controllerID != subscriberID || !time.Now().Before(session.controlExpiresAt) {
-		return errors.New("当前连接没有终端输入权")
+		return buserr.New(constant.ErrHostTerminalNoInputRight)
 	}
 	session.renewControlLocked(time.Now())
 	_, err := session.pty.Write(data)
@@ -389,7 +392,7 @@ func (session *hostTerminal) resize(subscriberID string, cols, rows uint16) erro
 	}
 	session.mu.Unlock()
 	if !allowed {
-		return errors.New("当前连接没有终端控制权")
+		return buserr.New(constant.ErrHostTerminalNoControlRight)
 	}
 	return session.pty.Resize(cols, rows)
 }

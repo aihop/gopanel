@@ -4,6 +4,8 @@ import (
 	"github.com/aihop/gopanel/app/dto"
 	"github.com/aihop/gopanel/app/e"
 	"github.com/aihop/gopanel/app/service"
+	"github.com/aihop/gopanel/constant"
+	"github.com/aihop/gopanel/i18n"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -12,7 +14,7 @@ func ClearHostMaintenance(c fiber.Ctx) error {
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	stdout, needPrivilege, message, err := service.NewHostMaintenance().ClearMemoryCaches(req.Mode)
+	stdout, needPrivilege, message, err := service.NewHostMaintenance().ClearMemoryCaches(c, req.Mode)
 	if err != nil {
 		return c.JSON(e.Fail(err))
 	}
@@ -34,6 +36,6 @@ func RelieveCPU(c fiber.Ctx) error {
 	}
 	return c.JSON(e.Succ(dto.HostCPURelieveRes{
 		Level:   level,
-		Message: "已降低 GoPanel 进程优先级（不影响 HTTP 服务）",
+		Message: i18n.GetMsgFromCtx(c, constant.ErrHostCPURelieveMessage),
 	}))
 }

@@ -3,12 +3,14 @@
 package api
 
 import (
-	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
+
+	"github.com/aihop/gopanel/buserr"
+	"github.com/aihop/gopanel/constant"
 )
 
 func buildHostTerminalCommand(shellName, workDir string) (*exec.Cmd, string, error) {
@@ -22,7 +24,7 @@ func buildHostTerminalCommand(shellName, workDir string) (*exec.Cmd, string, err
 	}
 	binary, ok := allowed[shellName]
 	if !ok {
-		return nil, "", errors.New("不支持的终端 Shell")
+		return nil, "", buserr.New(constant.ErrHostTerminalShellUnsupported)
 	}
 	path, err := exec.LookPath(binary)
 	if err != nil && shellName == "bash" {
@@ -30,7 +32,7 @@ func buildHostTerminalCommand(shellName, workDir string) (*exec.Cmd, string, err
 		path, err = exec.LookPath("sh")
 	}
 	if err != nil {
-		return nil, "", errors.New("所选终端 Shell 未安装")
+		return nil, "", buserr.New(constant.ErrHostTerminalShellNotInstalled)
 	}
 	command := exec.Command(path, "-l")
 	command.Dir = workDir
@@ -54,7 +56,7 @@ func getHostTerminalCapabilities() hostTerminalCapabilities {
 
 func stopHostTerminalProcess(command *exec.Cmd) error {
 	if command == nil || command.Process == nil {
-		return errors.New("终端进程不存在")
+		return buserr.New(constant.ErrHostTerminalProcessMissing)
 	}
 	if err := syscall.Kill(-command.Process.Pid, syscall.SIGKILL); err == nil {
 		return nil

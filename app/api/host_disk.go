@@ -3,13 +3,14 @@ package api
 import (
 	"bufio"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/aihop/gopanel/app/e"
 	"github.com/aihop/gopanel/app/service"
+	"github.com/aihop/gopanel/buserr"
+	"github.com/aihop/gopanel/constant"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -41,11 +42,11 @@ func HostDiskScanStart(c fiber.Ctx) error {
 func HostDiskScanResult(c fiber.Ctx) error {
 	id := strings.TrimSpace(c.Query("taskId"))
 	if id == "" {
-		return c.JSON(e.Fail(errors.New("taskId is required")))
+		return c.JSON(e.Fail(buserr.New(constant.ErrHostDiskTaskIDRequired)))
 	}
 	task, ok := service.GetDiskScanTask(id)
 	if !ok {
-		return c.JSON(e.Fail(errors.New("扫描任务不存在或已过期")))
+		return c.JSON(e.Fail(buserr.New(constant.ErrHostDiskScanTaskMissing)))
 	}
 	return c.JSON(e.Succ(task))
 }
@@ -69,7 +70,7 @@ func HostDiskScanCancel(c fiber.Ctx) error {
 func HostDiskScanStream(c fiber.Ctx) error {
 	id := strings.TrimSpace(c.Query("taskId"))
 	if id == "" {
-		return c.JSON(e.Fail(errors.New("taskId is required")))
+		return c.JSON(e.Fail(buserr.New(constant.ErrHostDiskTaskIDRequired)))
 	}
 
 	c.Set("Content-Type", "text/event-stream")
@@ -135,7 +136,7 @@ func HostDiskClean(c fiber.Ctx) error {
 		return c.JSON(e.Fail(err))
 	}
 	if len(req.Paths) == 0 {
-		return c.JSON(e.Fail(errors.New("未选择要处理的文件")))
+		return c.JSON(e.Fail(buserr.New(constant.ErrHostDiskNoFileSelected)))
 	}
 	results, err := service.CleanDiskPaths(strings.TrimSpace(req.TaskID), req.Paths, req.Truncate)
 	if err != nil {
