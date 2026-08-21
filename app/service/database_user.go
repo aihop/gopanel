@@ -107,6 +107,9 @@ func normalizeDatabaseUserHost(serverType model.DatabaseType, host string) strin
 }
 
 func databaseUserAccessScope(serverType model.DatabaseType, host string) model.DatabaseUserAccessScope {
+	if serverType == model.DatabaseTypePostgresql {
+		return model.DatabaseUserAccessScopeServer
+	}
 	if serverType != model.DatabaseTypeMysql {
 		return model.DatabaseUserAccessScopeUnknown
 	}
@@ -180,11 +183,12 @@ func (s *DatabaseUserService) Update(req *request.DatabaseUserUpdate) error {
 	if err != nil {
 		return err
 	}
-	user.Host = normalizeDatabaseUserHost(server.Type, firstNonEmptyNonBlank(req.Host, user.Host))
 	targetPrivileges := uniqueDatabaseNames(req.Privileges)
 
 	switch server.Type {
 	case model.DatabaseTypeMysql:
+		currentHost := normalizeDatabaseUserHost(server.Type, user.Host)
+		targetHost := normalizeDatabaseUserHost(server.Type, firstNonEmptyNonBlank(req.Host, currentHost))
 		mysql, err := db.NewMySQL(server.Username, server.Password, fmt.Sprintf("%s:%d", server.Host, server.Port))
 		if err != nil {
 			return err
@@ -194,18 +198,18 @@ func (s *DatabaseUserService) Update(req *request.DatabaseUserUpdate) error {
 		}(mysql)
 
 		if req.Password != "" {
-			if err = mysql.UserPassword(user.Username, req.Password, user.Host); err != nil {
+			if err = mysql.UserPassword(user.Username, req.Password, currentHost); err != nil {
 				return err
 			}
 		}
 
-		currentPrivileges, err := mysql.UserPrivileges(user.Username, user.Host)
+		currentPrivileges, err := mysql.UserPrivileges(user.Username, currentHost)
 		if err != nil {
-			currentPrivileges = []string{}
+			return err
 		}
 		for _, name := range currentPrivileges {
 			if !slices.Contains(targetPrivileges, name) {
-				if err = mysql.PrivilegesRevoke(user.Username, name, user.Host); err != nil {
+				if err = mysql.PrivilegesRevoke(user.Username, name, currentHost); err != nil {
 					return err
 				}
 			}
@@ -214,13 +218,23 @@ func (s *DatabaseUserService) Update(req *request.DatabaseUserUpdate) error {
 			if err = mysql.DatabaseCreate(name); err != nil {
 				return err
 			}
-			if !slices.Contains(currentPrivileges, name) {
-				if err = mysql.PrivilegesGrant(user.Username, name, user.Host); err != nil {
+			if slices.Contains(currentPrivileges, name) {
+				if err = mysql.PrivilegesRevoke(user.Username, name, currentHost); err != nil {
 					return err
 				}
 			}
+			if err = mysql.PrivilegesGrant(user.Username, name, currentHost); err != nil {
+				return err
+			}
 		}
+		if currentHost != targetHost {
+			if err = mysql.UserRenameHost(user.Username, currentHost, targetHost); err != nil {
+				return err
+			}
+		}
+		user.Host = targetHost
 	case model.DatabaseTypePostgresql:
+		user.Host = ""
 		postgres, err := db.NewPostgres(server.Username, server.Password, server.Host, server.Port)
 		if err != nil {
 			return err
@@ -236,7 +250,7 @@ func (s *DatabaseUserService) Update(req *request.DatabaseUserUpdate) error {
 
 		currentPrivileges, err := postgres.UserPrivileges(user.Username)
 		if err != nil {
-			currentPrivileges = []string{}
+			return err
 		}
 		for _, name := range currentPrivileges {
 			if !slices.Contains(targetPrivileges, name) {
@@ -249,10 +263,8 @@ func (s *DatabaseUserService) Update(req *request.DatabaseUserUpdate) error {
 			if err = postgres.DatabaseCreate(name); err != nil {
 				return err
 			}
-			if !slices.Contains(currentPrivileges, name) {
-				if err = postgres.PrivilegesGrant(user.Username, name); err != nil {
-					return err
-				}
+			if err = postgres.PrivilegesGrant(user.Username, name); err != nil {
+				return err
 			}
 		}
 	default:

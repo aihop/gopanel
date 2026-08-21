@@ -36,6 +36,8 @@ const accessScopeLabel = (row: any) => {
 			return t("database.localOnly")
 		case "specific":
 			return t("database.specificHost")
+		case "server":
+			return t("database.serverAccessPolicy")
 		default:
 			return t("database.notApplicable")
 	}
@@ -49,6 +51,8 @@ const accessScopeTagType = (row: any) => {
 			return "warning"
 		case "specific":
 			return "info"
+		case "server":
+			return "default"
 		default:
 			return "default"
 	}
@@ -89,10 +93,13 @@ const columns: any = [
 		}
 	},
 	{
-		title: t("database.host"),
+		title: t("database.hostAccessPolicy"),
 		key: "host",
 		width: 190,
 		render(row: any) {
+			if (row.accessScope === "server") {
+				return h(NTag, { type: "info" }, { default: () => accessScopeLabel(row) })
+			}
 			return h(NFlex, { align: "center", size: 6 }, {
 				default: () => [
 					h(NTag, null, { default: () => row.host || t("None") }),
@@ -320,7 +327,7 @@ onUnmounted(() => {
     type="info"
     class="mb-3"
   >
-    {{ $t("database.mysqlAccountIdentityTips") }}
+    {{ $t("database.databaseAccountAccessTips") }}
   </n-alert>
   <n-data-table
     striped

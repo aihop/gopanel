@@ -100,7 +100,7 @@ func (r *MySQL) DatabaseSize(name string) (int64, error) {
 }
 
 func (r *MySQL) UserCreate(user, password, host string) error {
-	_, err := r.Exec(fmt.Sprintf("CREATE USER IF NOT EXISTS %s@%s IDENTIFIED BY %s", mysqlLiteral(user), mysqlLiteral(host), mysqlLiteral(password)))
+	_, err := r.Exec(fmt.Sprintf("CREATE USER %s@%s IDENTIFIED BY %s", mysqlLiteral(user), mysqlLiteral(host), mysqlLiteral(password)))
 	r.flushPrivileges()
 	return err
 }
@@ -117,8 +117,20 @@ func (r *MySQL) UserPassword(user, password, host string) error {
 	return err
 }
 
+func (r *MySQL) UserRenameHost(user, currentHost, targetHost string) error {
+	_, err := r.Exec(fmt.Sprintf(
+		"RENAME USER %s@%s TO %s@%s",
+		mysqlLiteral(user),
+		mysqlLiteral(currentHost),
+		mysqlLiteral(user),
+		mysqlLiteral(targetHost),
+	))
+	r.flushPrivileges()
+	return err
+}
+
 func (r *MySQL) PrivilegesGrant(user, database, host string) error {
-	_, err := r.Exec(fmt.Sprintf("GRANT ALL PRIVILEGES ON %s.* TO %s@%s WITH GRANT OPTION", mysqlQuotedIdentifier(database), mysqlLiteral(user), mysqlLiteral(host)))
+	_, err := r.Exec(fmt.Sprintf("GRANT ALL PRIVILEGES ON %s.* TO %s@%s", mysqlQuotedIdentifier(database), mysqlLiteral(user), mysqlLiteral(host)))
 	r.flushPrivileges()
 	return err
 }

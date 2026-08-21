@@ -81,6 +81,7 @@ const (
 	DatabaseUserAccessScopeLocal    DatabaseUserAccessScope = "local"
 	DatabaseUserAccessScopeSpecific DatabaseUserAccessScope = "specific"
 	DatabaseUserAccessScopeAll      DatabaseUserAccessScope = "all"
+	DatabaseUserAccessScopeServer   DatabaseUserAccessScope = "server"
 )
 
 type DatabaseUser struct {

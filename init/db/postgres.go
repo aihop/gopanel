@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"net/url"
 	"slices"
+	"strings"
 
-	"github.com/aihop/gopanel/pkg/systemctl"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
@@ -119,12 +119,73 @@ func (r *Postgres) UserCreate(user, password string) error {
 }
 
 func (r *Postgres) UserDrop(user string) error {
-	_, err := r.Exec(fmt.Sprintf("DROP USER IF EXISTS %s", postgresQuotedIdentifier(user)))
+	var exists bool
+	if err := r.QueryRow("SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = $1)", user).Scan(&exists); err != nil {
+		return err
+	}
+	if !exists {
+		return nil
+	}
+	owner := r.administrativeRole()
+	if user == owner {
+		return fmt.Errorf("cannot drop the database administrative role %s", user)
+	}
+	ownedDatabases, err := r.Query(`
+		SELECT datname
+		FROM pg_catalog.pg_database
+		WHERE datdba = (SELECT oid FROM pg_catalog.pg_roles WHERE rolname = $1)
+	`, user)
 	if err != nil {
 		return err
 	}
+	var databasesOwnedByUser []string
+	for ownedDatabases.Next() {
+		var database string
+		if err = ownedDatabases.Scan(&database); err != nil {
+			_ = ownedDatabases.Close()
+			return err
+		}
+		databasesOwnedByUser = append(databasesOwnedByUser, database)
+	}
+	if err = ownedDatabases.Err(); err != nil {
+		_ = ownedDatabases.Close()
+		return err
+	}
+	if err = ownedDatabases.Close(); err != nil {
+		return err
+	}
+	for _, database := range databasesOwnedByUser {
+		if _, err = r.Exec(fmt.Sprintf("ALTER DATABASE %s OWNER TO %s", postgresQuotedIdentifier(database), postgresQuotedIdentifier(owner))); err != nil {
+			return err
+		}
+	}
 
-	return systemctl.Reload("postgresql")
+	databases, err := r.connectableDatabases()
+	if err != nil {
+		return err
+	}
+	for _, database := range databases {
+		dbConn, openErr := r.openDatabase(database)
+		if openErr != nil {
+			return openErr
+		}
+		queries := []string{
+			fmt.Sprintf("REASSIGN OWNED BY %s TO %s", postgresQuotedIdentifier(user), postgresQuotedIdentifier(owner)),
+			fmt.Sprintf("DROP OWNED BY %s", postgresQuotedIdentifier(user)),
+		}
+		for _, query := range queries {
+			if _, err = dbConn.Exec(query); err != nil {
+				_ = dbConn.Close()
+				return err
+			}
+		}
+		if err = dbConn.Close(); err != nil {
+			return err
+		}
+	}
+
+	_, err = r.Exec(fmt.Sprintf("DROP USER %s", postgresQuotedIdentifier(user)))
+	return err
 }
 
 func (r *Postgres) UserPassword(user, password string) error {
@@ -225,8 +286,76 @@ func (r *Postgres) openDatabase(database string) (*sql.DB, error) {
 }
 
 func (r *Postgres) PrivilegesRevoke(user, database string) error {
-	_, err := r.Exec(fmt.Sprintf("REVOKE ALL PRIVILEGES ON DATABASE %s FROM %s", postgresQuotedIdentifier(database), postgresQuotedIdentifier(user)))
-	return err
+	owner := r.administrativeRole()
+	if user == owner {
+		return fmt.Errorf("cannot revoke ownership from the database administrative role %s", user)
+	}
+	if _, err := r.Exec(fmt.Sprintf("ALTER DATABASE %s OWNER TO %s", postgresQuotedIdentifier(database), postgresQuotedIdentifier(owner))); err != nil {
+		return err
+	}
+	if _, err := r.Exec(fmt.Sprintf("REVOKE ALL PRIVILEGES ON DATABASE %s FROM %s", postgresQuotedIdentifier(database), postgresQuotedIdentifier(user))); err != nil {
+		return err
+	}
+	dbConn, err := r.openDatabase(database)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = dbConn.Close()
+	}()
+	revokeQueries := []string{
+		fmt.Sprintf("REASSIGN OWNED BY %s TO %s", postgresQuotedIdentifier(user), postgresQuotedIdentifier(owner)),
+		fmt.Sprintf("DROP OWNED BY %s", postgresQuotedIdentifier(user)),
+		fmt.Sprintf("REVOKE ALL PRIVILEGES ON SCHEMA public FROM %s", postgresQuotedIdentifier(user)),
+		fmt.Sprintf("REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM %s", postgresQuotedIdentifier(user)),
+		fmt.Sprintf("REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM %s", postgresQuotedIdentifier(user)),
+		fmt.Sprintf("REVOKE ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public FROM %s", postgresQuotedIdentifier(user)),
+		fmt.Sprintf("ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL PRIVILEGES ON TABLES FROM %s", postgresQuotedIdentifier(user)),
+		fmt.Sprintf("ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL PRIVILEGES ON SEQUENCES FROM %s", postgresQuotedIdentifier(user)),
+		fmt.Sprintf("ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL PRIVILEGES ON FUNCTIONS FROM %s", postgresQuotedIdentifier(user)),
+	}
+	for _, query := range revokeQueries {
+		if _, err := dbConn.Exec(query); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *Postgres) administrativeRole() string {
+	if role := strings.TrimSpace(r.username); role != "" {
+		return role
+	}
+	return "postgres"
+}
+
+func (r *Postgres) connectableDatabases() ([]string, error) {
+	rows, err := r.Query(`
+		SELECT datname
+		FROM pg_catalog.pg_database
+		WHERE datallowconn = true
+		  AND datistemplate = false
+		ORDER BY datname
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+
+	databases := make([]string, 0)
+	for rows.Next() {
+		var database string
+		if err = rows.Scan(&database); err != nil {
+			return nil, err
+		}
+		databases = append(databases, database)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	return databases, nil
 }
 
 func (r *Postgres) Users() ([]PostgresUser, error) {

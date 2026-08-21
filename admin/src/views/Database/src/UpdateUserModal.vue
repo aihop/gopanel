@@ -14,6 +14,8 @@ const serverId = defineModel<number>("serverId", { type: Number, default: 0 })
 const username = defineModel<string>("username", { type: String, default: "" })
 const host = defineModel<string>("host", { type: String, default: "" })
 const serverName = ref("")
+const serverType = ref("")
+type MySQLHostMode = "localhost" | "%" | "specific"
 const updateModel = ref({
 	serverId: 0,
 	username: "",
@@ -24,6 +26,7 @@ const updateModel = ref({
 	id: id.value
 })
 const privilegeOptions = ref<{ label: string; value: string }[]>([])
+const hostMode = ref<MySQLHostMode>("localhost")
 
 const isDetachedUser = computed(() => !id.value && !!serverId.value && !!username.value)
 const userDisplayName = computed(() => {
@@ -39,6 +42,25 @@ const modalTitle = computed(() => {
 	if (!userDisplayName.value) return base
 	return `${base}：${userDisplayName.value}`
 })
+const isMySQL = computed(() => serverType.value === "mysql" || serverType.value === "mariadb")
+const hostType = [
+	{ label: t("database.localhost"), value: "localhost" },
+	{ label: t("database.allHost"), value: "%" },
+	{ label: t("database.specificHost"), value: "specific" }
+]
+
+const syncHostMode = (value: string) => {
+	if (value === "localhost" || value === "%") {
+		hostMode.value = value
+		return
+	}
+	hostMode.value = "specific"
+}
+
+const handleHostModeChange = (value: MySQLHostMode) => {
+	hostMode.value = value
+	updateModel.value.host = value === "specific" ? "" : value
+}
 
 const privilegeMode = ref<"all" | "common" | "custom">("common")
 
@@ -125,12 +147,19 @@ const loadPrivilegeOptions = async (currentServerId: number) => {
 	syncPrivilegeModeFromSelection()
 }
 
-const handleUpdate = () => {
-	databaseUserUpdateAPI(updateModel.value).then(() => {
+const handleUpdate = async () => {
+	if (isMySQL.value && hostMode.value === "specific" && !updateModel.value.host.trim()) {
+		mes.error(t("database.specificHostRequired"))
+		return
+	}
+	try {
+		await databaseUserUpdateAPI(updateModel.value)
 		show.value = false
 		mes.success(t("Modified successfully"))
 		emitter.emit("database-user:refresh")
-	})
+	} catch (_error) {
+		mes.error(t("database.userSaveFailed"))
+	}
 }
 
 watch(
@@ -146,6 +175,7 @@ watch(
 		updateModel.value.privileges = []
 		updateModel.value.remark = ""
 		serverName.value = ""
+		serverType.value = ""
 		void loadPrivilegeOptions(updateModel.value.serverId)
 
 		const getParams: any = id.value
@@ -163,6 +193,9 @@ watch(
 				updateModel.value.username = data.username || username.value || ""
 				updateModel.value.host = data.host || host.value || ""
 				serverName.value = data.server?.name || ""
+				serverType.value = data.server?.type || ""
+				if (!isMySQL.value) updateModel.value.host = ""
+				else syncHostMode(updateModel.value.host)
 				updateModel.value.password = ""
 				updateModel.value.privileges = data.privileges
 				updateModel.value.remark = data.remark
@@ -194,9 +227,33 @@ watch(
         v-if="isDetachedUser"
         type="warning"
       >
-        该用户当前仅存在于数据库服务器中，保存后会自动在本地建立关联并同步权限
+        {{ $t("database.detachedUserTips") }}
       </n-alert>
       <n-form :model="updateModel">
+        <n-form-item
+          v-if="isMySQL"
+          path="host-select"
+          :label="$t('database.HostMysql')"
+        >
+          <n-select
+			:value="hostMode"
+            :options="hostType"
+			@update:value="handleHostModeChange"
+            :placeholder="$t('form.pleaseSelectTo', [$t('database.host')])"
+          />
+        </n-form-item>
+        <n-form-item
+          v-if="isMySQL && hostMode === 'specific'"
+          path="host"
+          :label="$t('database.specificHost')"
+        >
+          <n-input
+            v-model:value="updateModel.host"
+            type="text"
+            @keydown.enter.prevent
+            :placeholder="$t('form.pleaseInputTo', [$t('database.specificHostAddress')])"
+          />
+        </n-form-item>
         <n-form-item
           path="password"
           :label="$t('database.password')"
@@ -221,9 +278,9 @@ watch(
               :value="privilegeMode"
               @update:value="handlePrivilegeModeChange"
             >
-              <n-radio value="all">所有权限</n-radio>
-              <n-radio value="common">一般权限</n-radio>
-              <n-radio value="custom">自定义</n-radio>
+              <n-radio value="all">{{ $t("database.allPrivileges") }}</n-radio>
+              <n-radio value="common">{{ $t("database.commonPrivileges") }}</n-radio>
+              <n-radio value="custom">{{ $t("database.customPrivileges") }}</n-radio>
             </n-radio-group>
             <n-select
               v-model:value="updateModel.privileges"
@@ -237,8 +294,8 @@ watch(
                 privilegeMode === 'custom'
                   ? $t('form.pleaseSelectTo', [$t('database.privileges')])
                   : privilegeMode === 'all'
-                    ? '已选择：所有数据库'
-                    : '已选择：常用数据库'
+                    ? $t('database.allDatabasesSelected')
+                    : $t('database.commonDatabasesSelected')
               "
             />
           </n-flex>

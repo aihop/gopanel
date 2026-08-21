@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useI18n } from "vue-i18n"
 import { databaseListAPI, databaseServerListAPI, databaseUserCreateAPI } from "@/api/modules/database"
-import { ref, watch, inject, Ref } from "vue"
+import { computed, ref, watch, inject, Ref } from "vue"
 import { useMessage } from "naive-ui"
 import emitter from "@/utils/emitter"
 
@@ -18,22 +18,39 @@ const createModel = ref({
 	privileges: [] as string[],
 	remark: ""
 })
+type MySQLHostMode = "localhost" | "%" | "specific"
 
-const servers = ref<{ label: string; value: string }[]>([])
+const servers = ref<{ label: string; value: number; type: string }[]>([])
 const privilegeOptions = ref<{ label: string; value: string }[]>([])
+const hostMode = ref<MySQLHostMode>("localhost")
 
 const hostType = [
 	{ label: t("database.localhost"), value: "localhost" },
 	{ label: t("database.allHost"), value: "%" },
-	{ label: t("database.specificHost"), value: "" }
+	{ label: t("database.specificHost"), value: "specific" }
 ]
+const selectedServerType = computed(() => servers.value.find(server => server.value === createModel.value.serverId)?.type || "")
+const isMySQL = computed(() => selectedServerType.value === "mysql" || selectedServerType.value === "mariadb")
 
-const handleCreate = () => {
-	databaseUserCreateAPI(createModel.value).then(() => {
+const handleHostModeChange = (value: MySQLHostMode) => {
+	hostMode.value = value
+	createModel.value.host = value === "specific" ? "" : value
+}
+
+
+const handleCreate = async () => {
+	if (isMySQL.value && hostMode.value === "specific" && !createModel.value.host.trim()) {
+		message.error(t("database.specificHostRequired"))
+		return
+	}
+	try {
+		await databaseUserCreateAPI(createModel.value)
 		show.value = false
 		message.success(t("Created successfully"))
 		emitter.emit("database-user:refresh")
-	})
+	} catch (_error) {
+		message.error(t("database.userSaveFailed"))
+	}
 }
 
 const loadPrivilegeOptions = async (currentServerId: number | null) => {
@@ -63,15 +80,20 @@ watch(
 	() => show.value,
 	value => {
 		if (value) {
+			hostMode.value = "localhost"
+			createModel.value.host = "localhost"
 			createModel.value.serverId = globalSelectedServerId?.value || null as any
 			createModel.value.privileges = []
 			void loadPrivilegeOptions(createModel.value.serverId)
 			databaseServerListAPI({}).then(res => {
+				const responseData: any = res.data
+				const items = Array.isArray(responseData) ? responseData : (responseData?.items || [])
 				servers.value = []
-				for (const server of res.data as any[]) {
+				for (const server of items) {
 					servers.value.push({
 						label: server.name,
-						value: server.id
+						value: server.id,
+						type: server.type
 					})
 				}
 			})
@@ -83,6 +105,13 @@ watch(
 	() => createModel.value.serverId,
 	value => {
 		void loadPrivilegeOptions(value as number | null)
+	}
+)
+
+watch(
+	() => selectedServerType.value,
+	() => {
+		createModel.value.host = isMySQL.value ? (hostMode.value === "specific" ? "" : hostMode.value) : ""
 	}
 )
 </script>
@@ -138,15 +167,16 @@ watch(
 						</template>
 					</n-input>
 				</n-form-item>
-				<n-form-item path="host-select" :label="$t('database.HostMysql')">
+				<n-form-item v-if="isMySQL" path="host-select" :label="$t('database.HostMysql')">
 					<n-select
-						v-model:value="createModel.host"
+						:value="hostMode"
 						@keydown.enter.prevent
+						@update:value="handleHostModeChange"
 						:placeholder="$t('form.pleaseSelectTo', [$t('database.host')])"
 						:options="hostType"
 					/>
 				</n-form-item>
-				<n-form-item v-if="createModel.host === ''" path="host" :label="$t('database.specificHost')">
+				<n-form-item v-if="isMySQL && hostMode === 'specific'" path="host" :label="$t('database.specificHost')">
 					<n-input
 						v-model:value="createModel.host"
 						type="text"

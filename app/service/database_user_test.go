@@ -17,7 +17,7 @@ func TestDatabaseUserAccessScope(t *testing.T) {
 		{name: "localhost", serverType: model.DatabaseTypeMysql, host: "localhost", want: model.DatabaseUserAccessScopeLocal},
 		{name: "loopback address", serverType: model.DatabaseTypeMysql, host: "127.0.0.1", want: model.DatabaseUserAccessScopeLocal},
 		{name: "specific subnet", serverType: model.DatabaseTypeMysql, host: "10.0.%", want: model.DatabaseUserAccessScopeSpecific},
-		{name: "postgres does not use host identity", serverType: model.DatabaseTypePostgresql, host: "%", want: model.DatabaseUserAccessScopeUnknown},
+		{name: "postgres uses server access policy", serverType: model.DatabaseTypePostgresql, host: "%", want: model.DatabaseUserAccessScopeServer},
 	}
 
 	for _, test := range tests {
