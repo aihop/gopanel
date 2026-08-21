@@ -1,11 +1,11 @@
 package api
 
 import (
-	"errors"
-
 	"github.com/aihop/gopanel/app/dto"
 	"github.com/aihop/gopanel/app/e"
 	"github.com/aihop/gopanel/app/service"
+	"github.com/aihop/gopanel/buserr"
+	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/utils/convertor"
 	"github.com/gofiber/fiber/v3"
 )
@@ -97,7 +97,7 @@ func NodeRefresh(c fiber.Ctx) error {
 func NodeProxy(c fiber.Ctx) error {
 	id, _ := convertor.ToInt(c.Params("id"))
 	if id <= 0 {
-		return c.JSON(e.Fail(errors.New("节点 ID 不合法")))
+		return c.JSON(e.Fail(buserr.New(constant.ErrNodeIDInvalid)))
 	}
 	res, err := service.ForwardToNode(service.NodeProxyRequest{
 		NodeID:         uint(id),

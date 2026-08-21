@@ -12,6 +12,7 @@ import (
 	"github.com/aihop/gopanel/app/dto"
 	"github.com/aihop/gopanel/app/e"
 	"github.com/aihop/gopanel/app/service"
+	"github.com/aihop/gopanel/buserr"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/utils/cmd"
@@ -38,7 +39,7 @@ func SettingSystemApiTokenUpdate(c fiber.Ctx) error {
 
 	// 持久化到数据库（不再写 YAML；DB 为运行期设置的可靠来源）
 	if err := service.NewSetting().SaveApiToken(req.ApiInterfaceStatus, req.ApiKey); err != nil {
-		return c.JSON(e.Fail(fmt.Errorf("持久化 API Token 失败: %w", err)))
+		return c.JSON(e.Fail(buserr.WithDetail(constant.ErrSettingAPITokenPersistFailed, err.Error())))
 	}
 
 	return c.JSON(e.Succ("API Token settings updated"))
@@ -117,7 +118,7 @@ func SettingSystemPort(c fiber.Ctx) error {
 
 	port := int(req.ServerPort)
 	if port < 1 || port > 65535 {
-		return c.JSON(e.Fail(fmt.Errorf("端口 %d 不合法，取值范围 1-65535", port)))
+		return c.JSON(e.Fail(buserr.WithMap(constant.ErrSettingPortInvalid, map[string]interface{}{"port": port})))
 	}
 
 	currentPort := common.ParseListenPort(global.CONF.System.Port)
@@ -129,9 +130,9 @@ func SettingSystemPort(c fiber.Ctx) error {
 	// 只把它当作补充信息用来提示占用者是谁。
 	if common.ScanPort(port) {
 		if pid, perr := processService.CheckProcessPort(uint32(port)); perr == nil && pid != 0 {
-			return c.JSON(e.Fail(fmt.Errorf("端口 %d 已被进程 %d 占用", port, pid)))
+			return c.JSON(e.Fail(buserr.WithMap(constant.ErrSettingPortUsedByProcess, map[string]interface{}{"port": port, "pid": pid})))
 		}
-		return c.JSON(e.Fail(fmt.Errorf("端口 %d 已被占用", port)))
+		return c.JSON(e.Fail(buserr.WithMap(constant.ErrSettingPortInUse, map[string]interface{}{"port": port})))
 	}
 
 	// 更新端口配置：启动时读取的是 system.port，且值形如 ":5470"（app.Listen 直接用这个字符串）。
@@ -176,7 +177,7 @@ func SettingSystemEntrance(c fiber.Ctx) error {
 	}
 	req.Entrance = strings.TrimSpace(req.Entrance)
 	if req.Entrance == "" {
-		return c.JSON(e.Fail(fmt.Errorf("entrance cannot be empty")))
+		return c.JSON(e.Fail(buserr.New(constant.ErrSettingEntranceEmpty)))
 	}
 
 	// 定义已存在的路由组前缀，防止冲突
@@ -184,7 +185,7 @@ func SettingSystemEntrance(c fiber.Ctx) error {
 	// 检查是否与现有路由组冲突
 	for _, group := range existingGroups {
 		if req.Entrance == group {
-			return c.JSON(e.Fail(fmt.Errorf("entrance '%s' conflicts with an existing route group", req.Entrance)))
+			return c.JSON(e.Fail(buserr.WithMap(constant.ErrSettingEntranceConflicts, map[string]interface{}{"entrance": req.Entrance})))
 		}
 	}
 
@@ -248,7 +249,7 @@ func SettingSystemUpgrade(c fiber.Ctx) error {
 		return c.JSON(e.Fail(err))
 	}
 	if updateInfo == nil {
-		return c.JSON(e.Fail(fmt.Errorf("failed to retrieve update information")))
+		return c.JSON(e.Fail(buserr.New(constant.ErrSettingUpdateInfoUnavailable)))
 	}
 
 	// 创建日志文件记录安装过程
@@ -425,7 +426,7 @@ func SettingSystemCheck(c fiber.Ctx) error {
 		return c.JSON(e.Fail(err))
 	}
 	if updateInfo == nil {
-		return c.JSON(e.Fail(fmt.Errorf("failed to retrieve update information")))
+		return c.JSON(e.Fail(buserr.New(constant.ErrSettingUpdateInfoUnavailable)))
 	}
 	return c.JSON(e.Succ(updateInfo))
 }

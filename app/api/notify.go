@@ -7,6 +7,8 @@ import (
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
 	"github.com/aihop/gopanel/app/service"
+	"github.com/aihop/gopanel/constant"
+	"github.com/aihop/gopanel/i18n"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -44,7 +46,7 @@ func NotifyTest(c fiber.Ctx) error {
 	if err := service.TestNotifyMail(req.NotifyConfig, req.Password); err != nil {
 		return c.JSON(e.Fail(err))
 	}
-	return c.JSON(e.Succ("测试邮件已发送，请查收"))
+	return c.JSON(e.Succ(i18n.GetMsgFromCtx(c, constant.ErrNotifyTestEmailSent)))
 }
 
 // NotifyEventPage 告警事件列表
@@ -62,5 +64,5 @@ func NotifyEventPage(c fiber.Ctx) error {
 // 不用等下一个采集周期
 func NotifyEvaluate(c fiber.Ctx) error {
 	service.EvaluateAlerts()
-	return c.JSON(e.Succ("已执行一轮告警评估"))
+	return c.JSON(e.Succ(i18n.GetMsgFromCtx(c, constant.ErrNotifyAlertRoundExecuted)))
 }

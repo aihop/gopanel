@@ -461,3 +461,17 @@ var (
 	ErrLogSshLoginUnsupported          = "ErrLogSshLoginUnsupported"
 	ErrMonitorLoadFailed               = "ErrMonitorLoadFailed"
 )
+
+// setting / ssl / notify / node
+var (
+	ErrNodeIDInvalid                = "ErrNodeIDInvalid"
+	ErrSettingAPITokenPersistFailed = "ErrSettingAPITokenPersistFailed"
+	ErrSettingPortInvalid           = "ErrSettingPortInvalid"
+	ErrSettingPortUsedByProcess     = "ErrSettingPortUsedByProcess"
+	ErrSettingPortInUse             = "ErrSettingPortInUse"
+	ErrSettingEntranceEmpty         = "ErrSettingEntranceEmpty"
+	ErrSettingEntranceConflicts     = "ErrSettingEntranceConflicts"
+	ErrSettingUpdateInfoUnavailable = "ErrSettingUpdateInfoUnavailable"
+	ErrNotifyTestEmailSent          = "ErrNotifyTestEmailSent"
+	ErrNotifyAlertRoundExecuted     = "ErrNotifyAlertRoundExecuted"
+)
