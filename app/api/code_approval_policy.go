@@ -1,10 +1,11 @@
 package api
 
 import (
-	"errors"
 	"strings"
 
 	"github.com/aihop/gopanel/app/model"
+	"github.com/aihop/gopanel/buserr"
+	"github.com/aihop/gopanel/constant"
 )
 
 const (
@@ -22,7 +23,7 @@ func normalizeCodeApprovalPolicy(value string) (string, error) {
 	case codeApprovalPolicyFullAuto:
 		return codeApprovalPolicyFullAuto, nil
 	default:
-		return "", errors.New("无效的会话审批策略")
+		return "", buserr.New(constant.ErrCodeInvalidApprovalPolicy)
 	}
 }
 
@@ -55,7 +56,7 @@ func validateCodeExecutorApprovalPolicy(executorID, approvalPolicy string) error
 			return nil
 		}
 	}
-	return errors.New("当前执行器不支持所选的运行时审批策略")
+	return buserr.New(constant.ErrCodeApprovalPolicyUnsupported)
 }
 
 func updateCodeApprovalPolicy(session *model.AIDevSession, value string) (bool, error) {

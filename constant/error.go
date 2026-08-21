@@ -411,3 +411,27 @@ var (
 	ErrFlowProjectGitRepoExceeded      = "ErrFlowProjectGitRepoExceeded"
 	ErrFlowGitOperationFailed          = "ErrFlowGitOperationFailed"
 )
+
+// code / ai workspace
+var (
+	ErrCodeSessionIDInvalid                 = "ErrCodeSessionIDInvalid"
+	ErrCodeInvalidApprovalPolicy            = "ErrCodeInvalidApprovalPolicy"
+	ErrCodeApprovalPolicyUnsupported        = "ErrCodeApprovalPolicyUnsupported"
+	ErrCodeWorktreeBranchMismatch           = "ErrCodeWorktreeBranchMismatch"
+	ErrCodeWorktreeMetadataIncomplete       = "ErrCodeWorktreeMetadataIncomplete"
+	ErrCodeProjectSourceDirNotAbs           = "ErrCodeProjectSourceDirNotAbs"
+	ErrCodeProjectSourcePathNotDir          = "ErrCodeProjectSourcePathNotDir"
+	ErrCodeWorktreeOutsideManaged           = "ErrCodeWorktreeOutsideManaged"
+	ErrCodeWorktreeDirIDMismatch            = "ErrCodeWorktreeDirIDMismatch"
+	ErrCodeMultiWorktreeOutsideManaged      = "ErrCodeMultiWorktreeOutsideManaged"
+	ErrCodeMultiWorktreeDirIDMismatch       = "ErrCodeMultiWorktreeDirIDMismatch"
+	ErrCodeMultiWorktreeMetadataUnavailable = "ErrCodeMultiWorktreeMetadataUnavailable"
+	ErrCodeRepoWorktreeOutsideManaged       = "ErrCodeRepoWorktreeOutsideManaged"
+	ErrCodeSessionDirNotWorktreeRoot        = "ErrCodeSessionDirNotWorktreeRoot"
+	ErrCodeSessionSourceDirNotRepoRoot      = "ErrCodeSessionSourceDirNotRepoRoot"
+	ErrCodeWorktreeGitCommonDirMismatch     = "ErrCodeWorktreeGitCommonDirMismatch"
+	ErrCodeWorktreeGitPrivateDirInvalid     = "ErrCodeWorktreeGitPrivateDirInvalid"
+	ErrCodeGitWritableDirOutOfMetadata      = "ErrCodeGitWritableDirOutOfMetadata"
+	ErrCodeGitMetadataPathNotAbs            = "ErrCodeGitMetadataPathNotAbs"
+	ErrCodeGitMetadataPathNotDir            = "ErrCodeGitMetadataPathNotDir"
+)

@@ -2,13 +2,13 @@ package api
 
 import (
 	"encoding/json"
-	"errors"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/aihop/gopanel/app/e"
 	"github.com/aihop/gopanel/app/model"
+	"github.com/aihop/gopanel/buserr"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/utils/token"
@@ -45,7 +45,7 @@ func GetCodeAuditEvents(c fiber.Ctx) error {
 	claims := c.Locals(constant.AppAuthName).(*token.CustomClaims)
 	sessionID, err := strconv.ParseUint(c.Params("id"), 10, 64)
 	if err != nil || sessionID == 0 {
-		return c.JSON(e.Fail(errors.New("会话 ID 无效")))
+		return c.JSON(e.Fail(buserr.New(constant.ErrCodeSessionIDInvalid)))
 	}
 	if _, err := getAISessionWithPermission(uint(sessionID), claims); err != nil {
 		return c.JSON(e.Fail(err))

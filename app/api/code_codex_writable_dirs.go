@@ -1,17 +1,17 @@
 package api
 
 import (
-	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
+	"github.com/aihop/gopanel/buserr"
+	"github.com/aihop/gopanel/constant"
 )
 
-var errCodeWorktreeBranchMismatch = errors.New("会话 Worktree 当前分支与会话记录不一致")
+var errCodeWorktreeBranchMismatch = buserr.New(constant.ErrCodeWorktreeBranchMismatch)
 
 func codexWritableDirsForSession(session *model.AIDevSession) ([]string, error) {
 	if session == nil {
@@ -22,7 +22,7 @@ func codexWritableDirsForSession(session *model.AIDevSession) ([]string, error) 
 	}
 	if session.SourceWorkDir != "" || session.WorktreeBranch != "" {
 		if session.SourceWorkDir == "" || session.WorktreeBranch == "" {
-			return nil, errors.New("会话 Worktree 元数据不完整")
+			return nil, buserr.New(constant.ErrCodeWorktreeMetadataIncomplete)
 		}
 		return resolveCodexWorktreeGitWritableDirs(session)
 	}
@@ -42,7 +42,7 @@ func resolveCodexWritableDirs(sourceDirs []string) ([]string, error) {
 	for _, sourceDir := range sourceDirs {
 		sourceDir = strings.TrimSpace(sourceDir)
 		if sourceDir == "" || !filepath.IsAbs(sourceDir) {
-			return nil, errors.New("项目源目录必须是有效的绝对目录")
+			return nil, buserr.New(constant.ErrCodeProjectSourceDirNotAbs)
 		}
 		resolvedDir, err := filepath.EvalSymlinks(filepath.Clean(sourceDir))
 		if err != nil {
@@ -53,7 +53,7 @@ func resolveCodexWritableDirs(sourceDirs []string) ([]string, error) {
 			return nil, err
 		}
 		if !info.IsDir() {
-			return nil, errors.New("项目源路径不是目录")
+			return nil, buserr.New(constant.ErrCodeProjectSourcePathNotDir)
 		}
 		if _, exists := seen[resolvedDir]; exists {
 			continue
@@ -66,10 +66,10 @@ func resolveCodexWritableDirs(sourceDirs []string) ([]string, error) {
 
 func resolveCodexWorktreeGitWritableDirs(session *model.AIDevSession) ([]string, error) {
 	if !isManagedAISessionWorkDir(session.WorkDir, session.UserID) {
-		return nil, errors.New("会话 Worktree 不在 GoPanel 管理目录中")
+		return nil, buserr.New(constant.ErrCodeWorktreeOutsideManaged)
 	}
 	if filepath.Clean(session.WorkDir) != filepath.Clean(aiSessionWorktreeDir(session.UserID, session.ID)) {
-		return nil, errors.New("会话 Worktree 目录与会话编号不一致")
+		return nil, buserr.New(constant.ErrCodeWorktreeDirIDMismatch)
 	}
 	workDir, err := resolveCodexGitDirectory(session.WorkDir)
 	if err != nil {
@@ -80,20 +80,20 @@ func resolveCodexWorktreeGitWritableDirs(session *model.AIDevSession) ([]string,
 
 func resolveCodexMultiWorktreeGitWritableDirs(session *model.AIDevSession) ([]string, error) {
 	if !isManagedAISessionWorkDir(session.WorkDir, session.UserID) || !isAISessionWorkspaceDirectory(session.WorkDir) {
-		return nil, errors.New("会话多仓库 Worktree 不在 GoPanel 管理目录中")
+		return nil, buserr.New(constant.ErrCodeMultiWorktreeOutsideManaged)
 	}
 	if filepath.Clean(session.WorkDir) != filepath.Clean(aiSessionWorktreeDir(session.UserID, session.ID)) {
-		return nil, errors.New("会话多仓库 Worktree 目录与会话编号不一致")
+		return nil, buserr.New(constant.ErrCodeMultiWorktreeDirIDMismatch)
 	}
 	repositories, err := loadCodeSessionRepositories(session.ID)
 	if err != nil || len(repositories) == 0 {
-		return nil, errors.New("会话多仓库 Worktree 元数据不可用")
+		return nil, buserr.New(constant.ErrCodeMultiWorktreeMetadataUnavailable)
 	}
 	seen := make(map[string]struct{})
 	writableDirs := make([]string, 0, len(repositories)*4)
 	for _, repository := range repositories {
 		if !isPathInside(filepath.Clean(repository.WorktreeDir), filepath.Clean(session.WorkDir)) {
-			return nil, errors.New("会话仓库 Worktree 超出管理目录")
+			return nil, buserr.New(constant.ErrCodeRepoWorktreeOutsideManaged)
 		}
 		resolved, resolveErr := resolveCodexRepositoryWorktreeGitWritableDirs(repository.SourceDir, repository.WorktreeDir, repository.Branch)
 		if resolveErr != nil {
@@ -132,11 +132,11 @@ func inspectCodexRepositoryWorktreeGitWritableDirs(sourcePath, worktreePath stri
 	}
 	worktreeRoot, err := resolveCodeGitPath(workDir, "--show-toplevel")
 	if err != nil || worktreeRoot != workDir {
-		return nil, "", errors.New("会话目录不是预期的 Git Worktree 根目录")
+		return nil, "", buserr.New(constant.ErrCodeSessionDirNotWorktreeRoot)
 	}
 	sourceRoot, err := resolveCodeGitPath(sourceDir, "--show-toplevel")
 	if err != nil || sourceRoot != sourceDir {
-		return nil, "", errors.New("会话源目录不是预期的 Git 仓库根目录")
+		return nil, "", buserr.New(constant.ErrCodeSessionSourceDirNotRepoRoot)
 	}
 	worktreeGitDir, err := resolveCodeGitPath(workDir, "--git-dir")
 	if err != nil {
@@ -148,10 +148,10 @@ func inspectCodexRepositoryWorktreeGitWritableDirs(sourcePath, worktreePath stri
 	}
 	sourceCommonDir, err := resolveCodeGitPath(sourceDir, "--git-common-dir")
 	if err != nil || sourceCommonDir != worktreeCommonDir {
-		return nil, "", errors.New("会话 Worktree 与源仓库的 Git 公共目录不一致")
+		return nil, "", buserr.New(constant.ErrCodeWorktreeGitCommonDirMismatch)
 	}
 	if worktreeGitDir == worktreeCommonDir || !isPathInside(worktreeGitDir, filepath.Join(worktreeCommonDir, "worktrees")) {
-		return nil, "", errors.New("会话 Worktree 的 Git 私有目录无效")
+		return nil, "", buserr.New(constant.ErrCodeWorktreeGitPrivateDirInvalid)
 	}
 	currentBranch := ""
 	if headRef, headErr := runCodeGit(workDir, "symbolic-ref", "--quiet", "HEAD"); headErr == nil {
@@ -173,7 +173,7 @@ func inspectCodexRepositoryWorktreeGitWritableDirs(sourcePath, worktreePath stri
 			container = filepath.Join(worktreeCommonDir, "worktrees")
 		}
 		if !isPathInside(resolvedDir, container) {
-			return nil, "", errors.New("Git 可写目录超出已验证的元数据范围")
+			return nil, "", buserr.New(constant.ErrCodeGitWritableDirOutOfMetadata)
 		}
 		writableDirs[index] = resolvedDir
 	}
@@ -191,7 +191,7 @@ func resolveCodeGitPath(workDir, pathName string) (string, error) {
 func resolveCodexGitDirectory(path string) (string, error) {
 	path = strings.TrimSpace(path)
 	if path == "" || !filepath.IsAbs(path) {
-		return "", errors.New("Git 元数据路径必须是有效的绝对目录")
+		return "", buserr.New(constant.ErrCodeGitMetadataPathNotAbs)
 	}
 	resolvedPath, err := filepath.EvalSymlinks(filepath.Clean(path))
 	if err != nil {
@@ -202,7 +202,7 @@ func resolveCodexGitDirectory(path string) (string, error) {
 		return "", err
 	}
 	if !info.IsDir() {
-		return "", fmt.Errorf("Git 元数据路径不是目录：%s", resolvedPath)
+		return "", buserr.WithMap(constant.ErrCodeGitMetadataPathNotDir, map[string]interface{}{"path": resolvedPath})
 	}
 	return resolvedPath, nil
 }
