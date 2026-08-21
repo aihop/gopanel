@@ -1,12 +1,14 @@
 package api
 
 import (
-	"fmt"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/aihop/gopanel/app/dto"
+	"github.com/aihop/gopanel/constant"
+	"github.com/aihop/gopanel/i18n"
+	"github.com/gofiber/fiber/v3"
 )
 
 const (
@@ -32,22 +34,25 @@ var defaultLoginAttemptGuard = &loginAttemptGuard{
 	entries: make(map[string]*loginAttemptEntry),
 }
 
-func (g *loginAttemptGuard) Check(ip string, req *dto.AuthSignin) (string, bool) {
+func (g *loginAttemptGuard) Check(c fiber.Ctx, ip string, req *dto.AuthSignin) (string, bool) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
 	now := time.Now()
 	g.cleanupExpired(now)
 
-	if msg, ok := g.checkKeyLocked(now, g.ipKey(ip), "当前 IP 登录尝试过于频繁，请 15 分钟后再试"); ok {
-		return msg, true
+	if waitMinutes, ok := g.checkKeyLocked(now, g.ipKey(ip)); ok {
+		return i18n.GetMsgFromCtx(c, constant.ErrLoginIPBlocked, map[string]interface{}{"minutes": waitMinutes}), true
 	}
 
 	account := normalizeLoginAccount(req)
 	if account == "" {
 		return "", false
 	}
-	return g.checkKeyLocked(now, g.accountKey(ip, account), "该账号登录尝试过于频繁，请 15 分钟后再试")
+	if waitMinutes, ok := g.checkKeyLocked(now, g.accountKey(ip, account)); ok {
+		return i18n.GetMsgFromCtx(c, constant.ErrLoginAccountBlocked, map[string]interface{}{"minutes": waitMinutes}), true
+	}
+	return "", false
 }
 
 func (g *loginAttemptGuard) RequiresCaptcha(ip string, req *dto.AuthSignin) bool {
@@ -94,19 +99,19 @@ func (g *loginAttemptGuard) RegisterSuccess(ip string, req *dto.AuthSignin) {
 	}
 }
 
-func (g *loginAttemptGuard) checkKeyLocked(now time.Time, key string, message string) (string, bool) {
+func (g *loginAttemptGuard) checkKeyLocked(now time.Time, key string) (int, bool) {
 	entry, ok := g.entries[key]
 	if !ok {
-		return "", false
+		return 0, false
 	}
 	if entry.LockedUntil.After(now) {
 		waitMinutes := int(time.Until(entry.LockedUntil).Minutes())
 		if waitMinutes < 1 {
 			waitMinutes = 1
 		}
-		return fmt.Sprintf("%s（剩余约 %d 分钟）", message, waitMinutes), true
+		return waitMinutes, true
 	}
-	return "", false
+	return 0, false
 }
 
 func (g *loginAttemptGuard) bumpKey(now time.Time, key string, limit int) {

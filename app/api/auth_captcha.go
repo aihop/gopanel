@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"math"
 	"strings"
 	"sync"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/aihop/gopanel/app/dto"
 	"github.com/aihop/gopanel/app/e"
+	"github.com/aihop/gopanel/buserr"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/utils/cryptx"
@@ -140,11 +140,11 @@ func VerifyCaptchaCheck(c fiber.Ctx) error {
 func consumeVerifiedLoginCaptchaToken(token string) error {
 	token = strings.TrimSpace(token)
 	if token == "" {
-		return errors.New(constant.ErrVerifyToken)
+		return buserr.New(constant.ErrVerifyToken)
 	}
 	key := loginCaptchaVerifyKey(token)
 	if _, err := global.CACHE.Get(key); err != nil {
-		return errors.New(constant.ErrVerifyToken)
+		return buserr.New(constant.ErrVerifyToken)
 	}
 	return global.CACHE.Del(key)
 }

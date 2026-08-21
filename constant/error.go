@@ -232,3 +232,14 @@ var (
 	ErrInvalidToken = "ErrInvalidToken"
 	ErrExpiredToken = "ErrExpiredToken"
 )
+
+// auth / user validation
+var (
+	ErrCaptchaRequired     = "ErrCaptchaRequired"
+	ErrLoginIPBlocked      = "ErrLoginIPBlocked"
+	ErrLoginAccountBlocked = "ErrLoginAccountBlocked"
+	ErrTokenRequired       = "ErrTokenRequired"
+	ErrEmailRequired       = "ErrEmailRequired"
+	ErrPasswordRequired    = "ErrPasswordRequired"
+	ErrUserNoteTooLong     = "ErrUserNoteTooLong"
+)

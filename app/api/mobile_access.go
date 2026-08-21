@@ -101,7 +101,7 @@ func LoginMobileDevice(c fiber.Ctx) error {
 		IP: c.IP(), Agent: string(c.Request().Header.UserAgent()), Address: geo.Region(c.IP()),
 	}
 	logService := service.NewLogService()
-	if message, blocked := defaultLoginAttemptGuard.Check(c.IP(), authReq); blocked {
+	if message, blocked := defaultLoginAttemptGuard.Check(c, c.IP(), authReq); blocked {
 		loginLog.Status = constant.StatusFailed
 		loginLog.Message = "mobile login blocked by rate limiter"
 		_ = logService.CreateLoginLog(loginLog)

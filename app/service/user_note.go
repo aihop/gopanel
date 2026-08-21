@@ -1,11 +1,12 @@
 package service
 
 import (
-	"errors"
 	"unicode/utf8"
 
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
+	"github.com/aihop/gopanel/buserr"
+	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
 )
 
@@ -25,7 +26,7 @@ func (s *UserNoteService) Get(userID uint) (*model.UserNote, error) {
 
 func (s *UserNoteService) Save(userID uint, content string) (*model.UserNote, error) {
 	if utf8.RuneCountInString(content) > UserNoteMaxLength {
-		return nil, errors.New("便签内容不能超过 20000 字")
+		return nil, buserr.WithMap(constant.ErrUserNoteTooLong, map[string]interface{}{"max": UserNoteMaxLength})
 	}
 	return s.repo.Save(userID, content)
 }

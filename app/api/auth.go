@@ -33,7 +33,7 @@ func Login(c fiber.Ctx) error {
 		Agent:   string(c.Request().Header.UserAgent()),
 		Address: geo.Region(c.IP()),
 	}
-	if message, blocked := defaultLoginAttemptGuard.Check(c.IP(), r); blocked {
+	if message, blocked := defaultLoginAttemptGuard.Check(c, c.IP(), r); blocked {
 		loginLog.Status = constant.StatusFailed
 		loginLog.Message = "login blocked by rate limiter"
 		_ = logService.CreateLoginLog(loginLog)
@@ -44,7 +44,7 @@ func Login(c fiber.Ctx) error {
 			loginLog.Status = constant.StatusFailed
 			loginLog.Message = "captcha verification required"
 			_ = logService.CreateLoginLog(loginLog)
-			return c.JSON(e.RetError(constant.StatusCodeFullFail, "请先完成滑块验证"))
+			return c.JSON(e.Fail(buserr.New(constant.ErrCaptchaRequired)))
 		}
 	}
 

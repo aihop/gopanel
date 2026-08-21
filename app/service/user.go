@@ -1,12 +1,12 @@
 package service
 
 import (
-	"errors"
 	"sync"
 
 	"github.com/aihop/gopanel/app/dto/request"
 	"github.com/aihop/gopanel/app/model"
 	"github.com/aihop/gopanel/app/repo"
+	"github.com/aihop/gopanel/buserr"
 	"github.com/aihop/gopanel/constant"
 	"github.com/aihop/gopanel/global"
 	"github.com/aihop/gopanel/pkg/gormx"
@@ -36,13 +36,13 @@ func (s *UserService) WithTx(tx *gorm.DB) *UserService {
 
 func (s *UserService) Get(id uint) (res *model.User, err error) {
 	if id == 0 {
-		return nil, errors.New(constant.ErrIdRequired)
+		return nil, buserr.New(constant.ErrIdRequired)
 	}
 	if res, err = s.repo.Get(id); err != nil {
 		return
 	}
 	if res.ID == 0 {
-		return nil, errors.New(constant.ErrRecordNotFound)
+		return nil, buserr.New(constant.ErrRecordNotFound)
 	}
 
 	return
@@ -57,13 +57,13 @@ func (s *UserService) GetByAdminEmail() (email string) {
 
 func (s *UserService) GetByToken(token string) (res *model.User, err error) {
 	if token == "" {
-		return res, errors.New("token is required")
+		return res, buserr.New(constant.ErrTokenRequired)
 	}
 	if res, err = s.repo.GetByToken(token); err != nil {
 		return
 	}
 	if res.ID == 0 {
-		return res, errors.New(constant.ErrRecordNotFound)
+		return res, buserr.New(constant.ErrRecordNotFound)
 	}
 	return
 }
@@ -73,7 +73,7 @@ func (s *UserService) GetByEmail(email string) (res *model.User, err error) {
 		return
 	}
 	if res.ID == 0 {
-		return res, errors.New(constant.ErrRecordNotFound)
+		return res, buserr.New(constant.ErrRecordNotFound)
 	}
 	return
 }
@@ -83,7 +83,7 @@ func (s *UserService) GetByMobile(mobile string) (res *model.User, err error) {
 		return
 	}
 	if res.ID == 0 {
-		return res, errors.New(constant.ErrRecordNotFound)
+		return res, buserr.New(constant.ErrRecordNotFound)
 	}
 	return
 }
@@ -199,7 +199,7 @@ func (s *UserService) CreateInBatches(items []*model.User) (err error) {
 
 func (s *UserService) Delete(id uint) (err error) {
 	if id == 0 {
-		return errors.New(constant.ErrIdRequired)
+		return buserr.New(constant.ErrIdRequired)
 	}
 
 	return s.withTransaction(func(tx *gorm.DB) error {
@@ -237,13 +237,13 @@ func (s *UserService) ResetAccount(id uint, email string, password string) (err 
 		Password: encodedPassword,
 	}
 	if user.ID == 0 {
-		return errors.New(constant.ErrIdRequired)
+		return buserr.New(constant.ErrIdRequired)
 	}
 	if user.Email == "" {
-		return errors.New("email is required")
+		return buserr.New(constant.ErrEmailRequired)
 	}
 	if user.Password == "" {
-		return errors.New("password is required")
+		return buserr.New(constant.ErrPasswordRequired)
 	}
 	return s.repo.Update(user)
 }
