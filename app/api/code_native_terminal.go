@@ -194,6 +194,17 @@ func (manager *nativeCodeTerminalManager) attach(
 	go terminal.wait(manager)
 	if session.AgentName == "codex" {
 		go discoverNativeCodexSession(session, command.Process.Pid, time.Now())
+		// 终端里跑出来的内容也要实时进对话页。
+		//
+		// 原生终端的产出原先只在两个时机落库：终端连接时补拉一次，或用户手动点开
+		// 「完整对话」。执行过程中对话页是全黑的，人在终端敲了半天，切过去什么都看不到。
+		//
+		// 这个 follower 追的是 Codex 写在磁盘上的 rollout，本来就是为对话流写的，
+		// 只是对话改走 app-server 之后失去了调用方。挂到终端生命周期上即可复用。
+		// 仅限 codex：rollout 是它特有的格式，另外几个执行器各写各的，这里不假装支持。
+		go followCodexConversationRollout(
+			contextFromDone(terminal.done), session, session.ID, preparedSessionID, time.Now(),
+		)
 	} else if session.AgentName == "opencode" && session.NativeSessionID == "" {
 		go discoverNativeOpenCodeSession(session, command.Path, command.Env, time.Now(), terminal.done)
 	}

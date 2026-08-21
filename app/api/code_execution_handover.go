@@ -35,6 +35,20 @@ func (coordinator *codeExecutionCoordinator) acquireInteractiveSession(
 	return coordinator.acquireOwned(ctx, session.ID, keys, codeExecutionInteractive, false)
 }
 
+// contextFromDone 把「关闭即结束」的 channel 适配成 context。
+//
+// 终端一族的生命周期都挂在 terminal.done 上（readOutput / wait / 通知监听都用它），
+// 而追 rollout 的 follower 收的是 context。桥一下，免得为此把 follower 的签名改成
+// 只服务终端——它同样可能被别的调用方复用。
+func contextFromDone(done <-chan struct{}) context.Context {
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		<-done
+		cancel()
+	}()
+	return ctx
+}
+
 func handoverCodeSessionToConversation(ctx context.Context, sessionID uint) error {
 	if sessionID == 0 {
 		return errors.New("Code 执行会话无效")
