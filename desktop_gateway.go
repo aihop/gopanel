@@ -130,8 +130,8 @@ func (gateway *desktopGateway) useBuiltin(target *url.URL, mobileURL, token stri
 
 func (gateway *desktopGateway) setTarget(target *url.URL, token, mobileURL, entrance string) {
 	proxy := httputil.NewSingleHostReverseProxy(target)
-	proxy.ErrorHandler = func(response http.ResponseWriter, _ *http.Request, err error) {
-		http.Error(response, err.Error(), http.StatusBadGateway)
+	proxy.ErrorHandler = func(response http.ResponseWriter, request *http.Request, err error) {
+		writeDesktopConnectionError(response, request, target, err)
 	}
 	gateway.Lock()
 	gateway.target = target
