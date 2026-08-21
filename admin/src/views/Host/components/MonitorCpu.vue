@@ -5,9 +5,9 @@
         <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div class="space-y-2">
             <div class="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">Host Monitor</div>
-            <div class="text-2xl font-semibold fg-base-100">CPU 使用率监控</div>
+            <div class="text-2xl font-semibold fg-base-100">{{ t('hostMonitor.cpu.title') }}</div>
             <div class="text-sm leading-7 text-slate-500">
-              聚焦 CPU 实时占用、均值和峰值变化，统一为更简洁的大圆角卡片风格。
+              {{ t('hostMonitor.cpu.intro') }}
             </div>
           </div>
           <div class="rounded-2xl border border-blue-100 bg-blue-50/70 p-2">
@@ -24,7 +24,7 @@
       <div>
         <div class="hidden items-center gap-2 lg:flex">
           <span class="rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-600">CPU</span>
-          <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-500">实时趋势</span>
+          <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-500">{{ t('hostMonitor.cpu.realtimeTrend') }}</span>
         </div>
       </div>
     </div>
@@ -43,8 +43,8 @@
       <div class="rounded-[24px] border border-slate-100 bg-slate-50/80 p-4">
         <div class="mb-4 flex items-center justify-between">
           <div>
-            <div class="text-sm font-medium text-slate-600">CPU 曲线</div>
-            <div class="mt-1 text-xs text-slate-400">按时间分段查看当前主机 CPU 占用率变化</div>
+            <div class="text-sm font-medium text-slate-600">{{ t('hostMonitor.cpu.curveTitle') }}</div>
+            <div class="mt-1 text-xs text-slate-400">{{ t('hostMonitor.cpu.curveHelper') }}</div>
           </div>
           <div class="flex items-center gap-2 text-xs text-slate-400">
             <span class="h-2.5 w-2.5 rounded-full bg-sky-500"></span>
@@ -56,7 +56,7 @@
           :tooltip-labels="chartLabels"
           :series="chartSeries"
           :y-formatter="formatPercent"
-          empty-text="暂无 CPU 监控数据"
+          :empty-text="t('hostMonitor.cpu.empty')"
         />
       </div>
     </div>
@@ -65,6 +65,9 @@
 <script setup lang="ts">
 import SvgTrendChart from "@/components/monitor/SvgTrendChart.vue"
 import { computed, ref, watch } from "vue"
+import { useI18n } from "vue-i18n"
+
+const { t } = useI18n()
 
 type CpuData = {
 	date?: string[]
@@ -90,9 +93,9 @@ const summaryCards = computed(() => {
 	const avg = cpuValues.length ? cpuValues.reduce((sum, cur) => sum + cur, 0) / cpuValues.length : 0
 
 	return [
-		{ label: "当前占用", value: formatPercent(latest), desc: "最近一个采样点的 CPU 占用率" },
-		{ label: "平均占用", value: formatPercent(avg), desc: "当前时间段内的平均 CPU 占用率" },
-		{ label: "峰值占用", value: formatPercent(cpuValues.length ? Math.max(...cpuValues) : 0), desc: "当前时间段内的最高 CPU 占用率" }
+		{ label: t('hostMonitor.cpu.currentUsage'), value: formatPercent(latest), desc: t('hostMonitor.cpu.currentUsageDesc') },
+		{ label: t('hostMonitor.cpu.avgUsage'), value: formatPercent(avg), desc: t('hostMonitor.cpu.avgUsageDesc') },
+		{ label: t('hostMonitor.cpu.peakUsage'), value: formatPercent(cpuValues.length ? Math.max(...cpuValues) : 0), desc: t('hostMonitor.cpu.peakUsageDesc') }
 	]
 })
 

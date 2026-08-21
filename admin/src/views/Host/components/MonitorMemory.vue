@@ -4,9 +4,9 @@
       <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div class="space-y-2">
           <div class="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">Host Monitor</div>
-          <div class="text-2xl font-semibold fg-base-100">内存占用监控</div>
+          <div class="text-2xl font-semibold fg-base-100">{{ t('hostMonitor.memory.title') }}</div>
           <div class="text-sm leading-7 text-slate-500">
-            突出当前占用、平均值与峰值，用更统一的卡片层级呈现主机内存压力。
+            {{ t('hostMonitor.memory.intro') }}
           </div>
         </div>
         <div class="rounded-2xl border border-blue-100 bg-blue-50/70 p-2">
@@ -35,12 +35,12 @@
       <div class="rounded-[24px] border border-slate-100 bg-slate-50/80 p-4">
         <div class="mb-4 flex items-center justify-between">
           <div>
-            <div class="text-sm font-medium text-slate-600">内存趋势</div>
-            <div class="mt-1 text-xs text-slate-400">结合时间缩放查看主机内存占用曲线波动</div>
+            <div class="text-sm font-medium text-slate-600">{{ t('hostMonitor.memory.curveTitle') }}</div>
+            <div class="mt-1 text-xs text-slate-400">{{ t('hostMonitor.memory.curveHelper') }}</div>
           </div>
           <div class="flex items-center gap-2 text-xs text-slate-400">
             <span class="h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
-            内存
+            {{ t('monitor.memory') }}
           </div>
         </div>
         <SvgTrendChart
@@ -48,7 +48,7 @@
           :tooltip-labels="chartLabels"
           :series="chartSeries"
           :y-formatter="formatPercent"
-          empty-text="暂无内存监控数据"
+          :empty-text="t('hostMonitor.memory.empty')"
         />
       </div>
     </div>
@@ -57,6 +57,9 @@
 <script setup lang="ts">
 import SvgTrendChart from "@/components/monitor/SvgTrendChart.vue"
 import { computed, ref, watch } from "vue"
+import { useI18n } from "vue-i18n"
+
+const { t } = useI18n()
 
 type MemoryData = {
 	date?: string[]
@@ -81,9 +84,9 @@ const summaryCards = computed(() => {
 	const memoryValues = values.map(item => Number(item || 0))
 	const avg = memoryValues.length ? memoryValues.reduce((sum, cur) => sum + cur, 0) / memoryValues.length : 0
 	return [
-		{ label: "当前占用", value: formatPercent(latest), desc: "最近一个采样点的内存占用率" },
-		{ label: "平均占用", value: formatPercent(avg), desc: "当前时间段内的平均内存占用率" },
-		{ label: "峰值占用", value: formatPercent(memoryValues.length ? Math.max(...memoryValues) : 0), desc: "当前时间段内的最高内存占用率" }
+		{ label: t('hostMonitor.memory.currentUsage'), value: formatPercent(latest), desc: t('hostMonitor.memory.currentUsageDesc') },
+		{ label: t('hostMonitor.memory.avgUsage'), value: formatPercent(avg), desc: t('hostMonitor.memory.avgUsageDesc') },
+		{ label: t('hostMonitor.memory.peakUsage'), value: formatPercent(memoryValues.length ? Math.max(...memoryValues) : 0), desc: t('hostMonitor.memory.peakUsageDesc') }
 	]
 })
 
@@ -97,7 +100,7 @@ const chartLabels = computed(() => {
 
 const chartSeries = computed(() => [
 	{
-		name: "内存",
+		name: t('monitor.memory'),
 		values: (props.data?.value || []).map(item => Number(item || 0)),
 		color: "#10b981",
 		fillFrom: "rgba(16, 185, 129, 0.24)",

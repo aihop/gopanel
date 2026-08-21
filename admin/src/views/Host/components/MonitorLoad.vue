@@ -3,9 +3,9 @@
     <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
       <div class="space-y-2">
         <div class="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">Host Monitor</div>
-        <div class="text-2xl font-semibold fg-base-100">系统平均负载</div>
+        <div class="text-2xl font-semibold fg-base-100">{{ t('hostMonitor.load.title') }}</div>
         <div class="text-sm leading-7 text-slate-500">
-          同时观察 1 / 5 / 15 分钟负载和资源使用率，卡片样式统一为更轻盈的大圆角风格。
+          {{ t('hostMonitor.load.intro') }}
         </div>
       </div>
       <div class="rounded-2xl border border-blue-100 bg-blue-50/70 p-2">
@@ -34,12 +34,12 @@
       <div class="rounded-[24px] border border-slate-100 bg-slate-50/80 p-4">
         <div class="mb-4 flex items-center justify-between">
           <div>
-            <div class="text-sm font-medium text-slate-600">负载趋势</div>
-            <div class="mt-1 text-xs text-slate-400">负载曲线与资源占用对照查看系统忙闲状态</div>
+            <div class="text-sm font-medium text-slate-600">{{ t('hostMonitor.load.curveTitle') }}</div>
+            <div class="mt-1 text-xs text-slate-400">{{ t('hostMonitor.load.curveHelper') }}</div>
           </div>
           <div class="flex items-center gap-3 text-xs text-slate-400">
-            <span class="rounded-full bg-blue-50 px-3 py-1 font-medium text-blue-600">1 / 5 / 15 分钟</span>
-            <span class="rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-500">资源使用率</span>
+            <span class="rounded-full bg-blue-50 px-3 py-1 font-medium text-blue-600">{{ t('hostMonitor.load.avg1') }} / {{ t('hostMonitor.load.avg5') }} / {{ t('hostMonitor.load.avg15') }}</span>
+            <span class="rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-500">{{ t('monitor.resourceUsage') }}</span>
           </div>
         </div>
         <SvgTrendChart
@@ -47,7 +47,7 @@
           :tooltip-labels="chartLabels"
           :series="chartSeries"
           :y-formatter="formatAxisValue"
-          empty-text="暂无负载监控数据"
+          :empty-text="t('hostMonitor.load.empty')"
         />
       </div>
     </div>
@@ -56,6 +56,9 @@
 <script setup lang="ts">
 import SvgTrendChart from "@/components/monitor/SvgTrendChart.vue"
 import { computed, ref, watch } from "vue"
+import { useI18n } from "vue-i18n"
+
+const { t } = useI18n()
 
 type LoadPoint = {
 	cpuLoad1?: number
@@ -88,10 +91,10 @@ const summaryCards = computed(() => {
 	const latest = values[values.length - 1] || {}
 	const usageValues = values.map(item => Number(item?.loadUsage || 0))
 	return [
-		{ label: "1 分钟", value: formatLoad(latest.cpuLoad1), desc: "最近 1 分钟平均负载" },
-		{ label: "5 分钟", value: formatLoad(latest.cpuLoad5), desc: "最近 5 分钟平均负载" },
-		{ label: "15 分钟", value: formatLoad(latest.cpuLoad15), desc: "最近 15 分钟平均负载" },
-		{ label: "资源使用率", value: formatPercent(Math.max(0, ...usageValues)), desc: "当前时间段内的最高资源使用率" }
+		{ label: t('hostMonitor.load.avg1'), value: formatLoad(latest.cpuLoad1), desc: t('hostMonitor.load.currentLoadDesc') },
+		{ label: t('hostMonitor.load.avg5'), value: formatLoad(latest.cpuLoad5), desc: t('hostMonitor.load.currentLoadDesc') },
+		{ label: t('hostMonitor.load.avg15'), value: formatLoad(latest.cpuLoad15), desc: t('hostMonitor.load.currentLoadDesc') },
+		{ label: t('monitor.resourceUsage'), value: formatPercent(Math.max(0, ...usageValues)), desc: t('hostMonitor.load.peakLoadDesc') }
 	]
 })
 
@@ -105,7 +108,7 @@ const chartLabels = computed(() => {
 
 const chartSeries = computed(() => [
 	{
-		name: "1分钟",
+		name: t('hostMonitor.load.avg1'),
 		values: (props.data?.value || []).map(item => Number(item?.cpuLoad1 || 0)),
 		color: "#0ea5e9",
 		fillFrom: "rgba(14, 165, 233, 0.22)",
@@ -113,7 +116,7 @@ const chartSeries = computed(() => [
 		valueFormatter: (value: number) => formatLoad(value)
 	},
 	{
-		name: "5分钟",
+		name: t('hostMonitor.load.avg5'),
 		values: (props.data?.value || []).map(item => Number(item?.cpuLoad5 || 0)),
 		color: "#38bdf8",
 		fillFrom: "rgba(56, 189, 248, 0.16)",
@@ -121,7 +124,7 @@ const chartSeries = computed(() => [
 		valueFormatter: (value: number) => formatLoad(value)
 	},
 	{
-		name: "15分钟",
+		name: t('hostMonitor.load.avg15'),
 		values: (props.data?.value || []).map(item => Number(item?.cpuLoad15 || 0)),
 		color: "#6366f1",
 		fillFrom: "rgba(99, 102, 241, 0.16)",
@@ -129,7 +132,7 @@ const chartSeries = computed(() => [
 		valueFormatter: (value: number) => formatLoad(value)
 	},
 	{
-		name: "资源使用率",
+		name: t('monitor.resourceUsage'),
 		values: (props.data?.value || []).map(item => Number(item?.loadUsage || 0)),
 		color: "#f59e0b",
 		fillFrom: "rgba(245, 158, 11, 0.14)",

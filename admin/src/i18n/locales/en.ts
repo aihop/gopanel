@@ -3409,5 +3409,85 @@ export default {
 		viewDetails: "Details",
 		stopProcessWarn: "Are you sure you want to end this process (PID:{0})?",
 		processName: "Process name"
+	},
+	hostMonitor: {
+		cpu: {
+			eyebrow: "Host Monitor",
+			title: "CPU usage monitor",
+			intro: "Tracks real-time CPU usage, average and peak trends in a single rounded card layout.",
+			realtimeTrend: "Realtime trend",
+			curveTitle: "CPU curve",
+			curveHelper: "View CPU usage changes on the host over time.",
+			empty: "No CPU monitor data yet",
+			currentUsage: "Current usage",
+			currentUsageDesc: "Latest sampled CPU usage",
+			avgUsage: "Average usage",
+			avgUsageDesc: "Average CPU usage for the period",
+			peakUsage: "Peak usage",
+			peakUsageDesc: "Maximum CPU usage for the period"
+		},
+		memory: {
+			eyebrow: "Host Monitor",
+			title: "Memory usage monitor",
+			intro: "Tracks real-time memory usage, average and peak trends; separates physical and cache usage.",
+			curveTitle: "Memory curve",
+			curveHelper: "View memory usage changes on the host over time.",
+			empty: "No memory monitor data yet",
+			currentUsage: "Current usage",
+			currentUsageDesc: "Latest sampled memory usage",
+			avgUsage: "Average usage",
+			avgUsageDesc: "Average memory usage for the period",
+			peakUsage: "Peak usage",
+			peakUsageDesc: "Maximum memory usage for the period",
+			used: "Used",
+			total: "Total"
+		},
+		load: {
+			eyebrow: "Host Monitor",
+			title: "System load monitor",
+			intro: "Tracks 1/5/15-minute load average trends.",
+			curveTitle: "Load curve",
+			curveHelper: "View load average changes on the host over time.",
+			empty: "No load monitor data yet",
+			avg1: "1 min",
+			avg5: "5 min",
+			avg15: "15 min",
+			currentLoad: "Current load",
+			currentLoadDesc: "Latest sampled load average",
+			peakLoad: "Peak load",
+			peakLoadDesc: "Maximum load for the period"
+		},
+		io: {
+			eyebrow: "Host Monitor",
+			title: "Disk IO monitor",
+			intro: "Tracks disk read/write throughput and latency trends.",
+			readCurve: "Read throughput curve",
+			writeCurve: "Write throughput curve",
+			empty: "No disk IO data yet",
+			readRate: "Read rate",
+			writeRate: "Write rate",
+			readBytes: "Read bytes",
+			writeBytes: "Write bytes",
+			readLatency: "Read latency",
+			writeLatency: "Write latency",
+			readCount: "Read count",
+			writeCount: "Write count"
+		},
+		network: {
+			eyebrow: "Host Monitor",
+			title: "Network traffic monitor",
+			intro: "Tracks NIC up/down traffic trends.",
+			upCurve: "Uplink curve",
+			downCurve: "Downlink curve",
+			empty: "No network monitor data yet",
+			upRate: "Uplink rate",
+			downRate: "Downlink rate",
+			upBytes: "Uplink bytes",
+			downBytes: "Downlink bytes"
+		},
+		disk: {
+			scanTaskMissing: "Scan task does not exist or has expired",
+			noFileSelected: "No file selected for processing"
+		}
 	}
 }

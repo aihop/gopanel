@@ -3235,5 +3235,85 @@ export default {
 		viewDetails: "详情",
 		stopProcessWarn: "是否确定结束此进程 (PID:{0})？",
 		processName: "进程名称"
+	},
+	hostMonitor: {
+		cpu: {
+			eyebrow: "Host Monitor",
+			title: "CPU 使用率监控",
+			intro: "聚焦 CPU 实时占用、均值和峰值变化，统一为更简洁的大圆角卡片风格。",
+			realtimeTrend: "实时趋势",
+			curveTitle: "CPU 曲线",
+			curveHelper: "按时间分段查看当前主机 CPU 占用率变化",
+			empty: "暂无 CPU 监控数据",
+			currentUsage: "当前占用",
+			currentUsageDesc: "最近一个采样点的 CPU 占用率",
+			avgUsage: "平均占用",
+			avgUsageDesc: "当前时间段内的平均 CPU 占用率",
+			peakUsage: "峰值占用",
+			peakUsageDesc: "当前时间段内的最高 CPU 占用率"
+		},
+		memory: {
+			eyebrow: "Host Monitor",
+			title: "内存使用率监控",
+			intro: "聚焦内存实时占用、均值和峰值变化，区分物理与缓存占用。",
+			curveTitle: "内存曲线",
+			curveHelper: "按时间分段查看当前主机内存占用率变化",
+			empty: "暂无内存监控数据",
+			currentUsage: "当前占用",
+			currentUsageDesc: "最近一个采样点的内存占用率",
+			avgUsage: "平均占用",
+			avgUsageDesc: "当前时间段内的平均内存占用率",
+			peakUsage: "峰值占用",
+			peakUsageDesc: "当前时间段内的最高内存占用率",
+			used: "已使用",
+			total: "总容量"
+		},
+		load: {
+			eyebrow: "Host Monitor",
+			title: "系统负载监控",
+			intro: "聚焦系统 1/5/15 分钟负载均值变化趋势。",
+			curveTitle: "负载曲线",
+			curveHelper: "按时间分段查看当前主机负载均值变化",
+			empty: "暂无负载监控数据",
+			avg1: "1 分钟",
+			avg5: "5 分钟",
+			avg15: "15 分钟",
+			currentLoad: "当前负载",
+			currentLoadDesc: "最近一个采样点的负载均值",
+			peakLoad: "峰值负载",
+			peakLoadDesc: "当前时间段内的最高负载"
+		},
+		io: {
+			eyebrow: "Host Monitor",
+			title: "磁盘 IO 监控",
+			intro: "聚焦磁盘读写速率与延迟变化趋势。",
+			readCurve: "读速率曲线",
+			writeCurve: "写速率曲线",
+			empty: "暂无磁盘 IO 监控数据",
+			readRate: "读取速率",
+			writeRate: "写入速率",
+			readBytes: "读取字节数",
+			writeBytes: "写入字节数",
+			readLatency: "读延迟",
+			writeLatency: "写延迟",
+			readCount: "读次数",
+			writeCount: "写次数"
+		},
+		network: {
+			eyebrow: "Host Monitor",
+			title: "网络流量监控",
+			intro: "聚焦网卡上下行流量变化趋势。",
+			upCurve: "上行曲线",
+			downCurve: "下行曲线",
+			empty: "暂无网络监控数据",
+			upRate: "上行速率",
+			downRate: "下行速率",
+			upBytes: "上行字节数",
+			downBytes: "下行字节数"
+		},
+		disk: {
+			scanTaskMissing: "扫描任务不存在或已过期",
+			noFileSelected: "未选择要处理的文件"
+		}
 	}
 }
