@@ -180,9 +180,11 @@
 0. 推送前检查 `git status`：若存在可能与远程新增/修改文件冲突的 untracked 文件，先提示用户确认或安全移动，不可直接覆盖。
 1. `git add <改动文件列表>` — 只添加本次变更的文件
 2. `git commit -m "..."` — 单行标题 + 列表体
-3. `git remote set-url origin https://<用户名>:<密码>@codeup.aliyun.com/64dc6e9a9210862005710a57/gopanel.git` — 设置带认证的远程 URL
-4. `git push 2>&1` — 推送到远程
-5. `git remote set-url origin https://codeup.aliyun.com/64dc6e9a9210862005710a57/gopanel.git` — 恢复无凭据的远程 URL，避免泄露
+3. `git push 2>&1` — **直接调用**，远程凭据由 `.git/config` 中已有的 `origin` URL 自带，**不要**临时注入 / 还原
+4. 若 `git push` 因网络原因挂死：
+   - 等待 ≤ 90 秒仍未结束则用 Ctrl-C 中断，**不要** `kill -9`（避免损坏 `.git/index`）
+   - 中断后 `.git/config` 仍保留带凭据的 origin URL——这是预期状态，不会泄露到远程仓库
+   - 重试前先 `git fetch origin` 确认连接是否恢复
 
 **认证凭据**（会话有效期内使用）：
 
@@ -190,11 +192,14 @@
 - 环境变量名：`GOPANEL_GIT_USERNAME`、`GOPANEL_GIT_PASSWORD`。
 - 若环境变量未设置，从项目根 `.env` 读取 `GOPANEL_GIT_USERNAME` 和 `GOPANEL_GIT_PASSWORD` 的值，**不要在规则或提交中展示这些值**。
 - `.env` 文件受 `.gitignore` 保护，**不应出现在任何提交中**。
-- 注入命令示例：
+- 凭据只允许写入 `.git/config` 的 `[remote "origin"] url` 字段（本地配置，不随 commit 上传），由用户在首次克隆时或运维接入时填入。
+- 已弃用的「set-url 注入 → push → 还原无凭据 URL」模式：**当 `git push` 挂死时，最后一步「还原 URL」永远不会执行，凭据就会遗留在 `.git/config` 中**，进入「已注入但未清理」的中间态。所以新流程不再做这步临时注入。
+- 旧注入命令示例（**仅供首次接入参考**，不要在每次 push 时复用）：
   ```
   GIT_USERNAME=${GOPANEL_GIT_USERNAME:-$(grep -E '^GOPANEL_GIT_USERNAME=' .env | cut -d= -f2)}
   GIT_PASSWORD=${GOPANEL_GIT_PASSWORD:-$(grep -E '^GOPANEL_GIT_PASSWORD=' .env | cut -d= -f2-)}
   git remote set-url origin https://${GIT_USERNAME}:${GIT_PASSWORD}@codeup.aliyun.com/64dc6e9a9210862005710a57/gopanel.git
+  # 执行后保留此 URL，不要再回填无凭据版本。
   ```
 
 ## Naive UI 组件样式约定
